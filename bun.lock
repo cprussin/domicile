@@ -176,13 +176,13 @@
       },
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
-        "@vitejs/plugin-react": "catalog:",
         "vite": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
         "@domicile-desktop/manganese": "workspace:*",
+        "@pandacss/dev": "catalog:",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },

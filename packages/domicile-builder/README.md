@@ -39,10 +39,10 @@ On failure it prints `{"step":"failed","why":"…"}` and exits non-zero.
 
 | Step | Module |
 |---|---|
-| Read every local file and package the entry imports | `src/graph.ts` |
+| Read every local file and package the entry and the project's `vite.config` import | `src/graph.ts` |
 | Find the project (nearest `package.json` above the entry, else the entry's directory). `bun add --ignore-scripts` imports it doesn't list | `src/project.ts`, `src/main.ts` |
 | Key the cache on the files, lockfile and Domicile install. A cache hit takes under a second | `src/project.ts` |
-| Bundle with vite: transpile and bundle only, CSS imports included. `@domicile-desktop/*` and React resolve from Domicile's install. Packages ship their CSS prebuilt | `src/bundle.ts` |
+| Bundle with vite: transpile and bundle only, CSS imports included. The project's `vite.config`, if any, adds its plugins; the shell's output settings override it. `@domicile-desktop/*` and React resolve from Domicile's install. Packages ship their CSS prebuilt | `src/bundle.ts` |
 | Write the entry's `options` export to `options.json` beside `shell.js`, for the Settings app. Runs the entry in Bun only if it exports `options` | `src/evaluate.ts` |
 
 ## Test

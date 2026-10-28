@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -61,6 +67,57 @@ describe("bundle", () => {
     expect(readFileSync(path.join(out, "shell.js"), "utf8")).toContain(
       "https://mail.google.com",
     );
+  }, 120_000);
+
+  // The project's own config adds its tools; the builder's shell settings win
+  // over its output settings.
+  it("builds with the project's vite config", async () => {
+    const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
+    const entry = path.join(desk, "domicile.ts");
+    const config = path.join(desk, "vite.config.mjs");
+    writeFileSync(
+      entry,
+      `export const Shell = () => console.log(__GREETING__);`,
+    );
+    writeFileSync(
+      config,
+      `export default {
+         build: { outDir: "elsewhere", rollupOptions: { input: "nothing.ts" } },
+         define: { __GREETING__: JSON.stringify("hello from the config") },
+       };`,
+    );
+
+    const out = path.join(desk, "out");
+    await bundle(entry, out, DOMICILE, config);
+
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
+    expect(built).toMatch(/export\s*\{[^}]*\bas Shell\b/);
+    expect(built).toContain("hello from the config");
+  }, 120_000);
+
+  // SHELL-PACKAGING.md's Panda recipe: the user's `css()` calls get rules.
+  it("builds the rules of the user's `css()` calls with a Panda vite config", async () => {
+    // Outside Domicile's packages, as a user's config is, with this
+    // package's `@pandacss/dev` and manganese installed.
+    const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
+    cpSync(path.join(import.meta.dir, "..", "fixtures", "panda-shell"), desk, {
+      recursive: true,
+    });
+    symlinkSync(
+      path.join(import.meta.dir, "..", "node_modules"),
+      path.join(desk, "node_modules"),
+    );
+    const out = path.join(desk, "out");
+
+    await bundle(
+      path.join(desk, "domicile.tsx"),
+      out,
+      DOMICILE,
+      path.join(desk, "vite.config.ts"),
+    );
+
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
+    expect(built).toMatch(/\{color:#010203\}/);
   }, 120_000);
 
   // The shell SHELL-QUICKSTART.md teaches, so the doc's code keeps building.

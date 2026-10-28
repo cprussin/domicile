@@ -3,7 +3,6 @@
 import path from "node:path";
 
 import { shellBuild } from "@domicile-desktop/component-library/vite-shell";
-import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { build } from "vite";
 
@@ -21,20 +20,23 @@ const manganeseIn = (domicile: string): string =>
  * gives the user's code and manganese one shared React, and keeps the SDK's
  * protocol in step with the running Domicile.
  *
- * The build transpiles and bundles only. Packages ship their CSS prebuilt.
+ * Without `config`, the build transpiles and bundles only; packages ship
+ * their CSS prebuilt. With the project's vite `config`, its plugins and
+ * settings apply, and the shell's output settings here override its own.
  */
 export const bundle = async (
   entry: string,
   out: string,
   domicile: string,
+  config?: string,
 ): Promise<void> => {
   const shell = shellBuild({ entry });
   await build({
     base: "./",
     build: { ...shell.build, emptyOutDir: true, outDir: out },
-    configFile: false,
+    configFile: config ?? false,
     logLevel: "error",
-    plugins: [fromDomicile(domicile), react(), ...shell.plugins],
+    plugins: [fromDomicile(domicile), ...shell.plugins],
     root: path.dirname(entry),
   });
 };

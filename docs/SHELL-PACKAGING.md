@@ -101,6 +101,9 @@ domicile @domicile-desktop/manganese     # Domicile's own, prebuilt
 - An entry's packages go in the nearest `package.json` and `bun.lock` above
   it, created next to it if there are none.
 - `@domicile-desktop/*` and React always come from the running Domicile.
+- The build transpiles and bundles only. For other tools (Tailwind, Panda,
+  PostCSS), add a `vite.config` to the project: see
+  [Build config](#build-config).
 - A package with a prebuilt module declares it in `package.json` as
   `"domicile": { "shell": "dist/shell.js" }` and is served as is. Otherwise it
   is built from its entry.
@@ -113,6 +116,81 @@ domicile @domicile-desktop/manganese     # Domicile's own, prebuilt
 - A failed first build is printed, or shown on the splash, and the desktop
   does not start. A failed `load-shell` prints the error and keeps the
   running shell.
+
+## Build config
+
+`domicile` builds an entry with Vite, transpiling and bundling only. Packages
+ship their CSS prebuilt; manganese's covers all of its packages.
+
+To add a tool, put a `vite.config` in the entry's project (the directory with
+its `package.json`, or the entry's own directory). For Tailwind:
+
+```ts
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({ plugins: [tailwindcss()] });
+```
+
+```css
+/* style.css, imported by the entry */
+@import "tailwindcss";
+```
+
+### Panda with manganese's tokens
+
+`css()` from `@domicile-desktop/manganese/css` only names classes. To get
+rules for your own calls, run Panda with manganese's config:
+
+```sh
+bun add -d @pandacss/dev@1 @domicile-desktop/manganese
+```
+
+```ts
+// panda.config.ts
+import manganese from "@domicile-desktop/manganese/panda.config";
+import { defineConfig } from "@pandacss/dev";
+
+export default defineConfig({
+  ...manganese,
+  importMap: "@domicile-desktop/manganese",
+  include: ["./*.tsx"],
+  outdir: "styled-system",
+  preflight: false,
+});
+```
+
+```ts
+// vite.config.ts
+import panda from "@pandacss/dev/postcss";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  css: { postcss: { plugins: [panda({ cwd: import.meta.dirname })] } },
+});
+```
+
+```css
+/* style.css, imported by the entry */
+@layer reset, base, tokens, recipes, utilities;
+```
+
+- Install the manganese version your Domicile runs. Its config sets the class
+  name hashing, so a different version can name classes differently.
+- `include` lists your files; keep `node_modules` out of it.
+- The [builder's tests](/packages/domicile-builder/fixtures/panda-shell) build
+  this setup.
+
+### What the builder adds
+
+- The config's plugins and settings apply. `domicile` sets the output
+  ([Bundling](#bundling)) and resolves `@domicile-desktop/*` and React from
+  the running Domicile, over the config's own settings.
+- Packages the config imports are installed like the entry's.
+- The cache key covers the config and the files it imports. A file a tool
+  reads by name, such as `panda.config.ts`, is not covered: edit the entry to
+  rebuild.
 
 Users of your shell never run `domicile-compositor` and do not need a config
 file.

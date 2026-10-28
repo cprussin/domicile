@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { importGraph, packageOf } from "./graph";
+import { importGraph, mergedGraph, packageOf } from "./graph";
 
 /** A disk of these files and nothing else. */
 const disk =
@@ -45,6 +45,26 @@ describe("importGraph", () => {
         disk({ "/desk/domicile.ts": `import "./gone";` }),
       ),
     ).toThrow("./gone");
+  });
+});
+
+describe("mergedGraph", () => {
+  it("has every graph's files and packages", () => {
+    const merged = mergedGraph([
+      {
+        files: new Map([["/desk/domicile.ts", "a"]]),
+        packages: new Set(["zod"]),
+      },
+      {
+        files: new Map([["/desk/vite.config.ts", "b"]]),
+        packages: new Set(["zod", "vite"]),
+      },
+    ]);
+    expect([...merged.files]).toEqual([
+      ["/desk/domicile.ts", "a"],
+      ["/desk/vite.config.ts", "b"],
+    ]);
+    expect([...merged.packages]).toEqual(["zod", "vite"]);
   });
 });
 

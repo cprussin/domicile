@@ -172,7 +172,8 @@ Checks:
   ([`domicile-builder`](/packages/domicile-builder/README.md)).
 - Bun installs and runs the builder and TS configs. Vite transpiles and
   bundles through `shellBuild`, and runs no other compile step. Packages ship
-  their CSS prebuilt: manganese's covers its own packages.
+  their CSS prebuilt: manganese's covers its own packages. A project's own
+  `vite.config` adds its tools; the builder's shell settings override it.
 - `@domicile-desktop/*` and React always come from the install. Two copies of
   React break hooks, and a mismatched SDK speaks a different protocol.
 - No fallback shell runs during a slow first build; the splash does. A shell
