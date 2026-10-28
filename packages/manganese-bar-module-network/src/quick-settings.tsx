@@ -4,7 +4,7 @@ import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
 import { deskNetwork } from "@domicile-desktop/system-network/react";
 
 import { NetworkPanel } from "./NetworkPanel";
-import { NetworkGlyph, NetworkTiles } from "./NetworkQuick";
+import { NetworkGlyph, NetworkTile } from "./NetworkQuick";
 import { WIFI_ACTIONS } from "./wifi-actions";
 
 /** The desk's network icon, for the quick settings button. */
@@ -13,22 +13,14 @@ export const NetworkIndicator = () => {
   return <NetworkGlyph interfaces={interfaces} network={network} />;
 };
 
-/** The desk's Wi-Fi and wired tiles, for the quick settings panel. */
-export const NetworkToggles = ({
+/** The desk's network tile, for the quick settings panel. */
+export const NetworkCard = ({
   onMore,
 }: {
   onMore?: (() => void) | undefined;
 }) => {
-  const domicile = useDomicile();
-  const { interfaces, wifi } = deskNetwork(domicile);
-  return (
-    <NetworkTiles
-      domicile={domicile}
-      interfaces={interfaces}
-      onMore={onMore}
-      wifi={wifi}
-    />
-  );
+  const { interfaces, wifi } = deskNetwork(useDomicile());
+  return <NetworkTile interfaces={interfaces} onMore={onMore} wifi={wifi} />;
 };
 
 /** The desk's wired ports and Wi-Fi panel, for the quick settings panel's details. */

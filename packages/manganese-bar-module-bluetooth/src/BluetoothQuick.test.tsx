@@ -1,20 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
-import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BluetoothGlyph, BluetoothTile } from "./BluetoothQuick";
-import { heldActions } from "./held-actions";
-import {
-  ADAPTER,
-  heldBluetooth,
-  heldHardware,
-  reading,
-} from "./held-bluetooth";
-
-/** A host the component never calls, since the library is injected. */
-const NO_HOST = new FakeDomicileHost().domicile;
+import { heldBluetooth, heldHardware, reading } from "./held-bluetooth";
 
 describe(BluetoothGlyph, () => {
   it("shows nothing while no device is connected", () => {
@@ -51,9 +41,7 @@ describe(BluetoothTile, () => {
     const hardware = heldHardware();
     const { container } = render(
       <BluetoothTile
-        actions={heldActions().actions}
         bluetooth={bluetooth.bluetooth}
-        domicile={NO_HOST}
         hardware={hardware.hardware}
       />,
     );
@@ -61,23 +49,34 @@ describe(BluetoothTile, () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("names the connected devices, and turns every adapter off", async () => {
+  it("names the connected devices, and switches nothing", () => {
     const bluetooth = heldBluetooth();
-    const held = heldActions();
     render(
       <BluetoothTile
-        actions={held.actions}
         bluetooth={bluetooth.bluetooth}
-        domicile={NO_HOST}
         hardware={heldHardware().hardware}
+        onMore={() => undefined}
       />,
     );
     bluetooth.report(reading(true, ["WH-1000XM4"]));
+
     expect(screen.getByText("WH-1000XM4")).toBeVisible();
+    expect(screen.queryByRole("button", { pressed: true })).toBeNull();
+    expect(screen.queryByRole("button", { pressed: false })).toBeNull();
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: "Bluetooth" }));
+  it("says when it is on with nothing connected", () => {
+    const bluetooth = heldBluetooth();
+    render(
+      <BluetoothTile
+        bluetooth={bluetooth.bluetooth}
+        hardware={heldHardware().hardware}
+        onMore={() => undefined}
+      />,
+    );
+    bluetooth.report(reading(true, []));
 
-    expect(held.asked).toEqual([["setPowered", ADAPTER, false]]);
+    expect(screen.getByText("Not connected")).toBeVisible();
   });
 
   it("opens its details", async () => {
@@ -85,9 +84,7 @@ describe(BluetoothTile, () => {
     const opened = Promise.withResolvers<true>();
     render(
       <BluetoothTile
-        actions={heldActions().actions}
         bluetooth={bluetooth.bluetooth}
-        domicile={NO_HOST}
         hardware={heldHardware().hardware}
         onMore={() => {
           opened.resolve(true);
@@ -108,16 +105,14 @@ describe(BluetoothTile, () => {
     const bluetooth = heldBluetooth();
     render(
       <BluetoothTile
-        actions={heldActions().actions}
         bluetooth={bluetooth.bluetooth}
-        domicile={NO_HOST}
         hardware={heldHardware().hardware}
         locked
       />,
     );
     bluetooth.report(reading(true, []));
-    expect(screen.getByRole("button", { name: "Bluetooth" })).toBeDisabled();
-    expect(screen.getByText("On")).toBeVisible();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Not connected")).toBeVisible();
   });
 
   it("says why there is no adapter", () => {
@@ -125,15 +120,13 @@ describe(BluetoothTile, () => {
     const hardware = heldHardware();
     render(
       <BluetoothTile
-        actions={heldActions().actions}
         bluetooth={bluetooth.bluetooth}
-        domicile={NO_HOST}
         hardware={hardware.hardware}
       />,
     );
     hardware.report(Ok(true));
     bluetooth.report(Err({ kind: SystemErrorKind.Dbus, message: "gone" }));
-    expect(screen.getByRole("button", { name: "Bluetooth" })).toBeDisabled();
+    expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByText("Unavailable")).toBeVisible();
     expect(screen.queryByText(/gone/)).toBeNull();
   });

@@ -1,10 +1,12 @@
 import type { AccordionItem } from "@domicile-desktop/component-library/Accordion";
 import { Accordion } from "@domicile-desktop/component-library/Accordion";
-import { IconButton } from "@domicile-desktop/component-library/IconButton";
+import {
+  ChoiceList,
+  RadioRow,
+} from "@domicile-desktop/component-library/ChoiceRow";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import type { SelectOption } from "@domicile-desktop/component-library/Select";
 import { Select } from "@domicile-desktop/component-library/Select";
-import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type {
   Audio,
   AudioCard,
@@ -13,7 +15,11 @@ import type {
   AudioStream,
 } from "@domicile-desktop/system-audio/audio";
 import type { SoundControls } from "@domicile-desktop/system-audio/react";
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
+import { HeadphonesIcon } from "@phosphor-icons/react/dist/ssr/Headphones";
+import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
+import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
+import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { createContext, useContext, useState } from "react";
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
@@ -21,6 +27,8 @@ import { ask } from "./ask";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
 import { primary } from "./primary";
+import type { Route } from "./routes";
+import { routesOf } from "./routes";
 import { useMeters } from "./useMeters";
 
 type Props = {
@@ -30,19 +38,20 @@ type Props = {
 };
 
 /** A drawer under the sliders. */
-type Drawer = "outputs" | "inputs" | "apps" | "cards";
+type Drawer = "apps" | "cards";
 
 /**
  * The full sound mixer, in the bar's panel; a replacement for pavucontrol.
  *
- * Two sections, Output and Input, each with the default device's slider,
- * meter and port.
+ * Two sections, Output and Input, each with the slider and meter of the
+ * device in use, then where sound goes or comes from as a list to pick one
+ * of: "Speakers", "Headphones", "HDMI". Picking one switches the device and
+ * its port together.
  *
- * Below them, drawers: the other outputs and inputs, the apps that are
- * playing or recording with their streams, and the card profiles.
- *
- * Every choice is a `Select`. Its list renders outside the panel, and the
- * `Popover` still treats it as part of the panel.
+ * Below them, drawers: the apps that are playing or recording with their
+ * streams, and the sound cards' profiles. Their choices are `Select`s, whose
+ * lists render outside the panel, and the `Popover` still treats them as
+ * part of it.
  *
  * Only visible devices are metered. Recording streams have no meter; their
  * input's meter shows instead.
@@ -55,10 +64,6 @@ export const Mixer = ({ audio, server }: Props) => {
   const [panel, setPanel] = useState<HTMLElement | null>(null);
   const output = primary(audio.outputs);
   const input = primary(audio.inputs.filter((device) => !device.monitor));
-  const outputs = audio.outputs.filter((device) => device !== output);
-  const inputs = audio.inputs.filter(
-    (device) => device !== input && !device.monitor,
-  );
   const apps = byApp(audio.playback, audio.recording);
   const levels = useMeters(
     server,
@@ -66,45 +71,11 @@ export const Mixer = ({ audio, server }: Props) => {
       ...[output, input].flatMap((device) =>
         device === undefined ? [] : [device.id],
       ),
-      ...(open.includes("outputs") ? outputs : []).map(({ id }) => id),
-      ...(open.includes("inputs") ? inputs : []).map(({ id }) => id),
       ...(open.includes("apps") ? audio.playback : []).map(({ id }) => id),
     ],
     audio.meters,
   );
   const drawers: AccordionItem[] = [
-    ...(outputs.length > 0
-      ? [
-          {
-            content: (
-              <Devices
-                devices={outputs}
-                direction="output"
-                levels={levels}
-                server={server}
-              />
-            ),
-            label: "More outputs",
-            value: "outputs",
-          },
-        ]
-      : []),
-    ...(inputs.length > 0
-      ? [
-          {
-            content: (
-              <Devices
-                devices={inputs}
-                direction="input"
-                levels={levels}
-                server={server}
-              />
-            ),
-            label: "More inputs",
-            value: "inputs",
-          },
-        ]
-      : []),
     ...(apps.length > 0
       ? [
           {
@@ -126,7 +97,7 @@ export const Mixer = ({ audio, server }: Props) => {
       ? [
           {
             content: <Cards cards={audio.cards} server={server} />,
-            label: "Cards",
+            label: "Sound cards",
             value: "cards",
           },
         ]
@@ -144,6 +115,11 @@ export const Mixer = ({ audio, server }: Props) => {
               meter={levels.get(output.id)}
               server={server}
             />
+            <Routes
+              direction="output"
+              routes={routesOf(audio.outputs)}
+              server={server}
+            />
           </PanelSection>
         )}
         {input !== undefined && (
@@ -153,6 +129,11 @@ export const Mixer = ({ audio, server }: Props) => {
               direction="input"
               label="Microphone"
               meter={levels.get(input.id)}
+              server={server}
+            />
+            <Routes
+              direction="input"
+              routes={routesOf(audio.inputs)}
               server={server}
             />
           </PanelSection>
@@ -173,7 +154,7 @@ export const Mixer = ({ audio, server }: Props) => {
   );
 };
 
-const DRAWERS: readonly Drawer[] = ["outputs", "inputs", "apps", "cards"];
+const DRAWERS: readonly Drawer[] = ["apps", "cards"];
 
 const isDrawer = (value: string): value is Drawer =>
   DRAWERS.some((drawer) => drawer === value);
@@ -217,78 +198,84 @@ type DefaultProps = {
   meter: number | undefined;
 };
 
-/** One of the two default sliders, titled with its device, with its port. */
+/** One of the two sliders, for the device in use. */
 const Default = ({ device, direction, server, label, meter }: DefaultProps) => (
-  <div className={rowStyles}>
-    <span className={cx(headStyles, captionLineStyles)}>
-      <span className={captionStyles}>{device.description}</span>
-      <Port device={device} server={server} />
-    </span>
-    <Level
-      direction={direction}
-      label={label}
-      level={device.volume}
-      meter={meter}
-      muted={device.muted}
-      onLevel={(level) => {
-        ask(server.setVolume(device.id, level));
-      }}
-      onMuted={(muted) => {
-        ask(server.setMuted(device.id, muted));
-      }}
-    />
-  </div>
+  <Level
+    direction={direction}
+    label={label}
+    level={device.volume}
+    meter={meter}
+    muted={device.muted}
+    onLevel={(level) => {
+      ask(server.setVolume(device.id, level));
+    }}
+    onMuted={(muted) => {
+      ask(server.setMuted(device.id, muted));
+    }}
+  />
 );
 
-type DevicesProps = {
-  devices: readonly AudioDevice[];
+type RoutesProps = {
   direction: Direction;
+  routes: readonly Route[];
   server: SoundControls;
-  levels: ReadonlyMap<string, number>;
 };
 
-/** The non-default devices, each of which can be made the default. */
-const Devices = ({ devices, direction, levels, server }: DevicesProps) =>
-  devices.length > 0 && (
-    <ul className={listStyles}>
-      {devices.map((device) => (
-        <li className={rowStyles} key={device.id}>
-          <span className={headStyles}>
-            <Tooltip
-              content="Make it the default"
-              tone="overPhoto"
-              trigger={
-                <IconButton
-                  label={`Make ${device.description} the default`}
-                  onClick={() => {
-                    ask(server.setDefault(device.id));
-                  }}
-                  size="sm"
-                >
-                  <CheckCircleIcon aria-hidden size={14} />
-                </IconButton>
-              }
-            />
-            <span className={nameStyles}>{device.description}</span>
-            <Port device={device} server={server} />
-          </span>
-          <Level
-            direction={direction}
-            label={device.description}
-            level={device.volume}
-            meter={levels.get(device.id)}
-            muted={device.muted}
-            onLevel={(level) => {
-              ask(server.setVolume(device.id, level));
-            }}
-            onMuted={(muted) => {
-              ask(server.setMuted(device.id, muted));
-            }}
-          />
-        </li>
+/**
+ * Where sound goes or comes from, one picked. Absent with nothing to pick
+ * between.
+ */
+const Routes = ({ direction, routes, server }: RoutesProps) =>
+  routes.length > 1 && (
+    <ChoiceList<string>
+      aria-label={direction === "output" ? "Play sound on" : "Record from"}
+      onValueChange={(key) => {
+        const route = routes.find((each) => each.key === key);
+        if (route !== undefined) {
+          pick(route, server);
+        }
+      }}
+      value={routes.find(({ picked }) => picked)?.key}
+    >
+      {routes.map((route) => (
+        <RadioRow
+          detail={route.detail}
+          icon={iconOf(route, direction)}
+          key={route.key}
+          name={route.label}
+          value={route.key}
+        />
       ))}
-    </ul>
+    </ChoiceList>
   );
+
+/** Asks for the route's device and port, whichever aren't in use already. */
+const pick = ({ device, port }: Route, server: SoundControls) => {
+  if (!device.default) {
+    ask(server.setDefault(device.id));
+  }
+  if (port !== undefined && port.name !== device.port) {
+    ask(server.setPort(device.id, port.name));
+  }
+};
+
+/** A picture of the route, guessed from its names. */
+const iconOf = (route: Route, direction: Direction) => {
+  const names = [route.label, route.port?.name ?? "", route.device.id]
+    .join(" ")
+    .toLowerCase();
+  if (/bluez|bluetooth/.test(names)) {
+    return <BluetoothIcon />;
+  } else if (/head(phone|set)/.test(names)) {
+    return <HeadphonesIcon />;
+  } else if (/hdmi|displayport|monitor/.test(names)) {
+    return <MonitorIcon />;
+  } else if (direction === "input") {
+    return <MicrophoneIcon />;
+  } else {
+    return <SpeakerHighIcon />;
+  }
+};
 
 type AppsProps = {
   apps: readonly App[];
@@ -387,24 +374,6 @@ const Cards = ({ cards, server }: CardsProps) => (
     ))}
   </ul>
 );
-
-type PortProps = {
-  device: AudioDevice;
-  server: SoundControls;
-};
-
-/** A device's port picker, when it has more than one. */
-const Port = ({ device, server }: PortProps) =>
-  device.ports.length > 1 && (
-    <Choice
-      label={`${device.description} port`}
-      onChoose={(port) => {
-        ask(server.setPort(device.id, port));
-      }}
-      options={device.ports.map((port) => option(port, "unplugged"))}
-      value={device.port}
-    />
-  );
 
 type ChoiceProps = {
   label: string;

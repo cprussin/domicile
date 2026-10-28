@@ -25,7 +25,7 @@ export type QuickSettingsParts = {
     onAuxClick: (event: MouseEvent) => void;
     onWheel: (event: WheelEvent) => void;
   };
-  NetworkTiles: WithDetails;
+  NetworkTile: WithDetails;
   BluetoothTile: WithDetails;
   KeepAwakeTile: ComponentType;
   NightLightTile: ComponentType;
@@ -50,9 +50,10 @@ enum Details {
 /**
  * One bar item for the computer's settings: the network, Bluetooth, sound
  * and battery icons in a button, each shown only when it has something to
- * say. It opens a panel of labeled tiles, the brightness and volume
- * sliders, the battery, and a way to the Settings app. A tile's arrow opens
- * its details in place.
+ * say. It opens a panel of tiles into the network and Bluetooth details, a
+ * row of switches for what is turned on and off often, the brightness and
+ * volume sliders, the battery, and a way to the Settings app. Details open
+ * in place.
  *
  * Offers only what a locked desktop allows: no network, keep awake, theme,
  * details or Settings.
@@ -109,9 +110,11 @@ export const QuickSettings = ({
           <span className={mainStyles}>
             <span className={tilesStyles}>
               {!locked && (
-                <parts.NetworkTiles onMore={opener(Details.Network)} />
+                <parts.NetworkTile onMore={opener(Details.Network)} />
               )}
               <parts.BluetoothTile onMore={opener(Details.Bluetooth)} />
+            </span>
+            <span className={togglesStyles}>
               {!locked && <parts.KeepAwakeTile />}
               <parts.NightLightTile />
               {!locked && <parts.DarkModeTile />}
@@ -197,6 +200,9 @@ const mainStyles = flex({ direction: "column", gap: 3 });
 const slidersStyles = flex({ direction: "column", gap: 1.5 });
 
 const tilesStyles = grid({ columns: 2, gap: 2 });
+
+// The switches share the row evenly, however many a locked desktop leaves.
+const togglesStyles = flex({ gap: 2 });
 
 // The volume's arrow, an `IconButton`, and the gap before it.
 const brightnessStyles = cva({

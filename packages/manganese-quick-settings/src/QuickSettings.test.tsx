@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
+import { QuickToggle } from "@domicile-desktop/component-library/QuickToggle";
 import { BarContext } from "@domicile-desktop/manganese-bar/bar-context";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -8,26 +9,22 @@ import userEvent from "@testing-library/user-event";
 import type { QuickSettingsParts } from "./QuickSettings";
 import { QuickSettings } from "./QuickSettings";
 
-/** A tile that records whether it may open details. */
+/** A tile into details, which only shows its state without them. */
 const tile =
   (label: string) =>
-  ({ onMore }: { onMore?: (() => void) | undefined }) =>
-    onMore === undefined ? (
-      <QuickTile
-        icon={undefined}
-        label={label}
-        onPressedChange={() => undefined}
-        pressed={false}
-      />
-    ) : (
-      <QuickTile
-        icon={undefined}
-        label={label}
-        onMore={onMore}
-        onPressedChange={() => undefined}
-        pressed={false}
-      />
-    );
+  ({ onMore }: { onMore?: (() => void) | undefined }) => (
+    <QuickTile icon={undefined} label={label} onMore={onMore} />
+  );
+
+/** A switch that switches nothing. */
+const toggle = (label: string) => () => (
+  <QuickToggle
+    icon={undefined}
+    label={label}
+    onPressedChange={() => undefined}
+    pressed={false}
+  />
+);
 
 /** Parts that draw their names, and count the wheel. */
 const testParts = () => {
@@ -38,12 +35,12 @@ const testParts = () => {
     BluetoothDetails: () => <p>Bluetooth devices</p>,
     BluetoothTile: tile("Bluetooth"),
     BrightnessRow: () => <span>Brightness slider</span>,
-    DarkModeTile: tile("Dark mode"),
+    DarkModeTile: toggle("Dark mode"),
     Indicators: () => <span aria-label="Volume 50%" role="img" />,
-    KeepAwakeTile: tile("Keep awake"),
+    KeepAwakeTile: toggle("Keep awake"),
     NetworkDetails: () => <p>Wi-Fi networks</p>,
-    NetworkTiles: tile("Wi-Fi"),
-    NightLightTile: tile("Night light"),
+    NetworkTile: tile("Wi-Fi"),
+    NightLightTile: toggle("Night light"),
     SoundDetails: () => <p>Mixer</p>,
     SoundRow: ({ onMore }) => (
       <button disabled={onMore === undefined} onClick={onMore} type="button">
@@ -112,8 +109,8 @@ describe(QuickSettings, () => {
     );
 
     for (const name of [
-      "Wi-Fi",
-      "Bluetooth",
+      "Wi-Fi details",
+      "Bluetooth details",
       "Keep awake",
       "Night light",
       "Dark mode",
@@ -161,7 +158,7 @@ describe(QuickSettings, () => {
       screen.getByRole("button", { name: "Quick settings" }),
     );
 
-    expect(screen.queryByRole("button", { name: "Wi-Fi" })).toBeNull();
+    expect(screen.queryByText("Wi-Fi")).toBeNull();
     expect(screen.queryByRole("button", { name: "Keep awake" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Dark mode" })).toBeNull();
     expect(screen.getByRole("button", { name: "Night light" })).toBeVisible();
@@ -169,6 +166,7 @@ describe(QuickSettings, () => {
     expect(
       screen.queryByRole("button", { name: "Bluetooth details" }),
     ).toBeNull();
+    expect(screen.getByText("Bluetooth")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Sound details" }),
     ).toBeDisabled();

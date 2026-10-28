@@ -42,6 +42,24 @@ describe(ListRow, () => {
   });
 
   describe("interactions", () => {
+    it("folds what goes under it behind a toggle when given one", async () => {
+      render(
+        <List>
+          <ListRow disclosure="Details" label="Centar">
+            <span>10.42.0.17</span>
+          </ListRow>
+        </List>,
+      );
+      const toggle = screen.getByRole("button", { name: "Details" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByText("10.42.0.17")).toBeNull();
+
+      await userEvent.click(toggle);
+
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByText("10.42.0.17")).toBeVisible();
+    });
+
     it("is one button when it can be pressed, named for assistive tech", async () => {
       const pressed = new Promise((resolve) => {
         render(

@@ -260,13 +260,15 @@ the component library's panel parts, not hand-rolled rows and labels:
 | `Panel` | A titled panel; `PanelAction` puts a switch or button in its header |
 | `PanelHeader` | A title, a back button, controls at the end |
 | `PanelSection` | A group under a small label: Inboxes, Paired, Output |
-| `List` / `ListRow` | A row: icon, label over a detail, something at the end. `plain` rows are choices; `filled` rows are tiles with their own buttons |
+| `List` / `ListRow` | A row: icon, label over a detail, something at the end. `plain` rows are choices; `filled` rows are tiles with their own buttons; `disclosure` folds details away |
 | `DetailList` | Terms and values, such as addresses |
 | `SliderRow` | A slider with its icon, value and an optional arrow |
 | `PanelNote` | One line: searching, off, empty, or a refusal in plain words |
 | `PanelFooter` | The last line: a summary and an action |
 | `IconButton` | Every icon-only button |
-| `QuickTile` | A quick settings toggle |
+| `ChoiceList` / `RadioRow` | A list to pick one from: where sound plays, a keymap |
+| `QuickTile` | A quick settings tile into the details of what is nearly always on: Wi-Fi, Bluetooth |
+| `QuickToggle` | A quick settings switch for what is turned on and off often: night light, dark mode |
 
 Their type is the preset's `textStyles`: `panelTitle`, `panelLabel`,
 `panelDetail` and `panelOverline`. A label and its detail differ in size and

@@ -311,7 +311,7 @@ describe("Network", () => {
       );
       wifi.report(Ok(None()));
 
-      expect(screen.getByText("No Wi-Fi device")).toBeVisible();
+      expect(screen.getByText("No network devices")).toBeVisible();
       expect(
         screen.queryByRole("region", { name: "Wired" }),
       ).not.toBeInTheDocument();
@@ -339,6 +339,7 @@ describe("Network", () => {
       interfaces.report(Ok([port(true), RADIO]));
 
       await userEvent.click(screen.getByRole("button", { name: "Wired" }));
+      await userEvent.click(screen.getByRole("button", { name: "Details" }));
       addresses.report(
         Ok(
           new Map([
@@ -367,18 +368,47 @@ describe("Network", () => {
       expect(addresses.stopped).toBe(1);
     });
 
-    it("says when a port has no cable", async () => {
+    it("says when a port has no cable, on a machine without Wi-Fi", async () => {
       const network = heldNetwork();
       const interfaces = heldInterfaces();
-      render(<Item interfaces={interfaces.watch} network={network.watch} />);
+      const wifi = held<Result<Option<Wifi>, SystemError>>();
+      render(
+        <Item
+          interfaces={interfaces.watch}
+          network={network.watch}
+          wifi={wifi.watch}
+        />,
+      );
       network.report(online(Link.None()));
       interfaces.report(Ok([port(false)]));
 
       await userEvent.click(screen.getByRole("button", { name: "Offline" }));
+      wifi.report(Ok(None()));
 
       expect(screen.getByRole("region", { name: "Wired" })).toHaveTextContent(
         "No cable",
       );
+    });
+
+    it("leaves out a port with no cable beside Wi-Fi", async () => {
+      const network = heldNetwork();
+      const interfaces = heldInterfaces();
+      const wifi = held<Result<Option<Wifi>, SystemError>>();
+      render(
+        <Item
+          interfaces={interfaces.watch}
+          network={network.watch}
+          wifi={wifi.watch}
+        />,
+      );
+      network.report(online(Link.None()));
+      interfaces.report(Ok([port(false), RADIO]));
+
+      await userEvent.click(screen.getByRole("button", { name: "Offline" }));
+      wifi.report(Err({ kind: SystemErrorKind.Dbus, message: "gone" }));
+
+      expect(screen.queryByRole("region", { name: "Wired" })).toBeNull();
+      expect(screen.getByRole("region", { name: "Wi-Fi" })).toBeVisible();
     });
   });
 });

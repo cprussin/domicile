@@ -5,7 +5,6 @@ import { DetailList } from "@domicile-desktop/component-library/DetailList";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
-import { PanelAction } from "@domicile-desktop/component-library/Panel";
 import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Switch } from "@domicile-desktop/component-library/Switch";
@@ -27,6 +26,7 @@ import { hstack } from "../styled-system/patterns";
 import type { Addresses } from "./addressing";
 import { addressRowsOf } from "./addressing";
 import { signalOf } from "./signal";
+import { speedOf } from "./speed";
 import { WifiSignalIcon } from "./WifiSignalIcon";
 import type { WifiActions } from "./wifi-actions";
 
@@ -41,25 +41,32 @@ type Props = {
 };
 
 /**
- * The Wi-Fi panel: a switch for the radio in the header, the connection and
- * its details, and the other networks in range, each joined with a click.
+ * The Wi-Fi section: a switch for the radio on its heading, the connection
+ * with its details folded away, then the other networks in range, each
+ * joined with a click. Nothing without a Wi-Fi device.
  *
  * Scans when shown. A refusal shows plainly where it was asked, with the
  * service's words in its tooltip; the service's state shows the rest.
  */
 export const WifiPanel = ({ actions, addresses, host, wifi }: Props) => {
   if (wifi === undefined) {
-    return <PanelNote>Reading Wi-Fi…</PanelNote>;
+    return (
+      <PanelSection label="Wi-Fi">
+        <PanelNote>Reading Wi-Fi…</PanelNote>
+      </PanelSection>
+    );
   } else {
     return wifi.match({
       Err: (error) => (
-        <PanelNote detail={error.message} tone="warning">
-          Couldn't read Wi-Fi
-        </PanelNote>
+        <PanelSection label="Wi-Fi">
+          <PanelNote detail={error.message} tone="warning">
+            Couldn't read Wi-Fi
+          </PanelNote>
+        </PanelSection>
       ),
       Ok: (found) =>
         found.match({
-          None: () => <PanelNote>No Wi-Fi device</PanelNote>,
+          None: () => undefined,
           Some: (device) => (
             <Controls
               actions={actions}
@@ -93,8 +100,8 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
   };
   const others = wifi.networks.filter((network) => !network.connected);
   return (
-    <>
-      <PanelAction>
+    <PanelSection
+      action={
         <span className={headStyles}>
           {wifi.enabled && (
             <Tooltip
@@ -115,6 +122,7 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
           )}
           <Switch
             checked={wifi.enabled}
+            hideLabel
             label="Wi-Fi"
             onCheckedChange={(checked) => {
               requests.run("power", () =>
@@ -123,7 +131,9 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
             }}
           />
         </span>
-      </PanelAction>
+      }
+      label="Wi-Fi"
+    >
       <Failure error={requests.failed("power")}>
         {wifi.enabled ? "Couldn't turn Wi-Fi off" : "Couldn't turn Wi-Fi on"}
       </Failure>
@@ -134,59 +144,53 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
             host={host}
             wifi={{ backend, device, interface: name }}
           />
-          {wifi.connection !== undefined && (
-            <Connection
-              addresses={addresses}
-              connection={wifi.connection}
-              failed={requests.failed("disconnect")}
-              onDisconnect={() => {
-                requests.run("disconnect", () =>
-                  actions.disconnectWifi(host, wifi),
-                );
-              }}
-              pending={requests.pending("disconnect")}
-              wifi={wifi}
-            />
-          )}
-          <PanelSection
-            label={
-              wifi.connection === undefined ? "Networks" : "Other networks"
-            }
-          >
-            <List label="Networks">
-              {others.map((network) => (
-                <NetworkRow
-                  asking={asking === network.path}
-                  failed={requests.failed(network.path)}
-                  key={network.path}
-                  network={network}
-                  onJoin={(passphrase) => {
-                    join(network, passphrase);
-                  }}
-                  onPick={() => {
-                    if (needsPassphrase(network)) {
-                      setAsking(network.path);
-                    } else {
-                      join(network, undefined);
-                    }
-                  }}
-                  pending={requests.pending(network.path)}
-                />
-              ))}
-            </List>
-            {scanning && <PanelNote>Scanning…</PanelNote>}
-            {!scanning && others.length === 0 && (
-              <PanelNote>No other networks in range</PanelNote>
+          <List label="Networks">
+            {wifi.connection !== undefined && (
+              <Connection
+                addresses={addresses}
+                connection={wifi.connection}
+                failed={requests.failed("disconnect")}
+                onDisconnect={() => {
+                  requests.run("disconnect", () =>
+                    actions.disconnectWifi(host, wifi),
+                  );
+                }}
+                pending={requests.pending("disconnect")}
+                wifi={wifi}
+              />
             )}
-            <Failure error={requests.failed("scan")}>
-              Couldn't look for networks
-            </Failure>
-          </PanelSection>
+            {others.map((network) => (
+              <NetworkRow
+                asking={asking === network.path}
+                failed={requests.failed(network.path)}
+                key={network.path}
+                network={network}
+                onJoin={(passphrase) => {
+                  join(network, passphrase);
+                }}
+                onPick={() => {
+                  if (needsPassphrase(network)) {
+                    setAsking(network.path);
+                  } else {
+                    join(network, undefined);
+                  }
+                }}
+                pending={requests.pending(network.path)}
+              />
+            ))}
+          </List>
+          {scanning && <PanelNote>Scanning…</PanelNote>}
+          {!scanning && others.length === 0 && (
+            <PanelNote>No other networks in range</PanelNote>
+          )}
+          <Failure error={requests.failed("scan")}>
+            Couldn't look for networks
+          </Failure>
         </>
       ) : (
         <PanelNote>Wi-Fi is off</PanelNote>
       )}
-    </>
+    </PanelSection>
   );
 };
 
@@ -240,24 +244,21 @@ const Connection = ({
   pending,
   wifi,
 }: ConnectionProps) => (
-  <PanelSection label="Connected">
-    <List>
-      <ListRow
-        detail={summaryOf(connection)}
-        end={
-          <Button loading={pending} onClick={onDisconnect} size="xs">
-            Disconnect
-          </Button>
-        }
-        icon={<WifiSignalIcon strength={connection.strength} />}
-        label={connection.ssid}
-        surface="filled"
-      >
-        <Failure error={failed}>Couldn't disconnect</Failure>
-        <DetailList rows={detailsOf(wifi, connection, addresses)} />
-      </ListRow>
-    </List>
-  </PanelSection>
+  <ListRow
+    detail={summaryOf(connection)}
+    disclosure="Details"
+    icon={<WifiSignalIcon strength={connection.strength} />}
+    label={connection.ssid}
+    surface="filled"
+  >
+    <DetailList rows={detailsOf(wifi, connection, addresses)} />
+    <span>
+      <Button loading={pending} onClick={onDisconnect} rounded size="xs">
+        Disconnect
+      </Button>
+    </span>
+    <Failure error={failed}>Couldn't disconnect</Failure>
+  </ListRow>
 );
 
 type NetworkRowProps = {
@@ -370,20 +371,15 @@ const labelOf = (network: WifiNetwork): string =>
     `${signalOf(network.strength)} signal`,
   ].join(", ");
 
-/** The connection at a glance: its signal, band and speed, as known. */
+/** The connection at a glance: that it is the one in use, its signal and band. */
 const summaryOf = (connection: WifiConnection): string =>
   [
-    `${capitalized(signalOf(connection.strength))} signal`,
+    "Connected",
+    `${signalOf(connection.strength)} signal`,
     ...(connection.frequency === undefined
       ? []
       : [bandOf(connection.frequency)]),
-    ...(connection.bitrate === undefined
-      ? []
-      : [`${Math.round(connection.bitrate).toString()} Mb/s`]),
   ].join(" · ");
-
-const capitalized = (word: string): string =>
-  `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
 /**
  * The connection's details, leaving out what is unknown. The addresses come
@@ -394,6 +390,9 @@ const detailsOf = (
   connection: WifiConnection,
   addresses: Addresses,
 ): Detail[] => [
+  ...(connection.bitrate === undefined
+    ? []
+    : [["Speed", speedOf(connection.bitrate)] as const]),
   ...addressRowsOf(addresses, wifi.interface),
   ...(connection.ip === undefined
     ? []

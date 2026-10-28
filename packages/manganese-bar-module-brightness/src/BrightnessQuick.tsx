@@ -1,4 +1,4 @@
-import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
+import { QuickToggle } from "@domicile-desktop/component-library/QuickToggle";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import type { SharedBacklight } from "@domicile-desktop/system-backlight/shared-backlight";
 import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
@@ -22,13 +22,12 @@ export const BrightnessRow = ({
   );
 };
 
-/** The quick settings tile for the night light. */
+/** The quick settings switch for the night light. */
 export const NightLightTile = ({ nightLight }: { nightLight: NightLight }) => {
   const on = useSharedWatch(nightLight.on) ?? false;
   return (
-    <QuickTile
-      detail={on ? "On" : "Off"}
-      icon={<MoonIcon size={15} weight={on ? "fill" : "bold"} />}
+    <QuickToggle
+      icon={<MoonIcon size={16} weight={on ? "fill" : "bold"} />}
       label="Night light"
       onPressedChange={nightLight.toggle}
       pressed={on}

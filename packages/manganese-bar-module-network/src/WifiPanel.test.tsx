@@ -112,6 +112,10 @@ const shownWith = (changes: Partial<WifiConnection>) => {
   }
 };
 
+/** Unfolds the connection's details. */
+const unfold = () =>
+  userEvent.click(screen.getByRole("button", { name: "Details" }));
+
 /** Each term and its value's lines. */
 const detailsIn = (within: ReturnType<typeof screen.getByRole>) =>
   Array.from(within.querySelectorAll("dt"), (term) => [
@@ -159,7 +163,10 @@ describe("WifiPanel", () => {
     [
       "disconnecting",
       "disconnect",
-      () => screen.getByRole("button", { name: "Disconnect" }),
+      async () => {
+        await unfold();
+        return screen.getByRole("button", { name: "Disconnect" });
+      },
       "Couldn't disconnect",
     ],
   ])(
@@ -179,7 +186,7 @@ describe("WifiPanel", () => {
         }),
       );
 
-      await userEvent.click(control());
+      await userEvent.click(await control());
 
       expectWarning(text);
     },
@@ -199,12 +206,19 @@ describe("WifiPanel", () => {
   describe("before Wi-Fi is read", () => {
     it.each<[string, Result<Option<Wifi>, SystemError> | undefined, string]>([
       ["while it reads", undefined, "Reading Wi-Fi…"],
-      ["without a device", Ok(None()), "No Wi-Fi device"],
       ["on a failure", Err(REFUSED), "Couldn't read Wi-Fi"],
     ])("says so %s", async (_when, wifi, text) => {
       await shown(wifi);
 
-      expect(screen.getByText(text)).toBeVisible();
+      expect(screen.getByRole("region", { name: "Wi-Fi" })).toHaveTextContent(
+        text,
+      );
+    });
+
+    it("shows nothing without a device", async () => {
+      const { container } = await shown(Ok(None()));
+
+      expect(container).toBeEmptyDOMElement();
     });
   });
 
@@ -260,14 +274,26 @@ describe("WifiPanel", () => {
   });
 
   describe("the connection", () => {
-    it("shows its details, with its addresses from ip, one a line", async () => {
+    it("leads the list, its details folded away", async () => {
       await shown(Ok(Some(WIFI)));
 
-      const connected = screen.getByRole("region", { name: "Connected" });
+      const connected = within(
+        screen.getByRole("list", { name: "Networks" }),
+      ).getAllByRole("listitem")[0];
       expect(connected).toHaveTextContent(
-        "HomeStrong signal · 5 GHz · 867 Mb/s",
+        "HomeConnected · strong signal · 5 GHz",
       );
-      expect(detailsIn(connected)).toStrictEqual([
+      expect(screen.queryByRole("term")).toBeNull();
+    });
+
+    it("shows its details, with its addresses from ip, one a line", async () => {
+      await shown(Ok(Some(WIFI)));
+      await unfold();
+
+      expect(
+        detailsIn(screen.getByRole("region", { name: "Wi-Fi" })),
+      ).toStrictEqual([
+        ["Speed", ["867 Mb/s"]],
         [
           "Address",
           ["192.168.1.23/24", "2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64"],
@@ -281,15 +307,22 @@ describe("WifiPanel", () => {
 
     it("shows its addresses when the service reports none, as iwd does", async () => {
       await shownWith({ ip: undefined });
+      await unfold();
 
       expect(
         screen.getAllByRole("term").map((term) => term.textContent),
-      ).toStrictEqual(["Address", "Gateway", "Interface", "Hardware address"]);
+      ).toStrictEqual([
+        "Speed",
+        "Address",
+        "Gateway",
+        "Interface",
+        "Hardware address",
+      ]);
     });
 
     it.each([
-      [2412, "Strong signal · 2.4 GHz · 867 Mb/s"],
-      [5955, "Strong signal · 6 GHz · 867 Mb/s"],
+      [2412, "Connected · strong signal · 2.4 GHz"],
+      [5955, "Connected · strong signal · 6 GHz"],
     ])("names %d MHz's band", async (frequency, shown) => {
       await shownWith({ frequency });
 
@@ -314,7 +347,8 @@ describe("WifiPanel", () => {
         Ok(new Map()),
       );
 
-      expect(screen.getByText("Strong signal")).toBeVisible();
+      expect(screen.getByText("Connected · strong signal")).toBeVisible();
+      await unfold();
       expect(
         screen.getAllByRole("term").map((term) => term.textContent),
       ).toStrictEqual(["Interface", "Hardware address"]);
@@ -322,6 +356,7 @@ describe("WifiPanel", () => {
 
     it("disconnects", async () => {
       const panel = await shown(Ok(Some(WIFI)));
+      await unfold();
 
       await userEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
@@ -336,7 +371,7 @@ describe("WifiPanel", () => {
       expect(
         within(screen.getByRole("list", { name: "Networks" }))
           .getAllByRole("button")
-          .map((button) => button.getAttribute("aria-label")),
+          .flatMap((button) => button.getAttribute("aria-label") ?? []),
       ).toStrictEqual([
         "Office, saved, secured, fair signal",
         "Cafe, fair signal",
