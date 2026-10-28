@@ -23,9 +23,10 @@ export const parseManifest = (text: string): Manifest =>
  * Packages always taken from Domicile's install, never the project's.
  *
  * Domicile's packages must match the running Domicile's protocol, and the
- * user's code and manganese must share one React.
+ * user's code and manganese must share one React. Tailwind is built into the
+ * bundle step.
  */
-const FROM_DOMICILE = /^(@domicile-desktop\/.+|react|react-dom)$/;
+const FROM_DOMICILE = /^(@domicile-desktop\/.+|react|react-dom|tailwindcss)$/;
 
 /**
  * The directory whose `package.json` and `bun.lock` hold an entry's packages:

@@ -5,7 +5,9 @@
   "dependencies": {
     "@domicile-desktop/component-library": "workspace:*",
     "@pandacss/dev": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "tailwindcss": "catalog:",
     "vite": "catalog:",
     "zod": "catalog:"
   },

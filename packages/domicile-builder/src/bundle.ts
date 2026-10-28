@@ -2,15 +2,20 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { shellBuild } from "@domicile-desktop/component-library/vite-shell";
 import panda from "@pandacss/dev/postcss";
+import tailwind from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { build } from "vite";
 
 /** Imports resolved from Domicile's install instead of the user's project. */
 const FROM_DOMICILE = /^(@domicile-desktop\/[^/]+|react|react-dom)(\/.*)?$/;
+
+/** Tailwind's stylesheet, from the builder's own install. */
+const TAILWIND = fileURLToPath(import.meta.resolve("tailwindcss/index.css"));
 
 /** The manganese package directory in a Domicile install. */
 const manganeseIn = (domicile: string): string =>
@@ -51,7 +56,13 @@ export const bundle = async (
       },
     },
     logLevel: "error",
-    plugins: [fromDomicile(domicile), react(), ...shell.plugins],
+    plugins: [
+      tailwindFor(`${out}.tailwind.css`, files),
+      fromDomicile(domicile),
+      react(),
+      tailwind(),
+      ...shell.plugins,
+    ],
     root: path.dirname(entry),
   });
 };
@@ -78,6 +89,35 @@ export default { ...config, include: [...config.include, ...${JSON.stringify(fil
   );
   return config;
 };
+
+/**
+ * Resolve `import "tailwindcss"` in the user's code to a stylesheet of
+ * Tailwind's rules for the classes in `files`.
+ *
+ * The stylesheet is a file next to the build output, so Tailwind's plugin
+ * builds it like any CSS the user imports. It scans only `files`, not the
+ * cache directory it sits in.
+ */
+const tailwindFor = (sheet: string, files: readonly string[]): Plugin => ({
+  enforce: "pre",
+  name: "domicile:tailwind",
+  resolveId(source) {
+    if (source === "tailwindcss") {
+      mkdirSync(path.dirname(sheet), { recursive: true });
+      writeFileSync(
+        sheet,
+        [
+          `@import ${JSON.stringify(TAILWIND)} source(none);`,
+          ...files.map((file) => `@source ${JSON.stringify(file)};`),
+          "",
+        ].join("\n"),
+      );
+      return sheet;
+    } else {
+      return null;
+    }
+  },
+});
 
 /**
  * Resolve the user's imports of Domicile's packages and React from Domicile's

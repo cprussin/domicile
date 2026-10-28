@@ -42,7 +42,7 @@ On failure it prints `{"step":"failed","why":"…"}` and exits non-zero.
 | Read every local file and package the entry imports | `src/graph.ts` |
 | Find the project (nearest `package.json` above the entry, else the entry's directory). `bun add --ignore-scripts` imports it doesn't list | `src/project.ts`, `src/main.ts` |
 | Key the cache on the files, lockfile and Domicile install. A cache hit takes under a second | `src/project.ts` |
-| Bundle with vite, CSS included. `@domicile-desktop/*` and React resolve from Domicile's install. Panda uses manganese's config | `src/bundle.ts` |
+| Bundle with vite, CSS included. `@domicile-desktop/*` and React resolve from Domicile's install. Panda uses manganese's config. `import "tailwindcss"` builds Tailwind's rules for the user's files | `src/bundle.ts` |
 | Write the entry's `options` export to `options.json` beside `shell.js`, for the Settings app | `src/evaluate.ts` |
 
 ## Test

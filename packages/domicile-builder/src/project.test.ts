@@ -26,10 +26,15 @@ describe("missingPackages", () => {
     ).toEqual(["date-fns"]);
   });
 
-  it("never asks for Domicile's own packages or React, which come from Domicile", () => {
+  it("never asks for Domicile's own packages, React or Tailwind, which come from Domicile", () => {
     expect(
       missingPackages(
-        new Set(["@domicile-desktop/manganese", "react", "react-dom"]),
+        new Set([
+          "@domicile-desktop/manganese",
+          "react",
+          "react-dom",
+          "tailwindcss",
+        ]),
         undefined,
       ),
     ).toEqual([]);

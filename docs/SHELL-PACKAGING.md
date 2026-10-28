@@ -101,6 +101,9 @@ domicile @domicile-desktop/manganese     # Domicile's own, prebuilt
 - An entry's packages go in the nearest `package.json` and `bun.lock` above
   it, created next to it if there are none.
 - `@domicile-desktop/*` and React always come from the running Domicile.
+- `import "tailwindcss";` in an entry adds Tailwind's rules for the classes in
+  the entry and its local imports. Tailwind comes from the running Domicile
+  too, so a one-file shell needs no `package.json` or CSS file.
 - A package with a prebuilt module declares it in `package.json` as
   `"domicile": { "shell": "dist/shell.js" }` and is served as is. Otherwise it
   is built from its entry.

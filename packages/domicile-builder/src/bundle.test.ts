@@ -89,6 +89,24 @@ describe("bundle", () => {
     expect(built).toContain("rgb(1, 2, 3)");
   }, 120_000);
 
+  // `import "tailwindcss"` is all a one-file shell needs for Tailwind.
+  it("builds Tailwind's rules for the classes in the user's files", async () => {
+    const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
+    const entry = path.join(desk, "shell.tsx");
+    writeFileSync(
+      entry,
+      `import "tailwindcss";
+         import { mount } from "@domicile-desktop/react/mount";
+         const Desktop = () => <main className="grid-cols-[3fr_2fr]" />;
+         export const Shell = mount(Desktop);`,
+    );
+
+    await bundle(entry, path.join(desk, "out"), DOMICILE, [entry]);
+
+    const built = readFileSync(path.join(desk, "out", "shell.js"), "utf8");
+    expect(built).toMatch(/grid-template-columns:\s*3fr 2fr/);
+  }, 120_000);
+
   // The shell SHELL-QUICKSTART.md teaches, so the doc's code keeps building.
   it("builds the React example shell, which imports only React and the SDK", async () => {
     const entry = path.join(DOMICILE, "examples", "react-shell", "shell.tsx");
