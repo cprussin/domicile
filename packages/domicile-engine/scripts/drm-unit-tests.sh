@@ -50,6 +50,7 @@ SUITES=(
   DrmConnectorNameTest:6
   DrmPointerCrossingTest:20
   DrmPointerTargetsTest:5
+  DrmDeskInputTest:6
   DrmCanvasTest:7
   DrmNoGbmModesetTest:1
   GbmPixmapScanoutTest:3
@@ -59,7 +60,7 @@ SUITES=(
   AbsoluteMouseDeviceTest:2
   AbsoluteMouseConverterTest:7
   WaylandKeyboardWithoutKeymapTest:1
-  HeadlessDeskTest:5
+  HeadlessDeskTest:6
   HeadlessDeskInputTest:10
   HeadlessDeskCursorsTest:4
 )

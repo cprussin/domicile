@@ -273,7 +273,7 @@ void SetWhitePoint(float red, float green, float blue) {
 }
 
 // Delivers emulated input to the desk. Lives here for SetDisplayLayout's
-// reason; every platform but a headless desk ignores it.
+// reason; a nested desktop's platform ignores it.
 void InjectInput(const domicile::mojom::DeskInput& input) {
   ui::DomicileDeskInput::Kind kind = ui::DomicileDeskInput::Kind::kPointer;
   switch (input.kind) {

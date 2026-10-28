@@ -555,6 +555,17 @@ impl Screens {
         &self.scanout
     }
 
+    /// Where desktop point `point` is on the engine's desk, in its pixels,
+    /// by the [`Screens::scanout`] connector whose desk holds it. A point on
+    /// no connector's desk is at scale 1, as on a desktop with no connector
+    /// settings.
+    pub fn engine_pixel_of(&self, point: (f64, f64)) -> (f64, f64) {
+        self.scanout
+            .iter()
+            .find_map(|connector| engine_pixel_on(connector, point))
+            .unwrap_or(point)
+    }
+
     /// The desktop a reloaded config makes, or `None` to keep this one.
     ///
     /// - With `output.displays`, the config defines the desktop.
@@ -860,6 +871,32 @@ fn as_coordinate(measure: u32) -> i32 {
 /// [`as_coordinate`]; a negative value is a bug.
 fn as_measure(coordinate: i32) -> u32 {
     u32::try_from(coordinate).expect("a size or a scale is never negative")
+}
+
+/// Where desktop point `(x, y)` is in the engine's pixels on `connector`, or
+/// `None` off its desk. Scaled, then turned onto the panel as the engine's
+/// DRM `ToPanel` does, since the engine places a pointer in panel pixels.
+fn engine_pixel_on(connector: &Connector, (x, y): (f64, f64)) -> Option<(f64, f64)> {
+    let desk = connector.desk?;
+    let (left, top) = (f64::from(desk.position.0), f64::from(desk.position.1));
+    let (wide, high) = (f64::from(desk.size.0), f64::from(desk.size.1));
+    if !(left..left + wide).contains(&x) || !(top..top + high).contains(&y) {
+        return None;
+    }
+    let scale = connector.scale;
+    let (u, v) = ((x - left) * scale, (y - top) * scale);
+    let (upright_wide, upright_high) = (wide * scale, high * scale);
+    // The engine's `RotationOf`: a content turn is the panel's opposite one.
+    let (px, py) = match connector.transform {
+        Transform::Normal => (u, v),
+        Transform::Rotate90 => (v, upright_wide - u),
+        Transform::Rotate180 => (upright_wide - u, upright_high - v),
+        Transform::Rotate270 => (upright_high - v, u),
+    };
+    Some((
+        f64::from(connector.origin.0) + px,
+        f64::from(connector.origin.1) + py,
+    ))
 }
 
 #[cfg(test)]
@@ -2099,6 +2136,76 @@ mod tests {
                     }),
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn a_desktop_point_lands_on_the_engine_pixel_its_monitor_draws() {
+        let displays = [
+            a_pane(1, (0, 0), (1920, 1080)),
+            a_pane(2, (1920, 0), (1500, 900)),
+        ];
+        let virtuals = [pane_at(1, (1920, 1080), 1.0), pane_at(2, (1500, 900), 1.5)];
+        let screens = Screens::from_the_engine(&displays, &unspelled(), &virtuals);
+
+        assert_eq!(screens.engine_pixel_of((100.0, 50.0)), (100.0, 50.0));
+        assert_eq!(
+            screens.engine_pixel_of((1920.0 + 100.0, 50.0)),
+            (1920.0 + 150.0, 75.0),
+            "the 150% pane draws a point 1.5 pixels across"
+        );
+    }
+
+    #[test]
+    fn a_point_on_a_turned_monitor_lands_on_its_panel_pixel() {
+        // A 1080x1920 panel turned to stand 1920 wide, at 2x, right of a
+        // 1000-pixel monitor.
+        let turned = |transform| Connector {
+            id: 1,
+            enabled: true,
+            origin: (1000, 0),
+            transform,
+            scale: 2.0,
+            desk: Some(Desk {
+                position: (500, 0),
+                size: (960, 540),
+            }),
+        };
+        let near_the_top_left = (500.0 + 10.0, 20.0);
+        assert_eq!(
+            engine_pixel_on(&turned(Transform::Normal), near_the_top_left),
+            Some((1000.0 + 20.0, 40.0))
+        );
+        // Panel 1080 wide, 1920 high; the engine's ROTATE_270.
+        assert_eq!(
+            engine_pixel_on(&turned(Transform::Rotate90), near_the_top_left),
+            Some((1000.0 + 40.0, 1920.0 - 20.0))
+        );
+        assert_eq!(
+            engine_pixel_on(&turned(Transform::Rotate180), near_the_top_left),
+            Some((1000.0 + 1920.0 - 20.0, 1080.0 - 40.0))
+        );
+        // The engine's ROTATE_90.
+        assert_eq!(
+            engine_pixel_on(&turned(Transform::Rotate270), near_the_top_left),
+            Some((1000.0 + 1080.0 - 40.0, 20.0))
+        );
+        assert_eq!(
+            engine_pixel_on(&turned(Transform::Normal), (10.0, 20.0)),
+            None
+        );
+    }
+
+    #[test]
+    fn a_point_on_no_monitor_or_a_desk_with_no_connectors_is_at_scale_1() {
+        let displays = [a_pane(2, (0, 0), (1500, 900))];
+        let screens =
+            Screens::from_the_engine(&displays, &unspelled(), &[pane_at(2, (1500, 900), 1.5)]);
+        assert_eq!(screens.engine_pixel_of((5000.0, 5.0)), (5000.0, 5.0));
+
+        assert_eq!(
+            Screens::following_the_window((1280, 800), 2).engine_pixel_of((10.0, 20.0)),
+            (10.0, 20.0)
         );
     }
 
