@@ -7,7 +7,7 @@ import type {
 import { z } from "zod";
 
 import type { GoogleClient } from "./consent";
-import { REDIRECT } from "./consent";
+import { REDIRECT, SCOPE } from "./consent";
 import { jsonText } from "./json-text";
 
 /** Google's OAuth token endpoint. */
@@ -48,7 +48,10 @@ export const TokenRefusal = {
     kind: TokenRefusalKind.Failed as const,
     reason,
   }),
-  /** Google no longer takes the refresh token: sign in again. */
+  /**
+   * Google no longer takes the refresh token, or it was granted without
+   * {@link SCOPE}: sign in again.
+   */
   Revoked: () => ({ kind: TokenRefusalKind.Revoked as const }),
 };
 
@@ -77,11 +80,15 @@ export const refreshAccess = async (
     .andThen((answer): Result<Access, TokenRefusal> => {
       if (answer.status === 200) {
         return parsed(answer, accessSchema)
-          .map((fields) => ({
-            expiresInMs: fields.expires_in * 1000,
-            token: fields.access_token,
-          }))
-          .mapErr((why): TokenRefusal => TokenRefusal.Failed(why));
+          .mapErr((why): TokenRefusal => TokenRefusal.Failed(why))
+          .andThen((fields) =>
+            fields.scope.split(" ").includes(SCOPE)
+              ? Ok({
+                  expiresInMs: fields.expires_in * 1000,
+                  token: fields.access_token,
+                })
+              : Err(TokenRefusal.Revoked()),
+          );
       } else {
         return Err(
           errorSchema.safeParse(answer.body).data === "invalid_grant"
@@ -125,6 +132,8 @@ const refreshSchema = z.object({ refresh_token: z.string() });
 const accessSchema = z.object({
   access_token: z.string(),
   expires_in: z.number().int().positive(),
+  /** The scopes granted, space-separated. */
+  scope: z.string(),
 });
 
 /** The OAuth error code a refusal names. */

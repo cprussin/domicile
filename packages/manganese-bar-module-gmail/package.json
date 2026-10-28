@@ -10,7 +10,7 @@
     "react": "catalog:",
     "zod": "catalog:"
   },
-  "description": "A manganese bar item: one Gmail account's inbox count, read with the Gmail API.",
+  "description": "A manganese bar item: one Gmail account's inbox count, read with the Gmail API, and notifications for new mail.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",

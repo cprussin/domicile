@@ -11,12 +11,18 @@ describe("deskInbox", () => {
   it("is one watch per account on a desk", () => {
     const inboxes = deskInbox(new FakeDomicileHost().domicile);
 
-    expect(inboxes(EMAIL, CLIENT)).toBe(inboxes(EMAIL, CLIENT));
-    expect(inboxes(EMAIL, CLIENT)).not.toBe(inboxes("you@example.com", CLIENT));
+    expect(inboxes(EMAIL, CLIENT, "Work")).toBe(inboxes(EMAIL, CLIENT, "Work"));
+    expect(inboxes(EMAIL, CLIENT, "Work")).not.toBe(
+      inboxes("you@example.com", CLIENT, "Home"),
+    );
   });
 
   it("is signed out before the account signs in", async () => {
-    const { inbox } = deskInbox(new FakeDomicileHost().domicile)(EMAIL, CLIENT);
+    const { inbox } = deskInbox(new FakeDomicileHost().domicile)(
+      EMAIL,
+      CLIENT,
+      "Work",
+    );
 
     const reading = await new Promise((resolve) => {
       const stop = inbox.subscribe(() => {
@@ -30,7 +36,7 @@ describe("deskInbox", () => {
 
   it("signs in through Google's consent", () => {
     const fake = new FakeDomicileHost();
-    const account = deskInbox(fake.domicile)(EMAIL, CLIENT);
+    const account = deskInbox(fake.domicile)(EMAIL, CLIENT, "Work");
 
     const stop = account.inbox.subscribe(() => undefined);
     account.signIn();
@@ -46,7 +52,7 @@ describe("deskInbox", () => {
   it("reads again a second after a Gmail window changes", async () => {
     jest.useFakeTimers();
     const fake = new FakeDomicileHost();
-    const { inbox } = deskInbox(fake.domicile)(EMAIL, CLIENT);
+    const { inbox } = deskInbox(fake.domicile)(EMAIL, CLIENT, "Work");
     const readings = { count: 0 };
 
     const stop = inbox.subscribe(() => {

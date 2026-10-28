@@ -19,6 +19,13 @@ export const TOKEN = "https://oauth2.googleapis.com/token";
 export const INBOX =
   "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX";
 
+export const UNREAD =
+  "https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&labelIds=UNREAD&maxResults=20";
+
+/** The address of message `id`'s sender and subject. */
+export const HEADERS = (id: string) =>
+  `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`;
+
 /** Google's answer to a token request: `fields` as JSON. */
 export const json = (status: number, fields: object): FetchResponse => ({
   body: JSON.stringify(fields),

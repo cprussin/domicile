@@ -34,13 +34,13 @@ export const gmailInbox = ({ client, email, nickname }: Options): Inbox =>
     name: nickname,
     open: (domicile, reading) => {
       if (reading?.kind === InboxReadingKind.SignedOut) {
-        deskInbox(domicile)(email, client).signIn();
+        deskInbox(domicile)(email, client, nickname).signIn();
       } else {
         domicile.browser.open(inboxAddress(email));
       }
     },
     read: perDesktop((domicile) =>
-      asReadings(deskInbox(domicile)(email, client).inbox),
+      asReadings(deskInbox(domicile)(email, client, nickname).inbox),
     ),
   });
 
