@@ -74,6 +74,12 @@ export const importGraph = (entry: string, read: ReadFile): Graph => {
   return { files, packages };
 };
 
+/** One graph with every file and package of `graphs`. */
+export const mergedGraph = (graphs: readonly Graph[]): Graph => ({
+  files: new Map(graphs.flatMap((graph) => [...graph.files])),
+  packages: new Set(graphs.flatMap((graph) => [...graph.packages])),
+});
+
 /** The package a bare specifier names: its scope and name, without a subpath. */
 export const packageOf = (specifier: string): string => {
   const parts = specifier.split("/");

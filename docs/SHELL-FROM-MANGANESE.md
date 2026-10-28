@@ -58,6 +58,9 @@ export const Shell = runManganese({
 });
 ```
 
+To use a CSS tool such as Tailwind, add a `vite.config`
+([Build config](SHELL-PACKAGING.md#build-config)).
+
 More: [CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md),
 [HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md).
 

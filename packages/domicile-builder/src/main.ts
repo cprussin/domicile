@@ -18,11 +18,17 @@ import {
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { importGraph } from "./graph";
+import { importGraph, mergedGraph } from "./graph";
 import { installedName, packageProject, prebuiltOf } from "./package";
 import { line, Step } from "./progress";
 import type { Manifest } from "./project";
-import { cacheKey, missingPackages, parseManifest, projectOf } from "./project";
+import {
+  cacheKey,
+  missingPackages,
+  parseManifest,
+  projectOf,
+  viteConfigOf,
+} from "./project";
 
 /** The built module's file name in its output directory. */
 const MODULE = "shell.js";
@@ -61,19 +67,24 @@ const manifestOf = (project: string): Manifest | undefined => {
 };
 
 /**
- * Read the entry's import graph and add any packages its project lacks.
- * Builds and evaluations both start here.
+ * Read the import graphs of the entry and its project's vite config, and add
+ * any packages the project lacks. Builds and evaluations both start here.
  */
 const prepared = (entry: string) => {
   say(Step.Resolving());
-  const graph = importGraph(entry, readFile);
   const project = projectOf(entry, existsSync);
+  const config = viteConfigOf(project, existsSync);
+  const graph = mergedGraph(
+    [entry, ...(config === undefined ? [] : [config])].map((file) =>
+      importGraph(file, readFile),
+    ),
+  );
   const missing = missingPackages(graph.packages, manifestOf(project));
   if (missing.length > 0) {
     say(Step.Installing(missing));
     runBun(project, ["add", "--ignore-scripts", ...missing]);
   }
-  return { graph, project };
+  return { config, graph, project };
 };
 
 /** The cache key for what `prepared` read. */
@@ -107,7 +118,7 @@ const build = async (
     // Imported lazily: vite takes most of a second to load, and a cached
     // build needs none of it.
     const { bundle } = await import("./bundle");
-    await bundle(entry, root, domicile);
+    await bundle(entry, root, domicile, read.config);
     const { extractOptions } = await import("./evaluate");
     await extractOptions(entry, path.join(root, OPTIONS), domicile);
     say(Step.Built(root, MODULE, false));

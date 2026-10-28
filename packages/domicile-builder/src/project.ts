@@ -1,6 +1,7 @@
 // Finds an entry's project, lists the packages it lacks, and computes the
 // build cache key.
 
+import { isBuiltin } from "node:module";
 import path from "node:path";
 
 import { z } from "zod";
@@ -37,6 +38,23 @@ export const projectOf = (entry: string, exists: Exists): string => {
   return nearestProject(own, exists) ?? own;
 };
 
+/** The names vite looks for a config under, in its order. */
+const VITE_CONFIGS = [
+  "vite.config.js",
+  "vite.config.mjs",
+  "vite.config.ts",
+  "vite.config.cjs",
+  "vite.config.mts",
+  "vite.config.cts",
+];
+
+/** The project's own vite config, if it has one. */
+export const viteConfigOf = (
+  project: string,
+  exists: Exists,
+): string | undefined =>
+  VITE_CONFIGS.map((name) => path.join(project, name)).find(exists);
+
 /** `directory` or its nearest ancestor with a `package.json`, if any. */
 const nearestProject = (
   directory: string,
@@ -52,7 +70,10 @@ const nearestProject = (
   }
 };
 
-/** Packages in `imported` that `manifest` lacks, except Domicile's, sorted. */
+/**
+ * Packages in `imported` that `manifest` lacks, except Domicile's and the
+ * runtime's built-in modules, sorted.
+ */
 export const missingPackages = (
   imported: ReadonlySet<string>,
   manifest: Manifest | undefined,
@@ -61,6 +82,7 @@ export const missingPackages = (
     .filter(
       (name) =>
         !FROM_DOMICILE.test(name) &&
+        !isBuiltin(name) &&
         !Object.hasOwn(manifest?.dependencies ?? {}, name),
     )
     .sort();

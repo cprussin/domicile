@@ -64,6 +64,7 @@
       "types": "./styled-system/css/index.d.ts",
       "default": "./styled-system/css/index.mjs"
     },
+    "./panda.config": "./panda.config.ts",
     "./jsx": {
       "types": "./styled-system/jsx/index.d.ts",
       "default": "./styled-system/jsx/index.mjs"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { cacheKey, missingPackages, projectOf } from "./project";
+import { cacheKey, missingPackages, projectOf, viteConfigOf } from "./project";
 
 describe("projectOf", () => {
   it("is the nearest directory above the entry with a package.json", () => {
@@ -14,6 +14,19 @@ describe("projectOf", () => {
     expect(projectOf("/home/me/desk/domicile.tsx", () => false)).toBe(
       "/home/me/desk",
     );
+  });
+});
+
+describe("viteConfigOf", () => {
+  it("is the project's vite config", () => {
+    const has = new Set(["/home/me/desk/vite.config.mts"]);
+    expect(viteConfigOf("/home/me/desk", (file) => has.has(file))).toBe(
+      "/home/me/desk/vite.config.mts",
+    );
+  });
+
+  it("is `undefined` for a project without one", () => {
+    expect(viteConfigOf("/home/me/desk", () => false)).toBeUndefined();
   });
 });
 
@@ -32,6 +45,13 @@ describe("missingPackages", () => {
         new Set(["@domicile-desktop/manganese", "react", "react-dom"]),
         undefined,
       ),
+    ).toEqual([]);
+  });
+
+  // A vite config commonly imports `node:path`.
+  it("never asks for the runtime's built-in modules", () => {
+    expect(
+      missingPackages(new Set(["node:path", "path", "bun"]), undefined),
     ).toEqual([]);
   });
 });
