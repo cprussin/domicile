@@ -103,6 +103,7 @@ TOGETHER=(
   guard-shell-pdf
   guard-app-module
   guard-video-codecs
+  guard-browser-brand
 )
 
 # Run one at a time, after the rest. Latency measures time, so it runs alone.
@@ -118,6 +119,7 @@ LAST=(
 ONCE=(
   guard-app-only-in-shell
   guard-asks-promise
+  guard-browser-brand
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch

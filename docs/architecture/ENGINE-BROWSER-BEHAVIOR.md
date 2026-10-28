@@ -89,6 +89,13 @@ Patch `0110`:
   history steps and reloads do not ask (`AsksBeforeNavigating`).
 - A closed element answers yes, so a navigation never hangs.
 
+## What sites are told
+
+- Sites are told the engine is Google Chrome: `navigator.userAgentData` and
+  `Sec-CH-UA` carry the `Google Chrome` brand beside `Chromium` (patch 0157).
+  A Chromium build sends no browser brand, and Akamai's bot check refuses
+  that on some sign-ins, such as Citi's.
+
 ## Dialogs
 
 - `alert()`, `confirm()` and `prompt()` ask the shell. A guest's
@@ -159,4 +166,5 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-dialog.sh` and `guard-webview-beforeunload.sh`: dialogs.
 - `guard-webview-partition.sh`: partitions.
 - `guard-webview-will-navigate.sh`: will-navigate.
+- `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.
