@@ -31,8 +31,9 @@ bun run build:next
   repository root, filtered to the site and the packages it uses, which runs
   their `prepare` (Panda codegen). It installs with the repository's bun
   (`packageManager`), since Vercel's own is older.
-- The build builds the workspace packages the site uses first, since their
-  exports point at `dist/`.
+- The build builds the workspace packages the site uses first with turbo,
+  since their exports point at `dist/`. The install filter includes the root
+  (`./`) so turbo is installed.
 - Production branch: `stable`.
 - `git.deploymentEnabled` deploys only `stable`. Even a skipped deployment
   counts toward the Hobby plan's daily limit, so other branches make none.
