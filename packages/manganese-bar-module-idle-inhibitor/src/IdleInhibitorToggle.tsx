@@ -1,6 +1,5 @@
+import { AnimatedEyeIcon } from "@domicile-desktop/component-library/AnimatedEyeIcon";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
-import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
-import { EyeClosedIcon } from "@phosphor-icons/react/dist/ssr/EyeClosed";
 import { useSyncExternalStore } from "react";
 
 import { cva } from "../styled-system/css";
@@ -37,11 +36,7 @@ export const IdleInhibitorToggle = ({ inhibitor, holders = [] }: Props) => {
           onClick={inhibitor.toggle}
           type="button"
         >
-          {held || holders.length > 0 ? (
-            <EyeIcon size={15} weight="bold" />
-          ) : (
-            <EyeClosedIcon size={15} weight="bold" />
-          )}
+          <AnimatedEyeIcon open={held || holders.length > 0} size={15} />
         </button>
       }
     />

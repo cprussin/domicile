@@ -28,6 +28,12 @@ describe("IdleInhibitorToggle", () => {
       css({ "& > svg": { opacity: "inactive" } }),
     );
 
+    const eye = toggle.querySelector("svg");
+    expect(eye?.querySelector("[data-part=closed]")).toHaveAttribute(
+      "data-state",
+      "shown",
+    );
+
     await userEvent.click(toggle);
     expect(toggle).toBeDisabled();
     await act(async () => {
@@ -42,6 +48,12 @@ describe("IdleInhibitorToggle", () => {
     expect(toggle).toBeEnabled();
     expect(toggle.className).not.toContain(
       css({ "& > svg": { opacity: "inactive" } }),
+    );
+    // The same eye opens, rather than a new one replacing it.
+    expect(toggle.querySelector("svg")).toBe(eye);
+    expect(eye?.querySelector("[data-part=closed]")).toHaveAttribute(
+      "data-state",
+      "hidden",
     );
   });
 

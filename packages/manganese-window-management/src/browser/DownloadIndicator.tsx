@@ -1,5 +1,5 @@
+import { AnimatedCheckIcon } from "@domicile-desktop/component-library/AnimatedCheckIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
-import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 
@@ -62,7 +62,7 @@ const FinishedDownloads = ({
 }) => (
   <div className={indicatorStyles} data-finished="">
     <span className={statusStyles} role="status">
-      <CheckIcon size={14} weight="bold" />
+      <AnimatedCheckIcon size={14} />
       {completed === 1 ? "Downloaded" : `${completed} downloaded`}
     </span>
     <Button

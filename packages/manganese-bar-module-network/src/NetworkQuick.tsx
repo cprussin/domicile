@@ -1,4 +1,5 @@
 import type { Option, Result } from "@cprussin/option-result";
+import { AnimatedWifiIcon } from "@domicile-desktop/component-library/AnimatedWifiIcon";
 import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
@@ -9,7 +10,6 @@ import type { Network as Reading } from "@domicile-desktop/system-network/networ
 import { LinkKind } from "@domicile-desktop/system-network/network";
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
-import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 
 import { cva } from "../styled-system/css";
 import { LinkIcon, shownOf } from "./link-shown";
@@ -88,7 +88,7 @@ export const NetworkTile = ({ interfaces, onMore, wifi }: TileProps) => {
       return (
         <QuickTile
           detail={wifiDetailOf(device)}
-          icon={<WifiHighIcon size={15} weight="bold" />}
+          icon={<AnimatedWifiIcon bars={3} off={!device.enabled} size={15} />}
           label="Wi-Fi"
           onMore={onMore}
         />

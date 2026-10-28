@@ -1,4 +1,5 @@
 import type { Result } from "@cprussin/option-result";
+import { AnimatedSpeakerIcon } from "@domicile-desktop/component-library/AnimatedSpeakerIcon";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
@@ -7,7 +8,6 @@ import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Audio } from "@domicile-desktop/system-audio/audio";
 import type { SoundControls } from "@domicile-desktop/system-audio/react";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
-import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import type { MouseEvent, WheelEvent } from "react";
 
 import { cva } from "../styled-system/css";
@@ -38,7 +38,7 @@ export const SoundGlyph = ({ audio: watch, hardware }: Watches) => {
         className={glyphStyles({ dim: true })}
         role="img"
       >
-        <SpeakerSlashIcon size={15} weight="bold" />
+        <AnimatedSpeakerIcon muted size={15} volume={0} weight="bold" />
       </span>
     );
   } else {

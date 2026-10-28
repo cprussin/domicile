@@ -1,4 +1,5 @@
 import type { Result } from "@cprussin/option-result";
+import { AnimatedBluetoothIcon } from "@domicile-desktop/component-library/AnimatedBluetoothIcon";
 import { Panel } from "@domicile-desktop/component-library/Panel";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
@@ -8,14 +9,12 @@ import { isAbsent } from "@domicile-desktop/react/watch-presence";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
-import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
-import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
-import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
 import { cva } from "../styled-system/css";
 import { BluetoothPanel } from "./BluetoothPanel";
 import type { BluetoothActions } from "./bluetooth-actions";
 import { BLUETOOTH_ACTIONS } from "./bluetooth-actions";
 import { labelOf, unavailableLabelOf } from "./bluetooth-labels";
+import { iconStateOf } from "./icon-state";
 
 type Props = {
   /** The desk's Bluetooth, from BlueZ. */
@@ -155,15 +154,9 @@ const Item = ({
   );
 };
 
-const Icon = ({ connected, on }: { connected: boolean; on: boolean }) => {
-  if (!on) {
-    return <BluetoothSlashIcon size={15} weight="bold" />;
-  } else if (connected) {
-    return <BluetoothConnectedIcon size={15} weight="bold" />;
-  } else {
-    return <BluetoothIcon size={15} weight="bold" />;
-  }
-};
+const Icon = ({ connected, on }: { connected: boolean; on: boolean }) => (
+  <AnimatedBluetoothIcon size={15} state={iconStateOf(connected, on)} />
+);
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
 // unreadable over the wallpaper. Matches the volume control.

@@ -1,4 +1,5 @@
 import type { Option, Result } from "@cprussin/option-result";
+import { AnimatedLightningIcon } from "@domicile-desktop/component-library/AnimatedLightningIcon";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
@@ -141,15 +142,9 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
           y="2.5"
         />
         {reading.charging && (
-          // Centered in the inside, which runs from 1.5 to 21.5.
-          <LightningIcon
-            aria-label="Charging"
-            role="img"
-            size={8}
-            weight="fill"
-            x={7.5}
-            y={2}
-          />
+          // Centered in the inside, which runs from 1.5 to 21.5. It strikes
+          // as charging starts.
+          <AnimatedLightningIcon label="Charging" size={8} x={7.5} y={2} />
         )}
       </svg>
       <span className={percentSlotStyles}>

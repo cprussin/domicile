@@ -1,8 +1,6 @@
+import { AnimatedMicrophoneIcon } from "@domicile-desktop/component-library/AnimatedMicrophoneIcon";
+import { AnimatedSpeakerIcon } from "@domicile-desktop/component-library/AnimatedSpeakerIcon";
 import { LevelToast } from "@domicile-desktop/component-library/LevelToast";
-import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
-import { MicrophoneSlashIcon } from "@phosphor-icons/react/dist/ssr/MicrophoneSlash";
-import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
-import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import type { KeyLevel } from "./media-keys";
 import { LevelKind } from "./media-keys";
@@ -41,20 +39,19 @@ const NAMES: Record<LevelKind, string> = {
   [LevelKind.Volume]: "Volume",
 };
 
-const Icon = ({ level: { kind, muted } }: { level: KeyLevel }) => {
+const Icon = ({ level: { kind, level, muted } }: { level: KeyLevel }) => {
   switch (kind) {
     case LevelKind.Volume:
-      return muted ? (
-        <SpeakerSlashIcon size={28} weight="fill" />
-      ) : (
-        <SpeakerHighIcon size={28} weight="fill" />
+      return (
+        <AnimatedSpeakerIcon
+          muted={muted}
+          size={28}
+          volume={level}
+          weight="fill"
+        />
       );
     case LevelKind.Microphone:
-      return muted ? (
-        <MicrophoneSlashIcon size={28} weight="fill" />
-      ) : (
-        <MicrophoneIcon size={28} weight="fill" />
-      );
+      return <AnimatedMicrophoneIcon muted={muted} size={28} weight="fill" />;
     case LevelKind.Brightness:
       return <SunIcon size={28} weight="fill" />;
   }

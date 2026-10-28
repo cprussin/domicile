@@ -421,7 +421,6 @@
         "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@pandacss/dev": "catalog:",
-        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
       },
       "devDependencies": {
@@ -447,7 +446,6 @@
         "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@pandacss/dev": "catalog:",
-        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
         "zod": "catalog:",
       },
@@ -497,7 +495,6 @@
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-launcher": "workspace:*",
         "@pandacss/dev": "catalog:",
-        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
       },
       "devDependencies": {
@@ -571,7 +568,6 @@
         "@domicile-desktop/manganese-bar": "workspace:*",
         "@domicile-desktop/manganese-notifications": "workspace:*",
         "@pandacss/dev": "catalog:",
-        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
       },
       "devDependencies": {
@@ -619,7 +615,6 @@
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@pandacss/dev": "catalog:",
-        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
       },
       "devDependencies": {
@@ -925,7 +920,6 @@
         "@domicile-desktop/manganese-bar-module-volume": "workspace:*",
         "@domicile-desktop/react": "workspace:*",
         "@pandacss/dev": "catalog:",
-        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
       },
       "devDependencies": {

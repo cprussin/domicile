@@ -9,7 +9,6 @@ import {
   LinkKind,
 } from "@domicile-desktop/system-network/network";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
-import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
 
 import { signalOf } from "./signal";
 import { WifiSignalIcon } from "./WifiSignalIcon";
@@ -65,9 +64,8 @@ const NONE: Link = { kind: LinkKind.None };
 export const LinkIcon = ({ label, link }: { label: string; link: Link }) => {
   switch (link.kind) {
     case LinkKind.None:
-      return (
-        <WifiSlashIcon aria-label={label} role="img" size={15} weight="bold" />
-      );
+      // The Wi-Fi icon, so a dropped connection slashes its arcs.
+      return <WifiSignalIcon label={label} off strength={1} />;
     case LinkKind.Wired:
     case LinkKind.Other:
       return (

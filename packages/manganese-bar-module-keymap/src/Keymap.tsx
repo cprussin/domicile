@@ -1,3 +1,4 @@
+import { AnimatedKeyboardIcon } from "@domicile-desktop/component-library/AnimatedKeyboardIcon";
 import {
   ChoiceList,
   RadioRow,
@@ -41,7 +42,7 @@ export const Keymap = ({ hideDefault, keymaps, onSelect }: Props) => {
         tooltip={label}
         trigger={
           <button aria-label={label} className={triggerStyles} type="button">
-            <KeyboardIcon size={15} weight="bold" />
+            <AnimatedKeyboardIcon cue={listed.active} size={15} />
             {listed.active}
           </button>
         }

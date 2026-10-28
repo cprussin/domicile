@@ -1,4 +1,5 @@
 import type { Result } from "@cprussin/option-result";
+import { AnimatedSpeakerIcon } from "@domicile-desktop/component-library/AnimatedSpeakerIcon";
 import { Panel } from "@domicile-desktop/component-library/Panel";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
@@ -8,7 +9,6 @@ import { isAbsent } from "@domicile-desktop/react/watch-presence";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Audio } from "@domicile-desktop/system-audio/audio";
 import type { SoundControls } from "@domicile-desktop/system-audio/react";
-import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import { css, cva } from "../styled-system/css";
 import { ask } from "./ask";
 import { Level } from "./Level";
@@ -61,7 +61,7 @@ export const Volume = ({
             className={unavailableStyles}
             role="img"
           >
-            <SpeakerSlashIcon size={15} weight="bold" />
+            <AnimatedSpeakerIcon muted size={15} volume={0} weight="bold" />
           </span>
         }
       />

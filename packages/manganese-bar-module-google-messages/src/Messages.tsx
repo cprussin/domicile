@@ -1,3 +1,4 @@
+import { AnimatedChatIcon } from "@domicile-desktop/component-library/AnimatedChatIcon";
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
 import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
@@ -7,7 +8,6 @@ import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard
 import { PermissionAsk } from "@domicile-desktop/manganese-page-requests/PermissionAsk";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
 import { WEBVIEW_FOCUS_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
-import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { useEffect, useState } from "react";
 import { css } from "../styled-system/css";
 
@@ -159,7 +159,7 @@ const count = (unread: number) => (
     data-unread={unread > 0}
     type="button"
   >
-    <ChatCircleTextIcon aria-hidden size={15} weight="bold" />
+    <AnimatedChatIcon cue={unread === 0 ? undefined : unread} size={15} />
     <CountBadge count={unread} />
   </button>
 );

@@ -83,6 +83,21 @@ describe("Keymap", () => {
     ).toHaveTextContent("Keymap: us");
   });
 
+  it("presses the keyboard's keys when the keymap changes", () => {
+    const held = heldKeymaps();
+    shown(held);
+
+    held.report({ ...DVP_AND_US, active: "us" });
+    const keys = () =>
+      screen
+        .getByRole("button")
+        .querySelectorAll("[data-part=key] [data-cued]");
+    expect(keys()).toHaveLength(0);
+
+    held.report({ ...DVP_AND_US, active: "dvp" });
+    expect(keys()).toHaveLength(5);
+  });
+
   it("hides on the first keymap when asked to, and shows on any other", () => {
     const held = heldKeymaps();
     shown(held, true);

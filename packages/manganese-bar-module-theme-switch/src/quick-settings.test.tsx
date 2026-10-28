@@ -19,6 +19,19 @@ describe(DarkModeTile, () => {
     );
   });
 
+  it("shows the moon in the dark theme and the sun in the light", () => {
+    const moon = (theme: "dark" | "light") =>
+      render(
+        <ThemeProvider source={standaloneThemeSource(theme)}>
+          <DarkModeTile />
+        </ThemeProvider>,
+      )
+        .container.querySelector("[data-part=moon]")
+        ?.getAttribute("data-state");
+    expect(moon("dark")).toBe("shown");
+    expect(moon("light")).toBe("hidden");
+  });
+
   it("is not pressed in the light theme", () => {
     render(
       <ThemeProvider source={standaloneThemeSource("light")}>
