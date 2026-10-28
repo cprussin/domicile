@@ -8,6 +8,8 @@
 
 import type { Placement } from "./placement";
 import { LEAVING } from "./placement";
+import type { Rect } from "./rect";
+import { spanning } from "./rect";
 import type { Shown } from "./shown";
 import type { ShellWindow } from "./window";
 
@@ -58,7 +60,13 @@ export const departed = (
       ? []
       : [
           {
-            ...leavingFrom(before, window, placement, movesAsTab(placement)),
+            ...leavingFrom(
+              before,
+              window,
+              placement,
+              // A closing tab turns about itself as it collapses along its strip.
+              movesAsTab(placement) ? placement.bar : placement.frame,
+            ),
             at,
           },
         ];
@@ -71,30 +79,31 @@ export const departed = (
  * Skips them when the screen switched workspace from `before` to `now`: they
  * slide off with the workspace instead. Skips those a tab switch hid inside a
  * group still on `now`, as a hidden tab is.
+ *
+ * One window or group is sent at a time, so every part scales about the
+ * middle of everything sent, and a group leaves as one.
  */
 export const sentAway = (
   before: Shown,
   now: Shown,
   desk: readonly Shown[],
-): readonly Leaving[] =>
-  before.current === now.current
-    ? before.placements.flatMap((placement) => {
-        const window = now.windows.find(({ id }) => id === placement.id);
-        return window === undefined ||
-          placedOn(desk, placement.id) ||
-          inStripOn(now, placement.id)
-          ? []
-          : [
-              leavingFrom(
-                before,
-                window,
-                placement,
-                // One sent to the scratchpad slides off whole.
-                movesAsTab(placement) && !now.scratchpad.includes(window.id),
-              ),
-            ];
-      })
-    : [];
+): readonly Leaving[] => {
+  const sent =
+    before.current === now.current
+      ? before.placements.flatMap((placement) => {
+          const window = now.windows.find(({ id }) => id === placement.id);
+          return window === undefined ||
+            placedOn(desk, placement.id) ||
+            inStripOn(now, placement.id)
+            ? []
+            : [{ placement, window }];
+        })
+      : [];
+  const frames = sent.map(({ placement }) => placement.frame);
+  return sent.map(({ placement, window }) =>
+    leavingFrom(before, window, placement, frames.reduce(spanning)),
+  );
+};
 
 /** Whether a screen in `desk` shows the window `id`. */
 export const placedOn = (desk: readonly Shown[], id: string): boolean =>
@@ -135,14 +144,14 @@ export const withClosing = (
     );
 
 /**
- * The snapshot of `window`, last drawn at `placement`, as it leaves. A tab that
- * `collapses` along its strip turns about the tab, not the window.
+ * The snapshot of `window`, last drawn at `placement`, as it leaves, scaling
+ * about the middle of `frame`.
  */
 const leavingFrom = (
   before: Shown,
   window: ShellWindow,
   placement: Placement,
-  collapses: boolean,
+  frame: Rect,
 ): Leaving => ({
   focused: before.activeId === window.id,
   placement: {
@@ -151,7 +160,7 @@ const leavingFrom = (
     // window.
     behind: undefined,
     depth: LEAVING,
-    frame: collapses ? placement.bar : placement.frame,
+    frame,
   },
   window,
 });

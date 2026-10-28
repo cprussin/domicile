@@ -240,7 +240,7 @@ export const movingStyles = cva({
         animationDelay: "token(durations.fastest)",
         animationFillMode: "both",
       },
-      motion: ["closing-tab", "sending-tab", "uncovering"],
+      motion: ["closing-tab", "uncovering"],
     },
   ],
   variants: {
@@ -250,8 +250,9 @@ export const movingStyles = cva({
      * The tab a close or send uncovers was not drawn while hidden, and an
      * `<app>` drawn anew takes a frame or two to show. The leaving tab's
      * contents wait that long before fading, so the desktop does not show
-     * through. Its bar collapses at once, with its neighbors, and the window
-     * is done when its contents are (see `useWindowMotion`).
+     * through. A closing tab's bar collapses at once, with its neighbors, and
+     * the window is done when its contents are (see `useWindowMotion`). A
+     * sent tab's bar waits with its contents (see `sending-tab`).
      */
     contents: { false: {}, true: {} },
     motion: {
@@ -325,9 +326,12 @@ export const movingStyles = cva({
       sending: {
         animation: "windowSending {durations.slow} {easings.in-out} forwards",
       },
-      // A tab leaves its strip as it does when closed.
+      // A tab leaves its strip as a sent window leaves, so it does not look
+      // closed. Bar and contents wait together for the tab it uncovers (see
+      // `contents`), since both scale about one point.
       "sending-tab": {
-        animation: "windowClosingTab {durations.fast} {easings.out} forwards",
+        animation:
+          "windowSending {durations.slow} {easings.in-out} {durations.fastest} both",
       },
       stowing: {
         animation:

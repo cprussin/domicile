@@ -179,7 +179,7 @@ export const TitleBar = ({
 }: Props) => {
   const hidden = strip !== undefined && !strip.open;
   const element = useRef<HTMLDivElement>(null);
-  // A tab opening or leaving turns about its strip's start, as the tabs after
+  // A tab opening or closing turns about its strip's start, as the tabs after
   // it ease along. Anything else turns about its whole window's middle.
   const origin = alongStrip(motion) ? STRIP_START : originOf(frame, rect);
   // Over the rest of the strip, which slides under it when tabs swap.
@@ -363,11 +363,9 @@ const TabTooltip = ({
     </PopupBoundary>
   );
 
-/** Whether a tab plays `motion` along its strip, opening or leaving it. */
+/** Whether a tab plays `motion` along its strip, opening or closing. */
 const alongStrip = (motion: WindowMotion): boolean =>
-  motion === "closing-tab" ||
-  motion === "opening-tab" ||
-  motion === "sending-tab";
+  motion === "closing-tab" || motion === "opening-tab";
 
 /** The `transform-origin` of a tab moving along its strip. */
 const STRIP_START = { x: 0, y: 0 };

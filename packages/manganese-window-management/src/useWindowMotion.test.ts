@@ -279,51 +279,110 @@ describe("useWindowMotion", () => {
       });
     });
 
-    it("closes up along its strip when it was a tab", () => {
-      const tabs = (showing: readonly ShellWindow[]): Shown => ({
-        ...desktop("1", [TERMINAL, EDITOR], showing),
-        placements: showing.map(({ id }) => ({
+    describe("from a group of tabs", () => {
+      const MAIL = ShellWindow.App("mail", "mail");
+      /** The group's tabs: TERMINAL open, EDITOR hidden behind it. */
+      const group = [TERMINAL, EDITOR];
+      const stripOf = (windows: readonly ShellWindow[]) => ({
+        area: { height: 830, width: 600, x: 0, y: 32 },
+        at: 0,
+        box: { height: 30, width: 600, x: 0, y: 32 },
+        divided: false,
+        end: undefined,
+        endDivided: false,
+        group: {
+          node: { id: TERMINAL.id, up: 1 },
+          wells: 0,
+          windows: windows.map(({ id }) => id),
+        },
+        nested: false,
+        open: true,
+        tabs: windows.length,
+      });
+      const tabOf = (
+        id: string,
+        windows: readonly ShellWindow[],
+        at: number,
+      ): Placement => {
+        const bar = { height: 30, width: 300, x: at * 300, y: 32 };
+        return {
           ...placementOf(id),
+          bar,
+          frame: at === 0 ? { height: 830, width: 600, x: 0, y: 32 } : bar,
+          strip: { ...stripOf(windows), at, open: at === 0 },
+          surface:
+            at === 0 ? { height: 800, width: 600, x: 0, y: 62 } : undefined,
           tabbed: Layout.Tabbed,
-        })),
-      });
-      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
-
-      act(() => {
-        rerender(tabs([TERMINAL]));
-      });
-
-      expect(motionOf(result, EDITOR.id)).toBe("sending-tab");
-    });
-
-    // Its contents fade after its bar collapses; see `movingStyles`.
-    it("is let go of when its contents finish, not its bar", () => {
-      const tabs = (showing: readonly ShellWindow[]): Shown => ({
-        ...desktop("1", [TERMINAL, EDITOR], showing),
-        placements: showing.map(({ id }) => ({
-          ...placementOf(id),
-          tabbed: Layout.Tabbed,
-        })),
-      });
-      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
-      act(() => {
-        rerender(tabs([TERMINAL]));
+        };
+      };
+      const desk = (tabs: readonly ShellWindow[]): Shown => ({
+        ...desktop("1", [...group, MAIL], [...tabs, MAIL]),
+        placements: [
+          ...tabs.map(({ id }, at) => tabOf(id, tabs, at)),
+          {
+            ...placementOf(MAIL.id),
+            frame: { height: 830, width: 600, x: 600, y: 32 },
+          },
+        ],
       });
 
-      act(() => {
-        result.current.onPlayedOut(EDITOR.id, "sending-tab", SCREEN, "bar");
-      });
-      expect(motionOf(result, EDITOR.id)).toBe("sending-tab");
+      it("leaves its strip, from its whole box, when the group stays", () => {
+        const { rerender, result } = showing(desk(group));
 
-      act(() => {
-        result.current.onPlayedOut(
-          EDITOR.id,
-          "sending-tab",
-          SCREEN,
-          "contents",
-        );
+        act(() => {
+          rerender(desk([EDITOR]));
+        });
+
+        expect(drawnOf(result, TERMINAL.id)).toMatchObject({
+          motion: "sending-tab",
+          placement: {
+            depth: LEAVING,
+            frame: tabOf(TERMINAL.id, group, 0).frame,
+          },
+        });
       });
-      expect(motionOf(result, EDITOR.id)).toBe("resting");
+
+      // Its contents can report after its bar; see `outlastsBar`.
+      it("is let go of when its contents finish, not its bar", () => {
+        const { rerender, result } = showing(desk(group));
+        act(() => {
+          rerender(desk([EDITOR]));
+        });
+
+        act(() => {
+          result.current.onPlayedOut(TERMINAL.id, "sending-tab", SCREEN, "bar");
+        });
+        expect(motionOf(result, TERMINAL.id)).toBe("sending-tab");
+
+        act(() => {
+          result.current.onPlayedOut(
+            TERMINAL.id,
+            "sending-tab",
+            SCREEN,
+            "contents",
+          );
+        });
+        expect(motionOf(result, TERMINAL.id)).toBe("resting");
+      });
+
+      // Every part scales about the group's middle, so it leaves as one.
+      it("leaves with the whole group when the group is sent", () => {
+        const { rerender, result } = showing(desk(group));
+
+        act(() => {
+          rerender(desk([]));
+        });
+
+        const area = stripOf(group).area;
+        expect(drawnOf(result, TERMINAL.id)).toMatchObject({
+          motion: "sending",
+          placement: { frame: area },
+        });
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "sending",
+          placement: { frame: area },
+        });
+      });
     });
   });
 

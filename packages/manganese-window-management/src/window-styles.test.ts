@@ -106,10 +106,11 @@ describe("movingStyles", () => {
     expect(delayed()).not.toHaveLength(0);
   });
 
-  it("starts a sent tab's contents fading as late", () => {
-    expect(
-      classes(movingStyles({ contents: true, motion: "sending-tab" })),
-    ).toEqual(expect.arrayContaining([...delayed()]));
+  // Both scale about one point, so they must keep time to stay together.
+  it("starts a sent tab's bar as late as its contents", () => {
+    expect(movingStyles({ contents: true, motion: "sending-tab" })).toBe(
+      movingStyles({ motion: "sending-tab" }),
+    );
   });
 
   it("holds the uncovered tab under the closing one for as long", () => {

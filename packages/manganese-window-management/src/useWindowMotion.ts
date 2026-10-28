@@ -3,13 +3,20 @@ import { useCallback, useState } from "react";
 import { token } from "../styled-system/tokens";
 
 import type { Closing, Leaving } from "./closing";
-import { departed, movesAsTab, sentAway, withClosing } from "./closing";
+import {
+  departed,
+  movesAsTab,
+  placedOn,
+  sentAway,
+  withClosing,
+} from "./closing";
 import type { PlacedTab, Placement } from "./placement";
 import { contentsOf } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
 import type { Shown } from "./shown";
 import { tabSwitched } from "./tab-switch";
+import type { StripPlace } from "./tree/frames";
 import type { ShellWindow } from "./window";
 import type { Shuffle, TabFade, WindowMotion } from "./window-motion";
 import { arrivalFrom, departureFor } from "./window-motion";
@@ -433,19 +440,28 @@ const stowed = (desk: Desk, id: string): boolean =>
   Object.values(desk)[0]?.scratchpad.includes(id) ?? false;
 
 /**
- * How a window leaves the screen: up to the scratchpad, or off to another
- * workspace.
+ * How a window leaves the screen: up to the scratchpad, out of a group that
+ * stays, or off to another workspace.
  */
 const sendingMotion = (
   desk: Desk,
   { placement }: Leaving,
 ): SendingOn["motion"] => {
+  const { strip } = placement;
   if (stowed(desk, placement.id)) {
     return "stowing";
   } else {
-    return movesAsTab(placement) ? "sending-tab" : "sending";
+    return movesAsTab(placement) &&
+      strip !== undefined &&
+      groupStays(desk, strip)
+      ? "sending-tab"
+      : "sending";
   }
 };
+
+/** Whether a screen in `desk` still shows a window of `strip`'s group. */
+const groupStays = (desk: Desk, strip: StripPlace): boolean =>
+  strip.group.windows.some((id) => placedOn(Object.values(desk), id));
 
 /** The windows the desk's screens place. */
 const placedIds = (desk: Desk): ReadonlySet<string> =>
