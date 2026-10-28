@@ -58,6 +58,15 @@ describe(Popover, () => {
       expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
     });
 
+    it("says when it is withheld, so the stylesheet can hide it until its body is ready", () => {
+      render(
+        <Popover open withheld>
+          Body
+        </Popover>,
+      );
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-withheld");
+    });
+
     it("says when it is wide, so the stylesheet can widen its cap", () => {
       render(
         <Popover open wide>

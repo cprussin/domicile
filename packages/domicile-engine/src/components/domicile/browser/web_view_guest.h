@@ -706,12 +706,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // click) by asking the shell, which decides window order.
   void ActivateContents(content::WebContents* contents) override;
 
-  // Asks the guest's current page to report its content's size.
-  void EnablePreferredSize();
+  // Sizes an extension popup's page from its content, as Chrome's
+  // ExtensionViewViews does: Blink's auto-resize, between Chrome's popup
+  // bounds. Per widget, so each new page's is turned on. Nothing for a tab.
+  void EnableAutoResize();
 
-  // Reports the page's content size. See ContentSizeChanged in the mojom.
-  void UpdatePreferredSize(content::WebContents* web_contents,
-                           const gfx::Size& pref_size) override;
+  // Reports the size the popup's page sized itself to. See ContentSizeChanged
+  // in the mojom.
+  void ResizeDueToAutoResize(content::WebContents* web_contents,
+                             const gfx::Size& new_size) override;
 
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
@@ -750,8 +753,8 @@ class WebViewGuest : public mojom::WebViewGuest,
       content::RenderFrameHost* render_frame_host) override;
 
   // On a new page: clears the previous favicon and description (a page
-  // without them reports nothing), ends any find as Chrome does, asks the new
-  // renderer to report its content size, and reports the new site's
+  // without them reports nothing), ends any find as Chrome does, sizes an
+  // extension popup's new page from its content, and reports the new site's
   // permissions.
   void PrimaryPageChanged(content::Page& page) override;
 

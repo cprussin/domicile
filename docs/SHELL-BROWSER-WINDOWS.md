@@ -204,7 +204,7 @@ stale state.
 | `description` | `domicile-description-change` | The page's `<meta name="description">`, trimmed, or `""` |
 | `targetUrl` | `domicile-target-url-change` | The link under the pointer, or `""`. The engine draws no status bubble; manganese's is `browser/LinkTarget.tsx` |
 | `findMatches`, `findActiveMatch` | `domicile-find-change` | Find-in-page results |
-| `contentWidth`, `contentHeight` | `domicile-content-size-change` | Page content size (for popups) |
+| `contentWidth`, `contentHeight` | `domicile-content-size-change` | The size an `extensionpopup` view's page sized itself to |
 | `pageFullscreen` | `domicile-page-fullscreen-change` | Whether the page is fullscreen; see [Fullscreen](#fullscreen) |
 | `renderProcessGone`, `renderProcessExitCode` | `domicile-render-process-change` | Why the page's renderer went away, or `""`; see [Crashed pages](#crashed-pages) |
 

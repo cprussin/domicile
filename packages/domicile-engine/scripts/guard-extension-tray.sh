@@ -27,9 +27,10 @@
 # URL, a PNG icon and `enabled`; that the <webview> the shell then points at
 # that popup URL, marked `extensionpopup`, shows it; that getContexts lists the
 # popup as a `POPUP` and tabs.getCurrent names no tab, as Chrome answers its
-# toolbar popup; that the <webview> reports the
-# popup's content size as the fixture lays it out, which is what a shell sizes
-# its panel from (WebViewGuest::UpdatePreferredSize); and that the popup's
+# toolbar popup; that the <webview> reports the size the popup sized itself
+# to, as Chrome's toolbar popup sizes it -- as wide as its widest fixed part,
+# not as its longest line -- which is what a shell sizes its panel from
+# (WebViewGuest::ResizeDueToAutoResize); and that the popup's
 # `window.close()` reaches the shell as `domicile-close`.
 #
 # HOW IT CAN FAIL. NEGATIVE=1 runs the control: the list empty, and the
@@ -75,10 +76,6 @@ readonly CONTEXT="POPUP"
 readonly CURRENT_TAB="none"
 readonly WIDTH="230"
 readonly HEIGHT="170"
-# What the width may read over WIDTH: Blink's max-content width for the page
-# counts the gutter a classic vertical scrollbar takes, 15px on Linux, and 0
-# where scrollbars overlay.
-readonly SCROLLBAR="15"
 
 EXTENSION="$SCRIPTS/guard-extension-tray-extension"
 
@@ -166,10 +163,15 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 }
 
 # 3. The engine. No `--load-extension`: the fixture gets in by the list.
+# A real window: a headless one is 0x0 by default, which makes the <webview>
+# 0x0 too. A guest that size draws no frame, and auto-resize reports a size
+# only off a frame.
 STARTED_AT="$(date +%s)"
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
+  --ozone-override-screen-size=1024,768 \
+  --window-size=1024,768 \
   --disable-gpu \
   --app="domicile://shell/?expect=$ID&open=$OPEN" \
   --domicile-shell-root="$SCRIPTS" \
@@ -205,13 +207,13 @@ sleep 1
 saw() { # $1 fixed string
   grep -qF -- "$1" "$ENGINE_LOG" 2>/dev/null && echo 1 || echo 0
 }
-# Whether a size the fixture lays out was reported: HEIGHT, and WIDTH up to
-# SCROLLBAR over it -- for a page at $1, or any page with $1 empty.
+# Whether the fixture's size, WIDTH by HEIGHT, was reported -- for a page at
+# $1, or any page with $1 empty.
 sized() { # $1 address prefix, or empty
   grep -oE '"GUARD size width=[0-9]+ height=[0-9]+ url=[^"]*' "$ENGINE_LOG" 2>/dev/null |
-    awk -v w="$WIDTH" -v h="$HEIGHT" -v s="$SCROLLBAR" -v u="$1" '
+    awk -v w="$WIDTH" -v h="$HEIGHT" -v u="$1" '
       { split($3, a, "="); split($4, b, "="); split($5, c, "=") }
-      a[2] >= w && a[2] <= w + s && b[2] == h && index(c[2], u) == 1 { found = 1 }
+      a[2] == w && b[2] == h && index(c[2], u) == 1 { found = 1 }
       END { print found ? 1 : 0 }'
 }
 
@@ -299,10 +301,11 @@ CloseRequested, or the element did not dispatch domicile-close"
   ;;
 "tray 1 1 1 1 1 1 0")
   FAILURE="the popup showed and the <webview> never reported its content at \
-the fixture's size: the guest's renderer was not put in preferred-size mode \
-(WebViewGuest::PrimaryPageChanged), WebViewGuest::UpdatePreferredSize did not \
+the fixture's size: the guest's page was not put in auto-resize mode \
+(WebViewGuest::EnableAutoResize), WebViewGuest::ResizeDueToAutoResize did not \
 send ContentSizeChanged, or the element did not dispatch \
-domicile-content-size-change. The GUARD size lines above say what did arrive"
+domicile-content-size-change. A width over the fixture's is its longest line, \
+not its widest fixed part. The GUARD size lines above say what did arrive"
   ;;
 "control 1 1 0 1 0 0 0")
   PASSED="the control is sharp: an empty list left the fixture out of a tray \

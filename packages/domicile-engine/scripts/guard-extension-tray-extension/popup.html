@@ -6,13 +6,12 @@
     <!-- A file rather than inline: an extension page's CSP runs no inline script. -->
     <script src="popup.js"></script>
   </head>
-  <!-- Fluid, as Bitwarden's popup is in a tab: nothing fixes the width, and
-       two halves of guard-extension-tray.sh's WIDTH sit side by side at its
-       HEIGHT. The <webview> must report WIDTH, which they lay out at given
-       the room, and not the half its narrowest layout is. No whitespace
-       between them, which would widen the line by a space; top-aligned, so
-       the text in one does not drop it below the other and deepen the line. -->
-  <body style="margin: 0">
-    <span style="display: inline-block; width: 115px; height: 170px; vertical-align: top">the tray guard's popup</span><span style="display: inline-block; width: 115px; height: 170px; vertical-align: top"></span>
+  <!-- Sized as real popups size themselves (Phantom's is this, at 360 by
+       600): a minimum on the root, and a line longer than that. Chrome's
+       toolbar popup is as wide as the minimum, guard-extension-tray.sh's
+       WIDTH by HEIGHT, and wraps the line; a <webview> that reports the
+       line's whole length instead grows wider than the page means to be. -->
+  <body style="margin: 0; min-width: 230px; min-height: 170px">
+    <p style="margin: 0">the tray guard's popup, as wide as its minimum and not as this whole line</p>
   </body>
 </html>

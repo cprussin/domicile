@@ -1812,7 +1812,7 @@ void WebViewGuest::TitleWasSetForMainFrame(
 }
 
 void WebViewGuest::PrimaryPageChanged(content::Page& page) {
-  EnablePreferredSize();
+  EnableAutoResize();
   EndFind();
   if (!reported_favicon_.is_empty()) {
     reported_favicon_ = GURL();
@@ -2356,19 +2356,25 @@ void WebViewGuest::ActivateContents(content::WebContents* contents) {
   client_->FocusRequested();
 }
 
-void WebViewGuest::EnablePreferredSize() {
-  LOG(INFO) << "domicile: asked a <webview>'s page for its content size.";
-  guest_contents_->GetPrimaryMainFrame()
-      ->GetRenderViewHost()
-      ->EnablePreferredSizeMode();
+void WebViewGuest::EnableAutoResize() {
+  if (!extension_popup_) {
+    return;
+  }
+  // ExtensionPopup's kMinSize and kMaxSize. Chrome gives a popup the whole
+  // maximum on Wayland, which tells it nothing of where it sits on screen.
+  constexpr gfx::Size kMinSize(25, 25);
+  constexpr gfx::Size kMaxSize(800, 600);
+  LOG(INFO) << "domicile: sizing an extension popup's page from its content.";
+  guest_contents_->GetPrimaryMainFrame()->GetView()->EnableAutoResize(
+      kMinSize, kMaxSize);
 }
 
-void WebViewGuest::UpdatePreferredSize(content::WebContents* web_contents,
-                                       const gfx::Size& pref_size) {
-  LOG(INFO) << "domicile: a <webview>'s page reported its content size, "
-            << pref_size.ToString() << ".";
-  content_size_ = pref_size;
-  client_->ContentSizeChanged(pref_size.width(), pref_size.height());
+void WebViewGuest::ResizeDueToAutoResize(content::WebContents* web_contents,
+                                         const gfx::Size& new_size) {
+  LOG(INFO) << "domicile: an extension popup's page sized itself to "
+            << new_size.ToString() << ".";
+  content_size_ = new_size;
+  client_->ContentSizeChanged(new_size.width(), new_size.height());
 }
 
 void WebViewGuest::RequestFocus() {

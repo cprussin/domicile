@@ -14,6 +14,7 @@ import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 import { css } from "../../styled-system/css";
 import { useContentSize } from "./useContentSize";
+import { useShown } from "./useShown";
 
 type Props = {
   /** Host every click goes through. */
@@ -36,6 +37,7 @@ type Props = {
  * Every click calls `extensions.activate`, which grants `activeTab` on the
  * focused browser window. An action with a popup then opens it in a
  * `<webview>` panel; the engine dispatches `action.onClicked` for one without.
+ * The panel is withheld until the popup's page has loaded, as Chrome's is.
  *
  * The panel closes on an outside press, Escape, or the popup's
  * `window.close()`. Escape works only while the shell page has the keyboard,
@@ -48,6 +50,9 @@ export const ExtensionAction = ({
   opened,
 }: Props) => {
   const { id, popup } = extension;
+  // `null` because React passes it to a callback ref on unmount.
+  const [view, setView] = useState<HTMLWebViewElement | null>(null);
+  const shown = useShown(view);
   return popup === undefined ? (
     <Button
       label={extension.title}
@@ -76,6 +81,7 @@ export const ExtensionAction = ({
           <Icon extension={extension} />
         </Button>
       }
+      withheld={!shown}
     >
       <PopupView
         name={extension.name}
@@ -83,6 +89,8 @@ export const ExtensionAction = ({
           onOpen(undefined);
         }}
         popup={popup}
+        setView={setView}
+        view={view}
       />
     </Popover>
   );
@@ -117,22 +125,24 @@ type PopupViewProps = {
   /** The popup called `window.close()`. */
   onClose: () => void;
   popup: string;
+  /** Takes the view, as a callback ref. */
+  setView: (view: HTMLWebViewElement | null) => void;
+  /** The view `setView` took. */
+  view: HTMLWebViewElement | null;
 };
 
 /**
  * The popup page in a `<webview>`.
  *
  * The view reports `window.close()` as `domicile-close` and leaves closing to
- * the shell. Like Chrome's popup, it sizes to its content, capped at
- * `viewStyles`' box (also its size until the page reports one).
+ * the shell. Like Chrome's popup, it sizes to the size its page sized itself
+ * to (see `contentWidth` in `@domicile-desktop/sdk/webview-element`).
  *
  * The page's permission and device requests are asked above it. A grant is
  * the extension's, so it holds in the extension's other pages too. Its
  * dialogs cover it, and take focus, since the page is paused on them.
  */
-const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
-  // `null` because React passes it to a callback ref on unmount.
-  const [view, setView] = useState<HTMLWebViewElement | null>(null);
+const PopupView = ({ name, onClose, popup, setView, view }: PopupViewProps) => {
   const size = useContentSize(view);
   const request = usePermissionRequest(view);
   const deviceRequest = useDeviceRequest(view);
@@ -170,7 +180,7 @@ const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
           extensionpopup=""
           ref={setView}
           src={popup}
-          // Inline because Panda can't read runtime values. `viewStyles` caps it.
+          // Inline because Panda can't read runtime values.
           style={
             size === undefined
               ? undefined
@@ -213,18 +223,8 @@ const pageStyles = css({ position: "relative" });
 // The panel is flush, so the request gets its own inset.
 const askStyles = css({ padding: 2 });
 
-// A `<webview>` defaults to 300x150, so this sets its size until the popup
-// reports one and caps how far it grows. The cap fits typical popups
-// (Bitwarden's is 380px wide) and stays under Chrome's 600px on short screens.
 // `display: block` avoids a line-box gap under it in the panel.
-const viewStyles = css({
-  blockSize: "min({spacing.150}, 80vh)",
-  borderStyle: "none",
-  display: "block",
-  inlineSize: 100,
-  maxBlockSize: "min({spacing.150}, 80vh)",
-  maxInlineSize: 100,
-});
+const viewStyles = css({ borderStyle: "none", display: "block" });
 
 /** Focuses a popup's dialog when it opens. */
 const focusDialog = (element: HTMLElement | null): void => {
