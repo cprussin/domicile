@@ -29,7 +29,8 @@ export const Shell = runManganese({
 - `email`: the Google account.
 - `nickname`: its name in the drawer.
 
-A press opens the inbox in a browser window, or signs the account in. What it
+A press opens the inbox in a browser window, or signs the account in. New
+mail is notified under the nickname. What it
 shows: [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md#inboxes). It reads the
 inbox as the `Gmail` bar item does.
 

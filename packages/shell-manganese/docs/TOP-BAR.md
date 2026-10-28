@@ -390,20 +390,32 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
 - **Failed read:** the envelope, the nickname and a warning. Its tooltip
   says why.
 - Click opens the inbox in a browser window.
+- **New mail:** a notification per message, under the nickname: the sender,
+  then the subject. More than 3 at once are one notification, "5 new emails",
+  naming the senders. A press opens the message, or the inbox, in a browser
+  window. Mail already unread at startup or sign-in is not notified. Do not
+  disturb hides the toasts, as for any notification. The bar item and
+  `gmailInbox` share one reading, so each message notifies once.
 - Read every 30 seconds, and 1 and 5 seconds after a Gmail browser window
   opens, closes, navigates or changes title. Not read while the desktop is
   locked. Counts are conversations, as Gmail's inbox counts them.
 - How it reads:
   - `client` is a Google Cloud OAuth client of the Desktop app type, with the
-    Gmail API on and the `gmail.labels` scope. Publish its consent screen:
-    one in Testing expires sign-ins after 7 days.
+    Gmail API on and the `gmail.metadata` scope: labels and message headers,
+    never bodies. Publish its consent screen: one in Testing expires sign-ins
+    after 7 days. A refresh token granted without that scope signs the
+    account out, to sign in again.
   - Sign-in is Google's desktop flow. Consent redirects the window to a
     loopback address nothing listens on; the item reads the code from the
     window's address, closes it, and trades the code for a refresh token.
   - The refresh token is in `localStorage`, per account. One Google revokes
     signs the account out.
   - Each read asks `labels.get INBOX` for `threadsTotal` and
-    `threadsUnread`, with an access token kept until it expires.
+    `threadsUnread`, and `messages.list` for the unread messages in the
+    inbox, with an access token kept until it expires. A message not seen
+    before gets `messages.get` for its `From` and `Subject`.
+  - Notifications go to `org.freedesktop.Notifications` over the session
+    bus, with the theme's `gmail` icon, else `mail-unread`.
   - Requests go through `fetchWithCookies`
     ([SHELL-SYSTEM-ACCESS.md](../../../docs/SHELL-SYSTEM-ACCESS.md#the-browsers-cookies)).
 

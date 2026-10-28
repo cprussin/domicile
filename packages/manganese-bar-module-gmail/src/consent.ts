@@ -14,8 +14,11 @@ export type GoogleClient = { id: string; secret: string };
  */
 export const REDIRECT = "http://127.0.0.1:47823/";
 
-/** Read-only access to the labels, which carry the inbox's counts. */
-const SCOPE = "https://www.googleapis.com/auth/gmail.labels";
+/**
+ * Read-only access to labels, which carry the inbox's counts, and to message
+ * headers, which name a new message's sender and subject. Never bodies.
+ */
+export const SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
 
 /**
  * Google's consent page for `email`. It redirects to {@link REDIRECT} with

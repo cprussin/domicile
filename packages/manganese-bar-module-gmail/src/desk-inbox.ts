@@ -4,8 +4,10 @@ import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 
 import type { GoogleClient } from "./consent";
+import type { Mail } from "./gmail-api";
 import { watchGmailWindows } from "./gmail-windows";
 import type { Inbox } from "./inbox";
+import { mailNotices } from "./mail-notices";
 import { inboxReader } from "./read-inbox";
 import { signIn } from "./sign-in";
 import type { InboxWatch } from "./watch-inbox";
@@ -25,14 +27,21 @@ export type DeskAccount = {
 /**
  * Each account's inbox, watched once for every bar on the desk. Read again
  * soon after a Gmail window changes. Paused while the desk is locked, which
- * refuses the reads.
+ * refuses the reads. New mail is notified under the account's `nickname`.
  */
 export const deskInbox = perDesktop((domicile) => {
   const accounts = new Map<string, DeskAccount>();
-  return (email: string, client: GoogleClient): DeskAccount => {
+  const notify = mailNotices(domicile);
+  return (
+    email: string,
+    client: GoogleClient,
+    nickname: string,
+  ): DeskAccount => {
     const known = accounts.get(email);
     if (known === undefined) {
-      const account = watchedAccount(domicile, email, client);
+      const account = watchedAccount(domicile, email, client, (mail) =>
+        notify({ email, nickname }, mail),
+      );
       accounts.set(email, account);
       return account;
     } else {
@@ -45,8 +54,9 @@ const watchedAccount = (
   domicile: Domicile,
   email: string,
   client: GoogleClient,
+  onMail: (mail: readonly Mail[]) => Promise<void>,
 ): DeskAccount => {
-  const read = inboxReader(domicile, client, email);
+  const read = inboxReader(domicile, client, email, onMail);
   const running: { watch: InboxWatch | undefined } = { watch: undefined };
   return {
     inbox: sharedWatch((onInbox: (inbox: Inbox) => void) => {

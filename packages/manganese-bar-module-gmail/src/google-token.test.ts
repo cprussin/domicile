@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
 
-import { REDIRECT } from "./consent";
+import { REDIRECT, SCOPE } from "./consent";
 import { exchangeCode, refreshAccess, TokenRefusal } from "./google-token";
 import { answering, CLIENT, json, TOKEN } from "./held-google";
 
@@ -47,7 +47,9 @@ describe("exchangeCode", () => {
 describe("refreshAccess", () => {
   it("posts the refresh token for an access token", async () => {
     const { domicile, fetched } = answering({
-      [TOKEN]: [json(200, { access_token: "a", expires_in: 3599 })],
+      [TOKEN]: [
+        json(200, { access_token: "a", expires_in: 3599, scope: SCOPE }),
+      ],
     });
 
     expect(await refreshAccess(domicile, CLIENT, "r")).toStrictEqual(
@@ -66,6 +68,22 @@ describe("refreshAccess", () => {
   it("is revoked when Google no longer takes the refresh token", async () => {
     const { domicile } = answering({
       [TOKEN]: [json(400, { error: "invalid_grant" })],
+    });
+
+    expect(await refreshAccess(domicile, CLIENT, "r")).toStrictEqual(
+      Err(TokenRefusal.Revoked()),
+    );
+  });
+
+  it("is revoked when the refresh token cannot read message headers", async () => {
+    const { domicile } = answering({
+      [TOKEN]: [
+        json(200, {
+          access_token: "a",
+          expires_in: 3599,
+          scope: "https://www.googleapis.com/auth/gmail.labels",
+        }),
+      ],
     });
 
     expect(await refreshAccess(domicile, CLIENT, "r")).toStrictEqual(

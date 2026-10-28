@@ -18,7 +18,7 @@ type Props = {
  */
 export const Gmail = ({ client, email, nickname }: Props) => {
   const domicile = useDomicile();
-  const account = deskInbox(domicile)(email, client);
+  const account = deskInbox(domicile)(email, client, nickname);
   return (
     <Account
       email={email}

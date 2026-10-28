@@ -1,7 +1,7 @@
 # @domicile-desktop/manganese-bar-module-gmail
 
 A manganese bar item: one Gmail account's inbox count, read with the Gmail
-API.
+API. New mail raises a desktop notification.
 
 ## Use
 
@@ -30,7 +30,7 @@ export const Shell = runManganese({
 
 - `client`: a Google Cloud OAuth client, Desktop app type:
   1. Turn on the Gmail API in a Google Cloud project.
-  2. Give the OAuth consent screen the `gmail.labels` scope, and publish it.
+  2. Give the OAuth consent screen the `gmail.metadata` scope, and publish it.
      One in Testing expires sign-ins after 7 days.
   3. Create an OAuth client of the Desktop app type. Google does not treat
      its secret as secret.
