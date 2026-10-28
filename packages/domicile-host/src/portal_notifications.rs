@@ -135,6 +135,7 @@ impl<T> PortalNotifications<T> {
                 icon: notification.icon,
                 // The portal starts an application that has quit.
                 sender: None,
+                pid: None,
             },
             now,
         );

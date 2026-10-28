@@ -234,7 +234,27 @@ impl Compositor {
         self.client_on_with(display, title, &[])
     }
 
+    /// The same, on the session bus at `address`, for a client that notifies.
+    pub fn client_on_a_bus(&self, title: &str, extra: &[&str], address: &str) -> Client {
+        self.client_on_with_env(
+            &self.session.wayland_display,
+            title,
+            extra,
+            &[("DBUS_SESSION_BUS_ADDRESS", address)],
+        )
+    }
+
     fn client_on_with(&self, display: &str, title: &str, extra: &[&str]) -> Client {
+        self.client_on_with_env(display, title, extra, &[])
+    }
+
+    fn client_on_with_env(
+        &self,
+        display: &str,
+        title: &str,
+        extra: &[&str],
+        env: &[(&str, &str)],
+    ) -> Client {
         // The client is a target of this crate so cargo builds it first and
         // gives its path, whatever the profile or target directory.
         let mut child = Command::new(env!("CARGO_BIN_EXE_domicile-test-client"))
@@ -244,6 +264,7 @@ impl Compositor {
             .args(extra)
             .env("WAYLAND_DISPLAY", display)
             .env("XDG_RUNTIME_DIR", &self.runtime_dir)
+            .envs(env.iter().copied())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

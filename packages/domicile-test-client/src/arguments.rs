@@ -39,6 +39,13 @@ pub struct Arguments {
     /// checks need a real client to hold the data.
     pub copy: Option<String>,
 
+    /// A summary to send `org.freedesktop.Notifications` once connected, as
+    /// a chat app does, with a press as its only action.
+    ///
+    /// The bus and the Wayland socket share the client's process, as in
+    /// Electron, so a press can be traced back to the window.
+    pub notify: Option<String>,
+
     /// Text to offer on the primary (middle-click) selection.
     ///
     /// Separate from [`copy`](Self::copy) so checks can catch a compositor that
@@ -229,6 +236,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut outlive_its_window = None;
     let mut copy = None;
     let mut copy_primary = None;
+    let mut notify = None;
     let mut paste = None;
     let mut popup = None;
     let mut popup_grab = None;
@@ -306,6 +314,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--copy-primary" => {
                 take(&mut copy_primary, &flag, value(&mut args, &flag)?)?;
             }
+            "--notify" => {
+                take(&mut notify, &flag, value(&mut args, &flag)?)?;
+            }
             "--paste" => {
                 take(&mut paste, &flag, true)?;
             }
@@ -375,6 +386,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         outlive_its_window: outlive_its_window.unwrap_or(false),
         copy,
         copy_primary,
+        notify,
         paste: paste.unwrap_or(false),
         popup: popup.unwrap_or(false)
             || popup_grab.unwrap_or(false)

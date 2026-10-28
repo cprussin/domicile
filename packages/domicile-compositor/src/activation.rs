@@ -14,6 +14,11 @@
 //! may move the keyboard after minting it, as closing the notification drawer
 //! does. It is good for [`MINTED_FOR`], and only the newest is kept, so an
 //! app answering late cannot take the keyboard from a later choice.
+//!
+//! Some apps ignore `ActivationToken` and ask with a token of their own, made
+//! for their last input (Electron before 42, so Slack). A press's token also
+//! lets the process that sent the notification raise its window that way,
+//! once, while the token is good.
 
 use std::time::Duration;
 
@@ -25,20 +30,33 @@ use smithay::wayland::xdg_activation::{XdgActivationState, XdgActivationTokenDat
 pub const MINTED_FOR: Duration = Duration::from_secs(10);
 
 /// Marks a token the compositor minted for the user.
-struct Minted;
+struct Minted {
+    /// The process whose notification was pressed, if one was.
+    sender: Option<u32>,
+}
 
 /// Mint a token for the user's latest press in the chrome, dropping any older
-/// one.
-pub fn mint(state: &mut XdgActivationState) -> String {
+/// one. `sender` is the process whose notification was pressed, if one was.
+pub fn mint(state: &mut XdgActivationState, sender: Option<u32>) -> String {
     state.retain_tokens(|_, data| data.user_data.get::<Minted>().is_none());
-    state.create_external_token(minted()).0.to_string()
+    state.create_external_token(minted(sender)).0.to_string()
 }
 
 /// The data of a token the compositor mints.
-fn minted() -> XdgActivationTokenData {
+fn minted(sender: Option<u32>) -> XdgActivationTokenData {
     let data = XdgActivationTokenData::default();
-    data.user_data.insert_if_missing(|| Minted);
+    data.user_data.insert_if_missing(|| Minted { sender });
     data
+}
+
+/// Whether the minted token `data` lets process `pid` raise its window with
+/// a token of its own: `pid` sent the notification pressed, and the token is
+/// still good.
+pub fn invites(data: &XdgActivationTokenData, pid: u32) -> bool {
+    data.user_data
+        .get::<Minted>()
+        .is_some_and(|minted| minted.sender == Some(pid))
+        && data.timestamp.elapsed() < MINTED_FOR
 }
 
 /// Whether a request with `data`'s token may move the keyboard, given the
@@ -89,16 +107,38 @@ mod tests {
     fn a_token_minted_for_the_user_moves_it_after_the_keyboard_moved() {
         // Closing the drawer hands the keyboard back to a window after the
         // notification click minted the token.
-        assert!(granted(&minted(), Some(Serial::from(5))));
+        assert!(granted(&minted(None), Some(Serial::from(5))));
     }
 
     #[test]
     fn a_token_minted_for_the_user_expires() {
         let stale = XdgActivationTokenData {
             timestamp: Instant::now() - MINTED_FOR,
-            ..minted()
+            ..minted(None)
         };
         assert!(!granted(&stale, Some(Serial::from(5))));
+    }
+
+    #[test]
+    fn a_press_lets_its_notifications_process_raise_its_window() {
+        // An app that ignores `ActivationToken` and asks with its own token,
+        // as Electron before 42 does.
+        assert!(invites(&minted(Some(42)), 42));
+    }
+
+    #[test]
+    fn a_press_lets_no_other_process() {
+        assert!(!invites(&minted(Some(42)), 7));
+        assert!(!invites(&minted(None), 42));
+    }
+
+    #[test]
+    fn a_press_stops_letting_it_once_the_token_expires() {
+        let stale = XdgActivationTokenData {
+            timestamp: Instant::now() - MINTED_FOR,
+            ..minted(Some(42))
+        };
+        assert!(!invites(&stale, 42));
     }
 
     #[test]

@@ -91,6 +91,10 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
     notification gets it as `activation-token` in the platform data. The app
     raises its window with it, and the shell shows that window's workspace and
     tab and warps the pointer to it.
+  - The press also lets the process that sent the notification (as the bus
+    knows it) raise its window once with a token of its own, while the
+    press's token is good. Electron before 42, so Slack, ignores
+    `ActivationToken` and asks that way.
   - An app that has quit is started instead, from its `desktop-entry` hint,
     when its bus name is gone. The portal starts its own apps.
   - A press in the drawer closes the drawer, which would cover the window.

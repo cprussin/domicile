@@ -147,6 +147,11 @@ impl NotificationServer {
         let _ = self.told.send(Event::Invoke { id, action, token });
     }
 
+    /// The process that sent `id`, if it came over the bus.
+    pub fn pid(&self, id: u32) -> Option<u32> {
+        self.store.held.lock().unwrap().notifications.pid(id)
+    }
+
     /// The user replied `text` to `id`.
     pub fn reply(&self, id: u32, text: String) {
         let _ = self.told.send(Event::Reply { id, text });
@@ -434,6 +439,22 @@ fn owned(connection: &Connection, name: &str) -> bool {
     })
 }
 
+/// The process `sender` belongs to, as the bus knows it. `None` if the bus
+/// will not say, which is logged: a press then cannot let that process raise
+/// its window with a token of its own (see [`crate::activation::invites`]).
+async fn pid(connection: &zbus::Connection, sender: &zbus::names::UniqueName<'_>) -> Option<u32> {
+    let asked = match zbus::fdo::DBusProxy::new(connection).await {
+        Ok(bus) => {
+            bus.get_connection_unix_process_id(sender.clone().into())
+                .await
+        }
+        Err(why) => Err(why.into()),
+    };
+    asked
+        .inspect_err(|why| warn!(%why, %sender, "a notification's process could not be asked"))
+        .ok()
+}
+
 /// Emit `NotificationClosed`. A failure is logged and ignored, as in
 /// `crate::tray::listed`.
 fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
@@ -552,6 +573,7 @@ impl Server {
         &self,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
         #[zbus(header)] header: zbus::message::Header<'_>,
+        #[zbus(connection)] connection: &zbus::Connection,
         app_name: String,
         replaces_id: u32,
         app_icon: String,
@@ -572,6 +594,10 @@ impl Server {
             expire_timeout,
             icon: None,
             sender: header.sender().map(|sender| sender.to_string()),
+            pid: match header.sender() {
+                Some(sender) => pid(connection, sender).await,
+                None => None,
+            },
         };
         let notified = self.store.change(|held| {
             let notified = held.notifications.notify(sent, now());

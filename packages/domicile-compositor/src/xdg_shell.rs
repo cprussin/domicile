@@ -321,8 +321,9 @@ impl XdgActivationHandler for DomicileCompositor {
     /// A token made before the keyboard last moved, or a stale one the
     /// compositor minted, is dropped (see [`activation::granted`]): the window
     /// is asking on its own, not for the user, and is marked urgent instead
-    /// (`app_urgent`). The rest are broadcast as `focus_requested`; a shell
-    /// grants one with `focus_app`.
+    /// (`app_urgent`). Unless its process just had a notification pressed
+    /// (see [`activation::invites`]), which uses that press up. The rest are
+    /// broadcast as `focus_requested`; a shell grants one with `focus_app`.
     fn request_activation(
         &mut self,
         token: XdgActivationToken,
@@ -335,7 +336,9 @@ impl XdgActivationHandler for DomicileCompositor {
         let last_enter = self.seat.get_keyboard().unwrap().last_enter();
         // `None` for the chrome's own surface, which is never announced.
         let app_id = self.app_id_of(&surface);
-        if !activation::granted(&token_data, last_enter) {
+        if !activation::granted(&token_data, last_enter)
+            && !(app_id.is_some() && self.invited(&surface))
+        {
             let asked = token_data.serial.map(|(serial, _)| serial);
             debug!(
                 ?app_id,
@@ -360,6 +363,19 @@ impl XdgActivationHandler for DomicileCompositor {
 delegate_xdg_activation!(DomicileCompositor);
 
 impl DomicileCompositor {
+    /// Whether the app `surface` belongs to just had a notification
+    /// pressed, so may raise its window with a token of its own. Uses the
+    /// press's token up.
+    fn invited(&mut self, surface: &WlSurface) -> bool {
+        let pid = u32::try_from(owner_of(surface).pid).expect("a process id is positive");
+        let invitation = self
+            .xdg_activation_state
+            .tokens()
+            .find(|(_, data)| activation::invites(data, pid))
+            .map(|(token, _)| token.clone());
+        invitation.is_some_and(|token| self.xdg_activation_state.remove_token(&token))
+    }
+
     /// Tell the pages listening what a client asked of its window, and answer
     /// with a configure of the states it has.
     ///
