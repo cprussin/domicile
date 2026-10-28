@@ -343,13 +343,16 @@ screen-record`, the Screen Record launcher entry and the SDK's
 - **The compositor casts it and `domicile-recorder` encodes it.** The pick is
   cast with the pointer drawn in, as any screen cast is. The recorder, beside
   the compositor, is a GStreamer pipeline: the cast's PipeWire node, and its
-  sound node (`domicile-sound-desk`, or the window's), to VP8 and Opus in a
+  sound node (`domicile-sound-desk`, or the window's), to video and Opus in a
   WebM under `$XDG_VIDEOS_DIR/Screen recordings/`, named for when it started.
   It takes `pause`, `resume` and `stop` on stdin.
-- **A screen or region is recorded at most 4K's pixels.** The recorder
-  encodes on the CPU, which manages a few frames a second of a whole desk of
-  high-density monitors. A bigger stream is scaled down on the GPU
-  (`Casting::start_at_most`).
+- **The GPU encodes the video when it can.** The recorder takes the first
+  VA-API encoder GStreamer has: AV1, then VP9. Without one, the CPU encodes
+  VP8, which falls behind on a stream near 4K (about 15 frames a second on a
+  laptop).
+- **A screen or region is recorded at most 4K's pixels.** A whole desk of
+  high-density monitors is past what even the GPU path keeps up with, so a
+  bigger stream is scaled down on the GPU (`Casting::start_at_most`).
 - **It is listed while it runs.** A `recording` capturing session carries its
   sources, its file, and its time: `recorded_ms`, and `running_since_ms` unless
   paused. The shell answers it `pause`, `resume`, `stop` or `discard`. A pause

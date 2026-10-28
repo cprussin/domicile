@@ -7,7 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-# The pipeline: PipeWire in, VP8 and Opus out, muxed into WebM. Links
+# The pipeline: PipeWire in, AV1, VP9 or VP8 and Opus out, muxed into WebM. Links
 # libgstreamer, so the crate is left out of `default-members`.
 gstreamer = "0.25"
 thiserror.workspace = true

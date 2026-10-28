@@ -5,7 +5,7 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
-use domicile_recorder::pipeline::{description, Sources};
+use domicile_recorder::pipeline::{description, Encoder, Sources};
 use domicile_recorder::recording::Recording;
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -43,8 +43,8 @@ fn length(file: &Path) -> Duration {
 fn a_paused_recording_leaves_the_pause_out_of_the_file() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let file = dir.path().join("recording.webm");
-    let recording =
-        Recording::start(&description(&test_sources(true), &file)).expect("the recording starts");
+    let recording = Recording::start(&description(&test_sources(true), Encoder::Cpu, &file))
+        .expect("the recording starts");
 
     sleep(Duration::from_secs(1));
     recording.pause().expect("the recording pauses");
@@ -64,8 +64,8 @@ fn a_paused_recording_leaves_the_pause_out_of_the_file() {
 fn a_recording_without_sound_is_video_alone() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let file = dir.path().join("recording.webm");
-    let recording =
-        Recording::start(&description(&test_sources(false), &file)).expect("the recording starts");
+    let recording = Recording::start(&description(&test_sources(false), Encoder::Cpu, &file))
+        .expect("the recording starts");
 
     sleep(Duration::from_millis(500));
     recording.stop().expect("the recording finishes");
@@ -80,7 +80,11 @@ fn a_pipeline_that_cannot_run_fails_to_start() {
         video: "pipewiresrc path=4294967294".to_string(),
         sound: None,
     };
-    let started = Recording::start(&description(&sources, &dir.path().join("none.webm")));
+    let started = Recording::start(&description(
+        &sources,
+        Encoder::Cpu,
+        &dir.path().join("none.webm"),
+    ));
 
     assert!(started.is_err());
 }

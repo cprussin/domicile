@@ -9,7 +9,7 @@ use std::time::Duration;
 use domicile_recorder::args::parse;
 use domicile_recorder::command::Command;
 use domicile_recorder::pipeline::description;
-use domicile_recorder::recording::Recording;
+use domicile_recorder::recording::{encoder, Recording};
 
 /// How often the pipeline is checked for errors between commands.
 const POLL: Duration = Duration::from_millis(100);
@@ -22,7 +22,15 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let recording = match Recording::start(&description(&args.sources, &args.file)) {
+    let encoder = match encoder() {
+        Ok(encoder) => encoder,
+        Err(why) => {
+            eprintln!("domicile-recorder: the recording did not start: {why}");
+            return ExitCode::FAILURE;
+        }
+    };
+    eprintln!("domicile-recorder: encoding with {encoder:?}");
+    let recording = match Recording::start(&description(&args.sources, encoder, &args.file)) {
         Ok(recording) => recording,
         Err(why) => {
             eprintln!("domicile-recorder: the recording did not start: {why}");

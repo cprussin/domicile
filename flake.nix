@@ -649,11 +649,11 @@
             --set-default GST_PLUGIN_SYSTEM_PATH_1_0 "${pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" (with pkgs.gst_all_1; [
               gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav pkgs.pipewire
             ])}"
-          # The plugins the recorder's pipeline names: `pipewiresrc`, VP8,
-          # Opus and WebM.
+          # The plugins the recorder's pipeline names: `pipewiresrc`, VA-API
+          # and VP8, Opus and WebM.
           wrapProgram "$out/bin/domicile-recorder" \
             --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${pkgs.lib.makeSearchPath "lib/gstreamer-1.0" (with pkgs; [
-              gst_all_1.gstreamer.out gst_all_1.gst-plugins-base gst_all_1.gst-plugins-good pipewire
+              gst_all_1.gstreamer.out gst_all_1.gst-plugins-base gst_all_1.gst-plugins-good gst_all_1.gst-plugins-bad pipewire
             ])}"
         '';
       };

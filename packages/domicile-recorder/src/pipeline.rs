@@ -1,5 +1,5 @@
-//! The GStreamer pipeline a recording runs: its sources, encoded as VP8 and
-//! Opus, muxed into WebM.
+//! The GStreamer pipeline a recording runs: its sources, encoded as AV1 or
+//! VP9 on the GPU or VP8 on the CPU, and Opus, muxed into WebM.
 
 use std::path::Path;
 
@@ -31,15 +31,86 @@ impl Sources {
     }
 }
 
-/// The pipeline that records `sources` into `file`.
-pub fn description(sources: &Sources, file: &Path) -> String {
-    let video = format!(
-        "{} ! queue ! videoconvert ! video/x-raw,format=I420 ! queue ! \
-         vp8enc deadline=1 cpu-used=8 threads={} end-usage=cq cq-level=10 \
-         target-bitrate=16000000 keyframe-max-dist=240 ! queue ! mux.",
-        sources.video,
-        threads(),
-    );
+/// What encodes a recording's video.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Encoder {
+    /// The GPU, through VA-API.
+    Gpu(GpuEncoder),
+    /// VP8 on the CPU, which falls behind on a stream near 4K.
+    Cpu,
+}
+
+/// A VA-API encoder, by the codec and the GPU block that runs it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GpuEncoder {
+    Av1,
+    Av1LowPower,
+    Vp9,
+    Vp9LowPower,
+}
+
+impl GpuEncoder {
+    /// Best first: AV1 is the smaller file at the same quality.
+    const ALL: [GpuEncoder; 4] = [
+        GpuEncoder::Av1,
+        GpuEncoder::Av1LowPower,
+        GpuEncoder::Vp9,
+        GpuEncoder::Vp9LowPower,
+    ];
+
+    fn element(self) -> &'static str {
+        match self {
+            GpuEncoder::Av1 => "vaav1enc",
+            GpuEncoder::Av1LowPower => "vaav1lpenc",
+            GpuEncoder::Vp9 => "vavp9enc",
+            GpuEncoder::Vp9LowPower => "vavp9lpenc",
+        }
+    }
+
+    fn parser(self) -> &'static str {
+        match self {
+            GpuEncoder::Av1 | GpuEncoder::Av1LowPower => "av1parse",
+            GpuEncoder::Vp9 | GpuEncoder::Vp9LowPower => "vp9parse",
+        }
+    }
+}
+
+impl Encoder {
+    /// The best encoder for which `has` finds an element. The VA-API plugin
+    /// has an element only for what this machine's GPU encodes.
+    pub fn first(has: impl Fn(&str) -> bool) -> Encoder {
+        GpuEncoder::ALL
+            .into_iter()
+            .find(|gpu| has(gpu.element()))
+            .map_or(Encoder::Cpu, Encoder::Gpu)
+    }
+
+    /// The pipeline from a source's raw frames to encoded ones.
+    fn video(self) -> String {
+        match self {
+            // The frames come in system memory: `always-copy` copies a
+            // buffer, which a dmabuf cannot be.
+            Encoder::Gpu(gpu) => format!(
+                "video/x-raw ! queue ! vapostproc ! \
+                 video/x-raw(memory:VAMemory),format=NV12 ! queue ! \
+                 {} key-int-max=240 ! {}",
+                gpu.element(),
+                gpu.parser(),
+            ),
+            Encoder::Cpu => format!(
+                "queue ! videoconvert n-threads=0 ! video/x-raw,format=I420 ! queue ! \
+                 vp8enc deadline=1 cpu-used=8 threads={} end-usage=cq cq-level=10 \
+                 target-bitrate=16000000 keyframe-max-dist=240",
+                threads(),
+            ),
+        }
+    }
+}
+
+/// The pipeline that records `sources` into `file`, its video encoded by
+/// `encoder`.
+pub fn description(sources: &Sources, encoder: Encoder, file: &Path) -> String {
+    let video = format!("{} ! {} ! queue ! mux.", sources.video, encoder.video());
     let sound = sources.sound.as_ref().map(|sound| {
         format!(
             " {sound} ! queue ! audioconvert ! audioresample ! \
@@ -69,9 +140,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_gpus_av1_encoder_comes_first() {
+        assert_eq!(Encoder::first(|_| true), Encoder::Gpu(GpuEncoder::Av1));
+        assert_eq!(
+            Encoder::first(|element| element == "vavp9lpenc"),
+            Encoder::Gpu(GpuEncoder::Vp9LowPower)
+        );
+    }
+
+    #[test]
+    fn without_a_gpu_encoder_the_cpu_encodes_vp8() {
+        assert_eq!(Encoder::first(|_| false), Encoder::Cpu);
+    }
+
+    #[test]
+    fn the_gpu_converts_and_encodes_its_frames() {
+        let sources = Sources::pipewire(42, None);
+        let described = description(
+            &sources,
+            Encoder::Gpu(GpuEncoder::Av1),
+            Path::new("/tmp/a.webm"),
+        );
+
+        assert!(described.contains(
+            "video/x-raw ! queue ! vapostproc ! video/x-raw(memory:VAMemory),format=NV12"
+        ));
+        assert!(described.contains("! vaav1enc "));
+        assert!(described.contains("! av1parse ! queue ! mux."));
+        assert!(!described.contains("vp8enc"));
+    }
+
+    #[test]
+    fn the_cpu_converts_its_frames_on_every_core() {
+        let sources = Sources::pipewire(42, None);
+        let described = description(&sources, Encoder::Cpu, Path::new("/tmp/a.webm"));
+
+        assert!(described.contains("videoconvert n-threads=0 "));
+        assert!(described.contains("! vp8enc "));
+    }
+
+    #[test]
     fn a_cast_without_sound_records_video_alone() {
         let sources = Sources::pipewire(42, None);
-        let described = description(&sources, Path::new("/tmp/a.webm"));
+        let described = description(&sources, Encoder::Cpu, Path::new("/tmp/a.webm"));
 
         assert!(described.starts_with("pipewiresrc path=42 "));
         assert!(!described.contains("opusenc"));
@@ -81,7 +192,7 @@ mod tests {
     #[test]
     fn a_cast_with_sound_records_its_sound_node_by_name() {
         let sources = Sources::pipewire(42, Some("domicile-sound-desk"));
-        let described = description(&sources, Path::new("/tmp/a.webm"));
+        let described = description(&sources, Encoder::Cpu, Path::new("/tmp/a.webm"));
 
         assert!(described.contains("pipewiresrc target-object=\"domicile-sound-desk\""));
         assert!(described.contains("opusenc ! queue ! mux."));
@@ -90,7 +201,7 @@ mod tests {
     #[test]
     fn a_file_name_with_quotes_stays_one_value() {
         let sources = Sources::pipewire(1, None);
-        let described = description(&sources, Path::new("/tmp/say \"hi\".webm"));
+        let described = description(&sources, Encoder::Cpu, Path::new("/tmp/say \"hi\".webm"));
 
         assert!(described.ends_with("location=\"/tmp/say \\\"hi\\\".webm\""));
     }

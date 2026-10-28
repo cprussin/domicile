@@ -122,6 +122,7 @@ overrides:
       - libgtk-3-0
       - libpulse0
       # Miracast casts: Wi-Fi Direct, LAN TVs, and the encoding pipeline.
+      # The bad plugins also let screen recordings encode on the GPU.
       - network-manager
       - avahi-daemon
       - gstreamer1.0-tools
@@ -177,6 +178,7 @@ overrides:
       - libgtk-3.so.0()(64bit)
       - libpulse.so.0()(64bit)
       # Miracast casts: Wi-Fi Direct, LAN TVs, and the encoding pipeline.
+      # The bad plugins also let screen recordings encode on the GPU.
       - NetworkManager
       - avahi
       - gstreamer1
