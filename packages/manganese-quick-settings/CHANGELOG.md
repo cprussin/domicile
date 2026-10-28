@@ -1,0 +1,93 @@
+# @domicile-desktop/manganese-quick-settings
+
+## 0.1.0
+
+### Minor Changes
+
+- a1f9bb9: `QuickSettings` moves to its own package, `@domicile-desktop/manganese-quick-settings`. `@domicile-desktop/manganese/QuickSettings` is gone. The separate hardware bar items stay.
+
+### Patch Changes
+
+- 77fd631: A bar button stays lit while the panel it opened is open. New `fillOverPhoto` color and `_hoverOrOpen` condition.
+- 7a786a4: Quick settings, its Wi-Fi, Bluetooth and Sound details, and the notifications panel are built from shared panel parts (`Panel`, `PanelHeader`, `PanelSection`, `ListRow`, `DetailList`, `SliderRow`, `PanelNote`, `PanelFooter`, `IconButton`) with one type scale and set of colors, so they line up and nothing spills out of its panel. Bluetooth devices are grouped as connected, paired and nearby; refusals say what failed in plain words; and a panel opened with the pointer no longer shows a focus ring on its first control.
+- 4064278: Quick settings is tidier. The panel is narrower and evenly padded. A tile's status line is easier to read on the accent color. The brightness and volume sliders start and end together, and their percentages are larger. The battery line and Settings button are smaller and quieter. The mixer's captions match the slider figures.
+- f4a973d: Quick settings: Wi-Fi and Bluetooth tiles open their panels instead of switching; Keep awake, Night light and Dark mode become a row of switches (`QuickToggle`). The network panel groups by Wired and Wi-Fi with details folded away (`ListRow` `disclosure`). Sound lists outputs and inputs by port name to pick from.
+- Updated dependencies [bafd922]
+- Updated dependencies [8fa9c05]
+- Updated dependencies [77fd631]
+- Updated dependencies [1caba05]
+- Updated dependencies [9e60e1e]
+- Updated dependencies [6bbc80b]
+- Updated dependencies [923e65b]
+- Updated dependencies [44eb13c]
+- Updated dependencies [3980a9a]
+- Updated dependencies [623860a]
+- Updated dependencies [c7a232d]
+- Updated dependencies [487c705]
+- Updated dependencies [a9a62e8]
+- Updated dependencies [509f948]
+- Updated dependencies [c03a44b]
+- Updated dependencies [ab2d2f0]
+- Updated dependencies [14e6071]
+- Updated dependencies [56e1c22]
+- Updated dependencies [506b12f]
+- Updated dependencies [00e5da2]
+- Updated dependencies [75b9403]
+- Updated dependencies [3f7e261]
+- Updated dependencies [b49fa3a]
+- Updated dependencies [6730912]
+- Updated dependencies [2a87739]
+- Updated dependencies [4967b5d]
+- Updated dependencies [be59aae]
+- Updated dependencies [44d0983]
+- Updated dependencies [cd02e0e]
+- Updated dependencies [1ad2756]
+- Updated dependencies [b85d9bb]
+- Updated dependencies [01b9340]
+- Updated dependencies [558794b]
+- Updated dependencies [59b63cd]
+- Updated dependencies [fccc784]
+- Updated dependencies [e1205bb]
+- Updated dependencies [670713c]
+- Updated dependencies [8bc5b85]
+- Updated dependencies [4ee2c21]
+- Updated dependencies [3146073]
+- Updated dependencies [e83ec4a]
+- Updated dependencies [7a786a4]
+- Updated dependencies [4759ab2]
+- Updated dependencies [0f4582e]
+- Updated dependencies [d80e2f5]
+- Updated dependencies [c15ba93]
+- Updated dependencies [2fe5852]
+- Updated dependencies [1f1775a]
+- Updated dependencies [52a1d65]
+- Updated dependencies [3e5b976]
+- Updated dependencies [4064278]
+- Updated dependencies [f4a973d]
+- Updated dependencies [341debf]
+- Updated dependencies [ae7874c]
+- Updated dependencies [2430e48]
+- Updated dependencies [9fd298a]
+- Updated dependencies [c4fe915]
+- Updated dependencies [b39d80e]
+- Updated dependencies [21b82af]
+- Updated dependencies [427c184]
+- Updated dependencies [ee63a45]
+- Updated dependencies [f8b1742]
+- Updated dependencies [0abccd9]
+- Updated dependencies [113dabe]
+- Updated dependencies [1971d87]
+- Updated dependencies [2edc3c1]
+- Updated dependencies [b241f68]
+- Updated dependencies [6c3db42]
+- Updated dependencies [1d6f437]
+  - @domicile-desktop/component-library@1.1.0
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.0
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.0
+  - @domicile-desktop/manganese-bar-module-network@1.1.0
+  - @domicile-desktop/manganese-bar-module-volume@2.0.0
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.0
+  - @domicile-desktop/manganese-bar@1.1.0
+  - @domicile-desktop/manganese-bar-module-battery@1.1.0
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.0
+  - @domicile-desktop/react@0.1.0
