@@ -170,9 +170,9 @@ Checks:
 - Users need no build toolchain. The supervisor only spawns the builder; the
   builder owns the bundler
   ([`domicile-builder`](/packages/domicile-builder/README.md)).
-- Bun installs and runs the builder and TS configs. Vite bundles, through
-  `shellBuild` and Panda's postcss plugin, so a user's shell gets the same
-  build manganese ships.
+- Bun installs and runs the builder and TS configs. Vite transpiles and
+  bundles through `shellBuild`, and runs no other compile step. Packages ship
+  their CSS prebuilt: manganese's covers its own packages.
 - `@domicile-desktop/*` and React always come from the install. Two copies of
   React break hooks, and a mismatched SDK speaks a different protocol.
 - No fallback shell runs during a slow first build; the splash does. A shell

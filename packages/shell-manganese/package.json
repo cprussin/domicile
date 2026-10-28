@@ -51,7 +51,6 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
-    "postcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },
@@ -102,7 +101,8 @@
     "prepare": "panda codegen --silent && panda cssgen --silent",
     "start:dev": "dev-shell manganese",
     "test:types": "tsc --noEmit",
-    "test:unit": "bun test"
+    "test:unit": "bun test",
+    "watch:css": "panda cssgen --watch --silent"
   },
   "type": "module",
   "version": "1.0.0"

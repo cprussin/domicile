@@ -18,7 +18,9 @@ import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { Manganese } from "./Manganese";
 import { rememberedTheme } from "./theme/remembered-theme";
 
-import "./global.css";
+// Prebuilt by `panda cssgen` (`prepare`), with the rules for every manganese
+// package, so a shell that imports manganese needs no Panda step.
+import "../styled-system/styles.css";
 
 export { DEFAULT_BAR } from "./default-bars";
 /** Read by the builder into `options.json`, for the Settings app. */

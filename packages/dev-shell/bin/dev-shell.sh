@@ -53,6 +53,11 @@ trap cleanup EXIT INT TERM
 echo "watching $SHELL_DIR"
 (cd "$SHELL_DIR" && exec bunx vite build --watch) &
 WATCHING+=($!)
+# A shell that ships prebuilt CSS regenerates it with its `watch:css`.
+if grep -q '"watch:css"' "$SHELL_DIR/package.json"; then
+  (cd "$SHELL_DIR" && exec bun run watch:css) &
+  WATCHING+=($!)
+fi
 
 # The reload loop waits for the socket file, so it can start before the
 # `cargo build` below produces the `domicile` it runs.
