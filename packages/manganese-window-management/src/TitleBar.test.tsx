@@ -166,7 +166,7 @@ describe("TitleBar", () => {
 
   // The tabs after it ease along on the same curve, so its end meets the next
   // tab's start throughout and the strip shows no gap.
-  it.each(["closing-tab", "opening-tab", "sending-tab"] as const)(
+  it.each(["closing-tab", "opening-tab"] as const)(
     "turns about the start of its strip while %s",
     (motion) => {
       const { container } = render(
@@ -181,6 +181,23 @@ describe("TitleBar", () => {
       expect(bar(container)).toHaveStyle({ transformOrigin: "0px 0px" });
     },
   );
+
+  // Sent away, it leaves as a window does, so it does not look closed.
+  it("lifts out of its strip about its window's middle when sent away", () => {
+    const { container } = render(
+      <TitleBar
+        {...barProps}
+        motion="sending-tab"
+        strip={MIDDLE_TAB}
+        tabbed={Layout.Tabbed}
+      />,
+    );
+
+    expect(globalThis.getComputedStyle(bar(container)).animation).toContain(
+      "windowSending",
+    );
+    expect(bar(container)).toHaveStyle({ transformOrigin: "600px 415px" });
+  });
 
   it("opens out along a tabbed container's strip", () => {
     const { container } = render(

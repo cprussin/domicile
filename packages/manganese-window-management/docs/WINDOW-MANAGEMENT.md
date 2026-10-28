@@ -298,9 +298,12 @@ announces a window only then, so its title, app id and limits are known.
 - Moving a tab along its strip, by keys or by dragging: the tabs slide to
   their new places, the moved one included.
 - Closing: shrink and fade out.
-- Sending to a workspace no screen shows: shrink further and fade out.
-- Closing or sending away a tab: it closes up toward its start as the tabs
-  after it slide back.
+- Sending to a workspace no screen shows: shrink further and fade out. A
+  tab group leaves as one: every part scales about the group's middle.
+- Closing a tab: it closes up toward its start as the tabs after it slide
+  back.
+- Sending away a tab: it shrinks and fades with its contents, as a sent
+  window does, while the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
   slides the window back down. Each slide is the other played backwards, so
   one that cuts the other short starts where the window is
