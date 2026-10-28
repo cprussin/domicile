@@ -187,7 +187,7 @@ Stick to the **semantic** color tokens defined by the domicile preset:
 | `private` | Marks a private browser window |
 | `backdrop` | Modal/popover backdrop overlay |
 | `skeleton` | Loading skeleton fills |
-| `onPhoto` / `panelOverPhoto` | Lettering and a frosted panel drawn straight onto the wallpaper, the same in both themes |
+| `onPhoto` / `panelOverPhoto` | Lettering and a frosted panel drawn straight onto the wallpaper. The panel is darker in light mode, so its text reads over a white wallpaper |
 | `textSoft` / `textFaint` | A second line or figure / a section label, drawn from `currentcolor` |
 | `fill` / `fillHover` / `divider` | A tile, row or card on a panel / under the pointer / a rule, drawn from `currentcolor` |
 

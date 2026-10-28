@@ -40,6 +40,10 @@ describe("the domicile preset", () => {
     expect(withoutPanelColors()).toStrictEqual([]);
   });
 
+  it("draws faint text legibly on a panel over a white wallpaper in light mode", () => {
+    expect(faintOverWhite("_light")).toBeGreaterThanOrEqual(READABLE);
+  });
+
   it("draws muted text legibly on a tile on a card, in either theme", () => {
     expect(mutedOnTile("_light")).toBeGreaterThanOrEqual(READABLE);
     expect(mutedOnTile("base")).toBeGreaterThanOrEqual(READABLE);
@@ -236,6 +240,60 @@ const withoutPanelColors = (): readonly string[] => {
     return mixes && at(value, "_onPhoto") !== dark;
   });
 };
+
+/**
+ * The contrast of `textFaint` on a panel over the wallpaper in `theme`, with
+ * the wallpaper at its brightest: white.
+ */
+const faintOverWhite = (theme: Theme): number => {
+  const panel = over("#000000", opacityOf("panelOverPhoto", theme), "#ffffff");
+  return contrast(over("#ffffff", shareOf("textFaint"), panel), panel);
+};
+
+/** A token's colors. */
+const tokenColors = (): unknown =>
+  at(at(at(at(domicilePreset, "theme"), "extend"), "semanticTokens"), "colors");
+
+/** The opacity of an `rgb(from black r g b / N%)` token in `theme`, 0 to 1. */
+const opacityOf = (name: string, theme: Theme): number => {
+  const value = at(at(tokenColors(), name), "value");
+  const themed = typeof value === "string" ? value : at(value, theme);
+  const percent =
+    typeof themed === "string"
+      ? /\/ (?<percent>\d+)%\)$/u.exec(themed)?.groups?.percent
+      : undefined;
+  if (percent === undefined) {
+    throw new Error(`the preset has no ${theme} opacity for ${name}`);
+  } else {
+    return Number(percent) / 100;
+  }
+};
+
+/** How much `currentcolor` a `currentcolor` token keeps, 0 to 1. */
+const shareOf = (name: string): number => {
+  const value = at(at(tokenColors(), name), "value");
+  const percent =
+    typeof value === "string"
+      ? /currentcolor (?<percent>\d+)%/u.exec(value)?.groups?.percent
+      : undefined;
+  if (percent === undefined) {
+    throw new Error(`the preset has no currentcolor share for ${name}`);
+  } else {
+    return Number(percent) / 100;
+  }
+};
+
+/** `color` at `opacity` over `ground`, as the browser composites it. */
+const over = (color: string, opacity: number, ground: string): string =>
+  `#${[1, 3, 5]
+    .map((start) => {
+      const top = Number.parseInt(color.slice(start, start + 2), 16);
+      const bottom = Number.parseInt(ground.slice(start, start + 2), 16);
+      return Math.round(top * opacity + bottom * (1 - opacity))
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
 
 /** How much `foreground` `muted` mixes into `background`, from 0 to 1. */
 const mutedShare = (): number => {
