@@ -42,7 +42,7 @@ thiserror = "2"
 # Pinned release candidate for `Config::with_event_kinds`. Version 8 watches
 # every file open, which overflows the kernel queue on a real home (see
 # `domicile_host::home_watch`). Move to 9.0.0 when it is released.
-notify = "=9.0.0-rc.5"
+notify = "=9.0.0-rc.6"
 # Matches the gitignore-style globs in the config's `[files] omit`.
 globset = { version = "0.4", default-features = false }
 tempfile = "3"

@@ -31,6 +31,11 @@
       "matchFileNames": [".github/workflows/distro-packages.yml"],
       "matchDepNames": ["debian"],
       "allowedVersions": "<13"
+    },
+    {
+      "description": "Temporary: hold zbus on 5.x. zbus 6 removes the blocking API and the async-io feature this workspace is built on, so the move needs its own migration PR. Remove this rule in that PR.",
+      "matchPackageNames": ["zbus"],
+      "allowedVersions": "<6"
     }
   ]
 }
