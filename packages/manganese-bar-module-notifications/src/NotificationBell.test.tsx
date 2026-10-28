@@ -71,11 +71,58 @@ describe("NotificationBell", () => {
     ).toBeInTheDocument();
   });
 
+  it("strikes the bell through while do not disturb is on", () => {
+    const { container } = bell(3, [], true);
+
+    expect(container.querySelector("svg")).toHaveAttribute("data-slashed");
+  });
+
   it("stops counting where a badge has room", () => {
     bell(42);
 
     expect(
       screen.getByRole("button", { name: "Notifications, 42 unread" }),
     ).toHaveTextContent("9+");
+  });
+
+  it("swings when a notification arrives, not when they are read", () => {
+    const handle = createHandle();
+    const { container, rerender } = render(
+      <NotificationBell
+        doNotDisturb={false}
+        handle={handle}
+        screen="left"
+        unread={1}
+      />,
+    );
+    rerender(
+      <NotificationBell
+        doNotDisturb={false}
+        handle={handle}
+        screen="left"
+        unread={2}
+      />,
+    );
+    expect(
+      container.querySelector("[data-part=clapper] [data-cued]"),
+    ).not.toBeNull();
+
+    const read = render(
+      <NotificationBell
+        doNotDisturb={false}
+        handle={handle}
+        screen="right"
+        unread={2}
+      />,
+    );
+    read.rerender(
+      <NotificationBell
+        doNotDisturb={false}
+        handle={handle}
+        screen="right"
+        unread={0}
+      />,
+    );
+    expect(read.container.querySelector("[data-cued]")).toBeNull();
   });
 });

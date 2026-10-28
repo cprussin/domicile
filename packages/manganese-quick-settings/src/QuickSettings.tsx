@@ -1,3 +1,4 @@
+import { AnimatedGearIcon } from "@domicile-desktop/component-library/AnimatedGearIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
 import type { DrilldownDetail } from "@domicile-desktop/component-library/Drilldown";
 import { Drilldown } from "@domicile-desktop/component-library/Drilldown";
@@ -5,7 +6,6 @@ import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
-import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import type { ComponentType, MouseEvent, WheelEvent } from "react";
 import { useState } from "react";
 
@@ -130,7 +130,7 @@ export const QuickSettings = ({
               action={
                 !locked && (
                   <Button
-                    beforeIcon={<GearSixIcon aria-hidden size={14} />}
+                    beforeIcon={<AnimatedGearIcon size={14} />}
                     onClick={() => {
                       openSettings();
                       changeOpen(false);

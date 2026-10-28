@@ -1,10 +1,9 @@
+import { AnimatedBellIcon } from "@domicile-desktop/component-library/AnimatedBellIcon";
 import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { NotificationsHandle } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { bellId } from "@domicile-desktop/manganese-notifications/notifications-context";
-import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
-import { BellSimpleSlashIcon } from "@phosphor-icons/react/dist/ssr/BellSimpleSlash";
 
 import { css } from "../styled-system/css";
 
@@ -24,7 +23,7 @@ type Props = {
  * unseen count.
  *
  * It swings when the count goes up, to point back to notifications whose
- * toasts have gone.
+ * toasts have gone, and not when they are read.
  */
 export const NotificationBell = ({
   doNotDisturb,
@@ -37,7 +36,6 @@ export const NotificationBell = ({
     ...(unread === 0 ? [] : [`${unread} unread`]),
     ...(doNotDisturb ? ["do not disturb"] : []),
   ].join(", ");
-  const Icon = doNotDisturb ? BellSimpleSlashIcon : BellSimpleIcon;
   return (
     <Tooltip
       content={label}
@@ -52,13 +50,11 @@ export const NotificationBell = ({
           handle={handle}
           id={bellId(screen)}
         >
-          {/*
-        Keyed on the count so each new arrival remounts it and replays the
-        swing; an animation does not restart for a class it already has.
-      */}
-          <span aria-hidden className={bellStyles} key={unread}>
-            <Icon size={15} weight="fill" />
-          </span>
+          <AnimatedBellIcon
+            cue={unread === 0 ? undefined : unread}
+            off={doNotDisturb}
+            size={15}
+          />
           <CountBadge count={unread} />
         </Popover.Trigger>
       }
@@ -83,16 +79,4 @@ const buttonStyles = css({
   padding: 0,
   position: "relative",
   transition: "background-color {durations.fast} {easings.default}",
-});
-
-const bellStyles = css({
-  "[data-unread] > &": {
-    animationDuration: "{durations.slowest}",
-    animationName: "bellRing",
-    animationTimingFunction: "{easings.out}",
-  },
-  display: "inline-flex",
-  // Swings from the top. A physical property, since the swing does not depend
-  // on text direction.
-  transformOrigin: "top center",
 });

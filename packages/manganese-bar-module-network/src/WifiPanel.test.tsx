@@ -438,6 +438,12 @@ describe("WifiPanel", () => {
       await userEvent.click(row("Office").getByRole("button"));
 
       expect(row("Office").getByText("Connecting…")).toBeVisible();
+      // Its signal's arcs pulse in turn.
+      expect(
+        row("Office")
+          .getByRole("button")
+          .querySelectorAll("[data-part=arc][data-state=connecting]"),
+      ).toHaveLength(3);
     });
 
     it("shows the service's refusal on the network's row", async () => {

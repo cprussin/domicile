@@ -1,5 +1,5 @@
+import { AnimatedSquaresIcon } from "@domicile-desktop/component-library/AnimatedSquaresIcon";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
-import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 
 import { css } from "../styled-system/css";
 
@@ -20,7 +20,7 @@ export const LauncherButton = ({ onOpen }: Props) => (
         onClick={onOpen}
         type="button"
       >
-        <SquaresFourIcon aria-hidden size={15} />
+        <AnimatedSquaresIcon size={15} />
       </button>
     }
   />

@@ -305,7 +305,7 @@ const NetworkRow = ({
         <LockSimpleIcon aria-hidden size={12} weight="bold" />
       ) : undefined
     }
-    icon={<WifiSignalIcon strength={network.strength} />}
+    icon={<WifiSignalIcon connecting={pending} strength={network.strength} />}
     label={network.ssid}
     name={labelOf(network)}
     onPress={onPick}

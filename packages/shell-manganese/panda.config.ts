@@ -1,6 +1,5 @@
 import { domicilePreset } from "@domicile-desktop/component-library/pandacss-preset";
 import { batteryPreset } from "@domicile-desktop/manganese-bar-module-battery/panda-preset";
-import { notificationsPreset } from "@domicile-desktop/manganese-bar-module-notifications/panda-preset";
 import { launcherPreset } from "@domicile-desktop/manganese-launcher/panda-preset";
 import { lockPreset } from "@domicile-desktop/manganese-lock/panda-preset";
 import { windowManagementPreset } from "@domicile-desktop/manganese-window-management/panda-preset";
@@ -49,6 +48,5 @@ export default defineConfig({
     launcherPreset,
     lockPreset,
     batteryPreset,
-    notificationsPreset,
   ],
 });

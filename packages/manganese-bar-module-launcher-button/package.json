@@ -3,7 +3,6 @@
     "@domicile-desktop/component-library": "workspace:*",
     "@domicile-desktop/manganese-launcher": "workspace:*",
     "@pandacss/dev": "catalog:",
-    "@phosphor-icons/react": "catalog:",
     "react": "catalog:"
   },
   "description": "A manganese bar item: the button that opens the launcher.",

@@ -136,6 +136,30 @@ describe("Bluetooth", () => {
     ).toBeVisible();
   });
 
+  it("keeps one icon as it turns on and connects, so each change animates", () => {
+    const bluetooth = heldBluetooth();
+    render(
+      <Bluetooth
+        actions={NO_ACTIONS}
+        bluetooth={bluetooth.bluetooth}
+        domicile={NO_HOST}
+        hardware={UNCHECKED}
+      />,
+    );
+
+    bluetooth.report(reading(false, []));
+    const icon = screen.getByRole("button").querySelector("svg");
+    expect(icon).toHaveAttribute("data-slashed");
+
+    bluetooth.report(reading(true, ["WH-1000XM4"]));
+    expect(screen.getByRole("button").querySelector("svg")).toBe(icon);
+    expect(icon).not.toHaveAttribute("data-slashed");
+    expect(icon?.querySelector("[data-part=dot]")).toHaveAttribute(
+      "data-state",
+      "shown",
+    );
+  });
+
   it("names each connected device's battery, also as its tooltip", async () => {
     const bluetooth = heldBluetooth();
     render(

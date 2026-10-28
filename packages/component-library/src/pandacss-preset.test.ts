@@ -60,6 +60,15 @@ describe("the domicile preset", () => {
     ).toStrictEqual({ animationPlayState: "paused" });
   });
 
+  it("lands a staggered change at once under reduced motion", () => {
+    const reduced = at(
+      at(domicilePreset, "globalCss"),
+      "[data-reduced-motion] *, [data-reduced-motion] *::before, [data-reduced-motion] *::after",
+    );
+    expect(at(reduced, "transitionDelay")).toBe("0s !important");
+    expect(at(reduced, "animationDelay")).toBe("0s !important");
+  });
+
   it("leaves the shell handover's crossfade to the browser", () => {
     // `load_shell`'s view transition fades the splash into the shell. The
     // wipe's rules would hold the splash opaque under an additive fade-in,

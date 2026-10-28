@@ -7,7 +7,6 @@
     "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "@pandacss/dev": "catalog:",
-    "@phosphor-icons/react": "catalog:",
     "react": "catalog:"
   },
   "description": "A manganese bar item: Google Messages in a panel, with a count of its new messages.",

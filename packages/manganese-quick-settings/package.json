@@ -11,7 +11,6 @@
     "@domicile-desktop/manganese-bar-module-volume": "workspace:*",
     "@domicile-desktop/react": "workspace:*",
     "@pandacss/dev": "catalog:",
-    "@phosphor-icons/react": "catalog:",
     "react": "catalog:"
   },
   "description": "A manganese bar item: quick settings, the network, Bluetooth, sound, brightness and battery in one panel.",

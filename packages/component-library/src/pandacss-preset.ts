@@ -1,6 +1,7 @@
 import type { Preset } from "@pandacss/dev";
 import { definePreset, defineRecipe } from "@pandacss/dev";
 import pandacssPreset from "@pandacss/dev/presets";
+import { iconKeyframes } from "./_icon/icon-keyframes";
 import type { Size } from "./control-sizes";
 import { CONTROL_HEIGHT, CONTROL_PADDING_INLINE } from "./control-sizes";
 import { SPACING_STEP_REM } from "./spacing";
@@ -73,6 +74,12 @@ export const domicilePreset = definePreset({
       // `theme.contrast` set to `high`, as `data-contrast="high"` on
       // `<html>`. Panda's own `_highContrast` matches forced colors instead.
       contrastHigh: "[data-contrast=high] &",
+      // Inside a button or link that is pressed, such as an animated icon's
+      // part.
+      controlActive: ":is(button, a, [role=button]):active &",
+      // Inside a button or link under the pointer, such as an animated icon's
+      // part.
+      controlHover: ":is(button, a, [role=button]):hover &",
       // A picked item keeps its fill under the pointer: the current page or
       // place, a selected tab or option, a checked row.
       hoverEnabled:
@@ -138,12 +145,15 @@ export const domicilePreset = definePreset({
       },
     // `theme.reduced_motion`, as `data-reduced-motion` on `<html>`: every
     // animation and transition, the theme wipe's included, runs once at the
-    // shortest duration. Shortened rather than removed so `animationend` and
+    // shortest duration, and without delay, so a staggered change lands at
+    // once. Shortened rather than removed so `animationend` and
     // `transitionend` still fire.
     "[data-reduced-motion] *, [data-reduced-motion] *::before, [data-reduced-motion] *::after":
       {
+        animationDelay: "0s !important",
         animationDuration: "{durations.fastest} !important",
         animationIterationCount: "1 !important",
+        transitionDelay: "0s !important",
         transitionDuration: "{durations.fastest} !important",
       },
     "html[data-reduced-motion]::view-transition-group(*), html[data-reduced-motion]::view-transition-old(*), html[data-reduced-motion]::view-transition-new(*)":
@@ -203,6 +213,7 @@ export const domicilePreset = definePreset({
   theme: {
     extend: {
       keyframes: {
+        ...iconKeyframes,
         // `LevelToast`'s entrance, once per showing.
         levelToastEnter: {
           "0%": {

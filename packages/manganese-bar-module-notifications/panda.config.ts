@@ -1,8 +1,6 @@
 import { domicilePreset } from "@domicile-desktop/component-library/pandacss-preset";
 import { defineConfig } from "@pandacss/dev";
 
-import { notificationsPreset } from "./src/panda-preset";
-
 // The shell that renders this package scans its source and emits the CSS. This
 // config generates `styled-system/` for the package's own imports and tests.
 export default defineConfig({
@@ -15,5 +13,5 @@ export default defineConfig({
   jsxFramework: "react",
   outdir: "styled-system",
   preflight: true,
-  presets: [domicilePreset, notificationsPreset],
+  presets: [domicilePreset],
 });

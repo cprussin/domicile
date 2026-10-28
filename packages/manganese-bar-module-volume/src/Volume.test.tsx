@@ -4,7 +4,6 @@ import { Err, Ok } from "@cprussin/option-result";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
-import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
@@ -134,13 +133,9 @@ describe("Volume", () => {
         ...laptop,
         outputs: [device({ default: true, muted: true })],
       });
-      const muted = screen.getByRole("button").innerHTML;
-
-      const { container } = render(
-        <SpeakerSlashIcon size={15} weight="bold" />,
+      expect(screen.getByRole("button").querySelector("svg")).toHaveAttribute(
+        "data-slashed",
       );
-
-      expect(muted).toBe(container.innerHTML);
     });
 
     it("mutes and unmutes the default output with a middle click", () => {

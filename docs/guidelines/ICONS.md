@@ -27,3 +27,16 @@ import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 // wrong — deprecated alias, do NOT use
 import { X } from "@phosphor-icons/react/dist/ssr/X";
 ```
+
+## Animated icons
+
+The component library has animated versions of some icons, such as
+`AnimatedWifiIcon` and `AnimatedBellIcon`. Use one where it exists:
+
+- Each draws Phosphor's own paths, split into parts that move on a state
+  change, a cue or hover.
+- Keep one rendered across state changes, so the change animates. Don't
+  switch between icons for each state.
+- To add one, split the icon in `src/_icon/phosphor-parts.ts`; its test
+  checks the parts join back into Phosphor's icon.
+

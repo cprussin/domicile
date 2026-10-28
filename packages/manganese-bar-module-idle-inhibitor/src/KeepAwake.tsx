@@ -1,5 +1,5 @@
+import { AnimatedEyeIcon } from "@domicile-desktop/component-library/AnimatedEyeIcon";
 import { QuickToggle } from "@domicile-desktop/component-library/QuickToggle";
-import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { useSyncExternalStore } from "react";
 
 import { cva } from "../styled-system/css";
@@ -30,7 +30,7 @@ export const KeepAwakeGlyph = ({ inhibitor, holders = [] }: Props) => {
       className={glyphStyles({ held })}
       role="img"
     >
-      <EyeIcon size={15} weight="bold" />
+      <AnimatedEyeIcon open size={15} />
     </span>
   ) : undefined;
 };
@@ -43,7 +43,7 @@ export const KeepAwakeTile = ({ inhibitor, holders = [] }: Props) => {
     <QuickToggle
       detail={detailOf(held, holders)}
       disabled={at === Inhibiting.Taking || at === Inhibiting.Releasing}
-      icon={<EyeIcon size={16} weight="bold" />}
+      icon={<AnimatedEyeIcon open={held} size={16} />}
       label="Keep awake"
       onPressedChange={inhibitor.toggle}
       pressed={held}

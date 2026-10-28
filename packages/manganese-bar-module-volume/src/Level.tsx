@@ -1,10 +1,8 @@
+import { AnimatedMicrophoneIcon } from "@domicile-desktop/component-library/AnimatedMicrophoneIcon";
+import { AnimatedSpeakerIcon } from "@domicile-desktop/component-library/AnimatedSpeakerIcon";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Slider } from "@domicile-desktop/component-library/Slider";
 import { SliderRow } from "@domicile-desktop/component-library/SliderRow";
-import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
-import { MicrophoneSlashIcon } from "@phosphor-icons/react/dist/ssr/MicrophoneSlash";
-import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
-import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
@@ -107,16 +105,18 @@ const MuteIcon = ({
 }) => {
   switch (direction) {
     case "output":
-      return muted ? (
-        <SpeakerSlashIcon size={14} />
-      ) : (
-        <SpeakerHighIcon size={14} />
+      // Full, so dragging the slider does not pulse it.
+      return (
+        <AnimatedSpeakerIcon
+          muted={muted}
+          size={14}
+          volume={1}
+          weight="regular"
+        />
       );
     case "input":
-      return muted ? (
-        <MicrophoneSlashIcon size={14} />
-      ) : (
-        <MicrophoneIcon size={14} />
+      return (
+        <AnimatedMicrophoneIcon muted={muted} size={14} weight="regular" />
       );
   }
 };

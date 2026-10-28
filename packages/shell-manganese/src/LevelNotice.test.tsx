@@ -53,6 +53,10 @@ describe("LevelNotice", () => {
 
     expect(screen.getByRole("status")).toBe(shown);
     expect(shown).toHaveTextContent("Volume45%");
+    // The speaker's waves pulse for the change.
+    expect(shown.querySelectorAll("[data-part=wave] [data-cued]")).toHaveLength(
+      2,
+    );
   });
 
   it("shows on the screen it is asked for", () => {
