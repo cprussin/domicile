@@ -101,6 +101,9 @@ Patch `0110`:
 - A `beforeunload` that asks to stay asks the shell too, as a dialog of type
   `beforeunload` (`RunBeforeUnloadDialog`). Unanswered, it leaves, as with no
   manager, so a shell that draws no dialog never traps a page.
+- A paused page does not slow the shell's animations. A `<webview>` rasters
+  its whole page and embeds a new scale without waiting, so a window
+  sliding or shrinking with a dialog open animates at full rate (patch 0155).
 - The shell's `closeBrowserWindow` runs the page's `beforeunload`
   (`WebViewGuest::AskToClose`, `DispatchBeforeUnload`) and closes in
   `BeforeUnloadFired` if the page agrees. A page with no handler closes at
