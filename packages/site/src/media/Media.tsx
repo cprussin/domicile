@@ -60,6 +60,9 @@ export const Media = ({ name, alt, shape = "screen" }: Props) => {
 
 const mediaStyles = cva({
   base: {
+    // Author styles beat the browser's own full screen `contain`, so a
+    // capture would fill a screen of another shape and lose its edges.
+    _fullscreen: { border: "none", borderRadius: 0, objectFit: "contain" },
     blockSize: "auto",
     border: "1px solid {colors.border}",
     borderRadius: "2xl",
