@@ -40,10 +40,13 @@ const shown = (
 };
 
 describe(InboxList, () => {
-  it("leaves out an inbox before its first reading", () => {
+  it("says it is checking an inbox before its first reading", () => {
     shown([undefined]);
 
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Work: checking" }),
+    ).toBeVisible();
+    expect(screen.getByRole("status", { name: "Checking" })).toBeVisible();
   });
 
   it("offers to sign a signed-out inbox in", async () => {
@@ -100,6 +103,7 @@ describe(InboxList, () => {
     await userEvent.click(screen.getByRole("button", { name: "Chat" }));
 
     expect(opened).toEqual([1]);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("names the unread count of an inbox that knows only that", () => {

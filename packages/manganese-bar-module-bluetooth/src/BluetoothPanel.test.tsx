@@ -112,7 +112,9 @@ describe("BluetoothPanel", () => {
         }),
       );
 
-      expect(screen.getByText("Bluetooth is off")).toBeVisible();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Bluetooth is offTurn it on to connect headphones, keyboards and more.",
+      );
       expect(screen.queryByRole("list")).not.toBeInTheDocument();
       expect(panel.asked).toStrictEqual([]);
     });
@@ -162,7 +164,19 @@ describe("BluetoothPanel", () => {
         }),
       );
 
-      expect(screen.getByText("Searching for devices…")).toBeVisible();
+      expect(
+        within(screen.getByRole("region", { name: "Nearby" })).getByRole(
+          "status",
+        ),
+      ).toHaveTextContent("Looking for devices…");
+    });
+
+    it("says what to try when it has found nothing", () => {
+      shown(reading({ devices: [] }));
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "No devices foundPut your device in pairing mode to see it here.",
+      );
     });
   });
 

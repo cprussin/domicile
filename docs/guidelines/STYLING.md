@@ -264,7 +264,9 @@ the component library's panel parts, not hand-rolled rows and labels:
 | `List` / `ListRow` | A row: icon, label over a detail, something at the end. `plain` rows are choices; `filled` rows are tiles with their own buttons; `disclosure` folds details away |
 | `DetailList` | Terms and values, such as addresses |
 | `SliderRow` | A slider with its icon, value and an optional arrow |
-| `PanelNote` | One line: searching, off, empty, or a refusal in plain words |
+| `EmptyState` | A panel or section with nothing to show: an icon, what is missing, and what would fill it |
+| `Loading` | A spinner and what it waits for: centered in a waiting panel, a line under a filling list, or alone at a row's end |
+| `PanelNote` | One line beside rows: nothing else nearby, or a refusal in plain words |
 | `PanelFooter` | The last line: a summary and an action |
 | `IconButton` | Every icon-only button |
 | `ChoiceList` / `RadioRow` | A list to pick one from: where sound plays, a keymap |
@@ -276,7 +278,9 @@ Their type is the preset's `textStyles`: `panelTitle`, `panelLabel`,
 color, not weight. Their colors are the `currentcolor` tokens above, so the
 same parts read on a card, over the wallpaper and on an accent tile.
 
-Sections sit `gap: 3` apart; a section's label and its rows `gap: 1`. Show a
+Sections sit `gap: 3` apart; a section's label and its rows `gap: 1`. A panel
+never shows blank: while it waits, a `Loading`; with nothing to list, an
+`EmptyState`, whose words say what is missing and what would fill it. Show a
 refusal as a `PanelNote` with `tone="warning"`, saying what failed in plain
 words, and pass the service's message as its `detail`.
 

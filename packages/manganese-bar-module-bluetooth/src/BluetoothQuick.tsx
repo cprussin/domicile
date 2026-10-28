@@ -1,8 +1,11 @@
 import type { Result } from "@cprussin/option-result";
+import { Loading } from "@domicile-desktop/component-library/Loading";
+import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { isAbsent } from "@domicile-desktop/react/watch-presence";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
@@ -10,6 +13,8 @@ import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
 
 import { cva } from "../styled-system/css";
+import { BluetoothPanel } from "./BluetoothPanel";
+import type { BluetoothActions } from "./bluetooth-actions";
 import { labelOf, unavailableLabelOf } from "./bluetooth-labels";
 
 type GlyphProps = {
@@ -123,3 +128,35 @@ const glyphStyles = cva({
     },
   },
 });
+
+type DetailsProps = GlyphProps & {
+  /** Where requests go. */
+  host: Domicile;
+  actions: BluetoothActions;
+};
+
+/**
+ * The quick settings panel's Bluetooth details: the devices, once BlueZ
+ * answers, and a plain word on BlueZ's failure, with its words in the tooltip.
+ */
+export const BluetoothDetails = ({
+  actions,
+  bluetooth,
+  host,
+}: DetailsProps) => {
+  const reading = useSharedWatch(bluetooth);
+  return reading === undefined ? (
+    <Loading>Checking Bluetooth…</Loading>
+  ) : (
+    reading.match({
+      Err: (error) => (
+        <PanelNote detail={error.message} tone="warning">
+          Couldn't read Bluetooth
+        </PanelNote>
+      ),
+      Ok: (found) => (
+        <BluetoothPanel actions={actions} bluetooth={found} host={host} />
+      ),
+    })
+  );
+};

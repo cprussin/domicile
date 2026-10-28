@@ -1,7 +1,9 @@
 import { Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
+import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
+import { Loading } from "@domicile-desktop/component-library/Loading";
 import { PanelAction } from "@domicile-desktop/component-library/Panel";
 import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
@@ -15,6 +17,7 @@ import type {
   Device,
 } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
+import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
@@ -102,14 +105,25 @@ export const BluetoothPanel = ({ actions, bluetooth, host }: Props) => {
                     </List>
                   )}
                   {label === "Nearby" && searching && (
-                    <PanelNote>Searching for devices…</PanelNote>
+                    <Loading layout="row">Looking for devices…</Loading>
                   )}
                 </PanelSection>
               ),
           )}
+          {sorted.length === 0 && !searching && (
+            <EmptyState
+              hint="Put your device in pairing mode to see it here."
+              icon={BluetoothIcon}
+              title="No devices found"
+            />
+          )}
         </>
       ) : (
-        <PanelNote>Bluetooth is off</PanelNote>
+        <EmptyState
+          hint="Turn it on to connect headphones, keyboards and more."
+          icon={BluetoothSlashIcon}
+          title="Bluetooth is off"
+        />
       )}
     </>
   );

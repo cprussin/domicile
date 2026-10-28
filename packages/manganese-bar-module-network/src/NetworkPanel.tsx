@@ -1,5 +1,5 @@
 import type { Option, Result } from "@cprussin/option-result";
-import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
+import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
@@ -9,6 +9,7 @@ import type {
   NetworkInterface,
 } from "@domicile-desktop/system-network/interfaces";
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
+import { NetworkSlashIcon } from "@phosphor-icons/react/dist/ssr/NetworkSlash";
 
 import { flex } from "../styled-system/patterns";
 import { WifiPanel } from "./WifiPanel";
@@ -54,7 +55,7 @@ export const NetworkPanel = ({
         wifi={radio}
       />
       {ports.length === 0 && noRadio === true && (
-        <PanelNote>No network devices</PanelNote>
+        <EmptyState icon={NetworkSlashIcon} title="No Wi-Fi or network port" />
       )}
     </div>
   );

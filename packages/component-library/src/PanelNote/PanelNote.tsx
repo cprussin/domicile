@@ -19,8 +19,9 @@ type Props = {
 };
 
 /**
- * One line on how a panel stands: searching, off, empty, or a request that
- * failed. Announced as it changes.
+ * One line on how a panel stands beside its rows, such as nothing else nearby,
+ * or a request that failed. A panel with nothing at all to show takes an
+ * `EmptyState`, and one still waiting a `Loading`. Announced as it changes.
  */
 export const PanelNote = ({ children, detail, tone = "quiet" }: Props) => (
   <span

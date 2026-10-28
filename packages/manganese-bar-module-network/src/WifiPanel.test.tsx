@@ -205,7 +205,7 @@ describe("WifiPanel", () => {
 
   describe("before Wi-Fi is read", () => {
     it.each<[string, Result<Option<Wifi>, SystemError> | undefined, string]>([
-      ["while it reads", undefined, "Reading Wi-Fi…"],
+      ["while it reads", undefined, "Checking Wi-Fi…"],
       ["on a failure", Err(REFUSED), "Couldn't read Wi-Fi"],
     ])("says so %s", async (_when, wifi, text) => {
       await shown(wifi);
@@ -244,7 +244,9 @@ describe("WifiPanel", () => {
       );
 
       expect(screen.getByRole("switch", { name: "Wi-Fi" })).not.toBeChecked();
-      expect(screen.getByText("Wi-Fi is off")).toBeVisible();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Wi-Fi is offTurn it on to see networks nearby.",
+      );
       expect(panel.asked).toStrictEqual([]);
     });
   });
@@ -269,7 +271,26 @@ describe("WifiPanel", () => {
     it("says when it is scanning", async () => {
       await shown(Ok(Some({ ...WIFI, scanning: true })));
 
-      expect(screen.getByText("Scanning…")).toBeVisible();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Looking for networks…",
+      );
+    });
+
+    it("says when nothing else is in range", async () => {
+      await shown(Ok(Some({ ...WIFI, networks: [home] })));
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "No other networks nearby",
+      );
+    });
+
+    it("says what to try when nothing at all is in range", async () => {
+      await shown(Ok(Some({ ...WIFI, connection: undefined, networks: [] })));
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "No networks foundMove closer to your router, or try again in a moment.",
+      );
+      expect(screen.queryByRole("list", { name: "Networks" })).toBeNull();
     });
   });
 
