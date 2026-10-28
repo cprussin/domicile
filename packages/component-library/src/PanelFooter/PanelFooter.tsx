@@ -18,7 +18,8 @@ export const PanelFooter = ({ action, children }: Props) => (
 );
 
 // The action's own padding hangs past the panel's edge, so its label lines
-// up with the controls above.
+// up with the controls above. The gap under the rule matches the panel's
+// padding below, so the line sits centered between the rule and the edge.
 const footerStyles = hstack({
   "& > button:last-child": { marginInlineEnd: -1.5 },
   borderBlockStart: "1px solid {colors.divider}",
@@ -26,6 +27,6 @@ const footerStyles = hstack({
   gap: 2,
   justify: "space-between",
   minBlockSize: 7,
-  paddingBlockStart: 2,
+  paddingBlockStart: 3,
   textStyle: "panelDetail",
 });
