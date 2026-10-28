@@ -1,5 +1,7 @@
+import { Button } from "@domicile-desktop/component-library/Button";
 import type { DrilldownDetail } from "@domicile-desktop/component-library/Drilldown";
 import { Drilldown } from "@domicile-desktop/component-library/Drilldown";
+import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
@@ -114,27 +116,33 @@ export const QuickSettings = ({
               <parts.NightLightTile />
               {!locked && <parts.DarkModeTile />}
             </span>
-            {/* Clear of the volume's arrow, so the sliders end together. */}
-            <span className={brightnessStyles({ besideArrow: !locked })}>
-              <parts.BrightnessRow />
+            <span className={slidersStyles}>
+              {/* Clear of the volume's arrow, so the sliders end together. */}
+              <span className={brightnessStyles({ besideArrow: !locked })}>
+                <parts.BrightnessRow />
+              </span>
+              <parts.SoundRow onMore={opener(Details.Sound)} />
             </span>
-            <parts.SoundRow onMore={opener(Details.Sound)} />
-            <span className={footerStyles}>
+            <PanelFooter
+              action={
+                !locked && (
+                  <Button
+                    beforeIcon={<GearSixIcon aria-hidden size={14} />}
+                    onClick={() => {
+                      openSettings();
+                      changeOpen(false);
+                    }}
+                    rounded
+                    size="xs"
+                    variant="ghost"
+                  >
+                    Settings
+                  </Button>
+                )
+              }
+            >
               <parts.BatteryStatus />
-              {!locked && (
-                <button
-                  className={settingsStyles}
-                  onClick={() => {
-                    openSettings();
-                    changeOpen(false);
-                  }}
-                  type="button"
-                >
-                  <GearSixIcon aria-hidden size={14} />
-                  Settings
-                </button>
-              )}
-            </span>
+            </PanelFooter>
           </span>
         </Drilldown>
       </span>
@@ -183,53 +191,20 @@ const panelStyles = css({
   paddingBlock: 1.5,
 });
 
+// Tiles, sliders and the footer, a step apart.
 const mainStyles = flex({ direction: "column", gap: 3 });
+
+const slidersStyles = flex({ direction: "column", gap: 1.5 });
 
 const tilesStyles = grid({ columns: 2, gap: 2 });
 
-// The volume's arrow and the gap before it.
+// The volume's arrow, an `IconButton`, and the gap before it.
 const brightnessStyles = cva({
   base: { display: "flex" },
   variants: {
     besideArrow: {
       false: {},
-      true: { paddingInlineEnd: 7 },
+      true: { paddingInlineEnd: 8 },
     },
   },
-});
-
-// Quieter than the controls above it.
-const footerStyles = hstack({
-  _empty: { display: "none" },
-  borderBlockStartColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-  borderBlockStartStyle: "solid",
-  borderBlockStartWidth: "1px",
-  color: "color-mix(in oklab, currentcolor 80%, transparent)",
-  fontSize: "xs",
-  gap: 2,
-  paddingBlockStart: 2,
-});
-
-// The tray's hover circle, around a label; pushed to the footer's far end.
-const settingsStyles = hstack({
-  _focusVisible: {
-    outline: "{spacing.0.5} solid {colors.accent}",
-    outlineOffset: 0.5,
-  },
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  flexShrink: 0,
-  fontSize: "xs",
-  gap: 1.5,
-  marginInlineEnd: -2.5,
-  marginInlineStart: "auto",
-  paddingInline: 2.5,
-  transition: "background-color {durations.fast} {easings.default}",
 });

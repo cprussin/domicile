@@ -1,9 +1,7 @@
-import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import type { ReactNode } from "react";
 import { useState } from "react";
-
 import { css, cva } from "../../styled-system/css";
-import { hstack } from "../../styled-system/patterns";
+import { Panel } from "../Panel/Panel";
 
 /** The detail view: a title and its content. */
 export type DrilldownDetail = {
@@ -21,7 +19,8 @@ type Props = {
 };
 
 /**
- * A main view with a detail view that slides in over it, with a back button.
+ * A main view with a detail view that slides in over it, as a `Panel` with
+ * a back button. The detail puts controls in its header with `PanelAction`.
  *
  * Use it where a second panel won't fit, e.g. inside a popover that a
  * `Select` popup would close. The hidden view is `inert`, `aria-hidden` and
@@ -49,28 +48,19 @@ export const Drilldown = ({ children, detail, onBack }: Props) => {
         inert={!open}
       >
         {shown !== undefined && (
-          <>
-            <div className={headerStyles}>
-              <button
-                aria-label="Back"
-                className={backStyles}
-                onClick={onBack}
-                type="button"
-              >
-                <CaretLeftIcon size={14} />
-              </button>
-              <h3 className={titleStyles}>{shown.title}</h3>
-            </div>
+          <Panel onBack={onBack} title={shown.title}>
             {shown.content}
-          </>
+          </Panel>
         )}
       </div>
     </div>
   );
 };
 
+// Clips the pane sliding aside, but not the focus rings at its edges.
 const rootStyles = css({
-  overflow: "hidden",
+  overflow: "clip",
+  overflowClipMargin: "{spacing.1}",
   position: "relative",
 });
 
@@ -104,37 +94,4 @@ const paneStyles = cva({
       },
     },
   },
-});
-
-const headerStyles = hstack({
-  gap: 1,
-  paddingBlockEnd: 1.5,
-});
-
-const backStyles = css({
-  _focusVisible: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-    outlineColor: "transparent",
-  },
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 6,
-  justifyContent: "center",
-  padding: 0,
-});
-
-const titleStyles = css({
-  fontSize: "sm",
-  fontWeight: "semibold",
-  margin: 0,
 });

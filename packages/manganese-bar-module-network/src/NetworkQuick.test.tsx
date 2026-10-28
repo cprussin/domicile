@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Option, Result } from "@cprussin/option-result";
-import { None, Ok, Some } from "@cprussin/option-result";
+import { Err, None, Ok, Some } from "@cprussin/option-result";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { NetworkInterface } from "@domicile-desktop/system-network/interfaces";
 import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
 import type { Network as Reading } from "@domicile-desktop/system-network/network";
@@ -55,10 +56,12 @@ const online = (link: Reading["link"]) =>
   Ok<Reading, SystemError>({ connectivity: Connectivity.Full, link });
 
 /** The tiles, with each watch held by the test. */
-const tiles = (onMore?: () => void) => {
+const tiles = (
+  onMore?: () => void,
+  actions: ReturnType<typeof heldWifiActions> = heldWifiActions(),
+) => {
   const interfaces = held<Result<NetworkInterface[], SystemError>>();
   const wifi = held<Result<Option<Wifi>, SystemError>>();
-  const actions = heldWifiActions();
   render(
     <NetworkTiles
       actions={actions.actions}
@@ -117,6 +120,25 @@ describe(NetworkTiles, () => {
     await userEvent.click(screen.getByRole("button", { name: "Wi-Fi" }));
 
     expect(actions.asked).toEqual([["setEnabled", WIFI.device, false]]);
+  });
+
+  it("says plainly when the radio could not be switched", async () => {
+    const { interfaces, wifi } = tiles(
+      undefined,
+      heldWifiActions(() =>
+        Err({
+          kind: SystemErrorKind.Dbus,
+          message: "net.connman.iwd.Failed: Operation failed",
+        }),
+      ),
+    );
+    interfaces.report(Ok([RADIO]));
+    wifi.report(Ok(Some(WIFI)));
+
+    await userEvent.click(screen.getByRole("button", { name: "Wi-Fi" }));
+
+    expect(await screen.findByText("Couldn't switch")).toBeVisible();
+    expect(screen.queryByText(/iwd/)).toBeNull();
   });
 
   it("shows a wired tile with a cable in, which opens the details", async () => {

@@ -15,6 +15,7 @@ import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 
 import { cva } from "../styled-system/css";
 import { LinkIcon, shownOf } from "./link-shown";
+import { speedOf } from "./speed";
 import type { WifiActions } from "./wifi-actions";
 import { WIFI_ACTIONS } from "./wifi-actions";
 
@@ -101,7 +102,11 @@ export const NetworkTiles = ({
       <>
         {device !== undefined && (
           <QuickTile
-            detail={requests.failed("power")?.message ?? wifiDetailOf(device)}
+            detail={
+              requests.failed("power") === undefined
+                ? wifiDetailOf(device)
+                : "Couldn't switch"
+            }
             icon={<WifiHighIcon size={15} weight="bold" />}
             label="Wi-Fi"
             onMore={onMore}
@@ -136,15 +141,8 @@ const wifiDetailOf = (device: Wifi): string => {
   }
 };
 
-const cableDetailOf = ({ speed }: NetworkInterface): string => {
-  if (speed === undefined) {
-    return "Connected";
-  } else {
-    return speed >= 1000
-      ? `Connected, ${speed / 1000} Gb/s`
-      : `Connected, ${speed} Mb/s`;
-  }
-};
+const cableDetailOf = ({ speed }: NetworkInterface): string =>
+  speed === undefined ? "Connected" : `Connected, ${speedOf(speed)}`;
 
 const glyphStyles = cva({
   base: { display: "inline-flex", flexShrink: 0 },

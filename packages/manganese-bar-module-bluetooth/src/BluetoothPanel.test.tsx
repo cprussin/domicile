@@ -80,7 +80,7 @@ describe("BluetoothPanel", () => {
       expect(panel.asked).toContainEqual(["setPowered", ADAPTER, false]);
     });
 
-    it("shows BlueZ's refusal", async () => {
+    it("says plainly that BlueZ refused", async () => {
       shown(
         reading(),
         heldActions(([name]) =>
@@ -95,9 +95,14 @@ describe("BluetoothPanel", () => {
 
       await userEvent.click(screen.getByRole("switch", { name: "Bluetooth" }));
 
-      expect(
-        screen.getByText("org.bluez.Error.Blocked: Blocked through rfkill"),
-      ).toBeVisible();
+      const note = screen
+        .getByText("Couldn't turn Bluetooth off")
+        .closest("[role=status]");
+      expect(note).toHaveAttribute("data-tone", "warning");
+      expect(note).toHaveAttribute(
+        "title",
+        "org.bluez.Error.Blocked: Blocked through rfkill",
+      );
     });
 
     it("says it is off, and lists and scans nothing", () => {
@@ -162,16 +167,27 @@ describe("BluetoothPanel", () => {
   });
 
   describe("its devices", () => {
-    it("lists connected, then paired, then new, with each one's details", () => {
+    it("groups them as connected, paired and nearby, with each one's details", () => {
       shown(reading());
 
       expect(
-        screen.getAllByRole("listitem").map((item) => item.textContent),
+        ["Connected", "Paired", "Nearby"].map((group) =>
+          within(screen.getByRole("region", { name: group }))
+            .getAllByRole("listitem")
+            .map((item) => item.textContent),
+        ),
       ).toStrictEqual([
-        "WH-1000XM4Connected · Battery 80% · AC:80:0A:1B:2C:3DDisconnect",
-        "MX Master 3Paired · F4:73:35:4E:5F:60Connect",
-        "KitchenNew · 10:94:97:2A:3B:4CPair",
+        ["WH-1000XM4Battery 80%Disconnect"],
+        ["MX Master 3Not connectedConnect"],
+        ["Kitchen10:94:97:2A:3B:4CPair"],
       ]);
+    });
+
+    it("leaves out a group with nothing in it", () => {
+      shown(reading({ devices: [mouse] }));
+
+      expect(screen.queryByRole("region", { name: "Connected" })).toBeNull();
+      expect(screen.getByRole("region", { name: "Paired" })).toBeVisible();
     });
 
     it.each<[string, string, Asked[]]>([
@@ -209,7 +225,7 @@ describe("BluetoothPanel", () => {
       expect(panel.asked.slice(1)).toStrictEqual([["forget", mouse.path]]);
     });
 
-    it("shows BlueZ's refusal on the device's row", async () => {
+    it("says plainly on the device's row that BlueZ refused", async () => {
       const refused: SystemError = {
         kind: SystemErrorKind.Dbus,
         message: "org.bluez.Error.Failed: Page Timeout",
@@ -226,8 +242,10 @@ describe("BluetoothPanel", () => {
       );
 
       expect(
-        row("MX Master 3").getByText("org.bluez.Error.Failed: Page Timeout"),
-      ).toBeVisible();
+        row("MX Master 3")
+          .getByText("Couldn't connect")
+          .closest("[role=status]"),
+      ).toHaveAttribute("title", "org.bluez.Error.Failed: Page Timeout");
     });
   });
 });

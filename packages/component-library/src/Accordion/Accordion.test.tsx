@@ -27,6 +27,17 @@ describe(Accordion, () => {
 
       expect(screen.getByText("the inputs")).toBeInTheDocument();
     });
+
+    it("says when its sections are tiles, so the stylesheet can fill them", () => {
+      const { container } = render(
+        <Accordion items={items} surface="filled" />,
+      );
+
+      expect(container.firstElementChild).toHaveAttribute(
+        "data-surface",
+        "filled",
+      );
+    });
   });
 
   describe("interactions", () => {

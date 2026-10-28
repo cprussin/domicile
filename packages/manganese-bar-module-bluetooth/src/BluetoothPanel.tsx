@@ -1,17 +1,23 @@
 import { Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
+import { IconButton } from "@domicile-desktop/component-library/IconButton";
+import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
+import { PanelAction } from "@domicile-desktop/component-library/Panel";
+import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
+import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Bluetooth,
   Device,
 } from "@domicile-desktop/system-bluetooth/bluetooth";
-import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
+import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
+import type { ReactNode } from "react";
 import { useEffect } from "react";
-import { css } from "../styled-system/css";
-import { flex, hstack } from "../styled-system/patterns";
 import type { BluetoothActions } from "./bluetooth-actions";
 
 type Props = {
@@ -22,36 +28,46 @@ type Props = {
 };
 
 /**
- * The Bluetooth panel: a switch for every adapter, and the devices BlueZ
- * knows, each with its details and what can be done with it.
+ * The Bluetooth panel: a switch for every adapter in the header, and the
+ * devices BlueZ knows, grouped as connected, paired and nearby, each with
+ * what can be done with it.
  *
- * Scans while shown, so new devices appear. Each device's refusal shows on
- * its row; BlueZ's state shows the rest.
+ * Scans while shown, so new devices appear. A refusal shows plainly where it
+ * was asked, with BlueZ's words in its tooltip; BlueZ's state shows the rest.
  */
 export const BluetoothPanel = ({ actions, bluetooth, host }: Props) => {
   const requests = useRequests();
   const powered = bluetooth.adapters.filter((adapter) => adapter.powered);
   const on = powered.length > 0;
-  const power = requests.failed("power");
+  const searching = bluetooth.adapters.some(({ discovering }) => discovering);
+  const sorted = bluetooth.devices.toSorted(byName);
+  const groups = [
+    ["Connected", sorted.filter((device) => device.connected)],
+    ["Paired", sorted.filter((device) => device.paired && !device.connected)],
+    ["Nearby", sorted.filter((device) => !device.paired)],
+  ] as const;
   return (
-    <div className={panelStyles}>
-      <Switch
-        checked={on}
-        label="Bluetooth"
-        onCheckedChange={(checked) => {
-          requests.run("power", async () => {
-            const results = await Promise.all(
-              bluetooth.adapters.map(({ path }) =>
-                actions.setPowered(host, path, checked),
-              ),
-            );
-            return Result.collect(results);
-          });
-        }}
-      />
-      {power !== undefined && (
-        <span className={errorStyles}>{power.message}</span>
-      )}
+    <>
+      <PanelAction>
+        <Switch
+          checked={on}
+          hideLabel
+          label="Bluetooth"
+          onCheckedChange={(checked) => {
+            requests.run("power", async () => {
+              const results = await Promise.all(
+                bluetooth.adapters.map(({ path }) =>
+                  actions.setPowered(host, path, checked),
+                ),
+              );
+              return Result.collect(results);
+            });
+          }}
+        />
+      </PanelAction>
+      <Failure error={requests.failed("power")}>
+        {on ? "Couldn't turn Bluetooth off" : "Couldn't turn Bluetooth on"}
+      </Failure>
       {on ? (
         <>
           {powered.map(({ path }) => (
@@ -62,29 +78,60 @@ export const BluetoothPanel = ({ actions, bluetooth, host }: Props) => {
               key={path}
             />
           ))}
-          {bluetooth.adapters.some(({ discovering }) => discovering) && (
-            <span className={noteStyles}>Searching for devices…</span>
+          {groups.map(
+            ([label, devices]) =>
+              (devices.length > 0 || (label === "Nearby" && searching)) && (
+                <PanelSection key={label} label={label}>
+                  {devices.length > 0 && (
+                    <List>
+                      {devices.map((device) => (
+                        <DeviceRow
+                          device={device}
+                          failed={failedOf(requests, device)}
+                          key={device.path}
+                          onAsk={(verb, request) => {
+                            requests.run(keyOf(verb, device), () =>
+                              request(host, actions),
+                            );
+                          }}
+                          pending={VERBS.some((verb) =>
+                            requests.pending(keyOf(verb, device)),
+                          )}
+                        />
+                      ))}
+                    </List>
+                  )}
+                  {label === "Nearby" && searching && (
+                    <PanelNote>Searching for devices…</PanelNote>
+                  )}
+                </PanelSection>
+              ),
           )}
-          <ul className={listStyles}>
-            {bluetooth.devices.toSorted(byStanding).map((device) => (
-              <DeviceRow
-                device={device}
-                failed={requests.failed(device.path)?.message}
-                key={device.path}
-                onAsk={(request) => {
-                  requests.run(device.path, () => request(host, actions));
-                }}
-                pending={requests.pending(device.path)}
-              />
-            ))}
-          </ul>
         </>
       ) : (
-        <span className={noteStyles}>Bluetooth is off</span>
+        <PanelNote>Bluetooth is off</PanelNote>
       )}
-    </div>
+    </>
   );
 };
+
+/** What a row asks BlueZ to do. */
+type Verb = "connect" | "disconnect" | "pair" | "forget";
+
+const VERBS: readonly Verb[] = ["connect", "disconnect", "pair", "forget"];
+
+/** Each request's key: what it does, to which device. */
+const keyOf = (verb: Verb, device: Device): string => `${verb}:${device.path}`;
+
+/** The device's refused request, if any, and what it was. */
+const failedOf = (
+  requests: ReturnType<typeof useRequests>,
+  device: Device,
+): { verb: Verb; error: SystemError } | undefined =>
+  VERBS.flatMap((verb) => {
+    const error = requests.failed(keyOf(verb, device));
+    return error === undefined ? [] : [{ error, verb }];
+  })[0];
 
 /** Scans on `adapter` while shown. */
 const Discovery = ({
@@ -113,47 +160,88 @@ type Request = (
 
 type DeviceRowProps = {
   device: Device;
-  failed: string | undefined;
+  failed: { verb: Verb; error: SystemError } | undefined;
   pending: boolean;
-  onAsk: (request: Request) => void;
+  onAsk: (verb: Verb, request: Request) => void;
 };
 
 const DeviceRow = ({ device, failed, onAsk, pending }: DeviceRowProps) => (
-  <li className={rowStyles}>
-    <span className={headStyles}>
-      <span className={nameStyles}>{device.name}</span>
-      <span className={noteStyles}>{detailsOf(device)}</span>
-    </span>
-    <Button
-      loading={pending}
-      onClick={() => {
-        onAsk(primaryRequest(device));
-      }}
-      size="xs"
-    >
-      {primaryLabel(device)}
-    </Button>
-    {device.paired && (
-      <Tooltip
-        content="Forget"
-        tone="overPhoto"
-        trigger={
-          <button
-            aria-label={`Forget ${device.name}`}
-            className={iconButtonStyles}
-            onClick={() => {
-              onAsk((host, actions) => actions.forget(host, device));
-            }}
-            type="button"
-          >
-            <TrashIcon size={14} />
-          </button>
-        }
-      />
+  <ListRow
+    detail={detailOf(device)}
+    end={
+      <>
+        <Button
+          loading={pending}
+          onClick={() => {
+            onAsk(primaryVerb(device), primaryRequest(device));
+          }}
+          size="xs"
+          variant={device.connected ? "primary" : "accent"}
+        >
+          {primaryLabel(device)}
+        </Button>
+        {device.paired && (
+          <Tooltip
+            content="Forget"
+            tone="overPhoto"
+            trigger={
+              <IconButton
+                label={`Forget ${device.name}`}
+                onClick={() => {
+                  onAsk("forget", (host, actions) =>
+                    actions.forget(host, device),
+                  );
+                }}
+                size="sm"
+              >
+                <XIcon aria-hidden size={12} weight="bold" />
+              </IconButton>
+            }
+          />
+        )}
+      </>
+    }
+    icon={<BluetoothIcon size={15} weight="bold" />}
+    label={device.name}
+    surface="filled"
+  >
+    {failed !== undefined && (
+      <Failure error={failed.error}>{FAILED[failed.verb]}</Failure>
     )}
-    {failed !== undefined && <span className={errorStyles}>{failed}</span>}
-  </li>
+  </ListRow>
 );
+
+/** What a refusal says, by what was asked. */
+const FAILED: Record<Verb, string> = {
+  connect: "Couldn't connect",
+  disconnect: "Couldn't disconnect",
+  forget: "Couldn't forget it",
+  pair: "Couldn't pair",
+};
+
+/** What failed, in plain words, with BlueZ's in its tooltip. */
+const Failure = ({
+  children,
+  error,
+}: {
+  children: ReactNode;
+  error: SystemError | undefined;
+}) =>
+  error !== undefined && (
+    <PanelNote detail={error.message} tone="warning">
+      {children}
+    </PanelNote>
+  );
+
+const primaryVerb = (device: Device): Verb => {
+  if (device.connected) {
+    return "disconnect";
+  } else if (device.paired) {
+    return "connect";
+  } else {
+    return "pair";
+  }
+};
 
 /** Disconnect a connected device, connect a paired one, or pair a new one. */
 const primaryRequest = (device: Device): Request => {
@@ -179,37 +267,24 @@ const primaryLabel = (device: Device): string => {
   }
 };
 
-/** Its standing, battery and address, as one line. */
-const detailsOf = (device: Device): string =>
-  [
-    standingOf(device),
-    ...(device.battery === undefined ? [] : [`Battery ${device.battery}%`]),
-    device.address,
-  ].join(" · ");
-
-const standingOf = (device: Device): string => {
+/**
+ * Its second line: the battery while connected, else whether it is paired.
+ * A nearby device shows its address, which tells apart devices that share a
+ * name.
+ */
+const detailOf = (device: Device): string => {
   if (device.connected) {
-    return "Connected";
+    return device.battery === undefined
+      ? "Connected"
+      : `Battery ${device.battery.toString()}%`;
   } else if (device.paired) {
-    return "Paired";
+    return "Not connected";
   } else {
-    return "New";
+    return device.address;
   }
 };
 
-/** Connected first, then paired, then new; by name within each. */
-const byStanding = (a: Device, b: Device): number =>
-  rank(a) - rank(b) || a.name.localeCompare(b.name);
-
-const rank = (device: Device): number => {
-  if (device.connected) {
-    return 0;
-  } else if (device.paired) {
-    return 1;
-  } else {
-    return 2;
-  }
-};
+const byName = (a: Device, b: Device): number => a.name.localeCompare(b.name);
 
 /** Sends a request whose outcome nothing shows, logging a failure. */
 const report = (
@@ -232,56 +307,3 @@ const report = (
     },
   );
 };
-
-const panelStyles = flex({
-  direction: "column",
-  gap: 2,
-  inlineSize: 80,
-});
-
-const listStyles = flex({
-  direction: "column",
-  gap: 2,
-  listStyle: "none",
-  margin: 0,
-  maxBlockSize: "50vh",
-  overflowY: "auto",
-  padding: 0,
-});
-
-const rowStyles = hstack({
-  flexWrap: "wrap",
-  gap: 1.5,
-});
-
-const headStyles = flex({
-  direction: "column",
-  flex: "1 1 0",
-  minInlineSize: 0,
-});
-
-const nameStyles = css({ overflowWrap: "anywhere" });
-
-const noteStyles = css({ opacity: 0.75 });
-
-// Under the row, across its width.
-const errorStyles = css({ color: "warning", flexBasis: "100%" });
-
-// Matches the mixer's icon buttons.
-const iconButtonStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 6,
-  justifyContent: "center",
-  padding: 0,
-});

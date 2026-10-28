@@ -15,8 +15,9 @@ import { WiredPanel } from "./WiredPanel";
 import type { WifiActions } from "./wifi-actions";
 
 /**
- * The panel, which watches Wi-Fi and the addresses while it is open. Its
- * width is fixed, so a long address wraps rather than widening it.
+ * The panel, which watches Wi-Fi and the addresses while it is open. It
+ * takes its container's width; a long address wraps rather than widening
+ * it.
  */
 export const NetworkPanel = ({
   actions,
@@ -45,4 +46,4 @@ export const NetworkPanel = ({
   );
 };
 
-const panelStyles = flex({ direction: "column", gap: 3, inlineSize: 104 });
+const panelStyles = flex({ direction: "column", gap: 3, minInlineSize: 0 });

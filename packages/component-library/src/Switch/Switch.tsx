@@ -8,15 +8,29 @@ import type { ExtendProps } from "../extend-props";
 type Props = ExtendProps<
   typeof BaseSwitch.Root,
   {
+    /**
+     * Leave the label unseen, where a title beside the switch already says
+     * it, such as in a panel's header. It still names the switch.
+     */
+    hideLabel?: boolean | undefined;
     /** The text beside the switch, which also names it. */
     label: string;
   }
 >;
 
 /** An on/off switch with its label, over base-ui's Switch. */
-export const Switch = ({ label, ...rootProps }: Props) => {
+export const Switch = ({ hideLabel = false, label, ...rootProps }: Props) => {
   const id = useId();
-  return (
+  return hideLabel ? (
+    <BaseSwitch.Root
+      aria-label={label}
+      className={rootStyles}
+      id={id}
+      {...rootProps}
+    >
+      <BaseSwitch.Thumb className={thumbStyles} />
+    </BaseSwitch.Root>
+  ) : (
     <label className={labelStyles} htmlFor={id}>
       <BaseSwitch.Root className={rootStyles} id={id} {...rootProps}>
         <BaseSwitch.Thumb className={thumbStyles} />

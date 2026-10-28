@@ -1,12 +1,16 @@
+import { Button } from "@domicile-desktop/component-library/Button";
+import { List } from "@domicile-desktop/component-library/ListRow";
+import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
+import { PanelHeader } from "@domicile-desktop/component-library/PanelHeader";
+import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
+import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { Notification } from "@domicile-desktop/sdk/notification";
-import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
-import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import { memo, useCallback } from "react";
 
 import { css, cva } from "../styled-system/css";
-import { flex, hstack, vstack } from "../styled-system/patterns";
+import { flex } from "../styled-system/patterns";
 import { InboxList } from "./InboxList";
 import { InboxPage } from "./InboxPage";
 import type { Inbox, InboxReading } from "./inbox";
@@ -86,6 +90,16 @@ export const NotificationDrawer = memo(
   }: Props) => {
     const page =
       inboxes?.shown === undefined ? undefined : inboxes.inboxes[inboxes.shown];
+    const notifications = (
+      <Notifications
+        items={items}
+        now={now}
+        onAction={onAction}
+        onClose={onClose}
+        onDismiss={onDismiss}
+        onReply={onReply}
+      />
+    );
     return (
       <Popover
         align="end"
@@ -108,64 +122,51 @@ export const NotificationDrawer = memo(
           aria-labelledby={TITLE_ID}
           className={drawerStyles({ page: page !== undefined })}
         >
-          <header className={headerStyles}>
-            {page !== undefined && (
-              <button
-                aria-label="Back"
-                className={backStyles}
-                onClick={onBack}
-                type="button"
-              >
-                <CaretLeftIcon aria-hidden size={14} weight="bold" />
-              </button>
-            )}
-            <h2 className={titleStyles} id={TITLE_ID}>
-              {page === undefined ? "Notifications" : page.name}
-            </h2>
-          </header>
+          <PanelHeader
+            onBack={page === undefined ? undefined : onBack}
+            title={page === undefined ? "Notifications" : page.name}
+            titleId={TITLE_ID}
+          />
           {/* Hidden, not unmounted, so the inboxes' pages keep running. */}
           <div className={paneStyles} hidden={page !== undefined}>
             {inboxes !== undefined && (
-              <>
-                <h3 className={headingStyles}>Inboxes</h3>
-                <ul className={inboxListStyles}>
+              <PanelSection label="Inboxes">
+                <List>
                   <InboxList
                     inboxes={inboxes.inboxes}
                     onOpen={inboxes.onOpen}
                     readings={inboxes.readings}
                   />
-                </ul>
-                <h3 className={headingStyles}>Recent</h3>
-              </>
+                </List>
+              </PanelSection>
             )}
-            <Notifications
-              items={items}
-              now={now}
-              onAction={onAction}
-              onClose={onClose}
-              onDismiss={onDismiss}
-              onReply={onReply}
-            />
-            {items.length > 0 && (
-              <footer className={footerStyles}>
-                <span className={countStyles}>
-                  {items.length === 1
-                    ? "1 notification"
-                    : `${items.length.toString()} notifications`}
-                </span>
-                <button
-                  className={clearStyles}
+            {inboxes === undefined ? (
+              notifications
+            ) : (
+              <PanelSection label="Recent">{notifications}</PanelSection>
+            )}
+          </div>
+          {page === undefined && items.length > 0 && (
+            <PanelFooter
+              action={
+                <Button
+                  beforeIcon={<BroomIcon aria-hidden size={14} />}
                   onClick={() => {
                     onDismiss(items.map(({ id }) => id));
                   }}
-                  type="button"
+                  rounded
+                  size="xs"
+                  variant="ghost"
                 >
-                  <BroomIcon aria-hidden size={14} />
                   Clear all
-                </button>
-              </footer>
-            )}
-          </div>
+                </Button>
+              }
+            >
+              {items.length === 1
+                ? "1 notification"
+                : `${items.length.toString()} notifications`}
+            </PanelFooter>
+          )}
           {inboxes?.inboxes.map((inbox, index) =>
             inbox.kind === InboxKind.Page ? (
               <Page
@@ -224,21 +225,14 @@ const Notifications = ({
   onReply,
 }: NotificationsProps) =>
   items.length === 0 ? (
-    <div className={emptyStyles}>
-      <span aria-hidden className={glowStyles}>
-        <BellSimpleIcon size={20} weight="duotone" />
-      </span>
-      <span className={emptyTitleStyles}>You're all caught up</span>
-      <span className={emptyBodyStyles}>
-        What your applications and sites have to say will be here.
-      </span>
-    </div>
+    <PanelNote>You're all caught up</PanelNote>
   ) : (
     <ul className={listStyles}>
       {items.map((notification) => (
         <li className={rowStyles} key={notification.id}>
           <NotificationCard
             closeLabel="Clear"
+            density="compact"
             notification={notification}
             now={now}
             onAction={(key) => {
@@ -265,8 +259,7 @@ const drawerStyles = cva({
   base: {
     display: "flex",
     flexDirection: "column",
-    fontSize: "sm",
-    gap: 2.5,
+    gap: 3,
     maxBlockSize: "80vh",
   },
   variants: {
@@ -283,81 +276,28 @@ const drawerStyles = cva({
   },
 });
 
-const headerStyles = hstack({ gap: 1, minBlockSize: 6 });
-
-// The tray's hover circle, as quick settings' arrows.
-const backStyles = css({
-  _focusVisible: {
-    outline: "{spacing.0.5} solid {colors.accent}",
-    outlineOffset: 0.5,
-  },
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 6,
-  justifyContent: "center",
-  padding: 0,
-});
-
-const titleStyles = css({
-  fontSize: "md",
-  fontWeight: "semibold",
-  lineHeight: "tight",
-  margin: 0,
-});
-
 // Fills the drawer's body; scrolls when the notifications outgrow it.
 const paneStyles = flex({
   "&[hidden]": { display: "none" },
   direction: "column",
   flex: 1,
-  gap: 1.5,
+  gap: 3,
   minBlockSize: 0,
   overflowY: "auto",
 });
 
-// The section labels used in the portal's source picker.
-const headingStyles = css({
-  color: "muted",
-  fontSize: "xs",
-  fontWeight: "medium",
-  letterSpacing: "wide",
-  margin: 0,
-  paddingBlockStart: 1,
-  textTransform: "uppercase",
-});
-
-const inboxListStyles = flex({
-  direction: "column",
-  gap: 0.5,
-  margin: 0,
-  paddingInline: 0,
-});
-
 const listStyles = flex({
   direction: "column",
-  gap: 1.5,
+  gap: 1,
   listStyle: "none",
   margin: 0,
   paddingInline: 0,
 });
 
-// Each card on its own tile, lit on hover. A card that arrives while the
-// drawer is open slides in like a toast.
+// Each card on its own tile, lit on hover, as a list's filled rows. A card
+// that arrives while the drawer is open slides in like a toast.
 const rowStyles = css({
-  _hover: {
-    backgroundColor:
-      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
-  },
+  _hover: { backgroundColor: "fillHover" },
   _starting: {
     opacity: 0,
     transform: "translateX({spacing.4})",
@@ -366,7 +306,7 @@ const rowStyles = css({
   "&:has([data-urgency=critical])": {
     borderColor: "color-mix(in oklab, {colors.danger} 55%, transparent)",
   },
-  backgroundColor: "color-mix(in oklab, {colors.foreground} 6%, transparent)",
+  backgroundColor: "fill",
   border: "1px solid transparent",
   borderRadius: "lg",
   opacity: 1,
@@ -374,64 +314,4 @@ const rowStyles = css({
   transform: "translateX(0)",
   transition:
     "background-color {durations.fast} {easings.default}, border-color {durations.fast} {easings.default}, opacity {durations.slow} {easings.outQuart}, transform {durations.slow} {easings.outQuart}",
-});
-
-// Quieter than the notifications above it, as quick settings' battery line.
-const footerStyles = hstack({
-  borderBlockStartColor: "border",
-  borderBlockStartStyle: "solid",
-  borderBlockStartWidth: "1px",
-  fontSize: "xs",
-  justify: "space-between",
-  marginBlockStart: 1,
-  paddingBlockStart: 2,
-});
-
-const countStyles = css({
-  color: "muted",
-  fontVariantNumeric: "tabular-nums",
-});
-
-// As quick settings' Settings button.
-const clearStyles = hstack({
-  _focusVisible: {
-    outline: "{spacing.0.5} solid {colors.accent}",
-    outlineOffset: 0.5,
-  },
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-  },
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "muted",
-  cursor: "pointer",
-  flexShrink: 0,
-  fontSize: "xs",
-  gap: 1.5,
-  marginInlineEnd: -2.5,
-  paddingInline: 2.5,
-  transition: "background-color {durations.fast} {easings.default}",
-});
-
-// The empty state: no notifications is the normal case, not an error.
-const emptyStyles = vstack({
-  color: "muted",
-  gap: 1,
-  paddingBlock: 6,
-  textAlign: "center",
-});
-
-const glowStyles = css({ color: "accent", display: "inline-flex" });
-
-const emptyTitleStyles = css({
-  color: "foreground",
-  fontSize: "sm",
-  fontWeight: "semibold",
-});
-
-const emptyBodyStyles = css({
-  fontSize: "xs",
-  maxInlineSize: 56,
 });

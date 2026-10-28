@@ -1,4 +1,5 @@
 import type { Result } from "@cprussin/option-result";
+import { Panel } from "@domicile-desktop/component-library/Panel";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
@@ -147,7 +148,9 @@ const Item = ({
       }
       wide
     >
-      <BluetoothPanel actions={actions} bluetooth={reading} host={host} />
+      <Panel title="Bluetooth" width="standard">
+        <BluetoothPanel actions={actions} bluetooth={reading} host={host} />
+      </Panel>
     </Popover>
   );
 };

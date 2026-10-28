@@ -30,6 +30,25 @@ const card = (
 
 describe("NotificationCard", () => {
   describe("rendering", () => {
+    it("says when it is compact, as in a list, so the stylesheet can tighten it", () => {
+      const { container } = render(
+        <NotificationCard
+          closeLabel="Clear"
+          density="compact"
+          notification={notification({ summary: "New message" })}
+          now={NOW}
+          onAction={() => undefined}
+          onClose={() => undefined}
+          onReply={() => undefined}
+        />,
+      );
+
+      expect(container.firstElementChild).toHaveAttribute(
+        "data-density",
+        "compact",
+      );
+    });
+
     it("says who, when, what and more", () => {
       card({
         appName: "chat.example.com",

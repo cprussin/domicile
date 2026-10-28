@@ -24,7 +24,7 @@ export const InboxList = ({ inboxes, onOpen, readings }: Props) => (
         const Icon = inbox.icon;
         return (
           <InboxRow
-            icon={<Icon size={16} />}
+            icon={<Icon size={15} weight="bold" />}
             key={index}
             name={inbox.name}
             onOpen={() => {
