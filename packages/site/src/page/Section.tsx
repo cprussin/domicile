@@ -6,7 +6,7 @@ type Props = {
   id?: string | undefined;
   title?: string | undefined;
   lede?: string | undefined;
-  children: ReactNode;
+  children?: ReactNode;
 };
 
 /** A landing page section: a heading, a line under it, then its content. */

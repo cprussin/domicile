@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "rm public/media && cp -R ../../docs/media public/media && next build",
+  "buildCommand": "rm public/media && cp -R ../../docs/media public/media && (cd ../.. && node_modules/.bin/turbo run build --filter=@domicile-desktop/site^...) && next build",
   "git": {
     "deploymentEnabled": {
       "**": false,

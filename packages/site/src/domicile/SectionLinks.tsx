@@ -8,6 +8,12 @@ import { BrandMark } from "./BrandMark";
 export const SectionLinks = () => (
   <nav aria-label="On this page" className={linksStyles}>
     <SectionLink
+      body="Pick a window model, change the code, run it."
+      href="#make"
+      picture={<MakePicture />}
+      title="Make your own"
+    />
+    <SectionLink
       body="Your layout is a stylesheet."
       href="#css"
       picture={<CssPicture />}
@@ -56,6 +62,20 @@ const SectionLink = ({ href, picture, title, body }: LinkProps) => (
     <span className={titleStyles}>{title}</span>
     <span className={bodyStyles}>{body}</span>
   </a>
+);
+
+/** The builder: window models over a line of the code that draws one. */
+const MakePicture = () => (
+  <span className={makePictureStyles}>
+    <span className={modelsStyles}>
+      <span className={pickedModelStyles}>Tiling</span>
+      <span className={modelStyles}>Floating</span>
+      <span className={modelStyles}>Tabs</span>
+    </span>
+    <span className={ruleStyles}>
+      {'<main className="grid gap-2">\n  {windows.map(…)}\n</main>'}
+    </span>
+  </span>
 );
 
 /** Panes tiled beside the CSS that tiles them. */
@@ -181,6 +201,30 @@ const bodyStyles = css({
   fontSize: "sm",
   lineHeight: "snug",
   paddingInline: 1,
+});
+
+const makePictureStyles = flex({
+  blockSize: "100%",
+  direction: "column",
+  gap: 1.5,
+  padding: 2.5,
+});
+
+const modelsStyles = hstack({ gap: 1 });
+
+const modelStyles = css({
+  border: "1px solid {colors.border}",
+  borderRadius: "full",
+  fontSize: "2xs",
+  paddingInline: 1.5,
+});
+
+const pickedModelStyles = css({
+  border: "1px solid {colors.accent}",
+  borderRadius: "full",
+  color: "accent",
+  fontSize: "2xs",
+  paddingInline: 1.5,
 });
 
 const cssPictureStyles = grid({

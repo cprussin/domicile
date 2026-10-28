@@ -8,8 +8,8 @@ export const Hero = () => (
   <PageHero
     actions={
       <>
-        <LinkButton href="#quickstart" size="lg">
-          Write your first shell
+        <LinkButton href="#make" size="lg">
+          Make your own desktop
         </LinkButton>
         <LinkButton href="#docs" size="lg" variant="outline">
           Read the docs
@@ -21,8 +21,9 @@ export const Hero = () => (
         With Domicile, a shell is a JavaScript module. Native windows are{" "}
         <code className={codeStyles}>&lt;app&gt;</code> elements and web pages
         are <code className={codeStyles}>&lt;webview&gt;</code>s, side by side
-        in the same DOM. Build your desktop with the power of the web: React,
-        Svelte, Tailwind or plain CSS.
+        in the same DOM. So anything a web page can do, your desktop can do.
+        Write it in React, Tailwind or plain CSS, or describe it to your coding
+        agent. It already knows the web.
       </>
     }
     tag={{

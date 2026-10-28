@@ -1,16 +1,20 @@
 import { css } from "../../styled-system/css";
 import { Apps } from "../domicile/Apps";
 import { Batteries } from "../domicile/Batteries";
+import { ByHand } from "../domicile/ByHand";
 import { Cli } from "../domicile/Cli";
 import { CssStrip } from "../domicile/CssStrip";
 import { DomicileMark } from "../domicile/DomicileMark";
 import { DOCS } from "../domicile/docs";
 import { Hero } from "../domicile/Hero";
 import { HeroMedia } from "../domicile/HeroMedia";
+import { Iterate } from "../domicile/Iterate";
+import { Make } from "../domicile/Make";
 import { Npm } from "../domicile/Npm";
 import { Platform } from "../domicile/Platform";
 import { Quickstart } from "../domicile/Quickstart";
 import { ReferenceShell } from "../domicile/ReferenceShell";
+import { Showcase } from "../domicile/Showcase";
 import { Accent } from "../page/Accent";
 import { LinkColumns } from "../page/LinkColumns";
 import { REPO, repoFile } from "../page/repo";
@@ -33,15 +37,19 @@ const DomicilePage = () => (
     />
     <main>
       <Hero />
+      <Make />
+      <Showcase />
+      <Iterate />
       <HeroMedia />
       <CssStrip />
       <Batteries />
       <Apps />
-      <Platform />
       <Quickstart />
       <Cli />
       <Npm />
       <ReferenceShell />
+      <Platform />
+      <ByHand />
       <Section id="docs" title="Docs">
         <LinkColumns columns={DOCS} />
       </Section>
