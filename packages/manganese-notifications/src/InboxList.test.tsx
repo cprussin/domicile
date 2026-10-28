@@ -65,21 +65,21 @@ describe(InboxList, () => {
   });
 
   it("shows the unread count, and the total in words", () => {
-    shown([InboxReading.Counted(12, 3)]);
+    shown([InboxReading.Counted(1204, 3)]);
 
-    expect(
-      screen.getByRole("button", {
-        name: "Work: 3 unread of 12 conversations",
-      }),
-    ).toHaveTextContent("3");
+    const row = screen.getByRole("button", {
+      name: "Work: 3 unread of 1204 conversations",
+    });
+    expect(row).toHaveTextContent("1,204 conversations");
+    expect(row).toHaveTextContent("3");
   });
 
-  it("names a read inbox with nothing unread by its count", () => {
-    shown([InboxReading.Counted(12, 0)]);
+  it("shows the total of a read inbox with nothing unread", () => {
+    shown([InboxReading.Counted(1, 0)]);
 
     expect(
-      screen.getByRole("button", { name: "Work: 12 conversations" }),
-    ).toBeVisible();
+      screen.getByRole("button", { name: "Work: 1 conversation" }),
+    ).toHaveTextContent("1 conversation");
   });
 
   it("warns when it could not read the inbox, naming why, and still opens it", async () => {

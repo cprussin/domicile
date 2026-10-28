@@ -5,11 +5,11 @@ import userEvent from "@testing-library/user-event";
 import { InboxRow } from "./InboxRow";
 
 describe(InboxRow, () => {
-  it("names the inbox and its count, and opens it", async () => {
+  it("names the inbox and its counts, and opens it", async () => {
     const opened: string[] = [];
     render(
       <InboxRow
-        figure="412"
+        detail="412 conversations"
         icon={undefined}
         label="Work: 3 unread of 412 conversations"
         name="Work"
@@ -24,20 +24,19 @@ describe(InboxRow, () => {
       name: "Work: 3 unread of 412 conversations",
     });
     expect(row).toHaveTextContent("Work");
-    // The unread count in its place, not the total.
-    expect(row).toHaveTextContent("3");
-    expect(row).not.toHaveTextContent("412");
+    expect(row).toHaveTextContent("412 conversations");
+    expect(screen.getByText("3")).toBeInTheDocument();
     await userEvent.click(row);
 
     expect(opened).toEqual(["Work"]);
   });
 
-  it("shows the total when nothing is unread", () => {
+  it("shows a figure in place of the count when nothing is unread", () => {
     render(
       <InboxRow
-        figure="412"
+        figure="Sign in"
         icon={undefined}
-        label="Work: 412 conversations"
+        label="Sign in to Work"
         name="Work"
         onOpen={() => undefined}
         unread={0}
@@ -45,8 +44,8 @@ describe(InboxRow, () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Work: 412 conversations" }),
-    ).toHaveTextContent("412");
+      screen.getByRole("button", { name: "Sign in to Work" }),
+    ).toHaveTextContent("Sign in");
   });
 
   it("warns when the inbox could not be read", () => {

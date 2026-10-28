@@ -19,6 +19,17 @@ describe(CountBadge, () => {
     expect(screen.getByText("3")).toHaveAttribute("data-inline");
   });
 
+  it("counts further in line with text, where it has more room", () => {
+    render(
+      <>
+        <CountBadge count={42} inline />
+        <CountBadge count={120} inline />
+      </>,
+    );
+    expect(screen.getByText("42")).toBeInTheDocument();
+    expect(screen.getByText("99+")).toBeInTheDocument();
+  });
+
   it("shows nothing for zero", () => {
     const { container } = render(<CountBadge count={0} />);
     expect(container).toBeEmptyDOMElement();
