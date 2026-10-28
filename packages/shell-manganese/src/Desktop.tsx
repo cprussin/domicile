@@ -487,10 +487,16 @@ export const Desktop = ({
   );
   const drawer = useMemo(
     () => ({
+      doNotDisturb: notifications.doNotDisturb,
       handle: notificationsHandle,
       unread: notifications.unread + inboxDrawer.unread,
     }),
-    [inboxDrawer.unread, notifications.unread, notificationsHandle],
+    [
+      inboxDrawer.unread,
+      notifications.doNotDisturb,
+      notifications.unread,
+      notificationsHandle,
+    ],
   );
   const trayState = useMemo(
     () => ({
@@ -665,6 +671,7 @@ export const Desktop = ({
       />
       {/* Under the bell that opened it. */}
       <NotificationDrawer
+        doNotDisturb={notifications.doNotDisturb}
         handle={notificationsHandle}
         inboxes={inboxes.length === 0 ? undefined : inboxDrawer.drawer}
         items={notifications.items}
@@ -673,6 +680,7 @@ export const Desktop = ({
         onBack={backToNotifications}
         onClose={drawerClosed}
         onDismiss={notifications.dismiss}
+        onDoNotDisturb={notifications.setDoNotDisturb}
         onOpen={openNotifications}
         onReply={notifications.reply}
         open={notificationsOpen && !lock.locked}

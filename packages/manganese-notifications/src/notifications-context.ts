@@ -7,6 +7,8 @@ export type NotificationsHandle = ReturnType<typeof createHandle>;
 
 /** The notification drawer, for the bell that opens it. */
 export type NotificationsDrawer = {
+  /** Toasts are held back, but for critical ones. */
+  doNotDisturb: boolean;
   /** Opens the drawer under the bell pressed. */
   handle: NotificationsHandle;
   /** How many notifications arrived since the drawer was last opened. */

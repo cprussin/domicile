@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { Notification } from "@domicile-desktop/sdk/notification";
@@ -46,13 +46,17 @@ const toasts = () => {
 const mounted = () => {
   const host = client();
   const shown = toasts();
-  const { result } = renderHook(() =>
+  const { result, unmount } = renderHook(() =>
     useNotifications(host.domicile, shown.manager),
   );
-  return { host, result, shown };
+  return { host, result, shown, unmount };
 };
 
 describe("useNotifications", () => {
+  beforeEach(() => {
+    globalThis.localStorage.clear();
+  });
+
   describe("the list", () => {
     it("is empty until the compositor has said", () => {
       expect(mounted().result.current.items).toEqual([]);
@@ -113,6 +117,33 @@ describe("useNotifications", () => {
       ]);
     });
 
+    it("holds them back while do not disturb is on, but keeps the notification", () => {
+      const { host, result, shown } = mounted();
+      host.says([]);
+      act(() => {
+        result.current.setDoNotDisturb(true);
+      });
+      const arrived = notification({ id: 7, time: 1 });
+
+      host.says([arrived]);
+
+      expect(shown.added).toEqual([]);
+      expect(result.current.items).toEqual([arrived]);
+      expect(result.current.unread).toBe(1);
+    });
+
+    it("still toasts a critical one while do not disturb is on", () => {
+      const { host, result, shown } = mounted();
+      host.says([]);
+      act(() => {
+        result.current.setDoNotDisturb(true);
+      });
+
+      host.says([notification({ id: 8, urgency: "critical" })]);
+
+      expect(shown.added).toEqual([expect.objectContaining({ id: "8" })]);
+    });
+
     it("takes a toast down when its notification goes", () => {
       // Its application closed it, or it was cleared on another monitor's page.
       const { host, shown } = mounted();
@@ -141,6 +172,20 @@ describe("useNotifications", () => {
       });
 
       expect(result.current.unread).toBe(0);
+    });
+  });
+
+  describe("do not disturb", () => {
+    it("is off until turned on, and stays on through a reload", () => {
+      const first = mounted();
+      expect(first.result.current.doNotDisturb).toBe(false);
+
+      act(() => {
+        first.result.current.setDoNotDisturb(true);
+      });
+      first.unmount();
+
+      expect(mounted().result.current.doNotDisturb).toBe(true);
     });
   });
 

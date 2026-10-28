@@ -5,6 +5,13 @@ import { NotificationBell } from "./NotificationBell";
 /** The bell, which opens the notification drawer under itself. */
 export const Notifications = () => {
   const { screen } = useBar();
-  const { handle, unread } = useNotificationsDrawer();
-  return <NotificationBell handle={handle} screen={screen} unread={unread} />;
+  const { doNotDisturb, handle, unread } = useNotificationsDrawer();
+  return (
+    <NotificationBell
+      doNotDisturb={doNotDisturb}
+      handle={handle}
+      screen={screen}
+      unread={unread}
+    />
+  );
 };

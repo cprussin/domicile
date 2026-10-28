@@ -6,7 +6,14 @@ import {
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { notification } from "./fixture";
 import { Inbox, InboxReading } from "./inbox";
@@ -70,6 +77,7 @@ const drawer = (
     <>
       <Bell handle={handle} />
       <NotificationDrawer
+        doNotDisturb={false}
         handle={handle}
         items={items}
         now={0}
@@ -84,6 +92,9 @@ const drawer = (
         }}
         onDismiss={(ids) => {
           asked.push(["dismiss", ids]);
+        }}
+        onDoNotDisturb={(on) => {
+          asked.push(["do not disturb", on]);
         }}
         onOpen={(screen) => {
           asked.push(["open", screen]);
@@ -183,6 +194,24 @@ describe("NotificationDrawer", () => {
     expect(
       screen.queryByRole("button", { name: "Clear all" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("turns do not disturb on and off, with nothing to clear", async () => {
+    const asked: Asked = [];
+    const toggle = () => screen.getByRole("switch", { name: "Do not disturb" });
+
+    drawer([], asked);
+    expect(toggle()).not.toBeChecked();
+    await userEvent.click(toggle());
+    cleanup();
+    drawer([], asked, { doNotDisturb: true });
+    expect(toggle()).toBeChecked();
+    await userEvent.click(toggle());
+
+    expect(asked).toEqual([
+      ["do not disturb", true],
+      ["do not disturb", false],
+    ]);
   });
 
   it("lists the inboxes above the notifications", () => {

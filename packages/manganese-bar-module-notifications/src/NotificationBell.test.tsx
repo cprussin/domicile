@@ -10,11 +10,16 @@ import userEvent from "@testing-library/user-event";
 import { NotificationBell } from "./NotificationBell";
 
 /** A bell on `left` with `unread`, and the drawer it opens. */
-const bell = (unread: number, opened: string[] = []) => {
+const bell = (unread: number, opened: string[] = [], doNotDisturb = false) => {
   const handle = createHandle();
   return render(
     <>
-      <NotificationBell handle={handle} screen="left" unread={unread} />
+      <NotificationBell
+        doNotDisturb={doNotDisturb}
+        handle={handle}
+        screen="left"
+        unread={unread}
+      />
       <Popover
         handle={handle}
         onOpenChange={(open, { trigger }) => {
@@ -54,6 +59,16 @@ describe("NotificationBell", () => {
     expect(
       await screen.findByRole("tooltip", {}, { timeout: 2000 }),
     ).toHaveTextContent("Notifications, 3 unread");
+  });
+
+  it("says while do not disturb is on", () => {
+    bell(3, [], true);
+
+    expect(
+      screen.getByRole("button", {
+        name: "Notifications, 3 unread, do not disturb",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("stops counting where a badge has room", () => {

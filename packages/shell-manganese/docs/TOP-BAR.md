@@ -314,6 +314,9 @@ button, and their controls in one panel, each labeled in words.
 - The bell shows the count since it was last opened. It opens a panel under
   itself of every uncleared notification, where you can open, clear or clear
   all.
+- **Do not disturb**, a switch at the bottom of that panel, holds back every
+  toast but critical ones. Notifications still collect in the panel, and the
+  bell shows struck through. It stays on through a reload.
 - The compositor keeps the history, so it survives a reload. See
   [NOTIFICATIONS.md](../../../docs/architecture/NOTIFICATIONS.md).
 

@@ -4,6 +4,7 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { arrivals } from "./arrivals";
+import { storeDoNotDisturb, storedDoNotDisturb } from "./do-not-disturb";
 import { toastTimeout } from "./toast-timeout";
 
 export type NotificationCenter = {
@@ -19,6 +20,9 @@ export type NotificationCenter = {
   invoke: (id: number, action: string) => void;
   /** Send `text` from `id`'s reply field. */
   reply: (id: number, text: string) => void;
+  /** Holds back every toast but a critical one. Kept through a reload. */
+  doNotDisturb: boolean;
+  setDoNotDisturb: (on: boolean) => void;
 };
 
 /** The notifications and how far the user has read. */
@@ -42,7 +46,8 @@ type Desk = {
  *
  * A toast only interrupts. Closing it or timing out leaves the notification in
  * place. Clearing the notification (on any page) or its application closing it
- * removes the toast too. See docs/architecture/NOTIFICATIONS.md.
+ * removes the toast too. Do not disturb holds back every toast but a critical
+ * one; the notifications still collect. See docs/architecture/NOTIFICATIONS.md.
  */
 export const useNotifications = (
   domicile: Pick<Domicile, "notifications">,
@@ -55,10 +60,15 @@ export const useNotifications = (
   // The last list received, for `arrivals`. A ref because it is only used in
   // the handler, not for rendering.
   const told = useRef<readonly Notification[] | undefined>(undefined);
+  const [doNotDisturb, setQuiet] = useState(storedDoNotDisturb);
+  // Read by the handler, which subscribes once.
+  const quiet = useRef(doNotDisturb);
 
   useEffect(() => {
     const heard = (items: readonly Notification[]) => {
-      for (const arrived of arrivals(told.current, items)) {
+      for (const arrived of arrivals(told.current, items).filter(
+        ({ urgency }) => !quiet.current || urgency === "critical",
+      )) {
         toasts.add({
           data: arrived,
           description: arrived.body,
@@ -91,6 +101,12 @@ export const useNotifications = (
     setDesk((previous) => ({ ...previous, readUpTo: latest(previous.items) }));
   }, []);
 
+  const setDoNotDisturb = useCallback((on: boolean) => {
+    quiet.current = on;
+    storeDoNotDisturb(on);
+    setQuiet(on);
+  }, []);
+
   const dismiss = useCallback(
     (ids: readonly number[]) => {
       domicile.notifications.dismiss(ids);
@@ -114,10 +130,12 @@ export const useNotifications = (
 
   return {
     dismiss,
+    doNotDisturb,
     invoke,
     items: desk.items.toReversed(),
     read,
     reply,
+    setDoNotDisturb,
     unread: desk.items.filter(({ time }) => time > (desk.readUpTo ?? 0)).length,
   };
 };

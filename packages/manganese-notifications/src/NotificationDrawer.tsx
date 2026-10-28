@@ -5,6 +5,7 @@ import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
 import { PanelHeader } from "@domicile-desktop/component-library/PanelHeader";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { Switch } from "@domicile-desktop/component-library/Switch";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
@@ -36,6 +37,8 @@ export type DrawerInboxes = {
 };
 
 type Props = {
+  /** Toasts are held back, but for critical ones. */
+  doNotDisturb: boolean;
   /** Opens it under the bell pressed. */
   handle: NotificationsHandle;
   /**
@@ -57,6 +60,8 @@ type Props = {
   onBack: () => void;
   /** Clear `ids`. */
   onDismiss: (ids: readonly number[]) => void;
+  /** Turn do not disturb on or off. */
+  onDoNotDisturb: (on: boolean) => void;
   /** Press `key` on `id`. */
   onAction: (id: number, key: string) => void;
   /** Send `text` from `id`'s reply field. */
@@ -66,7 +71,8 @@ type Props = {
 /**
  * The notification drawer, a panel under the bell. Each notification can be
  * pressed or cleared, or all cleared at once. A press closes the drawer,
- * which would cover the window it raises.
+ * which would cover the window it raises. Do not disturb is switched in its
+ * footer.
  *
  * A notification stays here after its toast is gone, until it is cleared or its
  * application withdraws it. See docs/architecture/NOTIFICATIONS.md.
@@ -76,6 +82,7 @@ type Props = {
  */
 export const NotificationDrawer = memo(
   ({
+    doNotDisturb,
     handle,
     inboxes,
     items,
@@ -84,6 +91,7 @@ export const NotificationDrawer = memo(
     onBack,
     onClose,
     onDismiss,
+    onDoNotDisturb,
     onOpen,
     onReply,
     open,
@@ -147,25 +155,29 @@ export const NotificationDrawer = memo(
               <PanelSection label="Recent">{notifications}</PanelSection>
             )}
           </div>
-          {page === undefined && items.length > 0 && (
+          {page === undefined && (
             <PanelFooter
               action={
-                <Button
-                  beforeIcon={<BroomIcon aria-hidden size={14} />}
-                  onClick={() => {
-                    onDismiss(items.map(({ id }) => id));
-                  }}
-                  rounded
-                  size="xs"
-                  variant="ghost"
-                >
-                  Clear all
-                </Button>
+                items.length > 0 && (
+                  <Button
+                    beforeIcon={<BroomIcon aria-hidden size={14} />}
+                    onClick={() => {
+                      onDismiss(items.map(({ id }) => id));
+                    }}
+                    rounded
+                    size="xs"
+                    variant="ghost"
+                  >
+                    Clear all
+                  </Button>
+                )
               }
             >
-              {items.length === 1
-                ? "1 notification"
-                : `${items.length.toString()} notifications`}
+              <Switch
+                checked={doNotDisturb}
+                label="Do not disturb"
+                onCheckedChange={onDoNotDisturb}
+              />
             </PanelFooter>
           )}
           {inboxes?.inboxes.map((inbox, index) =>
