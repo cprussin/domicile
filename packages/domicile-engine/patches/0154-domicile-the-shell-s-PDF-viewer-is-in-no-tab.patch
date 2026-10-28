@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 27 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell's PDF viewer is in no tab
+
+A PDF the shell shows in an <iframe>, as the launcher's preview does, needs
+a stream with no tab id. The viewer asks chrome.tabs for its stream's tab
+and zoom. On a desk only a <webview> is a tab, so for the shell's tab id the
+answer is an error, the viewer throws reading it, and it draws an empty gray
+pane.
+
+- A stream from a WebContents the desk does not count as a tab carries
+  TAB_ID_NONE, as a stream in a <webview> does upstream. The viewer then
+  asks chrome.tabs nothing.
+- A PDF in a browser window keeps its tab id: the window's guest is a desk
+  tab, and the desk answers its zoom.
+- Off a desk, every tab id is Chrome's.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ .../api/mime_handlers/dispatch_mime_handler_event.cc     | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/extensions/api/mime_handlers/dispatch_mime_handler_event.cc b/chrome/browser/extensions/api/mime_handlers/dispatch_mime_handler_event.cc
+index 95c5da1..84e49f6 100644
+--- a/chrome/browser/extensions/api/mime_handlers/dispatch_mime_handler_event.cc
++++ b/chrome/browser/extensions/api/mime_handlers/dispatch_mime_handler_event.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <utility>
+ 
++#include "chrome/browser/extensions/domicile_desk_hooks.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/preloading/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
+ #include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
+@@ -84,7 +85,13 @@ void SendExecuteMimeTypeHandlerEvent(
+ 
+   const bool is_generic_handler = !handler->IsPluginExtension();
+ 
+-  int tab_id = ExtensionTabUtil::GetTabId(web_contents);
++  // Domicile's engine fork: on a desk only a <webview> is a tab. The PDF
++  // viewer asks chrome.tabs about a stream's tab, and never starts when there
++  // is no such tab, as for a PDF the shell shows. With no tab it asks nothing,
++  // as in a <webview> upstream.
++  const int tab_id = domicile_desk::IsTab(*web_contents)
++                         ? ExtensionTabUtil::GetTabId(web_contents)
++                         : extension_misc::kUnknownTabId;
+   std::unique_ptr<StreamContainer> stream_container(
+       new StreamContainer(tab_id, embedded, handler_url, extension_id,
+                           std::move(transferrable_loader), original_url));
