@@ -1,4 +1,5 @@
 import type { Result } from "@cprussin/option-result";
+import { Panel } from "@domicile-desktop/component-library/Panel";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
@@ -96,7 +97,9 @@ export const Volume = ({
         {locked ? (
           <OutputLevel audio={audio} server={server} />
         ) : (
-          <Mixer audio={audio} server={server} />
+          <Panel title="Sound" width="standard">
+            <Mixer audio={audio} server={server} />
+          </Panel>
         )}
       </Popover>
     );

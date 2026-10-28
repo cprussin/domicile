@@ -130,6 +130,35 @@ describe(Popover, () => {
       expect(screen.getByText("Body")).toBeInTheDocument();
     });
 
+    it("takes focus itself when the pointer opens it, so no control shows a focus ring", async () => {
+      render(
+        <Popover trigger={<Button>Details</Button>}>
+          <button type="button">First</button>
+        </Popover>,
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "Details" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toHaveFocus();
+      });
+    });
+
+    it("focuses its first control when the keyboard opens it", async () => {
+      render(
+        <Popover trigger={<Button>Details</Button>}>
+          <button type="button">First</button>
+        </Popover>,
+      );
+
+      screen.getByRole("button", { name: "Details" }).focus();
+      await userEvent.keyboard("{Enter}");
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "First" })).toHaveFocus();
+      });
+    });
+
     describe("with a tooltip", () => {
       it("names its trigger while the pointer rests on it", async () => {
         render(

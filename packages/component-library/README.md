@@ -17,24 +17,32 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | Name | What it is |
 |---|---|
 | `app-host-frames` | `encodeFrame` and `frameDecoder`: the length-prefixed JSON an app module and `domicile-app-host` speak over stdio. |
-| `Accordion` | Stack of sections that open and close. |
+| `Accordion` | Stack of sections that open and close. `surface="filled"` draws each as a tile. |
 | `Autocomplete` | Text field with a suggestion list the caller supplies and ranks. |
 | `Avatar` | Avatar with an initials or gradient fallback. |
 | `Button` | Button or link, with variants and sizes. |
 | `Card` | Raised surface with optional title and footer. |
 | `ChoiceRow` | Rows of a pick list, with icon, name and detail, framed while picked: `RadioRow` in `ChoiceList` for one, `CheckboxRow` for several. Take the panel's white text in an `overPhoto` popover. |
 | `CountBadge` | Unread count in an accent pill, pinned to the corner of its positioned parent, or `inline` beside text. Shows "9+" past nine. |
-| `Drilldown` | View that slides a second panel in from the side, with a back button. |
+| `DetailList` | Terms and values in two columns, such as a connection's addresses. Long values wrap in their column. |
+| `Drilldown` | View that slides a second `Panel` in from the side, with a back button. |
 | `Field` | Label, control and validation message. |
 | `FilePicker` | Keyboard-first file picker over its positioned parent. |
+| `IconButton` | Round, quiet button that shows only an icon: a back arrow, a details arrow, a mute button. Drawn in `currentcolor`. |
 | `file-request` | `FileRequest` and `ChooserMode`: what `FilePicker` asks for and how it answers. |
 | `Input` | Text input with prefix icon, clear button and invalid state. |
 | `Kbd` | Keyboard key cap. |
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
+| `ListRow` | Row of a panel's `List`: icon, label over a detail, and something at the end. One button, or a `filled` tile holding its own buttons. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `Notice` | Pill that briefly shows a change, such as a zoom level or volume, with an optional level meter. Key it per change. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. Parts: `Item`, `CheckboxItem`, `RadioGroup` and `RadioItem`, `Submenu`, `Separator`. Items take an `icon` and a `mnemonic`, whose letter chooses them. |
 | `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. `omitScreenCasts` leaves screen casts out of its indicator. See [PORTALS.md](/docs/PORTALS.md). |
+| `Panel` | Titled panel: a `PanelHeader`, then its content a step apart. `PanelAction` puts the content's controls in the header. |
+| `PanelFooter` | A panel's last line under a rule: a summary and an action. |
+| `PanelHeader` | A panel's title, with a back button when one level in and controls at the end. |
+| `PanelNote` | One line on how a panel stands; `warning` says a refusal plainly, with the service's words in its tooltip. |
+| `PanelSection` | A group in a panel under a small label, such as Inboxes or Paired. |
 | `source-name` | `sourceName`: how a screen cast's source is named. |
 | `Popover` | Non-modal panel anchored to the control that opened it. `tone="overPhoto"` is a see-through panel for the bar, dark in either theme. |
 | `PopupBoundary` | Keeps every popup inside it (tooltips, popovers, menus, lists) within a box, such as a window's frame. Outside one, popups stay on their `Screen`. `Popover` and `Tooltip` take `spansWindows` to leave it. |
@@ -45,8 +53,9 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `display-source` | `Display` and `DisplaySource` types for `DisplayProvider`. |
 | `Select` | Select / listbox. |
 | `SlideOver` | Drawer anchored to a screen edge. |
+| `SliderRow` | A slider with what it sets, its value and an optional button, lined up with the rows around it. |
 | `Slider` | Single-value range slider drawn in `currentcolor`. |
-| `Switch` | On/off switch with its label. |
+| `Switch` | On/off switch with its label, which `hideLabel` keeps unseen beside a title that says it. |
 | `Tabs` | Tab set built from a `tabs` array, with sizes. |
 | `TabRail` | Vertical tab rail with brand slot, footer and collapse. |
 | `Textarea` | Auto-sizing textarea with a resize handle. |

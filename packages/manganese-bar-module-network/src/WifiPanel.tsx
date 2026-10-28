@@ -1,6 +1,13 @@
 import type { Option, Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
+import type { Detail } from "@domicile-desktop/component-library/DetailList";
+import { DetailList } from "@domicile-desktop/component-library/DetailList";
+import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
+import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
+import { PanelAction } from "@domicile-desktop/component-library/Panel";
+import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
+import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
@@ -14,13 +21,11 @@ import type {
 } from "@domicile-desktop/system-network/wifi";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { css } from "../styled-system/css";
-import { flex, hstack } from "../styled-system/patterns";
+import { hstack } from "../styled-system/patterns";
 import type { Addresses } from "./addressing";
 import { addressRowsOf } from "./addressing";
-import type { Value } from "./Details";
-import { Details } from "./Details";
 import { signalOf } from "./signal";
 import { WifiSignalIcon } from "./WifiSignalIcon";
 import type { WifiActions } from "./wifi-actions";
@@ -36,21 +41,25 @@ type Props = {
 };
 
 /**
- * The Wi-Fi panel: a switch for the radio, the connection and its details,
- * and the networks in range, each joined with a click.
+ * The Wi-Fi panel: a switch for the radio in the header, the connection and
+ * its details, and the other networks in range, each joined with a click.
  *
- * Scans when shown. A refusal shows where it was asked; the service's state
- * shows the rest.
+ * Scans when shown. A refusal shows plainly where it was asked, with the
+ * service's words in its tooltip; the service's state shows the rest.
  */
 export const WifiPanel = ({ actions, addresses, host, wifi }: Props) => {
   if (wifi === undefined) {
-    return <span className={noteStyles}>Reading Wi-Fi…</span>;
+    return <PanelNote>Reading Wi-Fi…</PanelNote>;
   } else {
     return wifi.match({
-      Err: (error) => <span className={noteStyles}>{error.message}</span>,
+      Err: (error) => (
+        <PanelNote detail={error.message} tone="warning">
+          Couldn't read Wi-Fi
+        </PanelNote>
+      ),
       Ok: (found) =>
         found.match({
-          None: () => <span className={noteStyles}>No Wi-Fi device</span>,
+          None: () => <PanelNote>No Wi-Fi device</PanelNote>,
           Some: (device) => (
             <Controls
               actions={actions}
@@ -82,49 +91,49 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
       actions.connectWifi(host, wifi, network, passphrase),
     );
   };
+  const others = wifi.networks.filter((network) => !network.connected);
   return (
-    <div className={panelStyles}>
-      <div className={headStyles}>
-        <Switch
-          checked={wifi.enabled}
-          label="Wi-Fi"
-          onCheckedChange={(checked) => {
-            requests.run("power", () =>
-              actions.setWifiEnabled(host, wifi, checked),
-            );
-          }}
-        />
-        {wifi.enabled && (
-          <Tooltip
-            content="Scan"
-            tone="overPhoto"
-            trigger={
-              <button
-                aria-label="Scan"
-                className={iconButtonStyles}
-                disabled={scanning}
-                onClick={() => {
-                  requests.run("scan", () => actions.scanWifi(host, wifi));
-                }}
-                type="button"
-              >
-                <ArrowClockwiseIcon size={14} />
-              </button>
-            }
+    <>
+      <PanelAction>
+        <span className={headStyles}>
+          {wifi.enabled && (
+            <Tooltip
+              content="Scan"
+              tone="overPhoto"
+              trigger={
+                <IconButton
+                  disabled={scanning}
+                  label="Scan"
+                  onClick={() => {
+                    requests.run("scan", () => actions.scanWifi(host, wifi));
+                  }}
+                >
+                  <ArrowClockwiseIcon aria-hidden size={14} weight="bold" />
+                </IconButton>
+              }
+            />
+          )}
+          <Switch
+            checked={wifi.enabled}
+            label="Wi-Fi"
+            onCheckedChange={(checked) => {
+              requests.run("power", () =>
+                actions.setWifiEnabled(host, wifi, checked),
+              );
+            }}
           />
-        )}
-      </div>
-      <Failure error={requests.failed("power")} />
+        </span>
+      </PanelAction>
+      <Failure error={requests.failed("power")}>
+        {wifi.enabled ? "Couldn't turn Wi-Fi off" : "Couldn't turn Wi-Fi on"}
+      </Failure>
       {wifi.enabled ? (
         <>
           <ScanOnShow
             actions={actions}
             host={host}
-            run={requests.run}
             wifi={{ backend, device, interface: name }}
           />
-          {scanning && <span className={noteStyles}>Scanning…</span>}
-          <Failure error={requests.failed("scan")} />
           {wifi.connection !== undefined && (
             <Connection
               addresses={addresses}
@@ -139,10 +148,13 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
               wifi={wifi}
             />
           )}
-          <ul aria-label="Networks" className={listStyles}>
-            {wifi.networks
-              .filter((network) => !network.connected)
-              .map((network) => (
+          <PanelSection
+            label={
+              wifi.connection === undefined ? "Networks" : "Other networks"
+            }
+          >
+            <List label="Networks">
+              {others.map((network) => (
                 <NetworkRow
                   asking={asking === network.path}
                   failed={requests.failed(network.path)}
@@ -161,32 +173,53 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
                   pending={requests.pending(network.path)}
                 />
               ))}
-          </ul>
+            </List>
+            {scanning && <PanelNote>Scanning…</PanelNote>}
+            {!scanning && others.length === 0 && (
+              <PanelNote>No other networks in range</PanelNote>
+            )}
+            <Failure error={requests.failed("scan")}>
+              Couldn't look for networks
+            </Failure>
+          </PanelSection>
         </>
       ) : (
-        <span className={noteStyles}>Wi-Fi is off</span>
+        <PanelNote>Wi-Fi is off</PanelNote>
       )}
-    </div>
+    </>
   );
 };
 
-/** Scans once, when shown with the radio on. */
+/**
+ * Scans once, when shown with the radio on. Nobody asked for it, so a
+ * refusal is logged rather than shown; the Scan button shows its own.
+ */
 const ScanOnShow = ({
   actions,
   host,
-  run,
   wifi: { backend, device, interface: name },
 }: {
   actions: WifiActions;
   host: Domicile;
-  run: ReturnType<typeof useRequests>["run"];
   wifi: WifiDevice;
 }) => {
   useEffect(() => {
-    run("scan", () =>
-      actions.scanWifi(host, { backend, device, interface: name }),
+    actions.scanWifi(host, { backend, device, interface: name }).then(
+      (result) => {
+        result.match({
+          Err: (error) => {
+            // biome-ignore lint/suspicious/noConsole: nothing in the panel shows it
+            console.error("The Wi-Fi service refused to scan", error);
+          },
+          Ok: () => undefined,
+        });
+      },
+      (error: unknown) => {
+        // biome-ignore lint/suspicious/noConsole: surfacing a background failure
+        console.error("Failed to scan for Wi-Fi networks", error);
+      },
     );
-  }, [actions, backend, device, host, name, run]);
+  }, [actions, backend, device, host, name]);
   return undefined;
 };
 
@@ -207,22 +240,24 @@ const Connection = ({
   pending,
   wifi,
 }: ConnectionProps) => (
-  <section
-    aria-label={`Connected to ${connection.ssid}`}
-    className={connectionStyles}
-  >
-    <div className={headStyles}>
-      <span className={ssidStyles}>
-        <WifiSignalIcon strength={connection.strength} />
-        <span className={nameStyles}>{connection.ssid}</span>
-      </span>
-      <Button loading={pending} onClick={onDisconnect} size="xs">
-        Disconnect
-      </Button>
-    </div>
-    <Failure error={failed} />
-    <Details rows={detailsOf(wifi, connection, addresses)} />
-  </section>
+  <PanelSection label="Connected">
+    <List>
+      <ListRow
+        detail={summaryOf(connection)}
+        end={
+          <Button loading={pending} onClick={onDisconnect} size="xs">
+            Disconnect
+          </Button>
+        }
+        icon={<WifiSignalIcon strength={connection.strength} />}
+        label={connection.ssid}
+        surface="filled"
+      >
+        <Failure error={failed}>Couldn't disconnect</Failure>
+        <DetailList rows={detailsOf(wifi, connection, addresses)} />
+      </ListRow>
+    </List>
+  </PanelSection>
 );
 
 type NetworkRowProps = {
@@ -243,26 +278,38 @@ const NetworkRow = ({
   onPick,
   pending,
 }: NetworkRowProps) => (
-  <li className={rowStyles}>
-    <button
-      aria-busy={pending}
-      aria-label={labelOf(network)}
-      className={networkStyles}
-      onClick={onPick}
-      type="button"
-    >
-      <WifiSignalIcon strength={network.strength} />
-      <span className={nameStyles}>{network.ssid}</span>
-      {network.profile !== undefined && (
-        <span className={noteStyles}>Saved</span>
-      )}
-      {pending && <span className={noteStyles}>Connecting…</span>}
-      {network.secured && <LockSimpleIcon aria-hidden size={12} />}
-    </button>
-    {asking && <Passphrase onJoin={onJoin} ssid={network.ssid} />}
-    <Failure error={failed} />
-  </li>
+  <ListRow
+    busy={pending}
+    detail={noteOf(network, pending)}
+    end={
+      network.secured ? (
+        <LockSimpleIcon aria-hidden size={12} weight="bold" />
+      ) : undefined
+    }
+    icon={<WifiSignalIcon strength={network.strength} />}
+    label={network.ssid}
+    name={labelOf(network)}
+    onPress={onPick}
+  >
+    {(asking || failed !== undefined) && (
+      <>
+        {asking && <Passphrase onJoin={onJoin} ssid={network.ssid} />}
+        <Failure error={failed}>Couldn't connect to {network.ssid}</Failure>
+      </>
+    )}
+  </ListRow>
 );
+
+/** What a network's row says under its name, if anything. */
+const noteOf = (network: WifiNetwork, pending: boolean): string | undefined => {
+  if (pending) {
+    return "Connecting…";
+  } else if (network.profile === undefined) {
+    return undefined;
+  } else {
+    return "Saved";
+  }
+};
 
 /** The field for a new secured network's passphrase. */
 const Passphrase = ({
@@ -289,15 +336,26 @@ const Passphrase = ({
         type="password"
         value={passphrase}
       />
-      <Button size="xs" type="submit">
+      <Button size="xs" type="submit" variant="accent">
         Join
       </Button>
     </form>
   );
 };
 
-const Failure = ({ error }: { error: SystemError | undefined }) =>
-  error !== undefined && <span className={errorStyles}>{error.message}</span>;
+/** What failed, in plain words, with the service's in its tooltip. */
+const Failure = ({
+  children,
+  error,
+}: {
+  children: ReactNode;
+  error: SystemError | undefined;
+}) =>
+  error !== undefined && (
+    <PanelNote detail={error.message} tone="warning">
+      {children}
+    </PanelNote>
+  );
 
 /** A new secured network, whose passphrase the service does not know. */
 const needsPassphrase = (network: WifiNetwork): boolean =>
@@ -312,6 +370,21 @@ const labelOf = (network: WifiNetwork): string =>
     `${signalOf(network.strength)} signal`,
   ].join(", ");
 
+/** The connection at a glance: its signal, band and speed, as known. */
+const summaryOf = (connection: WifiConnection): string =>
+  [
+    `${capitalized(signalOf(connection.strength))} signal`,
+    ...(connection.frequency === undefined
+      ? []
+      : [bandOf(connection.frequency)]),
+    ...(connection.bitrate === undefined
+      ? []
+      : [`${Math.round(connection.bitrate).toString()} Mb/s`]),
+  ].join(" · ");
+
+const capitalized = (word: string): string =>
+  `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+
 /**
  * The connection's details, leaving out what is unknown. The addresses come
  * from `ip`, since iwd reports none and NetworkManager only IPv4's here.
@@ -320,14 +393,7 @@ const detailsOf = (
   wifi: Wifi,
   connection: WifiConnection,
   addresses: Addresses,
-): (readonly [string, Value])[] => [
-  ["Signal", `${Math.round(connection.strength * 100)}%`],
-  ...(connection.frequency === undefined
-    ? []
-    : [["Frequency", frequencyOf(connection.frequency)] as const]),
-  ...(connection.bitrate === undefined
-    ? []
-    : [["Speed", `${Math.round(connection.bitrate)} Mbit/s`] as const]),
+): Detail[] => [
   ...addressRowsOf(addresses, wifi.interface),
   ...(connection.ip === undefined
     ? []
@@ -335,9 +401,6 @@ const detailsOf = (
   ["Interface", wifi.interface],
   ["Hardware address", wifi.hardwareAddress],
 ];
-
-/** A frequency in MHz, with its band. */
-const frequencyOf = (mhz: number): string => `${mhz} MHz (${bandOf(mhz)})`;
 
 const bandOf = (mhz: number): string => {
   if (mhz < 3000) {
@@ -349,82 +412,6 @@ const bandOf = (mhz: number): string => {
   }
 };
 
-const panelStyles = flex({ direction: "column", gap: 2 });
+const headStyles = hstack({ gap: 2 });
 
-const headStyles = hstack({
-  gap: 2,
-  justify: "space-between",
-});
-
-const ssidStyles = hstack({ gap: 1.5 });
-
-const connectionStyles = flex({
-  borderBlock: "1px solid color-mix(in oklab, currentcolor 15%, transparent)",
-  direction: "column",
-  gap: 1,
-  paddingBlock: 2,
-});
-
-const listStyles = flex({
-  direction: "column",
-  gap: 0.5,
-  listStyle: "none",
-  margin: 0,
-  maxBlockSize: "50vh",
-  overflowY: "auto",
-  padding: 0,
-});
-
-const rowStyles = flex({
-  direction: "column",
-  gap: 1,
-});
-
-// A row of the list, not a control: no frame until hovered.
-const networkStyles = hstack({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-  },
-  backgroundColor: "transparent",
-  borderRadius: "md",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  font: "inherit",
-  gap: 1.5,
-  paddingBlock: 1,
-  paddingInline: 1.5,
-  textAlign: "start",
-});
-
-const nameStyles = css({
-  flex: "1 1 auto",
-  minInlineSize: 0,
-  overflowWrap: "anywhere",
-});
-
-const formStyles = hstack({ gap: 1.5, paddingInlineStart: 6 });
-
-const noteStyles = css({ opacity: 0.75 });
-
-const errorStyles = css({ color: "warning" });
-
-// Matches the mixer's icon buttons.
-const iconButtonStyles = css({
-  _disabled: { cursor: "wait", opacity: "disabled" },
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 6,
-  justifyContent: "center",
-  padding: 0,
-});
+const formStyles = hstack({ gap: 1.5 });

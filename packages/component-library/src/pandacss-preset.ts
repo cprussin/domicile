@@ -391,6 +391,20 @@ export const domicilePreset = definePreset({
             value:
               "color-mix(in oklab, {colors.danger} 70%, {colors.background})",
           },
+          // `divider`, `fill`, `fillHover`, `textFaint` and `textSoft` are
+          // drawn from `currentcolor`, so they read on any surface: a card,
+          // a panel over the wallpaper, an accent tile. See "Panels" in
+          // docs/guidelines/STYLING.md.
+          divider: {
+            value: "color-mix(in oklab, currentcolor 12%, transparent)",
+          },
+          // A tile, row or card resting on a panel.
+          fill: {
+            value: "color-mix(in oklab, currentcolor 8%, transparent)",
+          },
+          fillHover: {
+            value: "color-mix(in oklab, currentcolor 14%, transparent)",
+          },
           foreground: {
             value: {
               _contrastHigh: "{colors.neutral.50}",
@@ -433,6 +447,14 @@ export const domicilePreset = definePreset({
           success: {
             value: { _light: "{colors.green.700}", base: "{colors.green.500}" },
           },
+          // Section labels, quieter than `textSoft`.
+          textFaint: {
+            value: "color-mix(in oklab, currentcolor 65%, transparent)",
+          },
+          // A row's or tile's second line, and figures beside a control.
+          textSoft: {
+            value: "color-mix(in oklab, currentcolor 75%, transparent)",
+          },
           warning: {
             value: { _light: "{colors.amber.700}", base: "{colors.amber.500}" },
           },
@@ -454,6 +476,33 @@ export const domicilePreset = definePreset({
           // Theme-independent, like `onPhoto`.
           textOverPhoto: {
             value: "0 1px 2px rgb(from black r g b / 80%)",
+          },
+        },
+      },
+      // The type of panels: a popover's or a drawer's controls and lists. A
+      // label and its detail differ in size and color, not weight, so they
+      // keep their look on a font with no semibold face.
+      textStyles: {
+        panelDetail: {
+          value: { fontSize: "xs", fontWeight: "normal", lineHeight: "tight" },
+        },
+        panelLabel: {
+          value: { fontSize: "sm", fontWeight: "medium", lineHeight: "tight" },
+        },
+        panelOverline: {
+          value: {
+            fontSize: "0.6875rem",
+            fontWeight: "semibold",
+            letterSpacing: "wide",
+            lineHeight: "tight",
+            textTransform: "uppercase",
+          },
+        },
+        panelTitle: {
+          value: {
+            fontSize: "sm",
+            fontWeight: "semibold",
+            lineHeight: "tight",
           },
         },
       },

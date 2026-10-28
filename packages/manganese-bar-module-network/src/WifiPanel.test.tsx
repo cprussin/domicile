@@ -132,37 +132,75 @@ const row = (ssid: string) => {
   }
 };
 
+/** The warning that says `text`, keeping the service's words for its tooltip. */
+const expectWarning = (
+  text: string,
+  scope: Pick<typeof screen, "getByText"> = screen,
+) => {
+  const note = scope.getByText(text).closest("[role=status]");
+  expect(note).toHaveAttribute("data-tone", "warning");
+  expect(note).toHaveAttribute("title", REFUSED.message);
+};
+
 describe("WifiPanel", () => {
   it.each([
     [
       "the switch",
       "setEnabled",
       () => screen.getByRole("switch", { name: "Wi-Fi" }),
+      "Couldn't turn Wi-Fi off",
     ],
-    ["a scan", "scan", () => screen.getByRole("button", { name: "Scan" })],
+    [
+      "a scan",
+      "scan",
+      () => screen.getByRole("button", { name: "Scan" }),
+      "Couldn't look for networks",
+    ],
     [
       "disconnecting",
       "disconnect",
       () => screen.getByRole("button", { name: "Disconnect" }),
+      "Couldn't disconnect",
     ],
-  ])("shows the service's refusal of %s", async (_name, refused, control) => {
+  ])(
+    "says plainly that the service refused %s",
+    async (_name, refused, control, text) => {
+      // The scan on showing goes through, so only the one asked for fails.
+      const scans: string[] = [];
+      await shown(
+        Ok(Some(WIFI)),
+        heldWifiActions(([name]) => {
+          if (name === "scan") {
+            scans.push(name);
+          }
+          return name === refused && (name !== "scan" || scans.length > 1)
+            ? Err(REFUSED)
+            : Ok("done");
+        }),
+      );
+
+      await userEvent.click(control());
+
+      expectWarning(text);
+    },
+  );
+
+  it("keeps a failed scan on showing to itself, since nobody asked for it", async () => {
     await shown(
       Ok(Some(WIFI)),
       heldWifiActions(([name]) =>
-        name === refused ? Err(REFUSED) : Ok("done"),
+        name === "scan" ? Err(REFUSED) : Ok("done"),
       ),
     );
 
-    await userEvent.click(control());
-
-    expect(screen.getByText(REFUSED.message)).toBeVisible();
+    expect(screen.queryByText("Couldn't look for networks")).toBeNull();
   });
 
   describe("before Wi-Fi is read", () => {
     it.each<[string, Result<Option<Wifi>, SystemError> | undefined, string]>([
       ["while it reads", undefined, "Reading Wi-Fi…"],
       ["without a device", Ok(None()), "No Wi-Fi device"],
-      ["on a failure", Err(REFUSED), REFUSED.message],
+      ["on a failure", Err(REFUSED), "Couldn't read Wi-Fi"],
     ])("says so %s", async (_when, wifi, text) => {
       await shown(wifi);
 
@@ -225,12 +263,11 @@ describe("WifiPanel", () => {
     it("shows its details, with its addresses from ip, one a line", async () => {
       await shown(Ok(Some(WIFI)));
 
-      expect(
-        detailsIn(screen.getByRole("region", { name: "Connected to Home" })),
-      ).toStrictEqual([
-        ["Signal", ["72%"]],
-        ["Frequency", ["5180 MHz (5 GHz)"]],
-        ["Speed", ["867 Mbit/s"]],
+      const connected = screen.getByRole("region", { name: "Connected" });
+      expect(connected).toHaveTextContent(
+        "HomeStrong signal · 5 GHz · 867 Mb/s",
+      );
+      expect(detailsIn(connected)).toStrictEqual([
         [
           "Address",
           ["192.168.1.23/24", "2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64"],
@@ -247,20 +284,12 @@ describe("WifiPanel", () => {
 
       expect(
         screen.getAllByRole("term").map((term) => term.textContent),
-      ).toStrictEqual([
-        "Signal",
-        "Frequency",
-        "Speed",
-        "Address",
-        "Gateway",
-        "Interface",
-        "Hardware address",
-      ]);
+      ).toStrictEqual(["Address", "Gateway", "Interface", "Hardware address"]);
     });
 
     it.each([
-      [2412, "2412 MHz (2.4 GHz)"],
-      [5955, "5955 MHz (6 GHz)"],
+      [2412, "Strong signal · 2.4 GHz · 867 Mb/s"],
+      [5955, "Strong signal · 6 GHz · 867 Mb/s"],
     ])("names %d MHz's band", async (frequency, shown) => {
       await shownWith({ frequency });
 
@@ -285,9 +314,10 @@ describe("WifiPanel", () => {
         Ok(new Map()),
       );
 
+      expect(screen.getByText("Strong signal")).toBeVisible();
       expect(
         screen.getAllByRole("term").map((term) => term.textContent),
-      ).toStrictEqual(["Signal", "Interface", "Hardware address"]);
+      ).toStrictEqual(["Interface", "Hardware address"]);
     });
 
     it("disconnects", async () => {
@@ -364,7 +394,7 @@ describe("WifiPanel", () => {
 
       await userEvent.click(row("Office").getByRole("button"));
 
-      expect(row("Office").getByText(REFUSED.message)).toBeVisible();
+      expectWarning("Couldn't connect to Office", row("Office"));
     });
   });
 });

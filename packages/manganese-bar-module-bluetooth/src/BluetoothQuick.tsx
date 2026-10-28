@@ -90,12 +90,11 @@ export const BluetoothTile = ({
     const connected = usable.devices.filter((device) => device.connected);
     return (
       <QuickTile
-        detail={
-          requests.failed("power")?.message ??
-          (connected.length > 0
-            ? connected.map(({ name }) => name).join(", ")
-            : onOff(on))
-        }
+        detail={detailOf(
+          requests.failed("power") !== undefined,
+          connected.map(({ name }) => name),
+          on,
+        )}
         disabled={locked}
         icon={<BluetoothIcon size={15} weight="bold" />}
         label="Bluetooth"
@@ -120,7 +119,7 @@ export const BluetoothTile = ({
     return (
       <QuickTile
         detail={reading.match({
-          Err: (error) => `Unavailable: ${error.message}`,
+          Err: () => "Unavailable",
           Ok: () => "Off",
         })}
         disabled
@@ -133,7 +132,20 @@ export const BluetoothTile = ({
   }
 };
 
-const onOff = (on: boolean) => (on ? "On" : "Off");
+/** The tile's second line: a refusal, the connected devices, or on or off. */
+const detailOf = (
+  refused: boolean,
+  connected: readonly string[],
+  on: boolean,
+): string => {
+  if (refused) {
+    return "Couldn't switch";
+  } else if (connected.length > 0) {
+    return connected.join(", ");
+  } else {
+    return on ? "On" : "Off";
+  }
+};
 
 const glyphStyles = cva({
   base: { display: "inline-flex", flexShrink: 0 },

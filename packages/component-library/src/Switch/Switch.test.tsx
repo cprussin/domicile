@@ -13,6 +13,14 @@ describe(Switch, () => {
     });
   });
 
+  describe("with its label hidden", () => {
+    it("is still named by it, beside a title that says the same", () => {
+      render(<Switch checked hideLabel label="Bluetooth" />);
+      expect(screen.getByRole("switch", { name: "Bluetooth" })).toBeChecked();
+      expect(screen.queryByText("Bluetooth")).not.toBeInTheDocument();
+    });
+  });
+
   describe("interactions", () => {
     it("flips when its label is clicked", async () => {
       const checked = new Promise((resolve) => {

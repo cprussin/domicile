@@ -63,12 +63,14 @@ describe("Mixer", () => {
         screen.getByRole("meter", { name: "Microphone level" }),
       ).toHaveAttribute("data-muted");
       expect(
-        screen.getByRole("button", { name: "Mute Volume" }).parentElement
-          ?.className,
-      ).not.toContain(css({ color: "muted" }));
+        screen
+          .getByRole("button", { name: "Mute Volume" })
+          .closest("[data-muted]"),
+      ).toBeNull();
       expect(
-        screen.getByRole("button", { name: "Unmute Microphone" }).parentElement
-          ?.className,
+        screen
+          .getByRole("button", { name: "Unmute Microphone" })
+          .closest("[data-muted]")?.className,
       ).toContain(css({ color: "muted" }));
     });
 

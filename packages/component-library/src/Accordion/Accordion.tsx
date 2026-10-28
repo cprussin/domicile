@@ -20,11 +20,19 @@ type Props = ExtendProps<
     items: readonly AccordionItem[];
     /** `sm` gives a smaller, dimmer label, for nested or secondary sections. */
     size?: Size | undefined;
+    /**
+     * `filled` draws each section as a tile, a step apart, as a panel's
+     * rows; `plain` rules them apart.
+     */
+    surface?: Surface | undefined;
   }
 >;
 
 export const SIZES = ["md", "sm"] as const;
 export type Size = (typeof SIZES)[number];
+
+export const SURFACES = ["plain", "filled"] as const;
+export type Surface = (typeof SURFACES)[number];
 
 /**
  * Collapsible sections, styled over the @base-ui/react Accordion.
@@ -33,8 +41,17 @@ export type Size = (typeof SIZES)[number];
  * their content loses state. Drawn in `currentcolor` so it fits any
  * background.
  */
-export const Accordion = ({ items, size = "md", ...rootProps }: Props) => (
-  <BaseAccordion.Root className={rootStyles} {...rootProps}>
+export const Accordion = ({
+  items,
+  size = "md",
+  surface = "plain",
+  ...rootProps
+}: Props) => (
+  <BaseAccordion.Root
+    className={rootStyles}
+    data-surface={surface}
+    {...rootProps}
+  >
     {items.map((item) => (
       <BaseAccordion.Item
         className={itemStyles}
@@ -43,7 +60,7 @@ export const Accordion = ({ items, size = "md", ...rootProps }: Props) => (
         value={item.value}
       >
         <BaseAccordion.Header className={headerStyles}>
-          <BaseAccordion.Trigger className={triggerStyles({ size })}>
+          <BaseAccordion.Trigger className={triggerStyles({ size, surface })}>
             <span className={labelStyles({ size })}>{item.label}</span>
             <CaretDownIcon
               className={caretStyles}
@@ -52,7 +69,7 @@ export const Accordion = ({ items, size = "md", ...rootProps }: Props) => (
           </BaseAccordion.Trigger>
         </BaseAccordion.Header>
         <BaseAccordion.Panel className={panelStyles}>
-          <div className={contentStyles}>{item.content}</div>
+          <div className={contentStyles({ surface })}>{item.content}</div>
         </BaseAccordion.Panel>
       </BaseAccordion.Item>
     ))}
@@ -60,15 +77,20 @@ export const Accordion = ({ items, size = "md", ...rootProps }: Props) => (
 );
 
 const rootStyles = flex({
+  "&[data-surface=filled]": { gap: 1 },
   direction: "column",
   inlineSize: "100%",
 });
 
-// Divider between sections, tinted from `currentcolor`.
+// Divider between sections, tinted from `currentcolor`; or each a tile,
+// lit under the pointer, padded as a `ListRow`.
 const itemStyles = css({
-  "& + &": {
-    borderBlockStart:
-      "1px solid color-mix(in oklab, currentcolor 15%, transparent)",
+  "[data-surface=filled] > &": {
+    backgroundColor: "fill",
+    borderRadius: "lg",
+  },
+  "[data-surface=plain] > & + &": {
+    borderBlockStart: "1px solid {colors.divider}",
   },
 });
 
@@ -107,6 +129,16 @@ const triggerStyles = cva({
       md: { paddingBlock: 1.5 },
       sm: { fontSize: "xs", opacity: 0.75, paddingBlock: 1 },
     },
+    surface: {
+      filled: {
+        _hoverEnabled: { backgroundColor: "fillHover" },
+        borderRadius: "lg",
+        minBlockSize: 8,
+        paddingInline: 2,
+        textStyle: "panelLabel",
+      },
+      plain: {},
+    },
   },
 });
 
@@ -142,7 +174,12 @@ const panelStyles = css({
   transition: "block-size {durations.normal} {easings.out}",
 });
 
-const contentStyles = css({
-  paddingBlock: 2,
-  paddingInline: 1,
+const contentStyles = cva({
+  base: { paddingBlock: 2 },
+  variants: {
+    surface: {
+      filled: { paddingBlockStart: 1, paddingInline: 2 },
+      plain: { paddingInline: 1 },
+    },
+  },
 });

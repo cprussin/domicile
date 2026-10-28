@@ -1,4 +1,7 @@
+import type { AccordionItem } from "@domicile-desktop/component-library/Accordion";
 import { Accordion } from "@domicile-desktop/component-library/Accordion";
+import { IconButton } from "@domicile-desktop/component-library/IconButton";
+import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import type { SelectOption } from "@domicile-desktop/component-library/Select";
 import { Select } from "@domicile-desktop/component-library/Select";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
@@ -11,7 +14,6 @@ import type {
 } from "@domicile-desktop/system-audio/audio";
 import type { SoundControls } from "@domicile-desktop/system-audio/react";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
-import type { ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
@@ -33,11 +35,11 @@ type Drawer = "outputs" | "inputs" | "apps" | "cards";
 /**
  * The full sound mixer, in the bar's panel; a replacement for pavucontrol.
  *
- * Two sliders, for the default output and input, each with meter and port.
- * Under each, a drawer of the other devices.
+ * Two sections, Output and Input, each with the default device's slider,
+ * meter and port.
  *
- * Below that, a drawer of apps that are playing or recording, with their
- * streams, and a last drawer of card profiles.
+ * Below them, drawers: the other outputs and inputs, the apps that are
+ * playing or recording with their streams, and the card profiles.
  *
  * Every choice is a `Select`. Its list renders outside the panel, and the
  * `Popover` still treats it as part of the panel.
@@ -70,29 +72,71 @@ export const Mixer = ({ audio, server }: Props) => {
     ],
     audio.meters,
   );
-  const drawer = (
-    value: Drawer,
-    label: string,
-    content: ReactNode,
-    size: "md" | "sm" = "md",
-  ) => (
-    <Accordion
-      items={[{ content, label, value }]}
-      onValueChange={(shown) => {
-        setOpen((was) => [
-          ...was.filter((other) => other !== value),
-          ...(shown.includes(value) ? [value] : []),
-        ]);
-      }}
-      size={size}
-      value={open.includes(value) ? [value] : []}
-    />
-  );
+  const drawers: AccordionItem[] = [
+    ...(outputs.length > 0
+      ? [
+          {
+            content: (
+              <Devices
+                devices={outputs}
+                direction="output"
+                levels={levels}
+                server={server}
+              />
+            ),
+            label: "More outputs",
+            value: "outputs",
+          },
+        ]
+      : []),
+    ...(inputs.length > 0
+      ? [
+          {
+            content: (
+              <Devices
+                devices={inputs}
+                direction="input"
+                levels={levels}
+                server={server}
+              />
+            ),
+            label: "More inputs",
+            value: "inputs",
+          },
+        ]
+      : []),
+    ...(apps.length > 0
+      ? [
+          {
+            content: (
+              <Apps
+                apps={apps}
+                inputs={audio.inputs}
+                levels={levels}
+                outputs={audio.outputs}
+                server={server}
+              />
+            ),
+            label: "Apps",
+            value: "apps",
+          },
+        ]
+      : []),
+    ...(audio.cards.length > 0
+      ? [
+          {
+            content: <Cards cards={audio.cards} server={server} />,
+            label: "Cards",
+            value: "cards",
+          },
+        ]
+      : []),
+  ];
   return (
     <Panel.Provider value={panel}>
       <div className={mainStyles} ref={setPanel}>
         {output !== undefined && (
-          <section aria-label="Outputs" className={groupStyles}>
+          <PanelSection label="Output">
             <Default
               device={output}
               direction="output"
@@ -100,25 +144,10 @@ export const Mixer = ({ audio, server }: Props) => {
               meter={levels.get(output.id)}
               server={server}
             />
-            {outputs.length > 0 && (
-              <div className={nestedStyles}>
-                {drawer(
-                  "outputs",
-                  "More outputs",
-                  <Devices
-                    devices={outputs}
-                    direction="output"
-                    levels={levels}
-                    server={server}
-                  />,
-                  "sm",
-                )}
-              </div>
-            )}
-          </section>
+          </PanelSection>
         )}
         {input !== undefined && (
-          <section aria-label="Inputs" className={groupStyles}>
+          <PanelSection label="Input">
             <Default
               device={input}
               direction="input"
@@ -126,51 +155,28 @@ export const Mixer = ({ audio, server }: Props) => {
               meter={levels.get(input.id)}
               server={server}
             />
-            {inputs.length > 0 && (
-              <div className={nestedStyles}>
-                {drawer(
-                  "inputs",
-                  "More inputs",
-                  <Devices
-                    devices={inputs}
-                    direction="input"
-                    levels={levels}
-                    server={server}
-                  />,
-                  "sm",
-                )}
-              </div>
-            )}
-          </section>
+          </PanelSection>
         )}
-        {apps.length > 0 && (
-          <div className={groupStyles}>
-            {drawer(
-              "apps",
-              "Apps",
-              <Apps
-                apps={apps}
-                inputs={audio.inputs}
-                levels={levels}
-                outputs={audio.outputs}
-                server={server}
-              />,
-            )}
-          </div>
-        )}
-        {audio.cards.length > 0 && (
-          <div className={groupStyles}>
-            {drawer(
-              "cards",
-              "Cards",
-              <Cards cards={audio.cards} server={server} />,
-            )}
-          </div>
+        {drawers.length > 0 && (
+          <Accordion
+            items={drawers}
+            multiple
+            onValueChange={(shown) => {
+              setOpen(shown.filter(isDrawer));
+            }}
+            surface="filled"
+            value={[...open]}
+          />
         )}
       </div>
     </Panel.Provider>
   );
 };
+
+const DRAWERS: readonly Drawer[] = ["outputs", "inputs", "apps", "cards"];
+
+const isDrawer = (value: string): value is Drawer =>
+  DRAWERS.some((drawer) => drawer === value);
 
 /**
  * The mixer's panel. Choice lists stay within its width, so none spills onto
@@ -252,16 +258,15 @@ const Devices = ({ devices, direction, levels, server }: DevicesProps) =>
               content="Make it the default"
               tone="overPhoto"
               trigger={
-                <button
-                  aria-label={`Make ${device.description} the default`}
-                  className={iconButtonStyles}
+                <IconButton
+                  label={`Make ${device.description} the default`}
                   onClick={() => {
                     ask(server.setDefault(device.id));
                   }}
-                  type="button"
+                  size="sm"
                 >
-                  <CheckCircleIcon size={14} />
-                </button>
+                  <CheckCircleIcon aria-hidden size={14} />
+                </IconButton>
               }
             />
             <span className={nameStyles}>{device.description}</span>
@@ -448,28 +453,11 @@ const option = (
   value: choice.name,
 });
 
-// Wide enough for a device's name and its port to usually share a line.
+// The defaults' sections, then the drawers, a step apart.
 const mainStyles = flex({
   direction: "column",
-  inlineSize: 96,
-});
-
-// A divider between sections, so "More outputs" reads as part of the outputs.
-const groupStyles = flex({
-  _first: { paddingBlockStart: 0 },
-  _last: { paddingBlockEnd: 0 },
-  "& + &": {
-    borderBlockStart:
-      "1px solid color-mix(in oklab, currentcolor 15%, transparent)",
-  },
-  direction: "column",
-  gap: 1,
-  paddingBlock: 2,
-});
-
-// Indented to where the default's slider starts, past the mute button.
-const nestedStyles = css({
-  paddingInlineStart: 7,
+  gap: 3,
+  minInlineSize: 0,
 });
 
 const listStyles = flex({
@@ -495,17 +483,17 @@ const headStyles = hstack({
 });
 
 const captionStyles = css({
+  color: "textSoft",
   flex: "0 1 auto",
   minInlineSize: 0,
-  opacity: 0.75,
   overflowWrap: "anywhere",
 });
 
-// Aligned with the slider below, past its mute button, in the slider
-// figures' size.
+// Lined up with the slider below, past its mute button and the room for its
+// thumb.
 const captionLineStyles = css({
-  fontSize: "xs",
-  paddingInlineStart: 8,
+  paddingInlineStart: 9.5,
+  textStyle: "panelDetail",
 });
 
 const nameStyles = css({
@@ -518,7 +506,7 @@ const nameStyles = css({
 // screen.
 const appsStyles = flex({
   direction: "column",
-  gap: 4,
+  gap: 3,
   listStyle: "none",
   margin: 0,
   maxBlockSize: "50vh",
@@ -535,9 +523,8 @@ const appEntryStyles = flex({
 });
 
 const appStyles = css({
-  fontSize: "inherit",
-  fontWeight: "semibold",
   margin: 0,
+  textStyle: "panelLabel",
 });
 
 // Never truncated; wraps under the name instead. Full opacity, unlike the
@@ -546,23 +533,4 @@ const choiceStyles = css({
   flex: "0 0 auto",
   maxInlineSize: "100%",
   minInlineSize: 0,
-});
-
-// The bar's button style, in `currentcolor`; see `Level`.
-const iconButtonStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 6,
-  justifyContent: "center",
-  padding: 0,
 });

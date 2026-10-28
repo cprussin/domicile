@@ -134,6 +134,7 @@ describe(BluetoothTile, () => {
     hardware.report(Ok(true));
     bluetooth.report(Err({ kind: SystemErrorKind.Dbus, message: "gone" }));
     expect(screen.getByRole("button", { name: "Bluetooth" })).toBeDisabled();
-    expect(screen.getByText("Unavailable: gone")).toBeVisible();
+    expect(screen.getByText("Unavailable")).toBeVisible();
+    expect(screen.queryByText(/gone/)).toBeNull();
   });
 });

@@ -313,7 +313,7 @@ describe("Network", () => {
 
       expect(screen.getByText("No Wi-Fi device")).toBeVisible();
       expect(
-        screen.queryByRole("region", { name: /^Wired/ }),
+        screen.queryByRole("region", { name: "Wired" }),
       ).not.toBeInTheDocument();
       expect(wifi.started).toBe(1);
       expect(addresses.started).toBe(1);
@@ -353,10 +353,8 @@ describe("Network", () => {
         ),
       );
 
-      const wired = screen.getByRole("region", {
-        name: "Wired: enp0s31f6, connected",
-      });
-      expect(wired).toHaveTextContent("1000 Mbit/s");
+      const wired = screen.getByRole("region", { name: "Wired" });
+      expect(wired).toHaveTextContent("Connected1 Gb/s");
       expect(within(wired).getByText("192.168.1.40/24")).toBeVisible();
       expect(
         within(wired).getByText("fd00::8e16:45ff:fe5a:3e01/64"),
@@ -378,9 +376,9 @@ describe("Network", () => {
 
       await userEvent.click(screen.getByRole("button", { name: "Offline" }));
 
-      expect(
-        screen.getByRole("region", { name: "Wired: enp0s31f6, no cable" }),
-      ).toBeVisible();
+      expect(screen.getByRole("region", { name: "Wired" })).toHaveTextContent(
+        "No cable",
+      );
     });
   });
 });

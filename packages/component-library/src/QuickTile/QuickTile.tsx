@@ -3,6 +3,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import type { ReactNode } from "react";
 
 import { css, cva } from "../../styled-system/css";
+import { IconButton } from "../IconButton/IconButton";
 
 /** What every tile shows: `icon`, then `label` over `detail`. */
 type Content = {
@@ -48,7 +49,9 @@ export const QuickTile = (props: Props) =>
       type="button"
     >
       <Face detail={props.detail} icon={props.icon} label={props.label} />
-      <CaretRightIcon aria-hidden className={caretStyles} size={14} />
+      <span aria-hidden className={caretStyles}>
+        <CaretRightIcon size={14} weight="bold" />
+      </span>
     </button>
   ) : (
     <span className={tileStyles({ pressed: props.pressed })}>
@@ -64,14 +67,9 @@ export const QuickTile = (props: Props) =>
         <Face detail={props.detail} icon={props.icon} label={props.label} />
       </Toggle>
       {props.onMore !== undefined && (
-        <button
-          aria-label={`${props.label} details`}
-          className={moreStyles}
-          onClick={props.onMore}
-          type="button"
-        >
-          <CaretRightIcon aria-hidden size={14} />
-        </button>
+        <IconButton label={`${props.label} details`} onClick={props.onMore}>
+          <CaretRightIcon aria-hidden size={14} weight="bold" />
+        </IconButton>
       )}
     </span>
   );
@@ -88,30 +86,45 @@ const Face = ({ detail, icon, label }: Content) => (
   </>
 );
 
+// The whole tile rings when the keyboard is on its toggle; the arrow rings
+// itself.
 const tileStyles = cva({
   base: {
     _focusVisible: {
       outline: "{spacing.0.5} solid {colors.accent}",
       outlineOffset: 0.5,
     },
+    _hover: { backgroundColor: "fillHover" },
+    "&:has(> [aria-pressed]:focus-visible)": {
+      outline: "{spacing.0.5} solid {colors.accent}",
+      outlineOffset: 0.5,
+    },
     alignItems: "center",
-    backgroundColor: "color-mix(in oklab, currentcolor 10%, transparent)",
+    backgroundColor: "fill",
     borderRadius: "lg",
     borderStyle: "none",
     color: "inherit",
     cursor: "pointer",
     display: "flex",
-    gap: 2,
+    gap: 1,
     minBlockSize: 12,
     minInlineSize: 0,
-    paddingInline: 2.5,
+    paddingInlineEnd: 1.5,
+    paddingInlineStart: 2.5,
     textAlign: "start",
     transition: "background-color {durations.fast} {easings.default}",
   },
   variants: {
     pressed: {
       false: {},
-      true: { backgroundColor: "accent", color: "background" },
+      true: {
+        _hover: {
+          backgroundColor:
+            "color-mix(in oklab, {colors.accent} 88%, {colors.foreground})",
+        },
+        backgroundColor: "accent",
+        color: "background",
+      },
     },
   },
 });
@@ -119,10 +132,6 @@ const tileStyles = cva({
 // Fills the tile but its arrow, so most of the tile switches.
 const toggleStyles = css({
   _disabled: { cursor: "default" },
-  _focusVisible: {
-    outline: "{spacing.0.5} solid {colors.accent}",
-    outlineOffset: 0.5,
-  },
   alignItems: "center",
   alignSelf: "stretch",
   backgroundColor: "transparent",
@@ -131,54 +140,46 @@ const toggleStyles = css({
   cursor: "pointer",
   display: "flex",
   flex: 1,
-  gap: 2,
+  gap: 2.5,
   minInlineSize: 0,
+  outlineStyle: "none",
   padding: 0,
   textAlign: "start",
 });
 
-const moreStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
+// Where the toggle tile's arrow button sits, so both kinds line up.
+const caretStyles = css({
   alignItems: "center",
-  backgroundColor: "transparent",
   blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
   display: "inline-flex",
   flexShrink: 0,
   inlineSize: 6,
   justifyContent: "center",
-  marginInlineEnd: -1,
-  padding: 0,
+  marginInlineStart: "auto",
 });
-
-const caretStyles = css({ flexShrink: 0, marginInlineStart: "auto" });
 
 const iconStyles = css({ display: "inline-flex", flexShrink: 0 });
 
 const textStyles = css({
   display: "flex",
   flexDirection: "column",
+  gap: 0.5,
   minInlineSize: 0,
-  paddingBlock: 1.5,
+  paddingBlock: 2,
 });
 
 const labelStyles = css({
-  fontSize: "sm",
-  fontWeight: "semibold",
-  lineHeight: "tight",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  textStyle: "panelLabel",
+  whiteSpace: "nowrap",
 });
 
 // Softer than the label but still readable on the accent.
 const detailStyles = css({
-  color: "color-mix(in oklab, currentcolor 75%, transparent)",
-  fontSize: "xs",
-  lineHeight: "tight",
+  color: "textSoft",
   overflow: "hidden",
   textOverflow: "ellipsis",
+  textStyle: "panelDetail",
   whiteSpace: "nowrap",
 });

@@ -14,7 +14,11 @@ import { grid, hstack } from "../styled-system/patterns";
 import { ago } from "./ago";
 import { NotificationReply } from "./NotificationReply";
 
+/** `roomy` for a toast on its own; `compact` for one of a list. */
+export type Density = "roomy" | "compact";
+
 type Props = {
+  density?: Density | undefined;
   notification: Notification;
   /** The current time, for the relative timestamp. See `useNow`. */
   now: number;
@@ -51,6 +55,7 @@ type Props = {
 export const NotificationCard = ({
   body,
   closeLabel,
+  density = "roomy",
   notification,
   now,
   onAction,
@@ -72,18 +77,26 @@ export const NotificationCard = ({
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason
     // biome-ignore lint/a11y/useKeyWithClickEvents: the summary below is a button for the same press, which is what the keyboard reaches
     <div
-      className={cardStyles({ clickable: notification.clickable })}
+      className={cardStyles({ clickable: notification.clickable, density })}
+      data-density={density}
       data-notification=""
       data-urgency={notification.urgency}
       onClick={notification.clickable ? pressed : undefined}
     >
       {notification.icon === undefined ? (
-        <Avatar name={notification.appName || notification.summary} size="xs" />
+        <Avatar
+          name={notification.appName || notification.summary}
+          size={density === "compact" ? "2xs" : "xs"}
+        />
       ) : (
-        <img alt="" className={pictureStyles} src={notification.icon} />
+        <img
+          alt=""
+          className={pictureStyles({ density })}
+          src={notification.icon}
+        />
       )}
       <div className={wordsStyles}>
-        <div className={senderStyles}>
+        <div className={senderStyles({ density })}>
           {notification.urgency === "critical" && (
             <WarningCircleIcon
               aria-label="Critical"
@@ -101,7 +114,7 @@ export const NotificationCard = ({
         </div>
         {notification.clickable ? (
           <button
-            className={summaryStyles}
+            className={summaryStyles({ density })}
             onClick={(event) => {
               // Stop the press from also reaching the card.
               event.stopPropagation();
@@ -112,12 +125,14 @@ export const NotificationCard = ({
             {summary ?? notification.summary}
           </button>
         ) : (
-          <span className={summaryStyles}>
+          <span className={summaryStyles({ density })}>
             {summary ?? notification.summary}
           </span>
         )}
         {notification.body !== "" && (
-          <span className={bodyStyles}>{body ?? notification.body}</span>
+          <span className={bodyStyles({ density })}>
+            {body ?? notification.body}
+          </span>
         )}
         {buttons.length > 0 && (
           <div className={actionsStyles}>
@@ -163,11 +178,7 @@ export const NotificationCard = ({
 const cardStyles = cva({
   base: grid.raw({
     alignItems: "start",
-    columnGap: 3,
     gridTemplateColumns: "auto minmax(0, 1fr)",
-    paddingBlock: 3.5,
-    paddingInlineEnd: 9,
-    paddingInlineStart: 3.5,
     position: "relative",
     textAlign: "start",
   }),
@@ -176,17 +187,34 @@ const cardStyles = cva({
       false: {},
       true: { cursor: "pointer" },
     },
+    // Compact uses the panel type, as a list's rows do.
+    density: {
+      compact: {
+        columnGap: 2.5,
+        paddingBlock: 2,
+        paddingInlineEnd: 8,
+        paddingInlineStart: 2.5,
+      },
+      roomy: {
+        columnGap: 3,
+        paddingBlock: 3.5,
+        paddingInlineEnd: 9,
+        paddingInlineStart: 3.5,
+      },
+    },
   },
 });
 
 // An app icon keeps its shape, since most icons are not round; only its corners
 // are rounded to match the card.
-const pictureStyles = css({
-  blockSize: 8,
-  borderRadius: "lg",
-  flexShrink: 0,
-  inlineSize: 8,
-  objectFit: "cover",
+const pictureStyles = cva({
+  base: { borderRadius: "lg", flexShrink: 0, objectFit: "cover" },
+  variants: {
+    density: {
+      compact: { blockSize: 6, inlineSize: 6 },
+      roomy: { blockSize: 8, inlineSize: 8 },
+    },
+  },
 });
 
 const wordsStyles = css({
@@ -196,13 +224,20 @@ const wordsStyles = css({
   minInlineSize: 0,
 });
 
-const senderStyles = hstack({
-  color: "muted",
-  fontSize: "xs",
-  fontVariantNumeric: "tabular-nums",
-  gap: 1,
-  lineHeight: "tight",
-  minInlineSize: 0,
+const senderStyles = cva({
+  base: hstack.raw({
+    fontSize: "xs",
+    fontVariantNumeric: "tabular-nums",
+    gap: 1,
+    lineHeight: "tight",
+    minInlineSize: 0,
+  }),
+  variants: {
+    density: {
+      compact: { color: "textFaint" },
+      roomy: { color: "muted" },
+    },
+  },
 });
 
 const criticalStyles = css({ color: "danger", flexShrink: 0 });
@@ -215,27 +250,38 @@ const appNameStyles = css({
 });
 
 // Styled as plain text even when it is a button, since its press is the card's.
-const summaryStyles = css({
-  _focusVisible: {
-    outlineOffset: 0.5,
+const summaryStyles = cva({
+  base: {
+    _focusVisible: {
+      outlineOffset: 0.5,
+    },
+    all: "unset",
+    color: "foreground",
+    lineClamp: 2,
+    overflowWrap: "anywhere",
   },
-  all: "unset",
-  color: "foreground",
-  fontSize: "sm",
-  fontWeight: "semibold",
-  lineClamp: 2,
-  lineHeight: "snug",
-  overflowWrap: "anywhere",
+  variants: {
+    density: {
+      compact: { textStyle: "panelLabel" },
+      roomy: { fontSize: "sm", fontWeight: "semibold", lineHeight: "snug" },
+    },
+  },
 });
 
 // `pre-line` keeps the line breaks senders put in the body.
-const bodyStyles = css({
-  color: "muted",
-  fontSize: "sm",
-  lineClamp: 3,
-  lineHeight: "snug",
-  overflowWrap: "anywhere",
-  whiteSpace: "pre-line",
+const bodyStyles = cva({
+  base: { overflowWrap: "anywhere", whiteSpace: "pre-line" },
+  variants: {
+    density: {
+      compact: { color: "textSoft", lineClamp: 2, textStyle: "panelDetail" },
+      roomy: {
+        color: "muted",
+        fontSize: "sm",
+        lineClamp: 3,
+        lineHeight: "snug",
+      },
+    },
+  },
 });
 
 const actionsStyles = hstack({

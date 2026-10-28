@@ -1,4 +1,5 @@
 import type { Result } from "@cprussin/option-result";
+import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { isAbsent } from "@domicile-desktop/react/watch-presence";
@@ -9,8 +10,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import type { MouseEvent, WheelEvent } from "react";
 
-import { css, cva } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
+import { cva } from "../styled-system/css";
 import { ask } from "./ask";
 import { Level } from "./Level";
 import { primary } from "./primary";
@@ -91,32 +91,25 @@ type RowProps = {
 export const SoundRow = ({ audio: watch, onMore, server }: RowProps) => {
   const output = primary(useSharedWatch(watch)?.outputs ?? []);
   return output === undefined ? undefined : (
-    <span className={rowStyles}>
-      <span className={levelStyles}>
-        <Level
-          direction="output"
-          label="Volume"
-          level={output.volume}
-          muted={output.muted}
-          onLevel={(level) => {
-            ask(server.setVolume(output.id, level));
-          }}
-          onMuted={(muted) => {
-            ask(server.setMuted(output.id, muted));
-          }}
-        />
-      </span>
-      {onMore !== undefined && (
-        <button
-          aria-label="Sound details"
-          className={moreStyles}
-          onClick={onMore}
-          type="button"
-        >
-          <CaretRightIcon aria-hidden size={14} />
-        </button>
-      )}
-    </span>
+    <Level
+      direction="output"
+      end={
+        onMore !== undefined && (
+          <IconButton label="Sound details" onClick={onMore}>
+            <CaretRightIcon aria-hidden size={14} weight="bold" />
+          </IconButton>
+        )
+      }
+      label="Volume"
+      level={output.volume}
+      muted={output.muted}
+      onLevel={(level) => {
+        ask(server.setVolume(output.id, level));
+      }}
+      onMuted={(muted) => {
+        ask(server.setMuted(output.id, muted));
+      }}
+    />
   );
 };
 
@@ -128,27 +121,4 @@ const glyphStyles = cva({
       true: { opacity: "inactive" },
     },
   },
-});
-
-const rowStyles = hstack({ gap: 1, inlineSize: "100%" });
-
-const levelStyles = css({ flex: 1, minInlineSize: 0 });
-
-// Matches the arrow on a quick settings tile.
-const moreStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 6,
-  justifyContent: "center",
-  padding: 0,
 });

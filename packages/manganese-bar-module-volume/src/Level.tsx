@@ -1,12 +1,14 @@
+import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Slider } from "@domicile-desktop/component-library/Slider";
+import { SliderRow } from "@domicile-desktop/component-library/SliderRow";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MicrophoneSlashIcon } from "@phosphor-icons/react/dist/ssr/MicrophoneSlash";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
+import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { css, cva } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
+import { cva } from "../styled-system/css";
 
 /** The sound's direction, which picks the mute button's icon. */
 export type Direction = "output" | "input";
@@ -20,6 +22,8 @@ type Props = {
   /** The current level, 0 to 1 of the meter; absent for no meter. */
   meter?: number | undefined;
   muted: boolean;
+  /** A button after the percentage, such as an arrow to the mixer. */
+  end?: ReactNode | undefined;
   onLevel: (level: number) => void;
   onMuted: (muted: boolean) => void;
 };
@@ -40,6 +44,7 @@ type Held = { level: number; over: number };
  */
 export const Level = ({
   direction,
+  end,
   label,
   level,
   meter,
@@ -55,36 +60,40 @@ export const Level = ({
       : level;
   const percent = Math.round(shown * 100);
   return (
-    <span className={rowStyles({ muted })}>
-      <button
-        aria-label={`${muted ? "Unmute" : "Mute"} ${label}`}
-        aria-pressed={muted}
-        className={muteStyles}
-        onClick={() => {
-          onMuted(!muted);
-        }}
-        type="button"
+    <span className={rowStyles({ muted })} data-muted={muted ? "" : undefined}>
+      <SliderRow
+        end={end}
+        figure={`${percent.toString()}%`}
+        lead={
+          <IconButton
+            aria-pressed={muted}
+            label={`${muted ? "Unmute" : "Mute"} ${label}`}
+            onClick={() => {
+              onMuted(!muted);
+            }}
+          >
+            <MuteIcon direction={direction} muted={muted} />
+          </IconButton>
+        }
       >
-        <MuteIcon direction={direction} muted={muted} />
-      </button>
-      <Slider
-        label={label}
-        level={meter}
-        levelMuted={muted}
-        max={100}
-        min={0}
-        onValueChange={(value) => {
-          setDragging(true);
-          setHeld({ level: value / 100, over: level });
-          onLevel(value / 100);
-        }}
-        onValueCommitted={() => {
-          setDragging(false);
-        }}
-        step={1}
-        value={Math.min(100, percent)}
-      />
-      <span className={percentStyles}>{percent}%</span>
+        <Slider
+          label={label}
+          level={meter}
+          levelMuted={muted}
+          max={100}
+          min={0}
+          onValueChange={(value) => {
+            setDragging(true);
+            setHeld({ level: value / 100, over: level });
+            onLevel(value / 100);
+          }}
+          onValueCommitted={() => {
+            setDragging(false);
+          }}
+          step={1}
+          value={Math.min(100, percent)}
+        />
+      </SliderRow>
     </span>
   );
 };
@@ -112,45 +121,13 @@ const MuteIcon = ({
   }
 };
 
+// Gray while muted, the end button too.
 const rowStyles = cva({
-  base: hstack.raw({
-    gap: 2,
-    inlineSize: "100%",
-  }),
+  base: { display: "flex", inlineSize: "100%" },
   variants: {
     muted: {
       false: {},
       true: { color: "muted" },
     },
   },
-});
-
-// The bar's button style, not the library's, as in brightness: it uses
-// `currentcolor`, so it is white on the bar and `foreground` in the mixer.
-const muteStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 6,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 6,
-  justifyContent: "center",
-  padding: 0,
-  transition: "background-color {durations.fast} {easings.default}",
-});
-
-// The same figure style as brightness, so the two line up.
-const percentStyles = css({
-  color: "color-mix(in oklab, currentcolor 75%, transparent)",
-  fontSize: "xs",
-  fontVariantNumeric: "tabular-nums",
-  minInlineSize: 9,
-  textAlign: "end",
 });

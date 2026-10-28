@@ -188,6 +188,8 @@ Stick to the **semantic** color tokens defined by the domicile preset:
 | `backdrop` | Modal/popover backdrop overlay |
 | `skeleton` | Loading skeleton fills |
 | `onPhoto` / `panelOverPhoto` | Lettering and a frosted panel drawn straight onto the wallpaper, the same in both themes |
+| `textSoft` / `textFaint` | A second line or figure / a section label, drawn from `currentcolor` |
+| `fill` / `fillHover` / `divider` | A tile, row or card on a panel / under the pointer / a rule, drawn from `currentcolor` |
 
 **Do not reach for the palette** (`colors.red.500`, etc.). The palette is
 for the preset to derive semantic tokens *from* — not for consumer-side
@@ -247,6 +249,33 @@ literal palette reference like `{colors.neutral.900}` looks fine in
 dark mode and breaks in light mode. If you find yourself wanting a
 specific dark or light value, you almost always want the semantic
 equivalent (`background`, `card`, `foreground`, …) instead.
+
+### Panels
+
+Popovers, drawers and the details drilled into from them are built from
+the component library's panel parts, not hand-rolled rows and labels:
+
+| Part | For |
+|---|---|
+| `Panel` | A titled panel; `PanelAction` puts a switch or button in its header |
+| `PanelHeader` | A title, a back button, controls at the end |
+| `PanelSection` | A group under a small label: Inboxes, Paired, Output |
+| `List` / `ListRow` | A row: icon, label over a detail, something at the end. `plain` rows are choices; `filled` rows are tiles with their own buttons |
+| `DetailList` | Terms and values, such as addresses |
+| `SliderRow` | A slider with its icon, value and an optional arrow |
+| `PanelNote` | One line: searching, off, empty, or a refusal in plain words |
+| `PanelFooter` | The last line: a summary and an action |
+| `IconButton` | Every icon-only button |
+| `QuickTile` | A quick settings toggle |
+
+Their type is the preset's `textStyles`: `panelTitle`, `panelLabel`,
+`panelDetail` and `panelOverline`. A label and its detail differ in size and
+color, not weight. Their colors are the `currentcolor` tokens above, so the
+same parts read on a card, over the wallpaper and on an accent tile.
+
+Sections sit `gap: 3` apart; a section's label and its rows `gap: 1`. Show a
+refusal as a `PanelNote` with `tone="warning"`, saying what failed in plain
+words, and pass the service's message as its `detail`.
 
 ### Other token categories
 

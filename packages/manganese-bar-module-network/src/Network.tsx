@@ -1,4 +1,5 @@
 import type { Option, Result } from "@cprussin/option-result";
+import { Panel } from "@domicile-desktop/component-library/Panel";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
@@ -121,13 +122,15 @@ const Item = ({
       }
       wide
     >
-      <NetworkPanel
-        actions={actions}
-        addresses={addresses}
-        host={host}
-        wifi={wifi}
-        wired={wired}
-      />
+      <Panel title="Network" width="standard">
+        <NetworkPanel
+          actions={actions}
+          addresses={addresses}
+          host={host}
+          wifi={wifi}
+          wired={wired}
+        />
+      </Panel>
     </Popover>
   );
 };

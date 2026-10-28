@@ -151,6 +151,12 @@ const PopoverComponent = ({
             data-flush={flush ? "" : undefined}
             data-tone={tone}
             data-wide={wide ? "" : undefined}
+            // The keyboard lands on the first control; a pointer leaves
+            // focus on the panel, so no control shows a focus ring it
+            // didn't ask for.
+            initialFocus={(openType) =>
+              openType === "keyboard" ? true : popupRef.current
+            }
             ref={setPopupRef}
           >
             <CloseOnFocusOut
