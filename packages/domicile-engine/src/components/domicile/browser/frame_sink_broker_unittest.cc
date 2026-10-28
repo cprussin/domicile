@@ -414,6 +414,8 @@ class FrameSinkBrokerTest : public testing::Test {
                             base::Unretained(this)),
         FrameSinkBroker::VirtualDisplaysSetter(),
         base::BindRepeating(&FrameSinkBrokerTest::RecordWhitePoint,
+                            base::Unretained(this)),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordInput,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
@@ -465,6 +467,10 @@ class FrameSinkBrokerTest : public testing::Test {
   }
 
   // Fake for the ozone platform that owns the CRTCs' gamma ramps.
+  void RecordInput(const mojom::DeskInput& input) {
+    inputs_.push_back(input.Clone());
+  }
+
   void RecordWhitePoint(float red, float green, float blue) {
     white_points_.push_back({red, green, blue});
   }
@@ -496,6 +502,7 @@ class FrameSinkBrokerTest : public testing::Test {
 
   // Every white point the producer sent, in order.
   std::vector<std::vector<float>> white_points_;
+  std::vector<mojom::DeskInputPtr> inputs_;
 
   // Every clipboard the producer sent, in order.
   std::vector<std::pair<mojom::Clipboard, FrameSinkBroker::ClipboardContents>>
@@ -1211,6 +1218,22 @@ TEST_F(FrameSinkBrokerTest, AProducerSetsTheWhitePoint) {
 
   ASSERT_EQ(white_points_.size(), 1u);
   EXPECT_EQ(white_points_[0], (std::vector<float>{1.f, 0.75f, 0.5f}));
+}
+
+TEST_F(FrameSinkBrokerTest, AProducersEmulatedInputReachesTheDesk) {
+  // An EIS client's click, which only the engine can deliver to the shell.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->InjectInput(mojom::DeskInput::New(mojom::DeskInputKind::kButton,
+                                            /*x=*/0, /*y=*/0,
+                                            /*code=*/0x110, /*pressed=*/true));
+  RunUntilIdle();
+
+  ASSERT_EQ(inputs_.size(), 1u);
+  EXPECT_EQ(inputs_[0]->kind, mojom::DeskInputKind::kButton);
+  EXPECT_EQ(inputs_[0]->code, 0x110u);
+  EXPECT_TRUE(inputs_[0]->pressed);
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhatIsOnEachClipboard) {

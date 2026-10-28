@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_launch::shell_path::Shell;
 use domicile_launch::spawn::{
-    composite_on_the_cpu, compositor, engine, send_frames_in_memory, Runtime,
+    composite_on_the_cpu, compositor, engine, let_the_engine_take_input, send_frames_in_memory,
+    Runtime,
 };
 
 /// A built shell, split as `shell_path` returns it: the directory the engine
@@ -791,6 +792,28 @@ fn a_compositor_for_an_engine_on_the_cpu_sends_frames_in_memory() {
     let at = args
         .iter()
         .position(|arg| arg == "--software-compositing")
+        .expect("the flag is passed");
+    assert_eq!(args[at + 1], "yes");
+}
+
+#[test]
+fn a_compositor_for_a_headless_desk_lets_the_engine_take_input() {
+    let mut spawned = compositor(
+        Path::new("/l/compositor"),
+        Path::new("/l/engine"),
+        Path::new("/l/open-url"),
+        Path::new("/l/data"),
+        &runtime(),
+        None,
+        false,
+        &|_| None,
+    );
+    let_the_engine_take_input(&mut spawned);
+
+    let args = args_of(&spawned);
+    let at = args
+        .iter()
+        .position(|arg| arg == "--engine-takes-input")
         .expect("the flag is passed");
     assert_eq!(args[at + 1], "yes");
 }

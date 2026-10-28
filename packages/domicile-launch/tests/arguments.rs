@@ -334,6 +334,25 @@ fn windows_are_dmabufs_unless_the_command_line_says_otherwise() {
     assert!(parsed.software_compositing);
 }
 
+/// Emulated input goes to the seat unless the launcher says the engine
+/// takes it, as a headless desk's does.
+#[test]
+fn emulated_input_goes_to_the_seat_unless_the_command_line_says_otherwise() {
+    let parsed = parse(the_required_two()).expect("both are there");
+    assert!(!parsed.engine_takes_input);
+
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--engine-takes-input",
+        "yes",
+    ])
+    .expect("a command line for a headless desk parses");
+    assert!(parsed.engine_takes_input);
+}
+
 /// A real desk reads `/etc/pam.d`, which the compositor names.
 #[test]
 fn pam_services_come_from_the_machine_unless_the_command_line_says_otherwise() {

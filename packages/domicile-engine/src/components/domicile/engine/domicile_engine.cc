@@ -1124,6 +1124,36 @@ struct DomicileEngine {
                                   base::Unretained(this), red, green, blue));
   }
 
+  // Drops a kind this build does not know, from a newer compositor.
+  void InjectInput(const DomicileDeskInput& input) {
+    domicile::mojom::DeskInputKind kind;
+    switch (input.kind) {
+      case DOMICILE_DESK_INPUT_POINTER:
+        kind = domicile::mojom::DeskInputKind::kPointer;
+        break;
+      case DOMICILE_DESK_INPUT_BUTTON:
+        kind = domicile::mojom::DeskInputKind::kButton;
+        break;
+      case DOMICILE_DESK_INPUT_SCROLL:
+        kind = domicile::mojom::DeskInputKind::kScroll;
+        break;
+      case DOMICILE_DESK_INPUT_KEY:
+        kind = domicile::mojom::DeskInputKind::kKey;
+        break;
+      default:
+        LOG(WARNING) << "domicile: desk input of an unknown kind "
+                     << input.kind << " was dropped";
+        return;
+    }
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::InjectInputOnThread,
+                       base::Unretained(this),
+                       domicile::mojom::DeskInput::New(
+                           kind, input.x, input.y, input.code,
+                           input.pressed != 0)));
+  }
+
   // Blocks for the browser's answer, like CreateSurface.
   DomicileCaptureId StartCapture(int64_t display_id,
                                  const gfx::Size& size,
@@ -1324,6 +1354,12 @@ struct DomicileEngine {
   void SetWhitePointOnThread(float red, float green, float blue) {
     if (broker_) {
       broker_->SetWhitePoint(red, green, blue);
+    }
+  }
+
+  void InjectInputOnThread(domicile::mojom::DeskInputPtr input) {
+    if (broker_) {
+      broker_->InjectInput(std::move(input));
     }
   }
 
@@ -1906,6 +1942,13 @@ void domicile_virtual_displays_configure(DomicileEngine* engine,
   // count removes every virtual display.
   if (engine && (displays || count == 0)) {
     engine->ConfigureVirtualDisplays(displays, count);
+  }
+}
+
+void domicile_input_inject(DomicileEngine* engine,
+                           const DomicileDeskInput* input) {
+  if (engine && input) {
+    engine->InjectInput(*input);
   }
 }
 

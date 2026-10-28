@@ -15,7 +15,7 @@ use smithay::reexports::calloop::EventLoop;
 use super::barriers::{placed, Zone};
 use super::recorded::{a_client, a_receiver, Got, Recorded, Saw, KEYSYM_A};
 use super::Compositor;
-use super::{serve, Capabilities, Captured, Captures, Eis, Emulated};
+use super::{serve, Capabilities, Captured, Captures, DeskInput, Eis, Emulated};
 use crate::client_requests::ClientRequest;
 use crate::lock::{refused, Asked, Refusal};
 
@@ -66,6 +66,21 @@ impl Served {
                 started.elapsed() < PATIENCE,
                 "gave up waiting; injected so far: {:?}",
                 self.compositor.injected
+            );
+            self.event_loop
+                .dispatch(Duration::from_millis(10), &mut self.compositor)
+                .unwrap();
+        }
+    }
+
+    /// Run the loop until `done` holds of what went to the engine.
+    fn until_the_engine(&mut self, done: impl Fn(&[DeskInput]) -> bool) {
+        let started = Instant::now();
+        while !done(&self.compositor.engine_injected) {
+            assert!(
+                started.elapsed() < PATIENCE,
+                "gave up waiting; the engine got so far: {:?}",
+                self.compositor.engine_injected
             );
             self.event_loop
                 .dispatch(Duration::from_millis(10), &mut self.compositor)
@@ -259,6 +274,91 @@ fn input_sent_without_a_socket_takes_the_same_path_and_is_let_go_of() {
             ClientRequest::PointerLeave,
         ]
     );
+}
+
+#[test]
+fn where_the_engine_takes_input_a_clients_goes_to_it_and_is_let_go_of() {
+    // A headless desk: the shell, over which the seat reaches nothing, must
+    // see it.
+    let mut served = Served::new();
+    served.compositor.engine_takes_input = true;
+    let (socket, session) = served.eis.connect(EVERYTHING).unwrap();
+    let seen = a_client(socket, 4, |connection, devices| {
+        emulate(connection, devices, "absolute pointer", |pointer| {
+            pointer
+                .interface::<ei::PointerAbsolute>()
+                .unwrap()
+                .motion_absolute(900.0, 120.0);
+        });
+        emulate(connection, devices, "pointer", |pointer| {
+            pointer
+                .interface::<ei::Button>()
+                .unwrap()
+                .button(0x110, ei::button::ButtonState::Press);
+        });
+        emulate(connection, devices, "keyboard", |keyboard| {
+            keyboard
+                .interface::<ei::Keyboard>()
+                .unwrap()
+                .key(125, ei::keyboard::KeyState::Press);
+        });
+    });
+    served.until_the_engine(|injected| injected.len() >= 3);
+    assert!(matches!(served.heard(&seen), Saw::Devices(_)));
+
+    drop(session);
+    assert_eq!(served.heard(&seen), Saw::Disconnected);
+    served.until_the_engine(|injected| injected.len() >= 5);
+    assert_eq!(
+        served.compositor.engine_injected,
+        [
+            DeskInput::Pointer { x: 900.0, y: 120.0 },
+            DeskInput::Button {
+                code: 0x110,
+                pressed: true
+            },
+            DeskInput::Key {
+                code: 125,
+                pressed: true
+            },
+            DeskInput::Key {
+                code: 125,
+                pressed: false
+            },
+            DeskInput::Button {
+                code: 0x110,
+                pressed: false
+            },
+        ]
+    );
+    assert_eq!(served.compositor.injected, [], "and none to the seat");
+}
+
+#[test]
+fn where_the_engine_takes_input_input_sent_without_a_socket_goes_to_it_too() {
+    let mut served = Served::new();
+    served.compositor.engine_takes_input = true;
+    let emulator = served.eis.emulate();
+
+    emulator.keysym(KEYSYM_A, true);
+    served.until_the_engine(|injected| !injected.is_empty());
+    drop(emulator);
+    served.until_the_engine(|injected| injected.len() >= 2);
+
+    assert_eq!(
+        served.compositor.engine_injected,
+        [
+            DeskInput::Key {
+                code: 30,
+                pressed: true
+            },
+            DeskInput::Key {
+                code: 30,
+                pressed: false
+            },
+        ]
+    );
+    assert_eq!(served.compositor.injected, []);
 }
 
 #[test]
