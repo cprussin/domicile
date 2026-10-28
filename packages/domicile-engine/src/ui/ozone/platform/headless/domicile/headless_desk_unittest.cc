@@ -90,5 +90,24 @@ TEST(HeadlessDeskTest, AnUnnamedDisplayGoesPastTheOnesTheLayoutPlaced) {
       << "right of the 640-wide display the layout put at 100";
 }
 
+TEST(HeadlessDeskTest, ADisplayTakesTheScaleTheLayoutGivesIt) {
+  const HeadlessDesk desk = HeadlessDeskOf(
+      Placeholder(),
+      {Pane(kPane1, gfx::Size(1920, 1080)), Pane(kPane2, gfx::Size(1500, 900))},
+      {{.id = kPane1, .enabled = true, .origin = gfx::Point(0, 0)},
+       {.id = kPane2,
+        .enabled = true,
+        .origin = gfx::Point(1920, 0),
+        .scale = 1.5}});
+
+  ASSERT_EQ(desk.displays.size(), 2u);
+  EXPECT_EQ(desk.displays[0].device_scale_factor(), 1.f);
+  const display::Display& scaled = desk.displays[1];
+  EXPECT_FLOAT_EQ(scaled.device_scale_factor(), 1.5f);
+  EXPECT_EQ(scaled.bounds(), gfx::Rect(1920, 0, 1500, 900))
+      << "bounds stay in pixels, as DRM's do";
+  EXPECT_EQ(scaled.GetSizeInPixel(), gfx::Size(1500, 900));
+}
+
 }  // namespace
 }  // namespace ui

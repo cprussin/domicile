@@ -63,6 +63,12 @@ HeadlessDesk HeadlessDeskOf(
     screen.set_display_frequency(static_cast<float>(one.refresh_mhz) /
                                  1000.f);
     screen.set_label(one.name);
+    if (wanted != nullptr) {
+      // As DRM's `TurnAndScale`: the bounds stay pixels, and the window lays
+      // its page out at the scale.
+      screen.set_device_scale_factor(static_cast<float>(wanted->scale));
+      screen.set_size_in_pixels(one.mode);
+    }
     desk.displays.push_back(screen);
     desk.connectors[one.id] = base::StrCat(
         {"virtual-",

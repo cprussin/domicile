@@ -643,8 +643,9 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_set_white_point(
 
 // Delivers emulated input (EIS) to the desk, as the engine's own pointer and
 // keyboard would: the shell sees it first, and the engine forwards what lands
-// on a window as it forwards a real device's. Only a headless desk takes it;
-// elsewhere it is dropped, so the compositor delivers emulated input itself.
+// on a window as it forwards a real device's. A headless desk and a desk on
+// DRM take it; nested it is dropped, so the compositor delivers emulated input
+// itself.
 // See docs/architecture/A-HEADLESS-DESKTOP.md.
 DOMICILE_ENGINE_EXPORT void domicile_input_inject(DomicileEngine* engine,
                                                   const DomicileDeskInput* input);

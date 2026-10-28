@@ -89,8 +89,8 @@ pub enum Emulated {
 /// One event for the engine, as `domicile_input_inject` takes it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DeskInput {
-    /// The pointer moved to a desktop point. A headless desk is at scale 1,
-    /// so it is also the engine's.
+    /// The pointer moved to a desktop point. The seat turns it into the
+    /// engine pixel its monitor draws it at, as it sends it.
     Pointer { x: f64, y: f64 },
     /// An evdev button code.
     Button { code: u32, pressed: bool },

@@ -38,9 +38,8 @@ pub struct Arguments {
     /// shared memory. See [`crate::software_compositing`].
     pub software_compositing: bool,
     /// Whether emulated input (EIS) goes to the engine, which hands it to
-    /// the shell's window, instead of the seat. Only a headless desk's does,
-    /// since it has no other input. See
-    /// `docs/architecture/A-HEADLESS-DESKTOP.md`.
+    /// the shell's window, instead of the seat. A desk the engine drives
+    /// does; see [`crate::spawn::the_engine_takes_input`].
     pub engine_takes_input: bool,
     /// Where PAM services are read from. `None` is the machine's
     /// `/etc/pam.d`; tests name a directory holding a service of their own.

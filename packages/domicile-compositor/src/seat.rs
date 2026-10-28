@@ -101,7 +101,16 @@ impl eis::Compositor for CalloopData {
     }
 
     /// Dropped while no engine is up, as the seat drops input with no focus.
+    /// A pointer goes to the engine pixel its monitor draws its desktop point
+    /// at.
     fn inject_into_the_engine(&mut self, input: eis::DeskInput) {
+        let input = match input {
+            eis::DeskInput::Pointer { x, y } => {
+                let (x, y) = self.state.screens.engine_pixel_of((x, y));
+                eis::DeskInput::Pointer { x, y }
+            }
+            other => other,
+        };
         let taken = self
             .state
             .engine
