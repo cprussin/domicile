@@ -17,6 +17,14 @@ const choose = async (label: string, name: string) => {
   await userEvent.click(screen.getByRole("option", { name }));
 };
 
+/** Opens the output's list of ways. */
+const change = () =>
+  userEvent.click(
+    within(screen.getByRole("region", { name: "Output" })).getByRole("button", {
+      name: "Change",
+    }),
+  );
+
 describe("Mixer", () => {
   describe("at a glance", () => {
     it("has the default output and microphone, each with a meter", () => {
@@ -105,9 +113,19 @@ describe("Mixer", () => {
   });
 
   describe("where sound goes", () => {
-    it("lists each plugged-in port and device, the one in use picked", () => {
+    it("names the way in use, keeping the rest behind Change", () => {
       const sound = heldSound();
       mixer(sound);
+
+      const output = screen.getByRole("region", { name: "Output" });
+      expect(output).toHaveTextContent("Speakers");
+      expect(screen.queryByRole("radiogroup")).toBeNull();
+    });
+
+    it("lists each plugged-in port and device, the one in use picked", async () => {
+      const sound = heldSound();
+      mixer(sound);
+      await change();
 
       const outputs = screen.getByRole("radiogroup", { name: "Play sound on" });
       expect(
@@ -126,6 +144,7 @@ describe("Mixer", () => {
     it("makes another device the default", async () => {
       const sound = heldSound();
       mixer(sound);
+      await change();
 
       await userEvent.click(screen.getByRole("radio", { name: "HDMI" }));
 
@@ -141,6 +160,7 @@ describe("Mixer", () => {
           ports: output.ports.map((port) => ({ ...port, available: true })),
         })),
       });
+      await change();
 
       await userEvent.click(screen.getByRole("radio", { name: "Headphones" }));
 
@@ -156,6 +176,7 @@ describe("Mixer", () => {
         outputs: [device({ default: true })],
       });
 
+      expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
       expect(
         screen.queryByRole("radiogroup", { name: "Play sound on" }),
       ).toBeNull();

@@ -4,6 +4,7 @@ import {
   ChoiceList,
   RadioRow,
 } from "@domicile-desktop/component-library/ChoiceRow";
+import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import type { SelectOption } from "@domicile-desktop/component-library/Select";
 import { Select } from "@domicile-desktop/component-library/Select";
@@ -222,32 +223,51 @@ type RoutesProps = {
 };
 
 /**
- * Where sound goes or comes from, one picked. Absent with nothing to pick
+ * Where sound goes or comes from: the one in use, with the rest to pick from
+ * behind Change, since it rarely changes. Absent with nothing to pick
  * between.
  */
-const Routes = ({ direction, routes, server }: RoutesProps) =>
-  routes.length > 1 && (
-    <ChoiceList<string>
-      aria-label={direction === "output" ? "Play sound on" : "Record from"}
-      onValueChange={(key) => {
-        const route = routes.find((each) => each.key === key);
-        if (route !== undefined) {
-          pick(route, server);
-        }
-      }}
-      value={routes.find(({ picked }) => picked)?.key}
-    >
-      {routes.map((route) => (
-        <RadioRow
-          detail={route.detail}
-          icon={iconOf(route, direction)}
-          key={route.key}
-          name={route.label}
-          value={route.key}
-        />
-      ))}
-    </ChoiceList>
+const Routes = ({ direction, routes, server }: RoutesProps) => {
+  const current = routes.find(({ picked }) => picked);
+  return (
+    routes.length > 1 && (
+      <List>
+        <ListRow
+          detail={current?.detail}
+          disclosure="Change"
+          icon={current === undefined ? undefined : iconOf(current, direction)}
+          label={current?.label ?? "None"}
+        >
+          <RouteChoices direction={direction} routes={routes} server={server} />
+        </ListRow>
+      </List>
+    )
   );
+};
+
+/** Every route, one picked. */
+const RouteChoices = ({ direction, routes, server }: RoutesProps) => (
+  <ChoiceList<string>
+    aria-label={direction === "output" ? "Play sound on" : "Record from"}
+    onValueChange={(key) => {
+      const route = routes.find((each) => each.key === key);
+      if (route !== undefined) {
+        pick(route, server);
+      }
+    }}
+    value={routes.find(({ picked }) => picked)?.key}
+  >
+    {routes.map((route) => (
+      <RadioRow
+        detail={route.detail}
+        icon={iconOf(route, direction)}
+        key={route.key}
+        name={route.label}
+        value={route.key}
+      />
+    ))}
+  </ChoiceList>
+);
 
 /** Asks for the route's device and port, whichever aren't in use already. */
 const pick = ({ device, port }: Route, server: SoundControls) => {
