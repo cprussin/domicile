@@ -11,6 +11,7 @@
 #include "base/containers/flat_map.h"
 #include "ui/display/display.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace domicile {
 
@@ -111,6 +112,25 @@ class ShellWindowPlaces {
 
   base::flat_map<uintptr_t, Record> placed_;
 };
+
+// A shell window and its rectangle, in pixels.
+struct ShellWindowBounds {
+  uintptr_t window = 0;
+  gfx::Rect pixels;
+};
+
+// Each window in `windows` that `places` puts on one of `displays` but is not
+// at that display's rectangle, with the rectangle it must take.
+//
+// A window `ShellWindowPlaces` first sees at its rectangle's display, as the
+// startup window is, was never opened to fit it. On ozone headless that
+// window is the placeholder screen's size when the compositor's virtual
+// displays replace that screen, and a display capture finds no window at the
+// display's rectangle.
+std::vector<ShellWindowBounds> ShellWindowsToFit(
+    const ShellWindowPlaces& places,
+    const std::vector<ShellWindowBounds>& windows,
+    const std::vector<display::Display>& displays);
 
 }  // namespace domicile
 
