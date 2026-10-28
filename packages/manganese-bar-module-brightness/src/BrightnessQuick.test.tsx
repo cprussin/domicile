@@ -39,6 +39,5 @@ describe(NightLightTile, () => {
     await userEvent.click(tile);
 
     expect(tile).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("On")).toBeInTheDocument();
   });
 });

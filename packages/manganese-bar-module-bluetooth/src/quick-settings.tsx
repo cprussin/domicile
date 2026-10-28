@@ -15,7 +15,7 @@ export const BluetoothIndicator = () => (
 );
 
 /** The desk's Bluetooth tile, for the quick settings panel. Only the state while locked. */
-export const BluetoothToggle = ({
+export const BluetoothCard = ({
   onMore,
 }: {
   onMore?: (() => void) | undefined;
@@ -24,7 +24,6 @@ export const BluetoothToggle = ({
   return (
     <BluetoothTile
       bluetooth={deskBluetooth(domicile)}
-      domicile={domicile}
       hardware={deskBluetoothHardware(domicile)}
       locked={useBar().locked}
       onMore={onMore}

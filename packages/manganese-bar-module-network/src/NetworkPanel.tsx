@@ -1,4 +1,5 @@
 import type { Option, Result } from "@cprussin/option-result";
+import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
@@ -15,9 +16,12 @@ import { WiredPanel } from "./WiredPanel";
 import type { WifiActions } from "./wifi-actions";
 
 /**
- * The panel, which watches Wi-Fi and the addresses while it is open. It
- * takes its container's width; a long address wraps rather than widening
- * it.
+ * The panel, which watches Wi-Fi and the addresses while it is open: a Wired
+ * section, then a Wi-Fi one. It takes its container's width; a long address
+ * wraps rather than widening it.
+ *
+ * A port without a cable is left out, unless the machine has no Wi-Fi, when
+ * an empty port is the news.
  */
 export const NetworkPanel = ({
   actions,
@@ -33,15 +37,25 @@ export const NetworkPanel = ({
   wired: NetworkInterface[];
 }) => {
   const addressing = useSharedWatch(addresses);
+  const radio = useSharedWatch(wifi);
+  const noRadio = radio?.match({
+    Err: () => false,
+    Ok: (found) => found.isNone(),
+  });
+  const plugged = wired.filter(({ up }) => up);
+  const ports = plugged.length === 0 && noRadio === true ? wired : plugged;
   return (
     <div className={panelStyles}>
-      {wired.length > 0 && <WiredPanel addresses={addressing} ports={wired} />}
+      {ports.length > 0 && <WiredPanel addresses={addressing} ports={ports} />}
       <WifiPanel
         actions={actions}
         addresses={addressing}
         host={host}
-        wifi={useSharedWatch(wifi)}
+        wifi={radio}
       />
+      {ports.length === 0 && noRadio === true && (
+        <PanelNote>No network devices</PanelNote>
+      )}
     </div>
   );
 };

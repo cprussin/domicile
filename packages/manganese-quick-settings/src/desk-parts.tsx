@@ -2,9 +2,9 @@ import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import { Battery } from "@domicile-desktop/manganese-bar-module-battery";
 import { BatteryCharge } from "@domicile-desktop/manganese-bar-module-battery/quick-settings";
 import {
+  BluetoothCard,
   BluetoothDevices,
   BluetoothIndicator,
-  BluetoothToggle,
 } from "@domicile-desktop/manganese-bar-module-bluetooth/quick-settings";
 import {
   BrightnessLevel,
@@ -15,9 +15,9 @@ import {
   KeepAwakeIndicator,
 } from "@domicile-desktop/manganese-bar-module-idle-inhibitor/quick-settings";
 import {
+  NetworkCard,
   NetworkDetails,
   NetworkIndicator,
-  NetworkToggles,
 } from "@domicile-desktop/manganese-bar-module-network/quick-settings";
 import { DarkModeTile } from "@domicile-desktop/manganese-bar-module-theme-switch/quick-settings";
 import {
@@ -34,7 +34,7 @@ import type { QuickSettingsParts } from "./QuickSettings";
 export const DESK_PARTS: QuickSettingsParts = {
   BatteryStatus: BatteryCharge,
   BluetoothDetails: BluetoothDevices,
-  BluetoothTile: BluetoothToggle,
+  BluetoothTile: BluetoothCard,
   BrightnessRow: BrightnessLevel,
   DarkModeTile,
   Indicators: () => {
@@ -51,7 +51,7 @@ export const DESK_PARTS: QuickSettingsParts = {
   },
   KeepAwakeTile: KeepAwake,
   NetworkDetails,
-  NetworkTiles: NetworkToggles,
+  NetworkTile: NetworkCard,
   NightLightTile: NightLight,
   SoundDetails: SoundMixer,
   SoundRow: SoundLevel,

@@ -1,8 +1,10 @@
+import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import type { ReactNode } from "react";
-import { Children } from "react";
+import { Children, useId, useState } from "react";
 
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
+import { Button } from "../Button/Button";
 
 export const SURFACES = ["plain", "filled"] as const;
 export type Surface = (typeof SURFACES)[number];
@@ -12,6 +14,11 @@ type Common = {
   children?: ReactNode | undefined;
   /** A second line, such as a device's battery. */
   detail?: ReactNode | undefined;
+  /**
+   * Folds `children` behind a toggle at the row's end, named this, such as
+   * "Details" for a connection's addresses.
+   */
+  disclosure?: string | undefined;
   /** At the row's end: a figure, a pill, or, on a row that isn't pressed, buttons. */
   end?: ReactNode | undefined;
   /** 16px, before the label. */
@@ -50,6 +57,7 @@ export const ListRow = ({
   busy,
   children,
   detail,
+  disclosure,
   end,
   icon,
   label,
@@ -57,6 +65,31 @@ export const ListRow = ({
   onPress,
   surface = "plain",
 }: Props) => {
+  const below = Children.toArray(children).length > 0;
+  const belowId = useId();
+  const [unfolded, setUnfolded] = useState(false);
+  const toggle = disclosure !== undefined && below && (
+    <Button
+      afterIcon={
+        <CaretDownIcon
+          aria-hidden
+          className={caretStyles({ unfolded })}
+          size={12}
+          weight="bold"
+        />
+      }
+      aria-controls={belowId}
+      aria-expanded={unfolded}
+      onClick={() => {
+        setUnfolded(!unfolded);
+      }}
+      rounded
+      size="xs"
+      variant="ghost"
+    >
+      {disclosure}
+    </Button>
+  );
   const face = (
     <>
       {icon !== undefined && (
@@ -68,7 +101,12 @@ export const ListRow = ({
         <span className={labelStyles}>{label}</span>
         {detail !== undefined && <span className={detailStyles}>{detail}</span>}
       </span>
-      {end !== undefined && <span className={endStyles}>{end}</span>}
+      {(end !== undefined || toggle !== false) && (
+        <span className={endStyles}>
+          {end}
+          {toggle}
+        </span>
+      )}
     </>
   );
   return (
@@ -90,8 +128,10 @@ export const ListRow = ({
           {face}
         </button>
       )}
-      {Children.toArray(children).length > 0 && (
-        <div className={belowStyles}>{children}</div>
+      {below && (disclosure === undefined || unfolded) && (
+        <div className={belowStyles} id={belowId}>
+          {children}
+        </div>
       )}
     </li>
   );
@@ -167,6 +207,13 @@ const rowStyles = cva({
         transition: "background-color {durations.fast} {easings.default}",
       },
     },
+  },
+});
+
+const caretStyles = cva({
+  base: { transition: "transform {durations.fast} {easings.default}" },
+  variants: {
+    unfolded: { false: {}, true: { transform: "rotate(180deg)" } },
   },
 });
 

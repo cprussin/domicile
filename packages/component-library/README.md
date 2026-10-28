@@ -33,7 +33,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Input` | Text input with prefix icon, clear button and invalid state. |
 | `Kbd` | Keyboard key cap. |
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
-| `ListRow` | Row of a panel's `List`: icon, label over a detail, and something at the end. One button, or a `filled` tile holding its own buttons. |
+| `ListRow` | Row of a panel's `List`: icon, label over a detail, and something at the end. One button, or a `filled` tile holding its own buttons. `disclosure` folds what goes under it behind a toggle. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `Notice` | Pill that briefly shows a change, such as a zoom level or volume, with an optional level meter. Key it per change. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. Parts: `Item`, `CheckboxItem`, `RadioGroup` and `RadioItem`, `Submenu`, `Separator`. Items take an `icon` and a `mnemonic`, whose letter chooses them. |
@@ -47,7 +47,8 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Popover` | Non-modal panel anchored to the control that opened it. `tone="overPhoto"` is a see-through panel for the bar, dark in either theme. |
 | `PopupBoundary` | Keeps every popup inside it (tooltips, popovers, menus, lists) within a box, such as a window's frame. Outside one, popups stay on their `Screen`. `Popover` and `Tooltip` take `spansWindows` to leave it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
-| `QuickTile` | Quick settings tile: a labeled toggle in the accent color while on, with an arrow to its details. Drawn in `currentcolor`. |
+| `QuickTile` | Quick settings tile into the details of something nearly always on, such as Wi-Fi: one button with an arrow, or only its state without details. Drawn in `currentcolor`. |
+| `QuickToggle` | Quick settings switch for something turned on and off often: an icon in a circle, in the accent color while on, over its label. |
 | `Screen` | Renders its children once per selected display. |
 | `DisplayProvider` | Supplies the host's displays to `Screen`. |
 | `display-source` | `Display` and `DisplaySource` types for `DisplayProvider`. |

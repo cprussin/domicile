@@ -1,9 +1,7 @@
 import type { Option, Result } from "@cprussin/option-result";
 import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
-import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
-import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { NetworkInterface } from "@domicile-desktop/system-network/interfaces";
 import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
@@ -16,8 +14,6 @@ import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 import { cva } from "../styled-system/css";
 import { LinkIcon, shownOf } from "./link-shown";
 import { speedOf } from "./speed";
-import type { WifiActions } from "./wifi-actions";
-import { WIFI_ACTIONS } from "./wifi-actions";
 
 type GlyphProps = {
   /** The desk's network, from the network service. */
@@ -57,37 +53,27 @@ export const NetworkGlyph = ({ interfaces, network }: GlyphProps) => {
   }
 };
 
-type TilesProps = {
+type TileProps = {
   /** The network hardware, from `/sys`. */
   interfaces: SharedWatch<Result<NetworkInterface[], SystemError>>;
-  /** The Wi-Fi device, read while the tiles show. */
+  /** The Wi-Fi device, read while the tile shows. */
   wifi: SharedWatch<Result<Option<Wifi>, SystemError>>;
-  /** The host whose system calls reach the Wi-Fi service. */
-  domicile: Domicile;
-  /** Opens the wired ports and the Wi-Fi panel. */
+  /** Opens the wired ports and the Wi-Fi panel, which has the Wi-Fi switch. */
   onMore?: (() => void) | undefined;
-  /** Injectable so tests can see what the tiles ask for. */
-  actions?: WifiActions | undefined;
 };
 
 /**
- * The quick settings network tiles: Wi-Fi, which turns the radio on and off,
- * on a machine with a Wi-Fi device; and Wired, with a cable in or without
- * Wi-Fi. Nothing until Wi-Fi has been read.
+ * The quick settings network tile, which opens the network's details: Wired
+ * with a cable in, else Wi-Fi on a machine with a Wi-Fi device, else Wired.
+ * Wi-Fi is nearly always on, so the tile is a way in, not a switch. Nothing
+ * until Wi-Fi has been read.
  */
-export const NetworkTiles = ({
-  actions = WIFI_ACTIONS,
-  domicile,
-  interfaces,
-  onMore,
-  wifi,
-}: TilesProps) => {
+export const NetworkTile = ({ interfaces, onMore, wifi }: TileProps) => {
   const read = useSharedWatch(wifi);
   const ports = useSharedWatch(interfaces)?.match({
     Err: () => [],
     Ok: (found) => found,
   });
-  const requests = useRequests();
   if (read === undefined || ports === undefined) {
     return undefined;
   } else {
@@ -98,38 +84,27 @@ export const NetworkTiles = ({
     });
     const wired = ports.filter(({ kind }) => kind === InterfaceKind.Wired);
     const cable = wired.find(({ up }) => up);
-    return (
-      <>
-        {device !== undefined && (
-          <QuickTile
-            detail={
-              requests.failed("power") === undefined
-                ? wifiDetailOf(device)
-                : "Couldn't switch"
-            }
-            icon={<WifiHighIcon size={15} weight="bold" />}
-            label="Wi-Fi"
-            onMore={onMore}
-            onPressedChange={(pressed) => {
-              requests.run("power", () =>
-                actions.setWifiEnabled(domicile, device, pressed),
-              );
-            }}
-            pressed={device.enabled}
-          />
-        )}
-        {wired.length > 0 &&
-          (cable !== undefined || device === undefined) &&
-          onMore !== undefined && (
-            <QuickTile
-              detail={cable === undefined ? "No cable" : cableDetailOf(cable)}
-              icon={<NetworkIcon size={15} weight="bold" />}
-              label="Wired"
-              onMore={onMore}
-            />
-          )}
-      </>
-    );
+    if (cable === undefined && device !== undefined) {
+      return (
+        <QuickTile
+          detail={wifiDetailOf(device)}
+          icon={<WifiHighIcon size={15} weight="bold" />}
+          label="Wi-Fi"
+          onMore={onMore}
+        />
+      );
+    } else if (wired.length > 0) {
+      return (
+        <QuickTile
+          detail={cable === undefined ? "No cable" : cableDetailOf(cable)}
+          icon={<NetworkIcon size={15} weight="bold" />}
+          label="Wired"
+          onMore={onMore}
+        />
+      );
+    } else {
+      return undefined;
+    }
   }
 };
 

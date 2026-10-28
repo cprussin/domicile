@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Option, Result } from "@cprussin/option-result";
-import { Err, None, Ok, Some } from "@cprussin/option-result";
-import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
+import { None, Ok, Some } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { NetworkInterface } from "@domicile-desktop/system-network/interfaces";
 import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
 import type { Network as Reading } from "@domicile-desktop/system-network/network";
@@ -13,11 +11,7 @@ import { WifiBackend } from "@domicile-desktop/system-network/wifi";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { held } from "./held-watch";
-import { heldWifiActions } from "./held-wifi-actions";
-import { NetworkGlyph, NetworkTiles } from "./NetworkQuick";
-
-/** A host the tiles never call, since the library is injected. */
-const NO_HOST = new FakeDomicileHost().domicile;
+import { NetworkGlyph, NetworkTile } from "./NetworkQuick";
 
 const CABLE: NetworkInterface = {
   hardwareAddress: "8c:16:45:5a:3e:01",
@@ -55,23 +49,21 @@ const WIFI: Wifi = {
 const online = (link: Reading["link"]) =>
   Ok<Reading, SystemError>({ connectivity: Connectivity.Full, link });
 
-/** The tiles, with each watch held by the test. */
-const tiles = (
-  onMore?: () => void,
-  actions: ReturnType<typeof heldWifiActions> = heldWifiActions(),
-) => {
+/** Details that open nowhere. */
+const OPENS = { onMore: () => undefined };
+
+/** The tile, with each watch held by the test. */
+const tile = ({ onMore }: { onMore: (() => void) | undefined } = OPENS) => {
   const interfaces = held<Result<NetworkInterface[], SystemError>>();
   const wifi = held<Result<Option<Wifi>, SystemError>>();
   render(
-    <NetworkTiles
-      actions={actions.actions}
-      domicile={NO_HOST}
+    <NetworkTile
       interfaces={interfaces.watch}
       onMore={onMore}
       wifi={wifi.watch}
     />,
   );
-  return { actions, interfaces, wifi };
+  return { interfaces, wifi };
 };
 
 describe(NetworkGlyph, () => {
@@ -104,70 +96,67 @@ describe(NetworkGlyph, () => {
   });
 });
 
-describe(NetworkTiles, () => {
+describe(NetworkTile, () => {
   it("shows nothing until Wi-Fi has been read", () => {
-    const { interfaces } = tiles();
+    const { interfaces } = tile();
     interfaces.report(Ok([RADIO]));
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("names the Wi-Fi network, and turns the radio off", async () => {
-    const { actions, interfaces, wifi } = tiles();
+  it("names the Wi-Fi network, and opens the details rather than switching", async () => {
+    const opened = Promise.withResolvers<true>();
+    const { interfaces, wifi } = tile({
+      onMore: () => {
+        opened.resolve(true);
+      },
+    });
     interfaces.report(Ok([RADIO]));
     wifi.report(Ok(Some(WIFI)));
     expect(screen.getByText("Home")).toBeVisible();
+    expect(screen.queryByRole("button", { pressed: true })).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "Wi-Fi" }));
-
-    expect(actions.asked).toEqual([["setEnabled", WIFI.device, false]]);
-  });
-
-  it("says plainly when the radio could not be switched", async () => {
-    const { interfaces, wifi } = tiles(
-      undefined,
-      heldWifiActions(() =>
-        Err({
-          kind: SystemErrorKind.Dbus,
-          message: "net.connman.iwd.Failed: Operation failed",
-        }),
-      ),
-    );
-    interfaces.report(Ok([RADIO]));
-    wifi.report(Ok(Some(WIFI)));
-
-    await userEvent.click(screen.getByRole("button", { name: "Wi-Fi" }));
-
-    expect(await screen.findByText("Couldn't switch")).toBeVisible();
-    expect(screen.queryByText(/iwd/)).toBeNull();
-  });
-
-  it("shows a wired tile with a cable in, which opens the details", async () => {
-    const opened = Promise.withResolvers<true>();
-    const { interfaces, wifi } = tiles(() => {
-      opened.resolve(true);
-    });
-    interfaces.report(Ok([CABLE]));
-    wifi.report(Ok(None()));
-
-    expect(screen.queryByRole("button", { name: "Wi-Fi" })).toBeNull();
     await userEvent.click(
-      screen.getByRole("button", { name: "Wired details" }),
+      screen.getByRole("button", { name: "Wi-Fi details" }),
     );
 
-    expect(screen.getByText("Connected, 1 Gb/s")).toBeVisible();
     expect(await opened.promise).toBe(true);
   });
 
-  it("shows both with a cable in beside Wi-Fi", () => {
-    const { interfaces, wifi } = tiles(() => undefined);
-    interfaces.report(Ok([CABLE, RADIO]));
-    wifi.report(Ok(Some({ ...WIFI, connection: undefined, enabled: false })));
+  it.each([
+    ["off", { connection: undefined, enabled: false }, "Off"],
+    ["not connected", { connection: undefined }, "Not connected"],
+  ])("says when Wi-Fi is %s", (_when, changes, text) => {
+    const { interfaces, wifi } = tile();
+    interfaces.report(Ok([RADIO]));
+    wifi.report(Ok(Some({ ...WIFI, ...changes })));
 
-    expect(screen.getByRole("button", { name: "Wi-Fi" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByText("Off")).toBeVisible();
+    expect(screen.getByText(text)).toBeVisible();
+  });
+
+  it("is the wired tile with a cable in, even beside Wi-Fi", () => {
+    const { interfaces, wifi } = tile();
+    interfaces.report(Ok([CABLE, RADIO]));
+    wifi.report(Ok(Some(WIFI)));
+
+    expect(screen.queryByRole("button", { name: "Wi-Fi details" })).toBeNull();
     expect(screen.getByRole("button", { name: "Wired details" })).toBeVisible();
+    expect(screen.getByText("Connected, 1 Gb/s")).toBeVisible();
+  });
+
+  it("says when a machine without Wi-Fi has no cable in", () => {
+    const { interfaces, wifi } = tile();
+    interfaces.report(Ok([{ ...CABLE, speed: undefined, up: false }]));
+    wifi.report(Ok(None()));
+
+    expect(screen.getByText("No cable")).toBeVisible();
+  });
+
+  it("only shows the state without details to open", () => {
+    const { interfaces, wifi } = tile({ onMore: undefined });
+    interfaces.report(Ok([RADIO]));
+    wifi.report(Ok(Some(WIFI)));
+
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Home")).toBeVisible();
   });
 });

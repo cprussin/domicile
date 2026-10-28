@@ -15,7 +15,7 @@ type Props = {
   addresses: Addresses;
 };
 
-/** Each wired port: whether a cable is in, its speed, addresses and hardware address. */
+/** Each wired port: whether a cable is in and its speed, with its addresses folded away. */
 export const WiredPanel = ({ addresses, ports }: Props) => (
   <PanelSection label="Wired">
     <List>
@@ -26,6 +26,7 @@ export const WiredPanel = ({ addresses, ports }: Props) => (
               ? speedOf(port.speed)
               : undefined
           }
+          disclosure="Details"
           icon={<NetworkIcon size={15} weight="bold" />}
           key={port.name}
           label={port.up ? "Connected" : "No cable"}

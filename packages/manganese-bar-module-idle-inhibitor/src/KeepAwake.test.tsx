@@ -53,7 +53,6 @@ describe(KeepAwakeTile, () => {
     render(<KeepAwakeTile inhibitor={idleInhibitor(() => taking.promise)} />);
     const tile = screen.getByRole("button", { name: "Keep awake" });
     expect(tile).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText("Off")).toBeInTheDocument();
 
     await userEvent.click(tile);
     expect(tile).toBeDisabled();
@@ -63,13 +62,17 @@ describe(KeepAwakeTile, () => {
     });
 
     expect(tile).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("On")).toBeInTheDocument();
   });
 
-  it("names what else keeps the screens on", () => {
+  it("names what else keeps the screens on", async () => {
     render(
       <KeepAwakeTile holders={["Slack", "mpv"]} inhibitor={unanswered()} />,
     );
-    expect(screen.getByText("Kept on by Slack and mpv")).toBeInTheDocument();
+
+    await userEvent.hover(screen.getByRole("button", { name: "Keep awake" }));
+
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Kept on by Slack and mpv");
   });
 });

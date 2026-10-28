@@ -1,10 +1,8 @@
-import { Result } from "@cprussin/option-result";
+import type { Result } from "@cprussin/option-result";
 import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
-import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { isAbsent } from "@domicile-desktop/react/watch-presence";
-import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
@@ -12,8 +10,6 @@ import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
 
 import { cva } from "../styled-system/css";
-import type { BluetoothActions } from "./bluetooth-actions";
-import { BLUETOOTH_ACTIONS } from "./bluetooth-actions";
 import { labelOf, unavailableLabelOf } from "./bluetooth-labels";
 
 type GlyphProps = {
@@ -55,32 +51,26 @@ export const BluetoothGlyph = ({ bluetooth }: GlyphProps) => {
 type TileProps = GlyphProps & {
   /** Whether the machine has Bluetooth hardware, from `/sys`. */
   hardware: SharedWatch<Result<boolean, SystemError>>;
-  /** The host whose system calls reach BlueZ. */
-  domicile: Domicile;
-  /** A locked desktop refuses power, so the tile only shows the state. */
+  /** A locked desktop has no details, so the tile only shows the state. */
   locked?: boolean | undefined;
-  /** Opens the devices panel. */
+  /** Opens the devices panel, which has the power switch. */
   onMore?: (() => void) | undefined;
-  /** Injectable so tests can see what the tile asks for. */
-  actions?: BluetoothActions | undefined;
 };
 
 /**
- * The quick settings tile that turns every adapter on or off, naming the
- * connected devices. Nothing until BlueZ answers, and nothing without
- * Bluetooth hardware. Without an adapter it says why and can't be pressed.
+ * The quick settings tile that opens the devices, naming the connected ones.
+ * Bluetooth is nearly always on, so the tile is a way in, not a switch.
+ * Nothing until BlueZ answers, and nothing without Bluetooth hardware.
+ * Without an adapter it says why and can't be pressed.
  */
 export const BluetoothTile = ({
-  actions = BLUETOOTH_ACTIONS,
   bluetooth,
-  domicile,
   hardware,
   locked = false,
   onMore,
 }: TileProps) => {
   const reading = useSharedWatch(bluetooth);
   const present = useSharedWatch(hardware);
-  const requests = useRequests();
   const usable = reading?.match({
     Err: () => undefined,
     Ok: (found) => (found.adapters.length > 0 ? found : undefined),
@@ -91,26 +81,12 @@ export const BluetoothTile = ({
     return (
       <QuickTile
         detail={detailOf(
-          requests.failed("power") !== undefined,
           connected.map(({ name }) => name),
           on,
         )}
-        disabled={locked}
         icon={<BluetoothIcon size={15} weight="bold" />}
         label="Bluetooth"
         onMore={locked ? undefined : onMore}
-        onPressedChange={(pressed) => {
-          requests.run("power", async () =>
-            Result.collect(
-              await Promise.all(
-                usable.adapters.map(({ path }) =>
-                  actions.setPowered(domicile, path, pressed),
-                ),
-              ),
-            ),
-          );
-        }}
-        pressed={on}
       />
     );
   } else if (reading === undefined || isAbsent(present)) {
@@ -122,28 +98,19 @@ export const BluetoothTile = ({
           Err: () => "Unavailable",
           Ok: () => "Off",
         })}
-        disabled
         icon={<BluetoothSlashIcon size={15} weight="bold" />}
         label="Bluetooth"
-        onPressedChange={() => undefined}
-        pressed={false}
       />
     );
   }
 };
 
-/** The tile's second line: a refusal, the connected devices, or on or off. */
-const detailOf = (
-  refused: boolean,
-  connected: readonly string[],
-  on: boolean,
-): string => {
-  if (refused) {
-    return "Couldn't switch";
-  } else if (connected.length > 0) {
+/** The tile's second line: the connected devices, or whether it is on. */
+const detailOf = (connected: readonly string[], on: boolean): string => {
+  if (connected.length > 0) {
     return connected.join(", ");
   } else {
-    return on ? "On" : "Off";
+    return on ? "Not connected" : "Off";
   }
 };
 

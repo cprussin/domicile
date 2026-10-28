@@ -5,99 +5,40 @@ import userEvent from "@testing-library/user-event";
 import { QuickTile } from "./QuickTile";
 
 describe(QuickTile, () => {
-  describe("rendering", () => {
-    it("names the toggle with its label and shows its detail", () => {
-      render(
-        <QuickTile
-          detail="Home"
-          icon={<span />}
-          label="Wi-Fi"
-          onPressedChange={() => undefined}
-          pressed
-        />,
-      );
-      expect(screen.getByRole("button", { name: "Wi-Fi" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-      expect(screen.getByText("Home")).toBeInTheDocument();
-    });
+  it("opens its details from the whole tile", async () => {
+    const opened = Promise.withResolvers<true>();
+    render(
+      <QuickTile
+        detail="Centar"
+        icon={<span />}
+        label="Wi-Fi"
+        onMore={() => {
+          opened.resolve(true);
+        }}
+      />,
+    );
+    expect(screen.getByText("Centar")).toBeVisible();
 
-    it("has no details button without one to open", () => {
-      render(
-        <QuickTile
-          icon={<span />}
-          label="Dark mode"
-          onPressedChange={() => undefined}
-          pressed={false}
-        />,
-      );
-      expect(screen.getAllByRole("button")).toHaveLength(1);
-    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Wi-Fi details" }),
+    );
+
+    expect(await opened.promise).toBe(true);
   });
 
-  describe("interactions", () => {
-    it("asks for the other state when pressed", async () => {
-      const asked = await new Promise((resolve) => {
-        render(
-          <QuickTile
-            icon={<span />}
-            label="Bluetooth"
-            onPressedChange={resolve}
-            pressed
-          />,
-        );
-        userEvent
-          .click(screen.getByRole("button", { name: "Bluetooth" }))
-          .catch(() => {
-            /* no-op */
-          });
-      });
-      expect(asked).toBe(false);
-    });
+  it("switches nothing", () => {
+    render(
+      <QuickTile icon={<span />} label="Wi-Fi" onMore={() => undefined} />,
+    );
 
-    it("opens its details from the arrow", async () => {
-      const opened = await new Promise((resolve) => {
-        render(
-          <QuickTile
-            icon={<span />}
-            label="Bluetooth"
-            onMore={() => {
-              resolve(true);
-            }}
-            onPressedChange={() => undefined}
-            pressed
-          />,
-        );
-        userEvent
-          .click(screen.getByRole("button", { name: "Bluetooth details" }))
-          .catch(() => {
-            /* no-op */
-          });
-      });
-      expect(opened).toBe(true);
-    });
+    expect(screen.getByRole("button")).not.toHaveAttribute("aria-pressed");
+  });
 
-    it("opens its details from the whole tile when it has no toggle", async () => {
-      const opened = await new Promise((resolve) => {
-        render(
-          <QuickTile
-            detail="Connected"
-            icon={<span />}
-            label="Wired"
-            onMore={() => {
-              resolve(true);
-            }}
-          />,
-        );
-        userEvent
-          .click(screen.getByRole("button", { name: "Wired details" }))
-          .catch(() => {
-            /* no-op */
-          });
-      });
-      expect(opened).toBe(true);
-      expect(screen.getAllByRole("button")).toHaveLength(1);
-    });
+  it("only shows its state without details", () => {
+    render(<QuickTile detail="On" icon={<span />} label="Bluetooth" />);
+
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Bluetooth")).toBeVisible();
+    expect(screen.getByText("On")).toBeVisible();
   });
 });

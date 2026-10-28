@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
@@ -89,18 +89,67 @@ describe("Mixer", () => {
       ).toHaveAttribute("aria-valuenow", "30");
     });
 
-    it("switches the default output's port without leaving", async () => {
+    it("meters only what is on screen", async () => {
+      const sound = heldSound();
+      mixer(sound);
+      expect(sound.metered.at(-1)).toEqual(["output:speakers", "input:mic"]);
+
+      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
+
+      expect(sound.metered.at(-1)).toEqual([
+        "output:speakers",
+        "input:mic",
+        "playback:42",
+      ]);
+    });
+  });
+
+  describe("where sound goes", () => {
+    it("lists each plugged-in port and device, the one in use picked", () => {
       const sound = heldSound();
       mixer(sound);
 
-      await choose("Speakers port", "Headphones (unplugged)");
+      const outputs = screen.getByRole("radiogroup", { name: "Play sound on" });
+      expect(
+        within(outputs)
+          .getAllByRole("radio")
+          .map((radio) => [
+            radio.textContent,
+            radio.getAttribute("aria-checked"),
+          ]),
+      ).toStrictEqual([
+        ["Speakers", "true"],
+        ["HDMI", "false"],
+      ]);
+    });
+
+    it("makes another device the default", async () => {
+      const sound = heldSound();
+      mixer(sound);
+
+      await userEvent.click(screen.getByRole("radio", { name: "HDMI" }));
+
+      expect(sound.asked).toEqual([["setDefault", "output:hdmi"]]);
+    });
+
+    it("switches the device's port", async () => {
+      const sound = heldSound();
+      mixer(sound, {
+        ...laptop,
+        outputs: laptop.outputs.map((output) => ({
+          ...output,
+          ports: output.ports.map((port) => ({ ...port, available: true })),
+        })),
+      });
+
+      await userEvent.click(screen.getByRole("radio", { name: "Headphones" }));
 
       expect(sound.asked).toEqual([
         ["setPort", "output:speakers", "analog-output-headphones"],
       ]);
     });
 
-    it("has no way to the rest when there is none", () => {
+    it("offers no choice with only one way", () => {
       const sound = heldSound();
       mixer(sound, {
         ...laptop,
@@ -108,77 +157,11 @@ describe("Mixer", () => {
       });
 
       expect(
-        screen.queryByRole("button", { name: "More outputs" }),
-      ).not.toBeInTheDocument();
+        screen.queryByRole("radiogroup", { name: "Play sound on" }),
+      ).toBeNull();
       expect(
-        screen.queryByRole("button", { name: "More inputs" }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("meters only what is on screen", async () => {
-      const sound = heldSound();
-      mixer(sound);
-      expect(sound.metered.at(-1)).toEqual(["output:speakers", "input:mic"]);
-
-      await userEvent.click(
-        screen.getByRole("button", { name: "More outputs" }),
-      );
-
-      expect(sound.metered.at(-1)).toEqual([
-        "output:speakers",
-        "input:mic",
-        "output:hdmi",
-      ]);
-    });
-  });
-
-  describe("more outputs", () => {
-    it("opens a drawer of the rest under the default, and shuts it", async () => {
-      const sound = heldSound();
-      mixer(sound);
-      const more = screen.getByRole("button", { name: "More outputs" });
-
-      await userEvent.click(more);
-
-      expect(screen.getByRole("slider", { name: "HDMI" })).toBeVisible();
-      expect(
-        screen.queryByRole("slider", { name: "Speakers" }),
-      ).not.toBeInTheDocument();
-      // The default is still there, over its drawer.
-      expect(screen.getByRole("slider", { name: "Volume" })).toBeVisible();
-
-      await userEvent.click(more);
-
-      expect(
-        screen.queryByRole("slider", { name: "HDMI" }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("turns one, and makes it the default", async () => {
-      const sound = heldSound();
-      mixer(sound);
-      await userEvent.click(
-        screen.getByRole("button", { name: "More outputs" }),
-      );
-
-      act(() => {
-        screen.getByRole("slider", { name: "HDMI" }).focus();
-      });
-      await userEvent.keyboard("{ArrowLeft}");
-      await userEvent.hover(
-        screen.getByRole("button", { name: "Make HDMI the default" }),
-      );
-      expect(
-        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
-      ).toHaveTextContent("Make it the default");
-      await userEvent.click(
-        screen.getByRole("button", { name: "Make HDMI the default" }),
-      );
-
-      expect(sound.asked).toEqual([
-        ["setVolume", "output:hdmi", 0.99],
-        ["setDefault", "output:hdmi"],
-      ]);
+        screen.queryByRole("radiogroup", { name: "Record from" }),
+      ).toBeNull();
     });
   });
 
@@ -240,7 +223,9 @@ describe("Mixer", () => {
     it("switches a card's profile", async () => {
       const sound = heldSound();
       mixer(sound);
-      await userEvent.click(screen.getByRole("button", { name: "Cards" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Sound cards" }),
+      );
 
       await choose("Built-in Audio profile", "Off");
 

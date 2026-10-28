@@ -1,4 +1,4 @@
-import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
+import { QuickToggle } from "@domicile-desktop/component-library/QuickToggle";
 import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { useSyncExternalStore } from "react";
 
@@ -35,15 +35,15 @@ export const KeepAwakeGlyph = ({ inhibitor, holders = [] }: Props) => {
   ) : undefined;
 };
 
-/** The quick settings tile that keeps the screens on. */
+/** The quick settings switch that keeps the screens on, naming what else does in its tooltip. */
 export const KeepAwakeTile = ({ inhibitor, holders = [] }: Props) => {
   const at = useSyncExternalStore(inhibitor.subscribe, inhibitor.current);
   const held = isHeld(at);
   return (
-    <QuickTile
+    <QuickToggle
       detail={detailOf(held, holders)}
       disabled={at === Inhibiting.Taking || at === Inhibiting.Releasing}
-      icon={<EyeIcon size={15} weight="bold" />}
+      icon={<EyeIcon size={16} weight="bold" />}
       label="Keep awake"
       onPressedChange={inhibitor.toggle}
       pressed={held}
@@ -54,13 +54,13 @@ export const KeepAwakeTile = ({ inhibitor, holders = [] }: Props) => {
 const isHeld = (at: Inhibiting) =>
   at === Inhibiting.On || at === Inhibiting.Taking;
 
-const detailOf = (held: boolean, holders: readonly string[]): string => {
-  if (holders.length > 0) {
-    return `${held ? "Also kept" : "Kept"} on by ${names.format(holders)}`;
-  } else {
-    return held ? "On" : "Off";
-  }
-};
+const detailOf = (
+  held: boolean,
+  holders: readonly string[],
+): string | undefined =>
+  holders.length > 0
+    ? `${held ? "Also kept" : "Kept"} on by ${names.format(holders)}`
+    : undefined;
 
 const names = new Intl.ListFormat("en-US", { type: "conjunction" });
 
