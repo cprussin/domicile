@@ -35,18 +35,23 @@ device and no logind seat.
 - **Scale.** A virtual monitor has its own scale, fractional like a Windows
   window's 150%, set when added or resized. The engine lays out pixels only,
   so with a scaled one the compositor lays out the desk and sends it as the
-  display layout (`Screens::from_the_engine`). A rescale alone changes no
-  mode, so the compositor lays out again without waiting for a report.
-- **Input.** On headless the launcher passes the compositor
+  display layout (`Screens::from_the_engine`). Headless gives the display
+  that scale with its bounds still in pixels, as drm does. A rescale alone
+  changes no mode, so the compositor lays out again without waiting for a
+  report.
+- **Input.** On headless and drm the launcher passes the compositor
   `--engine-takes-input yes`, and EIS events go to the engine
-  (`domicile_input_inject`) instead of the seat. `HeadlessDeskInput` makes
-  each one the event a real device's would and hands it to the shell's
-  window, so the shell sees keys first and clicks on the shell reach it.
-  - Points are desktop coordinates; a headless desk is at scale 1.
+  (`domicile_input_inject`) instead of the seat. Headless's
+  `HeadlessDeskInput` makes each one the event a real device's would and
+  hands it to the shell's window; drm sends it down evdev's own path
+  (`InjectDeskInput`). Either way the shell sees keys first, clicks on the
+  shell reach it, and the lock screen takes it.
+  - The compositor turns each desktop point into the engine's pixels by the
+    display layout: scaled, and turned onto a rotated panel
+    (`Screens::engine_pixel_of`).
   - Keys go through xkb with the compositor's keymap.
   - No key repeat. A touch is the left button, one finger at a time.
-  - drm and nested keep the seat path. On drm the engine has a real seat too,
-    so moving EIS there is a follow-up.
+  - Nested keeps the seat path: the host session delivers input.
 - **`domicile monitor <name> <width>x<height> [scale]`** adds a monitor,
   prints its output name, resizes it for each `<width>x<height> [scale]` line
   on stdin and removes it when it exits.
@@ -87,7 +92,7 @@ device and no logind seat.
 - [x] engine: headless updates the display; drm replaces its snapshot (both
       already did: each takes the whole list again)
 - [x] protocol, SDK and compositor: a virtual monitor's own scale
-- [ ] engine: headless draws a virtual display at its layout scale
+- [x] engine: headless draws a virtual display at its layout scale
 - [x] `domicile monitor`
 - [x] `domicile monitor` takes a scale
 
@@ -102,7 +107,7 @@ device and no logind seat.
 - [x] engine: casts draw the pointer on headless, from Chromium's cursor art
   (`HeadlessDeskCursorFactory`, patch `0153`)
 - [ ] engine: headless pointers from the desk's XCursor theme
-- [ ] drm: EIS through the engine too
+- [x] drm: EIS through the engine too (patch `0156`)
 
 ## Open questions
 

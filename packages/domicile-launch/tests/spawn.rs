@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use domicile_launch::shell_path::Shell;
 use domicile_launch::spawn::{
     composite_on_the_cpu, compositor, engine, let_the_engine_take_input, send_frames_in_memory,
-    Runtime,
+    the_engine_takes_input, Runtime,
 };
 
 /// A built shell, split as `shell_path` returns it: the directory the engine
@@ -816,4 +816,14 @@ fn a_compositor_for_a_headless_desk_lets_the_engine_take_input() {
         .position(|arg| arg == "--engine-takes-input")
         .expect("the flag is passed");
     assert_eq!(args[at + 1], "yes");
+}
+
+#[test]
+fn the_engine_takes_emulated_input_on_a_desk_it_drives() {
+    assert!(the_engine_takes_input("headless"), "its only input");
+    assert!(the_engine_takes_input("drm"), "so the lock screen hears it");
+    assert!(
+        !the_engine_takes_input("wayland"),
+        "nested, the host session's seat delivers it"
+    );
 }
