@@ -141,10 +141,27 @@ impl NotificationServer {
         let _ = self.told.send(Event::Dismiss { ids });
     }
 
+    /// The user looked at a window that process `pid` drew for `app_id`, so
+    /// its application's notifications are read. Most applications never
+    /// close their own; Slack on Linux does not.
+    pub fn seen(&self, pid: Option<u32>, app_id: &str) {
+        let ids = self.store.seen_by(pid, app_id);
+        if !ids.is_empty() {
+            self.dismiss(ids);
+        }
+    }
+
     /// The user pressed `action` on `id`. Its application gets `token` to
     /// raise its window with.
+    ///
+    /// The press reads the rest of its application's notifications too, as
+    /// GNOME's does, so they clear.
     pub fn invoke(&self, id: u32, action: String, token: String) {
+        let others = self.store.alongside(id);
         let _ = self.told.send(Event::Invoke { id, action, token });
+        if !others.is_empty() {
+            self.dismiss(others);
+        }
     }
 
     /// The process that sent `id`, if it came over the bus.
@@ -313,6 +330,27 @@ impl Store {
                 .filter(|id| !held.portal.forget(*id))
                 .collect()
         })
+    }
+
+    /// The notifications of the window that process `pid` drew for `app_id`:
+    /// those `pid` sent over the bus and those the portal holds for `app_id`.
+    fn seen_by(&self, pid: Option<u32>, app_id: &str) -> Vec<u32> {
+        let held = self.held.lock().unwrap();
+        pid.map(|pid| held.notifications.sent_by(pid))
+            .unwrap_or_default()
+            .into_iter()
+            .chain(held.portal.of(app_id))
+            .collect()
+    }
+
+    /// The other notifications from `id`'s application.
+    fn alongside(&self, id: u32) -> Vec<u32> {
+        let held = self.held.lock().unwrap();
+        if held.portal.owns(id) {
+            held.portal.alongside(id)
+        } else {
+            held.notifications.alongside(id)
+        }
     }
 
     /// Reply to `id`. Returns whether it closes, or `None` if it has no
@@ -913,6 +951,65 @@ mod tests {
         assert_eq!(server.store.dismiss(&[bus, bus + 1]), [bus]);
         assert_eq!(published.try_iter().last(), Some(Vec::new()));
         assert!(!server.store.held.lock().unwrap().portal.owns(bus + 1));
+    }
+
+    #[test]
+    fn a_window_names_its_applications_notifications() {
+        let (server, _published) = unserved();
+        let from = |pid| Notify {
+            pid: Some(pid),
+            ..bus_notify("Mail")
+        };
+        let bus = server
+            .store
+            .change(|held| held.notifications.notify(from(42), 0).id);
+        server
+            .store
+            .change(|held| held.notifications.notify(from(7), 0));
+        server.add_from_portal(
+            "org.example.App".into(),
+            "update".into(),
+            from_the_portal("Update"),
+        );
+        server.add_from_portal(
+            "org.example.Other".into(),
+            "update".into(),
+            from_the_portal("Update"),
+        );
+
+        assert_eq!(
+            server.store.seen_by(Some(42), "org.example.App"),
+            [bus, bus + 2]
+        );
+        assert_eq!(server.store.seen_by(None, "org.example.Other"), [bus + 3]);
+    }
+
+    #[test]
+    fn a_notification_names_its_applications_others() {
+        let (server, _published) = unserved();
+        let from = |pid| Notify {
+            pid: Some(pid),
+            ..bus_notify("Mail")
+        };
+        let bus = server
+            .store
+            .change(|held| held.notifications.notify(from(42), 0).id);
+        server
+            .store
+            .change(|held| held.notifications.notify(from(42), 0));
+        server.add_from_portal(
+            "org.example.App".into(),
+            "update".into(),
+            from_the_portal("Update"),
+        );
+        server.add_from_portal(
+            "org.example.App".into(),
+            "mail".into(),
+            from_the_portal("Mail"),
+        );
+
+        assert_eq!(server.store.alongside(bus), [bus + 1]);
+        assert_eq!(server.store.alongside(bus + 2), [bus + 3]);
     }
 
     #[test]
