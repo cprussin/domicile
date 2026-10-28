@@ -5,6 +5,8 @@ use std::time::Duration;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
+use crate::pipeline::Encoder;
+
 /// How long a pipeline may take to start, or to finish its file.
 const WITHIN: Duration = Duration::from_secs(10);
 
@@ -106,6 +108,14 @@ impl Recording {
             }
         }
     }
+}
+
+/// The best encoder this machine has.
+pub fn encoder() -> Result<Encoder, Failed> {
+    gst::init().map_err(Failed::Init)?;
+    Ok(Encoder::first(|element| {
+        gst::ElementFactory::find(element).is_some()
+    }))
 }
 
 /// The failure an error message names.
