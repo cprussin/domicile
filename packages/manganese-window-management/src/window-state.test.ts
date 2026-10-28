@@ -1790,6 +1790,31 @@ describe("a floating window dragged across screens", () => {
     expect(state.draggingId).toBe(APP("kitty"));
   });
 
+  it("keeps focus while the pointer is still on the screen it left", () => {
+    // Held off-center, its middle crosses before the pointer does, and the
+    // pointer keeps reporting the screen it is over.
+    const state = reduce(
+      held(),
+      WindowAction.WindowMoved(APP("kitty"), 1700, 100),
+      WindowAction.ScreenHovered("left"),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("keeps focus while the pointer crosses another window", () => {
+    const state = reduce(
+      desktop("editor", "kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowGrabbed(APP("kitty")),
+      WindowAction.WindowHovered(APP("editor")),
+    );
+
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
   it("takes the drag in the page's pixels, whichever screen it is on", () => {
     // One page spans the desk, so drags use desk coordinates: the second move
     // lands on the right screen at 1800 - 1920.

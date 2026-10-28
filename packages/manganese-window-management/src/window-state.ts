@@ -818,7 +818,8 @@ export const WindowAction = {
 
   /**
    * The pointer moved on a screen, which focuses it even with no window under
-   * the pointer. See {@link WindowAction.WindowHovered} for windows.
+   * the pointer. See {@link WindowAction.WindowHovered} for windows. Ignored
+   * during a drag, as that is.
    */
   ScreenHovered: (name: string) => ({
     kind: WindowActionKind.ScreenHovered as const,
@@ -952,6 +953,9 @@ export const WindowAction = {
   /**
    * The pointer entered a window, which focuses it. A hidden tab counts as
    * its container's open tab (see `pointedOn`).
+   *
+   * Ignored during a drag: focus stays with the dragged window, and its
+   * screen is where its middle is, not the pointer (see `floatDragged`).
    *
    * Clicks are {@link WindowAction.WindowSelected}.
    */
@@ -1335,7 +1339,9 @@ const reduceAction = (
       );
     }
     case WindowActionKind.WindowHovered: {
-      return pointAtWindow(state, action.id);
+      return state.draggingId === undefined
+        ? pointAtWindow(state, action.id)
+        : state;
     }
     // A request only; see `WindowClosed`.
     case WindowActionKind.WindowKilled: {
@@ -1376,7 +1382,9 @@ const reduceAction = (
       );
     }
     case WindowActionKind.ScreenHovered: {
-      return pointAtScreen(state, action.name);
+      return state.draggingId === undefined
+        ? pointAtScreen(state, action.name)
+        : state;
     }
     case WindowActionKind.ScreensDescribed: {
       return describeScreens(state, action.screens);
