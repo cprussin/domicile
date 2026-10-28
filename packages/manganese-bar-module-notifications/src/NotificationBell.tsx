@@ -4,10 +4,13 @@ import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { NotificationsHandle } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { bellId } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
+import { BellSimpleSlashIcon } from "@phosphor-icons/react/dist/ssr/BellSimpleSlash";
 
 import { css } from "../styled-system/css";
 
 type Props = {
+  /** Toasts are held back; the bell is struck through. */
+  doNotDisturb: boolean;
   /** Opens the drawer under this bell. */
   handle: NotificationsHandle;
   /** The bar's monitor. */
@@ -23,9 +26,18 @@ type Props = {
  * It swings when the count goes up, to point back to notifications whose
  * toasts have gone.
  */
-export const NotificationBell = ({ handle, screen, unread }: Props) => {
-  const label =
-    unread === 0 ? "Notifications" : `Notifications, ${unread} unread`;
+export const NotificationBell = ({
+  doNotDisturb,
+  handle,
+  screen,
+  unread,
+}: Props) => {
+  const label = [
+    "Notifications",
+    ...(unread === 0 ? [] : [`${unread} unread`]),
+    ...(doNotDisturb ? ["do not disturb"] : []),
+  ].join(", ");
+  const Icon = doNotDisturb ? BellSimpleSlashIcon : BellSimpleIcon;
   return (
     <Tooltip
       content={label}
@@ -45,7 +57,7 @@ export const NotificationBell = ({ handle, screen, unread }: Props) => {
         swing; an animation does not restart for a class it already has.
       */}
           <span aria-hidden className={bellStyles} key={unread}>
-            <BellSimpleIcon size={15} weight="fill" />
+            <Icon size={15} weight="fill" />
           </span>
           <CountBadge count={unread} />
         </Popover.Trigger>

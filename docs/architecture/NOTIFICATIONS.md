@@ -103,5 +103,9 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
   refuses dismiss and action requests.
 - **Critical** notifications stay up until dismissed and use the `danger`
   color.
+- **Do not disturb,** switched in the drawer's footer, shows no toasts but
+  critical ones. Notifications still collect in the drawer and count on the
+  bell, which is struck through. The shell keeps the switch in `localStorage`,
+  so a reload keeps it.
 - **Toasts show on the focused monitor,** the one with the keyboard, in its
   top-right corner under its bar.
