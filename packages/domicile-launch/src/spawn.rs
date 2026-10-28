@@ -178,9 +178,16 @@ pub fn send_frames_in_memory(compositor: &mut Spawn) {
     compositor.args.push("yes".into());
 }
 
-/// Makes a [`compositor`] hand emulated input to the engine, for a headless
-/// desk, whose only input it is. See
-/// `docs/architecture/A-HEADLESS-DESKTOP.md`.
+/// Whether the engine on `platform` takes emulated input (EIS) through its
+/// own input path, so the shell and its lock screen hear it as a real hand's.
+/// A desk the engine drives does; a nested one's host session delivers it.
+/// See `docs/architecture/A-HEADLESS-DESKTOP.md`.
+pub fn the_engine_takes_input(platform: &str) -> bool {
+    platform != NESTED_PLATFORM
+}
+
+/// Makes a [`compositor`] hand emulated input to the engine, for a desk where
+/// [`the_engine_takes_input`].
 pub fn let_the_engine_take_input(compositor: &mut Spawn) {
     compositor.args.push("--engine-takes-input".into());
     compositor.args.push("yes".into());
