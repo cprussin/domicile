@@ -127,6 +127,39 @@ TEST(ShellWindowPlacesTest, AWindowStaysOnTheDisplayItWasFirstSeenOn) {
             std::vector<int64_t>({100, 200}));
 }
 
+TEST(ShellWindowsToFitTest, TheStartupWindowTakesTheDisplayThatReplacedItsOwn) {
+  // Ozone headless's placeholder screen goes when the compositor's virtual
+  // displays come, and the startup window, first seen after, reads as on the
+  // display at its corner while still the placeholder's size.
+  ShellWindowPlaces places;
+  places.Update({Seen(1, 100)}, {});
+  const std::vector<display::Display> desk = {
+      display::Display(100, gfx::Rect(0, 0, 640, 480)),
+      display::Display(200, gfx::Rect(640, 0, 320, 240))};
+
+  const std::vector<ShellWindowBounds> fit = ShellWindowsToFit(
+      places, {{.window = 1, .pixels = gfx::Rect(0, 0, 1024, 768)}}, desk);
+
+  ASSERT_EQ(fit.size(), 1u);
+  EXPECT_EQ(fit[0].window, 1u);
+  EXPECT_EQ(fit[0].pixels, gfx::Rect(0, 0, 640, 480));
+}
+
+TEST(ShellWindowsToFitTest, AWindowAtItsDisplayOrOnNoneIsLeftAlone) {
+  // A window on a display that is gone is closed, not fitted.
+  ShellWindowPlaces places;
+  places.Update({Seen(1, 100), Seen(2, 300)}, {});
+  const std::vector<display::Display> desk = {
+      display::Display(100, gfx::Rect(0, 0, 640, 480))};
+
+  EXPECT_TRUE(
+      ShellWindowsToFit(places,
+                        {{.window = 1, .pixels = gfx::Rect(0, 0, 640, 480)},
+                         {.window = 2, .pixels = gfx::Rect(0, 0, 1024, 768)}},
+                        desk)
+          .empty());
+}
+
 TEST(ShellWindowPlacesTest, AWindowThatIsGoneIsForgotten) {
   // Window addresses are reused, so a stale record would place the next window
   // on the old display and leave its real display dark.

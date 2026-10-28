@@ -115,7 +115,10 @@ source_set("shell_windows") {
     "browser/shell_windows.h",
   ]
 
-  public_deps = [ "//ui/display" ]
+  public_deps = [
+    "//ui/display",
+    "//ui/gfx/geometry",
+  ]
 }
 
 # The one page a desk is: its box, its scale, which display hosts it, and what
@@ -1211,6 +1214,7 @@ group("engine") {
     "//components/domicile/engine:domicile_engine",
     "//components/domicile/engine:engine_capture_probe",
     "//components/domicile/engine:engine_color_probe",
+    "//components/domicile/engine:engine_desk_probe",
     "//components/domicile/engine:engine_dmabuf_smoke",
     "//components/domicile/engine:engine_smoke",
   ]

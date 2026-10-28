@@ -104,10 +104,13 @@ gpu::SharedImageInterface* GetSoftwareSharedImageInterface() {
   return sii->get();
 }
 
-// The ozone platform whose displays are the machine's monitors. On any other
-// platform Domicile runs nested, and its desktop is a window in another
-// session.
+// The ozone platform whose displays are the machine's monitors. With the
+// headless desk switch, ozone headless shows the compositor's virtual
+// monitors instead (ui/ozone/platform/headless/domicile/headless_desk.h,
+// whose string this copies). Anywhere else Domicile runs nested, and its
+// desktop is a window in another session.
 constexpr char kScanoutPlatform[] = "drm";
+constexpr char kHeadlessDeskSwitch[] = "domicile-headless-desk";
 
 // Must match ui/ozone/public/ozone_switches.cc. Copied to avoid a dependency
 // for one string.
@@ -199,8 +202,8 @@ ui::DomicileDisplayLayout::Transform TransformOf(
   }
 }
 
-// Applies the producer's display layout. Every ozone platform but DRM ignores
-// it, and //components/domicile/browser cannot depend on //ui/ozone, so this
+// Applies the producer's display layout. Every ozone platform but DRM and a
+// headless desk ignores it, and //components/domicile/browser cannot depend on //ui/ozone, so this
 // lives here.
 void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
   std::vector<ui::DomicileDisplayLayout> wanted;
@@ -247,7 +250,7 @@ void SetPointerTargets(std::vector<domicile::mojom::PointerTargetPtr> targets) {
 }
 
 // Sets the producer's virtual displays. Lives here for SetDisplayLayout's
-// reason; every platform but DRM ignores it.
+// reason; every platform but DRM and a headless desk ignores it.
 void SetVirtualDisplays(
     std::vector<domicile::mojom::VirtualDisplayPtr> displays) {
   std::vector<ui::DomicileVirtualDisplay> wanted;
@@ -322,10 +325,11 @@ class DomicileBrowserService {
                             base::Unretained(this)));
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();
-    // Only on DRM. A nested run's screen is the host's monitors, which are not
-    // the producer's desktop.
+    // Only on DRM or a headless desk. A nested run's screen is the host's
+    // monitors, which are not the producer's desktop.
     if (command_line.GetSwitchValueASCII(kOzonePlatformSwitch) ==
-        kScanoutPlatform) {
+            kScanoutPlatform ||
+        command_line.HasSwitch(kHeadlessDeskSwitch)) {
       displays_ = std::make_unique<DomicileDisplayWatcher>(&broker_);
     }
     if (!command_line.HasSwitch(kSocketSwitch)) {
@@ -413,7 +417,7 @@ class DomicileBrowserService {
 
   domicile::FrameSinkBroker broker_;
   domicile::ExternalSurfaceProvider provider_;
-  // Null off DRM.
+  // Null unless on DRM or a headless desk.
   std::unique_ptr<DomicileDisplayWatcher> displays_;
 };
 
