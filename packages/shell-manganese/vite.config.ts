@@ -1,5 +1,4 @@
 import { shellBuild } from "@domicile-desktop/component-library/vite-shell";
-import pandacssPostcssPlugin from "@pandacss/dev/postcss";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { options } from "./src/options";
@@ -19,14 +18,5 @@ const shell = shellBuild({ entry: "src/index.tsx", options });
 export default defineConfig({
   base: "./",
   build: { ...shell.build, outDir: ".vite/renderer/main_window" },
-  css: {
-    postcss: {
-      // @pandacss/dev bundles a different postcss version than Vite, so the
-      // plugin types don't match. Casting to `never` erases the type;
-      // `@ts-expect-error` would leave it to fail the `UserConfig` comparison
-      // with TS2321. The runtime shapes are identical.
-      plugins: [pandacssPostcssPlugin as never],
-    },
-  },
   plugins: [react(), ...shell.plugins],
 });

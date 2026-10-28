@@ -176,7 +176,6 @@
       },
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
-        "@pandacss/dev": "catalog:",
         "@vitejs/plugin-react": "catalog:",
         "vite": "catalog:",
         "zod": "catalog:",
@@ -1064,7 +1063,6 @@
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "@vitejs/plugin-react": "catalog:",
-        "postcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
       },

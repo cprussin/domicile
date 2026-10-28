@@ -6,7 +6,7 @@
 // into the compositor's JSON. Reports each step on stdout as a JSON line.
 //
 // Only a JSON object with a `step` field is a step. Other stdout output, such
-// as Panda's timing, is the build log, which `domicile` shows as is.
+// as a tool's warnings, is the build log, which `domicile` shows as is.
 
 import {
   existsSync,
@@ -104,10 +104,10 @@ const build = async (
   if (readFile(path.join(root, MODULE)) === undefined) {
     installed(read.project);
     say(Step.Bundling());
-    // Imported lazily: vite and Panda take most of a second to load, and a
-    // cached build needs neither.
+    // Imported lazily: vite takes most of a second to load, and a cached
+    // build needs none of it.
     const { bundle } = await import("./bundle");
-    await bundle(entry, root, domicile, [...read.graph.files.keys()]);
+    await bundle(entry, root, domicile);
     const { extractOptions } = await import("./evaluate");
     await extractOptions(entry, path.join(root, OPTIONS), domicile);
     say(Step.Built(root, MODULE, false));

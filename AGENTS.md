@@ -212,7 +212,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/packages/manganese-window-management/docs/KEYS.md](/packages/manganese-window-management/docs/KEYS.md) | Default bindings, resize mode, commands, keysym rules, a sample config, differences from sway. |
 | [/packages/shell-manganese/docs/TOP-BAR.md](/packages/shell-manganese/docs/TOP-BAR.md) | The `bar` option and its items: workspaces, clock, network, Bluetooth, battery, brightness, volume, notifications, tray. |
 | [/packages/shell-manganese/docs/HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md) | How backlight and audio are read for the top bar. |
-| [/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md) | Using manganese's Panda CSS in custom bar items. |
+| [/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md) | Styling custom bar items. |
 | [/packages/manganese-launcher/docs/LAUNCHER.md](/packages/manganese-launcher/docs/LAUNCHER.md) | Launcher row order, sources and previews. |
 | [/packages/manganese-clipboard/docs/CLIPBOARD.md](/packages/manganese-clipboard/docs/CLIPBOARD.md) | Clipboard history and the browser-window clipboard on tty vs nested. |
 | [/packages/manganese-wallpaper/docs/WALLPAPER.md](/packages/manganese-wallpaper/docs/WALLPAPER.md) | Wallpaper rotation, per-theme photos, crossfade, sources. |

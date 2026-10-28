@@ -42,16 +42,15 @@ desktop ([SHELL-CONFIG.md](SHELL-CONFIG.md#a-config-module)).
 ## Add a bar item
 
 A bar item is a React component. It reads the desktop with
-`@domicile-desktop/react`'s hooks and styles itself with manganese's Panda
-CSS:
+`@domicile-desktop/react`'s hooks and styles itself with a plain CSS import:
 
 ```tsx
 import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
-import { css } from "@domicile-desktop/manganese/css";
 import { useWindows } from "@domicile-desktop/react/windows";
+import "./window-count.css";
 
 const WindowCount = () => (
-  <span className={css({ color: "muted" })}>{useWindows().length} windows</span>
+  <span className="window-count">{useWindows().length} windows</span>
 );
 
 export const Shell = runManganese({

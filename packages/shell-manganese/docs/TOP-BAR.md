@@ -63,7 +63,7 @@ Each item reads what it shows from context:
   the desktop provides: `useLauncher()`, `useNotificationsDrawer()`,
   `useTrayState()`, `useWorkspaces()`.
 
-To style your own items with manganese's Panda CSS, see
+To style your own items, see
 [CUSTOM-BAR-ITEMS.md](CUSTOM-BAR-ITEMS.md).
 
 Every bar and the lock screen share one watch per system readout. See

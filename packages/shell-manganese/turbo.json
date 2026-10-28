@@ -1,0 +1,14 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "prepare": {
+      "inputs": [
+        "panda.config.ts",
+        "src/**/*.{ts,tsx}",
+        "package.json",
+        "$TURBO_ROOT$/packages/component-library/src/**/*.{ts,tsx}",
+        "$TURBO_ROOT$/packages/manganese-*/src/**/*.{ts,tsx}"
+      ]
+    }
+  }
+}
