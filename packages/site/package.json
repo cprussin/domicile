@@ -1,14 +1,19 @@
 {
   "dependencies": {
+    "@cprussin/option-result": "catalog:",
     "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/react": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:",
+    "@tailwindcss/browser": "catalog:",
     "lowlight": "catalog:",
     "mdast-util-from-markdown": "catalog:",
     "mdast-util-gfm": "catalog:",
     "micromark-extension-gfm": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "sucrase": "catalog:"
   },
   "description": "domicile-desktop.com: the Domicile and manganese landing pages and the docs.",
   "devDependencies": {
@@ -18,6 +23,7 @@
     "@pandacss/dev": "catalog:",
     "@pandacss/preset-panda": "catalog:",
     "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
     "@types/bun": "catalog:",
     "@types/mdast": "catalog:",
     "@types/node": "catalog:",

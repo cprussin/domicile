@@ -1,6 +1,6 @@
-import { css, cva } from "../../styled-system/css";
+import { cva } from "../../styled-system/css";
+import { HighlightedLines } from "./HighlightedLines";
 import type { Language } from "./highlight";
-import { highlight } from "./highlight";
 
 type Props = {
   code: string;
@@ -15,18 +15,7 @@ type Props = {
 /** Highlighted code, colored at build time. */
 export const CodeBlock = ({ code, language, frame = "inset" }: Props) => (
   <pre className={preStyles({ frame })}>
-    <code>
-      {highlight(language, code).map((runs, line) => (
-        // Line numbers are stable keys.
-        <span className={lineStyles} key={line}>
-          {runs.map((run, at) => (
-            <span className={runStyles({ tone: run.tone })} key={at}>
-              {run.text}
-            </span>
-          ))}
-        </span>
-      ))}
-    </code>
+    <HighlightedLines code={code} language={language} />
   </pre>
 );
 
@@ -54,25 +43,6 @@ const preStyles = cva({
         borderRadius: "2xl",
         padding: 6,
       },
-    },
-  },
-});
-
-const lineStyles = css({ display: "block", minBlockSize: "1lh" });
-
-const runStyles = cva({
-  variants: {
-    tone: {
-      attr: { color: "syntax.attr" },
-      comment: { color: "syntax.comment" },
-      function: { color: "syntax.function" },
-      keyword: { color: "syntax.keyword" },
-      number: { color: "syntax.number" },
-      plain: { color: "syntax.plain" },
-      property: { color: "syntax.property" },
-      punctuation: { color: "syntax.punctuation" },
-      string: { color: "syntax.string" },
-      tag: { color: "syntax.tag" },
     },
   },
 });

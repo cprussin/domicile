@@ -8,14 +8,25 @@ import { hstack } from "../../styled-system/patterns";
 
 const LABELS = { copied: "Copied", failed: "Copy failed", idle: "Copy" };
 
-/** A shell command with a button that copies it. */
-export const CopyCommand = ({ command }: { command: string }) => {
+/**
+ * A shell command with a button that copies it. A `message`, such as a prompt
+ * for a coding agent, has no `$`.
+ */
+export const CopyCommand = ({
+  command,
+  kind = "command",
+}: {
+  command: string;
+  kind?: "command" | "message";
+}) => {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   return (
     <div className={boxStyles}>
-      <span aria-hidden="true" className={promptStyles}>
-        $
-      </span>
+      {kind === "command" ? (
+        <span aria-hidden="true" className={promptStyles}>
+          $
+        </span>
+      ) : undefined}
       <code className={commandStyles}>{command}</code>
       <Button
         onClick={() => {

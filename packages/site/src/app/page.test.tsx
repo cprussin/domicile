@@ -9,7 +9,14 @@ test("the hero links to each main section of the page", () => {
   const targets = [...(links ?? "").matchAll(/href="#([^"]+)"/g)].map(
     ([, id]) => id,
   );
-  expect(targets).toEqual(["css", "batteries", "apps", "npm", "manganese"]);
+  expect(targets).toEqual([
+    "make",
+    "css",
+    "batteries",
+    "apps",
+    "npm",
+    "manganese",
+  ]);
   for (const id of targets) {
     expect(html).toContain(`id="${id}"`);
   }
