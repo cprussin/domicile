@@ -30,6 +30,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         bool is_private,
                         const String& partition,
                         bool is_app,
+                        const String& app_id,
                         bool is_captured);
   ~DomicileBrowserWindow() override;
 
@@ -42,6 +43,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool isPrivate() const { return is_private_; }
   const String& partition() const { return partition_; }
   bool isApp() const { return is_app_; }
+  const String& appId() const { return app_id_; }
   bool isCaptured() const { return is_captured_; }
 
   void Trace(Visitor*) const override;
@@ -56,6 +58,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool is_private_ = false;
   String partition_;
   bool is_app_ = false;
+  String app_id_;
   bool is_captured_ = false;
 };
 

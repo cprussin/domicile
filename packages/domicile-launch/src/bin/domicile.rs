@@ -120,11 +120,15 @@ fn run() -> Result<ExitCode, String> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Invocation::OpenAsApp { target } => {
+        Invocation::OpenAsApp { target, id, reuse } => {
             let here = typed_in()?;
             match app_opening(&target, &here).map_err(|why| why.to_string())? {
+                AppOpening::Module(_) if id.is_some() => Err(format!(
+                    "--id is for a site; {target} is an app module, which opens \
+                     a window of its own each time"
+                )),
                 AppOpening::Module(entry) => ran_app(&entry, &here),
-                AppOpening::Address(url) => asked(&Request::OpenApp { url }),
+                AppOpening::Address(url) => asked(&Request::OpenApp { url, id, reuse }),
             }
         }
         // Absolute here, since the compositor does not share this working
@@ -1105,8 +1109,9 @@ fn answer_a_command(
                     open: &|url| {
                         open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
-                    open_app: &|url| {
-                        open_app(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    open_app: &|url, id, reuse| {
+                        open_app(engine, url, id, reuse, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
                     },
                     run_app: &|root, module| {
                         run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())

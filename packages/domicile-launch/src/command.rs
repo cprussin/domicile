@@ -77,6 +77,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::control::AppReuse;
 use crate::extensions::InstalledExtension;
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
@@ -165,17 +166,24 @@ pub fn open_url_line(url: &str) -> String {
         url,
         version: VERSION,
         app: false,
+        app_id: None,
+        reuse: AppReuse::New,
     })
 }
 
 /// The request to open `url` in an app window: a browser window the shell
 /// draws without an address bar. An engine that predates `app` ignores it and
 /// opens a browser window.
-pub fn open_app_line(url: &str) -> String {
+///
+/// With `id`, the window is that app's, and `reuse` says what to do when one
+/// of its windows is open.
+pub fn open_app_line(url: &str, id: Option<&str>, reuse: AppReuse) -> String {
     line(&Command::OpenUrl {
         url,
         version: VERSION,
         app: true,
+        app_id: id,
+        reuse,
     })
 }
 
@@ -336,6 +344,12 @@ enum Command<'a> {
         // engine reads.
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         app: bool,
+        // Left out when none, as `app` is.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        app_id: Option<&'a str>,
+        // Left out when new, the engine's default.
+        #[serde(skip_serializing_if = "is_new")]
+        reuse: AppReuse,
     },
     SitePermissions {
         version: u32,
@@ -416,4 +430,9 @@ fn line(command: &Command) -> String {
         serde_json::to_string(command).expect("a command is plain data and always serializes");
     line.push('\n');
     line
+}
+
+/// Whether `reuse` is the engine's default, which a line leaves out.
+fn is_new(reuse: &AppReuse) -> bool {
+    *reuse == AppReuse::New
 }

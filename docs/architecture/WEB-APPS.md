@@ -19,6 +19,23 @@ A shell's own launcher calls `domicile.browser.openApp(url)` instead, which
 opens the same window over the shell's `BrowserWindows` pipe
 ([SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md)).
 
+### One window per app
+
+An app window can belong to an app id, so a launch can reuse it:
+
+```
+domicile open --app --id messages --reuse focus https://messages.google.com/web/
+browser.openApp(url, { id: "gmail:me@example.com", reuse: AppReuse.Navigate })
+```
+
+- **`appId`** is listed on the window. Empty for none.
+- **`reuse`:** `new` (default) opens another window; `focus` raises the
+  oldest open window with the id; `navigate` also loads the address in it.
+- **Raising** fires `domicile-focus-request` on the window's `<webview>`, as
+  the page's own `window.focus()` does, so the shell raises it the same way.
+- **`countMatches(id, selector)`** counts elements in a window's page, so a
+  shell can read an app's unread count from its window, hidden or not.
+
 - **An app window** is a browser window with `isApp` set. It shares the
   profile, extensions and site permissions of every other window. Its visits
   stay out of the history ([HISTORY.md](/docs/HISTORY.md)).
@@ -90,8 +107,13 @@ runs `domicile open --app <entry.js>`.
 - **`install-app`'s entry runs `domicile` from `PATH`.** A store path would
   break once garbage-collected; home-manager's entries name one because each
   generation rewrites them.
-- **Every `open --app` opens a window.** An app can have several windows, as a
-  browser can.
+- **Every `open --app` opens a window, unless it names an id to reuse.** An
+  app can have several windows, as a browser can; an inbox wants one.
+- **The engine matches the window by id, not the shell.** A match in the shell
+  races its window list, so two quick launches open two windows, and the CLI
+  could not use it.
+- **An id the caller names, not one from the URL.** Two Gmail accounts share
+  an origin but are separate apps.
 - **A read-only address off the app's origin, none on it.** Only a program the
   user runs opens an app window, so its own pages need no address. A page
   elsewhere, such as a sign-in, shows its site and connection, as Chrome does
@@ -111,6 +133,8 @@ runs `domicile open --app <entry.js>`.
 - [x] home-manager `webApps.<name> = { url; icon; }`, which writes desktop
   entries
 - [x] `DomicileHost.openAppWindow(url)`, for a shell's own launcher
+- [x] app ids and `reuse` (`open --app --id --reuse`, `openApp(url, { id,
+  reuse })`), and `countBrowserWindowMatches`
 
 ## Open questions
 

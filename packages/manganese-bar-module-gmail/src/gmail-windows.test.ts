@@ -9,6 +9,7 @@ const browser = (
   url: string,
   title: string,
 ): DomicileBrowserWindow => ({
+  appId: "",
   height: 0,
   id,
   isApp: false,

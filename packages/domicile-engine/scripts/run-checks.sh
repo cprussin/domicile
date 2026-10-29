@@ -65,6 +65,7 @@ TOGETHER=(
   guard-webview-partition
   guard-webview-will-navigate
   guard-webview-app-window
+  guard-app-window-reuse
   guard-webview-routed-link
   guard-webview-target-url
   guard-webview-fullscreen

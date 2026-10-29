@@ -2391,7 +2391,7 @@ void WebViewGuest::ResizeDueToAutoResize(content::WebContents* web_contents,
 }
 
 void WebViewGuest::RequestFocus() {
-  LOG(INFO) << "domicile: an extension asked for a <webview> in front.";
+  LOG(INFO) << "domicile: asked for a <webview> in front.";
   client_->FocusRequested();
 }
 

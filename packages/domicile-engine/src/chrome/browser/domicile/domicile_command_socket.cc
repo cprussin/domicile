@@ -223,17 +223,25 @@ void RunAppInAnAppWindow(const base::FilePath& root,
 // `app` an app window, or refuses when there is no shell page to own it. The
 // shell sees it in its window list. See domicile_browser_windows.h.
 void OpenUrlOnceTheShellHasAPage(const GURL& url,
-                                 bool app,
+                                 std::optional<AppLaunch> app,
                                  WindowOpened opened,
                                  bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  std::move(opened).Run(has_a_page && OpenBrowserWindow(url, app));
+  if (!has_a_page) {
+    std::move(opened).Run(false);
+  } else if (app.has_value()) {
+    std::move(opened).Run(OpenAppWindow(url, app->id, app->reuse));
+  } else {
+    std::move(opened).Run(OpenBrowserWindow(url));
+  }
 }
 
 // Opens the window once the shell window shows a page, which owns it.
-void OpenUrlInABrowserWindow(const GURL& url, bool app, WindowOpened opened) {
-  WhenTheShellWindowCanTakeIt(base::BindOnce(&OpenUrlOnceTheShellHasAPage, url,
-                                             app, std::move(opened)));
+void OpenUrlInABrowserWindow(const GURL& url,
+                             std::optional<AppLaunch> app,
+                             WindowOpened opened) {
+  WhenTheShellWindowCanTakeIt(base::BindOnce(
+      &OpenUrlOnceTheShellHasAPage, url, std::move(app), std::move(opened)));
 }
 
 // The site settings of the shell's profile, which browser windows share, or

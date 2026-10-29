@@ -18,6 +18,7 @@ use crate::command::{
     set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
     site_permissions_line, uninstall_extension_line, visits_line, Reply, NO_SHELL_WINDOW,
 };
+use crate::control::AppReuse;
 use crate::extensions::InstalledExtension;
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
@@ -97,9 +98,21 @@ pub fn run_app(
     carry_out(socket, &run_app_line(root, module), Reply::Opened, patience)
 }
 
-/// Tells the engine at `socket` to open `url` in an app window.
-pub fn open_app(socket: &Path, url: &str, patience: Duration) -> Result<(), CommandError> {
-    carry_out(socket, &open_app_line(url), Reply::Opened, patience)
+/// Tells the engine at `socket` to open `url` in an app window, as app `id`'s
+/// when there is one, reusing its open window as `reuse` says.
+pub fn open_app(
+    socket: &Path,
+    url: &str,
+    id: Option<&str>,
+    reuse: AppReuse,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &open_app_line(url, id, reuse),
+        Reply::Opened,
+        patience,
+    )
 }
 
 /// Asks the engine at `socket` for every permission's default and every

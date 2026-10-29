@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use domicile_protocol::Scale;
 
-use crate::control::{Request, Switch, ThemeChange};
+use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
 
 /// What `domicile --help` prints.
@@ -29,6 +29,9 @@ Ask the running desktop:
   domicile open <file|folder|url>       Open with its default app, a link in
                                         a browser window
   domicile open --app <url|module>      Open a site or app module as an app
+  domicile open --app --id <id> [--reuse new|focus|navigate] <url>
+                                        Open a site as app <id>; with focus or
+                                        navigate, reuse its open window
   domicile open --which <file|url>      Print the app open would use
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
   domicile screen-record                Record the screen until the toolbar stops it
@@ -93,6 +96,16 @@ pub enum CliError {
          domicile open --app ./notes/notes.js\n"
     )]
     NothingToOpen,
+    #[error(
+        "--reuse finds the open window by its app's id, and was given no \
+         --id:\n\n    \
+         domicile open --app --id mail --reuse focus https://mail.example\n"
+    )]
+    ReuseWithoutId,
+    #[error("--reuse is new, focus or navigate, and was given {given}.")]
+    UnknownReuse { given: String },
+    #[error("{flag} takes a value, and was given none.")]
+    FlagWithoutValue { flag: String },
     #[error(
         "open takes one thing to open, and it was given {extra} as well. One \
          thing is one window."
@@ -196,8 +209,13 @@ pub enum Invocation {
     /// an app module ([`crate::app_entry`]), anything else as a site in a
     /// browser window without an address bar ([`crate::address`]).
     ///
-    /// Kept as typed, like [`Invocation::Open`]'s.
-    OpenAsApp { target: String },
+    /// Kept as typed, like [`Invocation::Open`]'s. A site may be app `id`'s,
+    /// whose open window `reuse` reuses.
+    OpenAsApp {
+        target: String,
+        id: Option<String>,
+        reuse: AppReuse,
+    },
     /// Print the desktop file id of the application [`Invocation::Open`]
     /// would run for this, or nothing for a web address. The launcher lists
     /// it first under "Open with".
@@ -232,7 +250,7 @@ pub enum Invocation {
 ///   `shell_path` treats a bare word as a path when such a file exists. Use
 ///   `./which-shell` to run a shell with a verb's name.
 /// - Each verb has a closed argument list and takes no flags but `open`'s
-///   `--app`. The running desktop already read its config, so a `--config`
+///   `--app`, `--id` and `--reuse`, and `--which`. The running desktop already read its config, so a `--config`
 ///   would be silently ignored.
 /// - `--config` may come before or after the shell.
 pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, CliError> {
@@ -273,12 +291,16 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             Verb::Opening => {
                 let first = args.next();
                 let flag = first.clone().filter(|word| word == APP || word == WHICH);
+                let (id, reuse) = match flag.as_deref() {
+                    Some(APP) => app_flags(&mut args)?,
+                    _ => (None, AppReuse::New),
+                };
                 let target = if flag.is_some() { args.next() } else { first };
                 match (target, args.next()) {
                     (None, _) => Err(CliError::NothingToOpen),
                     (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
                     (Some(target), None) => Ok(match flag.as_deref() {
-                        Some(APP) => Invocation::OpenAsApp { target },
+                        Some(APP) => Invocation::OpenAsApp { target, id, reuse },
                         Some(_) => Invocation::Opener { target },
                         None => Invocation::Open { target },
                     }),
@@ -399,6 +421,39 @@ const HELP: [&str; 3] = ["help", "--help", "-h"];
 
 /// `open`'s flag for opening as an app.
 const APP: &str = "--app";
+
+/// `open --app`'s flag naming the app a site's window belongs to.
+const ID: &str = "--id";
+
+/// `open --app`'s flag saying what to do when the app's window is open.
+const REUSE: &str = "--reuse";
+
+/// `open --app`'s `--id` and `--reuse`, in either order, before the target.
+fn app_flags(
+    args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
+) -> Result<(Option<String>, AppReuse), CliError> {
+    let mut id = None;
+    let mut reuse = AppReuse::New;
+    while let Some(flag) = args.next_if(|word| word == ID || word == REUSE) {
+        let value = args
+            .next()
+            .ok_or_else(|| CliError::FlagWithoutValue { flag: flag.clone() })?;
+        if flag == ID {
+            id = Some(value);
+        } else {
+            reuse = match value.as_str() {
+                "new" => AppReuse::New,
+                "focus" => AppReuse::Focus,
+                "navigate" => AppReuse::Navigate,
+                _ => return Err(CliError::UnknownReuse { given: value }),
+            };
+        }
+    }
+    if reuse != AppReuse::New && id.is_none() {
+        return Err(CliError::ReuseWithoutId);
+    }
+    Ok((id, reuse))
+}
 
 /// `open`'s flag for printing what would open it, without opening it.
 const WHICH: &str = "--which";
