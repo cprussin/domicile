@@ -2,6 +2,7 @@ import { css, cx } from "../../styled-system/css";
 import type { Direction } from "../direction";
 import { grabCursorStyles } from "../grab-cursor-styles";
 import { TILED } from "../placement";
+import type { Spot } from "../pointer-warp";
 import type { Rect } from "../rect";
 import { useGrabCursor } from "../useGrabCursor";
 import { placedAt } from "../window-styles";
@@ -16,6 +17,8 @@ type Props = {
   onDrop: () => void;
   onDropOn: (aim: Aim) => void;
   onGrab: (resizing: boolean) => void;
+  /** The pointer entered the sheet, at this page position. See `WindowFrame`. */
+  onHover: (at: Spot) => void;
   onPull: () => void;
   onStretch: (edge: Direction, by: number) => void;
   /** Whether a drag started now resizes instead of moves. */
@@ -31,7 +34,13 @@ type Props = {
  *
  * Mounted only while the modifier is held or a drag is running.
  */
-export const TileGrab = ({ frame, id, resizes, ...handlers }: Props) => {
+export const TileGrab = ({
+  frame,
+  id,
+  onHover,
+  resizes,
+  ...handlers
+}: Props) => {
   const { drag, ...events } = useTileDrag({
     dragged: [id],
     frame,
@@ -47,6 +56,10 @@ export const TileGrab = ({ frame, id, resizes, ...handlers }: Props) => {
       // The window this sheet belongs to. See `FloatGrab`.
       data-window={id}
       onPointerMove={onPointerMove}
+      // The sheet covers the window, so focus follows the pointer from here.
+      onPointerOver={(event) => {
+        onHover([event.clientX, event.clientY]);
+      }}
       style={placedAt(frame, TILED)}
       {...events}
     />

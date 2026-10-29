@@ -1,5 +1,6 @@
 import { css, cx } from "../../styled-system/css";
 import { grabCursorStyles } from "../grab-cursor-styles";
+import type { Spot } from "../pointer-warp";
 import type { Rect } from "../rect";
 import { useGrabCursor } from "../useGrabCursor";
 import { placedAt } from "../window-styles";
@@ -13,6 +14,8 @@ type Props = {
   float: Float;
   onDrop: () => void;
   onGrab: (resizing: boolean) => void;
+  /** The pointer entered the overlay, at this page position. See `WindowFrame`. */
+  onHover: (at: Spot) => void;
   onMove: (x: number, y: number) => void;
   onPull: () => void;
   onResize: (box: Rect) => void;
@@ -37,6 +40,7 @@ type Props = {
 export const FloatGrab = ({
   depth,
   float,
+  onHover,
   resizes,
   window,
   ...moves
@@ -62,6 +66,10 @@ export const FloatGrab = ({
       // `AppWindow`.
       data-window={window}
       onPointerMove={onPointerMove}
+      // The overlay covers the window, so focus follows the pointer from here.
+      onPointerOver={(event) => {
+        onHover([event.clientX, event.clientY]);
+      }}
       style={placedAt(rectOf(float), depth)}
       {...handlers}
     />
