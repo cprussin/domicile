@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::control::{
-    answer, parse_response, Desktop, LoadShell, OpenUrl, Response, Screenshot, SendShell,
+    answer, parse_response, AppReuse, Desktop, LoadShell, OpenUrl, Response, Screenshot, SendShell,
     SettingsFiles, Shot,
 };
 use domicile_launch::extensions::InstalledExtension;
@@ -134,15 +134,44 @@ fn a_desktop_told_to_open_an_app_tells_the_engine() {
     let answered = reply_to(
         "{\"type\":\"open_app\",\"url\":\"https://example.com/\"}",
         &Desktop {
-            open_app: &|url| {
-                told.set(Some(url.to_string()));
+            open_app: &|url, id, reuse| {
+                told.set(Some((url.to_string(), id.map(str::to_string), reuse)));
                 Ok(())
             },
             ..nothing_dialed()
         },
     );
 
-    assert_eq!(told.take(), Some("https://example.com/".to_string()));
+    assert_eq!(
+        told.take(),
+        Some(("https://example.com/".to_string(), None, AppReuse::New))
+    );
+    assert_eq!(answered, Response::Opened);
+}
+
+#[test]
+fn a_desktop_told_to_reuse_an_app_window_tells_the_engine_which() {
+    let told = Cell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"open_app\",\"url\":\"https://example.com/\",\"id\":\"mail\",\
+         \"reuse\":\"navigate\"}",
+        &Desktop {
+            open_app: &|url, id, reuse| {
+                told.set(Some((url.to_string(), id.map(str::to_string), reuse)));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some((
+            "https://example.com/".to_string(),
+            Some("mail".to_string()),
+            AppReuse::Navigate
+        ))
+    );
     assert_eq!(answered, Response::Opened);
 }
 
@@ -855,7 +884,7 @@ fn nothing_dialed() -> Desktop<'static> {
         media_devices: &|| panic!("only media_devices lists media devices"),
         module: Path::new("/shell.js"),
         open: &|_| panic!("only open_url opens a browser window"),
-        open_app: &|_| panic!("only open_app opens an app window"),
+        open_app: &|_, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         record: &|| panic!("only screen_record records anything"),

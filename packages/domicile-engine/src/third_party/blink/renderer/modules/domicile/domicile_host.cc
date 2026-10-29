@@ -1600,10 +1600,88 @@ void DomicileHost::openPrivateBrowserWindow(ScriptState*,
                     exception_state);
 }
 
+namespace {
+
+// openAppWindow()'s `reuse`, or nothing for a name it does not take.
+std::optional<domicile::mojom::blink::AppReuse> AppReuseNamed(
+    const String& reuse) {
+  if (reuse == "new") {
+    return domicile::mojom::blink::AppReuse::kNew;
+  }
+  if (reuse == "focus") {
+    return domicile::mojom::blink::AppReuse::kFocus;
+  }
+  if (reuse == "navigate") {
+    return domicile::mojom::blink::AppReuse::kNavigate;
+  }
+  return std::nullopt;
+}
+
+// The browser's answer to countBrowserWindowMatches(): the count, or nothing
+// when the window is gone or its page gave no number.
+void SettleBrowserWindowCount(ScriptPromiseResolver<IDLLong>* resolver,
+                              std::optional<int32_t> count) {
+  if (!count.has_value()) {
+    resolver->RejectWithDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The browser window is gone, or its page gave no count.");
+    return;
+  }
+  resolver->Resolve(*count);
+}
+
+}  // namespace
+
 void DomicileHost::openAppWindow(ScriptState*,
                                  const String& url,
+                                 const String& app_id,
+                                 const String& reuse,
                                  ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kApp, g_empty_string, exception_state);
+  // Resolved against this document, as openBrowserWindow's is.
+  const KURL resolved = window_->CompleteURL(url);
+  if (!resolved.IsValid()) {
+    exception_state.ThrowTypeError("url must be an address");
+    return;
+  }
+  const std::optional<domicile::mojom::blink::AppReuse> named =
+      AppReuseNamed(reuse);
+  if (!named.has_value()) {
+    exception_state.ThrowTypeError(
+        "reuse must be \"new\", \"focus\" or \"navigate\"");
+    return;
+  }
+  if (*named != domicile::mojom::blink::AppReuse::kNew && app_id.empty()) {
+    exception_state.ThrowTypeError(
+        "reuse \"focus\" or \"navigate\" needs an appId to find the window "
+        "by");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->OpenApp(resolved, app_id, *named);
+  }
+}
+
+ScriptPromise<IDLLong> DomicileHost::countBrowserWindowMatches(
+    ScriptState* script_state,
+    const String& id,
+    const String& selector,
+    ExceptionState& exception_state) {
+  // Parsed here, so a bad selector throws as a <webview>'s countMatches()
+  // does instead of rejecting later.
+  window_->document()->QuerySelector(AtomicString(selector), exception_state);
+  if (exception_state.HadException()) {
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLLong>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->CountMatches(
+      id, selector,
+      BindOnce(&SettleBrowserWindowCount, WrapPersistent(resolver)));
+  return promise;
 }
 
 void DomicileHost::OpenBrowserWindow(const String& url,
@@ -1633,9 +1711,6 @@ void DomicileHost::OpenBrowserWindow(const String& url,
         break;
       case WindowKind::kPrivate:
         windows_->Open(resolved, /*private_browsing=*/true, partition);
-        break;
-      case WindowKind::kApp:
-        windows_->OpenApp(resolved);
         break;
     }
   }
@@ -1774,7 +1849,7 @@ void DomicileHost::WindowsChanged(
         window->popup_window == 0 ? std::nullopt
                                   : std::optional<int32_t>(window->popup_window),
         window->width, window->height, window->private_browsing,
-        window->partition, window->app, window->captured));
+        window->partition, window->app, window->app_id, window->captured));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

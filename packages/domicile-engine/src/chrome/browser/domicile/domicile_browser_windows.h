@@ -44,9 +44,15 @@ namespace domicile {
 void StartBrowserWindows();
 
 // Opens a browser window at `url` in the shell's profile, for `domicile
-// open-url`, or with `app` an app window, for `domicile open-app`. Returns
-// false when there is no shell to own it.
-bool OpenBrowserWindow(const GURL& url, bool app);
+// open`. Returns false when there is no shell to own it.
+bool OpenBrowserWindow(const GURL& url);
+
+// Opens an app window at `url` with `app_id`, or reuses one as `reuse` says,
+// for `domicile open --app`. See mojom::BrowserWindows.OpenApp. Returns false
+// when there is no shell to own it.
+bool OpenAppWindow(const GURL& url,
+                   const std::string& app_id,
+                   mojom::AppReuse reuse);
 
 // Opens an app window at `url`, an app module's address, pinned to the app
 // at `app_host` so it may show that app and no other domicile:// address.

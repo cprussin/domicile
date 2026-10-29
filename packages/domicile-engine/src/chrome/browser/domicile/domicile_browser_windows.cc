@@ -139,10 +139,27 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // Opens an app window at `url`: a window of the desk's own window that the
   // shell draws without an address bar. Its page's new windows are browser
   // windows, as a link out of a Chrome app opens in the browser.
-  bool OpenApp(const GURL& url) {
+  //
+  // With an `app_id` and a `reuse` other than kNew, reuses the oldest open app
+  // window with that id instead; see mojom::BrowserWindows.OpenApp.
+  bool OpenApp(const GURL& url,
+               const std::string& app_id,
+               mojom::AppReuse reuse) {
+    if (!app_id.empty() && reuse != mojom::AppReuse::kNew) {
+      auto open = std::ranges::find(windows_, app_id, &Window::app_id);
+      if (open != windows_.end()) {
+        LOG(INFO) << "domicile: reused app window " << open->id << " for "
+                  << app_id << ".";
+        if (reuse == mojom::AppReuse::kNavigate) {
+          open->guest->Navigate(url);
+        }
+        open->guest->RequestFocus();
+        return true;
+      }
+    }
     return Make(url, /*popup_window=*/std::nullopt, 0, 0,
                 /*private_browsing=*/false, /*app=*/true,
-                /*partition=*/std::nullopt);
+                /*partition=*/std::nullopt, /*app_host=*/std::string(), app_id);
   }
 
   // Opens an app window at an app module's `url`, pinned to `app_host`. See
@@ -176,7 +193,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
         guest->contents(),
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
     windows_.push_back(Window{id, std::move(guest), std::move(watch), 0, 0,
-                              /*app=*/false, target_url});
+                              /*app=*/false, /*app_id=*/std::string(),
+                              target_url});
     Changed();
   }
 
@@ -261,7 +279,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
           window.height, contents.GetBrowserContext()->IsOffTheRecord(),
           partition.has_value() ? WebViewPartitionAttribute(*partition)
                                 : std::string(),
-          window.app, window.captures > 0));
+          window.app, window.app_id, window.captures > 0));
     }
     return list;
   }
@@ -334,6 +352,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     int width = 0;
     int height = 0;
     bool app = false;
+    // The id OpenApp was given; empty for none.
+    std::string app_id;
     // For a window a page opened, the address content navigates it to. Listed
     // until its first navigation commits, since content lists it first.
     GURL opened_at;
@@ -348,7 +368,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
             bool private_browsing,
             bool app,
             const std::optional<WebViewPartition>& partition,
-            const std::string& app_host = std::string()) {
+            const std::string& app_host = std::string(),
+            const std::string& app_id = std::string()) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -370,8 +391,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
       guest->PinToApp(app_host);
     }
     guest->Navigate(url);
-    windows_.push_back(
-        Window{id, std::move(guest), std::move(watch), width, height, app});
+    windows_.push_back(Window{id, std::move(guest), std::move(watch), width,
+                              height, app, app_id});
     Changed();
     return true;
   }
@@ -563,7 +584,22 @@ class BrowserWindowsService final
     windows_->Open(url, private_browsing, *parsed);
   }
 
-  void OpenApp(const GURL& url) override { windows_->OpenApp(url); }
+  void OpenApp(const GURL& url,
+               const std::string& app_id,
+               mojom::AppReuse reuse) override {
+    windows_->OpenApp(url, app_id, reuse);
+  }
+
+  void CountMatches(const std::string& id,
+                    const std::string& selector,
+                    CountMatchesCallback callback) override {
+    WebViewGuest* guest = windows_->Find(id);
+    if (guest == nullptr) {
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    guest->CountMatches(selector, std::move(callback));
+  }
 
   void Close(const std::string& id) override { windows_->AskToClose(id); }
 
@@ -629,16 +665,26 @@ void StartBrowserWindows() {
   SetBrowserWindowCaptureTargetFinder(base::BindRepeating(&CaptureTargetOf));
 }
 
-bool OpenBrowserWindow(const GURL& url, bool app) {
+bool OpenBrowserWindow(const GURL& url) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {
     return false;
   }
-  DeskWindows& windows =
-      DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()));
-  return app ? windows.OpenApp(url)
-             : windows.Open(url, /*private_browsing=*/false,
-                            /*partition=*/std::nullopt);
+  return DeskWindows::For(
+             Profile::FromBrowserContext(shell->GetBrowserContext()))
+      .Open(url, /*private_browsing=*/false, /*partition=*/std::nullopt);
+}
+
+bool OpenAppWindow(const GURL& url,
+                   const std::string& app_id,
+                   mojom::AppReuse reuse) {
+  content::WebContents* shell = ShellContentsIn(nullptr);
+  if (shell == nullptr) {
+    return false;
+  }
+  return DeskWindows::For(
+             Profile::FromBrowserContext(shell->GetBrowserContext()))
+      .OpenApp(url, app_id, reuse);
 }
 
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host) {

@@ -44,6 +44,10 @@ window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
 - `domicile open --app <url|module>` opens a site or an app module as an
   app: its own window, without an address bar
   ([WEB-APPS.md](architecture/WEB-APPS.md)).
+  - `--id <id>` makes a site's window app `<id>`'s.
+  - `--reuse focus` brings `<id>`'s open window to the front instead of
+    opening another; `--reuse navigate` also loads the address in it. Both
+    need `--id`. `new`, the default, always opens a window.
 - `domicile open --which <file|url>` prints the app `open` would use.
 - Apps on the desktop run it for `xdg-open` and `$BROWSER`.
 

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use domicile_launch::cli::{
     invocation, monitor_mode, monitor_size, CliError, Invocation, MonitorMode, USAGE,
 };
-use domicile_launch::control::{Request, Switch, ThemeChange};
+use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
 use domicile_protocol::Scale;
 
@@ -146,7 +146,9 @@ fn open_with_app_opens_an_address_or_module_as_an_app() {
     assert_eq!(
         run(&["open", "--app", "https://example.com/"]).unwrap(),
         Invocation::OpenAsApp {
-            target: "https://example.com/".to_string()
+            target: "https://example.com/".to_string(),
+            id: None,
+            reuse: AppReuse::New,
         }
     );
     assert_eq!(run(&["open", "--app"]), Err(CliError::NothingToOpen));
@@ -155,6 +157,65 @@ fn open_with_app_opens_an_address_or_module_as_an_app() {
         Err(CliError::ExtraToOpen {
             extra: "./b.js".to_string()
         })
+    );
+}
+
+#[test]
+fn open_with_app_takes_an_id_and_what_to_do_when_its_window_is_open() {
+    assert_eq!(
+        run(&["open", "--app", "--id", "mail", "https://mail.example/"]).unwrap(),
+        Invocation::OpenAsApp {
+            target: "https://mail.example/".to_string(),
+            id: Some("mail".to_string()),
+            reuse: AppReuse::New,
+        }
+    );
+    for (word, reuse) in [
+        ("new", AppReuse::New),
+        ("focus", AppReuse::Focus),
+        ("navigate", AppReuse::Navigate),
+    ] {
+        assert_eq!(
+            run(&[
+                "open",
+                "--app",
+                "--reuse",
+                word,
+                "--id",
+                "mail",
+                "https://mail.example/"
+            ])
+            .unwrap(),
+            Invocation::OpenAsApp {
+                target: "https://mail.example/".to_string(),
+                id: Some("mail".to_string()),
+                reuse,
+            }
+        );
+    }
+}
+
+#[test]
+fn open_with_app_refuses_a_reuse_it_cannot_carry_out() {
+    assert_eq!(
+        run(&["open", "--app", "--reuse", "focus", "https://mail.example/"]),
+        Err(CliError::ReuseWithoutId)
+    );
+    assert_eq!(
+        run(&["open", "--app", "--id", "mail", "--reuse", "raise", "x"]),
+        Err(CliError::UnknownReuse {
+            given: "raise".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["open", "--app", "--id"]),
+        Err(CliError::FlagWithoutValue {
+            flag: "--id".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["open", "--app", "--id", "mail"]),
+        Err(CliError::NothingToOpen)
     );
 }
 

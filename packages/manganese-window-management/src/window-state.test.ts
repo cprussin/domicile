@@ -47,6 +47,7 @@ const listed = (
     width: 0,
   },
 ) => ({
+  appId: "",
   height: popup.height,
   id,
   isApp: false,

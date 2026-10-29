@@ -59,11 +59,24 @@ struct BrowserWindow {
   // shell draws without an address bar. Its page's new windows are browser
   // windows.
   bool app;
+  // The app window's id, as OpenApp was given it; empty for none and for every
+  // browser window. Matches an open app window to the app it belongs to.
+  string app_id;
   // Whether a capture of the page alone is running, as a screenshot, a
   // picker's preview or a screen cast of it takes. A page draws only while
   // laid out, so a shell keeps a window it hides, such as behind a tab, laid
   // out while it is captured.
   bool captured;
+};
+
+// What OpenApp does when an app window with its `app_id` is already open.
+enum AppReuse {
+  // Opens another window.
+  kNew,
+  // Brings the open one to the front, as its page's window.focus() would.
+  kFocus,
+  // Loads the address in the open one and brings it to the front.
+  kNavigate,
 };
 
 // Renderer -> browser, bound per document.
@@ -80,10 +93,19 @@ interface BrowserWindows {
   // attribute does; empty for none. "persist:" with no name is a bad message.
   Open(url.mojom.Url url, bool private_browsing, string partition);
 
-  // Opens an app window at `url`, as `domicile open-app` does; it appears in
-  // the next list with `app` set. A domicile:// address shows
+  // Opens an app window at `url`, as `domicile open --app` does; it appears in
+  // the next list with `app` set and `app_id`. A domicile:// address shows
   // about:blank#blocked, as Open's does.
-  OpenApp(url.mojom.Url url);
+  //
+  // With an `app_id` and a `reuse` other than kNew, the oldest open app window
+  // with that id is reused instead, and only a new one is listed. The match is
+  // made here, so two quick calls never open two windows.
+  OpenApp(url.mojom.Url url, string app_id, AppReuse reuse);
+
+  // How many elements in window `id`'s main document match the CSS
+  // `selector`, as a <webview>'s CountMatches counts them. Null for an
+  // unknown id, and when the page gave no number.
+  CountMatches(string id, string selector) => (int32? count);
 
   // Closes window `id` and destroys its page once the page agrees; it leaves
   // the next list. A page with a `beforeunload` handler may ask the shell

@@ -395,7 +395,8 @@ class WebViewGuest : public mojom::WebViewGuest,
     return weak_factory_.GetWeakPtr();
   }
 
-  // chrome.tabs requests on a tab, handled as if the page had asked:
+  // chrome.tabs requests on a tab, and an app launch that reuses an app
+  // window, handled as if the page had asked:
   // - Focus: the shell raises windows, so the element fires
   //   `domicile-focus-request`.
   // - Close: the browser closes a browser window; a shell's own page fires

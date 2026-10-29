@@ -16,6 +16,7 @@
 #include "base/functional/function_ref.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "components/domicile/mojom/browser_windows.mojom-shared.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -35,6 +36,8 @@ namespace domicile {
 //
 //   {"type":"open_url","version":1,"url":"https://example.com/"}
 //   {"type":"open_url","version":1,"url":"https://example.com/","app":true}
+//   {"type":"open_url","version":1,"url":"https://example.com/","app":true,
+//    "app_id":"mail","reuse":"focus"}
 //   -> {"type":"opened"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -158,11 +161,21 @@ using RunApp = base::FunctionRef<void(const base::FilePath& root,
                                       const std::string& module,
                                       WindowOpened opened)>;
 
+// How `open_url` opens an app window: its id, and what to do when one with
+// that id is open. See mojom::BrowserWindows.OpenApp.
+struct AppLaunch {
+  // Empty for none.
+  std::string id;
+  mojom::AppReuse reuse = mojom::AppReuse::kNew;
+
+  friend bool operator==(const AppLaunch&, const AppLaunch&) = default;
+};
+
 // Carries out `open_url`: opens a browser window at `url`, or with `app` an app
 // window, which the shell draws without an address bar. Runs `opened` once,
 // possibly after returning, as for `run_app`.
-using OpenUrl =
-    base::FunctionRef<void(const GURL& url, bool app, WindowOpened opened)>;
+using OpenUrl = base::FunctionRef<
+    void(const GURL& url, std::optional<AppLaunch> app, WindowOpened opened)>;
 
 // One site's stored setting for one permission.
 struct StoredSitePermission {
