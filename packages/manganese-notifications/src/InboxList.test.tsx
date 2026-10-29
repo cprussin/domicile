@@ -59,12 +59,13 @@ describe(InboxList, () => {
     expect(opened).toEqual([0]);
   });
 
-  it("says an empty inbox is empty", () => {
+  it("says an empty inbox is empty, under its name where the count goes", () => {
     shown([InboxReading.Counted(0, 0)]);
 
-    expect(
-      screen.getByRole("button", { name: "Work: empty" }),
-    ).toHaveTextContent("Empty");
+    expect(screen.getByRole("button", { name: "Work: empty" })).toBeVisible();
+    expect(screen.getByText("Work").parentElement).toHaveTextContent(
+      "WorkEmpty",
+    );
   });
 
   it("shows the unread count, and the total in words", () => {
