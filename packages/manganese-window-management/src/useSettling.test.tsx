@@ -122,12 +122,18 @@ describe("useSettling", () => {
   // A strip is drawn by its open tab, so it is a new element after a tab
   // switch. The new one takes over the old one's place.
   describe("an element that takes over from another", () => {
-    type Part = { name: string; rect: Rect; shared: readonly string[] };
+    type Part = {
+      name: string;
+      rect: Rect;
+      shared?: readonly string[] | undefined;
+      takesOver?: readonly string[] | undefined;
+    };
 
     const Settled = ({
       rect,
       settler,
       shared,
+      takesOver,
     }: Omit<Part, "name"> & { settler: Settler }) => {
       const element = useRef<HTMLDivElement | null>(null);
       useSettling({
@@ -137,6 +143,7 @@ describe("useSettling", () => {
         settler,
         shared,
         still: false,
+        takesOver,
       });
       return <div ref={element} />;
     };
@@ -151,6 +158,7 @@ describe("useSettling", () => {
               rect={part.rect}
               settler={settler}
               shared={part.shared}
+              takesOver={part.takesOver}
             />
           ),
         );
@@ -169,6 +177,18 @@ describe("useSettling", () => {
         swapped([
           [{ name: "one", rect: WAS, shared: ["a", "b"] }],
           [{ name: "two", rect: NOW, shared: ["b", "c"] }],
+        ]),
+      ).toStrictEqual([{ scaleX: 0.5, scaleY: 0.5, x: 100, y: 20 }]);
+    });
+
+    // A drop indicator's box grows out of the tab line it replaces, but a
+    // line never grows out of a box.
+    it("takes over a key it does not hand on", () => {
+      expect(
+        swapped([
+          [{ name: "one", rect: WAS, shared: ["a"] }],
+          [{ name: "two", rect: NOW, takesOver: ["a"] }],
+          [{ name: "three", rect: WAS, shared: ["a"] }],
         ]),
       ).toStrictEqual([{ scaleX: 0.5, scaleY: 0.5, x: 100, y: 20 }]);
     });
