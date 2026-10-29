@@ -300,5 +300,17 @@ TEST(DeskGeometryTest, AWarpFromOffTheDeskIsNotTheDesks) {
             std::nullopt);
 }
 
+TEST(DeskGeometryTest, MonitorsOnTheHostAreInTheHostsPixels) {
+  // A tooltip fits on its monitor, which it finds in the host's root window.
+  EXPECT_EQ(MonitorsOnHost({kLaptop, kCenter, kRight}, kLaptop.id),
+            std::vector<gfx::Rect>({gfx::Rect(0, 0, 1920, 1280),
+                                    gfx::Rect(1920, -1920, 1800, 3200),
+                                    gfx::Rect(3720, -1920, 1800, 3200)}));
+}
+
+TEST(DeskGeometryTest, AHostOffTheDeskHasNoMonitors) {
+  EXPECT_TRUE(MonitorsOnHost({kCenter, kRight}, kLaptop.id).empty());
+}
+
 }  // namespace
 }  // namespace domicile

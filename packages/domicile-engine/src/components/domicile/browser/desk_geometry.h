@@ -73,6 +73,14 @@ gfx::Rect PopupBoundsOn(const gfx::Rect& popup,
                         const gfx::Rect& page_on_host,
                         const gfx::Rect& page_on_display);
 
+// Each of `lit`'s monitors in `host`'s logical pixels, which its root window
+// uses; empty if `host` is not on the desk.
+//
+// The host's root holds the page's tooltips, and a tooltip must fit on the
+// monitor it opens on (`aura::client::kDomicileDeskMonitorsKey`).
+std::vector<gfx::Rect> MonitorsOnHost(const std::vector<DeskPlace>& lit,
+                                      int64_t host);
+
 // The screens reported to the page. The first is one upright screen the size
 // of the desk at the desk's scale, with other fields copied from `like`.
 //

@@ -196,6 +196,8 @@ A nested run still uses the host's clipboard; [KNOWN-GAPS.md](/KNOWN-GAPS.md#cli
   (patch `0051`), as on ash.
 - Tooltips do too (patch `0076`). A top-level tooltip would be a window of
   its own, which no CRTC shows.
+- A tooltip fits on the desk monitor it opens on (patch `0160`), not the
+  display nearest it in CRTC pixels.
 - On a monitor other than the host's, a presenter mirrors them
   ([One page for the desk](ONE-PAGE-FOR-THE-DESK.md#browser-one-page-n-presenters)).
 
