@@ -465,6 +465,38 @@ describe("a command", () => {
     });
   });
 
+  it("hides a background app's window when closed, and closes others", () => {
+    const host = client();
+    const rules = floatingRulesSchema.parse([]);
+    // Constants, as a shell holds them: a new array each render re-lists.
+    const DISPLAYS = [LEFT];
+    const BACKGROUND = ["messages"];
+    const { result } = renderHook(() =>
+      useWindows(host.domicile, DISPLAYS, rules, BACKGROUND),
+    );
+    const window = {
+      appId: "messages",
+      height: 0,
+      id: "1",
+      isApp: true,
+      isCaptured: false,
+      isPrivate: false,
+      partition: "",
+      popupWindow: null,
+      title: "",
+      url: "https://messages.example/",
+      width: 0,
+    };
+    host.lists([window, { ...window, appId: "", id: "2", isApp: false }]);
+
+    act(() => {
+      result.current.act(WindowAction.WindowClosed("browser:1"));
+      result.current.act(WindowAction.WindowClosed("browser:2"));
+    });
+
+    expect(host.closed).toEqual(["2"]);
+  });
+
   it("runs the command of an application the launcher chose", () => {
     const { host, result } = desktop([LEFT, RIGHT]);
 
@@ -479,13 +511,9 @@ describe("a command", () => {
     const host = client();
     const displays = [LEFT, RIGHT];
     const openFile = (path: string) => ["pager", `/home/me/${path}`];
+    const rules = floatingRulesSchema.parse([]);
     const { result } = renderHook(() =>
-      useWindows(
-        host.domicile,
-        displays,
-        floatingRulesSchema.parse([]),
-        openFile,
-      ),
+      useWindows(host.domicile, displays, rules, undefined, openFile),
     );
 
     act(() => {

@@ -12,8 +12,8 @@ type Props = {
 
 /**
  * The drawer's list of inboxes: each one's name and counts. An inbox read from
- * outside shows a spinner until its first reading; a page has no count until
- * it has unread conversations, so it shows none.
+ * outside shows a spinner until its first reading; one in a window has no
+ * count until it has unread conversations, so it shows none.
  */
 export const InboxList = ({ inboxes, onOpen, readings }: Props) => (
   <>

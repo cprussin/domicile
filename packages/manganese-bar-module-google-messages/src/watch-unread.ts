@@ -51,3 +51,18 @@ export const watchUnread = (
     stop();
   };
 };
+
+/**
+ * Reads Messages' unread conversations with `countMatches`, which counts the
+ * elements matching a selector in Messages' page, such as its app window's,
+ * on every tick, and calls `onCount` with each count. Returns what stops it.
+ */
+export const watchUnreadWith = (
+  countMatches: (selector: string) => Promise<number>,
+  onCount: (count: number) => void,
+  every: typeof everyFewSeconds = everyFewSeconds,
+  onMissed: typeof logMissed = logMissed,
+): (() => void) =>
+  every(() => {
+    countMatches(UNREAD_CONVERSATIONS).then(onCount, onMissed);
+  });

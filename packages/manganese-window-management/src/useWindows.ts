@@ -24,6 +24,7 @@ import {
   WindowAction as Action,
   activeIdOf,
   activeIsPrivate,
+  closedIdsOf,
   killedIdsOf,
   NO_WINDOWS,
   reduceWindows,
@@ -43,6 +44,9 @@ export type Windows = WindowState & {
   activeId: string | undefined;
 };
 
+/** No app runs in the background. One array, so the default never changes. */
+const NO_BACKGROUND_APPS: readonly string[] = [];
+
 /**
  * The desktop's windows and the actions that change them.
  *
@@ -53,12 +57,16 @@ export type Windows = WindowState & {
  * @param displays - the desk the host described. `undefined` until it has
  *   described one.
  * @param floating - which client windows open floating, besides dialogs.
+ * @param backgroundApps - the app ids whose app windows run in the
+ *   background: they open hidden and hide when closed. See
+ *   `WindowState.background`.
  * @param openFile - the argv that opens a file the launcher chose.
  */
 export const useWindows = (
   domicile: Domicile,
   displays: readonly Display[] | undefined,
   floating: FloatingRules,
+  backgroundApps: readonly string[] = NO_BACKGROUND_APPS,
   openFile: typeof openCommand = openCommand,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
@@ -110,15 +118,25 @@ export const useWindows = (
           domicile.browser.open(action.src);
         }
       }
+      // A background app's window hides instead; the reducer hides it.
       if (action.kind === WindowActionKind.WindowClosed) {
-        closeWindows(domicile, [action.id]);
+        closeWindows(domicile, closedIdsOf(drawn.current, [action.id]));
       }
       // A `focus parent` selection closes whole, as in sway.
       if (action.kind === WindowActionKind.WindowKilled) {
-        closeWindows(domicile, killedIdsOf(drawn.current));
+        closeWindows(
+          domicile,
+          closedIdsOf(drawn.current, killedIdsOf(drawn.current)),
+        );
       }
       if (action.kind === WindowActionKind.GroupClosed) {
-        closeWindows(domicile, windowsInGroup(drawn.current, action.group));
+        closeWindows(
+          domicile,
+          closedIdsOf(
+            drawn.current,
+            windowsInGroup(drawn.current, action.group),
+          ),
+        );
       }
     },
     [domicile, openFile],
@@ -152,7 +170,7 @@ export const useWindows = (
     const browserWindowsChanged = () => {
       const listedBrowsers = browser.windows;
       if (listedBrowsers !== undefined) {
-        dispatch(Action.BrowserWindowsListed(listedBrowsers));
+        dispatch(Action.BrowserWindowsListed(listedBrowsers, backgroundApps));
       }
     };
     windowsChanged();
@@ -171,7 +189,7 @@ export const useWindows = (
         stop();
       }
     };
-  }, [domicile, floating]);
+  }, [backgroundApps, domicile, floating]);
 
   // Clients' requests, which the compositor reports without granting.
   useEffect(() => {

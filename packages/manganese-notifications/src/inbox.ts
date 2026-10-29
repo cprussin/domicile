@@ -1,5 +1,3 @@
-/// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
-
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Icon } from "@phosphor-icons/react";
@@ -52,43 +50,66 @@ export const unreadIn = (reading: InboxReading | undefined): number => {
 
 export enum InboxKind {
   Watched,
-  Page,
+  Window,
 }
 
+/** What every inbox has. */
+type Named = {
+  icon: Icon;
+  /** Its name in the list. */
+  name: string;
+  /**
+   * Its name in the launcher, which lists it as an app. `name` when not
+   * given.
+   */
+  launcherName?: string;
+};
+
 /**
- * One inbox listed in the notification drawer. Its unread conversations count
- * toward the bell.
+ * One inbox listed in the notification drawer and the launcher. Its unread
+ * conversations count toward the bell.
  */
 export const Inbox = {
   /**
-   * A page drawn in the drawer, widened, in place of the list. It stays
-   * loaded while hidden, so its notifications keep coming.
+   * Read from outside, and opened elsewhere, such as in an app window of its
+   * own.
    */
-  Page: (inbox: {
-    icon: Icon;
-    /** Its name in the list, and the drawer's title while shown. */
-    name: string;
-    /** The page's address. */
-    url: string;
-    /**
-     * Calls `onUnread` with the page's unread conversations, from the page
-     * itself. Returns what stops it.
-     */
-    countUnread: (
-      view: HTMLWebViewElement,
-      onUnread: (unread: number) => void,
-    ) => () => void;
-  }) => ({ ...inbox, kind: InboxKind.Page as const }),
-  /** Read from outside, and opened elsewhere, such as in a browser window. */
-  Watched: (inbox: {
-    icon: Icon;
-    /** Its name in the list. */
-    name: string;
-    /** Its reading, watched while the shell runs. */
-    read: (domicile: Domicile) => SharedWatch<InboxReading>;
-    /** Opens it, or signs it in, for a press of its row. */
-    open: (domicile: Domicile, reading: InboxReading | undefined) => void;
-  }) => ({ ...inbox, kind: InboxKind.Watched as const }),
+  Watched: (
+    inbox: Named & {
+      /** Its reading, watched while the shell runs. */
+      read: (domicile: Domicile) => SharedWatch<InboxReading>;
+      /** Opens it, or signs it in, for a press of its row. */
+      open: (domicile: Domicile, reading: InboxReading | undefined) => void;
+      /**
+       * The app window it opens in, if any, which the launcher lists: app
+       * `appId`'s, at `url`.
+       */
+      app?: { appId: string; url: string };
+    },
+  ) => ({ ...inbox, kind: InboxKind.Watched as const }),
+  /**
+   * A page in an app window of its own, which runs in the background: it opens
+   * hidden when the shell starts, shows when its row is pressed or its page
+   * asks to be in front, and hides when closed. So its notifications keep
+   * coming and its count stays current.
+   */
+  Window: (
+    inbox: Named & {
+      /** The app id of its window. One window per id. */
+      appId: string;
+      /** The page's address. */
+      url: string;
+      /**
+       * Calls `onUnread` with the page's unread conversations, read with
+       * `countMatches`, which counts the window's elements matching a CSS
+       * selector. Returns what stops it.
+       */
+      countUnread: (
+        countMatches: (selector: string) => Promise<number>,
+        onUnread: (unread: number) => void,
+      ) => () => void;
+    },
+  ) => ({ ...inbox, kind: InboxKind.Window as const }),
 };
 
 export type Inbox = ReturnType<(typeof Inbox)[keyof typeof Inbox]>;

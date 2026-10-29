@@ -325,8 +325,9 @@ button, and their controls in one panel, each labeled in words.
 ## Inboxes
 
 `runManganese({ inboxes: [...] })` lists inboxes in the notification drawer,
-under **Inboxes**, above the notifications. None by default. Each is plain
-data: a name, an icon, how it is read and what a press does.
+under **Inboxes**, above the notifications, and in the launcher. None by
+default. Each is plain data: a name, an icon, how it is read and what a press
+does.
 
 ```ts
 import { runManganese } from "@domicile-desktop/manganese";
@@ -335,8 +336,13 @@ import { messagesInbox } from "@domicile-desktop/manganese-inbox-google-messages
 
 export const Shell = runManganese({
   inboxes: [
-    gmailInbox({ client: { id, secret }, email: "me@gmail.com", nickname: "Work" }),
-    messagesInbox(),
+    gmailInbox({
+      client: { id, secret },
+      email: "me@gmail.com",
+      launcherName: "Email - Work",
+      nickname: "Work",
+    }),
+    messagesInbox({ launcherName: "SMS" }),
   ],
 });
 ```
@@ -344,19 +350,25 @@ export const Shell = runManganese({
 - Each row shows the inbox's unread conversations in a badge on its icon,
   and its conversation count where known. They add to the bell's count.
   Opening the drawer clears only the notifications' part.
+- A press closes the drawer and opens the inbox in an app window of its own,
+  or brings that window up: one window per inbox.
+- **The launcher** lists each inbox that opens a window, by its
+  `launcherName`, else its name. Its row opens the same window
+  (`domicile open --app --id <id> --reuse focus <url>`), drawn with the site's
+  icon.
 - **`Inbox.Watched`** (`@domicile-desktop/manganese-notifications/inbox`): read
-  from outside, as a `SharedWatch<InboxReading>`; a press runs its `open`,
-  then closes the drawer. `gmailInbox` is one: a press opens the inbox in a
-  browser window, or signs the account in. It reads as the
-  [Gmail](#gmail) item does.
-- **`Inbox.Page`**: a page shown in the drawer, widened, with a back button,
-  in place of the list. It loads with the shell and stays loaded while
-  hidden, so its notifications keep coming; its unread count comes from the
-  page. Pressing one of its notifications opens the drawer on it. Its
-  permission requests are asked above it. `messagesInbox` is one, kept as the
-  [Google Messages](#google-messages) item keeps its page. Use one or the
-  other: Messages runs one web session at a time.
-- The drawer opens on the notifications, not on a page it closed on.
+  from outside, as a `SharedWatch<InboxReading>`; a press runs its `open`.
+  Its `app` names the window the launcher opens. `gmailInbox` is one: a press
+  opens the account's own Gmail window (app id `gmail:<email>`), or signs the
+  account in. It reads as the [Gmail](#gmail) item does.
+- **`Inbox.Window`**: a page in an app window that runs in the background. It
+  opens hidden when the shell starts, shows on the current workspace when
+  pressed or when its page asks to be in front (as a press of one of its
+  notifications does), and hides when closed, so its notifications keep
+  coming. Its unread count comes from the window's page. `messagesInbox` is
+  one (app id `google-messages`). Don't also use the
+  [Google Messages](#google-messages) item: Messages runs one web session at
+  a time.
 - Not on the lock screen, as the drawer is not.
 
 ## Sharing
@@ -403,11 +415,11 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
   pill the idle inhibitor shows when on.
 - **Failed read:** the envelope, the nickname and a warning. Its tooltip
   says why.
-- Click opens the inbox in a browser window.
+- Click opens the account's Gmail window, or brings it up.
 - **New mail:** a notification per message, under the nickname: the sender,
   then the subject. More than 3 at once are one notification, "5 new emails",
-  naming the senders. A press opens the message, or the inbox, in a browser
-  window. A notification clears once its messages are read, anywhere.
+  naming the senders. A press opens the message, or the inbox, in the
+  account's Gmail window, opening it if none is. A notification clears once its messages are read, anywhere.
   Mail already unread at startup or sign-in is not notified. Do not
   disturb hides the toasts, as for any notification. The bar item and
   `gmailInbox` share one reading, so each message notifies once.

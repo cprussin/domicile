@@ -196,12 +196,19 @@ export type WindowState = {
   pressed: number;
   /** The scratchpad windows, next to show first. */
   scratchpad: readonly string[];
+  /**
+   * The windows of apps that run in the background, such as an inbox's. Each
+   * opens hidden, shows when it asks to be in front, and hides when closed,
+   * so its page keeps running.
+   */
+  background: readonly string[];
   windows: readonly ShellWindow[];
   workspaces: readonly Workspace[];
 };
 
 /** The initial state: no windows open. */
 export const NO_WINDOWS: WindowState = {
+  background: [],
   clipboardOpen: false,
   draggingId: undefined,
   focused: UNDESCRIBED_SCREEN,
@@ -303,6 +310,15 @@ export const activeIdOf = (state: WindowState): string | undefined =>
 /** The windows `kill` closes: every window in the node commands target. */
 export const killedIdsOf = (state: WindowState): readonly string[] =>
   commandedWindowsOn(workspaceHere(state));
+
+/**
+ * Of `ids`, the windows a close request closes: all but a background app's,
+ * which hide instead. See {@link WindowState.background}.
+ */
+export const closedIdsOf = (
+  state: WindowState,
+  ids: readonly string[],
+): readonly string[] => ids.filter((id) => !state.background.includes(id));
 
 /** Every window in the group `group` names. Throws for one no workspace holds. */
 export const windowsInGroup = (
@@ -535,9 +551,15 @@ export const WindowAction = {
 
   /**
    * The engine sent the full browser window list. New windows open, missing
-   * ones close, and the rest take their page's address and title.
+   * ones close, and the rest take their page's address and title. A new app
+   * window whose app id is in `backgroundApps` opens hidden; see
+   * {@link WindowState.background}.
    */
-  BrowserWindowsListed: (windows: readonly ListedBrowserWindow[]) => ({
+  BrowserWindowsListed: (
+    windows: readonly ListedBrowserWindow[],
+    backgroundApps: readonly string[] = [],
+  ) => ({
+    backgroundApps,
     kind: WindowActionKind.BrowserWindowsListed as const,
     windows,
   }),
@@ -1119,7 +1141,7 @@ const reduceAction = (
       return { ...state, launcherOpen: false };
     }
     case WindowActionKind.BrowserWindowsListed: {
-      return listBrowsers(state, action.windows);
+      return listBrowsers(state, action.windows, action.backgroundApps);
     }
     case WindowActionKind.ChildFocused: {
       return onCurrent(state, childFocused);
@@ -1166,7 +1188,7 @@ const reduceAction = (
       // elsewhere, and focus follows the pointer. A window that already has
       // the keyboard, such as one just launched, keeps the pointer's rule for
       // new windows.
-      const reached = reachWindow(state, action.id);
+      const reached = reachWindow(showBackground(state, action.id), action.id);
       return reached === state
         ? state
         : { ...reached, pressed: state.pressed + 1 };
@@ -1179,9 +1201,9 @@ const reduceAction = (
         fullscreenToggled(workspace, action.global),
       );
     }
-    // A request only; see `WindowClosed`.
+    // A request only, but for a background app's windows; see `WindowClosed`.
     case WindowActionKind.GroupClosed: {
-      return state;
+      return hideBackground(state, windowsInGroup(state, action.group));
     }
     case WindowActionKind.GroupDroppedOn: {
       return dropNode(state, action.group, action.target, action.edge);
@@ -1295,8 +1317,10 @@ const reduceAction = (
     // A request only. A client may refuse, for example with unsaved work, and
     // the engine closes a browser window. The window is removed on the next
     // `app_closed` or `browser_windows`. `useWindows` sends the request.
+    // A request only: `useWindows` asks the window to close, and the host's
+    // or engine's report removes it. A background app's window hides now.
     case WindowActionKind.WindowClosed: {
-      return state;
+      return hideBackground(state, [action.id]);
     }
     case WindowActionKind.WindowDropped: {
       return { ...state, draggingId: undefined };
@@ -1343,9 +1367,9 @@ const reduceAction = (
         ? pointAtWindow(state, action.id)
         : state;
     }
-    // A request only; see `WindowClosed`.
+    // A request only, but for a background app's windows; see `WindowClosed`.
     case WindowActionKind.WindowKilled: {
-      return state;
+      return hideBackground(state, killedIdsOf(state));
     }
     case WindowActionKind.WindowMoved: {
       return floatDragged(state, action.id, action.x, action.y);
@@ -1516,6 +1540,7 @@ const openFloatingApp = (
 const listBrowsers = (
   state: WindowState,
   listed: readonly ListedBrowserWindow[],
+  backgroundApps: readonly string[],
 ): WindowState => {
   const browsers = listed.map((entry) => ({ entry, window: browserOf(entry) }));
   const ids = new Set(browsers.map(({ window }) => window.id));
@@ -1526,10 +1551,14 @@ const listBrowsers = (
   return browsers
     .filter(({ window }) => !known.has(window.id))
     .reduce(
-      (opening, { entry, window }) =>
-        window.popupWindow === undefined
+      (opening, { entry, window }) => {
+        if (entry.isApp && backgroundApps.includes(entry.appId)) {
+          return openHidden(opening, window);
+        }
+        return window.popupWindow === undefined
           ? openWindow(opening, window)
-          : openPopupWindow(opening, window, entry.width, entry.height),
+          : openPopupWindow(opening, window, entry.width, entry.height);
+      },
       pagesShown(
         kept,
         new Map(browsers.map(({ window }) => [window.id, window])),
@@ -1582,10 +1611,44 @@ const openWindow = (state: WindowState, window: ShellWindow): WindowState =>
     opened(workspace, window.id),
   );
 
+// A background app's window, listed but on no workspace until it asks to be
+// in front.
+const openHidden = (state: WindowState, window: ShellWindow): WindowState => ({
+  ...state,
+  background: [...state.background, window.id],
+  windows: [...state.windows, window],
+});
+
+// Shows background window `id` on the current workspace, if it is hidden.
+const showBackground = (state: WindowState, id: string): WindowState =>
+  state.background.includes(id) && workspaceHolding(state, id) === undefined
+    ? onCurrent(state, (workspace) => opened(workspace, id))
+    : state;
+
+// Takes each background window of `ids` off its workspace, keeping it, so its
+// page keeps running. Other windows close when the host or engine says so.
+const hideBackground = (
+  state: WindowState,
+  ids: readonly string[],
+): WindowState =>
+  ids
+    .filter((id) => state.background.includes(id))
+    .reduce(
+      (hiding, id) => ({
+        ...hiding,
+        draggingId: hiding.draggingId === id ? undefined : hiding.draggingId,
+        workspaces: hiding.workspaces.map((workspace) =>
+          holds(workspace, id) ? closed(workspace, id) : workspace,
+        ),
+      }),
+      state,
+    );
+
 // Removes a window from the list, its workspace and the scratchpad. Unknown
 // ids are a no-op, since the host may drain events for a torn-down portal.
 const closeWindow = (state: WindowState, id: string): WindowState => ({
   ...state,
+  background: state.background.filter((kept) => kept !== id),
   draggingId: state.draggingId === id ? undefined : state.draggingId,
   scratchpad: state.scratchpad.filter((hidden) => hidden !== id),
   windows: state.windows.filter((window) => window.id !== id),

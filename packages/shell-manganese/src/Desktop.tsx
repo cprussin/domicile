@@ -97,7 +97,11 @@ import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useCastHolds } from "./cast-holds";
 import { LOCK_BAR } from "./default-bars";
-import { useInboxDrawer } from "./inbox-drawer";
+import {
+  backgroundAppsOf,
+  launcherAppsOf,
+  useInboxDrawer,
+} from "./inbox-drawer";
 import { KeymapNotice } from "./KeymapNotice";
 import type { LevelPress } from "./LevelNotice";
 import { LevelNotice } from "./LevelNotice";
@@ -143,7 +147,10 @@ export const Desktop = ({
   // The wallpaper advances only this theme's rotation, and holds it while
   // the theme wipe plays.
   const { flipping, theme } = useTheme();
-  const windows = useWindows(domicile, displays, floating);
+  // Inboxes in a window run in the background, and the launcher lists them.
+  const backgroundApps = useMemo(() => backgroundAppsOf(inboxes), [inboxes]);
+  const launcherApps = useMemo(() => launcherAppsOf(inboxes), [inboxes]);
+  const windows = useWindows(domicile, displays, floating, backgroundApps);
   const { act } = windows;
   const clientIcons = useClientIcons(
     domicile,
@@ -171,11 +178,18 @@ export const Desktop = ({
   const portalWallpaper = usePortalWallpaper(domicile);
   const backgroundPicture = usePictureUrl(files, portalWallpaper.background);
   const lockPicture = usePictureUrl(files, portalWallpaper.lockscreen);
-  // Installed apps and bookmarks, read through the desktop.
+  // Installed apps, the inboxes and bookmarks, read through the desktop.
   // Memoized because it holds what was read and the bookmarks' icons.
   const apps = useMemo(
-    () => appSearch(domicile, applications, sharedIconTheme(domicile)),
-    [applications, domicile],
+    () =>
+      appSearch(
+        domicile,
+        applications,
+        sharedIconTheme(domicile),
+        undefined,
+        launcherApps,
+      ),
+    [applications, domicile, launcherApps],
   );
   // Read while the launcher is closed so its rows render with it rather than
   // a moment later.
@@ -237,23 +251,11 @@ export const Desktop = ({
   const closeNotifications = useCallback(() => {
     setNotificationsOpen(false);
   }, []);
-  // An inbox's page opens the drawer on the screen with the keyboard, as on a
-  // press of its notification.
-  const showNotifications = useCallback(() => {
-    openNotifications(windows.focused);
-  }, [openNotifications, windows.focused]);
   const inboxDrawer = useInboxDrawer({
     domicile,
     inboxes,
     onClose: closeNotifications,
-    onShow: showNotifications,
   });
-  const { back: backToNotifications } = inboxDrawer;
-  // It opens again on the notifications, not the inbox it closed on.
-  const drawerClosed = useCallback(() => {
-    setNotificationsOpen(false);
-    backToNotifications();
-  }, [backToNotifications]);
 
   // Lock state belongs to the compositor, which is what blocks input. The page
   // cannot set it, and reloading the page does not unlock the desk.
@@ -372,7 +374,7 @@ export const Desktop = ({
         // Like a media key, these change no window.
         case WindowActionKind.NotificationsToggled: {
           if (notificationsOpen) {
-            drawerClosed();
+            closeNotifications();
           } else {
             openNotifications(windows.focused);
           }
@@ -422,7 +424,7 @@ export const Desktop = ({
       brightnessKeys,
       dismissNotifications,
       domicile,
-      drawerClosed,
+      closeNotifications,
       notificationIds,
       notificationsOpen,
       openNotifications,
@@ -677,8 +679,7 @@ export const Desktop = ({
         items={notifications.items}
         now={now}
         onAction={notifications.invoke}
-        onBack={backToNotifications}
-        onClose={drawerClosed}
+        onClose={closeNotifications}
         onDismiss={notifications.dismiss}
         onDoNotDisturb={notifications.setDoNotDisturb}
         onOpen={openNotifications}

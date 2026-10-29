@@ -1,3 +1,4 @@
+import type { WebApp } from "@domicile-desktop/manganese-launcher/app-search";
 import type {
   Inbox,
   InboxReading as Reading,
@@ -8,8 +9,15 @@ import {
   unreadIn,
 } from "@domicile-desktop/manganese-notifications/inbox";
 import type { DrawerInboxes } from "@domicile-desktop/manganese-notifications/NotificationDrawer";
+import { AppReuse } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 type Options = {
   domicile: Domicile;
@@ -17,82 +25,102 @@ type Options = {
   inboxes: readonly Inbox[];
   /** Closes the notification drawer. */
   onClose: () => void;
-  /** Opens the notification drawer. */
-  onShow: () => void;
 };
 
 /**
- * The notification drawer's inboxes: what each reads, the page the drawer
- * shows, and the unread conversations the bell adds to its count.
+ * The notification drawer's inboxes: what each reads, what a press opens, and
+ * the unread conversations the bell adds to its count.
+ *
+ * An inbox in a window runs in the background: its window opens at start if
+ * none is open, and its count is read from that window.
  */
-export const useInboxDrawer = ({
-  domicile,
-  inboxes,
-  onClose,
-  onShow,
-}: Options) => {
-  const [shown, setShown] = useState<number | undefined>(undefined);
+export const useInboxDrawer = ({ domicile, inboxes, onClose }: Options) => {
   const watched = useWatchedReadings(domicile, inboxes);
-  const [pageCounts, setPageCounts] = useState<ReadonlyMap<number, number>>(
-    () => new Map(),
-  );
+  const counted = useWindowCounts(domicile, inboxes);
   const readings = useMemo(
     () =>
       inboxes.map((inbox, index) => {
-        const counted = pageCounts.get(index);
+        const unread = counted.get(index);
         if (inbox.kind === InboxKind.Watched) {
           return watched[index];
         } else {
-          return counted === undefined
-            ? undefined
-            : InboxReading.Unread(counted);
+          return unread === undefined ? undefined : InboxReading.Unread(unread);
         }
       }),
-    [inboxes, pageCounts, watched],
-  );
-  const back = useCallback(() => {
-    setShown(undefined);
-  }, []);
-  const show = useCallback(
-    (index: number) => {
-      setShown(index);
-      onShow();
-    },
-    [onShow],
+    [counted, inboxes, watched],
   );
   const open = useCallback(
     (index: number) => {
       const inbox = inboxes[index];
-      if (inbox?.kind === InboxKind.Page) {
-        show(index);
-      } else if (inbox?.kind === InboxKind.Watched) {
-        inbox.open(domicile, readings[index]);
-        setShown(undefined);
+      if (inbox !== undefined) {
+        openInbox(domicile, inbox, readings[index]);
         onClose();
       }
     },
-    [domicile, inboxes, onClose, readings, show],
+    [domicile, inboxes, onClose, readings],
   );
-  const countPage = useCallback((index: number, unread: number) => {
-    setPageCounts((counted) => new Map([...counted, [index, unread]]));
-  }, []);
   const drawer = useMemo<DrawerInboxes>(
-    () => ({
-      inboxes,
-      onOpen: open,
-      onShow: show,
-      onUnread: countPage,
-      readings,
-      shown,
-    }),
-    [countPage, inboxes, open, readings, show, shown],
+    () => ({ inboxes, onOpen: open, readings }),
+    [inboxes, open, readings],
   );
   const unread = useMemo(
     () => readings.reduce((sum, reading) => sum + unreadIn(reading), 0),
     [readings],
   );
-  return { back, drawer, unread };
+  return { drawer, unread };
 };
+
+/**
+ * Opens `inbox`, as a press of its row or its launcher entry does: an inbox
+ * read from outside opens with its `reading`, and one in a window brings that
+ * window up, opening it if none is.
+ */
+export const openInbox = (
+  domicile: Domicile,
+  inbox: Inbox,
+  reading: Reading | undefined,
+): void => {
+  switch (inbox.kind) {
+    case InboxKind.Watched: {
+      inbox.open(domicile, reading);
+      break;
+    }
+    case InboxKind.Window: {
+      domicile.browser.openApp(inbox.url, {
+        id: inbox.appId,
+        reuse: AppReuse.Focus,
+      });
+      break;
+    }
+  }
+};
+
+/**
+ * The inboxes the launcher lists, as the app windows they open: each in a
+ * window, and each read from outside that names one. Named by its launcher
+ * name, else its name.
+ */
+export const launcherAppsOf = (inboxes: readonly Inbox[]): WebApp[] =>
+  inboxes.flatMap((inbox) => {
+    const name = inbox.launcherName ?? inbox.name;
+    switch (inbox.kind) {
+      case InboxKind.Watched: {
+        return inbox.app === undefined ? [] : [{ ...inbox.app, name }];
+      }
+      case InboxKind.Window: {
+        return [{ appId: inbox.appId, name, url: inbox.url }];
+      }
+    }
+  });
+
+/**
+ * The app ids whose windows run in the background: each inbox in a window's.
+ * The window manager opens them hidden and hides them when closed.
+ */
+export const backgroundAppsOf = (inboxes: readonly Inbox[]): string[] =>
+  inboxes.flatMap((inbox) =>
+    inbox.kind === InboxKind.Window ? [inbox.appId] : [],
+  );
 
 /** The latest reading of each inbox read from outside, by its place. */
 const useWatchedReadings = (domicile: Domicile, inboxes: readonly Inbox[]) => {
@@ -120,4 +148,79 @@ const useWatchedReadings = (domicile: Domicile, inboxes: readonly Inbox[]) => {
     };
   }, [watches]);
   return readings;
+};
+
+/**
+ * Each inbox in a window's unread count, by its place, read from its window.
+ * Opens the window of each one that has none, once the engine has listed the
+ * windows, so it runs from the start.
+ */
+const useWindowCounts = (domicile: Domicile, inboxes: readonly Inbox[]) => {
+  const listed = useInboxWindows(domicile, inboxes);
+  const [counts, setCounts] = useState<ReadonlyMap<number, number>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    const ids = listed?.split(" ") ?? [];
+    const stops = inboxes.map((inbox, index) => {
+      const id = ids[index];
+      if (inbox.kind === InboxKind.Window && id !== undefined && id !== "") {
+        return inbox.countUnread(
+          (selector) => domicile.browser.countMatches(id, selector),
+          (unread) => {
+            setCounts((known) => new Map([...known, [index, unread]]));
+          },
+        );
+      } else {
+        return undefined;
+      }
+    });
+    return () => {
+      for (const stop of stops) {
+        stop?.();
+      }
+    };
+  }, [domicile, inboxes, listed]);
+  useEffect(() => {
+    if (listed !== undefined) {
+      const ids = listed.split(" ");
+      for (const [index, inbox] of inboxes.entries()) {
+        if (inbox.kind === InboxKind.Window && ids[index] === "") {
+          domicile.browser.openApp(inbox.url, {
+            id: inbox.appId,
+            reuse: AppReuse.Focus,
+          });
+        }
+      }
+    }
+  }, [domicile, inboxes, listed]);
+  return counts;
+};
+
+/**
+ * The engine id of each inbox's window, by its place, space-separated: `""`
+ * for an inbox with none or read from outside. One string, so a list that
+ * changes no inbox's window changes nothing. `undefined` until the engine
+ * lists the windows.
+ */
+const useInboxWindows = (
+  domicile: Domicile,
+  inboxes: readonly Inbox[],
+): string | undefined => {
+  const subscribe = useCallback(
+    (changed: () => void) => domicile.browser.on("change", changed),
+    [domicile],
+  );
+  return useSyncExternalStore(subscribe, () => {
+    const windows = domicile.browser.windows;
+    return windows === undefined
+      ? undefined
+      : inboxes
+          .map((inbox) =>
+            inbox.kind === InboxKind.Window
+              ? (windows.find(({ appId }) => appId === inbox.appId)?.id ?? "")
+              : "",
+          )
+          .join(" ");
+  });
 };

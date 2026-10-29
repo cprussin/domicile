@@ -30,13 +30,24 @@ export type AppSearch = {
   search: (query: string) => Promise<FoundApps>;
 };
 
+/**
+ * A site the launcher offers as an application: it opens or brings up the
+ * site's one app window, app `appId`'s, as `domicile open --app --id` does.
+ * Drawn with its site's icon.
+ */
+export type WebApp = {
+  appId: string;
+  name: string;
+  url: string;
+};
+
 /** What is installed, as read on an opening. */
 type Installed = { entries: InstalledEntry[]; icon: IconLookup };
 
 /**
  * Searches the applications installed on the desktop `domicile` reaches, less
  * those `config` omits, and `config`'s bookmarks. Application icons come from
- * the config's icon theme.
+ * the config's icon theme. `webApps` are offered as applications too.
  *
  * Reads desktop entries on {@link AppSearch.opening} only: a read is a system
  * call per file, too slow for every keystroke. Bookmark icons are fetched in
@@ -47,12 +58,17 @@ export const appSearch = (
   config: ApplicationsConfig,
   iconTheme: IconTheme,
   icons: Favicons = favicons((url) => favicon(url, curlFetch(domicile))),
+  webApps: readonly WebApp[] = [],
 ): AppSearch => {
   const omits = omitting(config.omit);
+  const sites = new Map(webApps.map((app) => [webAppId(app), app.url]));
   let installed: Promise<Installed> | undefined;
   const search = async (query: string): Promise<FoundApps> => {
     icons
-      .lookFor(config.bookmarks.map(({ url }) => url))
+      .lookFor([
+        ...config.bookmarks.map(({ url }) => url),
+        ...webApps.map(({ url }) => url),
+      ])
       .catch((error: unknown) => {
         // biome-ignore lint/suspicious/noConsole: surfacing a lookup that broke
         console.error("could not look for bookmarks' icons", error);
@@ -61,7 +77,21 @@ export const appSearch = (
     const { entries, icon } = await installed;
     return {
       apps: await Promise.all(
-        findApps(entries, query, FOUND).map((entry) => drawn(entry, icon)),
+        findApps([...entries, ...webApps.map(webAppEntry)], query, FOUND).map(
+          (entry) => {
+            const site = sites.get(entry.id);
+            return site === undefined
+              ? drawn(entry, icon)
+              : {
+                  command: entry.command,
+                  comment: entry.comment,
+                  icon: orUndefined(icons.icon(site)),
+                  id: entry.id,
+                  name: entry.name,
+                  preview: undefined,
+                };
+          },
+        ),
       ),
       bookmarks: findBookmarks(config.bookmarks, query, FOUND).map(
         (bookmark): Bookmark => ({
@@ -79,6 +109,32 @@ export const appSearch = (
     search,
   };
 };
+
+/** The launcher row id of `app`, beside the desktop file IDs. */
+const webAppId = ({ appId }: WebApp): string => `web-app:${appId}`;
+
+/** `app` as a desktop entry would offer it. */
+const webAppEntry = (app: WebApp): InstalledEntry => ({
+  command: [
+    "domicile",
+    "open",
+    "--app",
+    "--id",
+    app.appId,
+    "--reuse",
+    "focus",
+    app.url,
+  ],
+  comment: "",
+  exec: "",
+  icon: undefined,
+  id: webAppId(app),
+  mimeTypes: [],
+  name: app.name,
+  preview: undefined,
+  windowClass: undefined,
+  words: app.name.toLowerCase(),
+});
 
 const read = async (
   domicile: AppsDesktop,

@@ -1,4 +1,7 @@
-import { inboxAddress } from "@domicile-desktop/manganese-bar-module-gmail/addresses";
+import {
+  gmailAppId,
+  inboxAddress,
+} from "@domicile-desktop/manganese-bar-module-gmail/addresses";
 import type { GoogleClient } from "@domicile-desktop/manganese-bar-module-gmail/consent";
 import { deskInbox } from "@domicile-desktop/manganese-bar-module-gmail/desk-inbox";
 import type { Inbox as GmailReading } from "@domicile-desktop/manganese-bar-module-gmail/inbox";
@@ -11,6 +14,7 @@ import {
 import { perDesktop } from "@domicile-desktop/react/per-desktop";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
+import { AppReuse } from "@domicile-desktop/sdk/desktop/browser";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 
 type Options = {
@@ -20,23 +24,35 @@ type Options = {
   email: string;
   /** The account's name in the drawer, such as `Work`. */
   nickname: string;
+  /** Its name in the launcher, such as `Email - Work`. `nickname` if not given. */
+  launcherName?: string;
 };
 
 /**
- * One Gmail account's inbox in the notification drawer, read with the Gmail
- * API: its conversations, with the unread ones counted toward the bell. A
- * press opens it in a browser window, or signs it in. Goes in
- * `runManganese`'s `inboxes`.
+ * One Gmail account's inbox in the notification drawer and the launcher,
+ * read with the Gmail API: its conversations, with the unread ones counted
+ * toward the bell. A press opens it in the account's own Gmail window, or
+ * brings that window up, or signs it in. Goes in `runManganese`'s `inboxes`.
  */
-export const gmailInbox = ({ client, email, nickname }: Options): Inbox =>
+export const gmailInbox = ({
+  client,
+  email,
+  launcherName,
+  nickname,
+}: Options): Inbox =>
   Inbox.Watched({
+    app: { appId: gmailAppId(email), url: inboxAddress(email) },
     icon: EnvelopeSimpleIcon,
+    ...(launcherName === undefined ? {} : { launcherName }),
     name: nickname,
     open: (domicile, reading) => {
       if (reading?.kind === InboxReadingKind.SignedOut) {
         deskInbox(domicile)(email, client, nickname).signIn();
       } else {
-        domicile.browser.open(inboxAddress(email));
+        domicile.browser.openApp(inboxAddress(email), {
+          id: gmailAppId(email),
+          reuse: AppReuse.Focus,
+        });
       }
     },
     read: perDesktop((domicile) =>

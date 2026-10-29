@@ -58,15 +58,34 @@ describe(gmailInbox, () => {
     );
   });
 
-  it("opens the account's inbox in a browser window", () => {
+  it("opens the account's inbox in its own Gmail window, or brings it up", () => {
     const fake = new FakeDomicileHost();
 
     inbox().open(fake.domicile, InboxReading.Counted(12, 3));
 
-    expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0]?.slice(0, 2)).toEqual([
-      "openBrowserWindow",
-      "https://mail.google.com/mail/?authuser=me%40example.com",
+    expect(fake.calls).toEqual([
+      [
+        "openAppWindow",
+        "https://mail.google.com/mail/?authuser=me%40example.com",
+        "gmail:me@example.com",
+        "focus",
+      ],
     ]);
+  });
+
+  it("is listed in the launcher by the name given, else its nickname, as its window", () => {
+    expect(inbox().launcherName).toBeUndefined();
+    expect(inbox().app).toEqual({
+      appId: "gmail:me@example.com",
+      url: "https://mail.google.com/mail/?authuser=me%40example.com",
+    });
+    expect(
+      gmailInbox({
+        client: CLIENT,
+        email: EMAIL,
+        launcherName: "Email - Work",
+        nickname: "Work",
+      }).launcherName,
+    ).toBe("Email - Work");
   });
 });
