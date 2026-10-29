@@ -240,7 +240,7 @@ class Desk {
   }
 }
 
-/** An inbox with 2 unread conversations, and a page. */
+/** An inbox with 2 unread conversations, and one in an app window. */
 const FAKE_INBOXES: readonly Inbox[] = [
   Inbox.Watched({
     icon: EnvelopeSimpleIcon,
@@ -252,7 +252,8 @@ const FAKE_INBOXES: readonly Inbox[] = [
         return () => undefined;
       }),
   }),
-  Inbox.Page({
+  Inbox.Window({
+    appId: "fake-chat",
     countUnread: () => () => undefined,
     icon: EnvelopeSimpleIcon,
     name: "Fake inbox",
@@ -1543,7 +1544,7 @@ describe("Shell", () => {
       ).toBeVisible();
     });
 
-    it("shows an inbox's page, and opens again on the notifications", async () => {
+    it("opens an inbox's app window, and closes the notifications", async () => {
       renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
       await userEvent.click(
         screen.getByRole("button", { name: "Notifications, 2 unread" }),
@@ -1552,17 +1553,16 @@ describe("Shell", () => {
       await userEvent.click(
         await screen.findByRole("button", { name: "Fake inbox" }),
       );
-      expect(
-        await screen.findByRole("heading", { name: "Fake inbox" }),
-      ).toBeInTheDocument();
-      await userEvent.keyboard("{Escape}");
-      await userEvent.click(
-        screen.getByRole("button", { name: "Notifications, 2 unread" }),
-      );
 
-      expect(
-        await screen.findByRole("heading", { name: "Notifications" }),
-      ).toBeInTheDocument();
+      expect(domicile.calls).toContainEqual([
+        "openAppWindow",
+        "https://chat.example.com/",
+        "fake-chat",
+        "focus",
+      ]);
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
     });
 
     it("is the far end of the bar", () => {

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
-import { UNREAD_CONVERSATIONS, watchUnread } from "./watch-unread";
+import {
+  UNREAD_CONVERSATIONS,
+  watchUnread,
+  watchUnreadWith,
+} from "./watch-unread";
 
 /** A page that answers each count from `answers`, in turn. */
 const pageAnswering = (
@@ -147,5 +151,51 @@ describe("watchUnread", () => {
     view.dispatchEvent(new Event(WEBVIEW_LOADING_CHANGE_EVENT));
 
     expect(asked()).toBe(0);
+  });
+});
+
+describe(watchUnreadWith, () => {
+  it("counts Messages' unread conversations on each tick", async () => {
+    const hand = byHand();
+    const counts: number[] = [];
+    const asked: string[] = [];
+    watchUnreadWith(
+      (selector) => {
+        asked.push(selector);
+        return Promise.resolve(asked.length);
+      },
+      (count) => {
+        counts.push(count);
+      },
+      hand.every,
+    );
+
+    hand.tick();
+    hand.tick();
+    await Promise.resolve();
+
+    expect(asked).toEqual([UNREAD_CONVERSATIONS, UNREAD_CONVERSATIONS]);
+    expect(counts).toEqual([1, 2]);
+  });
+
+  it("reports a count the window did not give, and stops when asked", async () => {
+    const hand = byHand();
+    const missed: unknown[] = [];
+    const stop = watchUnreadWith(
+      () => Promise.reject(new Error("navigated")),
+      () => undefined,
+      hand.every,
+      (error) => {
+        missed.push(error);
+      },
+    );
+
+    hand.tick();
+    await Promise.resolve();
+    await Promise.resolve();
+    stop();
+    hand.tick();
+
+    expect(missed).toHaveLength(1);
   });
 });

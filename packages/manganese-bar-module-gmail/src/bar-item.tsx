@@ -1,4 +1,6 @@
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { AppReuse } from "@domicile-desktop/sdk/desktop/browser";
+import { gmailAppId } from "./addresses";
 import type { GoogleClient } from "./consent";
 import { deskInbox } from "./desk-inbox";
 import { Gmail as Account } from "./Gmail";
@@ -13,8 +15,8 @@ type Props = {
 };
 
 /**
- * One Gmail account's inbox count, read with the Gmail API. Not in the
- * default bar.
+ * One Gmail account's inbox count, read with the Gmail API. A press opens
+ * the account's Gmail window, or brings it up. Not in the default bar.
  */
 export const Gmail = ({ client, email, nickname }: Props) => {
   const domicile = useDomicile();
@@ -25,7 +27,10 @@ export const Gmail = ({ client, email, nickname }: Props) => {
       inbox={account.inbox}
       nickname={nickname}
       onOpen={(url) => {
-        domicile.browser.open(url);
+        domicile.browser.openApp(url, {
+          id: gmailAppId(email),
+          reuse: AppReuse.Focus,
+        });
       }}
       onSignIn={account.signIn}
     />

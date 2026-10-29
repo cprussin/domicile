@@ -106,6 +106,9 @@ The pointer follows keyboard focus (sway's `mouse_warping container`):
 - A pointer that enters a browser window directly over its page (not its
   chrome) may not move focus until a click.
 - Clicking in the address bar keeps the caret there.
+- A background app's window (`useWindows`' `backgroundApps`, such as the
+  Messages inbox) opens hidden, shows when its app asks for focus, and hides
+  instead of closing, so its page keeps running.
 
 For how warping, browser-window focus and modifier drags work, see
 [FOCUS-INTERNALS.md](FOCUS-INTERNALS.md).

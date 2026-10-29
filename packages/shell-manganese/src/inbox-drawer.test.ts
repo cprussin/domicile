@@ -5,18 +5,27 @@ import {
   InboxReading,
 } from "@domicile-desktop/manganese-notifications/inbox";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
-import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import { act, renderHook } from "@testing-library/react";
 
-import { useInboxDrawer } from "./inbox-drawer";
+import {
+  backgroundAppsOf,
+  launcherAppsOf,
+  useInboxDrawer,
+} from "./inbox-drawer";
 
-/** A Work inbox read from outside, and a Chat page. */
+const CHAT_URL = "https://chat.example.com/";
+
+/** A Work inbox read from outside, and a Chat inbox in a window. */
 const inboxes = () => {
   const reading: { send: (reading: InboxReading) => void } = {
     send: () => undefined,
   };
+  const chat: {
+    countMatches: ((selector: string) => Promise<number>) | undefined;
+    send: (unread: number) => void;
+  } = { countMatches: undefined, send: () => undefined };
   const opened: (readonly unknown[])[] = [];
   const list: readonly InboxType[] = [
     Inbox.Watched({
@@ -31,41 +40,52 @@ const inboxes = () => {
           return () => undefined;
         }),
     }),
-    Inbox.Page({
-      countUnread: () => () => undefined,
+    Inbox.Window({
+      appId: "chat",
+      countUnread: (countMatches, onUnread) => {
+        chat.countMatches = countMatches;
+        chat.send = onUnread;
+        return () => {
+          chat.countMatches = undefined;
+        };
+      },
       icon: EnvelopeSimpleIcon,
       name: "Chat",
-      url: "https://chat.example.com/",
+      url: CHAT_URL,
     }),
   ];
-  return { list, opened, reading };
+  return { chat, list, opened, reading };
 };
 
 const drawer = () => {
-  const { list, opened, reading } = inboxes();
-  const domicile: Domicile = new FakeDomicileHost().domicile;
+  const { chat, list, opened, reading } = inboxes();
+  const fake = new FakeDomicileHost();
   const hook = renderHook(() =>
     useInboxDrawer({
-      domicile,
+      domicile: fake.domicile,
       inboxes: list,
       onClose: () => {
         opened.push(["close"]);
       },
-      onShow: () => {
-        opened.push(["show"]);
-      },
     }),
   );
-  return { hook, opened, reading };
+  return { chat, fake, hook, opened, reading };
 };
+
+/** The app windows `fake` was asked to open. */
+const appsOpened = (fake: FakeDomicileHost) =>
+  fake.calls.filter(([name]) => name === "openAppWindow");
 
 describe("useInboxDrawer", () => {
   it("reads every inbox, and adds up their unread conversations", () => {
-    const { hook, reading } = drawer();
+    const { chat, fake, hook, reading } = drawer();
+    act(() => {
+      fake.openApp(CHAT_URL, "chat", "focus");
+    });
 
     act(() => {
       reading.send(InboxReading.Counted(12, 2));
-      hook.result.current.drawer.onUnread(1, 3);
+      chat.send(3);
     });
 
     expect(hook.result.current.drawer.readings).toEqual([
@@ -75,17 +95,47 @@ describe("useInboxDrawer", () => {
     expect(hook.result.current.unread).toBe(5);
   });
 
-  it("counts a page once, at its latest", () => {
-    const { hook } = drawer();
-
+  it("counts an inbox in a window in that window's page", () => {
+    const { chat, fake } = drawer();
     act(() => {
-      hook.result.current.drawer.onUnread(1, 2);
-    });
-    act(() => {
-      hook.result.current.drawer.onUnread(1, 1);
+      fake.openApp(CHAT_URL, "chat", "focus");
     });
 
-    expect(hook.result.current.unread).toBe(1);
+    chat.countMatches?.("p.unread").catch(() => {
+      /* never answered */
+    });
+
+    expect(fake.calls).toContainEqual([
+      "countBrowserWindowMatches",
+      "1",
+      "p.unread",
+    ]);
+  });
+
+  it("opens an inbox's window at start, hidden, when it has none", () => {
+    const { fake } = drawer();
+
+    act(() => {
+      fake.set({ browserWindows: [] });
+    });
+
+    expect(appsOpened(fake)).toEqual([
+      ["openAppWindow", CHAT_URL, "chat", "focus"],
+    ]);
+  });
+
+  it("opens no second window for an inbox with one", () => {
+    const { fake } = drawer();
+
+    act(() => {
+      fake.set({ browserWindows: [] });
+    });
+    // The engine lists the window it opened, and lists again later.
+    act(() => {
+      fake.set({ browserWindows: fake.host.browserWindows });
+    });
+
+    expect(appsOpened(fake)).toHaveLength(1);
   });
 
   it("opens an inbox read from outside with its reading, closing the drawer", () => {
@@ -104,27 +154,45 @@ describe("useInboxDrawer", () => {
     ]);
   });
 
-  it("shows a page in the drawer, and goes back to the list", () => {
-    const { hook, opened } = drawer();
+  it("brings up an inbox's window, closing the drawer", () => {
+    const { fake, hook, opened } = drawer();
 
     act(() => {
       hook.result.current.drawer.onOpen(1);
     });
-    expect(opened).toEqual([["show"]]);
-    expect(hook.result.current.drawer.shown).toBe(1);
 
-    act(hook.result.current.back);
-    expect(hook.result.current.drawer.shown).toBeUndefined();
+    expect(appsOpened(fake)).toEqual([
+      ["openAppWindow", CHAT_URL, "chat", "focus"],
+    ]);
+    expect(opened).toEqual([["close"]]);
   });
+});
 
-  it("opens the drawer on a page that asks to be shown", () => {
-    const { hook, opened } = drawer();
+describe(launcherAppsOf, () => {
+  it("lists each inbox with a window, by its launcher name or else its name", () => {
+    const { list } = inboxes();
 
-    act(() => {
-      hook.result.current.drawer.onShow(1);
-    });
+    expect(
+      launcherAppsOf([
+        ...list,
+        Inbox.Watched({
+          app: { appId: "mail", url: "https://mail.example/" },
+          icon: EnvelopeSimpleIcon,
+          launcherName: "Email",
+          name: "Home",
+          open: () => undefined,
+          read: () => sharedWatch(() => () => undefined),
+        }),
+      ]),
+    ).toEqual([
+      { appId: "chat", name: "Chat", url: CHAT_URL },
+      { appId: "mail", name: "Email", url: "https://mail.example/" },
+    ]);
+  });
+});
 
-    expect(opened).toEqual([["show"]]);
-    expect(hook.result.current.drawer.shown).toBe(1);
+describe(backgroundAppsOf, () => {
+  it("is the app id of each inbox in a window", () => {
+    expect(backgroundAppsOf(inboxes().list)).toEqual(["chat"]);
   });
 });

@@ -149,6 +149,43 @@ describe("appSearch", () => {
     expect(lookup.asked).toStrictEqual([["https://mail.example"]]);
   });
 
+  it("offers a web app as an application that opens its one window, drawn with its site's icon", async () => {
+    const lookup = knownIcons({ "https://sms.example/": "data:sms" });
+    const apps = appSearch(
+      fakeDesktop(
+        { "/home/applications/editor.desktop": entry("Editor") },
+        desktop,
+      ),
+      { bookmarks: [], omit: [] },
+      configured(),
+      lookup.icons,
+      [{ appId: "sms", name: "SMS", url: "https://sms.example/" }],
+    );
+
+    const found = await apps.search("sm");
+
+    expect(found.apps).toStrictEqual([
+      {
+        command: [
+          "domicile",
+          "open",
+          "--app",
+          "--id",
+          "sms",
+          "--reuse",
+          "focus",
+          "https://sms.example/",
+        ],
+        comment: "",
+        icon: "data:sms",
+        id: "web-app:sms",
+        name: "SMS",
+        preview: undefined,
+      },
+    ]);
+    expect(lookup.asked).toStrictEqual([["https://sms.example/"]]);
+  });
+
   it("reads what is installed again on opening, and only then", async () => {
     const files: Record<string, string> = {
       "/home/applications/editor.desktop": entry("Editor"),

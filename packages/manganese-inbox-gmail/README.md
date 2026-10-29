@@ -1,8 +1,8 @@
 # @domicile-desktop/manganese-inbox-gmail
 
 Manganese's Gmail inbox: one account's conversation count in the notification
-drawer, read with the Gmail API. Its unread conversations count toward the
-bell.
+drawer and the launcher, read with the Gmail API. Its unread conversations
+count toward the bell.
 
 ## Use
 
@@ -18,6 +18,7 @@ export const Shell = runManganese({
     gmailInbox({
       client: { id: "….apps.googleusercontent.com", secret: "…" },
       email: "me@gmail.com",
+      launcherName: "Email - Work",
       nickname: "Work",
     }),
   ],
@@ -28,9 +29,11 @@ export const Shell = runManganese({
   [manganese-bar-module-gmail](../manganese-bar-module-gmail/README.md#use).
 - `email`: the Google account.
 - `nickname`: its name in the drawer.
+- `launcherName`: its name in the launcher. `nickname` if not given.
 
-A press opens the inbox in a browser window, or signs the account in. New
-mail is notified under the nickname. What it
+A press opens the account's own Gmail window, or brings it up, or signs the
+account in. New mail is notified under the nickname, and a press of one opens
+the message in that window. What it
 shows: [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md#inboxes). It reads the
 inbox as the `Gmail` bar item does.
 

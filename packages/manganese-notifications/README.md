@@ -5,7 +5,8 @@ Manganese's notification toasts and drawer, and the inboxes listed in it.
 ## Exports
 
 - `@domicile-desktop/manganese-notifications/inbox`: `Inbox` and
-  `InboxReading`, what `runManganese`'s `inboxes` lists in the drawer. See
+  `InboxReading`, what `runManganese`'s `inboxes` lists in the drawer and
+  the launcher. See
   [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md#inboxes).
 - `@domicile-desktop/manganese-notifications/NotificationDrawer`
 - `@domicile-desktop/manganese-notifications/NotificationToasts`

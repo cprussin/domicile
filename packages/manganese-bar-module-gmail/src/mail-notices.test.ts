@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
+import type { AppWindowOptions } from "@domicile-desktop/sdk/desktop/browser";
+import { AppReuse } from "@domicile-desktop/sdk/desktop/browser";
 import type {
   DbusBody,
   DbusCall,
@@ -7,7 +9,7 @@ import type {
 } from "@domicile-desktop/sdk/system";
 import { Bus, SystemErrorKind } from "@domicile-desktop/sdk/system";
 
-import { inboxAddress } from "./addresses";
+import { gmailAppId, inboxAddress } from "./addresses";
 import type { Mail } from "./gmail-api";
 import { heldBus } from "./held-bus";
 import { EMAIL } from "./held-google";
@@ -47,16 +49,20 @@ const pressed = (id: number) => ({
   signature: "us",
 });
 
-/** A desk whose bus answers `replies`; `opened` settles on its first open. */
+/**
+ * A desk whose bus answers `replies`; `opened` settles on its first open, with
+ * the address and how the app window was opened.
+ */
 const desk = (...replies: Parameters<typeof heldBus>[0]) => {
   const bus = heldBus(replies);
-  const opened = Promise.withResolvers<string>();
+  const opened =
+    Promise.withResolvers<[string, AppWindowOptions | undefined]>();
   return {
     bus,
     desk: {
       browser: {
-        open: (url: string) => {
-          opened.resolve(url);
+        openApp: (url: string, options?: AppWindowOptions) => {
+          opened.resolve([url, options]);
         },
       },
       dbus: bus.dbus,
@@ -104,7 +110,7 @@ describe("mailNotices", () => {
     ]);
   });
 
-  it("opens a pressed message in Gmail, and only for its own notifications", async () => {
+  it("opens a pressed message in its account's Gmail window, and only for its own notifications", async () => {
     const { bus, desk: held, opened } = desk(notified(7));
     const notify = mailNotices(held);
 
@@ -112,7 +118,10 @@ describe("mailNotices", () => {
     await bus.send(pressed(6));
     await bus.send(pressed(7));
 
-    expect(await opened).toBe(`${inboxAddress(EMAIL)}#inbox/t1`);
+    expect(await opened).toStrictEqual([
+      `${inboxAddress(EMAIL)}#inbox/t1`,
+      { id: gmailAppId(EMAIL), reuse: AppReuse.Navigate },
+    ]);
     await notify(ACCOUNT, read("m1"));
     expect(closes(bus.calls)).toStrictEqual([]);
   });
@@ -151,7 +160,7 @@ describe("mailNotices", () => {
     expect(bus.calls.map(({ body }) => body?.slice(3, 5))).toStrictEqual([
       ["4 new emails", "Sender 4, Sender 3, Sender 2, and 1 more"],
     ]);
-    expect(await opened).toBe(inboxAddress(EMAIL));
+    expect((await opened)[0]).toBe(inboxAddress(EMAIL));
   });
 
   it("names each sender once", async () => {
@@ -175,7 +184,7 @@ describe("mailNotices", () => {
     await notify(ACCOUNT, arrived([mail(2)]));
     await bus.send(pressed(8));
 
-    expect(await opened).toBe(`${inboxAddress(EMAIL)}#inbox/t2`);
+    expect((await opened)[0]).toBe(`${inboxAddress(EMAIL)}#inbox/t2`);
   });
 
   it("fails when the notification server refuses", async () => {

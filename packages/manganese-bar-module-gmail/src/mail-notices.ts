@@ -2,6 +2,7 @@
 // compositor runs. See docs/architecture/NOTIFICATIONS.md.
 
 import type { Browser } from "@domicile-desktop/sdk/desktop/browser";
+import { AppReuse } from "@domicile-desktop/sdk/desktop/browser";
 import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
 import type {
   DbusSignal,
@@ -11,7 +12,7 @@ import type {
 import { Bus, ListenedKind } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
-import { inboxAddress } from "./addresses";
+import { gmailAppId, inboxAddress } from "./addresses";
 import type { Mail, MailNews } from "./gmail-api";
 
 /** The notification server's address on the session bus. */
@@ -31,7 +32,7 @@ const MOST_NAMED = 3;
 /** What notifies: the bus, and the browser a press opens Gmail in. */
 export type NoticeDesk = {
   readonly dbus: Pick<Dbus, "call" | "match">;
-  readonly browser: Pick<Browser, "open">;
+  readonly browser: Pick<Browser, "openApp">;
 };
 
 /** The account mail arrived for. */
@@ -41,7 +42,7 @@ export type MailAccount = { email: string; nickname: string };
  * Notifies the desk of mail that arrived, under the account's nickname: a
  * notification per message, or one for all of them when more than
  * {@link MOST_APART} arrive at once. A press opens the message, or the inbox,
- * in a browser window. A notification closes once all its messages are read.
+ * in the account's Gmail window, opening one if none is. A notification closes once all its messages are read.
  * Rejects when the server refuses.
  */
 export const mailNotices = (desk: NoticeDesk) => {
@@ -58,22 +59,29 @@ export const mailNotices = (desk: NoticeDesk) => {
     await presses.listening;
     for (const notice of notices(account.email, arrived)) {
       const id = await notify(desk, account.nickname, notice);
-      shown.set(id, { opens: notice.opens, unread: notice.messages });
+      shown.set(id, {
+        email: account.email,
+        opens: notice.opens,
+        unread: notice.messages,
+      });
     }
-    for (const [id, { opens, unread }] of shown) {
-      const left = unread.filter((message) => !read.includes(message));
+    for (const [id, notified] of shown) {
+      const left = notified.unread.filter((message) => !read.includes(message));
       if (left.length === 0) {
         shown.delete(id);
         await close(desk, id);
       } else {
-        shown.set(id, { opens, unread: left });
+        shown.set(id, { ...notified, unread: left });
       }
     }
   };
 };
 
-/** One notification still up: what a press opens, and its unread messages. */
-type Shown = { opens: string; unread: readonly string[] };
+/**
+ * One notification still up: its account, what a press opens, and its unread
+ * messages.
+ */
+type Shown = { email: string; opens: string; unread: readonly string[] };
 
 type Notice = {
   summary: string;
@@ -203,7 +211,10 @@ const follow = async (
         const pressed = shown.get(id);
         if (pressed !== undefined) {
           shown.delete(id);
-          desk.browser.open(pressed.opens);
+          desk.browser.openApp(pressed.opens, {
+            id: gmailAppId(pressed.email),
+            reuse: AppReuse.Navigate,
+          });
         }
         break;
       }

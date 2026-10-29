@@ -9,6 +9,7 @@ import type { WindowState } from "./window-state";
 import {
   activeIdOf,
   activeIsPrivate,
+  closedIdsOf,
   currentHere,
   currentOn,
   NO_WINDOWS,
@@ -395,6 +396,77 @@ describe("the browser windows the engine lists", () => {
 });
 
 // A dialog, such as pinentry, or a window a floating rule names.
+describe("the apps that run in the background", () => {
+  /** App window `id` of app `appId`, as the engine lists it. */
+  const app = (id: string, appId: string) => ({
+    ...listed(id, "https://messages.example/"),
+    appId,
+    isApp: true,
+  });
+
+  /** Messages' window listed, with Messages running in the background. */
+  const running = () =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([app("1", "messages")], ["messages"]),
+    );
+
+  it("opens a background app's window hidden, keeping the window in front", () => {
+    const state = running();
+
+    expect(state.windows.map(({ id }) => id)).toContain(BROWSER("1"));
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("opens another app's window as any other", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([app("1", "mail")], ["messages"]),
+    );
+
+    expect(activeIdOf(state)).toBe(BROWSER("1"));
+  });
+
+  it("shows the hidden window on the workspace on screen when it asks to be in front", () => {
+    const state = reduce(running(), WindowAction.FocusRequested(BROWSER("1")));
+
+    expect(windowsOn(workspaceHere(state))).toEqual([
+      APP("kitty"),
+      BROWSER("1"),
+    ]);
+    expect(activeIdOf(state)).toBe(BROWSER("1"));
+  });
+
+  it("hides the window again when it is closed", () => {
+    const shown = reduce(running(), WindowAction.FocusRequested(BROWSER("1")));
+    const state = reduce(shown, WindowAction.WindowClosed(BROWSER("1")));
+
+    expect(state.windows.map(({ id }) => id)).toContain(BROWSER("1"));
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
+    expect(closedIdsOf(shown, [BROWSER("1"), APP("kitty")])).toEqual([
+      APP("kitty"),
+    ]);
+  });
+
+  it("hides the window when it is killed", () => {
+    const shown = reduce(running(), WindowAction.FocusRequested(BROWSER("1")));
+    const state = reduce(shown, WindowAction.WindowKilled());
+
+    expect(state.windows.map(({ id }) => id)).toContain(BROWSER("1"));
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
+  });
+
+  it("closes the window when the engine drops it", () => {
+    const state = reduce(
+      running(),
+      WindowAction.BrowserWindowsListed([], ["messages"]),
+    );
+
+    expect(state.windows.map(({ id }) => id)).toEqual([APP("kitty")]);
+  });
+});
+
 describe("the clients that open floating", () => {
   const floatOf = (state: WindowState) => {
     const [float] = workspaceHere(state).floats;

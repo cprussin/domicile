@@ -14,7 +14,8 @@ const WORK = Inbox.Watched({
   read: () => sharedWatch(() => () => undefined),
 });
 
-const CHAT = Inbox.Page({
+const CHAT = Inbox.Window({
+  appId: "chat",
   countUnread: () => () => undefined,
   icon: EnvelopeSimpleIcon,
   name: "Chat",
@@ -98,7 +99,7 @@ describe(InboxList, () => {
     expect(opened).toEqual([0]);
   });
 
-  it("lists a page by its unread count alone, from before its first count", async () => {
+  it("lists an inbox in a window by its unread count alone, from before its first count", async () => {
     const opened = shown([InboxReading.Counted(1, 0), undefined], [WORK, CHAT]);
 
     await userEvent.click(screen.getByRole("button", { name: "Chat" }));

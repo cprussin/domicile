@@ -24,8 +24,8 @@ import { bellId } from "./notifications-context";
 type Asked = (readonly unknown[])[];
 
 /**
- * A Work inbox read from outside, and a Chat page that counts 4 unread; records
- * what the drawer asks of them.
+ * A Work inbox read from outside, and a Chat inbox in a window; records what
+ * the drawer asks of them.
  */
 const inboxes = (asked: Asked = []): DrawerInboxes => ({
   inboxes: [
@@ -35,11 +35,9 @@ const inboxes = (asked: Asked = []): DrawerInboxes => ({
       open: () => undefined,
       read: () => sharedWatch(() => () => undefined),
     }),
-    Inbox.Page({
-      countUnread: (_view, onUnread) => {
-        onUnread(4);
-        return () => undefined;
-      },
+    Inbox.Window({
+      appId: "chat",
+      countUnread: () => () => undefined,
       icon: ChatCircleTextIcon,
       name: "Chat",
       url: "https://chat.example.com/",
@@ -48,14 +46,7 @@ const inboxes = (asked: Asked = []): DrawerInboxes => ({
   onOpen: (index) => {
     asked.push(["open inbox", index]);
   },
-  onShow: (index) => {
-    asked.push(["show inbox", index]);
-  },
-  onUnread: (index, unread) => {
-    asked.push(["unread", index, unread]);
-  },
   readings: [InboxReading.Counted(3, 1), undefined],
-  shown: undefined,
 });
 
 type DrawerProps = Parameters<typeof NotificationDrawer>[0];
@@ -100,9 +91,6 @@ const element = (
       now={0}
       onAction={(id, key) => {
         asked.push(["action", id, key]);
-      }}
-      onBack={() => {
-        asked.push(["back"]);
       }}
       onClose={() => {
         asked.push(["close"]);
@@ -269,38 +257,6 @@ describe("NotificationDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Work/v }));
 
     expect(asked).toContainEqual(["open inbox", 0]);
-  });
-
-  it("keeps the inboxes' pages loaded while closed", () => {
-    drawer([], [], { inboxes: inboxes(), open: false });
-
-    expect(document.querySelector("webview")).not.toBeNull();
-  });
-
-  it("hears a page's unread count, by its place", () => {
-    const asked: Asked = [];
-    drawer([], [], { inboxes: inboxes(asked) });
-
-    expect(asked).toContainEqual(["unread", 1, 4]);
-  });
-
-  it("shows an inbox's page, wide, and goes back", () => {
-    const asked: Asked = [];
-    drawer([notification({ id: 1, summary: "Older" })], asked, {
-      inboxes: { ...inboxes(asked), shown: 1 },
-    });
-
-    expect(screen.getByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
-    expect(document.querySelector("webview")?.closest("[hidden]")).toBeNull();
-    // Hidden, not gone, so an inbox's page keeps running.
-    expect(screen.getByText("Older").closest("[hidden]")).not.toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Clear all" }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-
-    expect(asked.at(-1)).toEqual(["back"]);
   });
 
   describe("clearing", () => {
