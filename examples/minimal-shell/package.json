@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@domicile-desktop/sdk": "0.0.0-alpha-782471d9d4b4"
+    "@domicile-desktop/sdk": "0.0.0-alpha-efd3e703ec70"
   },
   "description": "The worked example from docs/WRITING-A-SHELL.md: a Domicile shell built against the published SDK, with no dependency on this repo.",
   "devDependencies": {

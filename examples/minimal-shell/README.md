@@ -1,7 +1,8 @@
 # minimal-shell
 
-The smallest working Domicile shell: every window full-screen, newest on top.
-It is the worked example from [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
+The smallest working Domicile shell: every window full-screen, newest on top,
+a box at the bottom that runs the command typed in it, and `kitty` on
+Meta+Enter. It is the worked example from [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 
 - `src/index.ts` exports `Shell`, which mounts an `<app>` for each window in
   the desktop's `windows`. That file is the whole shell.
@@ -16,12 +17,12 @@ It is the worked example from [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 ```sh
 bun install
 bun run build
-nix run github:cprussin/domicile/782471d9d4b45947bee1fbf09f7249f11bdac33d -- ./.vite/renderer/main_window/shell.js
+nix run github:cprussin/domicile/efd3e703ec70efc67ed7b543a494960d89be5669 -- ./.vite/renderer/main_window/shell.js
 ```
 
 - The build emits one file, `.vite/renderer/main_window/shell.js`. Domicile
   serves its directory, then starts the compositor and the engine on it.
-- The SDK version, `0.0.0-alpha-782471d9d4b4`, is published from that commit,
+- The SDK version, `0.0.0-alpha-efd3e703ec70`, is published from that commit,
   a `stable` release. Run the shell on the commit its SDK names. To move
   forward, change both to a newer `stable` commit.
 

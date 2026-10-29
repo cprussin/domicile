@@ -4,7 +4,7 @@ import type { Shell } from "@domicile-desktop/sdk/shell";
 
 import { css } from "../../styled-system/css";
 import { previewDesktop } from "./preview-desktop";
-import { STAND_INS } from "./stand-ins";
+import type { StandIn } from "./stand-ins";
 
 type Props = {
   /** The shell to run. A new run gets a fresh frame. */
@@ -60,17 +60,18 @@ const start = (frame: HTMLIFrameElement, shell: Shell) => {
   if (page === null) {
     throw new Error("the preview's frame has no page");
   } else {
+    const { domicile, standIns } = previewDesktop();
     new MutationObserver(() => {
-      fillWindows(page);
+      fillWindows(page, standIns());
     }).observe(page.body, { childList: true, subtree: true });
-    shell(page.body, previewDesktop().domicile);
-    fillWindows(page);
+    shell(page.body, domicile);
+    fillWindows(page, standIns());
   }
 };
 
 /** Puts each stand-in's text in its `<app>`s that are still empty. */
-const fillWindows = (page: Document) => {
-  for (const { appId, body } of STAND_INS) {
+const fillWindows = (page: Document, standIns: readonly StandIn[]) => {
+  for (const { appId, body } of standIns) {
     for (const app of page.querySelectorAll(`app[app-id="${appId}"]:empty`)) {
       const text = page.createElement("pre");
       text.textContent = body;
