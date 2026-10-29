@@ -26,8 +26,9 @@ const meta = {
             >
               <DetailList
                 rows={[
-                  ["Address", "192.168.1.23/24"],
-                  ["Gateway", "192.168.1.1"],
+                  ["Speed", "867 Mb/s"],
+                  ["Address", "192.168.1.23/24", { copyable: true }],
+                  ["Gateway", "192.168.1.1", { copyable: true }],
                 ]}
               />
             </ListRow>

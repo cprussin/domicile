@@ -1,7 +1,13 @@
 import type { Result } from "@cprussin/option-result";
-import type { Detail } from "@domicile-desktop/component-library/DetailList";
+import type {
+  Detail,
+  DetailOptions,
+} from "@domicile-desktop/component-library/DetailList";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Addressing } from "@domicile-desktop/system-network/interfaces";
+
+/** An address or a name, which people paste elsewhere. */
+export const COPYABLE: DetailOptions = { copyable: true };
 
 /** Each interface's addresses, by name; `undefined` until `ip` answers. */
 export type Addresses =
@@ -17,9 +23,9 @@ export const addressRowsOf = (addresses: Addresses, name: string): Detail[] => {
   return [
     ...(addressing === undefined || addressing.addresses.length === 0
       ? []
-      : [["Address", addressing.addresses] as const]),
+      : [["Address", addressing.addresses, COPYABLE] as const]),
     ...(addressing?.gateway === undefined
       ? []
-      : [["Gateway", addressing.gateway] as const]),
+      : [["Gateway", addressing.gateway, COPYABLE] as const]),
   ];
 };

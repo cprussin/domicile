@@ -360,9 +360,28 @@ describe("WifiPanel", () => {
           ["192.168.1.23/24", "2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64"],
         ],
         ["Gateway", ["192.168.1.254"]],
-        ["DNS", ["192.168.1.1, 1.1.1.1"]],
+        ["DNS", ["192.168.1.1", "1.1.1.1"]],
         ["Interface", ["wlan0"]],
         ["Hardware address", ["A4:C3:F0:85:AC:2D"]],
+      ]);
+    });
+
+    it("offers to copy each address, server and name, but not the speed", async () => {
+      await shown(Ok(Some(WIFI)));
+      await unfold();
+
+      expect(
+        within(screen.getByRole("region", { name: "Wi-Fi" }))
+          .getAllByRole("button", { name: /^Copy / })
+          .map((button) => button.getAttribute("aria-label")),
+      ).toStrictEqual([
+        "Copy 192.168.1.23/24",
+        "Copy 2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64",
+        "Copy 192.168.1.254",
+        "Copy 192.168.1.1",
+        "Copy 1.1.1.1",
+        "Copy wlan0",
+        "Copy A4:C3:F0:85:AC:2D",
       ]);
     });
 

@@ -6,7 +6,7 @@ import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import type { NetworkInterface } from "@domicile-desktop/system-network/interfaces";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
 import type { Addresses } from "./addressing";
-import { addressRowsOf } from "./addressing";
+import { addressRowsOf, COPYABLE } from "./addressing";
 import { speedOf } from "./speed";
 
 type Props = {
@@ -50,6 +50,6 @@ export const WiredPanel = ({ addresses, ports }: Props) => (
 /** The port's details, leaving out what is unknown. */
 const detailsOf = (port: NetworkInterface, addresses: Addresses): Detail[] => [
   ...addressRowsOf(addresses, port.name),
-  ["Interface", port.name],
-  ["Hardware address", port.hardwareAddress],
+  ["Interface", port.name, COPYABLE],
+  ["Hardware address", port.hardwareAddress, COPYABLE],
 ];

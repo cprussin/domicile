@@ -29,7 +29,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { hstack } from "../styled-system/patterns";
 import type { Addresses } from "./addressing";
-import { addressRowsOf } from "./addressing";
+import { addressRowsOf, COPYABLE } from "./addressing";
 import { signalOf } from "./signal";
 import { speedOf } from "./speed";
 import { WifiSignalIcon } from "./WifiSignalIcon";
@@ -421,9 +421,9 @@ const detailsOf = (
   ...addressRowsOf(addresses, wifi.interface),
   ...(connection.ip === undefined
     ? []
-    : [["DNS", connection.ip.dns.join(", ")] as const]),
-  ["Interface", wifi.interface],
-  ["Hardware address", wifi.hardwareAddress],
+    : [["DNS", connection.ip.dns, COPYABLE] as const]),
+  ["Interface", wifi.interface, COPYABLE],
+  ["Hardware address", wifi.hardwareAddress, COPYABLE],
 ];
 
 const bandOf = (mhz: number): string => {
