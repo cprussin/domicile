@@ -9,14 +9,14 @@ import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { WindowState } from "@domicile-desktop/sdk/window-state";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { useLowered } from "./useLowered";
 import type { Settler } from "./useSettling";
-import { useSettling } from "./useSettling";
+import { UPRIGHT, useSettling } from "./useSettling";
 import { appWindowId } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving, isMoving } from "./window-motion";
@@ -164,16 +164,12 @@ export const AppWindow = ({
   const leaving = isLeaving(motion);
   // `null` because React passes `null` to a callback ref on unmount.
   const [element, setElement] = useState<HTMLAppElement | null>(null);
-  // The same element as a ref, which the layout effect in `useSettling` reads
-  // before this render's state could reach it.
-  const settling = useRef<HTMLAppElement | null>(null);
-  const attach = useCallback((node: HTMLAppElement | null) => {
-    settling.current = node;
-    setElement(node);
-  }, []);
+  // The box around the element, which `useSettling` eases. A ref because only
+  // its layout effect reads it.
+  const box = useRef<HTMLDivElement>(null);
   const lowered = useLowered(depth);
   useSettling({
-    element: settling,
+    element: box,
     origin:
       rect === undefined || frame === undefined
         ? undefined
@@ -285,11 +281,14 @@ export const AppWindow = ({
   }, [appId, element]);
 
   return (
-    <app
-      app-id={appId}
+    // The box places the window, plays its motions and eases it into a new
+    // box, clipping the `<app>` to where it is drawn. The `<app>` keeps its
+    // own size, so a client drawn at its new size is cropped rather than
+    // stretched while the box gets there.
+    <div
       className={cx(
         windowStyles,
-        appStyles,
+        boxStyles,
         // Neither a line nor rounded corners around the screen's own edge.
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
@@ -302,7 +301,6 @@ export const AppWindow = ({
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}
-      frame={String(syncedFrame)}
       hidden={rect === undefined}
       // A leaving window is unreachable by keyboard.
       inert={leaving}
@@ -312,26 +310,53 @@ export const AppWindow = ({
           onMotionEnded();
         }
       }}
-      ref={attach}
-      resizing={resizing ? "" : undefined}
-      // Inline because the box and the cursor are runtime values that Panda
-      // cannot extract at build time.
-      style={{
-        cursor,
-        ...(rect === undefined || frame === undefined
+      ref={box}
+      // Inline because the box is a runtime value that Panda cannot extract
+      // at build time.
+      style={
+        rect === undefined || frame === undefined
           ? undefined
           : {
               ...placedAt(rect, depth),
               ...scaledAbout(frame, rect),
               ...shuffledBy(restack),
-            }),
-      }}
-    />
+            }
+      }
+    >
+      <app
+        app-id={appId}
+        className={appStyles}
+        frame={String(syncedFrame)}
+        ref={setElement}
+        resizing={resizing ? "" : undefined}
+        // Inline because the cursor is a runtime value that Panda cannot
+        // extract at build time.
+        style={{ cursor }}
+        {...{ [UPRIGHT]: "" }}
+      />
+    </div>
   );
 };
 
-// The title bar draws the top edge, so the surface meets it flush.
-const appStyles = css({ borderBlockStartWidth: 0 });
+/**
+ * Clips the `<app>` to the box, rounded corners included, so the client's
+ * pixels are clipped too. The title bar draws the top edge, so the surface
+ * meets it flush.
+ */
+const boxStyles = css({ borderBlockStartWidth: 0, overflow: "clip" });
+
+/**
+ * Fills the box. Kept upright about its top left corner while the box eases,
+ * as the engine keeps a frame the client has not redrawn yet (`resizing`).
+ *
+ * No background, as {@link windowStyles} says: the compositor draws into it.
+ */
+const appStyles = css({
+  blockSize: "full",
+  display: "block",
+  inlineSize: "full",
+  transformOrigin: "0 0",
+});
 
 /** The states a window's client is told, by how the window is laid out. */
 const statesOf = (

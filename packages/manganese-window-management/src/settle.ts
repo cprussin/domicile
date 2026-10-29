@@ -52,17 +52,31 @@ export const partway = (from: Offset, progress: number): Offset => ({
 export type UprightStep = { at: number; scaleX: number; scaleY: number };
 
 /**
- * The `scale` that keeps a part of a settling element at its own size, at
- * `steps` even steps of the settle from `from`.
- *
- * The inverse of a linear ease is not linear, so it is sampled.
+ * How far a step of {@link uprightAlong} may leave a part from its own size,
+ * as a fraction of it.
  */
-export const uprightAlong = (
-  from: Offset,
-  steps: number,
-): readonly UprightStep[] =>
-  Array.from({ length: steps + 1 }, (_, step) => {
+const UPRIGHT_ERROR = 0.001;
+
+/**
+ * The `scale` that keeps a part of a settling element at its own size, at
+ * even steps of the settle from `from`.
+ *
+ * The inverse of a linear ease is not linear, so it is sampled, finely enough
+ * that the browser's linear interpolation between steps stays within
+ * {@link UPRIGHT_ERROR}: interpolating `1 / s` over a span `h` of the scale
+ * is off by at most `h² / 4s²` of it.
+ */
+export const uprightAlong = (from: Offset): readonly UprightStep[] => {
+  const steps = Math.max(1, stepsFor(from.scaleX), stepsFor(from.scaleY));
+  return Array.from({ length: steps + 1 }, (_, step) => {
     const at = step / steps;
     const settled = partway(from, at);
     return { at, scaleX: 1 / settled.scaleX, scaleY: 1 / settled.scaleY };
   });
+};
+
+/** How many even steps from `scale` to 1 keep within {@link UPRIGHT_ERROR}. */
+const stepsFor = (scale: number): number =>
+  Math.ceil(
+    Math.abs(1 - scale) / (2 * Math.min(scale, 1) * Math.sqrt(UPRIGHT_ERROR)),
+  );

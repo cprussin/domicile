@@ -493,7 +493,7 @@ const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
 const windowsOnScreen = (container: HTMLElement): string[] =>
   [
     ...container.querySelectorAll(
-      `main ${APP_TAG_NAME}:not([hidden]), main section:not([hidden])`,
+      `main :not([hidden]) > ${APP_TAG_NAME}, main section:not([hidden])`,
     ),
   ].map(
     (element) =>
@@ -667,6 +667,16 @@ const appElement = (container: HTMLElement, appId: string): HTMLElement => {
     throw new Error(`test: no window for ${appId}`);
   } else {
     return element;
+  }
+};
+
+/** The box that places, eases and clips a client's window; see `AppWindow`. */
+const appBox = (container: HTMLElement, appId: string): HTMLElement => {
+  const box = appElement(container, appId).parentElement;
+  if (box === null) {
+    throw new Error(`test: no box around the window for ${appId}`);
+  } else {
+    return box;
   }
 };
 
@@ -859,7 +869,7 @@ describe("Shell", () => {
 
       domicile.describes([LEFT]);
 
-      expect(appElement(container, "term")).not.toHaveAttribute("hidden");
+      expect(appBox(container, "term")).not.toHaveAttribute("hidden");
     });
 
     it("follows the desktop when it changes", () => {
@@ -1659,7 +1669,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("term");
 
-      expect(boxOf(appElement(container, "term"))).toEqual({
+      expect(boxOf(appBox(container, "term"))).toEqual({
         height: `${(1080 - TOP_BAR - TOP_GAP - GAP - TITLE_BAR + SURFACE_TUCK).toString()}px`,
         width: `${(1920 - 2 * GAP).toString()}px`,
         x: `${GAP.toString()}px`,
@@ -1684,7 +1694,7 @@ describe("Shell", () => {
       // start under its title bar.
       const { container } = renderShell();
       clientAppears("term");
-      const window = boxOf(appElement(container, "term"));
+      const window = boxOf(appBox(container, "term"));
 
       domicile.appear("menu", {
         grab: true,
@@ -1729,11 +1739,11 @@ describe("Shell", () => {
       clientAppears("two");
       press("e");
 
-      expect(boxOf(appElement(container, "one"))).toMatchObject({
+      expect(boxOf(appBox(container, "one"))).toMatchObject({
         width: "930px",
         x: "20px",
       });
-      expect(boxOf(appElement(container, "two"))).toMatchObject({
+      expect(boxOf(appBox(container, "two"))).toMatchObject({
         width: "930px",
         x: "970px",
       });
@@ -1848,7 +1858,7 @@ describe("Shell", () => {
       fireEvent.pointerUp(window, { clientX: 1800, clientY: 500 });
 
       expect(windowsOnScreen(container)).toEqual(["one", "two"]);
-      expect(boxOf(appElement(container, "two"))).toMatchObject({
+      expect(boxOf(appBox(container, "two"))).toMatchObject({
         x: "970px",
       });
     });
@@ -1925,7 +1935,7 @@ describe("Shell", () => {
       await user.click(screen.getByRole("button", { name: "Maximize" }));
 
       // A fullscreen window covers the top bar too.
-      expect(boxOf(appElement(container, "term"))).toMatchObject({
+      expect(boxOf(appBox(container, "term"))).toMatchObject({
         height: `${(1080 - TITLE_BAR + SURFACE_TUCK).toString()}px`,
         y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
@@ -1933,7 +1943,7 @@ describe("Shell", () => {
       // The same button restores it.
       await user.click(screen.getByRole("button", { name: "Restore" }));
 
-      expect(boxOf(appElement(container, "term"))).toMatchObject({
+      expect(boxOf(appBox(container, "term"))).toMatchObject({
         y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
@@ -1963,13 +1973,13 @@ describe("Shell", () => {
       expect(
         Number.parseFloat(barFor(container, "app:one").style.insetBlockStart),
       ).toBe(0);
-      expect(boxOf(appElement(container, "two"))).toMatchObject({
+      expect(boxOf(appBox(container, "two"))).toMatchObject({
         y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
 
       await user.click(screen.getByRole("button", { name: "Restore group" }));
 
-      expect(boxOf(appElement(container, "two"))).toMatchObject({
+      expect(boxOf(appBox(container, "two"))).toMatchObject({
         y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
@@ -2052,16 +2062,16 @@ describe("Shell", () => {
     it("plays a closed window out at the box it had, showing the window itself", () => {
       const { container } = renderShell();
       clientAppears("term");
-      const was = boxOf(appElement(container, "term"));
+      const was = boxOf(appBox(container, "term"));
 
       domicile.close("term");
 
       // The window's own element, so its contents do not change as it leaves.
-      expect(appElement(container, "term")).toHaveAttribute(
+      expect(appBox(container, "term")).toHaveAttribute(
         "data-motion",
         "closing",
       );
-      expect(boxOf(appElement(container, "term"))).toEqual(was);
+      expect(boxOf(appBox(container, "term"))).toEqual(was);
     });
 
     // Closing the visible tab collapses it along the strip and fades its
@@ -2073,7 +2083,7 @@ describe("Shell", () => {
 
       domicile.close("editor");
 
-      expect(appElement(container, "editor")).toHaveAttribute(
+      expect(appBox(container, "editor")).toHaveAttribute(
         "data-motion",
         "closing-tab",
       );
@@ -2082,7 +2092,7 @@ describe("Shell", () => {
       ).toBe("0");
       // Its contents only fade, revealing the next tab underneath.
       expect(
-        appElement(container, "editor").style.getPropertyValue("--collapse-x"),
+        appBox(container, "editor").style.getPropertyValue("--collapse-x"),
       ).toBe("");
     });
 
@@ -2094,7 +2104,7 @@ describe("Shell", () => {
       clientAppears("editor");
 
       expect(
-        appElement(container, "editor").compareDocumentPosition(
+        appBox(container, "editor").compareDocumentPosition(
           barFor(container, "app:term"),
         ),
       ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -2125,8 +2135,8 @@ describe("Shell", () => {
 
       domicile.close("one");
 
-      expect(Number(appElement(container, "one").style.zIndex)).toBeGreaterThan(
-        Number(appElement(container, "two").style.zIndex),
+      expect(Number(appBox(container, "one").style.zIndex)).toBeGreaterThan(
+        Number(appBox(container, "two").style.zIndex),
       );
     });
 
@@ -2168,7 +2178,7 @@ describe("Shell", () => {
       motionsPlayOut(container);
 
       expect(windowsOnScreen(container)).toEqual([]);
-      expect(appElement(container, "term")).toBeInTheDocument();
+      expect(appBox(container, "term")).toBeInTheDocument();
     });
 
     // Workspaces form a row: the arriving one slides in from its side and the
@@ -2209,7 +2219,7 @@ describe("Shell", () => {
       clientAppears("term");
 
       expect(
-        appElement(container, "term").parentElement?.style.getPropertyValue(
+        appBox(container, "term").parentElement?.style.getPropertyValue(
           "--workspace-width",
         ),
       ).toBe("1280px");
@@ -2241,7 +2251,7 @@ describe("Shell", () => {
       clientAppears("term");
       motionsPlayOut(container);
 
-      expect(appElement(container, "term").parentElement?.style.clip).toBe("");
+      expect(appBox(container, "term").parentElement?.style.clip).toBe("");
     });
 
     it("and the other way when the switch goes the other way", () => {
@@ -2555,7 +2565,7 @@ describe("Shell", () => {
       expect(lit(container)).toEqual(["app:two"]);
       expect(container.querySelector("[data-selection]")).toBeNull();
       for (const id of ["one", "two"]) {
-        expect(appElement(container, id).className).toContain(
+        expect(appBox(container, id).className).toContain(
           css({ borderColor: "borderStrong" }),
         );
       }
@@ -2735,8 +2745,8 @@ describe("Shell", () => {
 
       press("h", true);
 
-      expect(boxOf(appElement(container, "two"))).toMatchObject({ x: "20px" });
-      expect(boxOf(appElement(container, "one"))).toMatchObject({ x: "970px" });
+      expect(boxOf(appBox(container, "two"))).toMatchObject({ x: "20px" });
+      expect(boxOf(appBox(container, "one"))).toMatchObject({ x: "970px" });
     });
 
     it("makes one group of a split window and a window moved into it", () => {
@@ -2751,11 +2761,11 @@ describe("Shell", () => {
       press("l", true);
 
       // One column of two full-width windows, not a swap.
-      expect(boxOf(appElement(container, "one"))).toMatchObject({
+      expect(boxOf(appBox(container, "one"))).toMatchObject({
         width: "1880px",
         y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
-      expect(boxOf(appElement(container, "two"))).toMatchObject({
+      expect(boxOf(appBox(container, "two"))).toMatchObject({
         width: "1880px",
         y: `${(TOP_BAR + TOP_GAP + 499 + 20 + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
@@ -2970,7 +2980,7 @@ describe("Shell", () => {
       press("f");
 
       // A fullscreen window covers the top bar too.
-      expect(boxOf(appElement(container, "term"))).toMatchObject({
+      expect(boxOf(appBox(container, "term"))).toMatchObject({
         height: `${(1080 - TITLE_BAR + SURFACE_TUCK).toString()}px`,
         y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
@@ -2982,7 +2992,7 @@ describe("Shell", () => {
 
       press("f");
 
-      expect(appElement(container, "term").className).not.toContain(
+      expect(appBox(container, "term").className).not.toContain(
         css({ borderEndEndRadius: "lg" }),
       );
       expect(barFor(container, "app:term").className).not.toContain(
@@ -2996,7 +3006,7 @@ describe("Shell", () => {
 
       press("f", true);
 
-      expect(boxOf(appElement(container, "term"))).toMatchObject({
+      expect(boxOf(appBox(container, "term"))).toMatchObject({
         width: `${(1920 + 1280).toString()}px`,
       });
     });
@@ -3044,7 +3054,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       domicile.appear("pin", { dialog: true, height: 300, width: 400 });
 
-      expect(boxOf(appElement(container, "pin"))).toMatchObject({
+      expect(boxOf(appBox(container, "pin"))).toMatchObject({
         height: "300px",
         width: "400px",
       });
@@ -3060,7 +3070,7 @@ describe("Shell", () => {
         width: 400,
       });
 
-      expect(boxOf(appElement(container, "huddle"))).toMatchObject({
+      expect(boxOf(appBox(container, "huddle"))).toMatchObject({
         height: "300px",
         width: "400px",
       });
@@ -3074,14 +3084,12 @@ describe("Shell", () => {
       press("Tab", true);
 
       // Its own box over the tiling, not the whole workspace.
-      const floated = boxOf(appElement(container, "term"));
+      const floated = boxOf(appBox(container, "term"));
       expect(floated.width).not.toBe(`${(1920 - 2 * GAP).toString()}px`);
-      expect(
-        Number(appElement(container, "term").style.zIndex),
-      ).toBeGreaterThan(0);
+      expect(Number(appBox(container, "term").style.zIndex)).toBeGreaterThan(0);
 
       press("Tab", true);
-      expect(boxOf(appElement(container, "term"))).toMatchObject({
+      expect(boxOf(appBox(container, "term"))).toMatchObject({
         width: `${(1920 - 2 * GAP).toString()}px`,
       });
     });
@@ -3100,7 +3108,7 @@ describe("Shell", () => {
 
       press("Tab", true);
 
-      expect(boxOf(appElement(container, "vault"))).toMatchObject({
+      expect(boxOf(appBox(container, "vault"))).toMatchObject({
         height: "350px",
         width: "1300px",
       });
@@ -3265,7 +3273,7 @@ describe("Shell", () => {
       fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
 
       for (const part of [
-        appElement(container, "term"),
+        appBox(container, "term"),
         barFor(container, "app:term"),
         floatShadow(container),
         glowing(container),
@@ -3418,7 +3426,7 @@ describe("Shell", () => {
       fireEvent.pointerUp(window, { clientX: 1500, clientY: 100 });
 
       expect(
-        container.querySelectorAll(`${APP_TAG_NAME}:not([hidden])`),
+        container.querySelectorAll(`:not([hidden]) > ${APP_TAG_NAME}`),
       ).toHaveLength(1);
       expect(
         Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
@@ -3445,13 +3453,13 @@ describe("Shell", () => {
       clientAppears("term");
       press("Tab", true);
       const was = Number.parseFloat(
-        appElement(container, "term").style.insetInlineStart,
+        appBox(container, "term").style.insetInlineStart,
       );
 
       press("l", true);
 
       expect(
-        Number.parseFloat(appElement(container, "term").style.insetInlineStart),
+        Number.parseFloat(appBox(container, "term").style.insetInlineStart),
       ).toBeGreaterThan(was);
     });
 
@@ -3465,7 +3473,7 @@ describe("Shell", () => {
       // Around the whole frame, at the window's depth, and earlier in the
       // document so each window paints over only its own shadow.
       const shadow = floatShadow(container);
-      const app = appElement(container, "term");
+      const app = appBox(container, "term");
       const bar = barFor(container, "app:term");
       const top = Number.parseFloat(bar.style.insetBlockStart);
       const bottom =
@@ -3515,8 +3523,8 @@ describe("Shell", () => {
       press("Tab");
       press("Tab", true);
 
-      expect(Number(appElement(container, "one").style.zIndex)).toBeGreaterThan(
-        Number(appElement(container, "two").style.zIndex),
+      expect(Number(appBox(container, "one").style.zIndex)).toBeGreaterThan(
+        Number(appBox(container, "two").style.zIndex),
       );
     });
     it("shuffles a float pressed on over the one covering it", () => {
@@ -3529,9 +3537,9 @@ describe("Shell", () => {
       press("Tab");
       press("Tab", true);
       motionsPlayOut(container);
-      const under = appElement(container, "two");
+      const under = appBox(container, "two");
       expect(Number(under.style.zIndex)).toBeLessThan(
-        Number(appElement(container, "one").style.zIndex),
+        Number(appBox(container, "one").style.zIndex),
       );
 
       fireEvent.pointerDown(barFor(container, "app:two"), {
@@ -3540,14 +3548,11 @@ describe("Shell", () => {
       });
 
       const raised = [
-        appElement(container, "two"),
+        appBox(container, "two"),
         barFor(container, "app:two"),
         glowing(container),
       ];
-      const covered = [
-        appElement(container, "one"),
-        barFor(container, "app:one"),
-      ];
+      const covered = [appBox(container, "one"), barFor(container, "app:one")];
       for (const element of [...raised, ...covered]) {
         expect(element.style.getPropertyValue("--restack-x")).not.toBe("");
       }
@@ -3559,8 +3564,8 @@ describe("Shell", () => {
             element.dataset.strip === undefined,
         ),
       ).toEqual([
-        appElement(container, "one"),
-        appElement(container, "two"),
+        appBox(container, "one"),
+        appBox(container, "two"),
         barFor(container, "app:one"),
         barFor(container, "app:two"),
       ]);
@@ -3600,9 +3605,7 @@ describe("Shell", () => {
         fireEvent.pointerUp(window, { clientX: 100, clientY: 100 });
       }
 
-      expect(appElement(container, "one").dataset.motion).toBe(
-        "restacking-again",
-      );
+      expect(appBox(container, "one").dataset.motion).toBe("restacking-again");
       expect(glowing(container).className).toContain(
         movingStyles({ motion: "restacking-again" }),
       );
@@ -3616,7 +3619,7 @@ describe("Shell", () => {
 
       press("minus", true);
       // It slides off the top of the screen first.
-      expect(appElement(container, "term")).toHaveAttribute(
+      expect(appBox(container, "term")).toHaveAttribute(
         "data-motion",
         "stowing",
       );
@@ -3624,13 +3627,11 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual([]);
 
       press("minus");
-      expect(appElement(container, "term")).toHaveAttribute(
+      expect(appBox(container, "term")).toHaveAttribute(
         "data-motion",
         "dropping",
       );
-      expect(
-        Number(appElement(container, "term").style.zIndex),
-      ).toBeGreaterThan(0);
+      expect(Number(appBox(container, "term").style.zIndex)).toBeGreaterThan(0);
     });
     // It hangs from the top edge, so its top corners are square.
     it("hangs a window it shows from the top edge of the screen", () => {
@@ -3662,7 +3663,7 @@ describe("Shell", () => {
       const bar = barFor(container, "app:one");
 
       expect(Number(backdrop.style.zIndex)).toBeLessThan(
-        Number(appElement(container, "two").style.zIndex),
+        Number(appBox(container, "two").style.zIndex),
       );
       expect(Number(backdrop.style.zIndex)).toBeGreaterThanOrEqual(
         Number(bar.style.zIndex),
@@ -3673,7 +3674,7 @@ describe("Shell", () => {
       ).toBeTruthy();
 
       fireEvent.pointerDown(backdrop);
-      expect(appElement(container, "two")).toHaveAttribute(
+      expect(appBox(container, "two")).toHaveAttribute(
         "data-motion",
         "stowing",
       );
@@ -3708,7 +3709,7 @@ describe("Shell", () => {
       clientAppears("two");
 
       expect(domicile.calls).toContainEqual(["warpPointer", 1435, 566]);
-      expect(boxOf(appElement(container, "two"))).toMatchObject({
+      expect(boxOf(appBox(container, "two"))).toMatchObject({
         height: "989px",
         width: "930px",
         x: "970px",
@@ -3730,7 +3731,7 @@ describe("Shell", () => {
 
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
       expect(domicile.calls).toContainEqual(["warpPointer", 485, 566]);
-      expect(boxOf(appElement(container, "one"))).toMatchObject({
+      expect(boxOf(appBox(container, "one"))).toMatchObject({
         height: "989px",
         width: "930px",
         x: "20px",
@@ -3852,7 +3853,7 @@ describe("Shell", () => {
       clientAppears("term");
 
       // Shown there, not only assigned.
-      const term = appElement(container, "term");
+      const term = appBox(container, "term");
       expect(term).not.toHaveAttribute("hidden");
       expect(
         Number.parseFloat(term.style.insetInlineStart),
