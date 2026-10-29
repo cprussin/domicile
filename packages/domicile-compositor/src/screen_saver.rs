@@ -27,6 +27,11 @@ const NAME: &str = "org.freedesktop.ScreenSaver";
 /// Firefox and VLC use the short path; Chromium the long one.
 const PATHS: [&str; 2] = ["/org/freedesktop/ScreenSaver", "/ScreenSaver"];
 
+/// What a hold from the engine's own browser process is called: a page in a
+/// browser window, which the shell names by its site (`<webview>`'s
+/// `wakeLock`).
+pub const BROWSER: &str = "domicile-browser";
+
 /// One application's request to keep the screens on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hold {

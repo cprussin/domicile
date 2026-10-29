@@ -109,6 +109,11 @@
   // not fullscreen.
   undefined exitPageFullscreen();
 
+  // Whether the page keeps the screens on with a screen wake lock: its own
+  // `navigator.wakeLock`, or a video playing. `domicile-wake-lock-change`
+  // signals a change.
+  readonly attribute boolean wakeLock;
+
   // Why the page's renderer went away: "clean-exit", "abnormal-exit",
   // "killed", "crashed", "oom", "launch-failed" or "memory-eviction". Empty
   // while the page has a renderer. reload() or a new `src` starts a new one.

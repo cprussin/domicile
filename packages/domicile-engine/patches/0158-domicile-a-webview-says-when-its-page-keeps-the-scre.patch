@@ -1,0 +1,191 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 29 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview says when its page keeps the screens on
+
+A page's screen wake lock (`navigator.wakeLock`, a playing video) reaches
+the desktop as one `org.freedesktop.ScreenSaver` hold from the browser
+process, so the shell could only name the engine, not the site.
+
+WakeLockServiceImpl now passes each page wake lock through a counted
+one. The WebContents's delegate hears ScreenWakeLockChanged when its
+first lock goes on and its last goes off, and WebViewGuest tells the
+element, which reports it as `wakeLock`.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. guard-webview-wake-lock.sh checks it.
+---
+ .../wake_lock/wake_lock_service_impl.cc       | 120 +++++++++++++++++-
+ .../public/browser/web_contents_delegate.h    |   5 +
+ 2 files changed, 122 insertions(+), 3 deletions(-)
+
+diff --git a/content/browser/wake_lock/wake_lock_service_impl.cc b/content/browser/wake_lock/wake_lock_service_impl.cc
+index cdf986a..95fb882 100644
+--- a/content/browser/wake_lock/wake_lock_service_impl.cc
++++ b/content/browser/wake_lock/wake_lock_service_impl.cc
+@@ -4,13 +4,122 @@
+ 
+ #include "content/browser/wake_lock/wake_lock_service_impl.h"
+ 
++#include <memory>
++#include <utility>
++
++#include "base/check_op.h"
++#include "base/memory/weak_ptr.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_delegate.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "mojo/public/cpp/bindings/pending_remote.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "mojo/public/cpp/bindings/self_owned_receiver.h"
++#include "services/device/public/mojom/wake_lock.mojom.h"
+ #include "services/device/public/mojom/wake_lock_context.mojom.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
+ 
+ namespace content {
+ 
++namespace {
++
++// Domicile: how many of a WebContents's page wake locks are on. Its delegate
++// hears when the first goes on and when the last goes off; see
++// WebContentsDelegate::ScreenWakeLockChanged.
++class ScreenWakeLocksOn : public WebContentsUserData<ScreenWakeLocksOn> {
++ public:
++  ScreenWakeLocksOn(const ScreenWakeLocksOn&) = delete;
++  ScreenWakeLocksOn& operator=(const ScreenWakeLocksOn&) = delete;
++  ~ScreenWakeLocksOn() override = default;
++
++  void Change(bool on) {
++    const bool was_held = on_ > 0;
++    on_ += on ? 1 : -1;
++    CHECK_GE(on_, 0);
++    const bool held = on_ > 0;
++    if (held != was_held && GetWebContents().GetDelegate()) {
++      GetWebContents().GetDelegate()->ScreenWakeLockChanged(&GetWebContents(),
++                                                            held);
++    }
++  }
++
++ private:
++  friend class WebContentsUserData<ScreenWakeLocksOn>;
++  explicit ScreenWakeLocksOn(WebContents* web_contents)
++      : WebContentsUserData<ScreenWakeLocksOn>(*web_contents) {}
++
++  int on_ = 0;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(ScreenWakeLocksOn);
++
++// Domicile: a page's wake lock, passed through to the device service's, that
++// counts itself in its WebContents's ScreenWakeLocksOn while it is on. A page
++// that goes away without canceling closes the pipe, which ends it here too.
++class CountedWakeLock : public device::mojom::WakeLock {
++ public:
++  // Serves `receiver` with `lock`, counted in `web_contents`.
++  static void Serve(base::WeakPtr<WebContents> web_contents,
++                    mojo::PendingRemote<device::mojom::WakeLock> lock,
++                    mojo::PendingReceiver<device::mojom::WakeLock> receiver) {
++    mojo::MakeSelfOwnedReceiver(
++        std::make_unique<CountedWakeLock>(std::move(web_contents),
++                                          std::move(lock)),
++        std::move(receiver));
++  }
++
++  CountedWakeLock(base::WeakPtr<WebContents> web_contents,
++                  mojo::PendingRemote<device::mojom::WakeLock> lock)
++      : web_contents_(std::move(web_contents)), lock_(std::move(lock)) {}
++  CountedWakeLock(const CountedWakeLock&) = delete;
++  CountedWakeLock& operator=(const CountedWakeLock&) = delete;
++  ~CountedWakeLock() override { Hold(false); }
++
++  // device::mojom::WakeLock:
++  void RequestWakeLock() override {
++    lock_->RequestWakeLock();
++    Hold(true);
++  }
++  void CancelWakeLock() override {
++    lock_->CancelWakeLock();
++    Hold(false);
++  }
++  void AddClient(
++      mojo::PendingReceiver<device::mojom::WakeLock> receiver) override {
++    mojo::PendingRemote<device::mojom::WakeLock> client;
++    lock_->AddClient(client.InitWithNewPipeAndPassReceiver());
++    Serve(web_contents_, std::move(client), std::move(receiver));
++  }
++  void ChangeType(device::mojom::WakeLockType type,
++                  ChangeTypeCallback callback) override {
++    lock_->ChangeType(type, std::move(callback));
++  }
++  void HasWakeLockForTests(HasWakeLockForTestsCallback callback) override {
++    lock_->HasWakeLockForTests(std::move(callback));
++  }
++
++ private:
++  void Hold(bool on) {
++    if (on == on_) {
++      return;
++    }
++    on_ = on;
++    if (web_contents_) {
++      ScreenWakeLocksOn::CreateForWebContents(web_contents_.get());
++      ScreenWakeLocksOn::FromWebContents(web_contents_.get())->Change(on);
++    }
++  }
++
++  base::WeakPtr<WebContents> web_contents_;
++  mojo::Remote<device::mojom::WakeLock> lock_;
++  bool on_ = false;
++};
++
++}  // namespace
++
+ // static
+ void WakeLockServiceImpl::Create(
+     RenderFrameHost* render_frame_host,
+@@ -39,15 +148,20 @@ void WakeLockServiceImpl::GetWakeLock(
+     return;
+   }
+ 
++  WebContents* web_contents =
++      WebContents::FromRenderFrameHost(&render_frame_host());
+   device::mojom::WakeLockContext* wake_lock_context =
+-      WebContents::FromRenderFrameHost(&render_frame_host())
+-          ->GetWakeLockContext();
++      web_contents->GetWakeLockContext();
+ 
+   if (!wake_lock_context)
+     return;
+ 
++  // Domicile: counted, so the delegate hears which WebContents holds one.
++  mojo::PendingRemote<device::mojom::WakeLock> lock;
+   wake_lock_context->GetWakeLock(type, reason, description,
+-                                 std::move(receiver));
++                                 lock.InitWithNewPipeAndPassReceiver());
++  CountedWakeLock::Serve(web_contents->GetWeakPtr(), std::move(lock),
++                         std::move(receiver));
+ }
+ 
+ WakeLockServiceImpl::WakeLockServiceImpl(
+diff --git a/content/public/browser/web_contents_delegate.h b/content/public/browser/web_contents_delegate.h
+index afebf55..702356c 100644
+--- a/content/public/browser/web_contents_delegate.h
++++ b/content/public/browser/web_contents_delegate.h
+@@ -567,6 +567,11 @@ class CONTENT_EXPORT WebContentsDelegate {
+   // Called when the renderer puts a tab out of fullscreen mode.
+   virtual void ExitFullscreenModeForTab(WebContents*) {}
+ 
++  // Domicile: `source`'s pages turned on their first screen wake lock, or
++  // turned off their last (`navigator.wakeLock`, a playing video). So a shell
++  // can name the page that keeps the screens on.
++  virtual void ScreenWakeLockChanged(WebContents* source, bool held) {}
++
+   // Returns true if `web_contents` is, or is transitioning to, tab-fullscreen.
+   virtual bool IsFullscreenForTabOrPending(const WebContents* web_contents);
+ 
+-- 
+2.43.0
+

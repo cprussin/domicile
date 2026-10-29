@@ -143,6 +143,9 @@ class CORE_EXPORT HTMLWebViewElement final
   bool pageFullscreen() const { return page_fullscreen_; }
   void exitPageFullscreen();
 
+  // Whether the page keeps the screens on, from WakeLockChanged.
+  bool wakeLock() const { return wake_lock_; }
+
   // Why the page's renderer went away, or empty while it runs, and its exit
   // code. See RenderProcessChanged in
   // components/domicile/mojom/web_view_guest.mojom.
@@ -302,6 +305,7 @@ class CORE_EXPORT HTMLWebViewElement final
   void FindChanged(int32_t matches, int32_t active_match) override;
   void ContentSizeChanged(int32_t width, int32_t height) override;
   void PageFullscreenChanged(bool fullscreen) override;
+  void WakeLockChanged(bool held) override;
   void RenderProcessChanged(domicile::mojom::blink::WebViewRenderProcess state,
                             int32_t exit_code) override;
 
@@ -424,6 +428,7 @@ class CORE_EXPORT HTMLWebViewElement final
   int32_t content_width_ = 0;
   int32_t content_height_ = 0;
   bool page_fullscreen_ = false;
+  bool wake_lock_ = false;
   String render_process_gone_;
   int32_t render_process_exit_code_ = 0;
 

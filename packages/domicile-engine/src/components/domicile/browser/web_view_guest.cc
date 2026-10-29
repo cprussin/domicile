@@ -936,6 +936,9 @@ void WebViewGuest::ReportEverything() {
   if (page_fullscreen_) {
     client_->PageFullscreenChanged(true);
   }
+  if (wake_lock_) {
+    client_->WakeLockChanged(true);
+  }
   reported_site_permissions_.clear();
   ReportSitePermissions();
   reported_render_process_ = mojom::WebViewRenderProcess::kRunning;
@@ -2349,6 +2352,16 @@ void WebViewGuest::SetPageFullscreen(bool fullscreen) {
       ->GetWidget()
       ->SynchronizeVisualProperties();
   client_->PageFullscreenChanged(fullscreen);
+}
+
+void WebViewGuest::ScreenWakeLockChanged(content::WebContents* source,
+                                         bool held) {
+  wake_lock_ = held;
+  // Guards read this line. engine-diagnostics.sh greps for the `domicile:`
+  // prefix.
+  LOG(INFO) << "domicile: a <webview>'s page "
+            << (held ? "keeps" : "stopped keeping") << " the screens on.";
+  client_->WakeLockChanged(held);
 }
 
 void WebViewGuest::ActivateContents(content::WebContents* contents) {

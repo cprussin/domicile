@@ -68,6 +68,7 @@ TOGETHER=(
   guard-webview-routed-link
   guard-webview-target-url
   guard-webview-fullscreen
+  guard-webview-wake-lock
   guard-webview-device-request
   guard-webview-media-devices
   guard-webview-count-matches
