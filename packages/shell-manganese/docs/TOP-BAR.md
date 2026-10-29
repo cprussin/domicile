@@ -389,11 +389,12 @@ export const Shell = runManganese({
   casts out, so each shows once. Without it, the indicator lists them.
 - See [PORTALS.md](../../../docs/PORTALS.md).
 
-## Keep awake pill
+## Keep awake
 
-- Shown while anything keeps the screens on: a pill with an eye saying who
-  ("Kept awake by Firefox", "Kept awake by youtube.com", "Kept awake by 1 app
-  and 1 website"), or "Kept awake" when only quick settings' Keep awake is on.
+- Shown while anything keeps the screens on: an eye, like the other bar
+  icons. Hover names who ("Kept awake by Firefox", "Kept awake by
+  youtube.com", "Kept awake by 1 app and 1 website"), or "Kept awake" when
+  only quick settings' Keep awake is on.
 - An app or website is named once, however many holds it takes.
 - A browser window's page is named by its site, from `<webview>`'s
   `wakeLock` ([SHELL-BROWSER-WINDOWS.md](../../../docs/SHELL-BROWSER-WINDOWS.md)).

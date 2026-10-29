@@ -32,13 +32,18 @@ describe(KeptAwake, () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("names the one app keeping the screens on, once", () => {
+  it("draws only an eye, naming the one app on hover, once", async () => {
     render(
       <KeptAwake holders={["Firefox", "Firefox"]} inhibitor={unanswered()} />,
     );
+    const eye = screen.getByRole("button", { name: "Kept awake by Firefox" });
+    expect(eye.textContent).toBe("");
+
+    await userEvent.hover(eye);
+
     expect(
-      screen.getByRole("button", { name: "Kept awake by Firefox" }),
-    ).toBeInTheDocument();
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Kept awake by Firefox");
   });
 
   it("counts several apps, and lists them when opened", async () => {
