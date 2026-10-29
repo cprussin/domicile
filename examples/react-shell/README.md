@@ -1,8 +1,12 @@
 # react-shell
 
-The shell from [SHELL-QUICKSTART.md](/docs/SHELL-QUICKSTART.md): every window
-side by side, the focused one outlined, in React. `shell.tsx` is the whole
-shell.
+The shell from [SHELL-QUICKSTART.md](/docs/SHELL-QUICKSTART.md), in React:
+
+- Every window side by side, the focused one outlined.
+- A box at the bottom that runs the command typed in it, such as `firefox`.
+- Meta+Enter opens `kitty`.
+
+`shell.tsx` is the whole shell.
 
 ```sh
 domicile ./shell.tsx

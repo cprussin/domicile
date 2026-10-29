@@ -10,10 +10,57 @@ export type Model = {
   code: string;
 };
 
+/**
+ * Every model's way to start apps: a command box at the bottom, and a terminal
+ * on Meta+Enter.
+ */
+const LAUNCHER = `// Start an app: type its command at the bottom and press Enter.
+// Meta+Enter opens a terminal.
+const Launcher = () => {
+  const { keyboard, processes } = useDomicile();
+
+  useEffect(() => {
+    keyboard.grab("Meta+Return");
+    const unlisten = keyboard.on("shortcut", ({ chord }) => {
+      if (chord === "Meta+Return") {
+        processes.launch(["kitty"]);
+      }
+    });
+    return () => {
+      unlisten();
+      keyboard.ungrab("Meta+Return");
+    };
+  }, [keyboard, processes]);
+
+  return (
+    <form
+      className="fixed bottom-3 left-1/2 z-50 -translate-x-1/2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const argv = String(new FormData(e.currentTarget).get("command"))
+          .split(" ")
+          .filter(Boolean);
+        if (argv.length > 0) {
+          processes.launch(argv);
+        }
+        e.currentTarget.reset();
+      }}
+    >
+      <input
+        name="command"
+        placeholder="Run an app, like firefox"
+        className="w-72 rounded-full bg-zinc-900/90 px-4 py-1.5 text-xs text-zinc-100 shadow-lg shadow-black/40 outline-none ring-1 ring-white/10 placeholder:text-zinc-500 focus:ring-violet-400"
+      />
+    </form>
+  );
+};
+`;
+
 export const MODELS: readonly [Model, ...Model[]] = [
   {
     code: `// Tiling: the focused window takes the big column.
 // Click a title bar to focus its window.
+import { useEffect } from "react";
 // Tailwind, compiled in the page: a plain npm package, no build step. To
 // keep this desktop, bundle it with your own Tailwind setup instead.
 import "@tailwindcss/browser";
@@ -21,6 +68,7 @@ import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { mount } from "@domicile-desktop/react/mount";
 import { useFocusedWindow, useWindows } from "@domicile-desktop/react/windows";
 
+${LAUNCHER}
 const Desktop = () => {
   const { windows } = useDomicile();
   // Menus and tooltips have a parent. This desktop leaves them out.
@@ -51,6 +99,7 @@ const Desktop = () => {
           <app app-id={w.appId} className="flex-1" />
         </section>
       ))}
+      <Launcher />
     </main>
   );
 };
@@ -64,7 +113,7 @@ export const Shell = mount(Desktop);
   {
     code: `// Floating: drag windows by their title bar.
 // The one you touch comes to the front.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 // Tailwind, compiled in the page: a plain npm package, no build step. To
 // keep this desktop, bundle it with your own Tailwind setup instead.
 import "@tailwindcss/browser";
@@ -112,6 +161,7 @@ const Window = ({ window, index }) => {
   );
 };
 
+${LAUNCHER}
 const Desktop = () => (
   <main className="relative h-full">
     {useWindows()
@@ -119,6 +169,7 @@ const Desktop = () => (
       .map((w, i) => (
       <Window key={w.appId} window={w} index={i} />
     ))}
+    <Launcher />
   </main>
 );
 
@@ -140,6 +191,7 @@ import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { mount } from "@domicile-desktop/react/mount";
 import { useFocusedWindow, useWindows } from "@domicile-desktop/react/windows";
 
+${LAUNCHER}
 const Desktop = () => {
   const { windows } = useDomicile();
   // Menus and tooltips have a parent. This desktop leaves them out.
@@ -210,6 +262,7 @@ const Desktop = () => {
           );
         })}
       </div>
+      <Launcher />
     </main>
   );
 };
@@ -223,6 +276,7 @@ export const Shell = mount(Desktop);
   {
     code: `// Deck of cards: windows fan out in 3D.
 // Click a card's title bar to pull it forward.
+import { useEffect } from "react";
 // Tailwind, compiled in the page: a plain npm package, no build step. To
 // keep this desktop, bundle it with your own Tailwind setup instead.
 import "@tailwindcss/browser";
@@ -230,6 +284,7 @@ import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { mount } from "@domicile-desktop/react/mount";
 import { useFocusedWindow, useWindows } from "@domicile-desktop/react/windows";
 
+${LAUNCHER}
 const Desktop = () => {
   const { windows } = useDomicile();
   // Menus and tooltips have a parent. This desktop leaves them out.
@@ -262,6 +317,7 @@ const Desktop = () => {
           </section>
         );
       })}
+      <Launcher />
     </main>
   );
 };
@@ -274,6 +330,7 @@ export const Shell = mount(Desktop);
   },
   {
     code: `// Tabs: every app is a tab in one frame, like a browser.
+import { useEffect } from "react";
 // Tailwind, compiled in the page: a plain npm package, no build step. To
 // keep this desktop, bundle it with your own Tailwind setup instead.
 import "@tailwindcss/browser";
@@ -281,6 +338,7 @@ import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { mount } from "@domicile-desktop/react/mount";
 import { useFocusedWindow, useWindows } from "@domicile-desktop/react/windows";
 
+${LAUNCHER}
 const Desktop = () => {
   const { windows } = useDomicile();
   // Menus and tooltips have a parent. This desktop leaves them out.
@@ -314,6 +372,7 @@ const Desktop = () => {
           }\`}
         />
       ))}
+      <Launcher />
     </main>
   );
 };
@@ -330,7 +389,7 @@ export const Shell = mount(Desktop);
 //   import { runManganese } from "@domicile-desktop/manganese";
 //   <NestedShell shell={runManganese()} />
 // Here it's a small tiling shell, defined at the bottom of this file.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 // Tailwind, compiled in the page: a plain npm package, no build step. To
 // keep this desktop, bundle it with your own Tailwind setup instead.
 import "@tailwindcss/browser";
@@ -339,6 +398,7 @@ import { mount } from "@domicile-desktop/react/mount";
 import { useFocusedWindow, useWindows } from "@domicile-desktop/react/windows";
 import { NestedShell } from "@domicile-desktop/react/nested-shell";
 
+${LAUNCHER}
 const Desktop = () => {
   const [tilted, setTilted] = useState(true);
 
@@ -361,6 +421,7 @@ const Desktop = () => {
       >
         <NestedShell shell={TheirShell} />
       </div>
+      <Launcher />
     </main>
   );
 };

@@ -25,4 +25,20 @@ describe("previewDesktop", () => {
 
     expect(domicile.windows.focused).toBe("music");
   });
+
+  it("opens a window for each command the shell launches", async () => {
+    const { domicile, standIns } = previewDesktop();
+
+    await new Promise<void>((resolve) => {
+      domicile.windows.on("change", resolve);
+      domicile.processes.launch(["firefox", "--new-window"]);
+    });
+
+    expect(domicile.windows.list.at(-1)?.title).toBe("firefox");
+    expect(standIns().at(-1)).toEqual({
+      appId: "launched-1",
+      body: "$ firefox --new-window",
+      title: "firefox",
+    });
+  });
 });

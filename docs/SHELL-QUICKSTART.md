@@ -18,8 +18,10 @@ Install it from your distribution's packages or Nix:
 ```tsx
 /// <reference types="@domicile-desktop/react/elements" />
 
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { mount } from "@domicile-desktop/react/mount";
 import { useFocusedWindow, useWindows } from "@domicile-desktop/react/windows";
+import { useEffect } from "react";
 
 /** Every window side by side, the focused one outlined. */
 const Desktop = () => {
@@ -39,7 +41,43 @@ const Desktop = () => {
           }}
         />
       ))}
+      <Launcher />
     </main>
+  );
+};
+
+/** A box that runs the command typed in it, and a terminal on Meta+Enter. */
+const Launcher = () => {
+  const { keyboard, processes } = useDomicile();
+  useEffect(() => {
+    keyboard.grab("Meta+Return");
+    const unlisten = keyboard.on("shortcut", ({ chord }) => {
+      if (chord === "Meta+Return") {
+        processes.launch(["kitty"]);
+      }
+    });
+    return () => {
+      unlisten();
+      keyboard.ungrab("Meta+Return");
+    };
+  }, [keyboard, processes]);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const command = String(
+          new FormData(event.currentTarget).get("command"),
+        );
+        const argv = command.split(" ").filter(Boolean);
+        if (argv.length > 0) {
+          processes.launch(argv);
+        }
+        event.currentTarget.reset();
+      }}
+      style={{ bottom: 16, left: "50%", position: "fixed", translate: "-50%" }}
+    >
+      <input name="command" placeholder="Run an app, like firefox" />
+    </form>
   );
 };
 
@@ -49,6 +87,9 @@ export const Shell = mount(Desktop);
 - `mount(Desktop)` is the shell: Domicile calls it with the desktop.
 - `useWindows()` is every window, and rerenders when one opens or closes.
 - `<app app-id>` shows that window. A click on it gives it the keyboard.
+- `Launcher` starts apps: type a command in the box at the bottom, such as
+  `firefox`, and press Enter. Meta+Enter opens `kitty`; change it to your
+  terminal. `keyboard.grab` takes the chord from apps.
 
 <!-- tab: JavaScript -->
 
@@ -90,6 +131,29 @@ export const Shell = (root, domicile) => {
   draw();
   domicile.windows.on("change", draw);
   domicile.windows.on("focuschange", draw);
+
+  // A box that runs the command typed in it.
+  const launcher = document.createElement("form");
+  launcher.style.cssText =
+    "bottom: 16px; left: 50%; position: fixed; translate: -50%";
+  launcher.innerHTML = `<input name="command" placeholder="Run an app, like firefox">`;
+  launcher.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const argv = launcher.command.value.split(" ").filter(Boolean);
+    if (argv.length > 0) {
+      domicile.processes.launch(argv);
+    }
+    launcher.reset();
+  });
+  root.append(launcher);
+
+  // A terminal on Meta+Enter.
+  domicile.keyboard.grab("Meta+Return");
+  domicile.keyboard.on("shortcut", ({ chord }) => {
+    if (chord === "Meta+Return") {
+      domicile.processes.launch(["kitty"]);
+    }
+  });
 };
 ```
 
@@ -98,6 +162,9 @@ export const Shell = (root, domicile) => {
 - `domicile.windows.list` is every window. `change` says one opened, closed or
   changed, and `focuschange` that another has the keyboard.
 - `<app app-id>` shows that window. A click on it gives it the keyboard.
+- The `<form>` starts apps: type a command in the box at the bottom, such as
+  `firefox`, and press Enter. Meta+Enter opens `kitty`; change it to your
+  terminal. `keyboard.grab` takes the chord from apps.
 
 <!-- /tabs -->
 

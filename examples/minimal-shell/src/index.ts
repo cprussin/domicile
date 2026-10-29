@@ -1,4 +1,5 @@
-// A minimal shell: every app is full-screen, with the newest on top.
+// A minimal shell: every app is full-screen, with the newest on top, a box to
+// start apps and a terminal on Meta+Enter.
 //
 // Domicile calls the `Shell` export with the element to draw `<app>` elements
 // in. See /docs/WRITING-A-SHELL.md.
@@ -6,6 +7,9 @@
 import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 import { PortalAnswer, PortalKind } from "@domicile-desktop/sdk/portal";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
+
+/** The chord that opens a terminal. */
+const TERMINAL_CHORD = "Meta+Return";
 
 /** Draws the desktop into `root`, Domicile's empty `<body>`. */
 export const Shell: ShellModule = (root, domicile) => {
@@ -42,6 +46,32 @@ export const Shell: ShellModule = (root, domicile) => {
 
   show();
   domicile.windows.on("change", show);
+
+  // A box that runs the command typed in it, such as `firefox`. Fixed, so it
+  // stays above every window.
+  const input = document.createElement("input");
+  input.placeholder = "Run an app, like firefox";
+  const launcher = document.createElement("form");
+  launcher.style.cssText =
+    "bottom: 16px; left: 50%; position: fixed; translate: -50%; z-index: 1";
+  launcher.append(input);
+  launcher.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const argv = input.value.split(" ").filter((word) => word !== "");
+    if (argv.length > 0) {
+      domicile.processes.launch(argv);
+    }
+    launcher.reset();
+  });
+  root.append(launcher);
+
+  // A terminal on Meta+Enter. Change `kitty` to your terminal.
+  domicile.keyboard.grab(TERMINAL_CHORD);
+  domicile.keyboard.on("shortcut", ({ chord }) => {
+    if (chord === TERMINAL_CHORD) {
+      domicile.processes.launch(["kitty"]);
+    }
+  });
 
   // This shell draws no dialogs, so it refuses what applications ask through
   // the desktop portal rather than leave them waiting. Inhibitors ask nothing.

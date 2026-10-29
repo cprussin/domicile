@@ -33,4 +33,27 @@ export const Shell = (root, domicile) => {
   draw();
   domicile.windows.on("change", draw);
   domicile.windows.on("focuschange", draw);
+
+  // A box that runs the command typed in it.
+  const launcher = document.createElement("form");
+  launcher.style.cssText =
+    "bottom: 16px; left: 50%; position: fixed; translate: -50%";
+  launcher.innerHTML = `<input name="command" placeholder="Run an app, like firefox">`;
+  launcher.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const argv = launcher.command.value.split(" ").filter(Boolean);
+    if (argv.length > 0) {
+      domicile.processes.launch(argv);
+    }
+    launcher.reset();
+  });
+  root.append(launcher);
+
+  // A terminal on Meta+Enter.
+  domicile.keyboard.grab("Meta+Return");
+  domicile.keyboard.on("shortcut", ({ chord }) => {
+    if (chord === "Meta+Return") {
+      domicile.processes.launch(["kitty"]);
+    }
+  });
 };
