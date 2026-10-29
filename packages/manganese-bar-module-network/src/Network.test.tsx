@@ -364,6 +364,17 @@ describe("Network", () => {
       ).toBeVisible();
       expect(wired).toHaveTextContent("192.168.1.1");
       expect(wired).toHaveTextContent("8c:16:45:5a:3e:01");
+      expect(
+        within(wired)
+          .getAllByRole("button", { name: /^Copy / })
+          .map((button) => button.getAttribute("aria-label")),
+      ).toStrictEqual([
+        "Copy 192.168.1.40/24",
+        "Copy fd00::8e16:45ff:fe5a:3e01/64",
+        "Copy 192.168.1.1",
+        "Copy enp0s31f6",
+        "Copy 8c:16:45:5a:3e:01",
+      ]);
       expect(addresses.started).toBe(1);
 
       await userEvent.keyboard("{Escape}");

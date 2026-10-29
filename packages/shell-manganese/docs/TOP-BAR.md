@@ -201,6 +201,9 @@ button, and their controls in one panel, each labeled in words.
       passphrase.
     - A refusal shows under what was asked.
     - Wi-Fi is read only while the panel is open.
+  - Details can be selected. Addresses, gateways, DNS servers, interface
+    names and hardware addresses have a copy button on the line under the
+    pointer.
 
 ## Bluetooth
 
