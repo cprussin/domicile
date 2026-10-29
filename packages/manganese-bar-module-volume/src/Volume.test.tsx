@@ -237,7 +237,7 @@ describe("Volume", () => {
     it("meters while it is open, and stops when it shuts", async () => {
       const sound = heldSound();
       await opened(sound);
-      expect(sound.metered.at(-1)).toEqual(["output:speakers", "input:mic"]);
+      expect(sound.metered.at(-1)).toEqual(["input:mic"]);
 
       await userEvent.keyboard("{Escape}");
 

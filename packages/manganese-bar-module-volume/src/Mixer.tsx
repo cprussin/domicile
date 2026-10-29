@@ -1,9 +1,4 @@
-import type { AccordionItem } from "@domicile-desktop/component-library/Accordion";
-import { Accordion } from "@domicile-desktop/component-library/Accordion";
-import {
-  ChoiceList,
-  RadioRow,
-} from "@domicile-desktop/component-library/ChoiceRow";
+import { DrilldownPage } from "@domicile-desktop/component-library/Drilldown";
 import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
@@ -12,24 +7,27 @@ import { Select } from "@domicile-desktop/component-library/Select";
 import type {
   Audio,
   AudioCard,
-  AudioChoice,
   AudioDevice,
   AudioStream,
 } from "@domicile-desktop/system-audio/audio";
 import type { SoundControls } from "@domicile-desktop/system-audio/react";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { HeadphonesIcon } from "@phosphor-icons/react/dist/ssr/Headphones";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
-import { createContext, useContext, useState } from "react";
-import { css, cx } from "../styled-system/css";
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
 import { ask } from "./ask";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
 import { primary } from "./primary";
+import { profileName } from "./profile-name";
 import type { Route } from "./routes";
 import { routesOf } from "./routes";
 import { useMeters } from "./useMeters";
@@ -40,171 +38,152 @@ type Props = {
   server: SoundControls;
 };
 
-/** A drawer under the sliders. */
-type Drawer = "apps" | "cards";
+/** A page deeper in the mixer: an app's, by name, or the sound cards'. */
+type Page = { app: string } | "cards";
 
 /**
  * The full sound mixer, in the bar's panel; a replacement for pavucontrol.
+ * Goes in a `Drilldown`, which shows its pages.
  *
- * Two sections, Output and Input, each with the slider and meter of the
- * device in use, then where sound goes or comes from as a list to pick one
- * of: "Speakers", "Headphones", "HDMI". Picking one switches the device and
- * its port together.
+ * Speakers and Microphone: a picker of where sound goes or comes from, as
+ * people name them ("Speakers", "Headphones", "HDMI"), over the volume of the
+ * one in use. Picking one switches the device and its port together. Only the
+ * microphone is metered, so a person can see it hears them.
  *
- * Below them, drawers: the apps that are playing or recording with their
- * streams, and the sound cards' profiles. Their choices are `Select`s, whose
- * lists render outside the panel, and the `Popover` still treats them as
- * part of it.
+ * Apps: each app playing or recording, with one volume for all of its sound.
+ * Its page moves it to another device. Output monitors are hidden from the
+ * microphones, as in pavucontrol, but an app can still record from one.
  *
- * Only visible devices are metered. Recording streams have no meter; their
- * input's meter shows instead.
- *
- * Output monitors are hidden from the inputs, as in pavucontrol, but remain
- * targets for moving a recording.
+ * Sound card modes, which rarely change, are on a page of their own.
  */
 export const Mixer = ({ audio, server }: Props) => {
-  const [open, setOpen] = useState<readonly Drawer[]>([]);
-  const [panel, setPanel] = useState<HTMLElement | null>(null);
+  const [page, setPage] = useState<Page | undefined>(undefined);
   const output = primary(audio.outputs);
   const input = primary(audio.inputs.filter((device) => !device.monitor));
   const apps = byApp(audio.playback, audio.recording);
   const levels = useMeters(
     server,
-    [
-      ...[output, input].flatMap((device) =>
-        device === undefined ? [] : [device.id],
-      ),
-      ...(open.includes("apps") ? audio.playback : []).map(({ id }) => id),
-    ],
+    input === undefined ? [] : [input.id],
     audio.meters,
   );
-  const drawers: AccordionItem[] = [
-    ...(apps.length > 0
-      ? [
-          {
-            content: (
-              <Apps
-                apps={apps}
-                inputs={audio.inputs}
-                levels={levels}
-                outputs={audio.outputs}
-                server={server}
-              />
-            ),
-            label: "Apps",
-            value: "apps",
-          },
-        ]
-      : []),
-    ...(audio.cards.length > 0
-      ? [
-          {
-            content: <Cards cards={audio.cards} server={server} />,
-            label: "Sound cards",
-            value: "cards",
-          },
-        ]
-      : []),
-  ];
+  const close = () => {
+    setPage(undefined);
+  };
+  const shownApp =
+    page === undefined || page === "cards"
+      ? undefined
+      : apps.find((app) => app.name === page.app);
   return (
-    <Panel.Provider value={panel}>
-      <div className={mainStyles} ref={setPanel}>
-        {output === undefined && input === undefined && (
-          <EmptyState
-            // With a card, the way to sound may be its profile, turned off.
-            hint={
-              audio.cards.length === 0
-                ? "Plug some in and they'll show up here."
-                : undefined
-            }
-            icon={SpeakerSlashIcon}
-            title="No speakers or microphones"
+    <div className={mainStyles}>
+      {output === undefined && input === undefined && (
+        <EmptyState
+          // With a card, the way to sound may be its mode, turned off.
+          hint={
+            audio.cards.length === 0
+              ? "Plug some in and they'll show up here."
+              : undefined
+          }
+          icon={SpeakerSlashIcon}
+          title="No speakers or microphones"
+        />
+      )}
+      {output !== undefined && (
+        <PanelSection label="Speakers">
+          <Routes
+            direction="output"
+            routes={routesOf(audio.outputs)}
+            server={server}
           />
-        )}
-        {output !== undefined && (
-          <PanelSection label="Output">
-            <Default
-              device={output}
-              direction="output"
-              label="Volume"
-              meter={levels.get(output.id)}
+          <DeviceLevel
+            device={output}
+            direction="output"
+            label="Volume"
+            meter={undefined}
+            server={server}
+          />
+        </PanelSection>
+      )}
+      {input !== undefined && (
+        <PanelSection label="Microphone">
+          <Routes
+            direction="input"
+            routes={routesOf(audio.inputs)}
+            server={server}
+          />
+          <DeviceLevel
+            device={input}
+            direction="input"
+            label="Microphone"
+            meter={levels.get(input.id)}
+            server={server}
+          />
+        </PanelSection>
+      )}
+      {apps.length > 0 && (
+        <PanelSection label="Apps">
+          {apps.map((app) => (
+            <AppRow
+              app={app}
+              key={app.name}
+              onOpen={() => {
+                setPage({ app: app.name });
+              }}
               server={server}
             />
-            <Routes
-              direction="output"
-              routes={routesOf(audio.outputs)}
-              server={server}
-            />
-          </PanelSection>
-        )}
-        {input !== undefined && (
-          <PanelSection label="Input">
-            <Default
-              device={input}
-              direction="input"
-              label="Microphone"
-              meter={levels.get(input.id)}
-              server={server}
-            />
-            <Routes
-              direction="input"
-              routes={routesOf(audio.inputs)}
-              server={server}
-            />
-          </PanelSection>
-        )}
-        {drawers.length > 0 && (
-          <Accordion
-            items={drawers}
-            multiple
-            onValueChange={(shown) => {
-              setOpen(shown.filter(isDrawer));
+          ))}
+        </PanelSection>
+      )}
+      {audio.cards.length > 0 && (
+        <List>
+          <ListRow
+            end={<CaretRightIcon aria-hidden size={14} weight="bold" />}
+            label="Sound card modes"
+            onPress={() => {
+              setPage("cards");
             }}
-            surface="filled"
-            value={[...open]}
           />
-        )}
-      </div>
-    </Panel.Provider>
+        </List>
+      )}
+      {shownApp !== undefined && (
+        <DrilldownPage onBack={close} title={shownApp.name}>
+          <AppPage
+            app={shownApp}
+            inputs={audio.inputs}
+            outputs={audio.outputs}
+            server={server}
+          />
+        </DrilldownPage>
+      )}
+      {page === "cards" && (
+        <DrilldownPage onBack={close} title="Sound card modes">
+          <Cards cards={audio.cards} server={server} />
+        </DrilldownPage>
+      )}
+    </div>
   );
 };
 
-const DRAWERS: readonly Drawer[] = ["apps", "cards"];
-
-const isDrawer = (value: string): value is Drawer =>
-  DRAWERS.some((drawer) => drawer === value);
-
-/**
- * The mixer's panel. Choice lists stay within its width, so none spills onto
- * the next monitor, and within the window's height, so a long one has room.
- */
-const Panel = createContext<HTMLElement | null>(null);
-
-/** A stream and its direction. */
-type Flow = { stream: AudioStream; direction: Direction };
-
 /** An app and its playback and recording streams. */
-type App = { name: string; flows: readonly Flow[] };
+type App = {
+  name: string;
+  playback: readonly AudioStream[];
+  recording: readonly AudioStream[];
+};
 
 /** Streams grouped by app, in first-seen app order. */
 const byApp = (
   playback: readonly AudioStream[],
   recording: readonly AudioStream[],
-): readonly App[] => {
-  const apps = new Map<string, Flow[]>();
-  for (const flow of [
-    ...playback.map((stream) => ({ direction: "output" as const, stream })),
-    ...recording.map((stream) => ({ direction: "input" as const, stream })),
-  ]) {
-    apps.set(flow.stream.application, [
-      ...(apps.get(flow.stream.application) ?? []),
-      flow,
-    ]);
-  }
-  return [...apps].map(([name, flows]) => ({ flows, name }));
-};
+): readonly App[] =>
+  [
+    ...new Set([...playback, ...recording].map((stream) => stream.application)),
+  ].map((name) => ({
+    name,
+    playback: playback.filter((stream) => stream.application === name),
+    recording: recording.filter((stream) => stream.application === name),
+  }));
 
-type DefaultProps = {
+type DeviceLevelProps = {
   device: AudioDevice;
   direction: Direction;
   server: SoundControls;
@@ -214,7 +193,13 @@ type DefaultProps = {
 };
 
 /** One of the two sliders, for the device in use. */
-const Default = ({ device, direction, server, label, meter }: DefaultProps) => (
+const DeviceLevel = ({
+  device,
+  direction,
+  server,
+  label,
+  meter,
+}: DeviceLevelProps) => (
   <Level
     direction={direction}
     label={label}
@@ -237,51 +222,41 @@ type RoutesProps = {
 };
 
 /**
- * Where sound goes or comes from: the one in use, with the rest to pick from
- * behind Change, since it rarely changes. Absent with nothing to pick
- * between.
+ * Where sound goes or comes from, as a picker showing the one in use. Absent
+ * with nothing to pick between.
  */
 const Routes = ({ direction, routes, server }: RoutesProps) => {
   const current = routes.find(({ picked }) => picked);
   return (
     routes.length > 1 && (
-      <List>
-        <ListRow
-          detail={current?.detail}
-          disclosure="Change"
-          icon={current === undefined ? undefined : iconOf(current, direction)}
-          label={current?.label ?? "None"}
-        >
-          <RouteChoices direction={direction} routes={routes} server={server} />
-        </ListRow>
-      </List>
+      <Select<string>
+        aria-label={direction === "output" ? "Play sound on" : "Record from"}
+        onValueChange={(key) => {
+          const route = routes.find((each) => each.key === key);
+          if (route !== undefined) {
+            pick(route, server);
+          }
+        }}
+        options={routes.map((route) => ({
+          label: (
+            <Choice
+              detail={route.detail}
+              icon={iconOf(route, direction)}
+              label={route.label}
+            />
+          ),
+          textLabel: route.label,
+          value: route.key,
+        }))}
+        prefixIcon={
+          current === undefined ? undefined : iconOf(current, direction)
+        }
+        size="sm"
+        value={current?.key ?? null}
+      />
     )
   );
 };
-
-/** Every route, one picked. */
-const RouteChoices = ({ direction, routes, server }: RoutesProps) => (
-  <ChoiceList<string>
-    aria-label={direction === "output" ? "Play sound on" : "Record from"}
-    onValueChange={(key) => {
-      const route = routes.find((each) => each.key === key);
-      if (route !== undefined) {
-        pick(route, server);
-      }
-    }}
-    value={routes.find(({ picked }) => picked)?.key}
-  >
-    {routes.map((route) => (
-      <RadioRow
-        detail={route.detail}
-        icon={iconOf(route, direction)}
-        key={route.key}
-        name={route.label}
-        value={route.key}
-      />
-    ))}
-  </ChoiceList>
-);
 
 /** Asks for the route's device and port, whichever aren't in use already. */
 const pick = ({ device, port }: Route, server: SoundControls) => {
@@ -311,77 +286,168 @@ const iconOf = (route: Route, direction: Direction) => {
   }
 };
 
-type AppsProps = {
-  apps: readonly App[];
+type ChoiceProps = {
+  icon: ReactNode;
+  label: string;
+  /** Tells apart two choices with the same label, such as the card's name. */
+  detail: string | undefined;
+};
+
+/** A route in the picker's list: its picture, its name and its detail. */
+const Choice = ({ detail, icon, label }: ChoiceProps) => (
+  <span className={choiceStyles}>
+    <span aria-hidden className={choiceIconStyles}>
+      {icon}
+    </span>
+    <span>
+      {label}
+      {detail !== undefined && (
+        <span className={choiceDetailStyles}>{detail}</span>
+      )}
+    </span>
+  </span>
+);
+
+type AppRowProps = {
+  app: App;
+  onOpen: () => void;
+  server: SoundControls;
+};
+
+/**
+ * An app, opening its page, over one volume for all of its sound: what it
+ * plays, else what it records. The volume lines up with the device sliders.
+ */
+const AppRow = ({ app, onOpen, server }: AppRowProps) => (
+  <div className={appStyles}>
+    <List>
+      <ListRow
+        detail={app.recording.length > 0 ? "Using the microphone" : undefined}
+        end={<CaretRightIcon aria-hidden size={14} weight="bold" />}
+        label={app.name}
+        onPress={onOpen}
+      />
+    </List>
+    <Streams
+      direction={app.playback.length > 0 ? "output" : "input"}
+      label={app.name}
+      server={server}
+      streams={app.playback.length > 0 ? app.playback : app.recording}
+    />
+  </div>
+);
+
+type StreamsProps = {
+  direction: Direction;
+  label: string;
+  server: SoundControls;
+  /** At least one; the first one's volume is shown. */
+  streams: readonly AudioStream[];
+};
+
+/** One volume for several streams, which move together. */
+const Streams = ({ direction, label, server, streams }: StreamsProps) => {
+  const [first] = streams;
+  return (
+    first !== undefined && (
+      <Level
+        direction={direction}
+        label={label}
+        level={first.volume}
+        muted={first.muted}
+        onLevel={(level) => {
+          for (const stream of streams) {
+            ask(server.setVolume(stream.id, level));
+          }
+        }}
+        onMuted={(muted) => {
+          for (const stream of streams) {
+            ask(server.setMuted(stream.id, muted));
+          }
+        }}
+      />
+    )
+  );
+};
+
+type AppPageProps = {
+  app: App;
   server: SoundControls;
   /** Where a recording can go: every input, monitors included. */
   inputs: readonly AudioDevice[];
-  levels: ReadonlyMap<string, number>;
   /** Where a playback stream can go. */
   outputs: readonly AudioDevice[];
 };
 
-/**
- * Each app, named, with its streams: volume, mute, meter when playing, and the
- * device it plays to or records from.
- */
-const Apps = ({ apps, inputs, levels, outputs, server }: AppsProps) => (
-  <ul className={appsStyles}>
-    {apps.map((app) => (
-      <li className={appEntryStyles} key={app.name}>
-        <h3 className={appStyles}>{app.name}</h3>
-        <ul className={listStyles}>
-          {app.flows.map(({ direction, stream }) => {
-            // Skip a stream named after its app; the name adds nothing.
-            const title =
-              stream.title === stream.application ? undefined : stream.title;
-            const name =
-              title === undefined
-                ? stream.application
-                : `${stream.application}: ${title}`;
-            return (
-              <li className={rowStyles} key={stream.id}>
-                <span className={cx(headStyles, captionLineStyles)}>
-                  <span className={captionStyles}>
-                    {title ??
-                      (direction === "output" ? "Playing" : "Recording")}
-                  </span>
-                  <Choice
-                    label={`${name} ${direction}`}
-                    onChoose={(device) => {
-                      ask(server.moveStream(stream.id, device));
-                    }}
-                    options={(direction === "output" ? outputs : inputs).map(
-                      (device) => ({
-                        label: device.description,
-                        value: device.id,
-                      }),
-                    )}
-                    value={stream.device}
-                  />
-                </span>
-                <Level
-                  direction={direction}
-                  label={name}
-                  level={stream.volume}
-                  meter={
-                    direction === "output" ? levels.get(stream.id) : undefined
-                  }
-                  muted={stream.muted}
-                  onLevel={(level) => {
-                    ask(server.setVolume(stream.id, level));
-                  }}
-                  onMuted={(muted) => {
-                    ask(server.setMuted(stream.id, muted));
-                  }}
-                />
-              </li>
-            );
-          })}
-        </ul>
-      </li>
-    ))}
-  </ul>
+/** Where an app plays and records, each with its volume. */
+const AppPage = ({ app, inputs, outputs, server }: AppPageProps) => (
+  <>
+    {app.playback.length > 0 && (
+      <PanelSection label="Plays on">
+        <StreamDevice
+          devices={outputs}
+          label="Plays on"
+          server={server}
+          streams={app.playback}
+        />
+        <Streams
+          direction="output"
+          label={`${app.name} playing`}
+          server={server}
+          streams={app.playback}
+        />
+      </PanelSection>
+    )}
+    {app.recording.length > 0 && (
+      <PanelSection label="Records from">
+        <StreamDevice
+          devices={inputs}
+          label="Records from"
+          server={server}
+          streams={app.recording}
+        />
+        <Streams
+          direction="input"
+          label={`${app.name} recording`}
+          server={server}
+          streams={app.recording}
+        />
+      </PanelSection>
+    )}
+  </>
+);
+
+type StreamDeviceProps = {
+  devices: readonly AudioDevice[];
+  label: string;
+  server: SoundControls;
+  /** Shown on the first one's device; all move together. */
+  streams: readonly AudioStream[];
+};
+
+/** A picker of the device the streams play to or record from. */
+const StreamDevice = ({
+  devices,
+  label,
+  server,
+  streams,
+}: StreamDeviceProps) => (
+  <Select<string>
+    aria-label={label}
+    onValueChange={(device) => {
+      if (device !== null) {
+        for (const stream of streams) {
+          ask(server.moveStream(stream.id, device));
+        }
+      }
+    }}
+    options={devices.map((device) => ({
+      label: device.description,
+      value: device.id,
+    }))}
+    size="sm"
+    value={streams[0]?.device ?? null}
+  />
 );
 
 type CardsProps = {
@@ -389,151 +455,50 @@ type CardsProps = {
   server: SoundControls;
 };
 
-const Cards = ({ cards, server }: CardsProps) => (
-  <ul className={listStyles}>
-    {cards.map((card) => (
-      <li className={headStyles} key={card.id}>
-        <span className={nameStyles}>{card.description}</span>
-        <Choice
-          label={`${card.description} profile`}
-          onChoose={(profile) => {
+/** Each sound card's mode, under the card's name. */
+const Cards = ({ cards, server }: CardsProps) =>
+  cards.map((card) => (
+    <PanelSection key={card.id} label={card.description}>
+      <Select<string>
+        aria-label={card.description}
+        onValueChange={(profile) => {
+          if (profile !== null && profile !== card.profile) {
             ask(server.setProfile(card.id, profile));
-          }}
-          options={card.profiles.map((profile) =>
-            option(profile, "unavailable"),
-          )}
-          value={card.profile}
-        />
-      </li>
-    ))}
-  </ul>
-);
-
-type ChoiceProps = {
-  label: string;
-  options: readonly SelectOption<string>[];
-  /** The current choice, as the server last reported. */
-  value: string | undefined;
-  /** Request another; the choice changes when the server confirms. */
-  onChoose: (value: string) => void;
-};
-
-/** A quiet `Select` inline in a row, with its list kept within the panel. */
-const Choice = ({ label, onChoose, options, value }: ChoiceProps) => {
-  const panel = useContext(Panel)?.getBoundingClientRect();
-  return (
-    <span className={choiceStyles}>
-      <Select
-        aria-label={label}
-        boundary={
-          panel === undefined
-            ? undefined
-            : { height: innerHeight, width: panel.width, x: panel.x, y: 0 }
-        }
-        onValueChange={(chosen) => {
-          if (chosen !== null && chosen !== value) {
-            onChoose(chosen);
           }
         }}
-        options={options}
-        placeholder="…"
-        quiet
-        size="xs"
-        value={value ?? null}
+        options={card.profiles.map(modeOption)}
+        size="sm"
+        value={card.profile ?? null}
       />
-    </span>
-  );
-};
+    </PanelSection>
+  ));
 
-/** A port or profile as an option, marked when unavailable. */
-const option = (
-  choice: AudioChoice,
-  unusable: string,
+/** A card's mode as an option, marked when unavailable. */
+const modeOption = (
+  profile: AudioCard["profiles"][number],
 ): SelectOption<string> => ({
-  label: choice.available
-    ? choice.description
-    : `${choice.description} (${unusable})`,
-  value: choice.name,
+  label: profile.available
+    ? profileName(profile)
+    : `${profileName(profile)} (unavailable)`,
+  value: profile.name,
 });
 
-// The defaults' sections, then the drawers, a step apart.
+// Sections a step apart.
 const mainStyles = flex({
   direction: "column",
   gap: 3,
   minInlineSize: 0,
 });
 
-const listStyles = flex({
-  direction: "column",
-  gap: 2,
-  listStyle: "none",
-  margin: 0,
-  padding: 0,
-});
+// Each app sits close over its volume, a step from the next app.
+const appStyles = flex({ direction: "column", gap: 0.5 });
 
-const rowStyles = flex({
-  direction: "column",
-  gap: 0.5,
-});
+const choiceStyles = hstack({ gap: 2.5 });
 
-// The choice wraps under the name when both don't fit, so neither is
-// truncated.
-const headStyles = hstack({
-  columnGap: 1.5,
-  flexWrap: "wrap",
-  minBlockSize: 6,
-  rowGap: 1,
-});
+const choiceIconStyles = css({ display: "inline-flex", flexShrink: 0 });
 
-const captionStyles = css({
+const choiceDetailStyles = css({
   color: "textSoft",
-  flex: "0 1 auto",
-  minInlineSize: 0,
-  overflowWrap: "anywhere",
-});
-
-// Lined up with the slider below, past its mute button and the room for its
-// thumb.
-const captionLineStyles = css({
-  paddingInlineStart: 9.5,
+  display: "block",
   textStyle: "panelDetail",
-});
-
-const nameStyles = css({
-  flex: "0 1 auto",
-  minInlineSize: 0,
-  overflowWrap: "anywhere",
-});
-
-// Long lists scroll vertically inside the drawer, so the panel stays on
-// screen.
-const appsStyles = flex({
-  direction: "column",
-  gap: 3,
-  listStyle: "none",
-  margin: 0,
-  maxBlockSize: "50vh",
-  overflowX: "hidden",
-  overflowY: "auto",
-  padding: 0,
-});
-
-// App names sit close over their streams, which sit closer to each other than
-// to the next app.
-const appEntryStyles = flex({
-  direction: "column",
-  gap: 1,
-});
-
-const appStyles = css({
-  margin: 0,
-  textStyle: "panelLabel",
-});
-
-// Never truncated; wraps under the name instead. Full opacity, unlike the
-// caption, since it is clickable.
-const choiceStyles = css({
-  flex: "0 0 auto",
-  maxInlineSize: "100%",
-  minInlineSize: 0,
 });

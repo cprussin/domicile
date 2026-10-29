@@ -1,5 +1,6 @@
 import type { Result } from "@cprussin/option-result";
 import { AnimatedSpeakerIcon } from "@domicile-desktop/component-library/AnimatedSpeakerIcon";
+import { Drilldown } from "@domicile-desktop/component-library/Drilldown";
 import { Panel } from "@domicile-desktop/component-library/Panel";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
@@ -97,9 +98,13 @@ export const Volume = ({
         {locked ? (
           <OutputLevel audio={audio} server={server} />
         ) : (
-          <Panel title="Sound" width="standard">
-            <Mixer audio={audio} server={server} />
-          </Panel>
+          <span className={mixerStyles}>
+            <Drilldown>
+              <Panel title="Sound">
+                <Mixer audio={audio} server={server} />
+              </Panel>
+            </Drilldown>
+          </span>
         )}
       </Popover>
     );
@@ -171,6 +176,13 @@ const unavailableStyles = css({
 });
 
 // As wide as the brightness item's slider.
+// A popover's usual width, which the mixer's pages keep too.
+const mixerStyles = css({
+  display: "block",
+  inlineSize: 88,
+  maxInlineSize: "100%",
+});
+
 const outputLevelStyles = css({
   display: "block",
   inlineSize: 60,
