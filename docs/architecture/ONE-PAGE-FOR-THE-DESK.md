@@ -86,6 +86,9 @@ enters a gap, because pointer crossing follows `desk`.
   or a warp lands where the cursor is.
 - Each CRTC keeps its own cursor (`DrmCursor`). The host sets the cursor shape
   on every monitor.
+- The page's cursor applies off the host monitor too: `RenderWidgetHostViewAura`
+  takes a pointer outside its root but on the page as over itself
+  (`DeskPagePoint`, patch `0159`).
 
 ### Raster: one tiling per display scale
 
