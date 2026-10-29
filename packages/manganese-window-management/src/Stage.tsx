@@ -604,6 +604,9 @@ export const Stage = memo(
             const onGrabThis = () => {
               grabbed(window.id);
             };
+            const onHoverThis = (at: Spot) => {
+              onHover(window.id, at);
+            };
             if (placement === undefined || on === undefined) {
               return undefined;
             } else {
@@ -627,6 +630,7 @@ export const Stage = memo(
                           setStretching(resizing);
                           onGrabThis();
                         }}
+                        onHover={onHoverThis}
                         onPull={pull}
                         onStretch={(edge, by) => {
                           onStretch(window.id, edge, by, on.geometry);
@@ -652,6 +656,7 @@ export const Stage = memo(
                           setStretching(resizing);
                           onGrabThis();
                         }}
+                        onHover={onHoverThis}
                         onMove={(x, y) => {
                           onMove(window.id, x, y);
                         }}

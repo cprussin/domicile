@@ -51,7 +51,8 @@ Workspaces belong to the desktop, and screens show them, as in sway:
 
 - **Focus follows the pointer.** The window under the pointer gets the
   keyboard. No click needed. This is one case in `reduceWindows`; a shell that
-  wants click-to-focus changes only that case.
+  wants click-to-focus changes only that case. Holding Meta does not stop it:
+  the sheets that catch Meta+drag report the pointer entering too.
 - **Hovering does not raise.** A click raises.
 - **The screen under the pointer gets the keyboard**, even with no window on
   it (`src/screens/useScreenFollowsPointer.ts`).

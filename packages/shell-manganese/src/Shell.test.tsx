@@ -3766,6 +3766,50 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
     });
 
+    describe("while Meta is held", () => {
+      // Meta covers each window with a sheet that catches drags, so the
+      // pointer enters the sheet instead of the window.
+      const sheetOver = (container: HTMLElement, id: string): HTMLElement => {
+        const sheet = grabSheets(container).find(
+          (grab) => grab.getAttribute("data-window") === id,
+        );
+        if (sheet === undefined) {
+          throw new Error(`test: no sheet over ${id}`);
+        } else {
+          return sheet;
+        }
+      };
+
+      // A tiled window and a float, so no tiled border counts as a sheet.
+      const renderHeld = (): HTMLElement => {
+        const { container } = renderShell();
+        clientAppears("one");
+        clientAppears("two");
+        press("Tab", true);
+        pageHolds({ meta: true });
+        return container;
+      };
+
+      it("gives the keyboard to the tiled window the pointer moves into", () => {
+        const container = renderHeld();
+        domicile.calls.length = 0;
+
+        crossInto(sheetOver(container, "app:one"), 300, 300);
+
+        expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+      });
+
+      it("gives the keyboard to the floating window the pointer moves into", () => {
+        const container = renderHeld();
+        crossInto(sheetOver(container, "app:one"), 300, 300);
+        domicile.calls.length = 0;
+
+        crossInto(sheetOver(container, "app:two"), 900, 500);
+
+        expect(domicile.calls).toContainEqual(["focusApp", "two"]);
+      });
+    });
+
     it("leaves the keyboard where it is when the pointer lands on the chrome", () => {
       // The bar, wallpaper and float decorations are not windows; taking focus
       // for them would make the desktop untypeable.
