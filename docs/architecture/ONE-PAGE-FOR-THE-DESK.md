@@ -61,6 +61,9 @@ enters a gap, because pointer crossing follows `desk`.
     tooltip). The host's root holds them as windows of their own (patches
     `0051`, `0076`), so the page's mirror lacks them. Each sits where the page
     has it (`PopupBoundsOn`).
+  - A tooltip fits on the monitor it opens on. The host's root names each
+    monitor in its own coordinates (`kDomicileDeskMonitorsKey`, patch
+    `0160`): its screen coordinates are CRTC pixels, which place no monitor.
   - The window handles rotation.
 - The page's `ScreenInfos` list every display. `current()` is the desk box at
   S (`WidgetBase::UpdateSurfaceAndScreenInfo`).
