@@ -10,6 +10,7 @@ use domicile_launch::command::{
     set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
     site_permissions_line, uninstall_extension_line, visits_line, Reply,
 };
+use domicile_launch::control::AppReuse;
 use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
@@ -48,8 +49,23 @@ fn an_open_app_is_an_open_url_that_asks_for_an_app_window() {
     // A key rather than a new type, so an engine older than it opens a browser
     // window instead of refusing.
     assert_eq!(
-        open_app_line("https://example.com/"),
+        open_app_line("https://example.com/", None, AppReuse::New),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"app\":true}\n"
+    );
+}
+
+#[test]
+fn an_open_app_with_an_id_names_it_and_how_to_reuse_its_window() {
+    assert_eq!(
+        open_app_line("https://example.com/", Some("mail"), AppReuse::Focus),
+        "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"app\":true,\
+         \"app_id\":\"mail\",\"reuse\":\"focus\"}\n"
+    );
+    // "new" is the engine's default, so the line leaves it out.
+    assert_eq!(
+        open_app_line("https://example.com/", Some("mail"), AppReuse::New),
+        "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"app\":true,\
+         \"app_id\":\"mail\"}\n"
     );
 }
 

@@ -189,6 +189,32 @@ describe("FakeDomicileHost", () => {
     ]);
   });
 
+  it("reuses an app window with the same id, as the engine does", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.host.openAppWindow("https://mail.example/", "mail");
+    fake.host.openAppWindow("https://chat.example/", "chat", "focus");
+    fake.host.openAppWindow("https://mail.example/", "mail", "focus");
+    fake.host.openAppWindow("https://mail.example/t/1", "mail", "navigate");
+
+    expect(fake.host.browserWindows).toMatchObject([
+      { appId: "mail", id: "1", url: "https://mail.example/t/1" },
+      { appId: "chat", id: "2", url: "https://chat.example/" },
+    ]);
+  });
+
+  it("opens another app window with the same id for reuse new", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.host.openAppWindow("https://mail.example/", "mail");
+    fake.host.openAppWindow("https://mail.example/", "mail", "new");
+
+    expect(fake.host.browserWindows).toMatchObject([
+      { appId: "mail", id: "1" },
+      { appId: "mail", id: "2" },
+    ]);
+  });
+
   it("records an ask and hands back a promise", () => {
     const fake = new FakeDomicileHost();
 

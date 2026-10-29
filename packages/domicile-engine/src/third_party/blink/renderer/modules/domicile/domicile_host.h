@@ -218,7 +218,15 @@ class MODULES_EXPORT DomicileHost final
   void openPrivateBrowserWindow(ScriptState*,
                                 const String& url,
                                 ExceptionState&);
-  void openAppWindow(ScriptState*, const String& url, ExceptionState&);
+  void openAppWindow(ScriptState*,
+                     const String& url,
+                     const String& app_id,
+                     const String& reuse,
+                     ExceptionState&);
+  ScriptPromise<IDLLong> countBrowserWindowMatches(ScriptState*,
+                                                   const String& id,
+                                                   const String& selector,
+                                                   ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
 
   // The TVs, or null until the browser has listed them.
@@ -467,9 +475,9 @@ class MODULES_EXPORT DomicileHost final
 
   bool Ready(ExceptionState&);
 
-  // What openBrowserWindow, openPrivateBrowserWindow and openAppWindow open.
-  enum class WindowKind { kBrowser, kPrivate, kApp };
-  // `partition` as openBrowserWindow's; only kBrowser takes one.
+  // What openBrowserWindow and openPrivateBrowserWindow open.
+  enum class WindowKind { kBrowser, kPrivate };
+  // `partition` as openBrowserWindow's.
   void OpenBrowserWindow(const String& url,
                          WindowKind,
                          const String& partition,

@@ -41,7 +41,16 @@ pub enum Request {
     OpenUrl { url: String },
     /// Open this URL in an app window: a browser window the shell draws
     /// without an address bar. See `docs/architecture/WEB-APPS.md`.
-    OpenApp { url: String },
+    ///
+    /// With an `id`, `reuse` says what to do when an app window with that id
+    /// is open.
+    OpenApp {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        #[serde(default)]
+        reuse: AppReuse,
+    },
     /// Run the app module `module` under `root` in an app window. The client
     /// resolves both ([`crate::app_entry`]). See
     /// `docs/architecture/APP-MODULES.md`.
@@ -124,6 +133,19 @@ pub enum Request {
         #[serde(default)]
         scale: Scale,
     },
+}
+
+/// What [`Request::OpenApp`] does when an app window with its id is open.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AppReuse {
+    /// Open another window.
+    #[default]
+    New,
+    /// Bring the open one to the front.
+    Focus,
+    /// Load the address in the open one and bring it to the front.
+    Navigate,
 }
 
 /// How [`Request::DisableWhileTyping`] changes the setting.
@@ -266,9 +288,14 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 
 /// Tells the engine to open an address in the shell.
 ///
-/// [`crate::command_socket::open_url`] or [`crate::command_socket::open_app`]
-/// in a desktop; a closure in tests.
+/// [`crate::command_socket::open_url`] in a desktop; a closure in tests.
 pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+
+/// Tells the engine to open an address in an app window with an id, or to
+/// reuse the open one as [`AppReuse`] says.
+///
+/// [`crate::command_socket::open_app`] in a desktop; a closure in tests.
+pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse) -> Result<(), String>;
 
 /// Tells the engine to run an app module.
 ///
@@ -398,7 +425,7 @@ pub struct Desktop<'a> {
     pub files: &'a SettingsFiles,
     pub load: LoadShell<'a>,
     pub open: OpenUrl<'a>,
-    pub open_app: OpenUrl<'a>,
+    pub open_app: OpenApp<'a>,
     pub run_app: RunApp<'a>,
     pub capture: Screenshot<'a>,
     pub record: ScreenRecord<'a>,
@@ -463,10 +490,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::OpenApp { url }) => to_line(&match (desktop.open_app)(&url) {
-            Ok(()) => Response::Opened,
-            Err(why) => Response::Refused { why },
-        }),
+        Ok(Request::OpenApp { url, id, reuse }) => {
+            to_line(&match (desktop.open_app)(&url, id.as_deref(), reuse) {
+                Ok(()) => Response::Opened,
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::RunApp { root, module }) => to_line(&match (desktop.run_app)(&root, &module) {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },

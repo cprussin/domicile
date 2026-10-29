@@ -349,6 +349,50 @@ void AnswerRunApp(const base::DictValue& request,
               std::move(reply)));
 }
 
+// `open_url`'s app window, from `app_id` and `reuse`: nothing for a browser
+// window, which may have neither, or why the request is refused. Both are
+// optional, so a supervisor older than them is still understood.
+base::expected<std::optional<AppLaunch>, std::string> AppLaunchIn(
+    const base::DictValue& request,
+    bool is_app) {
+  const base::Value* id = request.Find("app_id");
+  const base::Value* reuse = request.Find("reuse");
+  if (!is_app) {
+    if (id != nullptr || reuse != nullptr) {
+      return base::unexpected(
+          "open_url's \"app_id\" and \"reuse\" are for an app window "
+          "(\"app\":true)");
+    }
+    return std::nullopt;
+  }
+  if (id != nullptr && !id->is_string()) {
+    return base::unexpected("open_url's \"app_id\" is a string");
+  }
+  AppLaunch launch;
+  if (id != nullptr) {
+    launch.id = id->GetString();
+  }
+  if (reuse == nullptr) {
+    return launch;
+  }
+  const std::string* named = reuse->GetIfString();
+  if (named != nullptr && *named == "new") {
+    launch.reuse = mojom::AppReuse::kNew;
+  } else if (named != nullptr && *named == "focus") {
+    launch.reuse = mojom::AppReuse::kFocus;
+  } else if (named != nullptr && *named == "navigate") {
+    launch.reuse = mojom::AppReuse::kNavigate;
+  } else {
+    return base::unexpected(
+        "open_url's \"reuse\" is \"new\", \"focus\" or \"navigate\"");
+  }
+  if (launch.reuse != mojom::AppReuse::kNew && launch.id.empty()) {
+    return base::unexpected(
+        "open_url's \"reuse\" needs an \"app_id\" to find the window by");
+  }
+  return launch;
+}
+
 void AnswerOpenUrl(const base::DictValue& request,
                    OpenUrl open_url,
                    CommandReply reply) {
@@ -374,8 +418,15 @@ void AnswerOpenUrl(const base::DictValue& request,
         "browser window"));
     return;
   }
+  const bool is_app = app != nullptr && app->GetBool();
+  const base::expected<std::optional<AppLaunch>, std::string> launch =
+      AppLaunchIn(request, is_app);
+  if (!launch.has_value()) {
+    std::move(reply).Run(RefusedCommand(launch.error()));
+    return;
+  }
   open_url(
-      parsed, app != nullptr && app->GetBool(),
+      parsed, *launch,
       base::BindOnce(&AnswerOpened,
                      std::string("this engine has no shell page to open it in"),
                      std::move(reply)));

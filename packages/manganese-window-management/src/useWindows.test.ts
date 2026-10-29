@@ -233,6 +233,7 @@ describe("a client's window requests", () => {
 
 describe("the desk's browser windows", () => {
   const EXAMPLE: DomicileBrowserWindow = {
+    appId: "",
     height: 0,
     id: "1",
     isApp: false,
@@ -436,6 +437,7 @@ describe("a command", () => {
       const { host, result } = desktop([LEFT, RIGHT]);
       host.lists([
         {
+          appId: "",
           height: 0,
           id: "1",
           isApp: false,

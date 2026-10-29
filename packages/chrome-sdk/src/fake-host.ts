@@ -125,7 +125,12 @@ export const describedWindow = (
 });
 
 /** The methods that return a promise. The fake's never settle. */
-const ASKS = new Set(["fetchWithCookies", "searchFiles", "startCasting"]);
+const ASKS = new Set([
+  "countBrowserWindowMatches",
+  "fetchWithCookies",
+  "searchFiles",
+  "startCasting",
+]);
 
 export class FakeDomicileHost {
   /** Every call the shell made, in order: the method's name, then its arguments. */
@@ -165,9 +170,10 @@ export class FakeDomicileHost {
             this.openBrowser(url, { isPrivate: true });
           };
         } else if (name === "openAppWindow") {
-          return (url: string) => {
-            calls.push([name, url]);
-            this.openBrowser(url, { isApp: true });
+          return (...args: Parameters<DomicileHost["openAppWindow"]>) => {
+            calls.push([name, ...args]);
+            const [url, appId = "", reuse = "new"] = args;
+            this.openApp(url, appId, reuse);
           };
         } else if (name === "closeBrowserWindow") {
           return (id: string) => {
@@ -231,13 +237,14 @@ export class FakeDomicileHost {
    * The engine opened a browser window at `url`, as for `domicile open`,
    * `target="_blank"`, with `popupWindow` an extension's popup window, or with
    * `isApp` `domicile open --app`. `openBrowserWindow` calls this too, and
-   * `openPrivateBrowserWindow` with `isPrivate`, and `openAppWindow` with
-   * `isApp`. Ids count up from `"1"`; the
+   * `openPrivateBrowserWindow` with `isPrivate`, and `openApp` with `isApp`
+   * and `appId`. Ids count up from `"1"`; the
    * asked-for size is 0.
    */
   openBrowser(
     url: string,
     {
+      appId = "",
       isApp = false,
       isPrivate = false,
       partition = "",
@@ -245,7 +252,7 @@ export class FakeDomicileHost {
     }: Partial<
       Pick<
         DomicileBrowserWindow,
-        "isApp" | "isPrivate" | "partition" | "popupWindow"
+        "appId" | "isApp" | "isPrivate" | "partition" | "popupWindow"
       >
     > = {},
   ): void {
@@ -254,6 +261,7 @@ export class FakeDomicileHost {
       browserWindows: [
         ...(this.#state.browserWindows ?? []),
         {
+          appId,
           height: 0,
           id: this.#browsersOpened.toString(),
           isApp,
@@ -267,6 +275,28 @@ export class FakeDomicileHost {
         } satisfies DomicileBrowserWindow,
       ],
     });
+  }
+
+  /**
+   * `openAppWindow`, as the engine carries it out: reuses the oldest app
+   * window with `appId` unless `reuse` is "new", loading `url` in it for
+   * "navigate", and otherwise opens one.
+   */
+  openApp(url: string, appId: string, reuse: string): void {
+    const windows = this.#state.browserWindows ?? [];
+    const open =
+      appId === "" || reuse === "new"
+        ? undefined
+        : windows.find((window) => window.appId === appId);
+    if (open === undefined) {
+      this.openBrowser(url, { appId, isApp: true });
+    } else if (reuse === "navigate") {
+      this.set({
+        browserWindows: windows.map((window) =>
+          window === open ? { ...window, url } : window,
+        ),
+      });
+    }
   }
 
   /**

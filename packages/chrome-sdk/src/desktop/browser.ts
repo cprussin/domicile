@@ -32,6 +32,27 @@ export type FetchInit = {
   sapisidHashOrigin?: string;
 };
 
+/** What {@link Browser.openApp} does when an app window with its id is open. */
+export enum AppReuse {
+  /** Opens another window. */
+  New,
+  /** Brings the open one to the front, as its page's window.focus() would. */
+  Focus,
+  /** Loads the address in the open one and brings it to the front. */
+  Navigate,
+}
+
+/** How {@link Browser.openApp} opens its window. */
+export type AppWindowOptions = {
+  /**
+   * The app the window belongs to, such as `mail:me@example.com`. Listed as
+   * the window's `appId`.
+   */
+  id?: string;
+  /** {@link AppReuse.New} by default. Any other needs an `id`. */
+  reuse?: AppReuse;
+};
+
 export type BrowserListeners = {
   /** A window opened, closed or changed. */
   change: () => void;
@@ -44,8 +65,18 @@ export type Browser = {
   open: (url: string, options?: { partition?: string }) => void;
   /** Open a window in the off-the-record profile. */
   openPrivate: (url: string) => void;
-  /** Open an app window, with no address bar. */
-  openApp: (url: string) => void;
+  /**
+   * Open an app window, with no address bar, or reuse the oldest one with
+   * `id` as `reuse` says. The browser matches the window, so two quick calls
+   * never open two.
+   */
+  openApp: (url: string, options?: AppWindowOptions) => void;
+  /**
+   * How many elements in window `id`'s page match the CSS `selector`. A
+   * hidden window answers. Rejects for an unknown window, and when the page
+   * gave no number.
+   */
+  countMatches: (id: string, selector: string) => Promise<number>;
   /** Close window `id`. Its page may ask to stay. */
   close: (id: string) => void;
   /**
@@ -62,6 +93,7 @@ export type BrowserHost = Pick<
   | "addEventListener"
   | "browserWindows"
   | "closeBrowserWindow"
+  | "countBrowserWindowMatches"
   | "fetchWithCookies"
   | "openAppWindow"
   | "openBrowserWindow"
@@ -77,6 +109,8 @@ export const browser = (host: BrowserHost): Browser => {
     close: (id) => {
       host.closeBrowserWindow(id);
     },
+    countMatches: (id, selector) =>
+      host.countBrowserWindowMatches(id, selector),
     fetch: (
       url,
       { method = "GET", headers = [], body, sapisidHashOrigin } = {},
@@ -95,8 +129,8 @@ export const browser = (host: BrowserHost): Browser => {
     open: (url, { partition = "" } = {}) => {
       host.openBrowserWindow(url, partition);
     },
-    openApp: (url) => {
-      host.openAppWindow(url);
+    openApp: (url, { id = "", reuse = AppReuse.New } = {}) => {
+      host.openAppWindow(url, id, reuseName(reuse));
     },
     openPrivate: (url) => {
       host.openPrivateBrowserWindow(url);
@@ -105,4 +139,16 @@ export const browser = (host: BrowserHost): Browser => {
       return windowsOf(host.browserWindows);
     },
   };
+};
+
+/** `reuse` as the engine's openAppWindow names it. */
+const reuseName = (reuse: AppReuse): string => {
+  switch (reuse) {
+    case AppReuse.New:
+      return "new";
+    case AppReuse.Focus:
+      return "focus";
+    case AppReuse.Navigate:
+      return "navigate";
+  }
 };

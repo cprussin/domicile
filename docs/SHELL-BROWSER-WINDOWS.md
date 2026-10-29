@@ -74,9 +74,15 @@ plus.addEventListener("click", () => {
   UI. The result arrives in the next list. Other windows open without you
   ([New windows](#new-windows)). A page may ask to stay before it closes
   ([Close requests](#close-requests)).
-- **`browser.openApp(url)`** opens an app window, as `domicile open --app` does,
-  for your own launcher. It is listed with `isApp: true`
-  ([New windows](#new-windows)).
+- **`browser.openApp(url, { id, reuse })`** opens an app window, as `domicile
+  open --app` does, for your own launcher. It is listed with `isApp: true` and
+  `appId: id` ([New windows](#new-windows)). With an `id`, `AppReuse.Focus`
+  brings that app's open window to the front instead (its `<webview>` fires
+  `domicile-focus-request`), and `AppReuse.Navigate` also loads `url` in it.
+  The engine matches the window, so two quick calls never open two.
+- **`browser.countMatches(id, selector)`** counts the elements matching a CSS
+  selector in window `id`'s page, as a `<webview>`'s `countMatches` does. A
+  hidden window answers.
 - **Set `window` before the view enters the document.** The engine reads it
   once, when the view connects. A window shows in one view at a time: a second
   view naming it stays empty, so never remount the view drawing it.
@@ -358,7 +364,8 @@ The browser opens a window without you for:
 - a `target="_blank"` link, `window.open` or a middle click
 - `domicile open <url>`, which `BROWSER` (`domicile-open-url`) and
   `xdg-open` run inside a desktop
-- `domicile open --app <url>`, which lists the window with `isApp`. Draw it
+- `domicile open --app <url>`, which lists the window with `isApp`, and
+  `appId` from `--id`. Draw it
   without an address bar, and with a read-only one while its page is off the
   origin it opened at ([WEB-APPS.md](architecture/WEB-APPS.md)).
 - an extension's `tabs.create` or `windows.create`

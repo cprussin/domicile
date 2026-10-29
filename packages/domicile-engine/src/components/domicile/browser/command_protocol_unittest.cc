@@ -13,9 +13,11 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/domicile/mojom/browser_windows.mojom-shared.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -50,7 +52,7 @@ struct Told {
   std::string app_module;
   bool opened = false;
   std::string url;
-  bool app = false;
+  std::optional<AppLaunch> app;
   bool set = false;
   std::string origin;
   std::optional<WebViewPermission> permission;
@@ -167,7 +169,8 @@ std::string Answer(std::string_view line,
     }
     std::move(opened).Run(has_window);
   };
-  auto open_url = [told, has_window](const GURL& url, bool app,
+  auto open_url = [told, has_window](const GURL& url,
+                                     std::optional<AppLaunch> app,
                                      WindowOpened opened) {
     told->opened = true;
     told->url = url.spec();
@@ -547,7 +550,7 @@ TEST(CommandProtocolTest, HandsTheShellTheAddressARequestNames) {
   EXPECT_EQ(TypeOf(reply), "opened");
   EXPECT_TRUE(told.opened);
   EXPECT_EQ(told.url, "https://example.com/a?b=c");
-  EXPECT_FALSE(told.app);
+  EXPECT_EQ(told.app, std::nullopt);
   EXPECT_FALSE(told.asked);
 }
 
@@ -558,7 +561,78 @@ TEST(CommandProtocolTest, OpensAnAppWindowWhenARequestAsksForOne) {
       R"("app":true})",
       &told);
   EXPECT_EQ(TypeOf(reply), "opened");
-  EXPECT_TRUE(told.app);
+  EXPECT_EQ(told.app, AppLaunch());
+}
+
+TEST(CommandProtocolTest, HandsTheShellAnAppWindowsIdAndReuse) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":true,"app_id":"mail","reuse":"navigate"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "opened");
+  EXPECT_EQ(told.app,
+            (AppLaunch{.id = "mail", .reuse = mojom::AppReuse::kNavigate}));
+}
+
+TEST(CommandProtocolTest, ReadsEachReuse) {
+  for (const auto& [name, reuse] :
+       {std::pair("new", mojom::AppReuse::kNew),
+        std::pair("focus", mojom::AppReuse::kFocus),
+        std::pair("navigate", mojom::AppReuse::kNavigate)}) {
+    Told told;
+    Answer(base::StrCat({R"({"type":"open_url","version":1,)",
+                         R"("url":"https://example.com/","app":true,)",
+                         R"("app_id":"mail","reuse":")",
+                         name, R"("})"}),
+           &told);
+    EXPECT_EQ(told.app, (AppLaunch{.id = "mail", .reuse = reuse})) << name;
+  }
+}
+
+TEST(CommandProtocolTest, RefusesAReuseItDoesNotKnow) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":true,"app_id":"mail","reuse":"raise"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("\"reuse\""));
+  EXPECT_FALSE(told.opened);
+}
+
+TEST(CommandProtocolTest, RefusesAReuseWithNoIdToFindTheWindowBy) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":true,"reuse":"focus"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("\"app_id\""));
+  EXPECT_FALSE(told.opened);
+}
+
+TEST(CommandProtocolTest, RefusesAnAppIdThatIsNotAString) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":true,"app_id":7})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("\"app_id\""));
+  EXPECT_FALSE(told.opened);
+}
+
+TEST(CommandProtocolTest, RefusesAnAppIdForABrowserWindow) {
+  // A browser window is never reused, so an id on one is a caller's mistake.
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app_id":"mail","reuse":"focus"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("app window"));
+  EXPECT_FALSE(told.opened);
 }
 
 TEST(CommandProtocolTest, RefusesAnAppThatIsNotABoolean) {

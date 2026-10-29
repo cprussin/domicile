@@ -122,6 +122,7 @@ Headless.
 | `guard-webview-partition.sh` | storage in a `<webview partition>` is apart from the user's and from other partitions; a window from `openBrowserWindow(url, partition)` is listed and stored in its partition; `persist:` outlives a restart and any other name does not |
 | `guard-webview-will-navigate.sh` | a page's own navigation asks the shell as `domicile-will-navigate`; `preventDefault()` keeps it from being requested (patch 0134); the shell's own `src` does not ask |
 | `guard-webview-app-window.sh` | an app window (`open_url` with `"app":true`) is listed `isApp` and records no visits; an ordinary window opened after it is recorded; the shell's `openAppWindow` opens a window listed `isApp` |
+| `guard-app-window-reuse.sh` | an app window with an id is reused by `"reuse":"focus"` and `"navigate"` (`open_url`, and the shell's `openAppWindow`) instead of opened again, and asks to be in front; `navigate` loads the address in it; `countBrowserWindowMatches` counts in a drawn window |
 | `guard-webview-survives-load-shell.sh` | a browser window's page keeps running across `load_shell`, and the new shell's `<webview window>` shows it |
 | `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after |
 | `guard-webview-moved.sh` | a browser window's page is attached again and visible after its `<webview>` moves in the shell's document, as React's `insertBefore` does |

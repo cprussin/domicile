@@ -230,6 +230,11 @@ export type DomicileBrowserWindow = {
    */
   readonly isApp: boolean;
   /**
+   * The app window's id, as openAppWindow() or `domicile open --app --id`
+   * gave it. Empty for none, and for every other window.
+   */
+  readonly appId: string;
+  /**
    * Whether a capture of the page alone is running: a screenshot, a picker's
    * preview or a screen cast of it. A page draws only while laid out, so keep
    * a window you hide, such as behind a tab, laid out while it is captured.
@@ -671,11 +676,27 @@ export type DomicileHost = {
    */
   openPrivateBrowserWindow(url: string): void;
   /**
-   * Opens an app window at `url`, as `domicile open-app` does, for a shell's
-   * own launcher. It appears in the next `browserwindowschanged` with `isApp`
-   * set. A domicile:// address shows blocked, as in a <webview>.
+   * Opens an app window at `url`, as `domicile open --app` does, for a
+   * shell's own launcher. It appears in the next `browserwindowschanged` with
+   * `isApp` set and `appId`. A domicile:// address shows blocked, as in a
+   * <webview>.
+   *
+   * `reuse` says what to do when an app window with `appId` is open: "new"
+   * opens another, "focus" brings the oldest such window to the front, as
+   * its page's window.focus() would, and "navigate" also loads `url` in it.
+   * The browser matches the window, so two quick calls never open two.
+   * Throws TypeError for another `reuse`, and for "focus" or "navigate" with
+   * no `appId`.
    */
-  openAppWindow(url: string): void;
+  openAppWindow(url: string, appId?: string, reuse?: string): void;
+  /**
+   * How many elements in browser window `id`'s main document match the CSS
+   * `selector`, as a <webview>'s countMatches() counts them. A hidden window
+   * answers. Throws SyntaxError for a selector that does not parse. Rejects
+   * with InvalidStateError for an unknown window, and when the page gave no
+   * number, as when it navigated first.
+   */
+  countBrowserWindowMatches(id: string, selector: string): Promise<number>;
   /**
    * Closes window `id`; it leaves the next `browserwindowschanged`. A page
    * with a `beforeunload` handler may first ask to stay, as a `domicile-dialog`
