@@ -4,7 +4,7 @@ import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 
 import type { GoogleClient } from "./consent";
-import type { Mail } from "./gmail-api";
+import type { MailNews } from "./gmail-api";
 import { watchGmailWindows } from "./gmail-windows";
 import type { Inbox } from "./inbox";
 import { mailNotices } from "./mail-notices";
@@ -39,8 +39,8 @@ export const deskInbox = perDesktop((domicile) => {
   ): DeskAccount => {
     const known = accounts.get(email);
     if (known === undefined) {
-      const account = watchedAccount(domicile, email, client, (mail) =>
-        notify({ email, nickname }, mail),
+      const account = watchedAccount(domicile, email, client, (news) =>
+        notify({ email, nickname }, news),
       );
       accounts.set(email, account);
       return account;
@@ -54,7 +54,7 @@ const watchedAccount = (
   domicile: Domicile,
   email: string,
   client: GoogleClient,
-  onMail: (mail: readonly Mail[]) => Promise<void>,
+  onMail: (news: MailNews) => Promise<void>,
 ): DeskAccount => {
   const read = inboxReader(domicile, client, email, onMail);
   const running: { watch: InboxWatch | undefined } = { watch: undefined };
