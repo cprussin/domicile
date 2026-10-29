@@ -453,14 +453,11 @@ export const domicilePreset = definePreset({
           onPhoto: {
             value: "white",
           },
-          // Darker in light mode, whose wallpapers tend to be bright, so
-          // `textFaint` stays readable over white; `pandacss-preset.test.ts`
-          // checks this.
+          // Dark enough that `textFaint` stays readable over white, which a
+          // bright wallpaper or website can put behind it in either theme;
+          // `pandacss-preset.test.ts` checks this.
           panelOverPhoto: {
-            value: {
-              _light: "rgb(from black r g b / 75%)",
-              base: "rgb(from black r g b / 55%)",
-            },
+            value: "rgb(from black r g b / 75%)",
           },
           // Marks a private browser window. Distinct from `accent`, which
           // marks focus and selection everywhere.

@@ -40,8 +40,9 @@ describe("the domicile preset", () => {
     expect(withoutPanelColors()).toStrictEqual([]);
   });
 
-  it("draws faint text legibly on a panel over a white wallpaper in light mode", () => {
+  it("draws faint text legibly on a panel over a white page or wallpaper, in either theme", () => {
     expect(faintOverWhite("_light")).toBeGreaterThanOrEqual(READABLE);
+    expect(faintOverWhite("base")).toBeGreaterThanOrEqual(READABLE);
   });
 
   it("draws muted text legibly on a tile on a card, in either theme", () => {
@@ -274,8 +275,8 @@ const withoutPanelColors = (): readonly string[] => {
 };
 
 /**
- * The contrast of `textFaint` on a panel over the wallpaper in `theme`, with
- * the wallpaper at its brightest: white.
+ * The contrast of `textFaint` on a panel in `theme` over the brightest thing
+ * behind it: a white page or wallpaper.
  */
 const faintOverWhite = (theme: Theme): number => {
   const panel = over("#000000", opacityOf("panelOverPhoto", theme), "#ffffff");
