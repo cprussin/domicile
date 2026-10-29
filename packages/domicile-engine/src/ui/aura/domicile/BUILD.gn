@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 # Routes pointer events on monitors outside the desk's host window to the
-# page. Linked from //chrome/browser/domicile, which makes GN load this file;
-# tested from //components/domicile:unit_tests.
+# page. Linked from //chrome/browser/domicile and, for the cursor,
+# //components/domicile:browser; tested from //components/domicile:unit_tests.
 source_set("desk_targeter") {
   sources = [
     "desk_targeter.cc",
