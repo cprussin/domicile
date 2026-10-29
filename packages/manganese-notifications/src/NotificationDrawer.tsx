@@ -9,10 +9,12 @@ import { Switch } from "@domicile-desktop/component-library/Switch";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
+import type { CSSProperties } from "react";
 import { memo, useCallback } from "react";
 
 import { css, cva } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
+import type { Row } from "./drawer-rows";
 import { InboxList } from "./InboxList";
 import { InboxPage } from "./InboxPage";
 import type { Inbox, InboxReading } from "./inbox";
@@ -20,6 +22,7 @@ import { InboxKind } from "./inbox";
 import { NotificationCard } from "./NotificationCard";
 import type { NotificationsHandle } from "./notifications-context";
 import { bellId, screenOfBell } from "./notifications-context";
+import { useDrawerRows } from "./useDrawerRows";
 
 /** The inboxes listed in the drawer, and what the shell knows of them. */
 export type DrawerInboxes = {
@@ -79,6 +82,9 @@ type Props = {
  *
  * Inboxes are listed above the notifications. An inbox with a page, such as
  * Messages, draws it here, widened, in place of the list.
+ *
+ * A notification cleared while the list shows slides out, then the rows below
+ * close up. Several cleared at once leave in turn, top to bottom.
  */
 export const NotificationDrawer = memo(
   ({
@@ -99,14 +105,16 @@ export const NotificationDrawer = memo(
   }: Props) => {
     const page =
       inboxes?.shown === undefined ? undefined : inboxes.inboxes[inboxes.shown];
+    const { onLeft, rows } = useDrawerRows(items, open && page === undefined);
     const notifications = (
       <Notifications
-        items={items}
         now={now}
         onAction={onAction}
         onClose={onClose}
         onDismiss={onDismiss}
+        onLeft={onLeft}
         onReply={onReply}
+        rows={rows}
       />
     );
     return (
@@ -225,41 +233,72 @@ const Page = ({ inbox, index, onShow, onUnread, shown }: PageProps) => {
 
 type NotificationsProps = Pick<
   Props,
-  "items" | "now" | "onAction" | "onClose" | "onDismiss" | "onReply"
->;
+  "now" | "onAction" | "onClose" | "onDismiss" | "onReply"
+> & {
+  rows: readonly Row[];
+  /** The row of notification `id` has finished leaving. */
+  onLeft: (id: number) => void;
+};
 
-/** The notifications, or that there are none. */
+/** The notifications, or that there are none once the last has left. */
 const Notifications = ({
-  items,
   now,
   onAction,
   onClose,
   onDismiss,
+  onLeft,
   onReply,
+  rows,
 }: NotificationsProps) =>
-  items.length === 0 ? (
-    <EmptyState icon={BellSimpleIcon} title="You're all caught up" />
+  rows.length === 0 ? (
+    <div className={caughtUpStyles}>
+      <EmptyState icon={BellSimpleIcon} title="You're all caught up" />
+    </div>
   ) : (
     <ul className={listStyles}>
-      {items.map((notification) => (
-        <li className={rowStyles} key={notification.id}>
-          <NotificationCard
-            closeLabel="Clear"
-            density="compact"
-            notification={notification}
-            now={now}
-            onAction={(key) => {
-              onAction(notification.id, key);
-              // Out of the way of the window the action raises.
-              onClose();
-            }}
-            onClose={() => {
-              onDismiss([notification.id]);
-            }}
-            onReply={(text) => {
-              onReply(notification.id, text);
-            }}
-          />
+      {rows.map(({ leaving, notification }) => (
+        <li
+          aria-hidden={leaving === undefined ? undefined : true}
+          className={rowStyles}
+          data-leaving={leaving === undefined ? undefined : ""}
+          inert={leaving !== undefined}
+          key={notification.id}
+          onTransitionEnd={(event) => {
+            // The height closes last.
+            if (
+              leaving !== undefined &&
+              event.target === event.currentTarget &&
+              event.propertyName === "grid-template-rows"
+            ) {
+              onLeft(notification.id);
+            }
+          }}
+          style={
+            leaving === undefined
+              ? undefined
+              : // Not a token: a place the leaving delay is multiplied by.
+                ({ "--leave-order": Math.min(leaving, 8) } as CSSProperties)
+          }
+        >
+          <div className={cardBoxStyles}>
+            <NotificationCard
+              closeLabel="Clear"
+              density="compact"
+              notification={notification}
+              now={now}
+              onAction={(key) => {
+                onAction(notification.id, key);
+                // Out of the way of the window the action raises.
+                onClose();
+              }}
+              onClose={() => {
+                onDismiss([notification.id]);
+              }}
+              onReply={(text) => {
+                onReply(notification.id, text);
+              }}
+            />
+          </div>
         </li>
       ))}
     </ul>
@@ -308,23 +347,48 @@ const listStyles = flex({
 });
 
 // Each card on its own tile, lit on hover, as a list's filled rows. A card
-// that arrives while the drawer is open slides in like a toast.
+// that arrives while the drawer is open slides in like a toast. A cleared one
+// slides out, then closes its height and the list's gap below it; the row is a
+// one-row grid so the height can close.
 const rowStyles = css({
   _hover: { backgroundColor: "fillHover" },
   _starting: {
     opacity: 0,
     transform: "translateX({spacing.4})",
   },
-  // Critical notifications get a danger ring, as their toasts do.
+  // Critical notifications get a danger ring, as their toasts do. A ring
+  // drawn inside, as a border would keep the closed row a line high.
   "&:has([data-urgency=critical])": {
-    borderColor: "color-mix(in oklab, {colors.danger} 55%, transparent)",
+    boxShadow:
+      "inset 0 0 0 1px color-mix(in oklab, {colors.danger} 55%, transparent)",
+  },
+  "&[data-leaving]": {
+    gridTemplateRows: "0fr",
+    marginBlockEnd: "calc(-1 * {spacing.1})",
+    opacity: 0,
+    pointerEvents: "none",
+    transform: "translateX({spacing.6})",
+    transition:
+      "opacity {durations.normal} {easings.in} calc(var(--leave-order) * {durations.fastest}), transform {durations.normal} {easings.in} calc(var(--leave-order) * {durations.fastest}), grid-template-rows {durations.normal} {easings.in-out} calc(var(--leave-order) * {durations.fastest} + {durations.normal}), margin-block-end {durations.normal} {easings.in-out} calc(var(--leave-order) * {durations.fastest} + {durations.normal})",
   },
   backgroundColor: "fill",
-  border: "1px solid transparent",
   borderRadius: "lg",
+  display: "grid",
+  gridTemplateRows: "1fr",
+  marginBlockEnd: 0,
   opacity: 1,
   overflow: "hidden",
   transform: "translateX(0)",
   transition:
-    "background-color {durations.fast} {easings.default}, border-color {durations.fast} {easings.default}, opacity {durations.slow} {easings.outQuart}, transform {durations.slow} {easings.outQuart}",
+    "background-color {durations.fast} {easings.default}, box-shadow {durations.fast} {easings.default}, opacity {durations.slow} {easings.outQuart}, transform {durations.slow} {easings.outQuart}, grid-template-rows {durations.normal} {easings.in-out}, margin-block-end {durations.normal} {easings.in-out}",
+});
+
+// Lets the row close past the card's padding.
+const cardBoxStyles = css({ minBlockSize: 0 });
+
+// Fades in as the last cleared row leaves.
+const caughtUpStyles = css({
+  _starting: { opacity: 0 },
+  opacity: 1,
+  transition: "opacity {durations.slow} {easings.out}",
 });
