@@ -237,6 +237,12 @@ export const domicilePreset = definePreset({
           "75%": { opacity: "1" },
           "100%": { opacity: "0" },
         },
+        // A ring that spreads out from a searching panel's icon and fades,
+        // like radar.
+        ping: {
+          "0%": { opacity: "0.55", transform: "scale(0.6)" },
+          "100%": { opacity: "0", transform: "scale(1.9)" },
+        },
         pulse: {
           "0%": { opacity: "0.3" },
           "50%": { opacity: "0.7" },
@@ -544,6 +550,8 @@ export const domicilePreset = definePreset({
           // How long a `Notice` stays up. Longer than the scale above, which
           // is for control feedback, not reading.
           notice: { value: "1.5s" },
+          // One ring of `ping`. Two run half a ring apart.
+          ping: { value: "2s" },
           pulse: { value: "1.5s" },
           // One turn of `spin`. A slower spinner looks stuck.
           spin: { value: "1s" },

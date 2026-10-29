@@ -44,10 +44,11 @@ export const BluetoothPanel = ({ actions, bluetooth, host }: Props) => {
   const on = powered.length > 0;
   const searching = bluetooth.adapters.some(({ discovering }) => discovering);
   const sorted = bluetooth.devices.toSorted(byName);
+  const nearby = sorted.filter((device) => !device.paired);
   const groups = [
     ["Connected", sorted.filter((device) => device.connected)],
     ["Paired", sorted.filter((device) => device.paired && !device.connected)],
-    ["Nearby", sorted.filter((device) => !device.paired)],
+    ["Nearby", nearby],
   ] as const;
   return (
     <>
@@ -83,38 +84,47 @@ export const BluetoothPanel = ({ actions, bluetooth, host }: Props) => {
           ))}
           {groups.map(
             ([label, devices]) =>
-              (devices.length > 0 || (label === "Nearby" && searching)) && (
-                <PanelSection key={label} label={label}>
-                  {devices.length > 0 && (
-                    <List>
-                      {devices.map((device) => (
-                        <DeviceRow
-                          device={device}
-                          failed={failedOf(requests, device)}
-                          key={device.path}
-                          onAsk={(verb, request) => {
-                            requests.run(keyOf(verb, device), () =>
-                              request(host, actions),
-                            );
-                          }}
-                          pending={VERBS.some((verb) =>
-                            requests.pending(keyOf(verb, device)),
-                          )}
-                        />
-                      ))}
-                    </List>
-                  )}
-                  {label === "Nearby" && searching && (
-                    <Loading layout="row">Looking for devices…</Loading>
-                  )}
+              devices.length > 0 && (
+                <PanelSection
+                  action={
+                    label === "Nearby" &&
+                    searching && (
+                      <Loading layout="glyph">Looking for devices…</Loading>
+                    )
+                  }
+                  key={label}
+                  label={label}
+                >
+                  <List>
+                    {devices.map((device) => (
+                      <DeviceRow
+                        device={device}
+                        failed={failedOf(requests, device)}
+                        key={device.path}
+                        onAsk={(verb, request) => {
+                          requests.run(keyOf(verb, device), () =>
+                            request(host, actions),
+                          );
+                        }}
+                        pending={VERBS.some((verb) =>
+                          requests.pending(keyOf(verb, device)),
+                        )}
+                      />
+                    ))}
+                  </List>
                 </PanelSection>
               ),
+          )}
+          {searching && nearby.length === 0 && (
+            <PanelSection label="Nearby">
+              <Loading icon={BluetoothIcon}>Looking for devices…</Loading>
+            </PanelSection>
           )}
           {sorted.length === 0 && !searching && (
             <EmptyState
               hint="Put your device in pairing mode to see it here."
               icon={BluetoothIcon}
-              title="No devices found"
+              title="No devices nearby"
             />
           )}
         </>

@@ -18,6 +18,27 @@ describe(IconButton, () => {
     });
   });
 
+  describe("while busy", () => {
+    it("says so, and ignores presses until done", async () => {
+      const presses: string[] = [];
+      render(
+        <IconButton
+          busy
+          label="Scan"
+          onClick={() => {
+            presses.push("scan");
+          }}
+        >
+          <svg />
+        </IconButton>,
+      );
+      const button = screen.getByRole("button", { name: "Scan" });
+      expect(button).toHaveAttribute("aria-busy", "true");
+      await userEvent.click(button);
+      expect(presses).toStrictEqual([]);
+    });
+  });
+
   describe("interactions", () => {
     it("is pressed", async () => {
       const pressed = new Promise((resolve) => {

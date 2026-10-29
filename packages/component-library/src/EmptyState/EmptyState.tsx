@@ -1,4 +1,5 @@
 import type { Icon } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
 
 import { css } from "../../styled-system/css";
 import { center, flex } from "../../styled-system/patterns";
@@ -10,20 +11,24 @@ type Props = {
   title: string;
   /** What would fill it, in a short sentence. */
   hint?: string | undefined;
+  /** A small button that would fill it, such as `Look again`. */
+  action?: ReactNode;
 };
 
 /**
  * A panel or section with nothing to show: an icon in a soft circle, what is
- * missing, and what would fill it. Centered in the room the panel has.
- * Announced as it changes.
+ * missing, and what would fill it. Centered in the room the panel has, as
+ * tall as a `Loading` so the panel holds still between them. Announced as it
+ * changes.
  */
-export const EmptyState = ({ hint, icon: Icon, title }: Props) => (
+export const EmptyState = ({ action, hint, icon: Icon, title }: Props) => (
   <div className={rootStyles} role="status">
     <span className={discStyles}>
       <Icon aria-hidden size={20} weight="bold" />
     </span>
     <span className={titleStyles}>{title}</span>
     {hint !== undefined && <span className={hintStyles}>{hint}</span>}
+    {action !== undefined && <span className={actionStyles}>{action}</span>}
   </div>
 );
 
@@ -33,6 +38,8 @@ const rootStyles = flex({
   flex: 1,
   gap: 1.5,
   justify: "center",
+  // The same as `Loading`'s panel, so a panel holds still between them.
+  minBlockSize: 40,
   paddingBlock: 5,
   paddingInline: 3,
   textAlign: "center",
@@ -49,9 +56,12 @@ const discStyles = center({
 
 const titleStyles = css({ textStyle: "panelLabel" });
 
-// Narrower than a panel, so a hint wraps to two even lines.
+// Narrower than a panel, and balanced, so a hint wraps to two even lines.
 const hintStyles = css({
   color: "textSoft",
   maxInlineSize: "15rem",
   textStyle: "panelDetail",
+  textWrap: "balance",
 });
+
+const actionStyles = css({ marginBlockStart: 1.5 });

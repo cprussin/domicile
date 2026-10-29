@@ -10,6 +10,11 @@ export type Size = (typeof SIZES)[number];
 type Props = ExtendProps<
   typeof BaseButton,
   {
+    /**
+     * Whether what it started is still going, such as a scan. Its icon turns
+     * and presses wait until it is done.
+     */
+    busy?: boolean | undefined;
     /** The icon, sized to suit: 14 for `md`, 12 for `sm`. */
     children: ReactNode;
     /** Names the button, which shows only its icon. */
@@ -26,16 +31,20 @@ type Props = ExtendProps<
  * an accent tile.
  */
 export const IconButton = ({
+  busy = false,
   children,
   label,
   size = "md",
   ...buttonProps
 }: Props) => (
   <BaseButton
+    aria-busy={busy ? true : undefined}
     aria-label={label}
     className={styles({ size })}
+    data-busy={busy ? "" : undefined}
     data-size={size}
     {...buttonProps}
+    disabled={busy || buttonProps.disabled}
   >
     {children}
   </BaseButton>
@@ -43,12 +52,19 @@ export const IconButton = ({
 
 const styles = cva({
   base: {
-    _disabled: { cursor: "default", opacity: "disabled" },
+    _disabled: {
+      "&:not([data-busy])": { opacity: "disabled" },
+      cursor: "default",
+    },
     _focusVisible: {
       outline: "{spacing.0.5} solid {colors.accent}",
       outlineOffset: 0,
     },
     _hoverEnabled: { backgroundColor: "fillHover" },
+    // Busy reads as working, not as unavailable: the icon turns, unfaded.
+    "&[data-busy] > *": {
+      animation: "spin {durations.spin} {easings.linear} infinite",
+    },
     alignItems: "center",
     backgroundColor: "transparent",
     borderRadius: "full",
