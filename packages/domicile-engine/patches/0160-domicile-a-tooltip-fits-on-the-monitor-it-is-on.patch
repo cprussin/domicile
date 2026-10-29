@@ -1,0 +1,134 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 29 Oct 2026 18:50:00 +0000
+Subject: [PATCH] domicile: a tooltip fits on the monitor it is on
+
+On a tty with several monitors, a native tooltip (an <img title>) on a
+monitor other than the host's opened far from the pointer and across two
+monitors.
+
+`TooltipAura::GetTooltipBounds` fits a tooltip in the display nearest its
+anchor. The desk's host root holds the page's tooltips for every monitor
+(0076), and its screen coordinates are the host's DIPs offset by its origin,
+while `DrmScreen` lists displays in CRTC pixels. So the nearest display was
+often another monitor, and the tooltip was moved onto that one's part of the
+page.
+
+The host's root now names each desk monitor in its own coordinates
+(`kDomicileDeskMonitorsKey`, set by //chrome/browser/domicile), and a
+tooltip fits in the one nearest its anchor.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LWjcAM7kUqesfVjyzF1KZL
+---
+ ui/aura/client/aura_constants.cc |  3 +++
+ ui/aura/client/aura_constants.h  |  8 +++++++
+ ui/views/corewm/tooltip_aura.cc  | 37 +++++++++++++++++++++++++++++---
+ 3 files changed, 45 insertions(+), 3 deletions(-)
+
+diff --git a/ui/aura/client/aura_constants.cc b/ui/aura/client/aura_constants.cc
+index 02e350a..c2eedda 100644
+--- a/ui/aura/client/aura_constants.cc
++++ b/ui/aura/client/aura_constants.cc
+@@ -23,6 +23,7 @@ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, gfx::Rect*)
+ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, gfx::Size*)
+ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, gfx::SizeF*)
+ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, gfx::RoundedCornersF*)
++DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, std::vector<gfx::Rect>*)
+ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, int64_t)
+ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, std::string*)
+ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(AURA_EXPORT, ui::mojom::ModalType)
+@@ -85,6 +86,8 @@ DEFINE_UI_CLASS_PROPERTY_KEY(int,
+                              kWindowWorkspaceKey,
+                              kWindowWorkspaceUnassignedWorkspace)
+ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(std::string, kDeskUuidKey)
++DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(std::vector<gfx::Rect>,
++                                   kDomicileDeskMonitorsKey)
+ DEFINE_UI_CLASS_PROPERTY_KEY(ui::ZOrderLevel,
+                              kZOrderingKey,
+                              ui::ZOrderLevel::kNormal)
+diff --git a/ui/aura/client/aura_constants.h b/ui/aura/client/aura_constants.h
+index 0b58687..1596342 100644
+--- a/ui/aura/client/aura_constants.h
++++ b/ui/aura/client/aura_constants.h
+@@ -90,6 +90,14 @@ AURA_EXPORT extern const WindowProperty<bool>* const kCreatedByUserGesture;
+ // A property key to indicate the uuid of the desk this window belongs to.
+ AURA_EXPORT extern const WindowProperty<std::string*>* const kDeskUuidKey;
+ 
++// DOMICILE: a property key to store, on the root window of the desk's host,
++// each monitor of the desk in that root's coordinates. On a tty the desk is one
++// page spanning every monitor, shown in the host monitor's window, so the
++// root's popups may sit on any monitor. Screen coordinates there are CRTC
++// pixels, which do not place them. Set by //chrome/browser/domicile.
++AURA_EXPORT extern const WindowProperty<std::vector<gfx::Rect>*>* const
++    kDomicileDeskMonitorsKey;
++
+ // A property key to indicate that a window should show that it deserves
+ // attention.
+ AURA_EXPORT extern const WindowProperty<bool>* const kDrawAttentionKey;
+diff --git a/ui/views/corewm/tooltip_aura.cc b/ui/views/corewm/tooltip_aura.cc
+index 2c7eea4..66c10ca 100644
+--- a/ui/views/corewm/tooltip_aura.cc
++++ b/ui/views/corewm/tooltip_aura.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/i18n/rtl.h"
+ #include "base/memory/raw_ptr.h"
+@@ -65,6 +66,38 @@ bool ShouldIgnoreScreenBounds() {
+ #endif
+ }
+ 
++// DOMICILE: the bounds, in screen coordinates, a tooltip at `anchor_point`
++// fits in.
++//
++// On a tty the desk's host root holds the page's tooltips for every monitor,
++// and its screen coordinates are CRTC pixels, not the desk's. So the display
++// nearest the anchor is often another monitor, and fitting the tooltip there
++// moves it far from the pointer and across a seam. The host's root names its
++// monitors instead (`kDomicileDeskMonitorsKey`).
++gfx::Rect FitBoundsAt(const aura::Window* window,
++                      const gfx::Point& anchor_point) {
++  const aura::Window* root = window->GetRootWindow();
++  const std::vector<gfx::Rect>* monitors =
++      root->GetProperty(aura::client::kDomicileDeskMonitorsKey);
++  if (monitors == nullptr || monitors->empty()) {
++    return display::Screen::Get()
++        ->GetDisplayNearestPoint(anchor_point)
++        .bounds();
++  }
++  aura::client::ScreenPositionClient* screen_position_client =
++      aura::client::GetScreenPositionClient(root);
++  CHECK(screen_position_client);
++  gfx::Point in_root = anchor_point;
++  screen_position_client->ConvertPointFromScreen(root, &in_root);
++  const gfx::Rect monitor = *std::ranges::min_element(
++      *monitors, {}, [&in_root](const gfx::Rect& one) {
++        return one.ManhattanDistanceToPoint(in_root);
++      });
++  gfx::Point origin = monitor.origin();
++  screen_position_client->ConvertPointToScreen(root, &origin);
++  return gfx::Rect(origin, monitor.size());
++}
++
+ }  // namespace
+ 
+ namespace views::corewm {
+@@ -168,9 +201,7 @@ gfx::Rect TooltipAura::GetTooltipBounds(const gfx::Size& tooltip_size,
+     return tooltip_rect;
+   }
+ 
+-  display::Screen* screen = display::Screen::Get();
+-  gfx::Rect display_bounds(
+-      screen->GetDisplayNearestPoint(anchor_point).bounds());
++  gfx::Rect display_bounds = FitBoundsAt(tooltip_window_, anchor_point);
+ 
+   // If tooltip is out of bounds on the x axis, we simply shift it
+   // horizontally by the offset variation.
+-- 
+2.43.0
+

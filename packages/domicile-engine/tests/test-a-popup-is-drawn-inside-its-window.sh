@@ -10,6 +10,8 @@
 # never drawn. The patches check `presents_every_window` in both places and,
 # when it is false, make the popup a child of its window, as ash does.
 #
+# A tooltip on the desk also fits on the monitor it opens on.
+#
 # Reads the patches, not a Chromium tree, so it runs in the shell group.
 set -u
 
@@ -79,6 +81,31 @@ case "$delegate" in
     echo "    params.context before presents_every_window, so a tooltip is a"
     echo "    top-level window with a software compositor, and on ozone/drm"
     echo "    that aborts the GPU process."
+    failed=$((failed + 1)) ;;
+esac
+
+# The host's root holds tooltips for every monitor of the desk, but its screen
+# coordinates are CRTC pixels. Fit by the display list, a tooltip on another
+# monitor opens far from the pointer, across a seam.
+tooltip="$(added_in "$PATCHES" 'tooltip_aura[.]cc$')"
+sets="$(grep -h kDomicileDeskMonitorsKey \
+  "$ROOT/packages/domicile-engine/src/chrome/browser/domicile/domicile_shell_windows.cc")"
+
+case "$tooltip" in
+  (*kDomicileDeskMonitorsKey*)
+    if [ -n "$sets" ]; then
+      echo '  ok    a tooltip fits on the desk monitor it opens on'
+    else
+      echo '  FAIL  a tooltip fits on the desk monitor it opens on'
+      echo "    domicile_shell_windows.cc never sets kDomicileDeskMonitorsKey,"
+      echo "    so tooltip_aura.cc always falls back to the display list."
+      failed=$((failed + 1))
+    fi ;;
+  (*)
+    echo '  FAIL  a tooltip fits on the desk monitor it opens on'
+    echo "    nothing the series adds to tooltip_aura.cc reads"
+    echo "    kDomicileDeskMonitorsKey, so a tooltip is fit to a display in CRTC"
+    echo "    pixels and lands on another monitor's part of the page."
     failed=$((failed + 1)) ;;
 esac
 
