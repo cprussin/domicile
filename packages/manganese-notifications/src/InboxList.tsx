@@ -46,7 +46,7 @@ const shownAs = (name: string, reading: InboxReading | undefined) => {
       return { figure: "Sign in", label: `Sign in to ${name}`, unread: 0 };
     case InboxReadingKind.Counted:
       return reading.total === 0
-        ? { figure: "Empty", label: `${name}: empty`, unread: 0 }
+        ? { detail: "Empty", label: `${name}: empty`, unread: 0 }
         : {
             detail: conversations(
               reading.total,
