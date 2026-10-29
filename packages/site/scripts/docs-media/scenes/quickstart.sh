@@ -1,5 +1,6 @@
-# The Domicile page's quickstart: the example shell running, then an edit to
-# its styles and `domicile load-shell`, with the steps in captions.
+# The Domicile page's quickstart: the example shell running nvim beside a
+# film, then an edit to its styles and `domicile load-shell`, with the steps in
+# captions.
 
 mkdir -p "$SCENE_TMP/my-shell"
 cp "$ROOT/examples/react-shell/shell.tsx" "$SCENE_TMP/my-shell/shell.tsx"
@@ -9,12 +10,8 @@ desktop "$SCENE_TMP/my-shell/shell.tsx"
 app foot --working-directory="$SCENE_TMP/my-shell" -o font="JetBrains Mono:size=12" \
   nvim -c 'set autoread' \
   -c 'call timer_start(250, {-> execute("checktime")}, {"repeat": -1})' shell.tsx
-# A copy, since btop writes its config back.
-mkdir -p "$SCENE_TMP/btop-config"
-cp -r "$ROOT/packages/site/scripts/docs-media/scenes/hero/btop" "$SCENE_TMP/btop-config/"
-XDG_CONFIG_HOME="$SCENE_TMP/btop-config" app foot \
-  -o font="JetBrains Mono:size=12" btop
-# Long enough for btop to draw its first graphs.
+movie
+# Long enough for the film to start.
 settle 6
 
 record_start quickstart

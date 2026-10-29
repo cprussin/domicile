@@ -1,8 +1,7 @@
-# The manganese tour's screenshot dialog, over a terminal and a browser.
+# The manganese tour's screenshot dialog, over a film and a browser.
 
 desktop @domicile-desktop/manganese
-app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
-  nvim packages/manganese-window-management/src/keyboard/commands.ts
+movie
 "$DOMICILE_BIN" open https://domicile-desktop.com/
 settle 8
 "$DOMICILE_BIN" send-shell layout toggle split

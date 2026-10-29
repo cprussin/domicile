@@ -1,9 +1,8 @@
-# The manganese tour's launcher: opened over a terminal and a browser, then
+# The manganese tour's launcher: opened over Blender and a browser, then
 # searched.
 
 desktop @domicile-desktop/manganese
-app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
-  nvim packages/manganese-window-management/src/keyboard/commands.ts
+blender_scene
 "$DOMICILE_BIN" open https://domicile-desktop.com/
 settle 8
 "$DOMICILE_BIN" send-shell layout toggle split

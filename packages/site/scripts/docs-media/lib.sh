@@ -11,6 +11,11 @@
 #   keys <wtype args...>  type into the desktop
 #   click <x> <y>         click the left button at a point on the output
 #   config <json>         the desktop's config, before `desktop`
+#   game [WxH]            SuperTuxKart, racing on its own
+#   movie                 Big Buck Bunny, playing in mpv
+#   blender_scene         Blender, playing an animation in its viewport
+#   photo                 GIMP, editing a photo
+#   document              LibreOffice Writer, editing a document
 #
 # See docs/media/README.md.
 
@@ -20,8 +25,9 @@
 # Tools the scenes use, fetched once so a scene's timing does not include a
 # download.
 TOOLS="$(nix build --no-link --print-out-paths \
-  nixpkgs#foot nixpkgs#neovim nixpkgs#btop nixpkgs#wtype nixpkgs#wl-clipboard nixpkgs#grim \
-  nixpkgs#libnotify nixpkgs#wf-recorder nixpkgs#ffmpeg nixpkgs#jetbrains-mono |
+  nixpkgs#foot nixpkgs#neovim nixpkgs#wtype nixpkgs#wl-clipboard nixpkgs#grim \
+  nixpkgs#libnotify nixpkgs#wf-recorder nixpkgs#ffmpeg nixpkgs#jetbrains-mono \
+  nixpkgs#supertuxkart nixpkgs#mpv nixpkgs#blender nixpkgs#gimp3 nixpkgs#libreoffice-fresh |
   sed 's#$#/bin#' | paste -sd:)"
 export PATH="$TOOLS:$PATH"
 
@@ -145,7 +151,7 @@ app() { # command...
     [ "$(grep -ac "app_appeared" "$log" || true)" -gt "$before" ] && return 0
     sleep 0.5
   done
-  echo "no window from $1. It said:" >&2
+  echo "no window from $*. It said:" >&2
   tail -20 "$SCENE_TMP/apps.log" >&2
   exit 1
 }
@@ -317,6 +323,81 @@ click() { # x, y
 config() { # json
   mkdir -p "$SCENE_TMP/config/domicile"
   echo "$1" >"$SCENE_TMP/config/domicile/domicile.json"
+}
+
+# The apps below are real desktop apps, run natively as `domicile` runs them:
+# Wayland only, since there is no Xwayland. Each gets the scene's made-up home,
+# so first-run state from whoever runs the scenes never shows.
+native() { # command...
+  app env -u DISPLAY \
+    HOME="$SCENE_TMP/home" \
+    XDG_CONFIG_HOME="$SCENE_TMP/config" \
+    XDG_DATA_HOME="$SCENE_TMP/home/.local/share" \
+    XDG_CACHE_HOME="$SCENE_TMP/cache" \
+    XDG_STATE_HOME="$SCENE_TMP/state" \
+    QT_QPA_PLATFORM=wayland SDL_VIDEODRIVER=wayland GDK_BACKEND=wayland \
+    "$@"
+}
+
+FIXTURES="$ROOT/packages/site/scripts/docs-media/fixtures"
+
+# SuperTuxKart, with every kart driven by the computer. `-s`, the window's size
+# where the scene's shell puts it, a manganese desktop's one window unless
+# given: it draws at that size until the shell first resizes it.
+game() { # [WxH]
+  native supertuxkart --no-start-screen --track=hacienda --numkarts=6 --laps=3 \
+    --profile-laps=3 -s "${1:-1900x1150}"
+}
+
+# Big Buck Bunny (Blender Foundation, CC BY 3.0), muted, from the bunny's first
+# scene, with mpv's controls showing. Fetched by `docs-media.sh`.
+movie() {
+  : "${BIG_BUCK_BUNNY:?docs-media.sh fetches Big Buck Bunny}"
+  native mpv --no-audio --loop-file=inf --start=72 --osc=yes \
+    --script-opts=osc-visibility=always --force-media-title="Big Buck Bunny" "$BIG_BUCK_BUNNY"
+}
+
+# Saves `fixtures/scene.py`'s scene, and preferences without the splash screen
+# in the desktop's config, so Blender opened from the launcher shows none too.
+blender_prepare() {
+  [ -f "$SCENE_TMP/scene.blend" ] && return 0
+  HOME="$SCENE_TMP/home" XDG_CONFIG_HOME="$SCENE_TMP/config" \
+    blender --background --python "$FIXTURES/blender/scene.py" -- "$SCENE_TMP/scene.blend" \
+    >>"$SCENE_TMP/apps.log" 2>&1
+}
+
+# Blender on that scene, its animation playing in the viewport.
+blender_scene() {
+  blender_prepare
+  native blender "$SCENE_TMP/scene.blend" --python "$FIXTURES/blender/play.py"
+}
+
+# The photo GIMP edits and the clipboard scene copies: "Colorful Cups" by
+# Dmitri Popov, from KDE's wallpapers (LGPL 3).
+PHOTO="$(nix build --no-link --print-out-paths nixpkgs#kdePackages.plasma-workspace-wallpapers)/share/wallpapers/ColorfulCups/contents/images/2560x1600.jpg"
+
+# GIMP on the photo. The config skips the welcome dialog, which shows when the
+# config was written by another version, and the color profile question.
+photo() {
+  local version
+  version="$(gimp --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+  mkdir -p "$SCENE_TMP/config/GIMP/${version%.*}"
+  cat >"$SCENE_TMP/config/GIMP/${version%.*}/gimprc" <<GIMP_EOF
+(config-version "$version")
+(show-welcome-dialog no)
+(color-profile-policy keep)
+(check-updates no)
+GIMP_EOF
+  cp "$PHOTO" "$SCENE_TMP/home/Pictures/cups.jpg"
+  native gimp --no-splash "$SCENE_TMP/home/Pictures/cups.jpg"
+}
+
+# LibreOffice Writer on `fixtures/trip.html`, made a document first.
+document() {
+  HOME="$SCENE_TMP/home" XDG_CONFIG_HOME="$SCENE_TMP/config" \
+    soffice --headless --convert-to odt --outdir "$SCENE_TMP/home/Documents" \
+    "$FIXTURES/trip.html" >>"$SCENE_TMP/apps.log" 2>&1
+  native soffice --norestore --nologo "$SCENE_TMP/home/Documents/trip.odt"
 }
 
 # Stops what the scene started. First prints the engine's fatal lines if it

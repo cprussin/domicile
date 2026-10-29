@@ -80,7 +80,7 @@ export const HeroMedia = () => (
       </div>
     </div>
     <Media
-      alt="nvim on the left; GitHub over btop on the right, each window a page element"
+      alt="SuperTuxKart racing on the left; GitHub over Big Buck Bunny on the right, each window a page element"
       name="hero"
     />
   </section>

@@ -1,8 +1,7 @@
-# The manganese tour's browser: a terminal beside a browser window.
+# The manganese tour's browser: a document beside a browser window.
 
 desktop @domicile-desktop/manganese
-app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
-  nvim packages/shell-manganese/src/Shell.tsx
+document
 "$DOMICILE_BIN" open https://github.com/cprussin/domicile
 # Long enough for the wallpaper and the page to load.
 settle 8

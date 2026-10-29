@@ -18,7 +18,9 @@ export const Hero = () => (
     }
     lede={
       <>
-        With Domicile, a shell is a JavaScript module. Native windows are{" "}
+        Games, video and every Linux app run natively, at full speed. Only the
+        desktop around them is web. With Domicile, a shell is a JavaScript
+        module. Native windows are{" "}
         <code className={codeStyles}>&lt;app&gt;</code> elements and web pages
         are <code className={codeStyles}>&lt;webview&gt;</code>s, side by side
         in the same DOM. So anything a web page can do, your desktop can do.
@@ -30,7 +32,7 @@ export const Hero = () => (
       href: "#platform",
       label: "Build a Wayland compositor with web technologies",
     }}
-    title="Your desktop is a web page."
+    title="Your desktop, built like a web page."
   >
     <SectionLinks />
   </PageHero>

@@ -48,12 +48,12 @@ const ASKS: readonly {
   },
 ];
 
-/** Things a desktop can do once it's a web page, each as an ask and its code. */
+/** Things a desktop can do once it's built with the web, each as an ask and its code. */
 export const Showcase = () => (
   <Section
     id="only"
     lede="Say it to your coding agent, or write it yourself. Either way, it's a few lines."
-    title="Things you can do when your desktop is a web page."
+    title="Things you can do when your desktop is built with the web."
   >
     <div className={gridStyles}>
       {ASKS.map(({ ask, code, language, note }) => (
