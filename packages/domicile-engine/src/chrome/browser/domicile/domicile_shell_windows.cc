@@ -34,6 +34,7 @@
 #include "content/public/browser/domicile_desk.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/domicile/desk_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -448,6 +449,10 @@ class ShellWindows : public display::DisplayObserver {
     // Send events outside the host window's bounds (other monitors) to the
     // page.
     aura::TargetDeskPage(window->GetRootWindow(), contents->GetNativeView());
+    // Fit the page's tooltips on the monitor each opens on (patch 0160).
+    window->GetRootWindow()->SetProperty(
+        aura::client::kDomicileDeskMonitorsKey,
+        MonitorsOnHost(desk->places, desk->geometry.host));
     content::SetDomicileDeskScreenInfos(
         contents,
         DeskScreenInfos(desk->geometry, desk->places,

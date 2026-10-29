@@ -66,6 +66,20 @@ gfx::Rect PopupBoundsOn(const gfx::Rect& popup,
   return popup + (page_on_display.origin() - page_on_host.origin());
 }
 
+std::vector<gfx::Rect> MonitorsOnHost(const std::vector<DeskPlace>& lit,
+                                      int64_t host) {
+  const auto on = std::ranges::find(lit, host, &DeskPlace::id);
+  if (on == lit.end()) {
+    return {};
+  }
+  std::vector<gfx::Rect> monitors;
+  monitors.reserve(lit.size());
+  for (const DeskPlace& place : lit) {
+    monitors.push_back(place.desk - on->desk.OffsetFromOrigin());
+  }
+  return monitors;
+}
+
 display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
                                      const std::vector<DeskPlace>& lit,
                                      const display::ScreenInfo& like) {
