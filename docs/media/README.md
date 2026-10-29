@@ -7,7 +7,7 @@ captured by a script, never by hand, so it can be retaken for each release.
   on a branch. It captures on `crux` and commits the results to that branch.
   A pull request that changes a scene does the same.
 - **Locally:** `packages/site/scripts/docs-media.sh [scene...]` on a machine with a GPU.
-  Without a DRM render node, terminal windows come out blank.
+  Without a DRM render node, app windows come out blank.
 
 ## Scenes
 
@@ -32,26 +32,36 @@ nested sway with these helpers (`packages/site/scripts/docs-media/lib.sh`):
 `domicile` restarts it, so the capture would go on with a fresh desktop. A
 scene whose engine exited prints the engine's fatal lines, however it ended.
 
-`foot`, `nvim`, `btop`, `wl-copy`, `grim`, `notify-send`, `ffmpeg` and JetBrains Mono are on `PATH` for every scene.
+`foot`, `nvim`, `wl-copy`, `grim`, `notify-send`, `ffmpeg` and JetBrains Mono are on `PATH` for every scene.
+
+Real desktop apps, run as `domicile` runs them (Wayland only, in the scene's own home), each started and waited for like `app`:
+
+| Helper | Starts |
+|---|---|
+| `game [WxH]` | SuperTuxKart, every kart driven by the computer. |
+| `movie` | Big Buck Bunny (Blender Foundation, CC BY 3.0) in mpv, muted. `docs-media.sh` fetches it. |
+| `blender_scene` | Blender on `fixtures/blender/scene.py`'s scene, its animation playing. |
+| `photo` | GIMP on a photo from KDE's wallpapers, which `$PHOTO` names. |
+| `document` | LibreOffice Writer on `fixtures/trip.html`. |
 
 ## Files
 
 | File | Scene | Shows |
 |---|---|---|
-| `hero.png`, `hero.webm`, `hero.mp4` | `hero` | The Domicile hero: nvim, a web page and btop in a three-pane shell. |
-| `manganese-hero.png`, `manganese-hero.webm`, `manganese-hero.mp4` | `manganese-hero` | The manganese hero, from an empty desktop: nvim in a terminal opened from the launcher, a web page opened beside it and Settings, then a notification. Captions name each key. |
-| `tour-tiling.png`, `tour-tiling.webm`, `tour-tiling.mp4` | `tour-tiling` | Three terminals tabbed, then split, then one floated. Captions name each key. |
-| `tour-browser.png` | `tour-browser` | nvim beside a browser window. |
-| `tour-launcher.png`, `tour-launcher.webm`, `tour-launcher.mp4` | `tour-launcher` | The launcher over a terminal and a browser, then "set" typed. |
-| `tour-clipboard.png` | `tour-clipboard` | The clipboard history with text and an image. |
-| `tour-screenshots.png` | `tour-screenshots` | The screenshot dialog. |
-| `tour-lock.png` | `tour-lock` | The lock screen. |
-| `tour-web-apps.png` | `tour-web-apps` | A site opened as an app, beside nvim. |
-| `tour-notifications.png`, `tour-notifications.webm`, `tour-notifications.mp4` | `tour-notifications` | Two toasts arriving, then the bell clicked to open the drawer. |
-| `tour-bar.png` | `tour-bar` | The bar from just left of the clock to the right edge, over a browser window. |
-| `tour-settings.png` | `tour-settings` | The Settings app beside nvim. |
+| `hero.png`, `hero.webm`, `hero.mp4` | `hero` | The Domicile hero: SuperTuxKart, a web page and Big Buck Bunny in a three-pane shell. |
+| `manganese-hero.png`, `manganese-hero.webm`, `manganese-hero.mp4` | `manganese-hero` | The manganese hero, from an empty desktop: Blender opened from the launcher, a web page opened beside it and Settings, then a notification. Captions name each key. |
+| `tour-tiling.png`, `tour-tiling.webm`, `tour-tiling.mp4` | `tour-tiling` | Blender, GIMP and a film tabbed, then split, then one floated. Captions name each key. |
+| `tour-browser.png` | `tour-browser` | LibreOffice beside a browser window. |
+| `tour-launcher.png`, `tour-launcher.webm`, `tour-launcher.mp4` | `tour-launcher` | The launcher over Blender and a browser, then "set" typed. |
+| `tour-clipboard.png` | `tour-clipboard` | The clipboard history with text and an image, over GIMP. |
+| `tour-screenshots.png` | `tour-screenshots` | The screenshot dialog, over a film and a browser. |
+| `tour-lock.png` | `tour-lock` | The lock screen, over a game. |
+| `tour-web-apps.png` | `tour-web-apps` | A site opened as an app, beside LibreOffice. |
+| `tour-notifications.png`, `tour-notifications.webm`, `tour-notifications.mp4` | `tour-notifications` | Two toasts arriving over a game, then the bell clicked to open the drawer. |
+| `tour-bar.png` | `tour-bar` | The bar from just left of the clock to the right edge, over a film and a browser window. |
+| `tour-settings.png` | `tour-settings` | The Settings app beside GIMP. |
 | `tour-extensions.png` | `tour-extensions` | uBlock Origin Lite's popup, open from the tray over a browser window. |
-| `tour-monitors.png`, `tour-monitors.webm`, `tour-monitors.mp4` | `tour-monitors` | Two monitors side by side, and nvim moving from the left one to the right one, beside a browser window. |
+| `tour-monitors.png`, `tour-monitors.webm`, `tour-monitors.mp4` | `tour-monitors` | Two monitors side by side, and SuperTuxKart moving from the left one to the right one mid-race, beside a browser window. |
 | `configure-settings.png` | `configure-settings` | The Settings app's Shell page, with the clock set to 12-hour. |
-| `quickstart.png`, `quickstart.webm`, `quickstart.mp4` | `quickstart` | The Domicile page's quickstart: the example shell beside btop, then a wider gap from an edit and `domicile load-shell`. Captions name each step. |
-| `shell-quickstart.png` | `shell-quickstart` | The shell quickstart's example shell: nvim editing it, beside btop. |
+| `quickstart.png`, `quickstart.webm`, `quickstart.mp4` | `quickstart` | The Domicile page's quickstart: nvim and the example shell, nvim beside a film, then a wider gap from an edit and `domicile load-shell`. Captions name each step. |
+| `shell-quickstart.png` | `shell-quickstart` | The shell quickstart's example shell: nvim editing it, beside a film. |

@@ -1,14 +1,11 @@
-# The Domicile landing page's hero: `hero/shell.js` with nvim on the left, and
-# GitHub over btop on the right.
+# The Domicile landing page's hero: `hero/shell.js` with SuperTuxKart racing on
+# the left, and GitHub over Big Buck Bunny on the right.
 
 desktop "$SCENE_DIR/shell.js"
-app foot -o font="JetBrains Mono:size=12" nvim "$SCENE_DIR/shell.js"
-# Only the CPU box: the others list crux's own processes, disks and network.
-# A copy, since btop writes its config back.
-mkdir -p "$SCENE_TMP/btop-config"
-cp -r "$SCENE_DIR/btop" "$SCENE_TMP/btop-config/"
-XDG_CONFIG_HOME="$SCENE_TMP/btop-config" app foot -o font="JetBrains Mono:size=12" btop
-# Long enough for the web page to load and btop to draw its first graphs.
-settle 8
+# The left pane: half the output, less the gaps.
+game 945x1180
+movie
+# Long enough for the race to load and start, and the web page to load.
+settle 12
 shot hero
 record hero 8

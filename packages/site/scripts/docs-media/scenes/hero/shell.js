@@ -1,5 +1,5 @@
-// The Domicile landing page's hero: a terminal on the left, and a web page over
-// a second terminal on the right.
+// The Domicile landing page's hero: a game on the left, and a web page over a
+// film on the right.
 const css = `
 html, body { background: #141820; }
 main { display: flex; gap: 10px; height: 100vh; padding: 10px; box-sizing: border-box; }

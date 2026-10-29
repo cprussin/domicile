@@ -34,6 +34,15 @@ done
 DOMICILE_BIN="$(nix build --no-link --print-out-paths "$ROOT#domicile")/bin/domicile"
 export DOMICILE_BIN
 
+# The film `movie` plays (lib.sh): Big Buck Bunny, Blender Foundation, CC BY 3.0,
+# from the Internet Archive. download.blender.org answers Nix's fetcher with a
+# 403.
+BIG_BUCK_BUNNY="$(nix eval --impure --raw --expr 'builtins.fetchurl {
+  url = "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4";
+}')"
+echo "Big Buck Bunny: $(nix hash file --type sha256 "$BIG_BUCK_BUNNY")"
+export BIG_BUCK_BUNNY
+
 # Compresses the scenes' recordings, below, and draws their captions.
 FFMPEG="${FFMPEG:-$(nix build --no-link --print-out-paths 'nixpkgs#ffmpeg^bin')/bin/ffmpeg}"
 CAPTION_FONT="$(nix build --no-link --print-out-paths nixpkgs#inter)/share/fonts/truetype/InterVariable.ttf"

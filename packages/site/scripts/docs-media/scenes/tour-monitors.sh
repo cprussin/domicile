@@ -1,5 +1,5 @@
 # The manganese tour's monitors: two side by side, and a window moving from
-# one to the other.
+# one to the other: SuperTuxKart, mid-race.
 
 config '{
   "output": {
@@ -10,9 +10,10 @@ config '{
   }
 }'
 desktop @domicile-desktop/manganese
-app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
-  nvim packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md
 "$DOMICILE_BIN" open https://domicile-desktop.com/
+settle 4
+# Last, so it has focus and is the window that moves. Half the left screen.
+game 470x1150
 settle 8
 KEYS_SETTLE=0.2
 record_start tour-monitors

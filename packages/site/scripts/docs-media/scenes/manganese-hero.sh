@@ -1,13 +1,13 @@
 # The manganese page's hero, from an empty desktop, with each key in a
-# caption: nvim in a terminal from the launcher, a web page from
-# the launcher beside it, then Settings, and a notification.
+# caption: Blender from the launcher, a web page from the launcher beside it,
+# then Settings, and a notification.
 
 desktop @domicile-desktop/manganese
-# The terminal the launcher opens runs nvim on a shell: keys typed with wtype
-# reach a native window through the desktop's keymap, not wtype's, and come
-# out garbled.
-sed -i "s|^shell=.*|shell=nvim $ROOT/examples/react-shell/shell.tsx|" \
-  "$SCENE_TMP/config/foot/foot.ini"
+# Blender as the launcher lists it, and its preferences without the splash
+# screen.
+ln -sf "$(dirname "$(command -v blender)")/../share/applications/blender.desktop" \
+  "$SCENE_TMP/home/.local/share/applications/blender.desktop"
+blender_prepare
 # Long enough for the wallpaper to load.
 settle 6
 KEYS_SETTLE=0.2
@@ -22,10 +22,10 @@ settle 0.8
 caption "Meta+Space opens the launcher"
 "$DOMICILE_BIN" send-shell launcher
 settle 0.4
-keys -d 90 foot
+keys -d 90 blender
 settle 0.3
 keys -k Return
-settle 1.5
+settle 3
 caption "Meta+Space, then a web address"
 "$DOMICILE_BIN" send-shell launcher
 settle 0.4
@@ -44,6 +44,6 @@ settle 0.3
 keys -k Return
 settle 2.5
 shot manganese-hero
-notify-send -a foot "Build finished" "cargo build took 4m 12s"
+notify-send -a Blender "Render finished" "All 240 frames are saved"
 settle 2.5
 record_end

@@ -13,13 +13,13 @@ const FEATURES: readonly {
   {
     body: "Split, tab, stack, float and the scratchpad, with Sway's layout.",
     media: "tour-tiling",
-    shows: "Three terminals tabbed, then split, then one floated",
+    shows: "Blender, GIMP and a film tabbed, then split, then one floated",
     title: "Tiling, Sway-style",
   },
   {
-    body: "Web pages are windows, under an address bar, tiled next to your terminal. Private windows too.",
+    body: "Web pages are windows, under an address bar, tiled next to your apps. Private windows too.",
     media: "tour-browser",
-    shows: "A terminal beside a browser window with the address bar focused",
+    shows: "LibreOffice beside a browser window with the address bar focused",
     title: "A browser, built in",
   },
   {
@@ -37,7 +37,7 @@ const FEATURES: readonly {
   {
     body: "Any site can be an app window without an address bar, and without Electron.",
     media: "tour-web-apps",
-    shows: "A web app window tiled beside a terminal",
+    shows: "A web app window tiled beside LibreOffice",
     title: "Web apps",
   },
   {
@@ -62,7 +62,7 @@ const FEATURES: readonly {
   {
     body: "Press Print, pick an area, then save it or copy it.",
     media: "tour-screenshots",
-    shows: "The screenshot dialog open over a terminal and a browser",
+    shows: "The screenshot dialog open over a film and a browser",
     title: "Screenshots",
   },
   {
@@ -74,13 +74,13 @@ const FEATURES: readonly {
   {
     body: "Windows move across the edge from one screen to the next.",
     media: "tour-monitors",
-    shows: "A window moving from one screen to the other",
+    shows: "A racing game moving from one screen to the other, still racing",
     title: "Several monitors",
   },
   {
     body: "Apps for displays, theme and shell options, and for your browsing history.",
     media: "tour-settings",
-    shows: "The Settings app beside a terminal",
+    shows: "The Settings app beside GIMP",
     title: "Settings and History",
   },
 ];

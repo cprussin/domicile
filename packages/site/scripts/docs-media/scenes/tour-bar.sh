@@ -1,9 +1,8 @@
 # The manganese tour's bar, up close: the clock and the status icons at the
-# right end of the desktop's top edge, over a browser window.
+# right end of the desktop's top edge, over a film beside a browser window.
 
 desktop @domicile-desktop/manganese
-app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
-  nvim packages/manganese-bar/README.md
+movie
 settle 2
 "$DOMICILE_BIN" open https://domicile-desktop.com/
 settle 4
