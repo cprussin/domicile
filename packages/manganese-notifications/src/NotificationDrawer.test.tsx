@@ -71,43 +71,76 @@ const Bell = ({ handle }: { handle: DrawerProps["handle"] }) => (
 const drawer = (
   items: DrawerProps["items"],
   asked: Asked = [],
-  { handle = createHandle(), ...more }: Partial<DrawerProps> = {},
-) =>
-  render(
-    <>
-      <Bell handle={handle} />
-      <NotificationDrawer
-        doNotDisturb={false}
-        handle={handle}
-        items={items}
-        now={0}
-        onAction={(id, key) => {
-          asked.push(["action", id, key]);
-        }}
-        onBack={() => {
-          asked.push(["back"]);
-        }}
-        onClose={() => {
-          asked.push(["close"]);
-        }}
-        onDismiss={(ids) => {
-          asked.push(["dismiss", ids]);
-        }}
-        onDoNotDisturb={(on) => {
-          asked.push(["do not disturb", on]);
-        }}
-        onOpen={(screen) => {
-          asked.push(["open", screen]);
-        }}
-        onReply={(id, text) => {
-          asked.push(["reply", id, text]);
-        }}
-        open
-        screen="left"
-        {...more}
-      />
-    </>,
-  );
+  more: Partial<DrawerProps> = {},
+) => {
+  const handle = more.handle ?? createHandle();
+  const view = render(element(items, asked, { ...more, handle }));
+  return {
+    /** Draws it again with `items`, as when some are cleared. */
+    update: (
+      next: DrawerProps["items"],
+      changed: Partial<DrawerProps> = {},
+    ) => {
+      view.rerender(element(next, asked, { ...more, ...changed, handle }));
+    },
+  };
+};
+
+const element = (
+  items: DrawerProps["items"],
+  asked: Asked,
+  { handle = createHandle(), ...more }: Partial<DrawerProps>,
+) => (
+  <>
+    <Bell handle={handle} />
+    <NotificationDrawer
+      doNotDisturb={false}
+      handle={handle}
+      items={items}
+      now={0}
+      onAction={(id, key) => {
+        asked.push(["action", id, key]);
+      }}
+      onBack={() => {
+        asked.push(["back"]);
+      }}
+      onClose={() => {
+        asked.push(["close"]);
+      }}
+      onDismiss={(ids) => {
+        asked.push(["dismiss", ids]);
+      }}
+      onDoNotDisturb={(on) => {
+        asked.push(["do not disturb", on]);
+      }}
+      onOpen={(screen) => {
+        asked.push(["open", screen]);
+      }}
+      onReply={(id, text) => {
+        asked.push(["reply", id, text]);
+      }}
+      open
+      screen="left"
+      {...more}
+    />
+  </>
+);
+
+/** The rows still sliding out of the list. */
+const leaving = () => [...document.querySelectorAll("li[data-leaving]")];
+
+/** Ends the slide out of every row sliding out. */
+const finishLeaving = () => {
+  for (const row of leaving()) {
+    // happy-dom's `TransitionEvent` drops `propertyName`.
+    fireEvent(
+      row,
+      Object.assign(new Event("transitionend", { bubbles: true }), {
+        propertyName: "grid-template-rows",
+      }),
+    );
+  }
+};
 
 describe("NotificationDrawer", () => {
   it("opens under the bell pressed, and says on which screen", () => {
@@ -268,5 +301,64 @@ describe("NotificationDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
     expect(asked.at(-1)).toEqual(["back"]);
+  });
+
+  describe("clearing", () => {
+    it("slides a cleared notification out before the rest close up", () => {
+      const view = drawer([
+        notification({ id: 2, summary: "Newer" }),
+        notification({ id: 1, summary: "Older" }),
+      ]);
+
+      view.update([notification({ id: 1, summary: "Older" })]);
+
+      expect(leaving().map((row) => row.textContent)).toEqual([
+        expect.stringContaining("Newer"),
+      ]);
+      expect(screen.getAllByRole("listitem")).toHaveLength(1);
+      finishLeaving();
+      expect(leaving()).toEqual([]);
+      expect(screen.queryByText("Newer")).not.toBeInTheDocument();
+    });
+
+    it("staggers the notifications cleared together, top to bottom", () => {
+      const view = drawer([
+        notification({ id: 2, summary: "Newer" }),
+        notification({ id: 1, summary: "Older" }),
+      ]);
+
+      view.update([]);
+
+      expect(
+        leaving().map((row) =>
+          (row as HTMLElement).style.getPropertyValue("--leave-order"),
+        ),
+      ).toEqual(["0", "1"]);
+    });
+
+    it("says it is caught up once the last has slid out", () => {
+      const view = drawer([notification({ id: 1 })]);
+
+      view.update([]);
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      finishLeaving();
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "You're all caught up",
+      );
+    });
+
+    it("drops a notification cleared while it is closed at once", () => {
+      const view = drawer(
+        [notification({ id: 2, summary: "Newer" }), notification({ id: 1 })],
+        [],
+        { inboxes: inboxes(), open: false },
+      );
+
+      view.update([notification({ id: 1 })]);
+
+      expect(leaving()).toEqual([]);
+      expect(screen.queryByText("Newer")).not.toBeInTheDocument();
+    });
   });
 });
