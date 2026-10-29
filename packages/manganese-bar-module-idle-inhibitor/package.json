@@ -6,10 +6,11 @@
     "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "@pandacss/dev": "catalog:",
+    "@phosphor-icons/react": "catalog:",
     "react": "catalog:",
     "zod": "catalog:"
   },
-  "description": "A manganese bar item: a toggle that keeps the screens from blanking.",
+  "description": "A manganese bar item: a toggle that keeps the screens from blanking, and a pill naming what keeps them on.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
@@ -29,6 +30,7 @@
   "exports": {
     ".": "./src/bar-item.tsx",
     "./desk-idle-inhibitor": "./src/desk-idle-inhibitor.ts",
+    "./kept-awake": "./src/kept-awake.tsx",
     "./portal-inhibit": "./src/portal-inhibit.ts",
     "./quick-settings": "./src/quick-settings.tsx"
   },

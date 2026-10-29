@@ -10,10 +10,7 @@ import {
   BrightnessLevel,
   NightLight,
 } from "@domicile-desktop/manganese-bar-module-brightness/quick-settings";
-import {
-  KeepAwake,
-  KeepAwakeIndicator,
-} from "@domicile-desktop/manganese-bar-module-idle-inhibitor/quick-settings";
+import { KeepAwake } from "@domicile-desktop/manganese-bar-module-idle-inhibitor/quick-settings";
 import {
   NetworkCard,
   NetworkDetails,
@@ -41,7 +38,6 @@ export const DESK_PARTS: QuickSettingsParts = {
     const { locked } = useBar();
     return (
       <>
-        {!locked && <KeepAwakeIndicator />}
         {!locked && <NetworkIndicator />}
         <BluetoothIndicator />
         <SoundIndicator />

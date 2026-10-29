@@ -27,6 +27,7 @@ package's default export path:
 | `Battery` | `@domicile-desktop/manganese-bar-module-battery` |
 | `Notifications` | `@domicile-desktop/manganese-bar-module-notifications` |
 | `Sharing` | `@domicile-desktop/manganese-bar-module-sharing` |
+| `KeptAwake` | `@domicile-desktop/manganese-bar-module-idle-inhibitor/kept-awake` |
 | `Cast` | `@domicile-desktop/manganese-bar-module-cast` |
 
 Items no default bar has:
@@ -134,8 +135,6 @@ One item for the computer's settings: the hardware items' icons in one
 button, and their controls in one panel, each labeled in words.
 
 - **The button** holds, left to right:
-  - an eye, while the screens are kept on: on a lit circle while this desktop
-    keeps them on;
   - the network icon, as the network item draws it;
   - the Bluetooth icon, only while a device is connected, or in `warning`
     when BlueZ fails;
@@ -374,6 +373,16 @@ export const Shell = runManganese({
 - While the bar has this item, the portal dialogs' indicator leaves screen
   casts out, so each shows once. Without it, the indicator lists them.
 - See [PORTALS.md](../../../docs/PORTALS.md).
+
+## Keep awake pill
+
+- Shown while anything keeps the screens on: a pill with an eye saying who
+  ("Kept awake by Firefox", "Kept awake by 2 apps"), or "Kept awake" when
+  only quick settings' Keep awake is on.
+- An app is named once, however many holds it takes.
+- Click lists each app, and **You** with a **Turn off** button while quick
+  settings' Keep awake is on.
+- See [IDLE.md](../../../docs/IDLE.md#what-holds-the-desktop-awake).
 
 ## Gmail
 

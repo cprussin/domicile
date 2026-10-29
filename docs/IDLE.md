@@ -139,8 +139,8 @@ handle to let go. Manganese's idle inhibitor bar item does this.
   - A screen saver hold is found by the application name it passed, and listed
     only while it holds.
   - A desktop with no timeout lists none.
-- Manganese's eye opens while anything holds, and names the holders in its
-  tooltip.
+- Manganese's keep awake pill shows while anything holds, and names the
+  holders.
 - Each change is logged at info, `what holds this desktop awake changed`.
 
 ### Finding what keeps a desktop awake
