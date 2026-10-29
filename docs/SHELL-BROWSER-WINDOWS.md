@@ -206,6 +206,7 @@ stale state.
 | `findMatches`, `findActiveMatch` | `domicile-find-change` | Find-in-page results |
 | `contentWidth`, `contentHeight` | `domicile-content-size-change` | The size an `extensionpopup` view's page sized itself to |
 | `pageFullscreen` | `domicile-page-fullscreen-change` | Whether the page is fullscreen; see [Fullscreen](#fullscreen) |
+| `wakeLock` | `domicile-wake-lock-change` | Whether the page keeps the screens on: its own `navigator.wakeLock`, or a video playing. Manganese's keep awake pill names the site |
 | `renderProcessGone`, `renderProcessExitCode` | `domicile-render-process-change` | Why the page's renderer went away, or `""`; see [Crashed pages](#crashed-pages) |
 
 <!-- tab: React -->

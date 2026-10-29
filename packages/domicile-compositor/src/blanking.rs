@@ -25,7 +25,7 @@ use crate::client_requests::ClientRequest;
 use crate::held_frames::HeldFrames;
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::portals::SHELL;
-use crate::screen_saver::{self, Change, Hold};
+use crate::screen_saver::{self, Change, Hold, BROWSER};
 use crate::{CalloopData, DomicileCompositor};
 
 /// Routes `zwp_idle_inhibitor_v1` requests to the idle clock.
@@ -282,7 +282,8 @@ impl DomicileCompositor {
     /// The applications holding the desktop awake through the portal or the
     /// screen saver, one name per hold. A screen saver hold from a process
     /// with windows counts only while one is shown; see
-    /// [`screen_saver::still_holds`].
+    /// [`screen_saver::still_holds`]. One from the engine's browser process is
+    /// [`BROWSER`].
     fn applications_holding(&self) -> Vec<String> {
         let windows: Vec<(Option<u32>, bool)> = if self.held_by_screen_saver.is_empty() {
             Vec::new()
@@ -299,6 +300,7 @@ impl DomicileCompositor {
                 })
                 .collect()
         };
+        let engine = self.engine_process.and_then(|pid| u32::try_from(pid).ok());
         self.held_by_portal_apps
             .iter()
             .cloned()
@@ -306,7 +308,13 @@ impl DomicileCompositor {
                 self.held_by_screen_saver
                     .iter()
                     .filter(|hold| screen_saver::still_holds(hold.pid, &windows))
-                    .map(|hold| hold.app.clone()),
+                    .map(|hold| {
+                        if hold.pid.is_some() && hold.pid == engine {
+                            BROWSER.to_string()
+                        } else {
+                            hold.app.clone()
+                        }
+                    }),
             )
             .collect()
     }
@@ -367,7 +375,8 @@ impl DomicileCompositor {
     /// knows it (see `domicile_host::app_names`): a Wayland inhibitor by its
     /// window's app id, the portal's and screen saver's by the application
     /// holding each. A shell page's own portal hold stays
-    /// [`SHELL`], for the shell to tell apart.
+    /// [`SHELL`], and a browser window's page's [`BROWSER`], for the shell to
+    /// tell apart.
     pub fn tell_the_shells_what_holds_the_desktop_awake(&mut self) {
         let on_the_desktop = self.surfaces_on_the_desktop();
         // Without a timeout there is nothing to hold off.
@@ -382,7 +391,7 @@ impl DomicileCompositor {
         let holders: Vec<String> = held
             .iter()
             .map(|holder| {
-                if holder == SHELL {
+                if holder == SHELL || holder == BROWSER {
                     holder.clone()
                 } else {
                     self.app_names.name(holder)

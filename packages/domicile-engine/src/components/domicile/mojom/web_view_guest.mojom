@@ -507,6 +507,11 @@ interface WebViewGuestClient {
   // fills the screen. Sent only when it changes; a fresh guest sends nothing.
   PageFullscreenChanged(bool fullscreen);
 
+  // The page turned on its first screen wake lock (`navigator.wakeLock`, a
+  // playing video) or turned off its last. Sent only when it changes; a fresh
+  // guest sends nothing.
+  WakeLockChanged(bool held);
+
   // The page's site's permission settings, one per WebViewPermission. Empty
   // for a page that is not http, https or an extension's, which has none.
   //

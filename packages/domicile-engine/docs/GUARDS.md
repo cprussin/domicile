@@ -114,6 +114,7 @@ Headless.
 | `guard-webview-print.sh` | a browser window's `print()`, then its page's own `window.print()`, each start and finish a print through the system dialog, with no Print Preview |
 | `guard-webview-beforeunload.sh` | `closeBrowserWindow` on a page whose `beforeunload` asks to stay asks the shell as a `beforeunload` dialog; Cancel keeps the window and Leave closes it |
 | `guard-webview-fullscreen.sh` | a page enters fullscreen from its own button, the shell hears it as `pageFullscreen`, and Escape (typed on a swapped Caps Lock) and `exitPageFullscreen()` each take it out |
+| `guard-webview-wake-lock.sh` | a page's `navigator.wakeLock` turns the shell's `wakeLock` on, and its release turns it off (patch 0158) |
 | `guard-webview-context-menu.sh` | a right click fires `domicile-context-menu` with the link and image under it; its `inspect` opens DevTools in a browser window (patch 0092); a right click in DevTools draws its HTML menu; closing the inspected window closes DevTools' too, and the engine survives it |
 | `guard-webview-new-window.sh` | a `target="_blank"` form opens a browser window, the shell's `<webview window>` shows it, and its page gets the form's POST |
 | `guard-webview-window-open.sh` | a page's `window.open()` returns a handle, the window is listed, keeps its opener and name, and posts back to its opener (patch 0115) |

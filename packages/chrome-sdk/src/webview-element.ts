@@ -222,6 +222,12 @@ export const WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT =
   "domicile-page-fullscreen-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.wakeLock} changes. Carries no payload.
+ * Bubbles.
+ */
+export const WEBVIEW_WAKE_LOCK_CHANGE_EVENT = "domicile-wake-lock-change";
+
+/**
  * Fired when {@link HTMLWebViewElement.renderProcessGone} or
  * {@link HTMLWebViewElement.renderProcessExitCode} changes: the page's
  * renderer went away, or a new one replaced it. Carries no payload. Bubbles.
@@ -591,6 +597,12 @@ declare global {
     readonly pageFullscreen: boolean;
     /** Take the page out of fullscreen, as Escape does. */
     exitPageFullscreen(): void;
+    /**
+     * Whether the page keeps the screens on with a screen wake lock: its own
+     * `navigator.wakeLock`, or a video playing. Changes fire
+     * {@link WEBVIEW_WAKE_LOCK_CHANGE_EVENT}.
+     */
+    readonly wakeLock: boolean;
     /**
      * Why the page's renderer went away, or `""` while it runs. The view then
      * draws nothing, so the shell can show its own message over or under it.

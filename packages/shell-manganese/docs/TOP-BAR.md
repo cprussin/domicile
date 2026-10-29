@@ -377,11 +377,13 @@ export const Shell = runManganese({
 ## Keep awake pill
 
 - Shown while anything keeps the screens on: a pill with an eye saying who
-  ("Kept awake by Firefox", "Kept awake by 2 apps"), or "Kept awake" when
-  only quick settings' Keep awake is on.
-- An app is named once, however many holds it takes.
-- Click lists each app, and **You** with a **Turn off** button while quick
-  settings' Keep awake is on.
+  ("Kept awake by Firefox", "Kept awake by youtube.com", "Kept awake by 1 app
+  and 1 website"), or "Kept awake" when only quick settings' Keep awake is on.
+- An app or website is named once, however many holds it takes.
+- A browser window's page is named by its site, from `<webview>`'s
+  `wakeLock` ([SHELL-BROWSER-WINDOWS.md](../../../docs/SHELL-BROWSER-WINDOWS.md)).
+- Click lists each app, each website with its icon, and **You** with a
+  **Turn off** button while quick settings' Keep awake is on.
 - See [IDLE.md](../../../docs/IDLE.md#what-holds-the-desktop-awake).
 
 ## Gmail

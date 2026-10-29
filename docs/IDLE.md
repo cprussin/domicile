@@ -137,10 +137,12 @@ handle to let go. Manganese's idle inhibitor bar item does this.
     application, its process name (`/proc/<pid>/comm`). A shell page's own
     hold is `domicile`, unnamed, so the shell can leave it out.
   - A screen saver hold is found by the application name it passed, and listed
-    only while it holds.
+    only while it holds. One from the engine's own browser process, a page in
+    a browser window, is `domicile-browser`, unnamed: the shell names the site
+    from `<webview>`'s `wakeLock`.
   - A desktop with no timeout lists none.
 - Manganese's keep awake pill shows while anything holds, and names the
-  holders.
+  holders and the websites.
 - Each change is logged at info, `what holds this desktop awake changed`.
 
 ### Finding what keeps a desktop awake

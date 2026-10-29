@@ -57,6 +57,63 @@ describe(KeptAwake, () => {
     expect(list).toHaveTextContent("Zoom");
   });
 
+  it("names the website a browser window keeps the screens on for", async () => {
+    render(
+      <KeptAwake
+        holders={["domicile-browser"]}
+        inhibitor={unanswered()}
+        pages={[
+          { icon: "https://www.youtube.com/favicon.ico", site: "youtube.com" },
+        ]}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Kept awake by youtube.com" }),
+    );
+
+    const list = await screen.findByRole("list", {
+      name: "Keeping your screens on",
+    });
+    expect(list).toHaveTextContent("youtube.com");
+    expect(list.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://www.youtube.com/favicon.ico",
+    );
+  });
+
+  it("counts apps and websites apart", () => {
+    render(
+      <KeptAwake
+        holders={["Zoom", "domicile-browser"]}
+        inhibitor={unanswered()}
+        pages={[{ icon: undefined, site: "youtube.com" }]}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Kept awake by 1 app and 1 website" }),
+    ).toBeInTheDocument();
+  });
+
+  it("calls a browser window's hold with no page reporting it a web page", () => {
+    render(
+      <KeptAwake holders={["domicile-browser"]} inhibitor={unanswered()} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Kept awake by a web page" }),
+    ).toBeInTheDocument();
+  });
+
+  it("names no website unless a browser window holds the desk awake", () => {
+    const { container } = render(
+      <KeptAwake
+        inhibitor={unanswered()}
+        pages={[{ icon: undefined, site: "youtube.com" }]}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("lets you turn off your own hold", async () => {
     render(<KeptAwake inhibitor={await held()} />);
 

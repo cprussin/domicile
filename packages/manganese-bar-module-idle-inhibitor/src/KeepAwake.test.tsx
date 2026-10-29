@@ -29,15 +29,19 @@ describe(KeepAwakeTile, () => {
     expect(tile).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("names what else keeps the screens on", async () => {
+  it("names what else keeps the screens on, a website by its site", async () => {
     render(
-      <KeepAwakeTile holders={["Slack", "mpv"]} inhibitor={unanswered()} />,
+      <KeepAwakeTile
+        holders={["Slack", "mpv", "domicile-browser"]}
+        inhibitor={unanswered()}
+        pages={[{ icon: undefined, site: "youtube.com" }]}
+      />,
     );
 
     await userEvent.hover(screen.getByRole("button", { name: "Keep awake" }));
 
     expect(
       await screen.findByRole("tooltip", {}, { timeout: 2000 }),
-    ).toHaveTextContent("Kept on by Slack and mpv");
+    ).toHaveTextContent("Kept on by Slack, mpv, and youtube.com");
   });
 });
