@@ -172,10 +172,12 @@ fn a_pressed_notifications_app_is_heard_asking_with_its_own_token() {
         &bus.address,
     );
     let chat_id = appeared(&mut chrome);
-    let id = notified(&mut chrome);
     let _other = compositor.client("other");
     let other_id = appeared(&mut chrome);
+    // `chat` notifies once it has the keyboard, so having it does not read
+    // the notification.
     focus(&mut chrome, &chat_id);
+    let id = notified(&mut chrome);
 
     chrome
         .say(&ChromeMessage::InvokeNotificationAction {

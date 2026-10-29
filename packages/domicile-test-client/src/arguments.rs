@@ -39,8 +39,11 @@ pub struct Arguments {
     /// checks need a real client to hold the data.
     pub copy: Option<String>,
 
-    /// A summary to send `org.freedesktop.Notifications` once connected, as
-    /// a chat app does, with a press as its only action.
+    /// A summary to send `org.freedesktop.Notifications` once the keyboard
+    /// first enters, as a chat app does, with a press as its only action.
+    ///
+    /// After the enter, so the window getting the keyboard does not read it
+    /// (the compositor clears an app's notifications then).
     ///
     /// The bus and the Wayland socket share the client's process, as in
     /// Electron, so a press can be traced back to the window.

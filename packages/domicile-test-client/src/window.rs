@@ -67,9 +67,6 @@ pub enum ClientError {
 
     #[error("could not make a buffer to draw into: {0}")]
     NoBuffer(String),
-
-    #[error("could not notify: {0}")]
-    NotNotified(#[from] zbus::Error),
 }
 
 /// The initial window size, in surface pixels.
@@ -243,11 +240,6 @@ pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
         .map_err(|err| ClientError::Lost(err.to_string()))?;
 
     client.open(&handle)?;
-    let _notified = asked
-        .notify
-        .as_deref()
-        .map(crate::notification::notify)
-        .transpose()?;
     loop {
         queue
             .blocking_dispatch(&mut client)
@@ -331,6 +323,11 @@ struct Client {
     copy_primary: Option<String>,
     /// See [`Arguments::paste`].
     paste: bool,
+    /// See [`Arguments::notify`]. Taken when sent.
+    notify: Option<String>,
+    /// The bus `notify` was sent on, which must outlive the notification;
+    /// see [`crate::notification::notify`].
+    notified_on: Option<zbus::blocking::Connection>,
     /// The clipboard and primary selection devices. `None` unless a copy or
     /// paste was requested.
     selections: Option<Selections>,
@@ -564,6 +561,8 @@ impl Client {
             copy: asked.copy.clone(),
             copy_primary: asked.copy_primary.clone(),
             paste: asked.paste,
+            notify: asked.notify.clone(),
+            notified_on: None,
             selections: None,
             asked: false,
             configured_size: None,
@@ -2512,6 +2511,12 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                 crate::say!(keyboard.id(), "enter({})", surface.id());
                 client.entered_at = Some(serial);
                 client.copy_what_was_asked_for(connection, handle);
+                if let Some(summary) = client.notify.take() {
+                    client.notified_on = Some(
+                        crate::notification::notify(&summary)
+                            .expect("the session bus takes a notification"),
+                    );
+                }
                 ask_for_focus_or_stop(client, handle, AskForFocus::WhenEntered, Some(serial));
             }
             wl_keyboard::Event::Leave { .. } => {
