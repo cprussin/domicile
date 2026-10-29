@@ -1,3 +1,4 @@
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
@@ -5,12 +6,14 @@ import { IconButton as IconButtonComponent, SIZES } from "./IconButton";
 
 const meta = {
   args: {
+    busy: false,
     children: <CaretRightIcon aria-hidden size={14} weight="bold" />,
     disabled: false,
     label: "Sound details",
     size: "md",
   },
   argTypes: {
+    busy: { control: "boolean", table: { category: "State" } },
     children: { control: false, table: { category: "Contents" } },
     disabled: { control: "boolean", table: { category: "State" } },
     label: { control: "text", table: { category: "Contents" } },
@@ -38,4 +41,12 @@ export const IconButton: StoryObj<typeof IconButtonComponent> = {};
 
 export const Small: StoryObj<typeof IconButtonComponent> = {
   args: { size: "sm" },
+};
+
+export const Busy: StoryObj<typeof IconButtonComponent> = {
+  args: {
+    busy: true,
+    children: <ArrowClockwiseIcon aria-hidden size={14} weight="bold" />,
+    label: "Scan",
+  },
 };

@@ -26,7 +26,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `CountBadge` | Unread count in an accent pill, pinned to the corner of its positioned parent, or `inline` beside text. Shows "9+" past nine. |
 | `DetailList` | Terms and values in two columns, such as a connection's addresses. Long values wrap in their column. |
 | `Drilldown` | View that slides a second `Panel` in from the side, with a back button. |
-| `EmptyState` | A panel or section with nothing to show: an icon in a soft circle, what is missing, and a hint on what would fill it. |
+| `EmptyState` | A panel or section with nothing to show: an icon in a soft circle, what is missing, a hint on what would fill it, and a button that would if there is one. |
 | `Field` | Label, control and validation message. |
 | `FilePicker` | Keyboard-first file picker over its positioned parent. |
 | `IconButton` | Round, quiet button that shows only an icon: a back arrow, a details arrow, a mute button. Drawn in `currentcolor`. |
@@ -35,7 +35,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Kbd` | Keyboard key cap. |
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
 | `ListRow` | Row of a panel's `List`: icon, label over a detail, and something at the end. One button, or a `filled` tile holding its own buttons. `disclosure` folds what goes under it behind a toggle. |
-| `Loading` | A spinner and what it waits for: centered in a waiting panel, on one line under a list, or alone at a row's end. |
+| `Loading` | What a panel waits for: a spinner over its words, what it searches for with rings spreading from it, or a spinner alone at a row's end. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `Notice` | Pill that briefly shows a change, such as a zoom level or volume, with an optional level meter. Key it per change. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. Parts: `Item`, `CheckboxItem`, `RadioGroup` and `RadioItem`, `Submenu`, `Separator`. Items take an `icon` and a `mnemonic`, whose letter chooses them. |

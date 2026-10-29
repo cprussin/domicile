@@ -1,31 +1,67 @@
-import { cva } from "../../styled-system/css";
+import type { Icon } from "@phosphor-icons/react";
 
-export const LAYOUTS = ["panel", "row", "glyph"] as const;
+import { css, cva } from "../../styled-system/css";
+import { center } from "../../styled-system/patterns";
+
+export const LAYOUTS = ["panel", "glyph"] as const;
 export type Layout = (typeof LAYOUTS)[number];
 
 type Props = {
   /** What it is waiting for, in plain words: `Checking Wi-Fi…`. */
   children: string;
   /**
-   * `panel` centers a spinner over its words in the room a waiting panel has;
-   * `row` puts them on one line, under a list that is still filling; `glyph`
-   * is the spinner alone, at a row's end, with the words for assistive tech.
+   * `panel` centers it over its words in the room a waiting panel has, as
+   * tall as an `EmptyState` so the panel holds still between them; `glyph` is
+   * the spinner alone, at a row's end or a section's heading, with the words
+   * for assistive tech.
    */
   layout?: Layout | undefined;
+  /**
+   * What a panel is searching for, such as Wi-Fi's fan. In place of the
+   * spinner, it sits in a soft circle with rings spreading out from it.
+   */
+  icon?: Icon | undefined;
 };
 
-/** A spinner and what it is waiting for. Announced as it changes. */
-export const Loading = ({ children, layout = "panel" }: Props) => (
-  <span
-    aria-label={layout === "glyph" ? children : undefined}
-    className={rootStyles({ layout })}
-    data-layout={layout}
-    role="status"
-  >
-    <span aria-hidden className={spinnerStyles({ layout })} />
-    {layout !== "glyph" && children}
-  </span>
-);
+/** What a panel is waiting for. Announced as it changes. */
+export const Loading = ({ children, icon: Icon, layout = "panel" }: Props) => {
+  switch (layout) {
+    case "glyph":
+      return (
+        <span
+          aria-label={children}
+          className={rootStyles({ layout })}
+          data-layout={layout}
+          role="status"
+        >
+          <span aria-hidden className={spinnerStyles({ layout })} />
+        </span>
+      );
+    case "panel":
+      return Icon === undefined ? (
+        <span
+          className={rootStyles({ layout })}
+          data-layout={layout}
+          role="status"
+        >
+          <span aria-hidden className={spinnerStyles({ layout })} />
+          {children}
+        </span>
+      ) : (
+        <span
+          className={rootStyles({ layout, searching: true })}
+          data-layout={layout}
+          data-searching
+          role="status"
+        >
+          <span aria-hidden className={radarStyles}>
+            <Icon size={20} weight="bold" />
+          </span>
+          <span className={titleStyles}>{children}</span>
+        </span>
+      );
+  }
+};
 
 const rootStyles = cva({
   base: {
@@ -42,11 +78,13 @@ const rootStyles = cva({
         flexDirection: "column",
         gap: 2.5,
         justifyContent: "center",
-        paddingBlock: 6,
+        // The same as `EmptyState`'s, so a panel holds still between them.
+        minBlockSize: 40,
+        paddingBlock: 5,
       },
-      // A row's inset, so the spinner lines up with the icons above it.
-      row: { gap: 2, paddingBlock: 1.5, paddingInline: 2 },
     },
+    // Its words are what the panel is doing now, so they read as a title.
+    searching: { true: { color: "inherit" } },
   },
 });
 
@@ -64,7 +102,30 @@ const spinnerStyles = cva({
     layout: {
       glyph: { blockSize: 3.5, inlineSize: 3.5 },
       panel: { blockSize: 5, inlineSize: 5 },
-      row: { blockSize: 3.5, inlineSize: 3.5 },
     },
   },
 });
+
+// `EmptyState`'s disc, with two rings spreading out from it half a ring
+// apart. Under reduced motion they spread once and the disc stays.
+const radarStyles = center({
+  _after: { animationDelay: "calc({durations.ping} / 2)" },
+  "&::before, &::after": {
+    animation: "ping {durations.ping} {easings.out} infinite",
+    border: "{spacing.0.5} solid currentcolor",
+    borderRadius: "full",
+    content: '""',
+    inset: 0,
+    opacity: 0,
+    position: "absolute",
+  },
+  backgroundColor: "fill",
+  blockSize: 10,
+  borderRadius: "full",
+  color: "textSoft",
+  inlineSize: 10,
+  marginBlockEnd: 1,
+  position: "relative",
+});
+
+const titleStyles = css({ textStyle: "panelLabel" });

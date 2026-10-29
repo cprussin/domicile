@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 import { render, screen } from "@testing-library/react";
 
 import { Loading } from "./Loading";
@@ -14,6 +15,13 @@ describe(Loading, () => {
       render(<Loading layout="glyph">Checking</Loading>);
       const status = screen.getByRole("status", { name: "Checking" });
       expect(status).toHaveTextContent(/^$/);
+    });
+
+    it("searches with what it is looking for in place of the spinner", () => {
+      render(<Loading icon={WifiHighIcon}>Looking for networks…</Loading>);
+      const status = screen.getByRole("status");
+      expect(status).toHaveAttribute("data-searching");
+      expect(status).toHaveTextContent("Looking for networks…");
     });
   });
 });

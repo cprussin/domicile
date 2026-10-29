@@ -23,6 +23,7 @@ import type {
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -103,24 +104,20 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
     );
   };
   const others = wifi.networks.filter((network) => !network.connected);
-  // Nothing else in range, and not looking for more.
-  const alone = !scanning && others.length === 0;
+  const empty = wifi.connection === undefined && others.length === 0;
+  const scan = () => {
+    requests.run("scan", () => actions.scanWifi(host, wifi));
+  };
   return (
     <PanelSection
       action={
         <span className={headStyles}>
-          {wifi.enabled && (
+          {wifi.enabled && (scanning || !empty) && (
             <Tooltip
               content="Scan"
               tone="overPhoto"
               trigger={
-                <IconButton
-                  disabled={scanning}
-                  label="Scan"
-                  onClick={() => {
-                    requests.run("scan", () => actions.scanWifi(host, wifi));
-                  }}
-                >
+                <IconButton busy={scanning} label="Scan" onClick={scan}>
                   <ArrowClockwiseIcon aria-hidden size={14} weight="bold" />
                 </IconButton>
               }
@@ -150,13 +147,22 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
             host={host}
             wifi={{ backend, device, interface: name }}
           />
-          {alone && wifi.connection === undefined ? (
+          {empty && scanning && (
+            <Loading icon={WifiHighIcon}>Looking for networks…</Loading>
+          )}
+          {empty && !scanning && (
             <EmptyState
-              hint="Move closer to your router, or try again in a moment."
+              action={
+                <Button onClick={scan} rounded size="xs">
+                  Look again
+                </Button>
+              }
+              hint="Move closer to your router, then look again."
               icon={MagnifyingGlassIcon}
-              title="No networks found"
+              title="No networks nearby"
             />
-          ) : (
+          )}
+          {!empty && (
             <List label="Networks">
               {wifi.connection !== undefined && (
                 <Connection
@@ -193,10 +199,11 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
               ))}
             </List>
           )}
-          {scanning && <Loading layout="row">Looking for networks…</Loading>}
-          {alone && wifi.connection !== undefined && (
-            <PanelNote>No other networks nearby</PanelNote>
-          )}
+          {!scanning &&
+            others.length === 0 &&
+            wifi.connection !== undefined && (
+              <PanelNote>No other networks nearby</PanelNote>
+            )}
           <Failure error={requests.failed("scan")}>
             Couldn't look for networks
           </Failure>

@@ -25,5 +25,19 @@ describe(EmptyState, () => {
         /^You're all caught up$/,
       );
     });
+
+    it("offers what would fill it under the hint", () => {
+      render(
+        <EmptyState
+          action={<button type="button">Look again</button>}
+          hint="Move closer to your router, then look again."
+          icon={WifiSlashIcon}
+          title="No networks nearby"
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Look again" }),
+      ).toBeInTheDocument();
+    });
   });
 });

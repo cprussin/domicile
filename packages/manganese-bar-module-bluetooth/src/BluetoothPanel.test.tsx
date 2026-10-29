@@ -164,19 +164,35 @@ describe("BluetoothPanel", () => {
         }),
       );
 
+      const nearby = within(screen.getByRole("region", { name: "Nearby" }));
+      expect(
+        nearby.getByRole("status", { name: "Looking for devices…" }),
+      ).toBeInTheDocument();
+      expect(nearby.getByText("Kitchen")).toBeVisible();
+    });
+
+    it("stands in for the nearby devices until it finds one", () => {
+      shown(
+        reading({
+          adapters: [{ discovering: true, path: ADAPTER, powered: true }],
+          devices: [mouse],
+        }),
+      );
+
       expect(
         within(screen.getByRole("region", { name: "Nearby" })).getByRole(
           "status",
         ),
-      ).toHaveTextContent("Looking for devices…");
+      ).toHaveTextContent(/^Looking for devices…$/);
     });
 
     it("says what to try when it has found nothing", () => {
       shown(reading({ devices: [] }));
 
       expect(screen.getByRole("status")).toHaveTextContent(
-        "No devices foundPut your device in pairing mode to see it here.",
+        "No devices nearbyPut your device in pairing mode to see it here.",
       );
+      expect(screen.queryByRole("region", { name: "Nearby" })).toBeNull();
     });
   });
 

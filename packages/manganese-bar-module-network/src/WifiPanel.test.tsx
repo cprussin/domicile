@@ -204,14 +204,21 @@ describe("WifiPanel", () => {
   });
 
   describe("before Wi-Fi is read", () => {
-    it.each<[string, Result<Option<Wifi>, SystemError> | undefined, string]>([
-      ["while it reads", undefined, "Checking Wi-Fi…"],
-      ["on a failure", Err(REFUSED), "Couldn't read Wi-Fi"],
-    ])("says so %s", async (_when, wifi, text) => {
-      await shown(wifi);
+    it("stands in for the networks while it reads", async () => {
+      await shown(undefined);
+
+      expect(
+        within(screen.getByRole("region", { name: "Wi-Fi" })).getByRole(
+          "status",
+        ),
+      ).toHaveTextContent("Checking Wi-Fi…");
+    });
+
+    it("says so on a failure", async () => {
+      await shown(Err(REFUSED));
 
       expect(screen.getByRole("region", { name: "Wi-Fi" })).toHaveTextContent(
-        text,
+        "Couldn't read Wi-Fi",
       );
     });
 
@@ -268,8 +275,27 @@ describe("WifiPanel", () => {
       ]);
     });
 
-    it("says when it is scanning", async () => {
+    it("turns the Scan button while it scans, leaving the list be", async () => {
       await shown(Ok(Some({ ...WIFI, scanning: true })));
+
+      expect(screen.getByRole("button", { name: "Scan" })).toHaveAttribute(
+        "aria-busy",
+        "true",
+      );
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    it("stands in for the networks while its first scan finds none", async () => {
+      await shown(
+        Ok(
+          Some({
+            ...WIFI,
+            connection: undefined,
+            networks: [],
+            scanning: true,
+          }),
+        ),
+      );
 
       expect(screen.getByRole("status")).toHaveTextContent(
         "Looking for networks…",
@@ -288,9 +314,23 @@ describe("WifiPanel", () => {
       await shown(Ok(Some({ ...WIFI, connection: undefined, networks: [] })));
 
       expect(screen.getByRole("status")).toHaveTextContent(
-        "No networks foundMove closer to your router, or try again in a moment.",
+        "No networks nearbyMove closer to your router, then look again.Look again",
       );
       expect(screen.queryByRole("list", { name: "Networks" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Scan" })).toBeNull();
+    });
+
+    it("looks again when nothing at all is in range", async () => {
+      const panel = await shown(
+        Ok(Some({ ...WIFI, connection: undefined, networks: [] })),
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "Look again" }));
+
+      expect(panel.asked).toStrictEqual([
+        ["scan", DEVICE],
+        ["scan", DEVICE],
+      ]);
     });
   });
 
