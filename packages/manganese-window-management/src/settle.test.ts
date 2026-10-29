@@ -60,14 +60,37 @@ describe("uprightAlong", () => {
   const FROM = { scaleX: 0.25, scaleY: 2, x: 40, y: -10 };
 
   // A part drawn at its own size inside a settling element, such as a title.
-  it("undoes the settle's scale at every step", () => {
-    const steps = uprightAlong(FROM, 4);
+  it("undoes the settle's scale at every step, from start to end", () => {
+    const steps = uprightAlong(FROM);
 
-    expect(steps.map(({ at }) => at)).toStrictEqual([0, 0.25, 0.5, 0.75, 1]);
+    expect(steps[0]?.at).toBe(0);
+    expect(steps.at(-1)?.at).toBe(1);
     for (const { at, scaleX, scaleY } of steps) {
       const settled = partway(FROM, at);
       expect(scaleX * settled.scaleX).toBeCloseTo(1);
       expect(scaleY * settled.scaleY).toBeCloseTo(1);
+    }
+  });
+
+  // The browser interpolates between steps linearly, but the inverse of a
+  // linear ease is not linear. A window's contents span the whole window, so
+  // a small error between steps would show as their pixels stretching.
+  it("keeps a part within a thousandth of its own size between steps", () => {
+    const from = { scaleX: 0.1, scaleY: 1.5, x: 0, y: 0 };
+    const steps = uprightAlong(from);
+
+    for (const [index, step] of steps.slice(1).entries()) {
+      const before = steps[index];
+      if (before === undefined) {
+        throw new Error("test: a step has no step before it");
+      }
+      const settled = partway(from, (before.at + step.at) / 2);
+      expect(
+        Math.abs(((before.scaleX + step.scaleX) / 2) * settled.scaleX - 1),
+      ).toBeLessThan(0.001);
+      expect(
+        Math.abs(((before.scaleY + step.scaleY) / 2) * settled.scaleY - 1),
+      ).toBeLessThan(0.001);
     }
   });
 });

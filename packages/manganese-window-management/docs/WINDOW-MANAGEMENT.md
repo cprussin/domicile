@@ -322,11 +322,16 @@ Rules:
 - Open and close use transforms. Resizing the element would reconfigure the
   client every frame.
 - Rearranging gives a window's contents their new box at once, so the client
-  is configured once. The contents then ease from the old box with `translate`
-  and `scale` (`useSettling`), stretched until they arrive. Eased boxes would
-  hold every frame: the engine waits for a resized client to draw.
-  Contents snap while a motion plays, since `scale` would scale the motion's
-  travel. The ease takes `durations.fastest` under reduced motion.
+  is configured once. The box then eases from the old one with `translate`
+  and `scale` (`useSettling`). Eased boxes would hold every frame: the engine
+  waits for a resized client to draw. Contents snap while a motion plays,
+  since `scale` would scale the motion's travel. The ease takes
+  `durations.fastest` under reduced motion.
+- The box clips what it holds, which keeps its own size about the box's top
+  left corner (`UPRIGHT`): the `<app>`, or a browser window's address bar and
+  page. The client has drawn at its new size by the first frame, so scaling it
+  would stretch its pixels; the box crops it instead, as the engine does under
+  `resizing`.
 - Every other part of a window eases the same way: title bars, tabs, strips,
   glows, shadows and the drop indicator. One mechanism on one timing, on the
   compositor's thread, keeps the parts together: each edge moves linearly in
@@ -334,8 +339,9 @@ Rules:
   scale, blur included, so no frame repaints them.
 - A bar keeps its icon, title and buttons at their own size (`UPRIGHT` in
   `useSettling`): they scale back by the inverse of the bar's scale, sampled
-  in steps. A title laid out wider than a growing bar is clipped by the bar
-  and runs under its buttons.
+  in steps close enough to stay within a thousandth of their size. A title
+  laid out wider than a growing bar is clipped by the bar and runs under its
+  buttons.
 - Depth never eases: each `z-index` step restacks the page's layers. A raise
   is at once. A part whose depth drops (`useLowered`) keeps its old depth
   until it has settled, so a window leaving fullscreen stays over the windows

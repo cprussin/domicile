@@ -29,9 +29,6 @@ export type Settler = {
  */
 export const UPRIGHT = "data-upright";
 
-/** How many steps {@link uprightAlong} samples a settle in. */
-const UPRIGHT_STEPS = 12;
-
 /** The box an element was given last, and the origin it scaled about. */
 type Placed = { origin: Point; rect: Rect };
 
@@ -255,12 +252,10 @@ const WEB_ANIMATIONS: Settler = {
       ]);
       // Keyframe offsets are eased progress, as the element's are, so each
       // part keeps pace with it.
-      const steps = uprightAlong(offset, UPRIGHT_STEPS).map(
-        ({ at, scaleX, scaleY }) => ({
-          offset: at,
-          scale: `${scaleX.toString()} ${scaleY.toString()}`,
-        }),
-      );
+      const steps = uprightAlong(offset).map(({ at, scaleX, scaleY }) => ({
+        offset: at,
+        scale: `${scaleX.toString()} ${scaleY.toString()}`,
+      }));
       settles.set(element, {
         animation,
         from: offset,

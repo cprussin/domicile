@@ -96,6 +96,16 @@ const portal = (container: HTMLElement): Element => {
   }
 };
 
+/** The box around the `<app>` that places, eases and clips it. */
+const windowBox = (container: HTMLElement): HTMLElement => {
+  const element = portal(container).parentElement;
+  if (element === null) {
+    throw new Error("test: the app window rendered no box around it");
+  } else {
+    return element;
+  }
+};
+
 beforeEach(() => {
   host.calls.length = 0;
 });
@@ -114,14 +124,14 @@ describe("AppWindow", () => {
     // border.
     const { container } = render(<AppWindow {...windowProps} focused />);
 
-    expect(portal(container).className).toContain(
+    expect(windowBox(container).className).toContain(
       css({ borderColor: "borderStrong" }),
     );
   });
 
   it("rounds its bottom corners, and leaves its top ones to the bar", () => {
     const { container } = render(<AppWindow {...windowProps} focused />);
-    const style = globalThis.getComputedStyle(portal(container));
+    const style = globalThis.getComputedStyle(windowBox(container));
 
     expect(style.borderEndStartRadius).not.toBe("");
     expect(style.borderEndEndRadius).not.toBe("");
@@ -134,7 +144,7 @@ describe("AppWindow", () => {
     const { container } = render(
       <AppWindow {...windowProps} focused fullscreen />,
     );
-    const style = globalThis.getComputedStyle(portal(container));
+    const style = globalThis.getComputedStyle(windowBox(container));
 
     expect(style.borderEndStartRadius).toBe("");
     expect(style.borderEndEndRadius).toBe("");
@@ -171,7 +181,7 @@ describe("AppWindow", () => {
     const { container } = render(
       <AppWindow {...windowProps} focused={false} rect={undefined} />,
     );
-    expect(portal(container)).not.toBeVisible();
+    expect(windowBox(container)).not.toBeVisible();
   });
 
   it("gives the keyboard to the window the shell says is focused", () => {
@@ -248,7 +258,7 @@ describe("AppWindow", () => {
       );
 
       expect(
-        globalThis.getComputedStyle(portal(container)).animation,
+        globalThis.getComputedStyle(windowBox(container)).animation,
       ).toContain("windowOpening");
     });
 
@@ -261,7 +271,7 @@ describe("AppWindow", () => {
 
       // The frame's middle is (600, 417), 385px below the contents' top at
       // y = 32.
-      expect(portal(container)).toHaveStyle({
+      expect(windowBox(container)).toHaveStyle({
         transformOrigin: "600px 385px",
       });
     });
@@ -272,7 +282,7 @@ describe("AppWindow", () => {
       const { container } = render(
         <AppWindow {...windowProps} focused={false} motion="closing" />,
       );
-      const style = globalThis.getComputedStyle(portal(container));
+      const style = globalThis.getComputedStyle(windowBox(container));
 
       expect(lengthOf(style.animation)).toBe(lengthOf(style.transition));
     });
@@ -295,9 +305,36 @@ describe("AppWindow", () => {
       );
 
       expect(
-        globalThis.getComputedStyle(portal(container)).transition,
+        globalThis.getComputedStyle(windowBox(container)).transition,
       ).not.toContain("inline-size");
       expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: 600, y: 0 }]);
+    });
+
+    // The client draws at its new size before the box gets there, so scaling
+    // its surface with the box would stretch its pixels. The box clips it
+    // instead, and it keeps to the box's top left corner.
+    it("crops its contents to the easing box rather than stretching them", () => {
+      const { kept, settler } = recordedSettles();
+      const { container, rerender } = render(
+        <AppWindow {...windowProps} focused={false} settler={settler} />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          rect={{ ...ON_SCREEN, width: 600 }}
+          settler={settler}
+        />,
+      );
+
+      expect(kept).toStrictEqual([[portal(container)]]);
+      expect(globalThis.getComputedStyle(windowBox(container)).overflow).toBe(
+        "clip",
+      );
+      expect(
+        globalThis.getComputedStyle(portal(container)).transformOrigin,
+      ).toBe("0 0");
     });
 
     // Each `z-index` change restacks the client's surface, so the depth never
@@ -308,7 +345,7 @@ describe("AppWindow", () => {
         <AppWindow {...windowProps} depth={0} focused={false} />,
       );
       const transition = () =>
-        globalThis.getComputedStyle(portal(container)).transition;
+        globalThis.getComputedStyle(windowBox(container)).transition;
 
       rerender(<AppWindow {...windowProps} depth={2000} focused={false} />);
       expect(transition()).not.toContain("z-index");
@@ -361,7 +398,7 @@ describe("AppWindow", () => {
       document.documentElement.toggleAttribute("data-reduced-motion", false);
 
       expect(
-        portal(container).getAnimations()[0]?.effect?.getTiming().duration,
+        windowBox(container).getAnimations()[0]?.effect?.getTiming().duration,
       ).toBe(Number.parseInt(token("durations.fastest"), 10));
     });
 
@@ -396,7 +433,9 @@ describe("AppWindow", () => {
       );
 
       // Unset, so it draws at full opacity.
-      expect(globalThis.getComputedStyle(portal(container)).opacity).toBe("");
+      expect(globalThis.getComputedStyle(windowBox(container)).opacity).toBe(
+        "",
+      );
     });
 
     it("says when it has played its motion out", async () => {
@@ -411,7 +450,7 @@ describe("AppWindow", () => {
             }}
           />,
         );
-        fireEvent.animationEnd(portal(container));
+        fireEvent.animationEnd(windowBox(container));
       });
     });
   });
@@ -433,10 +472,10 @@ describe("AppWindow", () => {
         />,
       );
 
-      expect(globalThis.getComputedStyle(portal(container)).pointerEvents).toBe(
-        "none",
-      );
-      expect(portal(container)).toHaveAttribute("inert");
+      expect(
+        globalThis.getComputedStyle(windowBox(container)).pointerEvents,
+      ).toBe("none");
+      expect(windowBox(container)).toHaveAttribute("inert");
     });
   });
 

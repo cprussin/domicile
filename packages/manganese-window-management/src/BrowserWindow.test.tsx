@@ -2725,6 +2725,35 @@ describe("BrowserWindow", () => {
       expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: 600, y: 0 }]);
     });
 
+    // The page draws at its new size before the window gets there, so
+    // scaling it with the window would stretch it. The window clips it
+    // instead, and it keeps to the window's top left corner.
+    it("crops its page to the easing box rather than stretching it", () => {
+      const { kept, settler } = recordedSettles();
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} settler={settler} />,
+      );
+
+      rerender(
+        <BrowserWindow
+          {...windowProps}
+          rect={{ ...ON_SCREEN, width: 600 }}
+          resizing={false}
+          settler={settler}
+        />,
+      );
+
+      const upright = kept[0] ?? [];
+      expect(upright).toHaveLength(1);
+      expect(upright[0]?.contains(view(container))).toBe(true);
+      expect(globalThis.getComputedStyle(browser()).overflow).toBe("hidden");
+      expect(
+        upright[0] === undefined
+          ? undefined
+          : globalThis.getComputedStyle(upright[0]).transformOrigin,
+      ).toBe("0 0");
+    });
+
     it("follows the pointer exactly while it is being dragged", () => {
       // Easing would make the window trail the pointer.
       const { played, settler } = recordedSettles();

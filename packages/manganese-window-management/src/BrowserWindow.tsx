@@ -47,7 +47,7 @@ import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
 import { useRises } from "./useRises";
 import type { Settler } from "./useSettling";
-import { useSettling } from "./useSettling";
+import { UPRIGHT, useSettling } from "./useSettling";
 import { useShownPage } from "./useShownPage";
 import { useZoom } from "./useZoom";
 import type { WindowMotion } from "./window-motion";
@@ -623,124 +623,130 @@ export const BrowserWindow = ({
             }
       }
     >
-      {popupWindow === undefined && !isApp && !pageFullscreen && (
-        <AddressBar
-          address={address}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          downloads={downloads}
-          isPrivate={isPrivate}
-          loading={loading}
-          loadProgress={loadProgress}
-          mediaDevices={mediaDevices}
-          onBack={drive((loaded) => {
-            loaded.goBack();
-          })}
-          onClearDownloads={() => {
-            withView((loaded) => {
-              loaded.clearCompletedDownloads();
-            });
-          }}
-          onForward={drive((loaded) => {
-            loaded.goForward();
-          })}
-          onNavigate={navigate}
-          onReload={drive((loaded) => {
-            loaded.reload();
-          })}
-          onSetSitePermission={(permission, setting) => {
-            withView((loaded) => {
-              loaded.setSitePermission(permission, setting);
-            });
-          }}
-          onStop={drive((loaded) => {
-            loaded.stop();
-          })}
-          onZoomIn={() => {
-            run(BrowserCommand.ZoomIn);
-          }}
-          onZoomOut={() => {
-            run(BrowserCommand.ZoomOut);
-          }}
-          onZoomReset={() => {
-            run(BrowserCommand.ZoomReset);
-          }}
-          permissionRequest={permissionRequest}
-          security={shown.security}
-          sitePermissions={sitePermissions}
-          visited={shown.visited}
-          zoom={zoom}
-        />
-      )}
-      {isApp && !pageFullscreen && leftOrigin(start, address) && (
-        <AppAddress address={address} security={shown.security} />
-      )}
       {/*
+        Kept at its own size while the window eases into a new box, which
+        clips it, so the page is cropped rather than stretched.
+      */}
+      <div className={contentsStyles} {...{ [UPRIGHT]: "" }}>
+        {popupWindow === undefined && !isApp && !pageFullscreen && (
+          <AddressBar
+            address={address}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+            downloads={downloads}
+            isPrivate={isPrivate}
+            loading={loading}
+            loadProgress={loadProgress}
+            mediaDevices={mediaDevices}
+            onBack={drive((loaded) => {
+              loaded.goBack();
+            })}
+            onClearDownloads={() => {
+              withView((loaded) => {
+                loaded.clearCompletedDownloads();
+              });
+            }}
+            onForward={drive((loaded) => {
+              loaded.goForward();
+            })}
+            onNavigate={navigate}
+            onReload={drive((loaded) => {
+              loaded.reload();
+            })}
+            onSetSitePermission={(permission, setting) => {
+              withView((loaded) => {
+                loaded.setSitePermission(permission, setting);
+              });
+            }}
+            onStop={drive((loaded) => {
+              loaded.stop();
+            })}
+            onZoomIn={() => {
+              run(BrowserCommand.ZoomIn);
+            }}
+            onZoomOut={() => {
+              run(BrowserCommand.ZoomOut);
+            }}
+            onZoomReset={() => {
+              run(BrowserCommand.ZoomReset);
+            }}
+            permissionRequest={permissionRequest}
+            security={shown.security}
+            sitePermissions={sitePermissions}
+            visited={shown.visited}
+            zoom={zoom}
+          />
+        )}
+        {isApp && !pageFullscreen && leftOrigin(start, address) && (
+          <AppAddress address={address} security={shown.security} />
+        )}
+        {/*
         Wraps the page so the find bar and file picker cover the page but not
         the address bar.
       */}
-      <div className={pageStyles}>
-        <webview
-          className={viewStyles}
-          ref={setView}
-          resizing={resizing ? "" : undefined}
-          // React sets attributes before insertion, when the engine reads it.
-          // See `window`.
-          window={window}
-        />
-        <LinkTarget view={view} />
-        <PageNotices
-          downloadsFinished={downloadsFinished}
-          zoom={zoom}
-          zoomsAnnounced={zoomsAnnounced}
-        />
-        {finding && (
-          <FindBar
-            onClose={stopFinding}
-            onFind={(text, backward) => {
-              withView((loaded) => {
-                loaded.find(text, backward);
-              });
-            }}
-            ref={setFindBox}
-            view={view}
+        <div className={pageStyles}>
+          <webview
+            className={viewStyles}
+            ref={setView}
+            resizing={resizing ? "" : undefined}
+            // React sets attributes before insertion, when the engine reads it.
+            // See `window`.
+            window={window}
           />
-        )}
-        {menu !== undefined && (
-          <PageMenu
-            at={menu.at}
-            items={pageMenuFor(menu.context, { canGoBack, canGoForward })}
-            onChoose={(command) => {
-              choosePageCommand(command, menu.context, {
-                browse: run,
-                openWindow: (url) => {
-                  if (isPrivate) {
-                    domicile.browser.openPrivate(url);
-                  } else {
-                    domicile.browser.open(url);
-                  }
-                },
-              });
-            }}
-            onClose={dismissMenu}
+          <LinkTarget view={view} />
+          <PageNotices
+            downloadsFinished={downloadsFinished}
+            zoom={zoom}
+            zoomsAnnounced={zoomsAnnounced}
           />
-        )}
-        {deviceRequest !== undefined && (
-          <div className={deviceAskStyles}>
-            <DeviceAsk request={deviceRequest} />
-          </div>
-        )}
-        {dialogRequest !== undefined && (
-          <PageDialog ref={setDialogBox} request={dialogRequest} />
-        )}
-        {asking !== undefined && (
-          <FilePicker
-            // A new picker per request, so each starts empty.
-            key={asking.serial}
-            ref={setPickerBox}
-            request={asking}
-          />
-        )}
+          {finding && (
+            <FindBar
+              onClose={stopFinding}
+              onFind={(text, backward) => {
+                withView((loaded) => {
+                  loaded.find(text, backward);
+                });
+              }}
+              ref={setFindBox}
+              view={view}
+            />
+          )}
+          {menu !== undefined && (
+            <PageMenu
+              at={menu.at}
+              items={pageMenuFor(menu.context, { canGoBack, canGoForward })}
+              onChoose={(command) => {
+                choosePageCommand(command, menu.context, {
+                  browse: run,
+                  openWindow: (url) => {
+                    if (isPrivate) {
+                      domicile.browser.openPrivate(url);
+                    } else {
+                      domicile.browser.open(url);
+                    }
+                  },
+                });
+              }}
+              onClose={dismissMenu}
+            />
+          )}
+          {deviceRequest !== undefined && (
+            <div className={deviceAskStyles}>
+              <DeviceAsk request={deviceRequest} />
+            </div>
+          )}
+          {dialogRequest !== undefined && (
+            <PageDialog ref={setDialogBox} request={dialogRequest} />
+          )}
+          {asking !== undefined && (
+            <FilePicker
+              // A new picker per request, so each starts empty.
+              key={asking.serial}
+              ref={setPickerBox}
+              request={asking}
+            />
+          )}
+        </div>
       </div>
     </section>
   );
@@ -777,6 +783,19 @@ const browserStyles = flex({
   direction: "column",
   // Clips the page to the frame's rounded bottom corners.
   overflow: "hidden",
+});
+
+/**
+ * Fills the window. Kept upright about its top left corner while the window
+ * eases, as the engine keeps a frame the page has not redrawn yet
+ * (`resizing`).
+ */
+const contentsStyles = flex({
+  blockSize: "full",
+  direction: "column",
+  flexShrink: 0,
+  inlineSize: "full",
+  transformOrigin: "0 0",
 });
 
 // Fills the height below the address bar and positions the overlays.
