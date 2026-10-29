@@ -12,13 +12,13 @@ const MESSAGES = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
 const INBOX = "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX";
 
 /**
- * The unread messages in the inbox, newest first. More than arrive between
- * two reads, so a read misses none.
+ * The newest unread messages in the inbox. Enough that a read misses none
+ * that arrived, and a notified message leaves the list only once read.
  */
 const UNREAD = `${MESSAGES}?${new URLSearchParams([
   ["labelIds", "INBOX"],
   ["labelIds", "UNREAD"],
-  ["maxResults", "20"],
+  ["maxResults", "100"],
 ]).toString()}`;
 
 /** The inbox's conversations: every one, and the unread ones. */
@@ -31,6 +31,14 @@ export type Mail = {
   /** The sender's name, or their address when the message names none. */
   from: string;
   subject: string;
+};
+
+/** What changed in the inbox's unread messages between two reads. */
+export type MailNews = {
+  /** The messages that arrived, newest first. */
+  arrived: readonly Mail[];
+  /** The ids of those no longer unread in the inbox. */
+  read: readonly string[];
 };
 
 /** Asks the Gmail API for the inbox's conversation counts. */

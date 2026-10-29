@@ -404,7 +404,8 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
 - **New mail:** a notification per message, under the nickname: the sender,
   then the subject. More than 3 at once are one notification, "5 new emails",
   naming the senders. A press opens the message, or the inbox, in a browser
-  window. Mail already unread at startup or sign-in is not notified. Do not
+  window. A notification clears once its messages are read, anywhere.
+  Mail already unread at startup or sign-in is not notified. Do not
   disturb hides the toasts, as for any notification. The bar item and
   `gmailInbox` share one reading, so each message notifies once.
 - Read every 30 seconds, and 1 and 5 seconds after a Gmail browser window

@@ -12,7 +12,7 @@ import { Bus, ListenedKind } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 import { inboxAddress } from "./addresses";
-import type { Mail } from "./gmail-api";
+import type { Mail, MailNews } from "./gmail-api";
 
 /** The notification server's address on the session bus. */
 const SERVER = {
@@ -38,28 +38,50 @@ export type NoticeDesk = {
 export type MailAccount = { email: string; nickname: string };
 
 /**
- * Notifies the desk of new `mail`, newest first, under the account's
- * nickname: a notification per message, or one for all of them when more than
+ * Notifies the desk of mail that arrived, under the account's nickname: a
+ * notification per message, or one for all of them when more than
  * {@link MOST_APART} arrive at once. A press opens the message, or the inbox,
- * in a browser window. Rejects when the server refuses.
+ * in a browser window. A notification closes once all its messages are read.
+ * Rejects when the server refuses.
  */
 export const mailNotices = (desk: NoticeDesk) => {
-  // Each notification sent, and the address a press opens.
-  const opens = new Map<number, string>();
+  // Each notification still up, by id.
+  const shown = new Map<number, Shown>();
   const presses: { listening: Promise<void> | undefined } = {
     listening: undefined,
   };
-  return async (account: MailAccount, mail: readonly Mail[]): Promise<void> => {
-    presses.listening ??= listen(desk, opens);
+  return async (
+    account: MailAccount,
+    { arrived, read }: MailNews,
+  ): Promise<void> => {
+    presses.listening ??= listen(desk, shown);
     await presses.listening;
-    for (const notice of notices(account.email, mail)) {
+    for (const notice of notices(account.email, arrived)) {
       const id = await notify(desk, account.nickname, notice);
-      opens.set(id, notice.opens);
+      shown.set(id, { opens: notice.opens, unread: notice.messages });
+    }
+    for (const [id, { opens, unread }] of shown) {
+      const left = unread.filter((message) => !read.includes(message));
+      if (left.length === 0) {
+        shown.delete(id);
+        await close(desk, id);
+      } else {
+        shown.set(id, { opens, unread: left });
+      }
     }
   };
 };
 
-type Notice = { summary: string; body: string; opens: string };
+/** One notification still up: what a press opens, and its unread messages. */
+type Shown = { opens: string; unread: readonly string[] };
+
+type Notice = {
+  summary: string;
+  body: string;
+  opens: string;
+  /** The ids of the messages it tells of. */
+  messages: readonly string[];
+};
 
 /** `mail`'s notifications, oldest first, so the newest shows on top. */
 const notices = (email: string, mail: readonly Mail[]): Notice[] =>
@@ -67,12 +89,14 @@ const notices = (email: string, mail: readonly Mail[]): Notice[] =>
     ? [
         {
           body: senders(mail),
+          messages: mail.map(({ id }) => id),
           opens: inboxAddress(email),
           summary: `${mail.length.toString()} new emails`,
         },
       ]
-    : mail.toReversed().map(({ from, subject, threadId }) => ({
+    : mail.toReversed().map(({ from, id, subject, threadId }) => ({
         body: subject,
+        messages: [id],
         opens: `${inboxAddress(email)}#inbox/${threadId}`,
         summary: from,
       }));
@@ -120,13 +144,31 @@ const notify = async (
 
 const notifiedSchema = z.tuple([z.number().int()]);
 
+/** Closes notification `id`; one the user already cleared stays gone. */
+const close = async (desk: NoticeDesk, id: number): Promise<void> =>
+  (
+    await desk.dbus.call({
+      ...SERVER,
+      body: [id],
+      member: "CloseNotification",
+      signature: "u",
+    })
+  ).match({
+    Err: (error) => {
+      throw new Error(
+        `could not clear a read mail's notification: ${error.message}`,
+      );
+    },
+    Ok: () => undefined,
+  });
+
 /**
- * Opens each press of one of `opens` from now on. Resolves once listening, or
+ * Opens each press of one of `shown` from now on. Resolves once listening, or
  * rejects when the bus refuses.
  */
 const listen = async (
   desk: NoticeDesk,
-  opens: Map<number, string>,
+  shown: Map<number, Shown>,
 ): Promise<void> =>
   (
     await desk.dbus.match({
@@ -140,7 +182,7 @@ const listen = async (
       throw new Error(`could not hear presses of mail: ${error.message}`);
     },
     Ok: (listening) => {
-      follow(desk, opens, listening).catch((error: unknown) => {
+      follow(desk, shown, listening).catch((error: unknown) => {
         // biome-ignore lint/suspicious/noConsole: a broken listener leaves presses unanswered, with nothing else to tell
         console.error("Stopped hearing presses of mail", error);
       });
@@ -149,7 +191,7 @@ const listen = async (
 
 const follow = async (
   desk: NoticeDesk,
-  opens: Map<number, string>,
+  shown: Map<number, Shown>,
   listening: Listening<Listened<DbusSignal>>,
 ): Promise<void> => {
   const reader = listening.items.getReader();
@@ -158,16 +200,16 @@ const follow = async (
       case ListenedKind.Heard: {
         // Ours offer only the default action: a press on the notification.
         const [id] = invokedSchema.parse(next.value.item.body);
-        const address = opens.get(id);
-        if (address !== undefined) {
-          opens.delete(id);
-          desk.browser.open(address);
+        const pressed = shown.get(id);
+        if (pressed !== undefined) {
+          shown.delete(id);
+          desk.browser.open(pressed.opens);
         }
         break;
       }
       case ListenedKind.Missed: {
         // A new compositor numbers its notifications from scratch.
-        opens.clear();
+        shown.clear();
         break;
       }
     }

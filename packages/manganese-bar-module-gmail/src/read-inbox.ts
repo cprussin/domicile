@@ -1,7 +1,7 @@
 import { Result } from "@cprussin/option-result";
 
 import type { GoogleClient } from "./consent";
-import type { Counts, Mail } from "./gmail-api";
+import type { Counts, Mail, MailNews } from "./gmail-api";
 import { inboxCounts, mailHeaders, unreadMail } from "./gmail-api";
 import type { Fetch, TokenRefusal } from "./google-token";
 import { refreshAccess, TokenRefusalKind } from "./google-token";
@@ -18,8 +18,9 @@ type Held = { token: string; expiresAt: number };
  * - The refresh token gets an access token, kept until it expires or Gmail
  *   refuses it.
  * - Each read passes `onMail` the unread messages that arrived since the
- *   last, newest first, and waits for it. The first read after signing in
- *   passes none, so mail already there is not news.
+ *   last, newest first, and those no longer unread, and waits for it. The
+ *   first read after signing in passes none, so mail already there is not
+ *   news.
  *
  * A read rejects when Google gives no access token, or Gmail no counts or
  * messages.
@@ -28,14 +29,17 @@ export const inboxReader = (
   domicile: Fetch,
   client: GoogleClient,
   email: string,
-  onMail: (mail: readonly Mail[]) => Promise<void>,
+  onMail: (news: MailNews) => Promise<void>,
   storage?: Parameters<typeof storedToken>[1],
   now: () => number = Date.now,
 ): (() => Promise<Inbox>) => {
   const held: { current: Held | undefined } = { current: undefined };
-  // Every unread message seen since signing in; `undefined` before the first
-  // read.
-  const seen: { ids: ReadonlySet<string> | undefined } = { ids: undefined };
+  // Every unread message seen since signing in, and those unread at the last
+  // read; `undefined` before the first read.
+  const seen: {
+    ids: ReadonlySet<string> | undefined;
+    unread: readonly string[];
+  } = { ids: undefined, unread: [] };
 
   const count = async (access: Held): Promise<Inbox> =>
     (await readMail(domicile, access.token, seen.ids)).match({
@@ -44,9 +48,11 @@ export const inboxReader = (
         throw new Error(why);
       },
       Ok: async ({ counts, ids, mail }) => {
+        const read = seen.unread.filter((id) => !ids.includes(id));
         seen.ids = new Set([...(seen.ids ?? []), ...ids]);
-        if (mail.length > 0) {
-          await onMail(mail);
+        seen.unread = ids;
+        if (mail.length > 0 || read.length > 0) {
+          await onMail({ arrived: mail, read });
         }
         return Inbox.Counted(counts.total, counts.unread);
       },
@@ -54,6 +60,7 @@ export const inboxReader = (
 
   const signedOut = (): Inbox => {
     seen.ids = undefined;
+    seen.unread = [];
     return Inbox.SignedOut();
   };
 

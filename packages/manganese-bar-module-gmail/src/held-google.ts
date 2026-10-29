@@ -20,7 +20,7 @@ export const INBOX =
   "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX";
 
 export const UNREAD =
-  "https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&labelIds=UNREAD&maxResults=20";
+  "https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&labelIds=UNREAD&maxResults=100";
 
 /** The address of message `id`'s sender and subject. */
 export const HEADERS = (id: string) =>

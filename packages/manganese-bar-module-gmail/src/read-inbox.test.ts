@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { None } from "@cprussin/option-result";
 import { SCOPE } from "./consent";
-import type { Mail } from "./gmail-api";
+import type { Mail, MailNews } from "./gmail-api";
 import {
   answering,
   CLIENT,
@@ -56,10 +56,10 @@ const ignored = () => Promise.resolve();
 
 /** An `onMail` that keeps what it is told. */
 const heldMail = () => {
-  const told: (readonly Mail[])[] = [];
+  const told: MailNews[] = [];
   return {
-    onMail: (arrived: readonly Mail[]) => {
-      told.push(arrived);
+    onMail: (news: MailNews) => {
+      told.push(news);
       return Promise.resolve();
     },
     told,
@@ -171,7 +171,7 @@ describe("inboxReader", () => {
       expect(told).toStrictEqual([]);
     });
 
-    it("tells of each message that arrives after, once", async () => {
+    it("tells of each message that arrives after, once, and of each read after", async () => {
       const { domicile } = answering({
         [HEADERS("m2")]: [headers("m2")],
         [HEADERS("m3")]: [headers("m3")],
@@ -186,7 +186,10 @@ describe("inboxReader", () => {
       await read();
       await read();
 
-      expect(told).toStrictEqual([[mail("m3"), mail("m2")]]);
+      expect(told).toStrictEqual([
+        { arrived: [mail("m3"), mail("m2")], read: [] },
+        { arrived: [], read: ["m2"] },
+      ]);
     });
 
     it("tells of none already unread when the account signs in again", async () => {
