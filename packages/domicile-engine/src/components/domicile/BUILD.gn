@@ -46,6 +46,9 @@ source_set("browser") {
     # Public for the same reason: //content gives the shell's restriction
     # targets the id captures of the desk leave out.
     "//components/viz/service/display/domicile:hidden_from_captures_id",
+    # Public for the same reason: //content sets the desk page's cursor on
+    # every monitor, where the targeter sends its events.
+    "//ui/aura/domicile:desk_targeter",
     "//base",
     "//components/domicile/mojom",
     "//components/viz/common",

@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 29 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the desk page sets the pointer on every monitor
+
+On a tty the desk is one page shown on every monitor and hosted by one
+monitor's window (docs/architecture/ONE-PAGE-FOR-THE-DESK.md). The page
+set the pointer only while it was on the host monitor. On any other
+monitor the pointer kept the last shape it was given: no grab hand while
+dragging a window, no resize arrows on a border, no hand over a link.
+
+RenderWidgetHostViewAura::UpdateCursorIfOverSelf drops a cursor unless
+aura finds the view under the pointer and the screen finds its window
+there. A pointer on another monitor is outside the host window's bounds,
+so aura finds no window and the screen finds the other monitor's. Events
+there reach the page through aura::TargetDeskPage; the cursor had no
+such path.
+
+The view now sets the cursor when the pointer is outside its root but
+on the page, the same test the targeter uses (aura::DeskPagePoint).
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. DeskPagePoint has its unit tests in
+domicile_unittests.
+---
+ .../render_widget_host_view_aura.cc           | 25 +++++++++++++++----
+ 1 file changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/content/browser/renderer_host/render_widget_host_view_aura.cc b/content/browser/renderer_host/render_widget_host_view_aura.cc
+index 7294908..cdefd5e 100644
+--- a/content/browser/renderer_host/render_widget_host_view_aura.cc
++++ b/content/browser/renderer_host/render_widget_host_view_aura.cc
+@@ -73,6 +73,7 @@
+ #include "ui/aura/client/screen_position_client.h"
+ #include "ui/aura/client/transient_window_client.h"
+ #include "ui/aura/client/window_parenting_client.h"
++#include "ui/aura/domicile/desk_targeter.h"
+ #include "ui/aura/env.h"
+ #include "ui/aura/window.h"
+ #include "ui/aura/window_event_dispatcher.h"
+@@ -107,6 +108,7 @@
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/color_palette.h"
+ #include "ui/gfx/geometry/dip_util.h"
++#include "ui/gfx/geometry/point_f.h"
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/size_conversions.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
+@@ -3178,9 +3180,6 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
+   if (!root_window)
+     return;
+ 
+-  if (ShouldSkipCursorUpdate())
+-    return;
+-
+   display::Screen* screen = display::Screen::Get();
+   CHECK(screen);
+   gfx::Point root_window_point = screen->GetCursorScreenPoint();
+@@ -3191,8 +3190,24 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
+         root_window, &root_window_point);
+   }
+ 
+-  if (root_window->GetEventHandlerForPoint(root_window_point) != window_)
+-    return;
++  // DOMICILE: on a tty the desk page spans every monitor but sits in the
++  // host monitor's window, so a pointer on another monitor is outside that
++  // window. aura finds no window there and the screen finds another
++  // monitor's, and both checks below would drop every cursor the page sets.
++  // The pointer is over the page wherever the page covers it. See
++  // ui/aura/domicile/desk_targeter.h.
++  const bool on_another_monitor =
++      aura::DeskPagePoint(root_window->bounds().size(),
++                          window_->GetBoundsInRootWindow(),
++                          gfx::PointF(root_window_point))
++          .has_value();
++  if (!on_another_monitor) {
++    if (ShouldSkipCursorUpdate())
++      return;
++
++    if (root_window->GetEventHandlerForPoint(root_window_point) != window_)
++      return;
++  }
+ 
+   gfx::NativeCursor cursor = current_cursor_.GetNativeCursor();
+   // Do not show loading cursor when the cursor is currently hidden.
+-- 
+2.43.0
+
