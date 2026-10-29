@@ -9,7 +9,7 @@ import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { SharedBacklight } from "@domicile-desktop/system-backlight/shared-backlight";
 import { LightbulbIcon } from "@phosphor-icons/react/dist/ssr/Lightbulb";
 import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbFilament";
-import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
+import { SunHorizonIcon } from "@phosphor-icons/react/dist/ssr/SunHorizon";
 import type { WheelEvent } from "react";
 import { css } from "../styled-system/css";
 import { BrightnessSlider } from "./BrightnessSlider";
@@ -34,7 +34,7 @@ type Props = {
  * {@link useBrightness}.
  *
  * Until there is a level, a dimmed bulb alone on a machine with a backlight.
- * On one without, such as a desktop with external monitors, a moon that opens
+ * On one without, such as a desktop with external monitors, a sunset that opens
  * the night light switch alone.
  */
 export const Brightness = ({ backlight, hardware, nightLight }: Props) => {
@@ -54,7 +54,7 @@ export const Brightness = ({ backlight, hardware, nightLight }: Props) => {
             className={triggerStyles}
             type="button"
           >
-            <MoonIcon size={15} weight={nightLightOn ? "fill" : "bold"} />
+            <SunHorizonIcon size={15} weight={nightLightOn ? "fill" : "bold"} />
           </button>
         }
       >
