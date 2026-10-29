@@ -86,6 +86,7 @@ Headless.
 | `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
 | `guard-shell-pdf.sh` | Chrome's PDF viewer starts on a PDF from `domicile://home/` in the shell's `<iframe>`, as the launcher's preview shows one (patch 0154) |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
+| `guard-browser-brand.sh` | sites are told the engine is Google Chrome in `navigator.userAgentData` and `Sec-CH-UA` (patch 0157); `Chromium` is the control |
 | `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
 | `guard-headless-desk.sh` | with `--domicile-headless-desk`, two virtual displays come on `virtual-1` and `virtual-2`, and a capture of each shows its own slice of the one shell page; a click and the A key sent with `domicile_input_inject` reach the shell |
 | `guard-shell-crash.sh` | a crashed shell ends the engine with a FATAL line saying the shell's renderer died and that this is a bug in Domicile (patch 0124) |

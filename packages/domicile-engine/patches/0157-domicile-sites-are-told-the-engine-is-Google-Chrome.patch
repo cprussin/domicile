@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 28 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: sites are told the engine is Google Chrome
+
+A Chromium build sends no browser brand in `navigator.userAgentData` or
+`Sec-CH-UA`, only `Chromium` and a GREASE brand. Akamai's bot check
+refuses that on some sites: Citi's sign-in answers "Access Denied" to
+stock Chromium and lets Google Chrome through.
+
+GetUserAgentBrandList now always adds `Google Chrome`, as a Chrome build
+does. The User-Agent string is unchanged: Chrome's and Chromium's are the
+same.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. guard-browser-brand.sh checks it.
+---
+ components/embedder_support/user_agent_utils.cc | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
+index 8332938..1d8f36a 100644
+--- a/components/embedder_support/user_agent_utils.cc
++++ b/components/embedder_support/user_agent_utils.cc
+@@ -158,10 +158,9 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
+   int major_version_number;
+   bool parse_result = base::StringToInt(major_version, &major_version_number);
+   DCHECK(parse_result);
+-  std::optional<std::string> brand;
+-#if !BUILDFLAG(CHROMIUM_BRANDING)
+-  brand = version_info::GetProductName();
+-#endif
++  // Domicile: send Chrome's brand. A Chromium build sends none, and Akamai's
++  // bot check refuses that on some sites' sign-ins and lets Chrome through.
++  std::optional<std::string> brand = "Google Chrome";
+ 
+   std::string brand_version =
+       output_version_type == blink::UserAgentBrandVersionType::kFullVersion
+-- 
+2.43.0
+
