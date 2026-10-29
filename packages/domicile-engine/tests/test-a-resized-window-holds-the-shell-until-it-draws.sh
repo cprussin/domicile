@@ -109,6 +109,16 @@ else
     "domicile_engine.cc submits a native window's frame at scale 1, not its box's"
 fi
 
+# Unstretched, a smaller frame leaves gutters in the box. Viz fills them with
+# the frame's root background color, which defaults to white: a growing
+# window flashes white at its new edges.
+if grep -q 'frame.metadata.root_background_color = SkColors::kTransparent;' "$SURFACE"; then
+  ok "with nothing drawn in the gutters"
+else
+  fail "with nothing drawn in the gutters" \
+    "domicile_engine.cc leaves a native window's root background color white"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

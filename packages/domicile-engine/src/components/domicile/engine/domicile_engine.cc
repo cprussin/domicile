@@ -318,6 +318,9 @@ class Surface : public mojom::SurfaceObserver,
     // The box is in device pixels at the page's scale. Unstretched while the
     // window resizes, a frame at scale 1 would show that much bigger.
     frame.metadata.device_scale_factor = shown.scale;
+    // Viz fills the rest of a bigger box with this, and it defaults to white:
+    // a window growing under the pointer would flash white at its new edges.
+    frame.metadata.root_background_color = SkColors::kTransparent;
     frame.metadata.frame_token = ++next_frame_token_;
     frames_.Sent(frame.metadata.frame_token);
     viz::TransferableResource resource = iter->second.resource;
