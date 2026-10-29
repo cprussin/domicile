@@ -702,6 +702,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) override;
 
+  // The page's first screen wake lock went on or its last went off. Patch
+  // 0158 counts them in content's WakeLockServiceImpl; the element hears
+  // WakeLockChanged.
+  void ScreenWakeLockChanged(content::WebContents* source, bool held) override;
+
   // Handles `window.focus()` or `client.focus()` (e.g. after a notification
   // click) by asking the shell, which decides window order.
   void ActivateContents(content::WebContents* contents) override;
@@ -984,6 +989,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Whether the page is fullscreen. Also what IsFullscreenForTabOrPending
   // answers, so the renderer's state and the element's never differ.
   bool page_fullscreen_ = false;
+  // Whether the page holds a screen wake lock. See ScreenWakeLockChanged.
+  bool wake_lock_ = false;
 
   // The page's open dialog. See RunJavaScriptDialog.
   GuestDialogs dialogs_;

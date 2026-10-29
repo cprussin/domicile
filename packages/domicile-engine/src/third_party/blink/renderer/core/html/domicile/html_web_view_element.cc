@@ -94,6 +94,7 @@ constexpr char kFindChangeEvent[] = "domicile-find-change";
 constexpr char kContentSizeChangeEvent[] = "domicile-content-size-change";
 constexpr char kPageFullscreenChangeEvent[] =
     "domicile-page-fullscreen-change";
+constexpr char kWakeLockChangeEvent[] = "domicile-wake-lock-change";
 constexpr char kRenderProcessChangeEvent[] = "domicile-render-process-change";
 
 // A request the shell answers on the event. See
@@ -823,6 +824,12 @@ void HTMLWebViewElement::PageFullscreenChanged(bool fullscreen) {
 
   DispatchEvent(
       *Event::CreateBubble(AtomicString(kPageFullscreenChangeEvent)));
+}
+
+void HTMLWebViewElement::WakeLockChanged(bool held) {
+  wake_lock_ = held;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kWakeLockChangeEvent)));
 }
 
 void HTMLWebViewElement::RenderProcessChanged(

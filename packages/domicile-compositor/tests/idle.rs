@@ -323,6 +323,42 @@ fn a_video_call_in_a_browser_holds_the_screens_on_until_it_lets_go() {
     );
 }
 
+/// A screen saver hold from the engine's own browser process is a page in a
+/// browser window, so a page hears it as `domicile-browser` for the shell to
+/// name the site. The test is both the engine and the page: its pid dialed the
+/// chrome socket.
+#[test]
+fn a_page_hears_a_browser_window_hold_the_desktop_awake_as_the_browser() {
+    let bus = Bus::started();
+    let compositor = Compositor::started_on_a_bus(A_DESK_THAT_BLANKS, &bus.address);
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::Hello {
+            protocol_version: domicile_protocol::PROTOCOL_VERSION,
+        })
+        .expect("the chrome socket takes a hello");
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 1,
+            request: SystemRequest::IdleHolds,
+        })
+        .expect("the chrome socket takes a system call");
+
+    let engine = bus.client_once(SCREEN_SAVER);
+    inhibit(&engine);
+    chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::SystemEvent {
+                    id: 1,
+                    event: SystemEvent::IdleHolds { holders },
+                } if *holders == ["domicile-browser"]
+            )
+        })
+        .expect("the page hears a browser window hold the desktop awake");
+}
+
 /// Asks the screen saver to stay off, as Chromium does, returning the cookie.
 fn inhibit(connection: &zbus::blocking::Connection) -> u32 {
     connection
