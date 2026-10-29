@@ -141,7 +141,7 @@ handle to let go. Manganese's idle inhibitor bar item does this.
     a browser window, is `domicile-browser`, unnamed: the shell names the site
     from `<webview>`'s `wakeLock`.
   - A desktop with no timeout lists none.
-- Manganese's keep awake pill shows while anything holds, and names the
+- Manganese's keep awake eye shows while anything holds, and names the
   holders and the websites.
 - Each change is logged at info, `what holds this desktop awake changed`.
 

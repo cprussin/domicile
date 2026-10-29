@@ -16,10 +16,10 @@ import { QuickSettings } from "@domicile-desktop/manganese-quick-settings";
  * Manganese's default bar.
  *
  * The launcher button is first, next to the tray. The sharing indicator leads
- * the right column, so it is seen, then the keep awake pill and casting to
+ * the right column, so it is seen, then the keep awake eye and casting to
  * TVs. The keymap, which shows only on a keyboard with several, is next, then
- * quick settings. The bell is last because the drawer it opens slides out from that
- * edge.
+ * quick settings. The bell is last because the drawer it opens slides out from
+ * that edge.
  */
 export const DEFAULT_BAR: BarLayout = {
   center: [<Clock key="clock" />],

@@ -8,7 +8,7 @@ import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { useSyncExternalStore } from "react";
 
 import { css } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
+import { center } from "../styled-system/patterns";
 import type { IdleInhibitor } from "./idle-inhibitor";
 import { Inhibiting } from "./idle-inhibitor";
 import type { WakeLockedPage } from "./wake-locked-pages";
@@ -27,23 +27,24 @@ type Props = {
 };
 
 /**
- * A bar pill shown while anything keeps the screens on, naming what does. Its
- * panel lists each app and website, and your own hold with a button to turn it
- * off.
+ * A bar eye shown while anything keeps the screens on, naming what does on
+ * hover. Its panel lists each app and website, and your own hold with a button
+ * to turn it off.
  */
 export const KeptAwake = ({ inhibitor, holders = [], pages = [] }: Props) => {
   const at = useSyncExternalStore(inhibitor.subscribe, inhibitor.current);
   const held = at === Inhibiting.On || at === Inhibiting.Taking;
   const { apps, sites } = keepingAwake(holders, pages);
+  const label = labelOf(apps, sites);
   return held || apps.length > 0 || sites.length > 0 ? (
     <Popover
       align="center"
       side="bottom"
       tone="overPhoto"
+      tooltip={label}
       trigger={
-        <button className={triggerStyles} type="button">
+        <button aria-label={label} className={triggerStyles} type="button">
           <AnimatedEyeIcon open size={15} />
-          {pillText(apps, sites)}
         </button>
       }
     >
@@ -89,8 +90,8 @@ export const KeptAwake = ({ inhibitor, holders = [], pages = [] }: Props) => {
   ) : undefined;
 };
 
-/** The pill's words: the one app or website by name, several counted. */
-const pillText = (
+/** The eye's name: the one app or website by name, several counted. */
+const labelOf = (
   apps: readonly string[],
   sites: readonly WakeLockedPage[],
 ): string => {
@@ -118,23 +119,16 @@ const siteIconStyles = css({
   objectFit: "contain",
 });
 
-// The sharing pill's shape in the bar's own hover fill, since nothing is
-// wrong.
-const triggerStyles = hstack({
-  _hoverOrOpen: {
-    backgroundColor: "color-mix(in oklab, {colors.onPhoto} 28%, transparent)",
-  },
-  backgroundColor: "fillOverPhoto",
-  blockSize: 6,
+// The other bar icons' hover circle.
+const triggerStyles = center({
+  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
+  backgroundColor: "transparent",
+  blockSize: 7,
   borderRadius: "full",
   borderStyle: "none",
-  color: "onPhoto",
+  color: "inherit",
   cursor: "pointer",
   flexShrink: 0,
-  fontSize: "sm",
-  fontWeight: "semibold",
-  gap: 1.5,
-  paddingInline: 2.5,
+  inlineSize: 7,
   transition: "background-color {durations.fast} {easings.default}",
-  whiteSpace: "nowrap",
 });
