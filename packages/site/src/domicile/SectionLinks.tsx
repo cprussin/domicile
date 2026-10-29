@@ -37,12 +37,6 @@ export const SectionLinks = () => (
       picture={<NpmPicture />}
       title="Share on npm"
     />
-    <SectionLink
-      body="A finished shell to use as is or build on."
-      href="#manganese"
-      picture={<ManganesePicture />}
-      title="Start from manganese"
-    />
   </nav>
 );
 
@@ -127,19 +121,6 @@ const NpmPicture = () => (
     <BrandMark brand="npm" />
     <span className={commandStyles}>
       <span className={promptStyles}>$</span> npm i @you/cool-bar
-    </span>
-  </span>
-);
-
-/** A manganese desktop: a bar and two tiled windows, in its color. */
-const ManganesePicture = () => (
-  <span className={desktopStyles}>
-    <span className={barStyles}>
-      <span className={workspaceStyles} />
-    </span>
-    <span className={tilesStyles}>
-      <span className={focusedTileStyles} />
-      <span className={tileStyles} />
     </span>
   </span>
 );
@@ -345,40 +326,3 @@ const commandStyles = css({
 });
 
 const promptStyles = css({ color: "muted" });
-
-const desktopStyles = flex({
-  backgroundColor:
-    "color-mix(in oklab, {colors.manganese} 25%, {colors.background})",
-  blockSize: "100%",
-  direction: "column",
-  gap: 1.5,
-  padding: 2,
-});
-
-const barStyles = hstack({
-  backgroundColor: "color-mix(in oklab, {colors.background} 60%, transparent)",
-  blockSize: 3,
-  borderRadius: "sm",
-  paddingInline: 1.5,
-});
-
-const workspaceStyles = css({
-  backgroundColor: "manganese",
-  blockSize: 1.5,
-  borderRadius: "xs",
-  inlineSize: 3,
-});
-
-const tilesStyles = grid({ flex: 1, gap: 1.5, gridTemplateColumns: "3fr 2fr" });
-
-const tileStyles = css({
-  backgroundColor: "background",
-  border: "1px solid {colors.border}",
-  borderRadius: "sm",
-});
-
-const focusedTileStyles = css({
-  backgroundColor: "background",
-  border: "1px solid {colors.manganese}",
-  borderRadius: "sm",
-});
