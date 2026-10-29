@@ -51,6 +51,13 @@ export const windowManagementPreset = definePreset({
       keyframes: {
         backdropHiding: BACKDROP_FADE,
         backdropShowing: BACKDROP_FADE,
+        // A drop indicator's box fades out where it was as the line between
+        // two tabs fades in; see `DropIndicator`.
+        dropBoxFading: {
+          "0%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
+        dropLineShowing: BACKDROP_FADE,
         // A workspace switch slides every window on the workspace by one
         // screen width (`--workspace-width`; see `slidAcross`). The arriving
         // workspace starts where the leaving one ends, so they never overlap

@@ -60,6 +60,11 @@ type Options = {
    * travel `scale` would scale.
    */
   still: boolean;
+  /**
+   * Keys the element eases from, like `shared`, but leaves nothing under when
+   * it goes.
+   */
+  takesOver?: readonly string[] | undefined;
 };
 
 /**
@@ -85,12 +90,14 @@ export const useSettling = ({
   settler = WEB_ANIMATIONS,
   shared = NO_KEYS,
   still,
+  takesOver = NO_KEYS,
 }: Options): void => {
   const last = useRef<Placed | undefined>(undefined);
   const { x, y, width, height } = rect ?? {};
   const { x: originX, y: originY } = origin ?? {};
   const handoffs = useHandoffs();
   const keys = shared.join("\n");
+  const taken = [...shared, ...takesOver].join("\n");
   useLayoutEffect(() => {
     const was = last.current;
     const shown = element.current;
@@ -98,7 +105,7 @@ export const useSettling = ({
     last.current = now;
     if (shown !== null && now !== undefined) {
       if (was === undefined) {
-        const from = takenOver(handoffs, keys);
+        const from = takenOver(handoffs, taken);
         if (from !== undefined && !still) {
           settler.play(
             shown,
@@ -118,11 +125,11 @@ export const useSettling = ({
     element,
     handoffs,
     height,
-    keys,
     originX,
     originY,
     settler,
     still,
+    taken,
     width,
     x,
     y,

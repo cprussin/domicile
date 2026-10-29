@@ -218,7 +218,9 @@ announces a window only then, so its title, app id and limits are known.
 - **Dropping on a tab strip**, tiled or floating, puts the window in it as a
   tab, before or after the nearest tab, by which half of that tab the pointer
   is nearer. The overlay is a line between the two tabs. A float hides the
-  targets behind it.
+  targets behind it. Moving onto a strip, the box fades out where it was and
+  the line fades in; leaving it, the box grows out of the line. A box scaled
+  to a line would stretch its border and rounding into a blob.
 - The overlay is drawn over the open tabs of the windows it aims at.
 - **Dropping on the edge of a window in a tab group** puts the window beside
   the group, as in sway. A group of one becomes a split.
