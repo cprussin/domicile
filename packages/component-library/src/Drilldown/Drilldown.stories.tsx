@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
 import { css } from "../../styled-system/css";
-import { Drilldown as DrilldownComponent } from "./Drilldown";
+import { Drilldown as DrilldownComponent, DrilldownPage } from "./Drilldown";
 
 const meta = {
   args: {
@@ -87,6 +87,44 @@ const Interactively = () => {
         Port: Speakers ›
       </button>
     </DrilldownComponent>
+  );
+};
+
+/** A page opened from the detail, one level deeper, slides in over both. */
+export const WithPage: StoryObj<typeof DrilldownComponent> = {
+  render: () => (
+    <DrilldownComponent
+      detail={{ content: <Apps />, title: "Sound" }}
+      onBack={() => undefined}
+    >
+      <p>The main view.</p>
+    </DrilldownComponent>
+  ),
+};
+
+const Apps = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => {
+          setOpen(true);
+        }}
+        type="button"
+      >
+        Firefox ›
+      </button>
+      {open && (
+        <DrilldownPage
+          onBack={() => {
+            setOpen(false);
+          }}
+          title="Firefox"
+        >
+          <p>Plays on: Speakers</p>
+        </DrilldownPage>
+      )}
+    </>
   );
 };
 

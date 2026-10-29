@@ -9,7 +9,7 @@ type Props = Omit<
   /** Accessible name for the thumb. */
   label: string;
   /**
-   * A live level from 0 to 1, drawn as a meter under the track, such as
+   * A live level from 0 to 1, drawn as a meter in the track, such as
    * current audio volume. Omit for no meter.
    */
   level?: number | undefined;
@@ -31,18 +31,18 @@ export const Slider = ({
     <BaseSlider.Control className={controlStyles}>
       <BaseSlider.Track className={trackStyles}>
         <BaseSlider.Indicator className={indicatorStyles} />
+        {level !== undefined && (
+          <Meter label={label} level={level} muted={levelMuted} />
+        )}
         <BaseSlider.Thumb aria-label={label} className={thumbStyles} />
       </BaseSlider.Track>
-      {level !== undefined && (
-        <Meter label={label} level={level} muted={levelMuted} />
-      )}
     </BaseSlider.Control>
   </BaseSlider.Root>
 );
 
 /**
- * The level meter: a thin green line under the track, so it isn't mistaken
- * for a second slider. Gray while muted.
+ * The level meter: a faint green fill in the track, over the value, so it
+ * isn't mistaken for a second slider. Gray while muted.
  */
 const Meter = ({
   label,
@@ -90,11 +90,9 @@ const meterStyles = css({
   "&[data-muted] > *": {
     backgroundColor: "muted",
   },
-  backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-  blockSize: "2px",
   borderRadius: "full",
-  insetBlockEnd: 0,
-  insetInline: 0,
+  inset: 0,
+  opacity: 0.5,
   overflow: "hidden",
   pointerEvents: "none",
   position: "absolute",

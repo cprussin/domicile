@@ -1,15 +1,28 @@
 import { describe, expect, it } from "bun:test";
+import { Drilldown } from "@domicile-desktop/component-library/Drilldown";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
-import { device, heldSound, laptop } from "./fixture";
+import { device, heldSound, laptop, stream } from "./fixture";
 import { Mixer } from "./Mixer";
 
 const mixer = (
   sound: ReturnType<typeof heldSound>,
   audio: typeof laptop = laptop,
-) => render(<Mixer audio={audio} server={sound.server} />);
+) => {
+  const view = (current: typeof laptop) => (
+    <Drilldown>
+      <Mixer audio={current} server={sound.server} />
+    </Drilldown>
+  );
+  const { rerender } = render(view(audio));
+  return {
+    report: (next: typeof laptop) => {
+      rerender(view(next));
+    },
+  };
+};
 
 /** Pick `name` from the `Select` called `label`. */
 const choose = async (label: string, name: string) => {
@@ -17,13 +30,20 @@ const choose = async (label: string, name: string) => {
   await userEvent.click(screen.getByRole("option", { name }));
 };
 
-/** Opens the output's list of ways. */
-const change = () =>
-  userEvent.click(
-    within(screen.getByRole("region", { name: "Output" })).getByRole("button", {
-      name: "Change",
-    }),
-  );
+/** The names of the options in the `Select` called `label`. */
+const options = async (label: string) => {
+  await userEvent.click(screen.getByRole("combobox", { name: label }));
+  return screen.getAllByRole("option").map((option) => option.textContent);
+};
+
+/** Two microphones: the laptop's and a headset's. */
+const withHeadset = {
+  ...laptop,
+  inputs: [
+    ...laptop.inputs,
+    device({ description: "Headset", id: "input:headset" }),
+  ],
+};
 
 describe("Mixer", () => {
   describe("at a glance", () => {
@@ -49,50 +69,38 @@ describe("Mixer", () => {
         /^No speakers or microphones$/,
       );
       expect(
-        screen.getByRole("button", { name: "Sound cards" }),
+        screen.getByRole("button", { name: "Sound card modes" }),
       ).toBeInTheDocument();
     });
 
-    it("has the default output and microphone, each with a meter", () => {
+    it("has the volume and the microphone, metering only the microphone", () => {
       const sound = heldSound();
       mixer(sound);
 
-      sound.levels(
-        new Map([
-          ["output:speakers", 1],
-          ["input:mic", 0.001],
-        ]),
-      );
+      sound.levels(new Map([["input:mic", 0.001]]));
 
       expect(screen.getByRole("slider", { name: "Volume" })).toHaveAttribute(
         "aria-valuenow",
         "50",
       );
       expect(
-        screen.getByRole("meter", { name: "Volume level" }),
-      ).toHaveAttribute("aria-valuenow", "100");
+        screen.queryByRole("meter", { name: "Volume level" }),
+      ).not.toBeInTheDocument();
       expect(
         screen.getByRole("meter", { name: "Microphone level" }),
       ).toHaveAttribute("aria-valuenow", "0");
+      expect(sound.metered.at(-1)).toEqual(["input:mic"]);
     });
 
-    it("grays a muted device's row and marks its meter", () => {
+    it("grays a muted microphone's row and marks its meter", () => {
       const sound = heldSound();
       mixer(sound, {
         ...laptop,
         inputs: laptop.inputs.map((input) => ({ ...input, muted: true })),
       });
 
-      sound.levels(
-        new Map([
-          ["output:speakers", 1],
-          ["input:mic", 1],
-        ]),
-      );
+      sound.levels(new Map([["input:mic", 1]]));
 
-      expect(
-        screen.getByRole("meter", { name: "Volume level" }),
-      ).not.toHaveAttribute("data-muted");
       expect(
         screen.getByRole("meter", { name: "Microphone level" }),
       ).toHaveAttribute("data-muted");
@@ -122,57 +130,26 @@ describe("Mixer", () => {
         screen.getByRole("slider", { name: "Microphone" }),
       ).toHaveAttribute("aria-valuenow", "30");
     });
-
-    it("meters only what is on screen", async () => {
-      const sound = heldSound();
-      mixer(sound);
-      expect(sound.metered.at(-1)).toEqual(["output:speakers", "input:mic"]);
-
-      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
-
-      expect(sound.metered.at(-1)).toEqual([
-        "output:speakers",
-        "input:mic",
-        "playback:42",
-      ]);
-    });
   });
 
   describe("where sound goes", () => {
-    it("names the way in use, keeping the rest behind Change", () => {
-      const sound = heldSound();
-      mixer(sound);
+    it("picks from each plugged-in port and device, showing the one in use", async () => {
+      mixer(heldSound());
 
-      const output = screen.getByRole("region", { name: "Output" });
-      expect(output).toHaveTextContent("Speakers");
-      expect(screen.queryByRole("radiogroup")).toBeNull();
-    });
-
-    it("lists each plugged-in port and device, the one in use picked", async () => {
-      const sound = heldSound();
-      mixer(sound);
-      await change();
-
-      const outputs = screen.getByRole("radiogroup", { name: "Play sound on" });
       expect(
-        within(outputs)
-          .getAllByRole("radio")
-          .map((radio) => [
-            radio.textContent,
-            radio.getAttribute("aria-checked"),
-          ]),
-      ).toStrictEqual([
-        ["Speakers", "true"],
-        ["HDMI", "false"],
+        screen.getByRole("combobox", { name: "Play sound on" }),
+      ).toHaveTextContent("Speakers");
+      expect(await options("Play sound on")).toStrictEqual([
+        "Speakers",
+        "HDMI",
       ]);
     });
 
     it("makes another device the default", async () => {
       const sound = heldSound();
       mixer(sound);
-      await change();
 
-      await userEvent.click(screen.getByRole("radio", { name: "HDMI" }));
+      await choose("Play sound on", "HDMI");
 
       expect(sound.asked).toEqual([["setDefault", "output:hdmi"]]);
     });
@@ -186,60 +163,86 @@ describe("Mixer", () => {
           ports: output.ports.map((port) => ({ ...port, available: true })),
         })),
       });
-      await change();
 
-      await userEvent.click(screen.getByRole("radio", { name: "Headphones" }));
+      await choose("Play sound on", "Headphones");
 
       expect(sound.asked).toEqual([
         ["setPort", "output:speakers", "analog-output-headphones"],
       ]);
     });
 
-    it("offers no choice with only one way", () => {
+    it("picks the microphone to record from", async () => {
       const sound = heldSound();
-      mixer(sound, {
+      mixer(sound, withHeadset);
+
+      await choose("Record from", "Headset");
+
+      expect(sound.asked).toEqual([["setDefault", "input:headset"]]);
+    });
+
+    it("offers no choice with only one way", () => {
+      mixer(heldSound(), {
         ...laptop,
         outputs: [device({ default: true })],
       });
 
-      expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
       expect(
-        screen.queryByRole("radiogroup", { name: "Play sound on" }),
-      ).toBeNull();
+        screen.queryByRole("combobox", { name: "Play sound on" }),
+      ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("radiogroup", { name: "Record from" }),
-      ).toBeNull();
+        screen.queryByRole("combobox", { name: "Record from" }),
+      ).not.toBeInTheDocument();
     });
   });
 
   describe("apps", () => {
-    it("opens a drawer of each app and its streams", async () => {
-      const sound = heldSound();
-      mixer(sound);
+    it("lists each app with its volume, saying which use the microphone", () => {
+      mixer(heldSound());
 
-      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
-
-      expect(screen.getByRole("heading", { name: "Firefox" })).toBeVisible();
-      expect(screen.getByRole("heading", { name: "Recorder" })).toBeVisible();
-      expect(sound.metered.at(-1)).toEqual([
-        "output:speakers",
-        "input:mic",
-        "playback:42",
-      ]);
+      const apps = screen.getByRole("region", { name: "Apps" });
+      expect(
+        within(apps).getByRole("button", { name: /^Firefox/ }),
+      ).toHaveTextContent(/^Firefox$/);
+      expect(
+        within(apps).getByRole("button", { name: /^Recorder/ }),
+      ).toHaveTextContent("RecorderUsing the microphone");
+      expect(
+        within(apps).getByRole("slider", { name: "Firefox" }),
+      ).toHaveAttribute("aria-valuenow", "100");
+      expect(
+        within(apps).getByRole("slider", { name: "Recorder" }),
+      ).toBeInTheDocument();
     });
 
-    it("turns down what is playing, and moves it", async () => {
+    it("turns down and mutes all of an app's sound together", async () => {
       const sound = heldSound();
-      mixer(sound);
-      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
+      mixer(sound, {
+        ...laptop,
+        playback: [
+          ...laptop.playback,
+          stream({ id: "playback:43", title: "A video" }),
+        ],
+      });
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Mute Firefox: A song" }),
+        screen.getByRole("button", { name: "Mute Firefox" }),
       );
-      await choose("Firefox: A song output", "HDMI");
 
       expect(sound.asked).toEqual([
         ["setMuted", "playback:42", true],
+        ["setMuted", "playback:43", true],
+      ]);
+    });
+
+    it("moves an app to another output from its page", async () => {
+      const sound = heldSound();
+      mixer(sound);
+
+      await userEvent.click(screen.getByRole("button", { name: /^Firefox/ }));
+      expect(screen.getByRole("heading", { name: "Firefox" })).toBeVisible();
+      await choose("Plays on", "HDMI");
+
+      expect(sound.asked).toEqual([
         ["moveStream", "playback:42", "output:hdmi"],
       ]);
     });
@@ -247,34 +250,49 @@ describe("Mixer", () => {
     it("can record from what an output plays", async () => {
       const sound = heldSound();
       mixer(sound);
-      await userEvent.click(screen.getByRole("button", { name: "Apps" }));
 
-      await choose("Recorder input", "Monitor of Speakers");
+      await userEvent.click(screen.getByRole("button", { name: /^Recorder/ }));
+      await choose("Records from", "Monitor of Speakers");
 
       expect(sound.asked).toEqual([
         ["moveStream", "recording:7", "input:speakers.monitor"],
       ]);
     });
 
-    it("has no drawer when nothing plays or records", () => {
+    it("leaves an app's page once the app stops", async () => {
       const sound = heldSound();
-      mixer(sound, { ...laptop, playback: [], recording: [] });
+      const view = mixer(sound);
+      await userEvent.click(screen.getByRole("button", { name: /^Firefox/ }));
+
+      view.report({ ...laptop, playback: [] });
 
       expect(
-        screen.queryByRole("button", { name: "Apps" }),
+        screen.queryByRole("heading", { name: "Firefox" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("has no apps when nothing plays or records", () => {
+      mixer(heldSound(), { ...laptop, playback: [], recording: [] });
+
+      expect(
+        screen.queryByRole("region", { name: "Apps" }),
       ).not.toBeInTheDocument();
     });
   });
 
   describe("cards", () => {
-    it("switches a card's profile", async () => {
+    it("switches a card's mode from its page", async () => {
       const sound = heldSound();
       mixer(sound);
       await userEvent.click(
-        screen.getByRole("button", { name: "Sound cards" }),
+        screen.getByRole("button", { name: "Sound card modes" }),
       );
 
-      await choose("Built-in Audio profile", "Off");
+      expect(await options("Built-in Audio")).toStrictEqual([
+        "Stereo sound only",
+        "Off",
+      ]);
+      await userEvent.click(screen.getByRole("option", { name: "Off" }));
 
       expect(sound.asked).toEqual([["setProfile", "alsa_card.pci", "off"]]);
     });
