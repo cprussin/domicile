@@ -445,6 +445,7 @@
         "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@pandacss/dev": "catalog:",
+        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
         "zod": "catalog:",
       },

@@ -29,7 +29,13 @@ terminal: `domicile send-shell idle-inhibitor`. The shell reaches it through
 
 `@domicile-desktop/manganese-bar-module-idle-inhibitor/quick-settings` exports its parts
 for [`QuickSettings`](../shell-manganese/docs/TOP-BAR.md#quick-settings):
-`KeepAwakeIndicator` and `KeepAwake`.
+`KeepAwake`.
+
+## Keep awake pill
+
+`@domicile-desktop/manganese-bar-module-idle-inhibitor/kept-awake` exports
+`KeptAwake`: a bar pill shown while anything keeps the screens on. See
+[TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md#keep-awake-pill).
 
 ## Test
 
