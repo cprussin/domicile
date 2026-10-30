@@ -44,8 +44,8 @@
 {"type":"system_reply","id":1,"reply":{"kind":"read","data":"OTcK"}}
 {"type":"system_reply","id":2,"reply":{"kind":"written"}}
 {"type":"system_reply","id":3,"reply":{"kind":"entries","entries":[{"name":"BAT0","file_type":"symlink"},{"name":"uevent","file_type":"file"}]}}
-{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"directory","size":4096,"modified_ms":1790000000000}}
-{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"other","size":0,"modified_ms":null}}
+{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"directory","size":4096,"modified_ms":1790000000000,"real_path":null}}
+{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"other","size":0,"modified_ms":null,"real_path":null}}
 {"type":"system_reply","id":5,"reply":{"kind":"started"}}
 {"type":"system_reply","id":6,"reply":{"kind":"failed","error":{"kind":"not_found","message":"No such file or directory (os error 2)"}}}
 {"type":"system_event","id":5,"event":{"kind":"output","stream":"stdout","data":"RXZlbnQgJ2NoYW5nZScK"}}

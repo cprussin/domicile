@@ -8,6 +8,7 @@ import { FilePicker } from "./FilePicker";
 import type { FileRequest } from "./file-request";
 import { ChooserMode } from "./file-request";
 import type { Folders } from "./folders";
+import { distinct, namedIn } from "./user-folders";
 
 const HOME = "/home/someone";
 
@@ -65,6 +66,13 @@ const foldersOf = () => {
         ? Promise.reject(new DOMException(path, "NotReadableError"))
         : Promise.resolve(entries);
     },
+    // The usual folders, those the tree has.
+    userFolders: (home) =>
+      Promise.resolve(
+        distinct(namedIn(undefined, home), home).filter(({ path }) =>
+          tree.has(path),
+        ),
+      ),
     watch: (path, changed) => {
       watchers.set(path, changed);
       return () => {

@@ -338,6 +338,7 @@ export const system = (host: SystemHost): System => {
           ? {
               fileType: fileType(reply.file_type),
               modifiedMs: reply.modified_ms ?? undefined,
+              realPath: reply.real_path ?? undefined,
               size: reply.size,
             }
           : unexpected(reply),

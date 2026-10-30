@@ -564,7 +564,8 @@ impl System {
                     .map(|entries| SystemReply::Entries { entries })
             }),
             SystemRequest::Stat { path } => self.on_a_thread(id, move |home| -> io::Result<_> {
-                let metadata = std::fs::metadata(home.join(path))?;
+                let path = home.join(path);
+                let metadata = std::fs::metadata(&path)?;
                 Ok(SystemReply::Stat {
                     file_type: file_type(metadata.file_type()),
                     size: metadata.len(),
@@ -573,6 +574,9 @@ impl System {
                         .ok()
                         .and_then(|at| at.duration_since(UNIX_EPOCH).ok())
                         .map(|since| since.as_millis() as u64),
+                    real_path: std::fs::canonicalize(&path)
+                        .ok()
+                        .map(|real| real.to_string_lossy().into_owned()),
                 })
             }),
             SystemRequest::Watch { path } => {

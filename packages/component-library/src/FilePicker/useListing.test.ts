@@ -10,6 +10,7 @@ const unchanging = (list: Folders["list"]): Folders => ({
     throw new Error("unexpected create");
   },
   list,
+  userFolders: () => Promise.resolve([]),
   watch: () => () => undefined,
 });
 
@@ -26,6 +27,7 @@ const changing = (entries: Map<string, readonly string[]>) => {
         ? Promise.reject(new DOMException(path, "NotReadableError"))
         : Promise.resolve(listed);
     },
+    userFolders: () => Promise.resolve([]),
     watch: (path, changed) => {
       watchers.set(path, changed);
       return () => {

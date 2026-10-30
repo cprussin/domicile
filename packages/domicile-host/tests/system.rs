@@ -270,12 +270,15 @@ mod files {
             file_type,
             size,
             modified_ms,
+            real_path,
         } = reply(&heard, 1)
         else {
             panic!("expected a stat");
         };
         assert_eq!((file_type, size), (FileType::File, 4));
         assert!(modified_ms.is_some());
+        let file = std::fs::canonicalize(home.path().join("file")).unwrap();
+        assert_eq!(real_path, Some(file.to_string_lossy().into_owned()));
     }
 }
 
