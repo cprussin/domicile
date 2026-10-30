@@ -52,14 +52,24 @@ DeskCursorImage DeskCursorImageOf(const SkBitmap& bitmap,
                                   const gfx::Point& hotspot,
                                   float scale);
 
+// `turned`, drawn for a panel turned `quarter_turns` clockwise, stood back
+// upright. `wm::CursorLoader` turns the pointer with the panel, but a cast of
+// that panel is upright (docs/DISPLAYS.md#rotation). Undoes
+// `wm::ScaleAndRotateCursorBitmapAndHotpoint`, hotspot and all, for
+// `quarter_turns` 0 to 3, which is how `display::Display::Rotation` counts.
+COMPONENT_EXPORT(DESK_CURSOR_IMAGE)
+DeskCursorImage UprightDeskCursorImage(DeskCursorImage turned,
+                                       int quarter_turns);
+
 // The pointer on screen, for the compositor's screen casts.
 //
 // The compositor draws a pointer into a cast but has no pointer of its own:
 // this process draws it, from the desk's theme or a page's cursor. The DRM
-// platform's `DrmCursor` sets the image here each time the pointer changes,
+// platform's `DrmCursor` sets the image here each time it shows the pointer,
 // and every control channel sends it to the compositor as `desk_cursor`.
 //
-// Set on the UI thread and listened for from the IO thread, hence the lock.
+// Set on the UI and evdev threads and listened for from the IO thread, hence
+// the lock.
 // Callers must wrap callbacks with `base::BindPostTask`: they run on the
 // thread that set the image, and never under the lock.
 class COMPONENT_EXPORT(DESK_CURSOR_IMAGE) DeskCursorImageSource {

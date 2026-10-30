@@ -133,8 +133,8 @@ The engine has two channels to the rest of Domicile:
   browser window casts. A repeat of the last place is dropped. See
   `components/domicile/browser/desk_pointer.h`.
 - **`desk_cursor`** is the browser's too: the pointer the DRM platform puts
-  on screen (`DrmCursor::SetCursor`, patch 0138), through
-  `ui/base/cursor/domicile/desk_cursor_image.h`. `image` has `size` and
+  on screen (`DrmCursor`, patches 0138 and 0163), stood upright for its
+  panel, through `ui/base/cursor/domicile/desk_cursor_image.h`. `image` has `size` and
   `hotspot` in pixels, `scale` in pixels a logical pixel, and `bgra`, the
   first frame as premultiplied BGRA in base64. No `image` while the pointer
   is hidden. Sent after `hello` too, once the platform has set one.
