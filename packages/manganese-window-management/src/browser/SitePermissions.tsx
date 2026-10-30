@@ -126,8 +126,8 @@ export const SitePermissions = ({
                         }
                       }}
                       options={SETTING_OPTIONS}
-                      quiet
                       size="xs"
+                      surface="quiet"
                       value={setting}
                     />
                   </span>
@@ -181,8 +181,8 @@ const DeviceChoice = ({
           }
         }}
         options={listed.map(({ id, name }) => ({ label: name, value: id }))}
-        quiet
         size="xs"
+        surface="quiet"
         value={first.id}
       />
     </span>
