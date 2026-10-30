@@ -31,8 +31,8 @@ export const SURFACES = ["card", "glass"] as const;
 export type Surface = (typeof SURFACES)[number];
 
 /**
- * The popup's width. `lg` fits rows with several columns; `xl` fits a list
- * beside a preview.
+ * The popup's width. `lg` fits rows with several columns, or a compact list
+ * beside a preview; `xl` fits a roomy list beside a preview.
  */
 export const SIZES = ["md", "lg", "xl"] as const;
 export type Size = (typeof SIZES)[number];
@@ -68,6 +68,11 @@ type Props = ExtendProps<
     size?: Size | undefined;
     surface?: Surface | undefined;
     title?: ReactNode | undefined;
+    /**
+     * Whether `title` is for screen readers only, as when the popup's first
+     * control already says what it is for.
+     */
+    titleHidden?: boolean | undefined;
     trigger?: ReactElement | undefined;
   }
 >;
@@ -83,6 +88,7 @@ const ModalDialogComponent = ({
   size = "md",
   surface = "card",
   title,
+  titleHidden = false,
   trigger,
   ...rootProps
 }: Props) => {
@@ -119,7 +125,12 @@ const ModalDialogComponent = ({
               finalFocus={returnFocus}
               onKeyDown={moveFooterFocus}
             >
-              {title !== undefined && (
+              {title !== undefined && titleHidden && (
+                <BaseDialog.Title className={hiddenTitleStyles}>
+                  {title}
+                </BaseDialog.Title>
+              )}
+              {title !== undefined && !titleHidden && (
                 <header
                   className={headerStyles({ hasCloseButton: closeButton })}
                 >
@@ -143,7 +154,7 @@ const ModalDialogComponent = ({
                 className={bodyStyles({
                   hasCloseButton: closeButton,
                   hasFooter: footer !== undefined,
-                  hasTitle: title !== undefined,
+                  hasTitle: title !== undefined && !titleHidden,
                 })}
               >
                 {children}
@@ -225,7 +236,7 @@ const popupStyles = flex({
     marginBlockStart: "8cqh",
   },
   "&[data-size=lg]": {
-    inlineSize: "min({spacing.180}, 92cqw)",
+    inlineSize: "min({spacing.220}, 92cqw)",
   },
   "&[data-size=xl]": {
     inlineSize: "min({spacing.320}, 92cqw)",
@@ -241,14 +252,18 @@ const popupStyles = flex({
       position: "absolute",
     },
     backdropFilter: "blur({spacing.5}) saturate(180%)",
-    backgroundColor: "color-mix(in oklab, {colors.card} 62%, transparent)",
+    // Near white in light mode: the light card through blur reads as gray.
+    backgroundColor: {
+      _light: "color-mix(in oklab, {colors.white} 86%, transparent)",
+      base: "color-mix(in oklab, {colors.card} 62%, transparent)",
+    },
     borderColor: "color-mix(in oklab, {colors.foreground} 16%, transparent)",
   },
   // Makes form controls translucent on glass. Controls mark their element
   // with `data-control`, so its parent is the wrapper that paints the
   // background. The descendant selector outranks the wrapper's own class
   // regardless of order (see `_control/wrapperBase.ts`).
-  "&[data-surface=glass] :has(> [data-control])": {
+  "&[data-surface=glass] :has(> [data-control]):not([data-flush])": {
     backgroundColor:
       "color-mix(in oklab, {colors.background} 45%, transparent)",
   },
@@ -292,6 +307,8 @@ const titleStyles = css({
   lineHeight: "snug",
   margin: 0,
 });
+
+const hiddenTitleStyles = css({ srOnly: true });
 
 const closeStyles = css({
   insetBlockStart: 3,
