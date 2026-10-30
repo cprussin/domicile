@@ -273,7 +273,7 @@ const triggerStyles = hstack({
   },
   backgroundColor: "danger",
   blockSize: 6,
-  borderRadius: "full",
+  borderRadius: "lg",
   borderStyle: "none",
   color: "onPhoto",
   cursor: "pointer",

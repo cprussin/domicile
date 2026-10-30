@@ -15,11 +15,9 @@ type Props = {
  * The workspace switcher at the bar's start. Like sway's bar, it shows this
  * screen's workspaces that have windows, plus the one on screen.
  *
- * Each is a number in a ring, filled for the focused workspace and outlined for
- * one visible on another screen (sway's `focused_workspace` versus
- * `active_workspace`). The ring marks the current workspace by shape, not just
- * shade, so it stands out over a wallpaper. Text is set smaller than the bar's
- * so `10` fits in the same circle.
+ * Each is a number. The focused workspace sits on a lit square like a hovered
+ * bar button; one visible on another screen gets a fainter square; the rest
+ * are dimmed until hovered.
  *
  * A plain `<button>` rather than the library's `Button`, which does not support
  * `aria-current` styling or an external `className`. It inherits the bar's
@@ -52,39 +50,37 @@ export const Workspaces = ({
   </nav>
 );
 
-// Enough gap that adjacent rings do not appear to touch.
-const listStyles = hstack({ gap: 2 });
+const listStyles = hstack({ gap: 0.5 });
 
 const workspaceStyles = cva({
   base: {
-    // The height of the bar's text, so the ring sits in the line.
+    _hover: { backgroundColor: "fillOverPhoto", color: "white" },
+    backgroundColor: "transparent",
     blockSize: 6,
-    // A transparent border from the start, so the hover border does not shift
-    // the number.
-    border: "1px solid transparent",
-    borderRadius: "full",
+    borderRadius: "lg",
+    borderStyle: "none",
+    color: "color-mix(in oklab, {colors.white} 55%, transparent)",
     cursor: "pointer",
     // A block, not flex: `text-box` trim below works only on block containers.
     display: "block",
-    // Smaller than the bar's text so two digits fit in the circle.
-    fontSize: "sm",
-    // Tabular figures keep every number the same width, so all stay centered.
+    // 13px, matching the clock.
+    fontSize: "0.8125rem",
+    // Tabular figures keep every number the same width.
     fontVariantNumeric: "tabular-nums",
-    inlineSize: 6,
-    // Only matters where `text-box` trim is unsupported; it keeps the line
-    // within the circle.
+    fontWeight: "medium",
+    // Only matters where `text-box` trim is unsupported.
     lineHeight: "tight",
-    padding: 0,
+    minInlineSize: 6,
+    paddingBlock: 0,
+    paddingInline: 2,
     // Pressed feedback that is not just color.
     scale: { _active: 0.92, base: 1 },
     textAlign: "center",
     // Center vertically. Trimming the line box to cap height and baseline
-    // leaves only the glyph, so the digit sits centered in the ring rather than
-    // high.
+    // leaves only the glyph, so the digit sits centered rather than high.
     textBox: "trim-both cap alphabetic",
     transition: `
       background-color {durations.fast} {easings.out},
-      border-color {durations.fast} {easings.out},
       color {durations.fast} {easings.out},
       scale {durations.faster} {easings.out}
     `,
@@ -92,32 +88,15 @@ const workspaceStyles = cva({
   variants: {
     shown: {
       focused: {
-        backgroundColor: "white",
-        // Black, not `background`: the chip is white in both themes, so its
-        // text cannot follow the theme.
-        color: "black",
-        fontWeight: "bold",
-        // No text shadow: on a white chip it only smudges the glyph.
-        textShadow: "none",
+        backgroundColor: "fillOverPhoto",
+        color: "white",
+        fontWeight: "semibold",
       },
-      hidden: {
-        _hover: {
-          // Hover ring and wash. White, not a token, because the wallpaper
-          // behind it does not change with the theme.
-          backgroundColor:
-            "color-mix(in oklab, {colors.white} 15%, transparent)",
-          borderColor: "color-mix(in oklab, {colors.white} 70%, transparent)",
-        },
-        backgroundColor: "transparent",
-      },
-      // Visible on another screen: the hover ring without the fill.
+      hidden: {},
+      // Visible on another screen: a fainter square.
       visible: {
-        _hover: {
-          backgroundColor:
-            "color-mix(in oklab, {colors.white} 15%, transparent)",
-        },
-        backgroundColor: "transparent",
-        borderColor: "color-mix(in oklab, {colors.white} 70%, transparent)",
+        backgroundColor: "color-mix(in oklab, {colors.white} 8%, transparent)",
+        color: "white",
       },
     },
   },

@@ -119,12 +119,12 @@ const siteIconStyles = css({
   objectFit: "contain",
 });
 
-// The other bar icons' hover circle.
+// The other bar icons' hover square.
 const triggerStyles = center({
   _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   backgroundColor: "transparent",
   blockSize: 7,
-  borderRadius: "full",
+  borderRadius: "lg",
   borderStyle: "none",
   color: "inherit",
   cursor: "pointer",

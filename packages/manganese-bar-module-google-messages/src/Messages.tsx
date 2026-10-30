@@ -167,7 +167,7 @@ const count = (unread: number) => (
 /** The id of `screen`'s button, for opening the panel under it. */
 const triggerId = (screen: string) => `google-messages-${screen}`;
 
-// Round, like the bar's other icon buttons, lit while there are new messages.
+// Rounded square, like the bar's other icon buttons, lit while there are new messages.
 const itemStyles = css({
   _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   "&[data-unread=true]": {
@@ -176,7 +176,7 @@ const itemStyles = css({
   alignItems: "center",
   backgroundColor: "transparent",
   blockSize: 7,
-  borderRadius: "full",
+  borderRadius: "lg",
   borderStyle: "none",
   color: "inherit",
   cursor: "pointer",
