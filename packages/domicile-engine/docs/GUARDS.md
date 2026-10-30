@@ -124,7 +124,7 @@ Headless.
 | `guard-webview-app-window.sh` | an app window (`open_url` with `"app":true`) is listed `isApp` and records no visits; an ordinary window opened after it is recorded; the shell's `openAppWindow` opens a window listed `isApp` |
 | `guard-app-window-reuse.sh` | an app window with an id is reused by `"reuse":"focus"` and `"navigate"` (`open_url`, and the shell's `openAppWindow`) instead of opened again, and asks to be in front; `navigate` loads the address in it; `countBrowserWindowMatches` counts in a drawn window |
 | `guard-webview-survives-load-shell.sh` | a browser window's page keeps running across `load_shell`, and the new shell's `<webview window>` shows it |
-| `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after |
+| `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after; once shown it never blinks `hidden` (patch 0162) |
 | `guard-webview-moved.sh` | a browser window's page is attached again and visible after its `<webview>` moves in the shell's document, as React's `insertBefore` does |
 | `guard-webview-paused.sh` | a window whose page is paused on a `confirm()` slides and shrinks at the frame rate of one whose page runs (patch 0155) |
 | `guard-webview-crash.sh` | a page whose renderer crashes sets `renderProcessGone` to `crashed`, its view draws nothing over the shell, and `reload()` brings it back (patch 0124) |
