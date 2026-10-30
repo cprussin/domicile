@@ -463,8 +463,32 @@ describe("PortalDialogs", () => {
 
       expect(screen.getByRole("dialog")).toHaveTextContent("Use the camera?");
       expect(screen.getByText("App asks")).toBeInTheDocument();
-      expect(screen.getByText("Example wants the camera")).toBeInTheDocument();
       expect(screen.getByText("It will see you.")).toBeInTheDocument();
+      // The subtitle mostly restates the title; it shows only without a body.
+      expect(
+        screen.queryByText("Example wants the camera"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("explains with the subtitle when there is no body", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([access(1, { body: "" })]);
+
+      expect(screen.getByText("Example wants the camera")).toBeInTheDocument();
+    });
+
+    it("draws the yes in the accent", () => {
+      const accent = render(<Button variant="accent">Allow</Button>);
+      const accented = within(accent.container).getByRole("button").className;
+      accent.unmount();
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([access(1)]);
+
+      expect(screen.getByRole("button", { name: "Allow" }).className).toBe(
+        accented,
+      );
     });
 
     it("uses the labels the application offers", () => {

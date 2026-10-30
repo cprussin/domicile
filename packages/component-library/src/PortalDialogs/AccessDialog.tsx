@@ -13,44 +13,56 @@ type Props = {
 };
 
 /** A yes/no question from an application. Dismissing it denies. */
-export const AccessDialog = ({ answer, asker, body, screen }: Props) => (
-  <ModalDialog
-    closeButton={false}
-    footer={
-      <>
-        <Button
-          onClick={() => {
-            answer(Answer.Canceled());
-          }}
-          variant="outline"
-        >
-          {body.denyLabel ?? "Deny"}
-        </Button>
-        <Button
-          onClick={() => {
-            answer(Answer.Access());
-          }}
-          variant={body.destructive ? "danger" : "primary"}
-        >
-          {body.grantLabel ?? "Allow"}
-        </Button>
-      </>
-    }
-    onOpenChange={(open) => {
-      if (!open) {
-        answer(Answer.Canceled());
+export const AccessDialog = ({ answer, asker, body, screen }: Props) => {
+  // One line under the title. The subtitle mostly restates the title, so the
+  // body wins when there is one.
+  const detail = [body.body, body.subtitle].find((text) => text !== "");
+  return (
+    <ModalDialog
+      closeButton={false}
+      footer={
+        <>
+          {asker !== undefined && (
+            <p className={askerStyles}>{`${asker} asks`}</p>
+          )}
+          <Button
+            onClick={() => {
+              answer(Answer.Canceled());
+            }}
+            variant="outline"
+          >
+            {body.denyLabel ?? "Deny"}
+          </Button>
+          <Button
+            onClick={() => {
+              answer(Answer.Access());
+            }}
+            variant={body.destructive ? "danger" : "accent"}
+          >
+            {body.grantLabel ?? "Allow"}
+          </Button>
+        </>
       }
-    }}
-    open
-    screen={screen}
-    title={body.title}
-  >
-    {asker !== undefined && <p className={askerStyles}>{`${asker} asks`}</p>}
-    {body.subtitle !== "" && <p className={textStyles}>{body.subtitle}</p>}
-    {body.body !== "" && <p className={textStyles}>{body.body}</p>}
-  </ModalDialog>
-);
+      onOpenChange={(open) => {
+        if (!open) {
+          answer(Answer.Canceled());
+        }
+      }}
+      open
+      screen={screen}
+      title={body.title}
+    >
+      {detail !== undefined && <p className={detailStyles}>{detail}</p>}
+    </ModalDialog>
+  );
+};
 
-const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
+// Who asks sits opposite the buttons, leaving the body one line.
+const askerStyles = css({
+  color: "muted",
+  fontSize: "0.8125rem",
+  margin: 0,
+  marginInlineEnd: "auto",
+});
 
-const textStyles = css({ color: "foreground", margin: 0 });
+const detailStyles = css({ color: "muted", margin: 0 });
