@@ -171,7 +171,8 @@ user's and every other partition, like a separate browser profile:
 - **Hide a window with `display: none`** on the view or an ancestor, and keep
   it mounted. Its page is then hidden like a background tab:
   `document.visibilityState` is `hidden`, timers slow and nothing paints.
-  Showing the view shows the page.
+  Showing the view shows the page. The page hears a hide 100ms late, so a
+  view that is shown again within that time never reads `hidden`.
 - **Lay out a hidden window while it `isCaptured`.** A screenshot, a picker's
   preview or a screen cast of the page alone sets it, and `browser.on("change")`
   fires. A page with no layout box draws nothing, so the capture would get no
