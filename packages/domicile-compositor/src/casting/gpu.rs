@@ -125,47 +125,38 @@ pub fn snapshot(
     }
 }
 
-/// Reads `crop` of `texture` into `target`, rows `stride` bytes apart.
+/// Draws `layers` into a frame `size` big and reads it into `target`, rows
+/// `stride` bytes apart.
 ///
 /// Waits for the GPU. Taken only for a frame on the GPU cast to a consumer
-/// that refused dmabufs.
+/// that refused dmabufs, or a screenshot.
 ///
-/// Draws the crop into a buffer of its own first: a dmabuf GLES imports as
+/// Draws into a buffer of its own: a dmabuf GLES imports as
 /// `GL_TEXTURE_EXTERNAL_OES` cannot back the framebuffer a read needs, and
 /// Smithay does not say which ones it imported that way.
-pub fn read_back(
+pub fn read_drawn(
     renderer: &mut GlesRenderer,
-    texture: &GlesTexture,
-    crop: Rect,
+    layers: &[Layer],
+    size: (u32, u32),
     target: &mut [u8],
     stride: usize,
 ) -> Result<(), FillError> {
-    let size = Size::from((crop.2, crop.3));
-    let mut upright: GlesTexture = renderer.create_buffer(Fourcc::Argb8888, size)?;
-    let whole = Rectangle::from_size((crop.2, crop.3).into());
-    let mut framebuffer = renderer.bind(&mut upright)?;
-    let mut frame = renderer.render(&mut framebuffer, whole.size, Transform::Normal)?;
-    frame.clear(Color32F::TRANSPARENT, &[whole])?;
-    Frame::render_texture_from_to(
-        &mut frame,
-        texture,
-        Rectangle::new(
-            (f64::from(crop.0), f64::from(crop.1)).into(),
-            (f64::from(crop.2), f64::from(crop.3)).into(),
-        ),
-        whole,
-        &[whole],
-        &[],
-        Transform::Normal,
-        1.0,
+    let whole = Rectangle::from_size(Size::from((size.0 as i32, size.1 as i32)));
+    let drawn: GlesTexture = renderer.create_buffer(Fourcc::Argb8888, whole.size)?;
+    // The read below waits for the draw, so its fence is not needed.
+    draw(
+        renderer,
+        layers,
+        &drawn,
+        size,
+        Plan::Nothing,
+        &Sprite::hidden(),
     )?;
-    frame.finish()?.wait().map_err(|_| FillError::Interrupted)?;
-    drop(framebuffer);
-    // Rows come back top first: Smithay drew the texture upright, y-inverted
-    // or not, into a buffer that is not.
-    let mapping = renderer.copy_texture(&upright, Rectangle::from_size(size), Fourcc::Argb8888)?;
+    // Rows come back top first: `draw` drew upright into a buffer that is
+    // not y-inverted.
+    let mapping = renderer.copy_texture(&drawn, whole, Fourcc::Argb8888)?;
     let pixels = renderer.map_texture(&mapping)?;
-    let row = crop.2 as usize * 4;
+    let row = size.0 as usize * 4;
     for (y, from) in pixels.chunks_exact(row).enumerate() {
         target[y * stride..y * stride + row].copy_from_slice(from);
     }
@@ -297,6 +288,30 @@ mod tests {
         255, 0, 0, 255, // bottom left: blue
         255, 255, 255, 255, // bottom right: white
     ];
+
+    /// Reads `crop` of `texture` into `target`, rows `stride` bytes apart.
+    fn read_back(
+        renderer: &mut GlesRenderer,
+        texture: &GlesTexture,
+        crop: Rect,
+        target: &mut [u8],
+        stride: usize,
+    ) -> Result<(), FillError> {
+        let snapshot = Snapshot::Texture(texture.clone());
+        let layer = Layer {
+            snapshot: &snapshot,
+            from: crop,
+            to: (0, 0, crop.2, crop.3),
+            transform: Transform::Normal,
+        };
+        read_drawn(
+            renderer,
+            &[layer],
+            (crop.2 as u32, crop.3 as u32),
+            target,
+            stride,
+        )
+    }
 
     #[test]
     fn a_texture_reads_back_the_right_way_up() {

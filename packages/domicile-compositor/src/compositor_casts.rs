@@ -252,7 +252,8 @@ impl DomicileCompositor {
             .insert_source(Timer::from_deadline(due), |_, _, data: &mut CalloopData| {
                 let state = &mut data.state;
                 state.cast_deadline = None;
-                let due = state.casting.tick(Instant::now());
+                let renderer = state.gpu.as_mut().map(Gpu::renderer);
+                let due = state.casting.tick(renderer, Instant::now());
                 state.arm_the_cast_deadline(due);
                 TimeoutAction::Drop
             })

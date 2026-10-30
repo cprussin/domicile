@@ -1,9 +1,13 @@
 //! When a stream's next frame is filled and sent.
 //!
-//! PipeWire lends the Wayland thread empty buffers. A damaged commit fills the
-//! oldest lent buffer, and the buffer is sent no sooner than one frame interval
-//! after the last. A commit that lands inside the interval refills the buffer
-//! that is waiting, so the consumer gets the newest frame, not the first.
+//! PipeWire lends the Wayland thread empty buffers. A damaged commit takes the
+//! oldest lent buffer, which is filled and sent once a frame interval has
+//! passed since the last. Commits that land inside the interval all go into
+//! that one buffer, so the consumer gets the newest frame, filled once.
+//!
+//! Frames are due on a fixed beat, not one interval after each send: a send
+//! that is late by a timer's wake does not push every later frame back, which
+//! would make a source at the stream's own rate lose a frame every few dozen.
 //!
 //! A commit that finds no lent buffer is dropped. Its damage is kept and sent
 //! with the next frame, because the consumer's copy has not seen it.
@@ -22,10 +26,11 @@ pub const MOST_RECTS: usize = 16;
 #[derive(Debug)]
 pub struct Pacing<B> {
     interval: Duration,
+    /// The beat the last frame was sent on.
     last_sent: Option<Instant>,
     lent: VecDeque<B>,
-    /// The buffer holding a frame that waits for the interval to pass.
-    filled: Option<B>,
+    /// The buffer a frame waits in for the interval to pass.
+    waiting: Option<B>,
     /// Everything damaged since the last frame sent.
     damage: Vec<Rect>,
 }
@@ -33,11 +38,11 @@ pub struct Pacing<B> {
 /// What [`Pacing::due`] says to do.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Due<B> {
-    /// Send this buffer, with this damage.
+    /// Fill this buffer and send it, with this damage.
     Send { buffer: B, damage: Vec<Rect> },
-    /// A filled buffer waits; ask again at this instant.
+    /// A frame waits; ask again at this instant.
     At(Instant),
-    /// Nothing is filled.
+    /// No frame waits.
     Nothing,
 }
 
@@ -48,7 +53,7 @@ impl<B: Copy + PartialEq> Pacing<B> {
             interval: Duration::from_secs(1) / framerate,
             last_sent: None,
             lent: VecDeque::new(),
-            filled: None,
+            waiting: None,
             damage: Vec::new(),
         }
     }
@@ -61,43 +66,51 @@ impl<B: Copy + PartialEq> Pacing<B> {
     /// PipeWire took its buffers back to make new ones, as on a resize.
     pub fn forget_buffers(&mut self) {
         self.lent.clear();
-        self.filled = None;
+        self.waiting = None;
     }
 
-    /// The source committed a frame damaged in `rects`. Returns the buffer to
-    /// fill with it, or `None` when every buffer is with the consumer.
+    /// The source committed a frame damaged in `rects`. Returns the buffer the
+    /// frame waits in, or `None` when every buffer is with the consumer.
     pub fn damaged(&mut self, rects: &[Rect]) -> Option<B> {
         self.damage.extend_from_slice(rects);
         if self.damage.len() > MOST_RECTS {
             self.damage = vec![bounding_box(&self.damage)];
         }
-        if self.filled.is_none() {
-            self.filled = self.lent.pop_front();
+        if self.waiting.is_none() {
+            self.waiting = self.lent.pop_front();
         }
-        self.filled
+        self.waiting
     }
 
-    /// Whether damage waits for a buffer to be filled.
+    /// Whether damage waits for a buffer.
     pub fn owed(&self) -> bool {
-        self.filled.is_none() && !self.damage.is_empty()
+        self.waiting.is_none() && !self.damage.is_empty()
     }
 
-    /// When the filled buffer that waits is due, if one does.
+    /// Whether a frame waits in a buffer for the interval to pass.
+    pub fn waits(&self) -> bool {
+        self.waiting.is_some()
+    }
+
+    /// When the frame that waits is due, if one does.
     pub fn waiting_until(&self) -> Option<Instant> {
-        self.filled
+        self.waiting
             .and(self.last_sent)
             .map(|sent| sent + self.interval)
     }
 
-    /// Whether a filled buffer is due at `now`. A `Send` counts as sent.
+    /// Whether the frame that waits is due at `now`. A `Send` counts as sent:
+    /// fill its buffer and send it.
     pub fn due(&mut self, now: Instant) -> Due<B> {
         let at = self.last_sent.map(|sent| sent + self.interval);
-        match (self.filled, at) {
+        match (self.waiting, at) {
             (None, _) => Due::Nothing,
             (Some(_), Some(at)) if now < at => Due::At(at),
-            (Some(buffer), _) => {
-                self.filled = None;
-                self.last_sent = Some(now);
+            (Some(buffer), at) => {
+                self.waiting = None;
+                // On the beat unless a whole interval was missed, as after
+                // a pause, when the beat starts again from now.
+                self.last_sent = Some(at.filter(|&at| now < at + self.interval).unwrap_or(now));
                 Due::Send {
                     buffer,
                     damage: std::mem::take(&mut self.damage),
@@ -168,8 +181,7 @@ mod tests {
         pacing.damaged(&[WHOLE]);
         pacing.due(start);
 
-        // Two commits inside the 100 ms interval: the second refills the
-        // buffer the first filled.
+        // Two commits inside the 100 ms interval wait in one buffer.
         assert_eq!(pacing.damaged(&[(0, 0, 10, 10)]), Some(2));
         assert_eq!(pacing.damaged(&[(20, 20, 10, 10)]), Some(2));
         let later = start + Duration::from_millis(40);
@@ -226,6 +238,62 @@ mod tests {
         );
     }
 
+    /// A source drawing at the stream's own rate, its frames a little early
+    /// or late, loses none of them to a frame that replaces one waiting.
+    #[test]
+    fn a_source_at_the_streams_rate_loses_no_frame_to_jitter() {
+        let mut pacing = Pacing::new(60);
+        let start = Instant::now();
+        let mut sent = 0;
+        let mut timer = None;
+        for frame in 0..120u32 {
+            let jitter = Duration::from_micros(u64::from(frame % 3) * 700);
+            let arrives = start + Duration::from_secs(1) * frame / 60 + jitter;
+            if let Some(at) = timer.filter(|&at| at <= arrives) {
+                timer = None;
+                if let Due::Send { .. } = pacing.due(at) {
+                    sent += 1;
+                }
+            }
+            pacing.lent(frame);
+            pacing.damaged(&[WHOLE]);
+            match pacing.due(arrives) {
+                Due::Send { .. } => sent += 1,
+                // The deadline timer wakes a millisecond late.
+                Due::At(at) => timer = Some(at + Duration::from_millis(1)),
+                Due::Nothing => unreachable!("a frame waits"),
+            }
+        }
+        if let Some(at) = timer {
+            if let Due::Send { .. } = pacing.due(at) {
+                sent += 1;
+            }
+        }
+
+        assert_eq!(sent, 120);
+    }
+
+    #[test]
+    fn a_frame_after_a_pause_is_sent_at_once_and_paces_from_there() {
+        let mut pacing = Pacing::new(10);
+        pacing.lent(1);
+        pacing.lent(2);
+        let start = Instant::now();
+        pacing.damaged(&[WHOLE]);
+        pacing.due(start);
+
+        let later = start + Duration::from_secs(5);
+        pacing.damaged(&[WHOLE]);
+
+        assert!(matches!(pacing.due(later), Due::Send { buffer: 2, .. }));
+        pacing.lent(1);
+        pacing.damaged(&[WHOLE]);
+        assert_eq!(
+            pacing.due(later),
+            Due::At(later + Duration::from_millis(100))
+        );
+    }
+
     #[test]
     fn forgotten_buffers_are_not_filled() {
         let mut pacing = Pacing::new(60);
@@ -249,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn damage_without_a_buffer_is_owed_until_one_is_filled() {
+    fn damage_without_a_buffer_is_owed_until_one_is_lent() {
         let mut pacing = Pacing::new(60);
         assert!(!pacing.owed());
 
@@ -262,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_filled_frame_inside_the_interval_waits() {
+    fn only_a_frame_inside_the_interval_waits() {
         let mut pacing = Pacing::new(10);
         pacing.lent(1);
         pacing.lent(2);

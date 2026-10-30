@@ -1,5 +1,5 @@
-//! Paints a frame's layers into memory, on the CPU where they are kept there
-//! and read back from the GPU where they are not.
+//! Paints a frame's layers into memory: on the CPU when every layer is kept
+//! there, else drawn together on the GPU and read back once.
 
 use smithay::backend::renderer::gles::GlesRenderer;
 
@@ -9,59 +9,58 @@ use crate::casting::shm_copy::{copy, Client};
 
 /// Draws `layers` over `target`, a `pixel` buffer with rows `stride` bytes
 /// apart. A layer on the GPU needs `renderer`.
+///
+/// With a layer on the GPU, the GPU draws them all, scaling each, and the
+/// frame is read back in one go: reading back each source at its own size
+/// and scaling it on the CPU took longer than a frame on a desk near 4K.
 pub fn paint(
     layers: &[Layer],
     target: &mut [u8],
     stride: usize,
     pixel: Pixel,
-    mut renderer: Option<&mut GlesRenderer>,
+    renderer: Option<&mut GlesRenderer>,
 ) -> Result<(), FillError> {
+    if layers
+        .iter()
+        .any(|layer| matches!(layer.snapshot, Snapshot::Texture(_)))
+    {
+        let size = layers.iter().fold((0, 0), |(width, height), layer| {
+            (
+                width.max((layer.to.0 + layer.to.2) as u32),
+                height.max((layer.to.1 + layer.to.3) as u32),
+            )
+        });
+        return gpu::read_drawn(
+            renderer.ok_or(FillError::NoGpu)?,
+            layers,
+            size,
+            target,
+            stride,
+        );
+    }
     for layer in layers {
-        match layer.snapshot {
-            Snapshot::Pixels {
+        let Snapshot::Pixels {
+            bytes: pixels,
+            stride: from,
+            alpha,
+            ..
+        } = layer.snapshot
+        else {
+            unreachable!("a frame with a layer on the GPU is drawn there above");
+        };
+        copy(
+            &Client {
                 bytes: pixels,
-                stride: from,
-                alpha,
-                ..
-            } => copy(
-                &Client {
-                    bytes: pixels,
-                    stride: *from,
-                    alpha: *alpha,
-                },
-                layer.from,
-                target,
-                stride,
-                pixel,
-                layer.to,
-                layer.transform,
-            ),
-            Snapshot::Texture(texture) => {
-                // Read back at the source's size, then scale on copy.
-                let row = layer.from.2 as usize * 4;
-                let mut read = vec![0; row * layer.from.3 as usize];
-                gpu::read_back(
-                    renderer.as_deref_mut().ok_or(FillError::NoGpu)?,
-                    texture,
-                    layer.from,
-                    &mut read,
-                    row,
-                )?;
-                copy(
-                    &Client {
-                        bytes: &read,
-                        stride: row,
-                        alpha: true,
-                    },
-                    (0, 0, layer.from.2, layer.from.3),
-                    target,
-                    stride,
-                    pixel,
-                    layer.to,
-                    layer.transform,
-                );
-            }
-        }
+                stride: *from,
+                alpha: *alpha,
+            },
+            layer.from,
+            target,
+            stride,
+            pixel,
+            layer.to,
+            layer.transform,
+        );
     }
     Ok(())
 }
@@ -130,6 +129,48 @@ mod tests {
         .expect("read back and painted");
 
         assert_eq!(blue(&target), [2, 1]);
+    }
+
+    /// A desk across a monitor kept on the CPU and one on the GPU, the
+    /// second scaled down by half, is drawn together.
+    #[test]
+    fn layers_on_the_cpu_and_the_gpu_are_painted_side_by_side() {
+        let (mut renderer, _) = headless_renderer().expect("EGL: llvmpipe will do");
+        let cpu = Snapshot::Pixels {
+            bytes: SIDE_BY_SIDE.to_vec(),
+            stride: 8,
+            alpha: true,
+            size: (2, 1),
+        };
+        let wide = [SIDE_BY_SIDE, SIDE_BY_SIDE].concat();
+        let gpu = Snapshot::Texture(
+            renderer
+                .import_memory(&wide, Fourcc::Argb8888, Size::from((4, 1)), false)
+                .expect("the pixels import"),
+        );
+        let layers = [
+            Layer {
+                snapshot: &cpu,
+                from: (0, 0, 2, 1),
+                to: (0, 0, 2, 1),
+                transform: Transform::Normal,
+            },
+            Layer {
+                snapshot: &gpu,
+                from: (0, 0, 4, 1),
+                to: (2, 0, 2, 1),
+                transform: Transform::Normal,
+            },
+        ];
+        let mut target = [0; 16];
+
+        paint(&layers, &mut target, 16, Pixel::Bgra, Some(&mut renderer)).expect("painted");
+
+        assert_eq!(blue(&target)[..2], [1, 2]);
+        // Every other source pixel; which of each pair is the GPU's pick.
+        assert!(blue(&target)[2..]
+            .iter()
+            .all(|&blue| blue == 1 || blue == 2));
     }
 
     /// Each pixel's blue byte.
