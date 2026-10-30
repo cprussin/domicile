@@ -196,6 +196,9 @@ struct Cast {
     part: Option<Rect>,
     /// The pointer's image for its metadata, with `cursor_plan`.
     cursor_sprite: Option<Arc<Sprite>>,
+    /// Its [`ToPipewire::Start`], held until its source's size is known: a
+    /// browser window's page has none until it draws.
+    unstarted: Option<ToPipewire>,
 }
 
 /// The pointer over a source.
@@ -352,8 +355,9 @@ impl Streams {
                 (width.max(1) as u32, height.max(1) as u32)
             }
             // A window that has not drawn is offered at one pixel, and asks
-            // again with its first frame. So is a browser window's page.
+            // again with its first frame.
             (Shows::Window(app_id), None) => self.sizes.get(app_id).copied().unwrap_or((1, 1)),
+            // Offered once its page draws, at its size; see `page_drawn`.
             (Shows::BrowserWindow(_), None) => (1, 1),
             (Shows::Desk { layout, .. }, _) => layout.size,
         };
@@ -363,6 +367,21 @@ impl Streams {
                 .and_then(|gpu| gpu.modifiers.get(&pixel).cloned())
                 .unwrap_or_default()
         });
+        let waits = matches!((&shows, part), (Shows::BrowserWindow(_), None));
+        let start = ToPipewire::Start {
+            stream,
+            offered,
+            size,
+            cursor,
+            heard,
+            listener,
+        };
+        let unstarted = if waits {
+            Some(start)
+        } else {
+            self.send(start);
+            None
+        };
         self.casts.insert(
             stream,
             Cast {
@@ -376,16 +395,9 @@ impl Streams {
                 cursor_plan: Plan::Nothing,
                 part,
                 cursor_sprite: None,
+                unstarted,
             },
         );
-        self.send(ToPipewire::Start {
-            stream,
-            offered,
-            size,
-            cursor,
-            heard,
-            listener,
-        });
     }
 
     /// What `stream` shows of `source`, with any capture it draws from
@@ -985,6 +997,28 @@ impl Streams {
         let content = frame.content;
         let damage = within(frame.damage.unwrap_or(content), content);
         page.frame = Some(Frame { snapshot, content });
+        let cast = self.casts.get_mut(&stream).expect("found above");
+        if let Some(ToPipewire::Start {
+            stream,
+            offered,
+            cursor,
+            heard,
+            listener,
+            ..
+        }) = cast.unstarted.take()
+        {
+            let size = page_size(content);
+            cast.asked = size;
+            self.send(ToPipewire::Start {
+                stream,
+                offered,
+                size,
+                cursor,
+                heard,
+                listener,
+            });
+        }
+        let page = self.pages.get_mut(&capture).expect("checked by the caller");
         let held = match kept {
             Kept::Copied => {
                 capturer.release(capture, id);
@@ -1331,6 +1365,17 @@ impl Streams {
     }
 
     fn send(&mut self, request: ToPipewire) {
+        // A stream that ends before it started starts first, so it ends as
+        // every stream does and its consumer hears it.
+        if let ToPipewire::End { stream, .. } = &request {
+            if let Some(start) = self
+                .casts
+                .get_mut(stream)
+                .and_then(|cast| cast.unstarted.take())
+            {
+                self.send(start);
+            }
+        }
         if self.clients.contains(&request.stream()) {
             self.to_clients
                 .send(request)
@@ -2551,6 +2596,78 @@ mod tests {
         assert_eq!(filled(&heard), Some(vec![(0, 0, 1, 1)]), "wanted");
     }
 
+    /// Starts a client's cast of browser window "1".
+    fn browser_window_cast(streams: &mut Streams, engine: &mut Engine) -> StreamId {
+        let stream = StreamId(1);
+        streams.request(
+            Request::Start {
+                stream,
+                source: Source::BrowserWindow("1".into()),
+                part: None,
+                most_pixels: None,
+                cursor: CursorMode::Embedded,
+                consumer: Consumer::Client,
+                listener: Box::new(|_| {}),
+            },
+            Vec::new,
+            None,
+            Some(engine),
+        );
+        stream
+    }
+
+    /// A browser window's stream is offered at its page's size, which its
+    /// first frame says, not at one pixel then resized: a recording of one
+    /// that was resized came out black.
+    #[test]
+    fn a_browser_window_cast_is_offered_at_its_pages_size() {
+        let (to_clients, heard) = channel();
+        let mut streams = Streams::new(channel().0, to_clients, None);
+        let mut engine = Engine::default();
+        browser_window_cast(&mut streams, &mut engine);
+        assert!(
+            heard.try_recv().is_err(),
+            "nothing offered before the page draws"
+        );
+
+        let mut letterboxed = painted((3, 2), &[0, 1, 2, 0, 3, 4]);
+        letterboxed.content = (1, 0, 2, 2);
+        streams.captured(
+            BROWSER_WINDOW,
+            7,
+            Ok(letterboxed),
+            None,
+            &mut engine,
+            Instant::now(),
+        );
+
+        match heard.try_recv() {
+            Ok(ToPipewire::Start { size, .. }) => assert_eq!(size, (2, 2)),
+            _ => panic!("a stream offered once the page drew"),
+        }
+    }
+
+    /// A browser window's cast stopped before its page drew still ends
+    /// through its stream, so its consumer hears it.
+    #[test]
+    fn a_browser_window_cast_stopped_before_its_page_draws_ends() {
+        let (to_clients, heard) = channel();
+        let mut streams = Streams::new(channel().0, to_clients, None);
+        let mut engine = Engine::default();
+        let stream = browser_window_cast(&mut streams, &mut engine);
+
+        streams.request(Request::Stop { stream }, Vec::new, None, Some(&mut engine));
+
+        assert!(matches!(heard.try_recv(), Ok(ToPipewire::Start { .. })));
+        assert!(matches!(
+            heard.try_recv(),
+            Ok(ToPipewire::End {
+                why: Ended::Stopped,
+                ..
+            })
+        ));
+    }
+
     /// The pointer over a monitor or a window is in its pixels, with its
     /// image at its density. Off it, or hidden, there is none.
     #[test]
@@ -2591,6 +2708,7 @@ mod tests {
             cursor_plan: Plan::Nothing,
             part: None,
             cursor_sprite: None,
+            unstarted: None,
         }
     }
 }
