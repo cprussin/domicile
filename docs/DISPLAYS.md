@@ -191,6 +191,9 @@ window so each can rotate and scale on its own.
 - A rotated monitor's capture is upright. viz captures the window's frame
   before it turns it for the panel, so screenshots and monitor and region
   casts read it as they read any other monitor.
+- The pointer in a cast is upright too. `DrmCursor` turns the image it hands
+  the casts (`desk_cursor`) back by the rotation of the panel it is on
+  (patch `0163`).
 - A client that pre-rotates its buffer for a rotated panel
   (`wl_surface.set_buffer_transform`) is shown and cast upright. See
   [WINDOW-COMPOSITING.md](architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).
