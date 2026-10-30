@@ -1060,7 +1060,7 @@ fn reroute_frontend(connection: &zbus::blocking::Connection, systemd: &zbus::blo
         Ok(true) => match systemd
             .call::<_, _, OwnedObjectPath>("TryRestartUnit", &(FRONTEND_UNIT, "replace"))
         {
-            Ok(_) => tracing::info!(
+            Ok(_) => tracing::debug!(
                 "restarted the portal frontend, which had started under another desktop's name"
             ),
             Err(why) => tracing::debug!(

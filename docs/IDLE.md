@@ -143,16 +143,16 @@ handle to let go. Manganese's idle inhibitor bar item does this.
   - A desktop with no timeout lists none.
 - Manganese's keep awake eye shows while anything holds, and names the
   holders and the websites.
-- Each change is logged at info, `what holds this desktop awake changed`.
+- Each change is logged at debug, `what holds this desktop awake changed`.
 
 ### Finding what keeps a desktop awake
 
 Input that restarts the clock after the desktop sat still for half its shortest
-timeout is logged at info, `input restarts the idle clock`, with what it was
+timeout is logged at debug, `input restarts the idle clock`, with what it was
 and how long the desktop had been still. For the browser's own input,
 `detail` names the event and the device, e.g. `MouseMoved from Logitech USB
-Receiver`. Where the compositor logs to the
-journal, read both lines with:
+Receiver`. Start the desktop with `RUST_LOG=warn,domicile_compositor=debug`.
+Where the compositor logs to the journal, read both lines with:
 
 ```sh
 journalctl -b --grep 'idle clock|holds this desktop'

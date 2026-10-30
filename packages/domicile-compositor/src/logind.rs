@@ -8,7 +8,7 @@ use std::os::fd::OwnedFd;
 use std::thread;
 
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use zbus::blocking::{proxy, Connection, Proxy};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
@@ -62,7 +62,7 @@ impl DomicileCompositor {
                     .insert_source(
                         Timer::from_duration(LOCK_SCREEN_DRAWS_WITHIN),
                         move |_, _, _: &mut CalloopData| {
-                            info!("this desktop is locked; the machine can sleep");
+                            debug!("this desktop is locked; the machine can sleep");
                             drop(held.take());
                             TimeoutAction::Drop
                         },

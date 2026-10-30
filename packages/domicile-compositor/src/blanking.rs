@@ -19,7 +19,7 @@ use smithay::wayland::{
     idle_inhibit::IdleInhibitHandler,
     shell::xdg::{ToplevelSurface, XdgToplevelSurfaceData},
 };
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::client_requests::ClientRequest;
 use crate::held_frames::HeldFrames;
@@ -79,7 +79,7 @@ impl DomicileCompositor {
                 ClientRequest::Activity { input } => input.as_deref(),
                 _ => None,
             };
-            info!(
+            debug!(
                 input,
                 detail,
                 still_seconds = still.as_secs_f32(),
@@ -399,7 +399,7 @@ impl DomicileCompositor {
             })
             .collect();
         if self.hub.idle_holds.hold(holders.clone()) {
-            info!(?holders, "what holds this desktop awake changed");
+            debug!(?holders, "what holds this desktop awake changed");
         }
     }
 

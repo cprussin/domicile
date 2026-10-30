@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use domicile_config::{
     ExtensionsConfig, IdleConfig, KeyboardConfig, Keymap, LockConfig, Omit, ThemeMode,
@@ -222,7 +222,7 @@ impl DomicileCompositor {
     /// browser process (over the chrome socket), and later chromes (stored
     /// copy). See [`crate::keymap`].
     fn retype_the_desktop(&mut self, keymap: &Keymap, compiled: String) {
-        info!(
+        debug!(
             keymap = %keymap.name,
             layout = %keymap.xkb_layout,
             variant = %keymap.xkb_variant,
@@ -363,7 +363,7 @@ impl DomicileCompositor {
             Err(why) => error!(%why, "the reloaded lock cannot be used; the current one stays"),
             Ok(verifier) => {
                 self.lock.rekeyed(Box::new(verifier));
-                info!("taking up a reloaded lock");
+                debug!("taking up a reloaded lock");
             }
         }
     }

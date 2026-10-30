@@ -65,6 +65,8 @@ one monitor is its window. Without an engine, `DOMICILE_CAST_TEST_PATTERN=1`
 fills monitor and region casts with one color instead
 (`packages/e2e-harness/tests/e2e-a-monitor-casts-through-the-portal.sh` uses it).
 
+The lines below are debug; run with `RUST_LOG=warn,domicile_compositor=debug`.
+
 - `cast ready … node=N`: the stream's node. A consumer connects to it.
 - `cast format … settled=…`: what the consumer picked: `Shm`, `Dmabuf`, or a
   modifier the producer fixed.

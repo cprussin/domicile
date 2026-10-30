@@ -13,8 +13,8 @@ use crate::DomicileCompositor;
 
 /// Log a request the lock refused.
 ///
-/// Input at a locked desktop is normal (it wakes the screen), so that is debug.
-/// A shell sending commands while locked has a bug, so that is a warning.
+/// Both are debug: input at a locked desktop wakes the screen, and a shell's
+/// timers (night light, wallpaper) keep sending commands while it is locked.
 /// Neither line says what was asked.
 pub fn say_what_the_lock_refused(refusal: Refusal) {
     match refusal {
@@ -22,7 +22,7 @@ pub fn say_what_the_lock_refused(refusal: Refusal) {
             debug!("this desktop is locked; what the shell forwarded reaches no client")
         }
         Refusal::Command => {
-            warn!("this desktop is locked; what the shell asked for is not done")
+            debug!("this desktop is locked; what the shell asked for is not done")
         }
     }
 }

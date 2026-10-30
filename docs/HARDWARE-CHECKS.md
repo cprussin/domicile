@@ -81,7 +81,8 @@ Expect, in order:
 3. One new engine, and no second `domicile is up`.
 4. From the compositor: `the engine this desktop was drawing through has been
    replaced; rejoining it`
-5. `rejoined the engine and restated this desktop to it shown=2 blank=0`
+5. `rejoined the engine and restated this desktop to it shown=2 blank=0`, at
+   debug (`RUST_LOG=warn,domicile_compositor=debug`)
 
 Pass: both windows still show what they showed, including the idle one. The
 idle client does not redraw, so it shows only if the compositor restored its

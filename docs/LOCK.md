@@ -199,6 +199,9 @@ the read directory match.
 
 ## Log lines
 
+The routine ones (the machine can sleep, a refused request, a reloaded lock)
+are debug. See them with `RUST_LOG=warn,domicile_compositor=debug`.
+
 ```
 nobody is at this desktop; it locks itself
 nothing holds this desktop awake now; it locks itself

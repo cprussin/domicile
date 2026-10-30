@@ -24,7 +24,7 @@ use domicile_host::home_walk::{walk, walk_within, Directory, RealDirectory};
 use domicile_host::home_watch::HomeWatcher;
 use domicile_host::index_file::{read, write, IndexFileError};
 use domicile_host::index_location::index_file;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// How many walked paths are added to the index at a time. Small enough for an
 /// early launcher to fill in gradually, large enough to keep loop overhead low.
@@ -143,7 +143,7 @@ pub fn keep_the_index(
                 debug!("the kernel dropped filesystem events, so the home is being walked again");
             }
             Held::Omitting(new) => {
-                info!("the desk's config moved `files.omit`, so the home is being walked again");
+                debug!("the desk's config moved `files.omit`, so the home is being walked again");
                 omit = new;
             }
             Held::Ended => return,

@@ -19,7 +19,7 @@ domicile ./shell.js --config ./desk.json  # with another config file
 - With no shell, it runs the one the config names: a JSON config's `"shell"`,
   or a config module's `Shell` export.
 - The config is `~/.config/domicile/domicile.{ts,tsx,js,mjs,json}` unless
-  `--config` names one. It prints which it used.
+  `--config` names one. On a terminal, it prints which it used.
 - A `.ts`, `.tsx` or a `.js` with bare imports is built first, with React and
   `@domicile-desktop/*` from Domicile's install. So are npm and `github:`
   packages ([SHELL-PACKAGING.md](SHELL-PACKAGING.md#distributing)).

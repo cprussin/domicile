@@ -395,13 +395,13 @@ fn built(
     for line in BufReader::new(stdout).lines() {
         let line = line.map_err(|why| format!("cannot read the shell builder: {why}"))?;
         match heard(&line) {
-            BuilderHeard::Step(step) if terminal => {
-                eprint!("\r\x1b[K{}", bar(&step));
-                let _ = std::io::stderr().flush();
-                stepped(&step);
-            }
+            // Off a terminal, the splash shows the progress; the log stays
+            // quiet.
             BuilderHeard::Step(step) => {
-                eprintln!("domicile: {}", bar(&step));
+                if terminal {
+                    eprint!("\r\x1b[K{}", bar(&step));
+                    let _ = std::io::stderr().flush();
+                }
                 stepped(&step);
             }
             BuilderHeard::Log(said) => log.push(said),
@@ -689,16 +689,19 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         &binary.with_file_name("domicile-app-host"),
     )?;
 
-    // Print the choices before starting anything, so later failures can be
-    // read against them. Print the absolute module path, not its directory, so
-    // a wrong file is visible.
-    let module = page.root.join(&page.module);
-    println!("shell: {}", module.display());
-    // Print how the config was chosen; a wrong config is a common cause of a
-    // wrong monitor layout.
-    println!("config: {config}");
-    // The profile decides which sign-ins the desktop has.
-    println!("profile: {}", places.profile.display());
+    // On a terminal, print the choices before starting anything, so later
+    // failures can be read against them. A login session's journal stays
+    // quiet. Print the absolute module path, not its directory, so a wrong
+    // file is visible.
+    let interactive = std::io::stdout().is_terminal();
+    if interactive {
+        let module = page.root.join(&page.module);
+        println!("shell: {}", module.display());
+        // A wrong config is a common cause of a wrong monitor layout.
+        println!("config: {config}");
+        // The profile decides which sign-ins the desktop has.
+        println!("profile: {}", places.profile.display());
+    }
 
     // Bind before starting components, which inherit the path. The
     // supervisor owns it because it routes commands to the engine and the
@@ -756,7 +759,9 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         env("XDG_VTNR").as_deref(),
     )
     .map_err(|why| why.to_string())?;
-    println!("the engine is taking the {platform} platform");
+    if interactive {
+        println!("the engine is taking the {platform} platform");
+    }
     let on_the_cpu = on_the_cpu(
         &platform,
         env(software_compositing::VARIABLE).as_deref(),
@@ -874,9 +879,11 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     start_an_engine(desktop, &mut running)?;
     start_a_compositor(desktop, &mut running, heard)?;
 
-    println!();
+    // Scripts wait for this line, so it prints off a terminal too.
     println!("domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above.");
-    println!("Ctrl-C to stop.");
+    if std::io::stdout().is_terminal() {
+        println!("Ctrl-C to stop.");
+    }
 
     // Restart each part that dies; see `domicile_launch::restart`. `over`
     // records the exit that ended the desktop, because the loop's own result

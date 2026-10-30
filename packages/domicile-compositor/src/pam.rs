@@ -24,7 +24,7 @@ use std::ptr;
 use domicile_protocol::Passphrase;
 use libloading::Library;
 use thiserror::Error;
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::lock::{CouldNotCheck, Verdict, Verifier};
 
@@ -373,7 +373,7 @@ extern "C" fn converse(
                     let text = CStr::from_ptr(message.msg).to_string_lossy();
                     match message.msg_style {
                         PAM_ERROR_MSG => warn!(said = %text, "PAM, on unlocking this desktop"),
-                        PAM_TEXT_INFO => info!(said = %text, "PAM, on unlocking this desktop"),
+                        PAM_TEXT_INFO => debug!(said = %text, "PAM, on unlocking this desktop"),
                         _ => (*answers.add(each)).resp = answer(typed),
                     }
                 }

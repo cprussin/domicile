@@ -23,7 +23,7 @@ use domicile_host::recording::{file_name, recordings_dir, Timer};
 use domicile_protocol::{
     Captured, CapturingKind, PortalAnswer, SystemError, SystemErrorKind, SHELL_APP_ID,
 };
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 use super::queue::{ask_unbidden, Queue};
 use super::screencast::{captured, chosen, dialog, preview, Selected};
@@ -154,7 +154,7 @@ pub fn for_the_shell(queue: &Queue, recordings: &Recordings) -> Result<PathBuf, 
             let _ = heard.lock().unwrap().send(Heard::Control(answer.clone()));
         }
     });
-    info!(file = %recorded.file.display(), "recording the screen");
+    debug!(file = %recorded.file.display(), "recording the screen");
     let over = loop {
         let heard = hearing
             .recv()
@@ -221,7 +221,7 @@ fn cast(
                     }
                 }
                 Event::Ended(why) => {
-                    info!(?why, "a screen recording's stream ended");
+                    debug!(?why, "a screen recording's stream ended");
                     // Dropping `ready` unsent fails a stream that never
                     // started.
                     ready = None;

@@ -31,7 +31,7 @@ use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 use smithay::reexports::calloop::channel::Sender;
 use spa::pod::Pod;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::casting::audio::{self, Graph, Heard, Holders};
 use crate::casting::cursor::{arrow, within, CursorMode, Plan, Sprite};
@@ -384,7 +384,7 @@ impl Producer {
                 }
             })
             .register();
-        info!("connected to PipeWire for casting");
+        debug!("connected to PipeWire for casting");
         *self.connection.borrow_mut() = Some(Connection {
             core: core.clone(),
             _core_listener: core_listener,
@@ -583,7 +583,7 @@ impl Producer {
             Ok(node) => {
                 let ports = audio_ports();
                 node.set_param(spa::param::ParamType::PortConfig, 0, pod_of(&ports));
-                info!(stream = ?cast, %name, "cast sound node made");
+                debug!(stream = ?cast, %name, "cast sound node made");
                 let mut holders = Holders::default();
                 holders.cast_started(cast);
                 self.sounds.borrow_mut().insert(
@@ -606,7 +606,7 @@ impl Producer {
         self.sounds.borrow_mut().retain(|name, sound| {
             let keep = !sound.holders.expired(now);
             if !keep {
-                info!(%name, "an idle sound node was dropped");
+                debug!(%name, "an idle sound node was dropped");
             }
             keep
         });
@@ -862,7 +862,7 @@ impl Cast {
         for step in steps {
             match step {
                 Step::Ready { node } => {
-                    info!(stream = ?self.id, node, "cast ready");
+                    debug!(stream = ?self.id, node, "cast ready");
                     self.hear(Event::Ready {
                         node,
                         sound: self.sound.clone(),
@@ -879,7 +879,7 @@ impl Cast {
                     }
                 }
                 Step::End(why) => {
-                    info!(stream = ?self.id, ?why, "cast ended");
+                    debug!(stream = ?self.id, ?why, "cast ended");
                     self.shared.tell(ToWayland::Ended { stream: self.id });
                     self.hear(Event::Ended(why));
                     // Fails only once the reaper is gone, at exit.
