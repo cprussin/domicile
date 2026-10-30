@@ -632,6 +632,22 @@ fn hints(mut sent: HashMap<String, OwnedValue>) -> Hints {
     }
 }
 
+/// `app_icon`, else the icon of the sender's desktop entry: the one the
+/// `desktop-entry` hint names, else the one `app_name` names. Many
+/// applications send no icon and leave the server to find theirs.
+fn icon_of(app_icon: String, hints: &Hints, app_name: &str, applications: &[PathBuf]) -> String {
+    let entry = hints
+        .desktop_entry
+        .as_deref()
+        .filter(|entry| !entry.is_empty())
+        .unwrap_or(app_name);
+    if app_icon.is_empty() && !entry.is_empty() {
+        app(entry, applications).icon
+    } else {
+        app_icon
+    }
+}
+
 /// The object at `/org/freedesktop/Notifications`.
 struct Server {
     store: Arc<Store>,
@@ -663,6 +679,8 @@ impl Server {
         hints: HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> u32 {
+        let hints = self::hints(hints);
+        let app_icon = icon_of(app_icon, &hints, &app_name, &self.store.applications);
         let sent = Notify {
             app_name,
             replaces_id,
@@ -670,7 +688,7 @@ impl Server {
             summary,
             body,
             actions,
-            hints: self::hints(hints),
+            hints,
             expire_timeout,
             icon: None,
             sender: header.sender().map(|sender| sender.to_string()),
@@ -936,6 +954,39 @@ mod tests {
                 .collect::<Vec<_>>()
         });
         assert_eq!(names, ["Chromium"]);
+    }
+
+    #[test]
+    fn a_notification_without_an_icon_is_drawn_with_its_entrys() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("applications")).unwrap();
+        std::fs::write(
+            dir.path().join("applications/com.slack.Slack.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Slack\nExec=slack\nIcon=slack-tray\n",
+        )
+        .unwrap();
+        let applications = application_dirs(&[dir.path().to_path_buf()]);
+        let hinted = Hints {
+            desktop_entry: Some("com.slack.Slack".into()),
+            ..Hints::default()
+        };
+
+        assert_eq!(
+            icon_of(String::new(), &hinted, "", &applications),
+            "slack-tray"
+        );
+        assert_eq!(
+            icon_of(String::new(), &Hints::default(), "Slack", &applications),
+            "slack-tray"
+        );
+        assert_eq!(
+            icon_of("mail".into(), &hinted, "Slack", &applications),
+            "mail"
+        );
+        assert_eq!(
+            icon_of(String::new(), &Hints::default(), "", &applications),
+            ""
+        );
     }
 
     #[test]
