@@ -513,14 +513,16 @@ const tabStyles = cva({
       focus: ["focused", "leaf", "resting", "selected"],
       open: true,
     },
+    // The strip's own color, not clear: a hidden tab broken out of its group
+    // eases into a bar's color, and from clear the desktop shows through.
     {
       css: {
         _hover: {
           backgroundColor:
-            "color-mix(in oklab, {colors.chrome} 60%, transparent)",
+            "color-mix(in oklab, {colors.chrome} 60%, {colors.tabRail})",
           color: "foreground",
         },
-        backgroundColor: "transparent",
+        backgroundColor: "tabRail",
       },
       focus: ["focused", "leaf", "resting", "selected"],
       open: false,
