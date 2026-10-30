@@ -56,13 +56,8 @@ export const ConnectionIndicator = ({ security, url }: Props) => {
   );
 };
 
-// One class per icon color, used by `INDICATORS`.
-const secureMarkStyles = css({
-  alignItems: "center",
-  color: "success",
-  display: "inline-flex",
-});
-
+// One class per icon color, used by `INDICATORS`. A secure connection is
+// gray, so color only ever means something is wrong.
 const neutralMarkStyles = css({
   alignItems: "center",
   color: "muted",
@@ -112,7 +107,7 @@ const INDICATORS: Readonly<
   [ConnectionSafety.Secure]: {
     body: "The browser validated this site's certificate, and what passes between here and it is encrypted. That is a statement about the connection and not about the site: a page can be reached securely and still not be worth trusting.",
     mark: (
-      <span className={secureMarkStyles}>
+      <span className={neutralMarkStyles}>
         <AnimatedLockIcon size={14} />
       </span>
     ),

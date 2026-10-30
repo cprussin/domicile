@@ -197,6 +197,7 @@ export const AddressBar = ({
         // Off for an empty line, where the list is only history: Enter then
         // reaches the form, which ignores it.
         autoHighlight={typed.trim() !== ""}
+        filled
         onSuggestionTaken={onNavigate}
         onValueChange={type}
         prefixButtons={
@@ -211,52 +212,52 @@ export const AddressBar = ({
             />
           </>
         }
-        rounded
         size="sm"
         spellCheck={false}
         suggestions={suggestionsFor(typed, visited)}
         value={typed}
       />
-      {/* At the inline end, as in Chrome. Styled as a capsule like the
-          address field, so the bar reads as two pills. */}
-      <div aria-label="Zoom" className={zoomStyles} role="group">
-        <Button
-          disabled={isFullyZoomedOut(zoom)}
-          label="Zoom out"
-          onClick={onZoomOut}
-          rounded
-          size="xs"
-          variant="ghost"
-        >
-          <AnimatedMinusIcon size={12} />
-        </Button>
-        <span aria-hidden className={dividerStyles} />
-        {/* The zoom level; pressing it resets to 100%. Fixed width so the
-            bar does not shift as the number changes. */}
-        <span className={readoutStyles}>
+      {/* At the inline end, as in Chrome, and only while the page is
+          zoomed. Styled as a capsule beside the address field. */}
+      {!isUnzoomed(zoom) && (
+        <div aria-label="Zoom" className={zoomStyles} role="group">
           <Button
-            disabled={isUnzoomed(zoom)}
-            onClick={onZoomReset}
+            disabled={isFullyZoomedOut(zoom)}
+            label="Zoom out"
+            onClick={onZoomOut}
             rounded
             size="xs"
-            title="Reset zoom"
             variant="ghost"
           >
-            {zoomPercent(zoom)}
+            <AnimatedMinusIcon size={12} />
           </Button>
-        </span>
-        <span aria-hidden className={dividerStyles} />
-        <Button
-          disabled={isFullyZoomedIn(zoom)}
-          label="Zoom in"
-          onClick={onZoomIn}
-          rounded
-          size="xs"
-          variant="ghost"
-        >
-          <AnimatedPlusIcon size={12} weight="bold" />
-        </Button>
-      </div>
+          <span aria-hidden className={dividerStyles} />
+          {/* The zoom level; pressing it resets to 100%. Fixed width so the
+            bar does not shift as the number changes. */}
+          <span className={readoutStyles}>
+            <Button
+              onClick={onZoomReset}
+              rounded
+              size="xs"
+              title="Reset zoom"
+              variant="ghost"
+            >
+              {zoomPercent(zoom)}
+            </Button>
+          </span>
+          <span aria-hidden className={dividerStyles} />
+          <Button
+            disabled={isFullyZoomedIn(zoom)}
+            label="Zoom in"
+            onClick={onZoomIn}
+            rounded
+            size="xs"
+            variant="ghost"
+          >
+            <AnimatedPlusIcon size={12} weight="bold" />
+          </Button>
+        </div>
+      )}
       {downloads.count === 0 && downloads.completed === 0 ? undefined : (
         <DownloadIndicator downloads={downloads} onClear={onClearDownloads} />
       )}
@@ -328,17 +329,18 @@ const lineFor = (suggestion: AddressSuggestion): Suggestion<string> => {
   }
 };
 
-// The open tab's background, so the bar reads as chrome, not page, and joins
-// the title bar above. A private window's bar is tinted its own color, so it is
+// The open tab's surface, so the bar reads as chrome, not page, and joins the
+// tab above. A private window's bar is tinted its own color, so it is
 // never mistaken for an ordinary one.
 const barStyles = hstack({
+  // The address in 13px, the desktop's text size, rather than the field's.
+  "& input[aria-label=Address]": { fontSize: "0.8125rem" },
   "&[data-private]": {
     backgroundColor:
       "color-mix(in oklab, {colors.private} 35%, {colors.background})",
     borderBlockEndColor: "private",
   },
-  backgroundColor:
-    "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
+  backgroundColor: "chrome",
   borderBlockEnd: "1px solid {colors.border}",
   flex: "none",
   gap: 2,
@@ -368,13 +370,12 @@ const historyStyles = hstack({
   gap: 0.5,
 });
 
-// Matches the address field's height, border and background. The buttons
-// are a size smaller so they sit inside the capsule's edge.
+// Matches the address field's height, fill and corners. The buttons are a
+// size smaller so they sit inside its edge.
 const zoomStyles = hstack({
-  backgroundColor: "background",
+  backgroundColor: "card",
   blockSize: 6,
-  border: "1px solid {colors.border}",
-  borderRadius: "full",
+  borderRadius: "lg",
   flex: "none",
   gap: 1,
   paddingInline: 0.5,

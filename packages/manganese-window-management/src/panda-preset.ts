@@ -157,6 +157,26 @@ export const windowManagementPreset = definePreset({
         },
         windowStowing: SCRATCHPAD_SLIDE,
       },
+      semanticTokens: {
+        colors: {
+          // The open tab and the browser toolbar under it, one surface. White
+          // in light mode, so it stands clear of the darker `tabRail`.
+          chrome: {
+            value: {
+              _light: "{colors.white}",
+              base: "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
+            },
+          },
+          // A tab strip behind its tabs.
+          tabRail: {
+            value: {
+              _light:
+                "color-mix(in oklab, {colors.foreground} 10%, {colors.background})",
+              base: "color-mix(in oklab, {colors.card} 45%, {colors.background})",
+            },
+          },
+        },
+      },
     },
   },
 });
