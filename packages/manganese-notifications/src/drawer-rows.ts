@@ -3,6 +3,8 @@ import type { Notification } from "@domicile-desktop/sdk/notification";
 /** A notification drawn in the drawer. */
 export type Row = {
   notification: Notification;
+  /** It came in while the drawer showed, so it animates in. */
+  arriving: boolean;
   /**
    * While it animates out, its place among the rows cleared with it, top to
    * bottom, which staggers them.
@@ -14,8 +16,9 @@ export type Row = {
  * The rows to draw for `items`, given the rows drawn before.
  *
  * A notification gone from `items` stays under the row above it, leaving, until
- * its animation ends. One back in `items` stays. Without `animate`, such as
- * while the drawer is closed, gone notifications go at once.
+ * its animation ends. One back in `items` stays. A notification not drawn
+ * before arrives. Without `animate`, such as while the drawer is closed, gone
+ * notifications go at once and none arrive.
  */
 export const nextRows = (
   rows: readonly Row[],
@@ -23,6 +26,7 @@ export const nextRows = (
   animate: boolean,
 ): Row[] => {
   const kept = new Set(items.map(({ id }) => id));
+  const drawn = new Set(rows.map(({ notification }) => notification.id));
   const gone = animate
     ? rows.filter(({ notification }) => !kept.has(notification.id))
     : [];
@@ -31,7 +35,11 @@ export const nextRows = (
   return [
     ...(under.get(undefined) ?? []),
     ...items.flatMap((notification) => [
-      { leaving: undefined, notification },
+      {
+        arriving: animate && !drawn.has(notification.id),
+        leaving: undefined,
+        notification,
+      },
       ...(under.get(notification.id) ?? []),
     ]),
   ];
@@ -56,6 +64,7 @@ const leavingUnder = (
       under.set(above, [
         ...(under.get(above) ?? []),
         {
+          arriving: false,
           leaving: row.leaving ?? starting.indexOf(row),
           notification: row.notification,
         },
