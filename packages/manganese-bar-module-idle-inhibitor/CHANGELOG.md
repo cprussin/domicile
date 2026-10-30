@@ -1,5 +1,134 @@
 # @domicile-desktop/manganese-bar-module-idle-inhibitor
 
+## 1.1.0
+
+### Minor Changes
+
+- 623860a: While a TV is cast to, the desk holds off idle blanking and holds notification banners, which the TV could show. `inhibitIdle` takes the reason the portal is told.
+- 9d4a876: The keep awake pill names the website a browser window keeps the screens on for ("Kept awake by youtube.com"), with its icon, instead of the engine. `<webview>` gains `wakeLock` and `domicile-wake-lock-change`, and the compositor lists the engine's own hold as `domicile-browser`.
+- 10ee944: A keep awake pill in the default bar shows while anything keeps the screens on, names the apps, and turns off your own hold. Quick settings' button drops its eye, and `KeepAwakeIndicator` is gone.
+- b85d9bb: Name what keeps the screens on. A new `idle_holds` system call (`session.idleHolds()` in the SDK) lists the windows and applications holding idle inhibitors, and the bar's eye opens and names them. The compositor logs each change, and the input that restarts the idle clock when it was getting close to blanking or locking, naming the event and device for the browser's own input.
+- 341debf: Quick settings: one bar item (`@domicile-desktop/manganese/QuickSettings`) replaces the theme, keep awake, brightness, volume, Bluetooth, network and battery items in `DEFAULT_BAR` and `LOCK_BAR`. Its button shows the network, sound and battery, plus the eye while the screens are kept on and Bluetooth while a device is connected. Its panel has labeled tiles (Wi-Fi or Wired, Bluetooth, Keep awake, Night light, Dark mode), the brightness and volume sliders, and the battery in words with the time left, and a Settings button. A tile's arrow opens the item's panel in place. Each hardware item exports its parts as `./quick-settings`; the component library adds `QuickTile`, and `system-battery` reads UPower's `TimeToEmpty` as `secondsLeft`.
+- 0abccd9: New manganese commands, for a key or `domicile send-shell`: `notifications` toggles the notification drawer, `notifications clear` clears it, and `idle-inhibitor` toggles keeping the screens on.
+
+### Patch Changes
+
+- 77fd631: A bar button stays lit while the panel it opened is open. New `fillOverPhoto` color and `_hoverOrOpen` condition.
+- 1caba05: Dimmed top bar items (muted, off, offline) keep the full hover background; only the icon dims.
+- 923e65b: Top bar tooltips are design-system tooltips: a frosted pill under the item that stays on its screen. `Tooltip` takes a `tone`, and `Popover` takes a `tooltip` for its trigger.
+- 7a29c8f: Icons in the bar, quick settings and level notices move when their state changes or they are pointed at: the bell swings, Wi-Fi arcs fill out, Bluetooth dots slide out, speaker waves pulse, a slash draws across what is off, the dark mode sun turns to a moon, and more. New `Animated*Icon` components and `_controlHover` / `_controlActive` conditions in the component library. The notifications bar item no longer exports a Panda preset.
+- 4917e8f: The keep awake bar item is a plain eye, like the other bar icons, naming who keeps the screens on in its tooltip.
+- 3146073: Each package asks for the bun and Node its workspace does: `engines` is `bun >=1.4.2`, `node >=24`.
+- c15ba93: Shells and manganese packages take the typed `Domicile` instead of the raw host. `PortalDialogs` takes `domicile` (no more `host`/`desktopOf`), `usePortalWallpaper` and manganese-host's helpers take `Domicile` slices, and the SDK's `bindKeys`, `fireGlobalShortcuts`, `watchShellOptions` and `casting` take namespaces. Adds `portals.fireShortcut`.
+- 2fe5852: Everything that took `system(domicile)` takes `desktop(domicile)`, or the namespace it calls.
+  
+  - SDK: `keyboard.keymaps` and `keyboard.selectKeymap`. `watchMenu`, `readIconTheme`, `watchIconTheme` and `previewFile` take `{ dbus }` or `{ files }`. `MenuSystem`, `IconThemeSystem` and `PreviewSystem` are `MenuDesktop`, `IconThemeDesktop` and `PreviewDesktop`.
+  - system-apps: functions take `AppsDesktop` (`./apps-desktop`). `./fake-system`'s `fakeSystem` is `./fake-desktop`'s `fakeDesktop`.
+  - component-library: `AppChooser`'s `system` prop is `domicile`; `PortalDialogs`' `systemOf` is `desktopOf`, and its `host` is a whole `DomicileHost`; `systemFolders` is `desktopFolders`, over `domicile.files`; `usePictureUrl` and `useApps` take `domicile.files` and `AppsDesktop`.
+- f4a973d: Quick settings: Wi-Fi and Bluetooth tiles open their panels instead of switching; Keep awake, Night light and Dark mode become a row of switches (`QuickToggle`). The network panel groups by Wired and Wi-Fi with details folded away (`ListRow` `disclosure`). Sound lists outputs and inputs by port name to pick from.
+- 1971d87: React hooks for system state. Each `system-*` package has a `/react` with hooks and one watch per desktop: `useBattery`, `useBluetooth`, `useNetwork`, `useWifi`, `useAudio` and more. `@domicile-desktop/react` gains the shared watches (`sharedWatch`, `perDesktop`, `useSharedWatch`, `useDeskWatch`, `watchPresence`). manganese-host's `domicile-context`, `per-host`, `shared-watch`, `useSharedWatch` and `watch-presence` move there, and manganese uses `<DomicileProvider>`.
+- 44f23d6: The top bar is easier to read: the clock is larger, workspaces are numbers with the current one on a lit square instead of a white disc, and bar buttons light up as rounded squares like the rest of the desktop.
+- Updated dependencies [bafd922]
+- Updated dependencies [fe90bca]
+- Updated dependencies [77fd631]
+- Updated dependencies [6bbc80b]
+- Updated dependencies [a62f35a]
+- Updated dependencies [923e65b]
+- Updated dependencies [44eb13c]
+- Updated dependencies [3980a9a]
+- Updated dependencies [c7a232d]
+- Updated dependencies [9d0934e]
+- Updated dependencies [a9a62e8]
+- Updated dependencies [fa78a81]
+- Updated dependencies [509f948]
+- Updated dependencies [a2ee8ea]
+- Updated dependencies [c03a44b]
+- Updated dependencies [40f5af3]
+- Updated dependencies [ab2d2f0]
+- Updated dependencies [17064a7]
+- Updated dependencies [a88ce23]
+- Updated dependencies [0e8c788]
+- Updated dependencies [a1569c6]
+- Updated dependencies [6fecbbd]
+- Updated dependencies [258d9aa]
+- Updated dependencies [d9f5353]
+- Updated dependencies [14e6071]
+- Updated dependencies [56e1c22]
+- Updated dependencies [e42226f]
+- Updated dependencies [506b12f]
+- Updated dependencies [00e5da2]
+- Updated dependencies [75b9403]
+- Updated dependencies [3f7e261]
+- Updated dependencies [b49fa3a]
+- Updated dependencies [35b8470]
+- Updated dependencies [6730912]
+- Updated dependencies [2a87739]
+- Updated dependencies [7a29c8f]
+- Updated dependencies [4967b5d]
+- Updated dependencies [be59aae]
+- Updated dependencies [9d4a876]
+- Updated dependencies [44d0983]
+- Updated dependencies [6825067]
+- Updated dependencies [cd02e0e]
+- Updated dependencies [840418d]
+- Updated dependencies [57b5b1f]
+- Updated dependencies [b2c6fd5]
+- Updated dependencies [93f015d]
+- Updated dependencies [b85d9bb]
+- Updated dependencies [01b9340]
+- Updated dependencies [fccc784]
+- Updated dependencies [e1205bb]
+- Updated dependencies [670713c]
+- Updated dependencies [8bc5b85]
+- Updated dependencies [4ee2c21]
+- Updated dependencies [3146073]
+- Updated dependencies [bbf849b]
+- Updated dependencies [e83ec4a]
+- Updated dependencies [7a786a4]
+- Updated dependencies [4759ab2]
+- Updated dependencies [3bb9bd5]
+- Updated dependencies [0f4582e]
+- Updated dependencies [d80e2f5]
+- Updated dependencies [c15ba93]
+- Updated dependencies [2fe5852]
+- Updated dependencies [52a1d65]
+- Updated dependencies [3e5b976]
+- Updated dependencies [4064278]
+- Updated dependencies [f4a973d]
+- Updated dependencies [341debf]
+- Updated dependencies [ae7874c]
+- Updated dependencies [599d60f]
+- Updated dependencies [75799a0]
+- Updated dependencies [2430e48]
+- Updated dependencies [9fd298a]
+- Updated dependencies [c4fe915]
+- Updated dependencies [b1041f8]
+- Updated dependencies [20a1fc5]
+- Updated dependencies [b39d80e]
+- Updated dependencies [21b82af]
+- Updated dependencies [427c184]
+- Updated dependencies [ee63a45]
+- Updated dependencies [66bfb0d]
+- Updated dependencies [5a6a4fc]
+- Updated dependencies [25b9bd3]
+- Updated dependencies [113dabe]
+- Updated dependencies [0bd0d2a]
+- Updated dependencies [d9f5353]
+- Updated dependencies [1971d87]
+- Updated dependencies [570e7bb]
+- Updated dependencies [2edc3c1]
+- Updated dependencies [b241f68]
+- Updated dependencies [6c3db42]
+- Updated dependencies [9c89f16]
+- Updated dependencies [ca86667]
+- Updated dependencies [ee1cc17]
+- Updated dependencies [eb6b52a]
+- Updated dependencies [63728a9]
+  - @domicile-desktop/component-library@2.0.0
+  - @domicile-desktop/sdk@1.1.0
+  - @domicile-desktop/manganese-host@2.0.0
+  - @domicile-desktop/react@0.1.0
+
 ## 1.0.0
 
 ### Major Changes
