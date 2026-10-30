@@ -21,9 +21,8 @@ loadEmittedStylesheet(
   new URL("../styled-system/styles.css", import.meta.url),
 );
 
-/** The address bar's background, which the bar or open tab above matches. */
-const RAISED =
-  "color-mix(in oklab, {colors.foreground} 14%, {colors.background})";
+/** The address bar's surface, which the bar or open tab above matches. */
+const RAISED = "chrome";
 
 /** An arbitrary bar position. */
 const ON_SCREEN = { height: 30, width: 1200, x: 0, y: 32 };
@@ -376,7 +375,8 @@ describe("TitleBar", () => {
 
     expect(face(container).className).toContain(
       css({
-        backgroundColor: `color-mix(in oklab, {colors.accent} 45%, ${RAISED})`,
+        backgroundColor:
+          "color-mix(in oklab, {colors.accent} 45%, {colors.chrome})",
       }),
     );
     expect(face(container).className).toContain(css({ fontWeight: "medium" }));
@@ -438,7 +438,7 @@ describe("TitleBar", () => {
       ).not.toContain(strong);
     });
 
-    it("raises the open tab to match the address bar it meets", () => {
+    it("draws the open tab on the address bar's surface", () => {
       const raised = css({ backgroundColor: RAISED });
 
       expect(

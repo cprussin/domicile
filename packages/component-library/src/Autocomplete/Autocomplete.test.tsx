@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
+import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 
 import type { Suggestion } from "./Autocomplete";
@@ -75,6 +76,14 @@ describe(Autocomplete, () => {
       await userEvent.click(screen.getByRole("button", { name: "Connection" }));
 
       expect(pressed).toStrictEqual(["connection"]);
+    });
+
+    it("draws a filled field on a tint with no edge at rest", () => {
+      render(<Autocomplete aria-label="Address" filled suggestions={SITES} />);
+
+      const field = screen.getByRole("combobox").parentElement;
+      expect(field?.className).toContain(css({ backgroundColor: "card" }));
+      expect(field?.className).toContain(css({ borderColor: "transparent" }));
     });
 
     it("shows the value it is given and no list until the user types", () => {

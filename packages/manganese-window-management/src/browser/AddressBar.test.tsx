@@ -54,16 +54,13 @@ describe("AddressBar", () => {
     expect(address()).toHaveValue("https://example.com");
   });
 
-  // The focused bar or open tab above is the same color, so the two read as
-  // one piece of chrome.
-  it("is raised as far as the bar above", () => {
+  // The open tab above is the same color, so the two read as one piece of
+  // chrome.
+  it("is the same surface as the open tab above", () => {
     render(<AddressBar {...BAR} />);
 
     expect(address().closest("form")?.className).toContain(
-      css({
-        backgroundColor:
-          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
-      }),
+      css({ backgroundColor: "chrome" }),
     );
   });
 
@@ -446,12 +443,10 @@ describe("AddressBar", () => {
       expect(calls).toStrictEqual(["in", "out", "reset"]);
     });
 
-    it("grays out what would do nothing at 100%", () => {
+    it("stays out of the way at 100%", () => {
       render(<AddressBar {...BAR} zoom={1} />);
 
-      expect(control("100%")).toBeDisabled();
-      expect(control("Zoom in")).toBeEnabled();
-      expect(control("Zoom out")).toBeEnabled();
+      expect(screen.queryByRole("group", { name: "Zoom" })).toBeNull();
     });
 
     it("grays out zooming past either end", () => {

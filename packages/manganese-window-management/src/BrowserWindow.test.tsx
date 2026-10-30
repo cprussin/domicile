@@ -1954,11 +1954,12 @@ describe("BrowserWindow", () => {
 
     it("zooms from the buttons in its bar", async () => {
       const { container } = renderWindow();
-      const asked = zoomable(view(container), 1);
+      // Zoomed already: the buttons show only then.
+      const asked = zoomable(view(container), 1.1);
 
       await userEvent.click(control("Zoom in"));
 
-      expect(asked).toStrictEqual([1.1]);
+      expect(asked).toStrictEqual([1.25]);
     });
 
     it("says what it zoomed to", () => {

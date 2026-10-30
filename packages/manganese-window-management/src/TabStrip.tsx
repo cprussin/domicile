@@ -255,8 +255,7 @@ const CORNER = { x: 0, y: 0 };
  */
 const stripStyles = cva({
   base: {
-    backgroundColor:
-      "color-mix(in oklab, {colors.card} 45%, {colors.background})",
+    backgroundColor: "tabRail",
     // Longhands, as for `edgeStyles`.
     borderBlockEndWidth: "1px",
     borderBlockStartWidth: "1px",

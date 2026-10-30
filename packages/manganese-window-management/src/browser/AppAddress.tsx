@@ -30,8 +30,7 @@ export const AppAddress = ({ address, security }: Props) => (
 
 // The address bar's background and edge, so it reads as the same chrome.
 const barStyles = hstack({
-  backgroundColor:
-    "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
+  backgroundColor: "chrome",
   borderBlockEnd: "1px solid {colors.border}",
   flex: "none",
   gap: 1,

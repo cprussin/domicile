@@ -289,11 +289,17 @@ export const TitleBar = ({
             {...{ [UPRIGHT]: "" }}
           >
             {/*
-            A hidden tab only offers to close, as in a browser, so its title
-            keeps the room. A narrow bar drops these too.
+            A hidden tab only offers to close, as in a browser. A narrow bar
+            drops these too. A tab shows its buttons only under the pointer or
+            keyboard, so its title has the room the rest of the time.
           */}
             {!hidden && (
-              <span className={extraControlStyles}>
+              <span
+                className={cx(
+                  extraControlStyles,
+                  strip !== undefined && onHoverStyles,
+                )}
+              >
                 <Button
                   label={floating ? "Tile" : "Float"}
                   onClick={onFloat}
@@ -312,9 +318,11 @@ export const TitleBar = ({
                 </Button>
               </span>
             )}
-            <Button label="Close" onClick={onClose} size="sm" variant="ghost">
-              <AnimatedCloseIcon size={14} />
-            </Button>
+            <span className={cx(hidden && onHoverStyles)}>
+              <Button label="Close" onClick={onClose} size="sm" variant="ghost">
+                <AnimatedCloseIcon size={14} />
+              </Button>
+            </span>
           </span>
         </div>
       </TabTooltip>
@@ -412,7 +420,7 @@ const WindowIcon = ({ icon }: { icon: string | undefined }) => {
   return (
     <span className={iconStyles} data-icon>
       {icon === undefined || failed ? (
-        <AppWindowIcon size={14} />
+        <AppWindowIcon size={16} />
       ) : (
         // biome-ignore lint/a11y/noNoninteractiveElementInteractions: `onError` is the image failing to load, not an interaction
         <img
@@ -499,12 +507,9 @@ const tabStyles = cva({
   // The background follows both variants, so each pair sets it once.
   compoundVariants: [
     {
-      // Matches the address bar, which it meets. Brighter than the card, so
-      // the open tab stands out from the strip.
-      css: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
-      },
+      // One surface with the address bar, which it meets. It stands out from
+      // the strip's `tabRail`.
+      css: { backgroundColor: "chrome" },
       focus: ["focused", "leaf", "resting", "selected"],
       open: true,
     },
@@ -512,7 +517,7 @@ const tabStyles = cva({
       css: {
         _hover: {
           backgroundColor:
-            "color-mix(in oklab, {colors.card} 60%, transparent)",
+            "color-mix(in oklab, {colors.chrome} 60%, transparent)",
           color: "foreground",
         },
         backgroundColor: "transparent",
@@ -565,7 +570,7 @@ const tabStyles = cva({
  * Bar colors for sway's three client states plus `leaf`.
  *
  * The glow around the focused window is the main focus indicator (see
- * `FocusGlow`), so the bar only adds the open tab's background and a heavier
+ * `FocusGlow`), so the bar only adds the open tab's surface and a heavier
  * weight. No state uses an accent edge.
  *
  * Each state sets all its colors instead of overriding one: two rules on one
@@ -588,8 +593,7 @@ const barStyles = cva({
   variants: {
     focus: {
       focused: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
+        backgroundColor: "chrome",
         color: "foreground",
         // Weight as well as color, for users who cannot tell the colors
         // apart.
@@ -599,19 +603,19 @@ const barStyles = cva({
       // bars use the open tab's background, so this one mixes in the accent.
       leaf: {
         backgroundColor:
-          "color-mix(in oklab, {colors.accent} 45%, color-mix(in oklab, {colors.foreground} 14%, {colors.background}))",
+          "color-mix(in oklab, {colors.accent} 45%, {colors.chrome})",
         color: "foreground",
         fontWeight: "medium",
       },
+      // The strip's color, so a title bar reads as a strip with one tab.
       resting: {
-        backgroundColor: "background",
+        backgroundColor: "tabRail",
         color: "muted",
         fontWeight: "normal",
       },
       // A bar in the `focus parent` selection.
       selected: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.foreground} 14%, {colors.background})",
+        backgroundColor: "chrome",
         color: "foreground",
         fontWeight: "medium",
       },
@@ -652,6 +656,16 @@ const leadStyles = hstack({
   transformOrigin: "left center",
 });
 
+/**
+ * Folded away until the pointer is on the tab or the keyboard is in it. Folded
+ * to no width rather than hidden, so the keyboard still reaches the buttons.
+ */
+const onHoverStyles = css({
+  "[data-face]:is(:hover, :focus-within) &": { maxInlineSize: "none" },
+  maxInlineSize: 0,
+  overflow: "hidden",
+});
+
 // Hidden in a bar too narrow to keep its title beside them. The bar is the
 // query container (see `barStyles` and `tabStyles`).
 const extraControlStyles = hstack({
@@ -662,8 +676,8 @@ const extraControlStyles = hstack({
 const groupMarkStyles = hstack({
   color: "muted",
   flexShrink: 0,
-  // The config's `fonts.size = 11.0`, as for the title.
-  fontSize: "0.6875rem",
+  // 13px, as for the title.
+  fontSize: "0.8125rem",
   gap: 0.5,
 });
 
@@ -675,16 +689,21 @@ const iconStyles = css({
 });
 
 const iconImageStyles = css({
-  height: "14px",
+  height: "16px",
   objectFit: "contain",
-  width: "14px",
+  width: "16px",
 });
 
 const titleStyles = css({
   flex: 1,
-  // The config's `fonts.size = 11.0`, which has no scale token.
-  fontSize: "0.6875rem",
+  // 13px, the desktop's text size, matching the address bar.
+  fontSize: "0.8125rem",
   overflow: "hidden",
+  // Centered on its capitals, not its line box, whose extra room below the
+  // baseline left the title riding high. Even padding keeps descenders clear
+  // of the clip without moving the center.
+  paddingBlock: "0.25em",
+  textBox: "trim-both cap alphabetic",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 });

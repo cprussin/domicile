@@ -36,6 +36,11 @@ type CommonProps<V> = Partial<ControlVariant> & {
   disabled?: boolean | undefined;
   /** Shown in place of the list when `suggestions` is empty. */
   emptyMessage?: ReactNode | undefined;
+  /**
+   * A tinted field with no edge until hovered or focused, as in an address
+   * bar, which sits on a toolbar rather than on a page.
+   */
+  filled?: boolean | undefined;
   onSuggestionTaken?: ((value: V) => void) | undefined;
   onValueChange?: ((value: string) => void) | undefined;
   rounded?: boolean | undefined;
@@ -74,6 +79,7 @@ export const Autocomplete = <V,>({
   autoHighlight = false,
   disabled,
   emptyMessage,
+  filled = false,
   onSuggestionTaken,
   onValueChange,
   prefixButtons,
@@ -107,7 +113,7 @@ export const Autocomplete = <V,>({
         className={cx(
           control({ size }),
           wrapperBase,
-          wrapperStyles({ rounded, size }),
+          wrapperStyles({ filled, rounded, size }),
         )}
         onMouseDown={focusControlOnMouseDown}
         ref={attach}
@@ -211,6 +217,15 @@ const wrapperStyles = cva({
     { css: { paddingInline: 11.5 }, rounded: true, size: "4xl" },
   ],
   variants: {
+    // `wrapperBase` still draws the hover and focus edges.
+    filled: {
+      false: {},
+      true: {
+        backgroundColor: "card",
+        borderColor: "transparent",
+        borderRadius: "lg",
+      },
+    },
     rounded: {
       true: { borderRadius: "full" },
     },
