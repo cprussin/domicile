@@ -677,7 +677,7 @@ const groupMarkStyles = hstack({
   color: "muted",
   flexShrink: 0,
   // 13px, as for the title.
-  fontSize: "0.8125rem",
+  fontSize: "ui",
   gap: 0.5,
 });
 
@@ -697,7 +697,7 @@ const iconImageStyles = css({
 const titleStyles = css({
   flex: 1,
   // 13px, the desktop's text size, matching the address bar.
-  fontSize: "0.8125rem",
+  fontSize: "ui",
   overflow: "hidden",
   // Centered on its capitals, not its line box, whose extra room below the
   // baseline left the title riding high. Even padding keeps descenders clear

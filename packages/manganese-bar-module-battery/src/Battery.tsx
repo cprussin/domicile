@@ -198,8 +198,7 @@ const percentSlotStyles = css({
 });
 
 const percentStyles = css({
-  // 10px to match the bar; the font-size scale jumps from 8px to 12px.
-  fontSize: "0.625rem",
+  fontSize: "ui",
   // Fixed-width digits, so the figure does not shift as the charge changes.
   fontVariantNumeric: "tabular-nums",
   gridArea: "1 / 1",

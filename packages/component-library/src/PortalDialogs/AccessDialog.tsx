@@ -60,7 +60,7 @@ export const AccessDialog = ({ answer, asker, body, screen }: Props) => {
 // Who asks sits opposite the buttons, leaving the body one line.
 const askerStyles = css({
   color: "muted",
-  fontSize: "0.8125rem",
+  fontSize: "ui",
   margin: 0,
   marginInlineEnd: "auto",
 });

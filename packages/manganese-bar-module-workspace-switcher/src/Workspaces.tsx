@@ -64,7 +64,7 @@ const workspaceStyles = cva({
     // A block, not flex: `text-box` trim below works only on block containers.
     display: "block",
     // 13px, matching the clock.
-    fontSize: "0.8125rem",
+    fontSize: "ui",
     // Tabular figures keep every number the same width.
     fontVariantNumeric: "tabular-nums",
     fontWeight: "medium",

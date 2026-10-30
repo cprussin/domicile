@@ -173,12 +173,11 @@ const itemStyles = hstack({
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-// 10px to match the bar's other figures; no font-size token fits.
-const textStyles = css({ fontSize: "0.625rem", whiteSpace: "nowrap" });
+const textStyles = css({ fontSize: "ui", whiteSpace: "nowrap" });
 
 // Fixed-width digits, so the bar does not shift as the count changes.
 const figureStyles = css({
-  fontSize: "0.625rem",
+  fontSize: "ui",
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
 });

@@ -826,7 +826,7 @@ const sidebarStyles = flex({
 const placesStyles = flex({
   "& > button": {
     // 13px, the desktop's text size, as the folder's rows.
-    fontSize: "0.8125rem",
+    fontSize: "ui",
     gap: 2.5,
     inlineSize: "100%",
     justifyContent: "flex-start",
@@ -985,7 +985,7 @@ const rowTileStyles = css({
 
 const rowNameStyles = css({
   // 13px, the desktop's text size, between the scale's 12px and 14px.
-  fontSize: "0.8125rem",
+  fontSize: "ui",
   fontWeight: "medium",
   overflow: "hidden",
   textOverflow: "ellipsis",
