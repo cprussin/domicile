@@ -82,8 +82,9 @@ const stop = watchInterfaces(domicile, (interfaces) => interfaces.map(show));
   wired or wireless, hardware address, whether the link is up, and a wired
   link's speed. Loopback, bridges and VPNs are left out. Works while locked.
 - `readAddresses` runs `ip -j address show` and `ip -j route show default`:
-  each interface's global addresses and default gateway. `ip` must be on the
-  compositor's `PATH`.
+  each interface's lasting global IPv4 and IPv6 addresses (temporary IPv6
+  addresses left out) and default gateway. `ip` must be on the compositor's
+  `PATH`.
 - The watches read every 5 seconds, since a cable's carrier sends no uevent,
   and report only a change.
 

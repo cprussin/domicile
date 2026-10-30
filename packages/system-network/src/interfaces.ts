@@ -31,10 +31,14 @@ export type NetworkInterface = {
   speed: number | undefined;
 };
 
-/** An interface's addresses, from `ip`. */
+/**
+ * An interface's lasting global addresses with their prefix length, e.g.
+ * `192.168.1.40/24`, from `ip`. Temporary IPv6 addresses are left out: they
+ * rotate daily and nothing reaches the machine at them.
+ */
 export type Addressing = {
-  /** Global addresses in use with their prefix length, e.g. `192.168.1.40/24`. */
-  addresses: string[];
+  ipv4: string[];
+  ipv6: string[];
   /** The default route's gateway through it. */
   gateway: string | undefined;
 };
@@ -95,7 +99,7 @@ export const watchAddresses = (
 ): (() => void) => poll(() => readAddresses(domicile), onAddresses, every);
 
 /**
- * Each interface's global addresses in use and default gateway, by name, from
+ * Each interface's lasting global addresses and default gateway, by name, from
  * `ip -j`. `ip` must be on the compositor's `PATH`.
  */
 export const readAddresses = async (domicile: {
@@ -110,13 +114,9 @@ export const readAddresses = async (domicile: {
           listed.map(({ addr_info: info, ifname }) => [
             ifname,
             {
-              addresses: info
-                .filter(
-                  ({ deprecated, scope }) =>
-                    scope === "global" && deprecated !== true,
-                )
-                .map(({ local, prefixlen }) => `${local}/${prefixlen}`),
               gateway: defaults.find(({ dev }) => dev === ifname)?.gateway,
+              ipv4: lastingOf(info, "inet"),
+              ipv6: lastingOf(info, "inet6"),
             },
           ]),
         ),
@@ -272,20 +272,35 @@ const ip = async <T extends NonNullable<unknown>>(
           }),
   );
 
+const addressInfoSchema = z.object({
+  // An IPv6 address past its preferred lifetime, kept only for open connections.
+  deprecated: z.boolean().optional(),
+  family: z.string(),
+  local: z.string(),
+  prefixlen: z.number(),
+  scope: z.string(),
+  // An IPv6 privacy address, which outgoing connections use and rotate daily.
+  temporary: z.boolean().optional(),
+});
+
 const addressesSchema = z.array(
-  z.object({
-    addr_info: z.array(
-      z.object({
-        // An IPv6 address past its preferred lifetime, kept only for open connections.
-        deprecated: z.boolean().optional(),
-        local: z.string(),
-        prefixlen: z.number(),
-        scope: z.string(),
-      }),
-    ),
-    ifname: z.string(),
-  }),
+  z.object({ addr_info: z.array(addressInfoSchema), ifname: z.string() }),
 );
+
+/** `info`'s global addresses in `family` that are neither deprecated nor temporary. */
+const lastingOf = (
+  info: readonly z.infer<typeof addressInfoSchema>[],
+  family: "inet" | "inet6",
+): string[] =>
+  info
+    .filter(
+      (address) =>
+        address.family === family &&
+        address.scope === "global" &&
+        address.deprecated !== true &&
+        address.temporary !== true,
+    )
+    .map(({ local, prefixlen }) => `${local}/${prefixlen}`);
 
 const routesSchema = z.array(
   z.object({ dev: z.string(), gateway: z.string().optional() }),

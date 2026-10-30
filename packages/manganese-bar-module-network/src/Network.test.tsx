@@ -348,8 +348,9 @@ describe("Network", () => {
             [
               "enp0s31f6",
               {
-                addresses: ["192.168.1.40/24", "fd00::8e16:45ff:fe5a:3e01/64"],
                 gateway: "192.168.1.1",
+                ipv4: ["192.168.1.40/24"],
+                ipv6: ["fd00::8e16:45ff:fe5a:3e01/64"],
               },
             ],
           ]),
@@ -358,10 +359,8 @@ describe("Network", () => {
 
       const wired = screen.getByRole("region", { name: "Wired" });
       expect(wired).toHaveTextContent("Connected1 Gb/s");
-      expect(within(wired).getByText("192.168.1.40/24")).toBeVisible();
-      expect(
-        within(wired).getByText("fd00::8e16:45ff:fe5a:3e01/64"),
-      ).toBeVisible();
+      expect(wired).toHaveTextContent("192.168.1.40/24");
+      expect(wired).toHaveTextContent("fd00::8e16:45ff:fe5a:3e01/64");
       expect(wired).toHaveTextContent("192.168.1.1");
       expect(wired).toHaveTextContent("8c:16:45:5a:3e:01");
       expect(
