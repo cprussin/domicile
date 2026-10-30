@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 30 Oct 2026 04:00:00 +0000
+Subject: [PATCH] domicile: a lit monitor's color change goes with its next
+ page flip
+
+A night light did nothing on lyra's laptop panel (amdgpu, kernel 6.18)
+until the screens blanked or the lid closed. The engine committed the warm
+gamma table and the kernel took it (GAMMA_LUT held the new blob), but the
+panel kept showing the old one until a modeset.
+
+`HardwareDisplayPlaneManager` commits a CRTC's color properties on their
+own: a blocking commit with no planes. KWin and Mutter send a color change
+with the next frame instead.
+
+- `CommitPendingCrtcState` leaves the change pending on a CRTC with a plane
+  on it, and its next page flip carries it. A CRTC with no plane still
+  commits it at once.
+- Only a real commit takes the pending properties. Adding one uses it up,
+  so a test commit would drop the change its page flip was to carry.
+- ChromeOS keeps upstream's behavior: there `kCtmColorManagement` decides
+  (0012).
+
+Tested by `DrmColorCommitTest`.
+
+Verified: not built. This repository cannot build Chromium; the engine job
+builds it on `crux`.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LWjcAKveDAi7vjVsXpKjcN
+---
+ ui/ozone/platform/drm/BUILD.gn                |  1 +
+ .../hardware_display_plane_manager_atomic.cc  | 24 +++++++++++++++++++
+ .../hardware_display_plane_manager_atomic.h   |  2 ++
+ 3 files changed, 27 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index a4da309..599e071 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -286,6 +286,7 @@ source_set("gbm_unittests") {
+     "domicile/drm_pointer_crossing_unittest.cc",
+     "domicile/drm_pointer_targets_unittest.cc",
+     "domicile/drm_clipboard_unittest.cc",
++    "domicile/drm_color_commit_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
+     "domicile/drm_sleep_unittest.cc",
+     "domicile/drm_vt_switcher_unittest.cc",
+diff --git a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc
+index 75ed3c1..5d3f70f 100644
+--- a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc
++++ b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc
+@@ -352,6 +352,14 @@ void HardwareDisplayPlaneManagerAtomic::SetAtomicPropsForCommit(
+         AddAllPendingCrtcProperties(atomic_request, crtc_state_[*idx],
+                                     pending_blobs);
+       }
++#else
++      // DOMICILE: a real commit carries the color change a lit CRTC was left
++      // with (see `CommitPendingCrtcState`). A test does not: adding a pending
++      // property uses it up, and the commit it tests would go without.
++      if (!test_only) {
++        AddAllPendingCrtcProperties(atomic_request, crtc_state_[*idx],
++                                    pending_blobs);
++      }
+ #endif
+     }
+ 
+@@ -566,6 +574,16 @@ HardwareDisplayPlaneManagerAtomic::CreatePlane(uint32_t plane_id) {
+ 
+ bool HardwareDisplayPlaneManagerAtomic::CommitPendingCrtcState(
+     CrtcState& crtc_state) {
++#if !BUILDFLAG(IS_CHROMEOS)
++  // DOMICILE: a CRTC with a plane on it takes a color change with its next
++  // page flip, as KWin and Mutter send one. amdgpu takes a commit of a lit
++  // CRTC's color properties alone but shows the old ones until a modeset, so
++  // a night light did nothing until the screens blanked.
++  if (HasPlaneOn(crtc_state.properties.id)) {
++    return true;
++  }
++#endif
++
+   std::vector<ScopedDrmPropertyBlob> pending_blobs;
+   ScopedDrmAtomicReqPtr property_set(drmModeAtomicAlloc());
+ 
+@@ -591,6 +609,12 @@ bool HardwareDisplayPlaneManagerAtomic::CommitPendingCrtcState(
+   return result;
+ }
+ 
++bool HardwareDisplayPlaneManagerAtomic::HasPlaneOn(uint32_t crtc_id) const {
++  return std::ranges::any_of(planes_, [crtc_id](const auto& plane) {
++    return plane->owning_crtc() == crtc_id;
++  });
++}
++
+ bool HardwareDisplayPlaneManagerAtomic::AddOutFencePtrProperties(
+     drmModeAtomicReq* property_set,
+     const std::vector<uint32_t>& crtcs,
+diff --git a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.h b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.h
+index 43d8467..b798258 100644
+--- a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.h
++++ b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.h
+@@ -68,6 +68,8 @@ class HardwareDisplayPlaneManagerAtomic : public HardwareDisplayPlaneManager {
+                          uint32_t connector_id,
+                          uint32_t crtc_id);
+   bool CommitPendingCrtcState(CrtcState& state) override;
++  // DOMICILE: whether a plane is assigned to `crtc_id`, so it page flips.
++  bool HasPlaneOn(uint32_t crtc_id) const;
+   bool AddOutFencePtrProperties(
+       drmModeAtomicReq* property_set,
+       const std::vector<uint32_t>& crtcs,
