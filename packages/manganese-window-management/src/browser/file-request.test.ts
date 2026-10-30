@@ -29,6 +29,7 @@ const listed: Folders = {
     throw new Error("unexpected create");
   },
   list: (path) => Promise.resolve([`${path}/a`, `${path}/b/`]),
+  userFolders: () => Promise.resolve([]),
   watch: () => () => undefined,
 };
 

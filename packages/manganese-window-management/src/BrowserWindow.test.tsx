@@ -842,6 +842,7 @@ describe("BrowserWindow", () => {
           throw new Error("unexpected create");
         },
         list: () => Promise.resolve(["notes.txt"]),
+        userFolders: () => Promise.resolve([]),
         watch: () => () => undefined,
       }),
       frame: FRAME,

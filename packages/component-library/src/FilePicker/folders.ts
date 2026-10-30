@@ -5,6 +5,8 @@ import type { Files } from "@domicile-desktop/sdk/desktop/files";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 
 import { listDirectory } from "./list-directory";
+import type { UserPlace } from "./user-folders";
+import { userFoldersIn } from "./user-folders";
 
 /** What the picker does to folders, by absolute path. */
 export type Folders = {
@@ -16,6 +18,11 @@ export type Folders = {
    */
   list: (path: string) => Promise<readonly string[]>;
   /**
+   * The user's standard folders that exist, such as their downloads, each
+   * directory once and without `home`. See `userFoldersIn`.
+   */
+  userFolders: (home: string) => Promise<readonly UserPlace[]>;
+  /**
    * Calls `changed` after each change to the entries of the directory at
    * `path`, until the returned function is called.
    */
@@ -25,13 +32,14 @@ export type Folders = {
 /** The calls {@link desktopFolders} makes. */
 export type FolderFiles = Pick<
   Files,
-  "createDir" | "readDir" | "stat" | "watch"
+  "createDir" | "readDir" | "readText" | "stat" | "watch"
 >;
 
 /** {@link Folders} through the desktop's files. */
 export const desktopFolders = (files: FolderFiles): Folders => ({
   create: (path) => files.createDir(path),
   list: (path) => listDirectory(files, path),
+  userFolders: (home) => userFoldersIn(files, home),
   watch: (path, changed) => watchDirectory(files, path, changed),
 });
 

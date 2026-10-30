@@ -208,9 +208,10 @@ fn replies_carry_the_requests_id() {
                 file_type: FileType::Directory,
                 size: 4096,
                 modified_ms: Some(1_700_000_000_000),
+                real_path: Some("/home/me".into()),
             },
         }),
-        r#"{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"directory","size":4096,"modified_ms":1700000000000}}"#
+        r#"{"type":"system_reply","id":4,"reply":{"kind":"stat","file_type":"directory","size":4096,"modified_ms":1700000000000,"real_path":"/home/me"}}"#
     );
     assert_eq!(
         host(&HostMessage::SystemReply {

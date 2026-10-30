@@ -73,6 +73,11 @@ export type Stat = {
   /** In bytes. Files under `/sys` and `/proc` report 0 or 4096. */
   size: number;
   modifiedMs: number | undefined;
+  /**
+   * The absolute path with every link resolved, so two paths to one file
+   * compare equal; `undefined` from a host too old to say.
+   */
+  realPath: string | undefined;
 };
 
 export enum Signal {

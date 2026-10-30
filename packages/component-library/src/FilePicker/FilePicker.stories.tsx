@@ -38,6 +38,7 @@ const folders: Folders = {
       ? Promise.reject(new DOMException(path, "NotReadableError"))
       : Promise.resolve(entries);
   },
+  userFolders: () => Promise.resolve([]),
   watch: () => () => undefined,
 };
 
