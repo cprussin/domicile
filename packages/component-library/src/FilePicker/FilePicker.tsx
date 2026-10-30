@@ -766,9 +766,14 @@ const panelStyles = grid({
     opacity: 0,
     transform: "translateY({spacing.3}) scale(0.96)",
   },
+  // Fields sit on the panel as a soft fill, edged only under the pointer or
+  // focus.
   "& :has(> [data-control])": {
-    backgroundColor:
-      "color-mix(in oklab, {colors.background} 45%, transparent)",
+    backgroundColor: "fill",
+    borderRadius: "lg",
+  },
+  "& :has(> [data-control]):not(:hover, :focus-within)": {
+    borderColor: "transparent",
   },
   backdropFilter: "blur({spacing.5}) saturate(180%)",
   // More opaque than `ModalDialog`'s glass, for readable rows over anything.
