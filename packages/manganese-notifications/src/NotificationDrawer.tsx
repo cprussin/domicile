@@ -262,11 +262,14 @@ const paneStyles = flex({
   overflowY: "auto",
 });
 
+// Clips the rows sliding in and out sideways, which would otherwise scroll the
+// pane and flash its scrollbars.
 const listStyles = flex({
   direction: "column",
   gap: 1,
   listStyle: "none",
   margin: 0,
+  overflowX: "clip",
   paddingInline: 0,
 });
 
