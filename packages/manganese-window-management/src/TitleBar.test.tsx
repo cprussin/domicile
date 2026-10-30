@@ -447,6 +447,14 @@ describe("TitleBar", () => {
       expect(face(tab({}).container).className).not.toContain(raised);
     });
 
+    // A hidden tab broken out of its group grows into a bar, easing its
+    // color as it goes. From a clear tab, the desktop shows through it.
+    it("draws a hidden tab on the strip's own color", () => {
+      expect(face(tab({}).container).className).toContain(
+        css({ backgroundColor: "tabRail" }),
+      );
+    });
+
     // Swapped tabs slide past each other. The open tab slides over its
     // neighbors, whose pieces of the strip would otherwise cover it.
     it("draws the open tab over the rest of its strip", () => {
