@@ -68,11 +68,9 @@ const ADDRESSES = Ok<Map<string, Addressing>, SystemError>(
     [
       "wlan0",
       {
-        addresses: [
-          "192.168.1.23/24",
-          "2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64",
-        ],
         gateway: "192.168.1.254",
+        ipv4: ["192.168.1.23/24"],
+        ipv6: ["2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64"],
       },
     ],
   ]),
@@ -355,10 +353,8 @@ describe("WifiPanel", () => {
         detailsIn(screen.getByRole("region", { name: "Wi-Fi" })),
       ).toStrictEqual([
         ["Speed", ["867 Mb/s"]],
-        [
-          "Address",
-          ["192.168.1.23/24", "2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64"],
-        ],
+        ["IPv4 address", ["192.168.1.23/24"]],
+        ["IPv6 address", ["2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64"]],
         ["Gateway", ["192.168.1.254"]],
         ["DNS", ["192.168.1.1", "1.1.1.1"]],
         ["Interface", ["wlan0"]],
@@ -393,7 +389,8 @@ describe("WifiPanel", () => {
         screen.getAllByRole("term").map((term) => term.textContent),
       ).toStrictEqual([
         "Speed",
-        "Address",
+        "IPv4 address",
+        "IPv6 address",
         "Gateway",
         "Interface",
         "Hardware address",

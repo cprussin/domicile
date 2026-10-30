@@ -201,6 +201,13 @@ const ADDRESSES = JSON.stringify([
         scope: "global",
       },
       {
+        family: "inet6",
+        local: "fd00::5d2e:91c4:7ab0:2f16",
+        prefixlen: 64,
+        scope: "global",
+        temporary: true,
+      },
+      {
         deprecated: true,
         family: "inet6",
         local: "fd00::9a41:77c2:d0e3:15b8",
@@ -229,7 +236,7 @@ const ran = (stdout: string): Result<Ran, SystemError> =>
   Ok({ code: 0, signal: undefined, stderr: "", stdout });
 
 describe(readAddresses, () => {
-  it("reads each interface's current global addresses and its gateway from ip", async () => {
+  it("reads each interface's lasting global addresses, by family, and its gateway from ip", async () => {
     const asked: (readonly string[])[] = [];
     const addresses = await readAddresses({
       processes: {
@@ -247,12 +254,14 @@ describe(readAddresses, () => {
       ["ip", "-j", "route", "show", "default"],
     ]);
     expect(okOf(addresses).get("enp0s31f6")).toEqual({
-      addresses: ["192.168.1.40/24", "fd00::1c2b:3aff:fe4d:5e6f/64"],
       gateway: "192.168.1.1",
+      ipv4: ["192.168.1.40/24"],
+      ipv6: ["fd00::1c2b:3aff:fe4d:5e6f/64"],
     });
     expect(okOf(addresses).get("wlan0")).toEqual({
-      addresses: [],
       gateway: undefined,
+      ipv4: [],
+      ipv6: [],
     });
   });
 

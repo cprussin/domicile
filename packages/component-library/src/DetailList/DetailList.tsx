@@ -1,5 +1,5 @@
 import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
@@ -16,6 +16,11 @@ export type DetailValue = string | readonly string[];
 export type DetailOptions = {
   /** Give each line a button that copies it, for an address or a name. */
   copyable?: boolean | undefined;
+  /**
+   * An address, such as an IP address: each line wraps only between its
+   * colon-separated groups, and its prefix length, such as `/64`, is grayed.
+   */
+  address?: boolean | undefined;
 };
 
 /** A term and its value. */
@@ -39,7 +44,9 @@ export const DetailList = ({ rows }: { rows: readonly Detail[] }) => (
         <dd className={valueStyles}>
           {linesOf(value).map((line) => (
             <span className={lineStyles} data-detail-line="" key={line}>
-              <span className={textStyles}>{line}</span>
+              <span className={textStyles}>
+                {options?.address === true ? <AddressText text={line} /> : line}
+              </span>
               {options?.copyable === true && <CopyButton text={line} />}
             </span>
           ))}
@@ -48,6 +55,24 @@ export const DetailList = ({ rows }: { rows: readonly Detail[] }) => (
     ))}
   </dl>
 );
+
+/** `text`, an address, able to break after each colon, with its prefix length grayed. */
+const AddressText = ({ text }: { text: string }) => {
+  const [address = text, prefix] = text.split("/");
+  return (
+    <>
+      {groupsOf(address).map(({ at, group }) => (
+        <Fragment key={at}>
+          {group}
+          {group.endsWith(":") && <wbr />}
+        </Fragment>
+      ))}
+      {prefix !== undefined && (
+        <span className={prefixStyles}>{`/${prefix}`}</span>
+      )}
+    </>
+  );
+};
 
 /** Copies `text`, then shows a check for a moment. */
 const CopyButton = ({ text }: { text: string }) => {
@@ -106,6 +131,8 @@ const rowStyles = css({
 
 const termStyles = css({ color: "textSoft" });
 
+const prefixStyles = css({ color: "textSoft" });
+
 // The shell turns selection off; a value is something to select.
 const valueStyles = css({
   fontVariantNumeric: "tabular-nums",
@@ -134,3 +161,10 @@ const copyStyles = css({
 
 const linesOf = (value: DetailValue): readonly string[] =>
   typeof value === "string" ? [value] : value;
+
+/** `address` cut after each colon, each piece with where it starts. */
+const groupsOf = (address: string) =>
+  Array.from(address.matchAll(/[^:]*:|[^:]+$/g), (match) => ({
+    at: match.index,
+    group: match[0],
+  }));

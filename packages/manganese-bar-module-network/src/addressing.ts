@@ -9,6 +9,9 @@ import type { Addressing } from "@domicile-desktop/system-network/interfaces";
 /** An address or a name, which people paste elsewhere. */
 export const COPYABLE: DetailOptions = { copyable: true };
 
+/** An IP address, which people paste elsewhere. */
+const ADDRESS: DetailOptions = { address: true, copyable: true };
+
 /** Each interface's addresses, by name; `undefined` until `ip` answers. */
 export type Addresses =
   | Result<Map<string, Addressing>, SystemError>
@@ -21,11 +24,14 @@ export const addressRowsOf = (addresses: Addresses, name: string): Detail[] => {
     Ok: (byName) => byName.get(name),
   });
   return [
-    ...(addressing === undefined || addressing.addresses.length === 0
+    ...(addressing === undefined || addressing.ipv4.length === 0
       ? []
-      : [["Address", addressing.addresses, COPYABLE] as const]),
+      : [["IPv4 address", addressing.ipv4, ADDRESS] as const]),
+    ...(addressing === undefined || addressing.ipv6.length === 0
+      ? []
+      : [["IPv6 address", addressing.ipv6, ADDRESS] as const]),
     ...(addressing?.gateway === undefined
       ? []
-      : [["Gateway", addressing.gateway, COPYABLE] as const]),
+      : [["Gateway", addressing.gateway, ADDRESS] as const]),
   ];
 };

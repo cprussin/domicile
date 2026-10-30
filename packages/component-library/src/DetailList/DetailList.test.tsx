@@ -59,6 +59,32 @@ describe(DetailList, () => {
           .map((button) => button.getAttribute("aria-label")),
       ).toEqual(["Copy 10.42.0.1"]);
     });
+
+    it("breaks an address only between its groups, and grays its prefix length", () => {
+      const { container } = render(
+        <DetailList
+          rows={[
+            [
+              "IPv6 address",
+              "2600:1702:4b80:438f:2a0c:50ff:fe33:91aa/64",
+              { address: true },
+            ],
+          ]}
+        />,
+      );
+      const value = screen.getByRole("definition");
+      expect(value).toHaveTextContent(
+        "2600:1702:4b80:438f:2a0c:50ff:fe33:91aa/64",
+      );
+      expect(
+        Array.from(container.querySelectorAll("wbr"), (wbr) =>
+          wbr.previousSibling?.textContent?.at(-1),
+        ),
+      ).toEqual([":", ":", ":", ":", ":", ":", ":"]);
+      expect(globalThis.getComputedStyle(screen.getByText("/64")).color).toBe(
+        globalThis.getComputedStyle(screen.getByRole("term")).color,
+      );
+    });
   });
 
   describe("interactions", () => {

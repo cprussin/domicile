@@ -262,7 +262,7 @@ the component library's panel parts, not hand-rolled rows and labels:
 | `PanelHeader` | A title, a back button, controls at the end |
 | `PanelSection` | A group under a small label: Inboxes, Paired, Output |
 | `List` / `ListRow` | A row: icon, label over a detail, something at the end. `plain` rows are choices; `filled` rows are tiles with their own buttons; `disclosure` folds details away |
-| `DetailList` | Terms and values, such as addresses. Values can be selected; `copyable` rows get copy buttons |
+| `DetailList` | Terms and values, such as addresses. Values can be selected; `copyable` rows get copy buttons; `address` rows wrap only between groups |
 | `SliderRow` | A slider with its icon, value and an optional arrow |
 | `EmptyState` | A panel or section with nothing to show: an icon, what is missing, what would fill it, and a button that would if there is one |
 | `Loading` | What a panel waits for: a spinner over its words, what it searches for with rings spreading from it, or a spinner alone at a row's end |
