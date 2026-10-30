@@ -15,7 +15,7 @@ type Props = {
 
 /**
  * An eye that keeps the screens on: closed and dimmed while they blank when
- * idle, open on a lit circle while held, and open alone while only something
+ * idle, open on a lit square while held, and open alone while only something
  * else holds them. Disabled until the portal answers.
  */
 export const IdleInhibitorToggle = ({ inhibitor, holders = [] }: Props) => {
@@ -70,7 +70,7 @@ const toggleStyles = cva({
     alignItems: "center",
     backgroundColor: "transparent",
     blockSize: 7,
-    borderRadius: "full",
+    borderRadius: "lg",
     borderStyle: "none",
     cursor: "pointer",
     display: "inline-flex",

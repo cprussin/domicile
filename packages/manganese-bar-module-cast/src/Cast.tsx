@@ -230,7 +230,7 @@ const triggerStyles = cva({
     alignItems: "center",
     backgroundColor: "transparent",
     blockSize: 7,
-    borderRadius: "full",
+    borderRadius: "lg",
     borderStyle: "none",
     color: "inherit",
     cursor: "pointer",

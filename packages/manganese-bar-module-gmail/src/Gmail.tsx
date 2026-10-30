@@ -157,7 +157,7 @@ const itemStyles = hstack({
   "&[data-unread=true] [data-figure]": { fontWeight: "semibold" },
   backgroundColor: "transparent",
   blockSize: 7,
-  borderRadius: "full",
+  borderRadius: "lg",
   borderStyle: "none",
   color: "inherit",
   cursor: "pointer",

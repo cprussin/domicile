@@ -145,7 +145,7 @@ const triggerStyles = cva({
     alignItems: "center",
     backgroundColor: "transparent",
     blockSize: 7,
-    borderRadius: "full",
+    borderRadius: "lg",
     borderStyle: "none",
     cursor: "pointer",
     display: "inline-flex",
