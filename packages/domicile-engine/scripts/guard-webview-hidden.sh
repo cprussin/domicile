@@ -29,10 +29,14 @@
 #   visible when shown            its state when the box was hidden again is
 #                                 `visible`: it was shown and stayed so
 #   hidden again                  its last state is `hidden`
+#   steady while shown            once visible, it says nothing else until the
+#                                 box is hidden: no blink of `hidden` on the
+#                                 way in (patch 0162)
 #
 # Control: NEGATIVE=1 starts the box shown. The page's last state before the
 # shell's `showing` step must be `visible`, so the claim's `hidden` is the
-# box's doing, not a headless browser's.
+# box's doing, not a headless browser's. Its page must be steady from attach
+# to the hiding step too: that is where an unheld engine blinks.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -150,18 +154,24 @@ saw() { # $1 pattern
 # The page's states at the shell's steps: its state when the box was shown,
 # whether it was visible when the box was hidden again, and its state at the
 # end. A page reports only changes, so each is the last state before that
-# point. `none` when there was no state or no such step.
-STATES="$(awk '
+# point. `none` when there was no state or no such step. Last, whether it
+# stayed visible while shown: from the shell's showing step in the claim, from
+# the start in the control, until its hiding step.
+STATES="$(awk -v hide="$HIDE" '
+  BEGIN { watching = !hide }
   match($0, /GUARD state=[a-z]+/) {
     state = substr($0, RSTART + 12, RLENGTH - 12)
+    # Once shown, a page that says hidden before the box is hidden blinked.
+    if (watching && state == "visible") { seen = 1 }
+    if (watching && state != "visible" && seen) { blinked = 1 }
   }
-  /GUARD showing/ { showed = 1; before = state }
-  /GUARD hiding/ { hid = 1; shown = (state == "visible") }
+  /GUARD showing/ { showed = 1; before = state; if (hide) { watching = 1 } }
+  /GUARD hiding/ { hid = 1; shown = (state == "visible"); watching = 0 }
   END {
     if (!showed) { before = state }
     after = (hid ? state : "")
-    printf "%s %d %s\n", (before == "" ? "none" : before), shown,
-      (after == "" ? "none" : after)
+    printf "%s %d %s %d\n", (before == "" ? "none" : before), shown,
+      (after == "" ? "none" : after), !blinked
   }' "$ENGINE_LOG" 2>/dev/null)"
 
 SAW_SHELL=$(saw "GUARD shell-loaded")
@@ -172,19 +182,19 @@ SAW_STEPS=0
 MEASURED="$MODE $SAW_SHELL $SAW_PAGE $SAW_STEPS $STATES"
 echo
 echo "measured: $MEASURED"
-echo "  (mode shell page steps before-showing visible-at-hiding last)"
+echo "  (mode shell page steps before-showing visible-at-hiding last steady)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-webview-hidden-guard.sh` runs this block
 # directly. MEASURED is "<mode> <shell> <page> <steps> <before> <shown>
-# <after>".
+# <after> <steady>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"hidden 1 1 1 hidden 1 hidden")
+"hidden 1 1 1 hidden 1 hidden 1")
   PASSED="a browser window's page is hidden while its <webview> is not \
 rendered, visible once it is, and hidden again when it is not"
   ;;
-"shown 1 1 1 visible "*)
+"shown 1 1 1 visible "*" 1")
   PASSED="the control is sharp: the same window in a box shown from the start \
 was visible, so the claim's hidden page is the box's doing"
   ;;
@@ -200,6 +210,13 @@ did not load, or it threw, and the engine log has its console"
   FAILURE="the shell never showed and hid the box, because its <webview> \
 never reported a page: the window was not attached (AttachToElement, \
 AttachWindowTo, ReportEverything)"
+  ;;
+"hidden 1 1 1 hidden 1 hidden 0" | "shown 1 1 1 visible "*" 0")
+  FAILURE="A SHOWN PAGE SAID HIDDEN FOR A MOMENT: its <webview>'s frame \
+passed through not rendered or out of the viewport on its way in, and each \
+step reached the page (RemoteFrameView::VisibilityChanged, \
+WebContentsImpl::OnRenderFrameProxyVisibilityChanged). A page that refetches \
+or animates on visibilitychange does so for nothing"
   ;;
 "hidden 1 1 1 visible "*)
   FAILURE="A PAGE WHOSE <webview> IS NOT RENDERED SAYS IT IS VISIBLE, so it \
