@@ -254,7 +254,7 @@ const popupStyles = flex({
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
-  borderRadius: "lg",
+  borderRadius: "0.875rem",
   boxShadow: "modal",
   direction: "column",
   inlineSize: "min({spacing.120}, 92cqw)",
