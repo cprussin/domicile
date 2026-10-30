@@ -75,16 +75,16 @@ export const QuickSettings = ({
           setDetails(shown);
         };
   const { Indicators } = parts;
-  const changeOpen = (opened: boolean) => {
-    setOpen(opened);
-    if (!opened) {
-      setDetails(undefined);
-    }
-  };
   return (
     <Popover
       align="end"
-      onOpenChange={changeOpen}
+      onOpenChange={setOpen}
+      // Back to the tiles once hidden, so the panel closes on what it shows.
+      onOpenChangeComplete={(opened) => {
+        if (!opened) {
+          setDetails(undefined);
+        }
+      }}
       open={open}
       side="bottom"
       tone="overPhoto"
@@ -133,7 +133,7 @@ export const QuickSettings = ({
                     beforeIcon={<AnimatedGearIcon size={14} />}
                     onClick={() => {
                       openSettings();
-                      changeOpen(false);
+                      setOpen(false);
                     }}
                     rounded
                     size="xs"

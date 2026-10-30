@@ -3,7 +3,7 @@ import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
 import { QuickToggle } from "@domicile-desktop/component-library/QuickToggle";
 import { BarContext } from "@domicile-desktop/manganese-bar/bar-context";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { QuickSettingsParts } from "./QuickSettings";
@@ -138,6 +138,29 @@ describe(QuickSettings, () => {
       expect(screen.getByText(content)).toBeVisible();
       await userEvent.click(screen.getByRole("button", { name: "Back" }));
     }
+  });
+
+  it("closes on the details it shows, and reopens on the tiles", async () => {
+    shown(false);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Quick settings" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Sound details" }),
+    );
+
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+
+    expect(screen.getByRole("heading", { name: "Sound" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Mixer")).toBeNull();
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Quick settings" }),
+    );
+    expect(screen.getByRole("button", { name: "Sound details" })).toBeVisible();
   });
 
   it("opens the Settings app from the footer, and closes", async () => {
