@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 30 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a cast shows the pointer upright on a turned
+ monitor
+
+A cast of a monitor stood on its side showed the pointer on its side.
+wm::CursorLoader turns the pointer with the panel so it looks upright
+there, but a cast of that panel is upright (docs/DISPLAYS.md#rotation),
+and the casts drew the turned image as it was.
+
+- DrmCursor sets the cast's image on each show instead of each
+  SetCursor, stood back upright by the rotation of the panel the pointer
+  is on (ui::UprightDeskCursorImage). A pointer that crosses onto a panel
+  turned another way is cast as that panel shows it.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. UprightDeskCursorImage has its unit tests in
+domicile_unittests.
+---
+ ui/ozone/platform/drm/host/drm_cursor.cc | 34 ++++++++++++++++++------
+ ui/ozone/platform/drm/host/drm_cursor.h  |  1 +
+ 2 files changed, 27 insertions(+), 8 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index 8d229f6..48a4326 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -101,14 +101,6 @@ void DrmCursor::SetCursor(gfx::AcceleratedWidget window,
+   cursor_ = platform_cursor;
+ 
+   SendCursorShowLocked();
+-
+-  // DOMICILE: the compositor's screen casts draw this pointer, which only
+-  // this process has. An animated one is cast as its first frame. The
+-  // source's listeners only post a task, so this may run under `lock_`.
+-  const std::vector<SkBitmap>& bitmaps = cursor_->bitmaps();
+-  DeskCursorImageSource::Get().Set(DeskCursorImageOf(
+-      bitmaps.empty() ? SkBitmap() : bitmaps.front(), cursor_->hotspot(),
+-      cursor_->cursor_image_scale_factor()));
+ }
+ 
+ void DrmCursor::OnWindowAdded(gfx::AcceleratedWidget window,
+@@ -400,6 +392,8 @@ void DrmCursor::CrossLocked(const PointerCrossing& crossing)
+ }
+ 
+ void DrmCursor::SendCursorShowLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
++  SetDeskCursorImageLocked();
++
+   if (!cursor_ || cursor_->type() == CursorType::kNone) {
+     SendCursorHideLocked();
+     return;
+@@ -409,6 +403,30 @@ void DrmCursor::SendCursorShowLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
+                       cursor_->frame_delay());
+ }
+ 
++// DOMICILE: the compositor's screen casts draw the pointer on screen, which
++// only this process has. On each show rather than each `SetCursor`: the
++// pointer is drawn turned with the panel it is on, and a cast of that panel
++// is upright, so a pointer that crossed onto a panel turned another way is
++// cast stood up another way. An animated one is cast as its first frame. The
++// source drops an image it already has and its listeners only post a task,
++// so this may run under `lock_`, on the UI or the evdev thread.
++void DrmCursor::SetDeskCursorImageLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
++  if (!cursor_) {
++    return;
++  }
++  // No window holds the pointer before the first is added.
++  const auto screen =
++      std::ranges::find(screens_, window_, &PointerScreen::window);
++  const display::Display::Rotation turn =
++      screen == screens_.end() ? display::Display::ROTATE_0 : screen->rotation;
++  const std::vector<SkBitmap>& bitmaps = cursor_->bitmaps();
++  DeskCursorImageSource::Get().Set(UprightDeskCursorImage(
++      DeskCursorImageOf(bitmaps.empty() ? SkBitmap() : bitmaps.front(),
++                        cursor_->hotspot(),
++                        cursor_->cursor_image_scale_factor()),
++      static_cast<int>(turn)));
++}
++
+ void DrmCursor::SendCursorHideLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
+   CursorSetLockTested(window_, std::vector<SkBitmap>(), std::nullopt,
+                       base::TimeDelta());
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
+index 390a9f6..fa58330 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.h
++++ b/ui/ozone/platform/drm/host/drm_cursor.h
+@@ -122,6 +122,7 @@ class DrmCursor : public CursorDelegateEvdev {
+  private:
+   void SetCursorLocationLocked(const gfx::PointF& location);
+   void SendCursorShowLocked();
++  void SetDeskCursorImageLocked();
+   void SendCursorHideLocked();
+   void SendCursorMoveLocked();
+   PointerScreen& ScreenLocked(gfx::AcceleratedWidget window);
