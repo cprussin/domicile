@@ -44,7 +44,12 @@ describe("an app's host", () => {
     const stat = await appDesktop(new FakeAppHost()).files.stat("notes.txt");
 
     expect(stat).toStrictEqual(
-      Ok({ fileType: FileType.File, modifiedMs: undefined, size: 4 }),
+      Ok({
+        fileType: FileType.File,
+        modifiedMs: undefined,
+        realPath: undefined,
+        size: 4,
+      }),
     );
   });
 });

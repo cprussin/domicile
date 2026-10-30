@@ -41,6 +41,7 @@ const systemReplySchema = z.looseObject({
       file_type: fileTypeSchema,
       kind: z.literal("stat"),
       modified_ms: z.number().nullable(),
+      real_path: z.string().nullish(),
       size: z.number(),
     }),
     z.looseObject({

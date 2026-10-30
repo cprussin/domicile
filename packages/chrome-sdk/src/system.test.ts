@@ -191,7 +191,12 @@ describe("files", () => {
     });
 
     expect(await described).toStrictEqual(
-      Ok({ fileType: FileType.Directory, modifiedMs: undefined, size: 0 }),
+      Ok({
+        fileType: FileType.Directory,
+        modifiedMs: undefined,
+        realPath: undefined,
+        size: 0,
+      }),
     );
   });
 });

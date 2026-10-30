@@ -51,6 +51,7 @@ const holding = (
             : Ok({
                 fileType: directory ? FileType.Directory : FileType.File,
                 modifiedMs: undefined,
+                realPath: path,
                 size: bytes?.length ?? 0,
               }),
         );
