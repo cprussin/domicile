@@ -360,10 +360,15 @@ impl Notifications {
             .or_else(|| self.named(&notify.app_icon))
     }
 
-    /// A picture named by a path, a `file://` URI or an icon's name.
+    /// A picture named by an image's `data:` URL, a path, a `file://` URI or
+    /// an icon's name.
     fn named(&mut self, named: &str) -> Option<String> {
         let path = named.strip_prefix("file://").unwrap_or(named);
-        if Path::new(path).is_absolute() {
+        if named.starts_with("data:") {
+            // Base64 takes 4 bytes for each 3.
+            (named.starts_with("data:image/") && named.len() as u64 <= LARGEST_FILE * 4 / 3)
+                .then(|| named.to_string())
+        } else if Path::new(path).is_absolute() {
             file(Path::new(path))
         } else {
             self.icons.icon(named, "")
@@ -844,6 +849,47 @@ mod tests {
                 let expected = Some(data_url("image/png", PNG_BYTES));
                 assert_eq!(by_image_path, expected, "image-path {named}");
                 assert_eq!(by_app_icon, expected, "app_icon {named}");
+            }
+        }
+
+        #[test]
+        fn a_picture_named_by_a_data_url_is_drawn_as_it_is() {
+            // A shell, which writes no files, sends a site's icon this way.
+            let url = data_url("image/x-icon", b"\0\0\x01\0");
+            let mut notifications = held(Vec::new());
+
+            let icon = icon_of(
+                &mut notifications,
+                Notify {
+                    hints: Hints {
+                        image_path: Some(url.clone()),
+                        ..Hints::default()
+                    },
+                    ..notify("")
+                },
+            );
+
+            assert_eq!(icon, Some(url));
+        }
+
+        #[test]
+        fn a_data_url_that_is_no_picture_or_too_big_is_none() {
+            let too_big = format!(
+                "data:image/png;base64,{}",
+                "A".repeat(LARGEST_FILE as usize * 2)
+            );
+            let mut notifications = held(Vec::new());
+
+            for named in [data_url("text/html", b"<script>"), too_big] {
+                let icon = icon_of(
+                    &mut notifications,
+                    Notify {
+                        app_icon: named,
+                        ..notify("")
+                    },
+                );
+
+                assert_eq!(icon, None);
             }
         }
 
