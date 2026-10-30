@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Err, Ok } from "@cprussin/option-result";
+import { Err, None, Ok, Some } from "@cprussin/option-result";
 import type { AppWindowOptions } from "@domicile-desktop/sdk/desktop/browser";
 import { AppReuse } from "@domicile-desktop/sdk/desktop/browser";
 import type {
@@ -8,6 +8,7 @@ import type {
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { Bus, SystemErrorKind } from "@domicile-desktop/sdk/system";
+import { favicons } from "@domicile-desktop/system-apps/favicons";
 
 import { gmailAppId, inboxAddress } from "./addresses";
 import type { Mail } from "./gmail-api";
@@ -16,6 +17,12 @@ import { EMAIL } from "./held-google";
 import { mailNotices } from "./mail-notices";
 
 const ACCOUNT = { email: EMAIL, nickname: "Work" };
+
+/** Gmail's icon, as a site's icon is looked up. */
+const GMAIL_ICON = "data:image/x-icon;base64,AAABAA==";
+
+/** Icons of sites that give none. */
+const NO_ICON = favicons(() => Promise.resolve(Ok(None())));
 
 const mail = (n: number): Mail => ({
   from: `Sender ${n.toString()}`,
@@ -75,7 +82,7 @@ describe("mailNotices", () => {
   it("notifies of a message: the account, its sender and its subject", async () => {
     const { bus, desk: held } = desk(notified(7));
 
-    await mailNotices(held)(ACCOUNT, arrived([mail(1)]));
+    await mailNotices(held, NO_ICON)(ACCOUNT, arrived([mail(1)]));
 
     expect(bus.calls).toStrictEqual([
       {
@@ -99,10 +106,26 @@ describe("mailNotices", () => {
     ]);
   });
 
+  it("draws a message with Gmail's site icon, as the launcher does", async () => {
+    const { bus, desk: held } = desk(notified(7));
+    const looked: string[] = [];
+    const icons = favicons((url) => {
+      looked.push(url);
+      return Promise.resolve(Ok(Some(GMAIL_ICON)));
+    });
+
+    await mailNotices(held, icons)(ACCOUNT, arrived([mail(1)]));
+
+    expect(looked).toStrictEqual([inboxAddress(EMAIL)]);
+    expect(bus.calls[0]?.body?.[6]).toStrictEqual({
+      "image-path": { signature: "s", value: GMAIL_ICON },
+    });
+  });
+
   it("notifies of several messages oldest first, so the newest shows on top", async () => {
     const { bus, desk: held } = desk(notified(7), notified(8));
 
-    await mailNotices(held)(ACCOUNT, arrived([mail(2), mail(1)]));
+    await mailNotices(held, NO_ICON)(ACCOUNT, arrived([mail(2), mail(1)]));
 
     expect(bus.calls.map(({ body }) => body?.[3])).toStrictEqual([
       "Sender 1",
@@ -112,7 +135,7 @@ describe("mailNotices", () => {
 
   it("opens a pressed message in its account's Gmail window, and only for its own notifications", async () => {
     const { bus, desk: held, opened } = desk(notified(7));
-    const notify = mailNotices(held);
+    const notify = mailNotices(held, NO_ICON);
 
     await notify(ACCOUNT, arrived([mail(1)]));
     await bus.send(pressed(6));
@@ -128,7 +151,7 @@ describe("mailNotices", () => {
 
   it("closes a message's notification once it is read, and no other", async () => {
     const { bus, desk: held } = desk(notified(7), notified(8), CLOSED);
-    const notify = mailNotices(held);
+    const notify = mailNotices(held, NO_ICON);
 
     await notify(ACCOUNT, arrived([mail(2), mail(1)]));
     await notify(ACCOUNT, read("m1", "m9"));
@@ -138,7 +161,7 @@ describe("mailNotices", () => {
 
   it("closes a notification for many messages once all are read", async () => {
     const { bus, desk: held } = desk(notified(7), CLOSED);
-    const notify = mailNotices(held);
+    const notify = mailNotices(held, NO_ICON);
 
     await notify(ACCOUNT, arrived([mail(4), mail(3), mail(2), mail(1)]));
     await notify(ACCOUNT, read("m1", "m2", "m3"));
@@ -151,7 +174,7 @@ describe("mailNotices", () => {
   it("notifies of many messages at once as one, which opens the inbox", async () => {
     const { bus, desk: held, opened } = desk(notified(7));
 
-    await mailNotices(held)(
+    await mailNotices(held, NO_ICON)(
       ACCOUNT,
       arrived([mail(4), mail(3), mail(2), mail(1)]),
     );
@@ -166,7 +189,7 @@ describe("mailNotices", () => {
   it("names each sender once", async () => {
     const { bus, desk: held } = desk(notified(7));
 
-    await mailNotices(held)(
+    await mailNotices(held, NO_ICON)(
       ACCOUNT,
       arrived([mail(1), mail(1), mail(2), mail(1)]),
     );
@@ -176,7 +199,7 @@ describe("mailNotices", () => {
 
   it("forgets its notifications once the compositor restarts", async () => {
     const { bus, desk: held, opened } = desk(notified(7), notified(8));
-    const notify = mailNotices(held);
+    const notify = mailNotices(held, NO_ICON);
 
     await notify(ACCOUNT, arrived([mail(1)]));
     await bus.miss();
@@ -196,7 +219,7 @@ describe("mailNotices", () => {
     );
 
     await expect(
-      mailNotices(held)(ACCOUNT, arrived([mail(1)])),
+      mailNotices(held, NO_ICON)(ACCOUNT, arrived([mail(1)])),
     ).rejects.toThrow("ServiceUnknown");
   });
 });

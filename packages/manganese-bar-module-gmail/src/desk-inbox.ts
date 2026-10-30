@@ -2,6 +2,9 @@ import { perDesktop } from "@domicile-desktop/react/per-desktop";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { curlFetch } from "@domicile-desktop/system-apps/curl";
+import { favicon } from "@domicile-desktop/system-apps/favicon";
+import { favicons } from "@domicile-desktop/system-apps/favicons";
 
 import type { GoogleClient } from "./consent";
 import type { MailNews } from "./gmail-api";
@@ -31,7 +34,10 @@ export type DeskAccount = {
  */
 export const deskInbox = perDesktop((domicile) => {
   const accounts = new Map<string, DeskAccount>();
-  const notify = mailNotices(domicile);
+  const notify = mailNotices(
+    domicile,
+    favicons((url) => favicon(url, curlFetch(domicile))),
+  );
   return (
     email: string,
     client: GoogleClient,

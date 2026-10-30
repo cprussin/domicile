@@ -10,6 +10,7 @@ import type {
   Listening,
 } from "@domicile-desktop/sdk/system";
 import { Bus, ListenedKind } from "@domicile-desktop/sdk/system";
+import type { Favicons } from "@domicile-desktop/system-apps/favicons";
 import { z } from "zod";
 
 import { gmailAppId, inboxAddress } from "./addresses";
@@ -41,11 +42,13 @@ export type MailAccount = { email: string; nickname: string };
 /**
  * Notifies the desk of mail that arrived, under the account's nickname: a
  * notification per message, or one for all of them when more than
- * {@link MOST_APART} arrive at once. A press opens the message, or the inbox,
- * in the account's Gmail window, opening one if none is. A notification closes once all its messages are read.
- * Rejects when the server refuses.
+ * {@link MOST_APART} arrive at once. Each is drawn with Gmail's site icon from
+ * `icons`, as the launcher draws the account's Gmail. A press opens the
+ * message, or the inbox, in the account's Gmail window, opening one if none
+ * is. A notification closes once all its messages are read. Rejects when the
+ * server refuses.
  */
-export const mailNotices = (desk: NoticeDesk) => {
+export const mailNotices = (desk: NoticeDesk, icons: Favicons) => {
   // Each notification still up, by id.
   const shown = new Map<number, Shown>();
   const presses: { listening: Promise<void> | undefined } = {
@@ -57,8 +60,14 @@ export const mailNotices = (desk: NoticeDesk) => {
   ): Promise<void> => {
     presses.listening ??= listen(desk, shown);
     await presses.listening;
+    const site = inboxAddress(account.email);
+    if (arrived.length > 0) {
+      await icons.lookFor([site]);
+    }
+    // The theme's Gmail icon until the site's is found.
+    const picture = icons.icon(site).unwrapOr("gmail");
     for (const notice of notices(account.email, arrived)) {
-      const id = await notify(desk, account.nickname, notice);
+      const id = await notify(desk, account.nickname, picture, notice);
       shown.set(id, {
         email: account.email,
         opens: notice.opens,
@@ -124,6 +133,7 @@ const senders = (mail: readonly Mail[]): string => {
 const notify = async (
   desk: NoticeDesk,
   nickname: string,
+  picture: string,
   { body, summary }: Notice,
 ): Promise<number> =>
   (
@@ -132,12 +142,12 @@ const notify = async (
       body: [
         nickname,
         0,
-        // The theme's mail icon, unless it has Gmail's own.
+        // The theme's mail icon, unless the picture is found.
         "mail-unread",
         summary,
         body,
         ["default", "Open"],
-        { "image-path": { signature: "s", value: "gmail" } },
+        { "image-path": { signature: "s", value: picture } },
         -1,
       ],
       member: "Notify",
