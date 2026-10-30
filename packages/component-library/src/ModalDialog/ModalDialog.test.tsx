@@ -37,6 +37,16 @@ describe(ModalDialog, () => {
       expect(screen.getByText("Body")).toBeInTheDocument();
     });
 
+    it("still names itself by a title kept for screen readers", () => {
+      render(
+        <ModalDialog closeButton={false} open title="Open" titleHidden>
+          Body
+        </ModalDialog>,
+      );
+      expect(screen.getByRole("dialog", { name: "Open" })).toBeInTheDocument();
+      expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+    });
+
     it("renders no close button when it is turned off", () => {
       render(
         <ModalDialog closeButton={false} open title="Settings">

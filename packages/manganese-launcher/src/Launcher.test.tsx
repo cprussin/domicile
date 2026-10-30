@@ -294,10 +294,10 @@ describe("Launcher", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
-  it("opens wide, so the rows and a preview both have room", () => {
+  it("opens wide enough for the rows and a preview, and no wider", () => {
     using _panel = launcher();
 
-    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("xl");
+    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("lg");
   });
 
   it("sizes its rows to its own screen, not the page every monitor shares", () => {
@@ -309,24 +309,12 @@ describe("Launcher", () => {
     });
   });
 
-  it("lists the tags a line can carry at the start of its footer", () => {
+  it("has no footer: the search box is all it draws besides the results", () => {
     using _panel = launcher();
 
-    const tags = screen.getByRole("list", { name: "Tags" });
-    expect(
-      within(tags)
-        .getAllByRole("listitem")
-        .map((tag) => tag.textContent),
-    ).toStrictEqual([
-      "!p Private",
-      "!gh GitHub",
-      "!im Google Images",
-      "!maps Google Maps",
-      "!wiki Wikipedia",
-      "!yt YouTube",
-    ]);
-    // Pushes the keys to the footer's end.
-    expect(tags).toHaveStyle({ marginInlineEnd: "auto" });
+    expect(screen.getByRole("dialog").querySelector("footer")).toBeNull();
+    // Still named for screen readers, with no visible title.
+    expect(screen.getByRole("dialog", { name: "Open" })).toBeInTheDocument();
   });
 
   it("offers what the host found, each name under the directory it is in", async () => {

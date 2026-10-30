@@ -1,7 +1,6 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
 import { Input } from "@domicile-desktop/component-library/Input";
-import { Kbd } from "@domicile-desktop/component-library/Kbd";
 import {
   highlightIn,
   keepInView,
@@ -9,7 +8,7 @@ import {
   steppedTo,
 } from "@domicile-desktop/component-library/list-walk";
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
-import { Engine, TAGS } from "@domicile-desktop/manganese-address/search";
+import { Engine } from "@domicile-desktop/manganese-address/search";
 import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
 import { FilePreviewKind } from "@domicile-desktop/sdk/file-preview";
 import {
@@ -146,14 +145,8 @@ export const Launcher = memo(
     searchApps,
   }: Props) => (
     <ModalDialog
-      // Keyboard-driven, so no close button; the footer shows Escape.
+      // Keyboard-driven, so no close button; Escape closes it.
       closeButton={false}
-      footer={
-        <>
-          <Tags />
-          <Keys />
-        </>
-      }
       onOpenChange={(next) => {
         if (!next) {
           onDismiss();
@@ -169,11 +162,14 @@ export const Launcher = memo(
       // view would read as a click in it and move the keyboard there.
       returnFocus={false}
       screen={screen}
-      // Wide enough for the rows and the preview side by side.
-      size="xl"
+      // Wide enough for the rows and the preview side by side, and narrow
+      // enough to read as a quick panel rather than a window.
+      size="lg"
       // Translucent, so the desktop stays visible behind a brief overlay.
       surface="glass"
+      // The search box heads the panel, so the title is for screen readers.
       title="Open"
+      titleHidden
     >
       {/*
       Inside the dialog so it unmounts on close, and every open starts with an
@@ -250,54 +246,57 @@ const Query = ({
 
   return (
     <div className={panelStyles}>
-      <Input
-        aria-activedescendant={
-          highlighted === undefined ? undefined : rowId(listId, highlighted)
-        }
-        aria-controls={listId}
-        aria-expanded
-        // A placeholder isn't an accessible name, and browser address bars are
-        // comboboxes too, so this needs a label.
-        aria-label={PROMPT}
-        autoFocus
-        onChange={(event) => {
-          setQuery(event.target.value);
-          // Reset, since the old index refers to the previous list.
-          setStepped(0);
-        }}
-        onKeyDown={(event) => {
-          const step = stepOf(event);
-          if (step !== undefined) {
-            // Stop the box from moving the caret.
-            event.preventDefault();
-            // Step from the clamped highlight, since `stepped` may be past the
-            // end of a narrowed list.
-            setStepped(steppedTo(highlighted ?? 0, step, choices.length));
-          } else if (event.key === "Enter" && chosen !== undefined) {
-            // Taken, or the engine forwards it to the window the launch
-            // focuses.
-            event.preventDefault();
-            onLaunch(event.shiftKey ? openWithOf(chosen) : launchOf(chosen));
-          } else if (event.key === "Tab") {
-            // Keep focus in the box (see `keepKeyboardIn`).
-            event.preventDefault();
+      <div className={searchStyles}>
+        <Input
+          aria-activedescendant={
+            highlighted === undefined ? undefined : rowId(listId, highlighted)
           }
-        }}
-        placeholder={PROMPT}
-        prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
-        ref={box}
-        role="combobox"
-        size="lg"
-        // File names would be flagged as misspellings.
-        spellCheck={false}
-        // Match count, like a find bar's.
-        suffixIcon={
-          <span aria-hidden="true" className={countStyles}>
-            {`${found.matched.toString()} matched`}
-          </span>
-        }
-        value={query}
-      />
+          aria-controls={listId}
+          aria-expanded
+          // A placeholder isn't an accessible name, and browser address bars are
+          // comboboxes too, so this needs a label.
+          aria-label={PROMPT}
+          autoFocus
+          flush
+          onChange={(event) => {
+            setQuery(event.target.value);
+            // Reset, since the old index refers to the previous list.
+            setStepped(0);
+          }}
+          onKeyDown={(event) => {
+            const step = stepOf(event);
+            if (step !== undefined) {
+              // Stop the box from moving the caret.
+              event.preventDefault();
+              // Step from the clamped highlight, since `stepped` may be past the
+              // end of a narrowed list.
+              setStepped(steppedTo(highlighted ?? 0, step, choices.length));
+            } else if (event.key === "Enter" && chosen !== undefined) {
+              // Taken, or the engine forwards it to the window the launch
+              // focuses.
+              event.preventDefault();
+              onLaunch(event.shiftKey ? openWithOf(chosen) : launchOf(chosen));
+            } else if (event.key === "Tab") {
+              // Keep focus in the box (see `keepKeyboardIn`).
+              event.preventDefault();
+            }
+          }}
+          placeholder={PROMPT}
+          prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
+          ref={box}
+          role="combobox"
+          size="lg"
+          // File names would be flagged as misspellings.
+          spellCheck={false}
+          // Match count, like a find bar's.
+          suffixIcon={
+            <span aria-hidden="true" className={countStyles}>
+              {`${found.matched.toString()} matched`}
+            </span>
+          }
+          value={query}
+        />
+      </div>
       <div className={splitStyles}>
         {/*
           Fixed size, so the panel doesn't resize as results change while
@@ -961,40 +960,6 @@ const StillIndexing = () => (
   </p>
 );
 
-/** Footer hints for the tags a line can carry. */
-const Tags = () => (
-  <ul aria-label="Tags" className={tagsStyles}>
-    {[
-      [PRIVATE_TAG, "Private"],
-      ...Object.entries(TAGS).map(([tag, engine]) => [tag, nameOf(engine)]),
-    ].map(([tag, name]) => (
-      <li className={keyStyles} key={tag}>
-        <Kbd>{tag}</Kbd> {name}
-      </li>
-    ))}
-  </ul>
-);
-
-/** Footer hints for the launcher's three keys. */
-const Keys = () => (
-  <div className={keysStyles}>
-    <span className={keyStyles}>
-      <Kbd>↑</Kbd>
-      <Kbd>↓</Kbd> Move
-    </span>
-    <span className={keyStyles}>
-      <Kbd>↵</Kbd> Open
-    </span>
-    <span className={keyStyles}>
-      <Kbd>⇧</Kbd>
-      <Kbd>↵</Kbd> Open with
-    </span>
-    <span className={keyStyles}>
-      <Kbd>esc</Kbd> Close
-    </span>
-  </div>
-);
-
 /** A stable key for a row across renders. */
 const keyOf = (choice: Choice): string => {
   switch (choice.kind) {
@@ -1070,6 +1035,17 @@ const nameOf = (engine: Engine): string => {
 const rowId = (listId: string, at: number): string =>
   `${listId}-${at.toString()}`;
 
+// The search box is the panel's header, set off by a line under it.
+const searchStyles = css({
+  borderBlockEnd:
+    "1px solid color-mix(in oklab, {colors.foreground} 10%, transparent)",
+  // Up into the popup's top padding, which is sized for a title.
+  marginBlockStart: -3,
+  marginInline: -5,
+  paddingBlockEnd: 2,
+  paddingInline: 3,
+});
+
 const panelStyles = vstack({
   alignItems: "stretch",
   gap: 3,
@@ -1089,7 +1065,7 @@ const resultsStyles = css({
   // list.
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
   // Relative to the dialog's screen, not the page, which spans every monitor.
-  // Leaves room for the box, footer and top offset on any monitor.
+  // Leaves room for the box and top offset on any monitor.
   blockSize: "60cqh",
   borderRadius: "md",
   overflowY: "auto",
@@ -1175,20 +1151,21 @@ const listStyles = flex({
 });
 
 const rowStyles = hstack({
-  // An accent gradient. There is no separate hover style; the pointer moves
-  // the highlight.
+  // A neutral wash, so color is left for what needs attention. There is no
+  // separate hover style; the pointer moves the highlight.
   "&[data-highlighted]": {
-    backgroundImage:
-      "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
+    backgroundColor:
+      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
   },
   // A filled glyph on the highlighted row, since an outline glyph loses
   // contrast on the lighter background.
   "&[data-highlighted] [data-row-glyph=reached]": { opacity: 1 },
   "&[data-highlighted] [data-row-glyph=resting]": { opacity: 0 },
   "&[data-highlighted] [data-row-tile]": {
-    backgroundColor: "color-mix(in oklab, {colors.accent} 28%, transparent)",
-    borderColor: "color-mix(in oklab, {colors.accent} 45%, transparent)",
-    color: "accent",
+    backgroundColor:
+      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
+    borderColor: "color-mix(in oklab, {colors.foreground} 20%, transparent)",
+    color: "foreground",
   },
   borderRadius: "md",
   color: "foreground",
@@ -1240,12 +1217,13 @@ const rowGlyphStyles = css({
   transition: "opacity {durations.fast} {easings.out}",
 });
 
-// Matched letters in the accent color instead of `mark`'s yellow. Emboldened
-// with a stroke rather than font weight, which would widen letters and shift
-// the row on every key. `paint-order: stroke` keeps letter holes open.
+// Matched letters in bold, in the row's own color instead of `mark`'s yellow.
+// Emboldened with a stroke rather than font weight, which would widen letters
+// and shift the row on every key. `paint-order: stroke` keeps letter holes
+// open.
 const markStyles = css({
   backgroundColor: "transparent",
-  color: "accent",
+  color: "inherit",
   paintOrder: "stroke",
   WebkitTextStroke: "{borderWidths.fauxBold} currentColor",
 });
@@ -1307,25 +1285,4 @@ const spinnerStyles = css({
   color: "accent",
   display: "inline-flex",
   flexShrink: 0,
-});
-
-// At the footer's start, pushing the keys to its end.
-const tagsStyles = hstack({
-  color: "muted",
-  fontSize: "xs",
-  gap: 4,
-  listStyle: "none",
-  margin: 0,
-  marginInlineEnd: "auto",
-  padding: 0,
-});
-
-const keysStyles = hstack({
-  color: "muted",
-  fontSize: "xs",
-  gap: 4,
-});
-
-const keyStyles = hstack({
-  gap: 1,
 });

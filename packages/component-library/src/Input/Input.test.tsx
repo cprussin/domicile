@@ -33,6 +33,13 @@ describe(Input, () => {
     });
   });
 
+  it("marks a flush field, so no edge or fill is drawn around it", () => {
+    render(<Input aria-label="Search" flush />);
+    expect(screen.getByRole("textbox").parentElement).toHaveAttribute(
+      "data-flush",
+    );
+  });
+
   describe("ref forwarding", () => {
     it("gives the element it drew to a ref it is passed", () => {
       const seen: (HTMLElement | null)[] = [];

@@ -17,6 +17,11 @@ export { SIZES, type Size } from "../control-sizes";
 
 type CommonProps = Partial<ControlVariant> & {
   clearable?: boolean | undefined;
+  /**
+   * No box: just the text and its icons, for a field that heads a panel. It
+   * draws no edge, fill or focus ring.
+   */
+  flush?: boolean | undefined;
   prefixIcon?: ReactNode | undefined;
   // Narrower than base-ui's `Ref<HTMLElement>` since this always renders an
   // `<input>`. Ref objects are invariant, so the wider type would need a cast.
@@ -36,6 +41,7 @@ type Props = ExtendProps<
 
 export const Input = ({
   clearable = false,
+  flush = false,
   prefixIcon,
   rounded = false,
   size = "md",
@@ -74,8 +80,9 @@ export const Input = ({
       className={cx(
         control({ size }),
         wrapperBase,
-        wrapperStyles({ rounded, size }),
+        wrapperStyles({ flush, rounded, size }),
       )}
+      data-flush={flush ? "" : undefined}
       onMouseDown={focusControlOnMouseDown}
       style={controlSizingStyle({ width })}
     >
@@ -133,6 +140,20 @@ const wrapperStyles = cva({
     { css: { paddingInline: 11.5 }, rounded: true, size: "4xl" },
   ],
   variants: {
+    // `wrapperBase` and glass surfaces skip their edges and fills for
+    // `[data-flush]`.
+    // Under `[data-flush]`, to outrank `wrapperBase`'s own fill and edge.
+    flush: {
+      false: {},
+      true: {
+        "&[data-flush]": {
+          backgroundColor: "transparent",
+          borderColor: "transparent",
+          borderRadius: 0,
+          outlineStyle: "none",
+        },
+      },
+    },
     rounded: {
       true: { borderRadius: "full" },
     },

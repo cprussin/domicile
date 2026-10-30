@@ -7,7 +7,8 @@ import { css } from "../../styled-system/css";
  * it, marked `data-control`. Selectors always target `[data-control]` so
  * suffix buttons can't affect the wrapper; a disabled Send button must not
  * gray out the textarea. Precedence is disabled, invalid, focused, hovered,
- * enforced by the `:not(...)` chains.
+ * enforced by the `:not(...)` chains. A `[data-flush]` wrapper (a flush
+ * `Input`) draws no hover or focus edge.
  *
  * The wrapper looks focused when the control has `:focus`,
  * `[data-popup-open]` (a Select popup holds focus), or `[data-active]`
@@ -31,7 +32,7 @@ export const wrapperBase = css({
   "&:has([data-control]:is(:focus, [data-popup-open], [data-active]))": {
     color: "foreground",
   },
-  "&:has([data-control]:is(:focus, [data-popup-open], [data-active])):not(:has([data-control][data-invalid]))":
+  "&:has([data-control]:is(:focus, [data-popup-open], [data-active])):not(:has([data-control][data-invalid])):not([data-flush])":
     {
       borderColor: "accent",
       outlineColor: "accent",
@@ -65,7 +66,7 @@ export const wrapperBase = css({
   "&:has([data-control][data-resizing]) [data-resize-handle]": {
     color: "muted",
   },
-  "&:is(:hover, :has([data-control][data-resizing])):not(:has([data-control]:disabled)):not(:has([data-control]:is(:focus, [data-popup-open], [data-active]))):not(:has([data-control][data-invalid]))":
+  "&:is(:hover, :has([data-control][data-resizing])):not(:has([data-control]:disabled)):not(:has([data-control]:is(:focus, [data-popup-open], [data-active]))):not(:has([data-control][data-invalid])):not([data-flush])":
     {
       borderColor: "muted",
     },
