@@ -17,6 +17,17 @@ describe(shellBuild, () => {
     ).toEqual({ entryFileNames: "settings.js" });
   });
 
+  // The CSS moves into the module, where a font file's relative URL would
+  // no longer resolve.
+  it("inlines fonts", () => {
+    const { assetsInlineLimit } = shellBuild({ entry: "src/index.tsx" }).build;
+
+    expect(assetsInlineLimit("inter.woff2", Buffer.alloc(100_000))).toBe(true);
+    expect(assetsInlineLimit("photo.jpg", Buffer.alloc(100_000))).toBe(
+      undefined,
+    );
+  });
+
   it("writes the shell's options when it declares some", () => {
     const options = defineOptions({ gaps: option.number("Gaps", 4) });
 

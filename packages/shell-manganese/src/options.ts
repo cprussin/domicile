@@ -19,6 +19,8 @@ export const options = defineOptions({
     format: option.choice("Clock format", ["24h", "12h"], "24h"),
     seconds: option.toggle("Show seconds", true),
   },
+  // A face installed on the computer, by name. Inter ships with manganese.
+  font: option.text("Font", "Inter"),
   keymap: {
     hideDefault: option.toggle("Hide the keymap on the first one", false),
   },

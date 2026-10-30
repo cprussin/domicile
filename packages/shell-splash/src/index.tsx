@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { followTheme } from "./follow-theme";
 import { Splash } from "./Splash";
 
+import "@domicile-desktop/component-library/fonts/inter.css";
 import "./global.css";
 
 /** The splash, mounted into `root` for as long as the page lives. */

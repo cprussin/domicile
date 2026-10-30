@@ -59,6 +59,9 @@ in `src/options.ts`:
 
 - **`clock.format`**: `24h` (the default) or `12h`.
 - **`clock.seconds`**: whether the clock shows seconds. Default `true`.
+- **`font`**: the face the desktop's text is drawn in, by the name it is
+  installed under, such as `DejaVu Sans`. Default `Inter`, which manganese
+  ships, so the desktop looks the same on every computer.
 - **`keymap.hideDefault`**: whether the keymap item hides while the first
   keymap is active. Default `false`.
 - **`brightness.automatic`**: follow the room's light with the backlight, on a

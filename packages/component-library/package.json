@@ -78,6 +78,8 @@
     "./FilePicker": "./src/FilePicker/FilePicker.tsx",
     "./file-request": "./src/FilePicker/file-request.ts",
     "./folders": "./src/FilePicker/folders.ts",
+    "./font": "./src/fonts/font.ts",
+    "./fonts/inter.css": "./src/fonts/inter.css",
     "./IconButton": "./src/IconButton/IconButton.tsx",
     "./Input": "./src/Input/Input.tsx",
     "./Kbd": "./src/Kbd/Kbd.tsx",

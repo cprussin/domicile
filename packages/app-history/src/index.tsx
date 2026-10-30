@@ -15,6 +15,7 @@ import { App } from "./App";
 import { hostBrowser } from "./browser";
 import { spawnedHost } from "./host";
 
+import "@domicile-desktop/component-library/fonts/inter.css";
 import "./global.css";
 
 export const main: AppMain = (root, domicile) => {

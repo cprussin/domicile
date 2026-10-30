@@ -1,4 +1,5 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
+import { applyFont } from "@domicile-desktop/component-library/font";
 import { createHandle } from "@domicile-desktop/component-library/Popover";
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { useTheme } from "@domicile-desktop/component-library/ThemeProvider";
@@ -94,7 +95,7 @@ import {
   useAutoBrightness,
 } from "@domicile-desktop/system-backlight/react";
 import type { ReactNode } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { useCastHolds } from "./cast-holds";
 import { LOCK_BAR } from "./default-bars";
 import {
@@ -318,6 +319,10 @@ export const Desktop = ({
   const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
   useAutoBrightness(domicile, shellOptions.brightness.automatic);
   useNightLight(domicile, shellOptions.nightLight);
+  // Before the paint, so text never shows in the old face.
+  useLayoutEffect(() => {
+    applyFont(shellOptions.font);
+  }, [shellOptions.font]);
   // How many bar items' panels hold the keyboard; see `useKeepsKeyboard`.
   const [heldPanels, setHeldPanels] = useState(0);
   const holdKeyboard = useCallback(() => {

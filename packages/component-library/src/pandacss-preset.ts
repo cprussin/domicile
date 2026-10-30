@@ -206,6 +206,7 @@ export const domicilePreset = definePreset({
       backgroundColor: "background",
       color: "foreground",
       colorScheme: "dark",
+      fontFamily: "body",
     },
   },
   name: "domicile",
@@ -567,6 +568,13 @@ export const domicilePreset = definePreset({
           outQuart: { value: "cubic-bezier(0.25, 1, 0.5, 1)" },
         },
         fonts: {
+          // The desktop's face: `--desktop-font`, which a shell sets from its
+          // options (see `applyFont`), then Inter, which `fonts/inter.css`
+          // ships, so text looks the same on every computer.
+          body: {
+            value:
+              "var(--desktop-font, Inter), Inter, ui-sans-serif, system-ui, sans-serif",
+          },
           mono: {
             value:
               "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace",

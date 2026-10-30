@@ -77,6 +77,11 @@ export const shellBuild = ({
   options,
 }: ShellBuild) => ({
   build: {
+    // Fonts go in the module with the CSS that names them: a relative URL in
+    // that CSS would resolve against the document, not the asset. Other
+    // assets keep vite's size rule.
+    assetsInlineLimit: (file: string, _content: Buffer): true | undefined =>
+      file.endsWith(".woff2") ? true : undefined,
     // No content hash, so configs and packages can name the module path.
     //
     // Keep the entry's exports. Vite's app default drops them, which removes

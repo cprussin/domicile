@@ -66,6 +66,8 @@ These are in the config file only:
 - Install icon and cursor themes the usual way, so they are under an `icons`
   folder, such as `~/.local/share/icons`.
 - Fonts apply to apps that follow the system's font.
+- The desktop itself draws its text in Inter. Pick another installed face with
+  the manganese shell's `font` option.
 
 ## Dark sites
 
