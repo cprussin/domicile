@@ -252,6 +252,7 @@ const Routes = ({ direction, routes, server }: RoutesProps) => {
           current === undefined ? undefined : iconOf(current, direction)
         }
         size="sm"
+        surface="filled"
         value={current?.key ?? null}
       />
     )
@@ -446,6 +447,7 @@ const StreamDevice = ({
       value: device.id,
     }))}
     size="sm"
+    surface="filled"
     value={streams[0]?.device ?? null}
   />
 );
@@ -468,6 +470,7 @@ const Cards = ({ cards, server }: CardsProps) =>
         }}
         options={card.profiles.map(modeOption)}
         size="sm"
+        surface="filled"
         value={card.profile ?? null}
       />
     </PanelSection>

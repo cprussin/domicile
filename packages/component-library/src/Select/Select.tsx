@@ -1,8 +1,14 @@
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { CaretUpDownIcon } from "@phosphor-icons/react/dist/ssr/CaretUpDown";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
-import type { ComponentProps, MouseEventHandler, ReactNode } from "react";
-import { useRef, useState } from "react";
+import type {
+  ComponentProps,
+  MouseEventHandler,
+  ReactNode,
+  RefCallback,
+} from "react";
+import { useCallback, useRef, useState } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
 import { control } from "../../styled-system/recipes";
@@ -11,10 +17,14 @@ import { focusControlOnMouseDown } from "../_control/focus";
 import { PrefixIconStack } from "../_control/PrefixIconStack";
 import { useStableRef } from "../_control/useStableRef";
 import { wrapperBase } from "../_control/wrapperBase";
+import type { Size } from "../control-sizes";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 
 export { SIZES, type Size } from "../control-sizes";
+
+export const SURFACES = ["field", "filled", "quiet"] as const;
+export type Surface = (typeof SURFACES)[number];
 
 type Boundary = ComponentProps<
   typeof BaseSelect.Positioner
@@ -39,11 +49,11 @@ type CommonProps<V> = Partial<ControlVariant> & {
    */
   boundary?: Boundary | undefined;
   /**
-   * Renders only the value and a caret, in the inherited color, with no
-   * field. For a setting shown inline in text, such as a device's port
-   * under its name.
+   * `field` is a bordered field, as in a form. `filled` is a soft row sized
+   * like a panel's rows, whatever `size`, for a panel of tiles and rows. `quiet` is only the value and a
+   * caret in the inherited color, for a setting inline in text.
    */
-  quiet?: boolean | undefined;
+  surface?: Surface | undefined;
   // base-ui uses `null` for "controlled, nothing selected" and `undefined`
   // for uncontrolled; both pass through unchanged.
   defaultValue?: V | null | undefined;
@@ -60,8 +70,9 @@ type CommonProps<V> = Partial<ControlVariant> & {
 
 type Props<V> = ExtendProps<typeof BaseSelect.Trigger, CommonProps<V>>;
 
-// A dropdown styled like Input. The trigger carries `data-control` so
-// `wrapperBase`'s state selectors apply to it.
+// A dropdown: a field styled like Input, a soft row for a panel, or quiet
+// text. The trigger carries `data-control` so `wrapperBase`'s state selectors
+// apply to it.
 export const Select = <V,>({
   boundary,
   defaultValue,
@@ -71,10 +82,10 @@ export const Select = <V,>({
   options,
   placeholder,
   prefixIcon,
-  quiet = false,
   required,
   rounded = false,
   size = "md",
+  surface = "field",
   value,
   width,
   ...triggerProps
@@ -99,7 +110,20 @@ export const Select = <V,>({
   // The popup anchors to the wrapper, not the trigger, so `--anchor-width`
   // is the visible field's width.
   const { attach, boundary: around } = usePopupBoundary(false);
-  const [wrapperRef, setWrapperRef] = useStableRef<HTMLDivElement>(attach);
+  // The list is portaled out of the panel, so it takes the panel's tone
+  // itself and is dark in either theme, as the panel is.
+  const [overPhoto, setOverPhoto] = useState(false);
+  const attachWrapper = useCallback<RefCallback<HTMLDivElement>>(
+    (wrapper) => {
+      attach(wrapper);
+      setOverPhoto(
+        wrapper !== null && wrapper.closest("[data-tone=overPhoto]") !== null,
+      );
+    },
+    [attach],
+  );
+  const [wrapperRef, setWrapperRef] =
+    useStableRef<HTMLDivElement>(attachWrapper);
   return (
     <BaseSelect.Root<V>
       defaultValue={defaultValue}
@@ -151,15 +175,7 @@ export const Select = <V,>({
       {/* biome-ignore lint/a11y/noStaticElementInteractions: forwards wrapper-padding clicks to the trigger so the full container is the clickable target; mirrors native <label> behavior */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: the trigger button this onClick forwards to handles every keyboard interaction (Enter/Space to open, Esc to close, arrows to navigate); the wrapper onClick is a mouse-only convenience for click-anywhere-on-the-field */}
       <div
-        className={
-          quiet
-            ? quietStyles
-            : cx(
-                control({ size }),
-                wrapperBase,
-                wrapperStyles({ rounded, size }),
-              )
-        }
+        className={wrapperClassOf(surface, size, rounded)}
         onClick={openTriggerOnWrapperClick}
         onMouseDown={focusControlOnMouseDown}
         ref={setWrapperRef}
@@ -168,12 +184,20 @@ export const Select = <V,>({
         <PrefixIconStack prefixIcon={prefixIcon} size={size} />
         <BaseSelect.Trigger
           {...triggerProps}
-          className={cx(triggerStyles, quiet && quietTriggerStyles)}
+          className={cx(
+            triggerStyles,
+            surface !== "field" && inheritColorStyles,
+          )}
           data-active={active ? "" : undefined}
           data-control=""
         >
           <BaseSelect.Value className={valueStyles} placeholder={placeholder} />
-          <BaseSelect.Icon className={caretStyles} render={<CaretDownIcon />} />
+          <BaseSelect.Icon
+            className={caretStyles({ surface })}
+            render={
+              surface === "filled" ? <CaretUpDownIcon /> : <CaretDownIcon />
+            }
+          />
         </BaseSelect.Trigger>
       </div>
       <BaseSelect.Portal>
@@ -187,6 +211,7 @@ export const Select = <V,>({
           anchor={wrapperRef}
           className={positionerStyles}
           collisionBoundary={boundary ?? around}
+          data-tone={overPhoto ? "overPhoto" : undefined}
           side="bottom"
           sideOffset={6}
         >
@@ -251,7 +276,33 @@ const quietStyles = css({
   transition: "background-color {durations.fast} {easings.out}",
 });
 
-const quietTriggerStyles = css({
+// A soft row sized and lettered like a panel's `ListRow`: the panel's
+// `fill`, lit a step under the pointer and while open, with an inset ring for
+// keyboard focus.
+const filledStyles = css({
+  "&:has([data-control]:focus-visible)": {
+    outline: "{spacing.0.5} solid {colors.accent}",
+    outlineOffset: "calc({spacing.0.5} * -1)",
+  },
+  "&:has([data-control]:is(:hover, [data-popup-open]))": {
+    backgroundColor: "fillHover",
+  },
+  alignItems: "center",
+  backgroundColor: "fill",
+  borderRadius: "lg",
+  cursor: { _disabled: "not-allowed", base: "pointer" },
+  display: "flex",
+  gap: 2.5,
+  inlineSize: "100%",
+  minBlockSize: 8,
+  paddingBlock: 1.5,
+  paddingInline: 2,
+  textStyle: "panelLabel",
+  transition: "background-color {durations.fast} {easings.default}",
+});
+
+// Off the field, the value takes the surrounding text's color.
+const inheritColorStyles = css({
   color: "inherit",
   gap: 1,
 });
@@ -287,15 +338,23 @@ const valueStyles = css({
   whiteSpace: "nowrap",
 });
 
-const caretStyles = css({
-  "&[data-popup-open]": {
-    transform: "rotate(180deg)",
+// The up-and-down caret of a filled select points both ways, so it doesn't
+// turn when open.
+const caretStyles = cva({
+  base: {
+    color: "muted",
+    flexShrink: 0,
+    // Pins the caret to the inline end.
+    marginInlineStart: "auto",
+    transition: "transform {durations.fast} {easings.default}",
   },
-  color: "muted",
-  flexShrink: 0,
-  // Pins the caret to the inline end.
-  marginInlineStart: "auto",
-  transition: "transform {durations.fast} {easings.default}",
+  variants: {
+    surface: {
+      field: { "&[data-popup-open]": { transform: "rotate(180deg)" } },
+      filled: { color: "textSoft" },
+      quiet: { "&[data-popup-open]": { transform: "rotate(180deg)" } },
+    },
+  },
 });
 
 // `rounded` adds 1.5 spacing units to the recipe's inline padding
@@ -379,6 +438,11 @@ const positionerStyles = css({
 });
 
 const popupStyles = css({
+  // In a panel over the wallpaper, with rows inset like the panel's own.
+  _onPhoto: {
+    borderRadius: "lg",
+    paddingInline: 1,
+  },
   // Touch overlay: a centered popup that fades and scales in, like
   // `ModalDialog`.
   _touchOverlay: {
@@ -475,6 +539,7 @@ const listStyles = css({
 });
 
 const itemStyles = css({
+  _onPhoto: { borderRadius: "md" },
   // Touch targets of at least 48px.
   _pointerCoarse: {
     fontSize: "md",
@@ -514,3 +579,18 @@ const itemIndicatorStyles = css({
   display: "inline-flex",
   flexShrink: 0,
 });
+
+const wrapperClassOf = (surface: Surface, size: Size, rounded: boolean) => {
+  switch (surface) {
+    case "field":
+      return cx(
+        control({ size }),
+        wrapperBase,
+        wrapperStyles({ rounded, size }),
+      );
+    case "filled":
+      return filledStyles;
+    case "quiet":
+      return quietStyles;
+  }
+};

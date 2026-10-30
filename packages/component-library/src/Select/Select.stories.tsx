@@ -9,7 +9,7 @@ import { iconControl } from "../__test__/iconControl";
 import { invalidDecorator } from "../__test__/invalidDecorator";
 import { Variants } from "../__test__/Variants";
 import type { SelectOption } from "./Select";
-import { Select as SelectComponent, SIZES } from "./Select";
+import { Select as SelectComponent, SIZES, SURFACES } from "./Select";
 
 const FONT_OPTIONS: readonly SelectOption<string>[] = [
   { label: "Sans-serif", value: "sans" },
@@ -76,9 +76,9 @@ const meta = {
     disabled: false,
     options: FONT_OPTIONS,
     placeholder: "Choose a font…",
-    quiet: false,
     rounded: false,
     size: "md",
+    surface: "field",
     width: 64,
   },
   argTypes: {
@@ -94,10 +94,6 @@ const meta = {
       ...iconControl,
       table: { category: "Contents" },
     },
-    quiet: {
-      control: "boolean",
-      table: { category: "Style" },
-    },
     rounded: {
       control: "boolean",
       table: { category: "Style" },
@@ -105,6 +101,11 @@ const meta = {
     size: {
       control: "inline-radio",
       options: SIZES,
+      table: { category: "Style" },
+    },
+    surface: {
+      control: "inline-radio",
+      options: SURFACES,
       table: { category: "Style" },
     },
     width: {
@@ -161,6 +162,17 @@ export const Rounded = {
     prefixIcon: <TextAaIcon />,
     rounded: true,
     size: "md",
+  },
+} satisfies StoryObj<typeof SelectComponent>;
+
+export const Filled = {
+  args: {
+    defaultValue: "sans",
+    disabled: false,
+    prefixIcon: <TextAaIcon />,
+    rounded: false,
+    size: "md",
+    surface: "filled",
   },
 } satisfies StoryObj<typeof SelectComponent>;
 

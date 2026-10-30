@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import type { SelectOption } from "./Select";
-import { Select } from "./Select";
+import { Select, SURFACES } from "./Select";
 
 const OPTIONS: readonly SelectOption<string>[] = [
   { label: "Sans-serif", value: "sans" },
@@ -100,22 +100,25 @@ describe(Select, () => {
       ).toContain("Monospace");
     });
 
-    it("chooses the same way when it is quiet", async () => {
-      const user = userEvent.setup();
-      render(
-        <Select
-          aria-label="Font"
-          defaultValue="sans"
-          options={OPTIONS}
-          quiet
-        />,
-      );
-      await user.click(screen.getByRole("combobox", { name: "Font" }));
-      await user.click(screen.getByRole("option", { name: "Serif" }));
-      expect(
-        screen.getByRole("combobox", { name: "Font" }).textContent,
-      ).toContain("Serif");
-    });
+    it.each([...SURFACES])(
+      "chooses the same way on a %s surface",
+      async (surface) => {
+        const user = userEvent.setup();
+        render(
+          <Select
+            aria-label="Font"
+            defaultValue="sans"
+            options={OPTIONS}
+            surface={surface}
+          />,
+        );
+        await user.click(screen.getByRole("combobox", { name: "Font" }));
+        await user.click(screen.getByRole("option", { name: "Serif" }));
+        expect(
+          screen.getByRole("combobox", { name: "Font" }).textContent,
+        ).toContain("Serif");
+      },
+    );
 
     it("marks options as disabled so they cannot be selected", async () => {
       const user = userEvent.setup();
@@ -123,6 +126,31 @@ describe(Select, () => {
       await user.click(screen.getByRole("combobox", { name: "Font" }));
       const cursive = screen.getByRole("option", { name: "Cursive" });
       expect(cursive).toHaveAttribute("data-disabled");
+    });
+  });
+
+  describe("tone", () => {
+    it("draws its list over the wallpaper when it is in a panel over the wallpaper", async () => {
+      const user = userEvent.setup();
+      render(
+        <div data-tone="overPhoto">
+          <Select aria-label="Font" options={OPTIONS} />
+        </div>,
+      );
+      await user.click(screen.getByRole("combobox", { name: "Font" }));
+      // The list is portaled out of the panel, so only its own tone counts.
+      expect(
+        screen.getByRole("listbox").closest("[data-tone=overPhoto]"),
+      ).not.toBeNull();
+    });
+
+    it("draws its list on a card elsewhere", async () => {
+      const user = userEvent.setup();
+      render(<Select aria-label="Font" options={OPTIONS} />);
+      await user.click(screen.getByRole("combobox", { name: "Font" }));
+      expect(
+        screen.getByRole("listbox").closest("[data-tone=overPhoto]"),
+      ).toBeNull();
     });
   });
 
