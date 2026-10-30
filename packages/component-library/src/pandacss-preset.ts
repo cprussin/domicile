@@ -569,7 +569,7 @@ export const domicilePreset = definePreset({
         },
         fontSizes: {
           // The desktop's one text size, 13px: bar items, tab and window
-          // titles, the address bar, list rows. Between `xs` and `sm`.
+          // titles, the address bar. Between `xs` and `sm`.
           ui: { value: "0.8125rem" },
         },
         fonts: {
