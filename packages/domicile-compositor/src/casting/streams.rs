@@ -189,13 +189,9 @@ struct Cast {
     filling: bool,
     /// The size last asked of PipeWire, so a resize is asked once.
     asked: (u32, u32),
-    /// The pointer as the filled, unsent frame shows it.
-    cursor_plan: Plan,
     /// The part of a window shown, in its frame's pixels, or `None` for all
     /// of it.
     part: Option<Rect>,
-    /// The pointer's image for its metadata, with `cursor_plan`.
-    cursor_sprite: Option<Arc<Sprite>>,
     /// Its [`ToPipewire::Start`], held until its source's size is known: a
     /// browser window's page has none until it draws.
     unstarted: Option<ToPipewire>,
@@ -392,9 +388,7 @@ impl Streams {
                 targets: HashMap::new(),
                 filling: false,
                 asked: size,
-                cursor_plan: Plan::Nothing,
                 part,
-                cursor_sprite: None,
                 unstarted,
             },
         );
@@ -1082,24 +1076,26 @@ impl Streams {
         }
     }
 
-    /// Sends the filled frames that are due. Returns when to call again.
-    pub fn tick(&mut self, now: Instant) -> Option<Instant> {
-        let mut sent = Vec::new();
-        for (&stream, cast) in &mut self.casts {
-            if let Some(Due::Send { buffer, damage }) = cast.pacing.as_mut().map(|p| p.due(now)) {
-                sent.push(ToPipewire::Filled {
-                    stream,
-                    buffer,
-                    damage,
-                    cursor: cast.cursor_plan,
-                    sprite: cast.cursor_sprite.clone(),
-                    // Waited on when it was filled; see `gpu::draw`.
-                    fence: None,
-                });
-            }
-        }
-        for filled in sent {
-            self.send(filled);
+    /// Fills and sends the frames that are due. Returns when to call again.
+    pub fn tick(
+        &mut self,
+        mut renderer: Option<&mut GlesRenderer>,
+        now: Instant,
+    ) -> Option<Instant> {
+        let due: Vec<StreamId> = self
+            .casts
+            .iter()
+            .filter(|(_, cast)| cast.filling)
+            .filter(|(_, cast)| {
+                cast.pacing
+                    .as_ref()
+                    .and_then(Pacing::waiting_until)
+                    .is_some_and(|at| at <= now)
+            })
+            .map(|(&stream, _)| stream)
+            .collect();
+        for stream in due {
+            self.offer(stream, Vec::new(), renderer.as_deref_mut(), now);
         }
         self.next_due()
     }
@@ -1360,6 +1356,8 @@ impl Streams {
     fn next_due(&self) -> Option<Instant> {
         self.casts
             .values()
+            // A paused stream's frame waits until it fills again.
+            .filter(|cast| cast.filling)
             .filter_map(|cast| cast.pacing.as_ref()?.waiting_until())
             .min()
     }
@@ -1603,7 +1601,9 @@ fn cut(view: View<'_>, part: Rect) -> (View<'_>, Rect) {
     )
 }
 
-/// Damages `cast` and fills a buffer from `view` if one is lent.
+/// Damages `cast`, and fills and sends a buffer from `view` if one is lent and
+/// the frame is due. A frame that is not due yet waits for [`Streams::tick`],
+/// and is filled once, with the newest view, when it is sent.
 fn step(
     stream: StreamId,
     cast: &mut Cast,
@@ -1624,11 +1624,14 @@ fn step(
         cast.asked = view.size;
         return Outcome::Resize(view.size);
     }
-    if damage.is_empty() && !pacing.owed() {
+    if damage.is_empty() && !pacing.owed() && !pacing.waits() {
         return Outcome::Nothing;
     }
-    let Some(buffer) = pacing.damaged(&damage) else {
+    if pacing.damaged(&damage).is_none() {
         return Outcome::Starved;
+    }
+    let Due::Send { buffer, damage } = pacing.due(now) else {
+        return Outcome::Nothing;
     };
     let target = cast
         .targets
@@ -1640,20 +1643,15 @@ fn step(
         Ok(fence) => fence,
         Err(why) => return Outcome::Failed(why),
     };
-    cast.cursor_plan = cursor;
-    cast.cursor_sprite =
-        matches!(cursor, Plan::Metadata { at: Some(_) }).then(|| Arc::new(sprite.clone()));
-    match pacing.due(now) {
-        Due::Send { buffer, damage } => Outcome::Send(ToPipewire::Filled {
-            stream,
-            buffer,
-            damage,
-            cursor,
-            sprite: cast.cursor_sprite.clone(),
-            fence,
-        }),
-        Due::At(_) | Due::Nothing => Outcome::Nothing,
-    }
+    let sprite = matches!(cursor, Plan::Metadata { at: Some(_) }).then(|| Arc::new(sprite.clone()));
+    Outcome::Send(ToPipewire::Filled {
+        stream,
+        buffer,
+        damage,
+        cursor,
+        sprite,
+        fence,
+    })
 }
 
 /// Writes `layers` into `target`. A dmabuf target returns the fence the
@@ -1725,7 +1723,7 @@ mod tests {
     use crate::buffer_transform::Sampled;
     use crate::casting::audio::Heard;
     use crate::casting::captures::Capturer;
-    use crate::casting::cursor::{CursorMode, Plan, Sprite};
+    use crate::casting::cursor::{CursorMode, Sprite};
     use crate::casting::gpu::Snapshot;
     use crate::casting::lifecycle::Ended;
     use crate::casting::memory::Mapping;
@@ -2596,6 +2594,96 @@ mod tests {
         assert_eq!(filled(&heard), Some(vec![(0, 0, 1, 1)]), "wanted");
     }
 
+    /// Frames that come inside the interval wait in one buffer, which is
+    /// filled once, with the newest of them, when it is due.
+    #[test]
+    fn a_waiting_frame_is_filled_with_the_newest_view_when_due() {
+        let (to_clients, heard) = channel();
+        let mut streams = Streams::new(channel().0, to_clients, None);
+        streams.screens(screens(), None);
+        let mut engine = Engine::default();
+        let stream = StreamId(1);
+        streams.request(
+            Request::Start {
+                stream,
+                source: Source::Monitor("drm-1".into()),
+                part: None,
+                most_pixels: None,
+                cursor: CursorMode::Hidden,
+                consumer: Consumer::Client,
+                listener: Box::new(|_| {}),
+            },
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+        heard.try_recv().expect("started");
+        let mappings = [0, 1].map(|_| Arc::new(Mapping::new(c"test", 4).expect("a memfd")));
+        let now = Instant::now();
+        streams.news(
+            ToWayland::Format {
+                stream,
+                format: StreamFormat {
+                    pixel: Pixel::Bgrx,
+                    size: (1, 1),
+                    modifier: None,
+                },
+                framerate: 10,
+            },
+            None,
+            Some(&mut engine),
+            now,
+        );
+        for (id, mapping) in mappings.iter().enumerate() {
+            let buffer = BufferId(id as u32);
+            let target = Target::Shm(mapping.clone());
+            for news in [
+                ToWayland::Added {
+                    stream,
+                    buffer,
+                    target,
+                },
+                ToWayland::Lent { stream, buffer },
+            ] {
+                streams.news(news, None, Some(&mut engine), now);
+            }
+        }
+        streams.news(
+            ToWayland::Filling { stream, on: true },
+            None,
+            Some(&mut engine),
+            now,
+        );
+        streams.captured(1, 1, Ok(frame((1, 1), 9)), None, &mut engine, now);
+        let filled = |heard: &Channel<ToPipewire>| {
+            std::iter::from_fn(|| heard.try_recv().ok())
+                .filter_map(|request| match request {
+                    ToPipewire::Filled { buffer, .. } => Some(buffer),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(filled(&heard), [BufferId(0)], "the first frame");
+
+        let soon = now + Duration::from_millis(10);
+        streams.captured(1, 2, Ok(frame((1, 1), 5)), None, &mut engine, soon);
+        let due = streams.captured(1, 3, Ok(frame((1, 1), 7)), None, &mut engine, soon);
+        assert_eq!(filled(&heard), [], "inside the interval");
+        assert_eq!(due, Some(now + Duration::from_millis(100)));
+        // SAFETY: nothing else touches the buffer in this test.
+        assert_eq!(
+            unsafe { mappings[1].bytes() }[0],
+            0,
+            "not filled before it is due"
+        );
+
+        streams.tick(None, now + Duration::from_millis(100));
+
+        assert_eq!(filled(&heard), [BufferId(1)]);
+        // SAFETY: as above.
+        assert_eq!(unsafe { mappings[1].bytes() }[0], 7, "the newest frame");
+    }
+
     /// Starts a client's cast of browser window "1".
     fn browser_window_cast(streams: &mut Streams, engine: &mut Engine) -> StreamId {
         let stream = StreamId(1);
@@ -2705,9 +2793,7 @@ mod tests {
             targets: HashMap::new(),
             filling: false,
             asked: (1, 1),
-            cursor_plan: Plan::Nothing,
             part: None,
-            cursor_sprite: None,
             unstarted: None,
         }
     }
