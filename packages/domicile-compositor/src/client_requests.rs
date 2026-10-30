@@ -394,8 +394,10 @@ impl DomicileCompositor {
             // With a token, so the application can raise its window.
             ClientRequest::InvokeNotificationAction { id, action } => {
                 if let Some(server) = self.hub.notifications.get() {
-                    let token = activation::mint(&mut self.xdg_activation_state, server.pid(id));
-                    server.invoke(id, action, token);
+                    let pid = server.pid(id);
+                    let token = activation::mint(&mut self.xdg_activation_state, pid);
+                    let windowed = pid.is_some_and(|pid| self.has_a_window(pid));
+                    server.invoke(id, action, token, windowed);
                 }
             }
             ClientRequest::ReplyToNotification { id, text } => {

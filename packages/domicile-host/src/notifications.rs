@@ -170,9 +170,11 @@ impl Notifications {
             .flatten()
             .map(|at| self.entries.remove(at).shown.id);
         let id = replaced.unwrap_or_else(|| self.fresh_id());
+        // A site's names the browser's entry, not the site's.
         let application = notify
             .sender
             .clone()
+            .filter(|_| notify.hints.origin_name.is_none())
             .zip(notify.hints.desktop_entry.clone())
             .map(|(bus_name, desktop_entry)| Application {
                 bus_name,
@@ -1050,6 +1052,26 @@ mod tests {
             assert_eq!(notifications.alongside(chat), [again]);
             assert_eq!(notifications.alongside(unknown), Vec::<u32>::new());
             assert_eq!(notifications.alongside(999), Vec::<u32>::new());
+        }
+
+        #[test]
+        fn a_sites_notification_has_no_application_to_start() {
+            // The engine names its own desktop entry, which is the browser,
+            // not the site.
+            let mut notifications = held(Vec::new());
+            let Notified { id, .. } = notifications.notify(
+                Notify {
+                    hints: Hints {
+                        origin_name: Some("chat.example.com".into()),
+                        desktop_entry: Some("chromium-browser".into()),
+                        ..Hints::default()
+                    },
+                    ..from_chat(None)
+                },
+                0,
+            );
+
+            assert_eq!(notifications.application(id), None);
         }
 
         #[test]

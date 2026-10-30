@@ -10,7 +10,8 @@
 //! gets `ActionInvoked`, `NotificationReplied` and `NotificationClosed`. A
 //! press comes with an `xdg-activation` token (`ActivationToken`), which the
 //! application raises its window with. A press on a notification whose
-//! application has quit starts it instead, from its `desktop-entry` hint. See
+//! application has quit starts it instead, from its `desktop-entry` hint, and
+//! one whose application runs with no window starts it again as well. See
 //! `docs/architecture/NOTIFICATIONS.md`.
 //!
 //! The notification model is in `domicile_host::notifications`; this module
@@ -87,10 +88,12 @@ enum Event {
     Dismiss { ids: Vec<u32> },
     /// The user pressed `action` on `id`. `token` lets its application raise
     /// its window; see [`crate::activation`].
+    /// `windowed` says whether the process that sent it has a window.
     Invoke {
         id: u32,
         action: String,
         token: String,
+        windowed: bool,
     },
     /// The user replied `text` to `id`.
     Reply { id: u32, text: String },
@@ -152,13 +155,19 @@ impl NotificationServer {
     }
 
     /// The user pressed `action` on `id`. Its application gets `token` to
-    /// raise its window with.
+    /// raise its window with. `windowed` says whether the process that sent
+    /// it has a window; one with none is started again to show one.
     ///
     /// The press reads the rest of its application's notifications too, as
     /// GNOME's does, so they clear.
-    pub fn invoke(&self, id: u32, action: String, token: String) {
+    pub fn invoke(&self, id: u32, action: String, token: String, windowed: bool) {
         let others = self.store.alongside(id);
-        let _ = self.told.send(Event::Invoke { id, action, token });
+        let _ = self.told.send(Event::Invoke {
+            id,
+            action,
+            token,
+            windowed,
+        });
         if !others.is_empty() {
             self.dismiss(others);
         }
@@ -403,13 +412,24 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>, starting: &Starting) -> z
                     closed(&server, id, Reason::Dismissed);
                 }
             }
-            Event::Invoke { id, action, token } => match store.press(id, &action) {
+            Event::Invoke {
+                id,
+                action,
+                token,
+                windowed,
+            } => match store.press(id, &action) {
                 Pressed::Bus {
                     closes,
                     application,
-                } => match quit(application.as_ref(), |name| owned(&connection, name)) {
-                    Some(desktop_entry) => starting.start(desktop_entry, &token),
-                    None => pressed_on_the_bus(&server, id, &action, &token, closes),
+                } => match reach(application.as_ref(), windowed, |name| {
+                    owned(&connection, name)
+                }) {
+                    Reached::Heard => pressed_on_the_bus(&server, id, &action, &token, closes),
+                    Reached::Started(desktop_entry) => starting.start(desktop_entry, &token),
+                    Reached::HeardAndStarted(desktop_entry) => {
+                        pressed_on_the_bus(&server, id, &action, &token, closes);
+                        starting.start(desktop_entry, &token);
+                    }
                 },
                 Pressed::Portal(pressed) => match store.portal_actions.get() {
                     Some(portal) => portal(pressed, token),
@@ -455,13 +475,35 @@ impl Starting {
     }
 }
 
-/// The desktop entry to start for a press on a notification from
-/// `application`, or `None` if it is still running (`owned` says whether a bus
-/// name is) or names no desktop entry.
-fn quit(application: Option<&Application>, owned: impl Fn(&str) -> bool) -> Option<&str> {
-    application
-        .filter(|application| !owned(&application.bus_name))
-        .map(|application| application.desktop_entry.as_str())
+/// How a press on a bus notification reaches its application.
+#[derive(Debug, PartialEq, Eq)]
+enum Reached<'a> {
+    /// It hears the press and raises its own window.
+    Heard,
+    /// It has quit, so the desktop entry starts it.
+    Started(&'a str),
+    /// It hears the press but has no window to raise, as Slack closed to its
+    /// tray. Starting the desktop entry again shows one, as the launcher
+    /// would.
+    HeardAndStarted(&'a str),
+}
+
+/// How a press on a notification from `application` reaches it. `windowed`
+/// says whether its process has a window, `owned` whether a bus name is on
+/// the bus. One that names no desktop entry can only hear it.
+fn reach(
+    application: Option<&Application>,
+    windowed: bool,
+    owned: impl Fn(&str) -> bool,
+) -> Reached<'_> {
+    match application {
+        None => Reached::Heard,
+        Some(application) => match (owned(&application.bus_name), windowed) {
+            (false, _) => Reached::Started(&application.desktop_entry),
+            (true, false) => Reached::HeardAndStarted(&application.desktop_entry),
+            (true, true) => Reached::Heard,
+        },
+    }
 }
 
 /// Whether `name` is on the bus. A failed question counts as on: the press
@@ -722,11 +764,31 @@ mod tests {
             bus_name: ":1.42".into(),
             desktop_entry: "org.example.Chat".into(),
         };
-        assert_eq!(quit(Some(&chat), |_| false), Some("org.example.Chat"));
+        assert_eq!(
+            reach(Some(&chat), false, |_| false),
+            Reached::Started("org.example.Chat")
+        );
         // Still running: it hears the press and raises its own window.
-        assert_eq!(quit(Some(&chat), |name| name == ":1.42"), None);
+        assert_eq!(
+            reach(Some(&chat), true, |name| name == ":1.42"),
+            Reached::Heard
+        );
         // Nothing to start.
-        assert_eq!(quit(None, |_| false), None);
+        assert_eq!(reach(None, false, |_| false), Reached::Heard);
+    }
+
+    #[test]
+    fn a_press_starts_a_running_application_with_no_window_again() {
+        // Slack closed to its tray hears the press but shows no window.
+        // Starting it again does, as launching it from the launcher would.
+        let chat = Application {
+            bus_name: ":1.42".into(),
+            desktop_entry: "org.example.Chat".into(),
+        };
+        assert_eq!(
+            reach(Some(&chat), false, |name| name == ":1.42"),
+            Reached::HeardAndStarted("org.example.Chat")
+        );
     }
 
     #[test]

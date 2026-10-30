@@ -16,6 +16,7 @@ use tracing::debug;
 use domicile_protocol::HostMessage;
 
 use crate::chrome_hub::broadcast_closed;
+use crate::clients::owner_of;
 use crate::configure_answers::Resize;
 use crate::decorations::asks_to_draw_its_frame;
 use crate::surface_commit::Role;
@@ -31,6 +32,13 @@ impl DomicileCompositor {
             .iter()
             .find(|(id, _)| id == app_id)
             .map(|(_, toplevel)| toplevel.clone())
+    }
+
+    /// Whether process `pid` has a window open.
+    pub fn has_a_window(&self, pid: u32) -> bool {
+        self.toplevels
+            .iter()
+            .any(|(_, toplevel)| u32::try_from(owner_of(toplevel.wl_surface()).pid) == Ok(pid))
     }
 
     /// The surface an app id names: a window, or a popup over one.
