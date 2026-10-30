@@ -93,11 +93,13 @@ export const fakeDesktop = (
                 ? {
                     fileType: FileType.File,
                     modifiedMs: undefined,
+                    realPath: path,
                     size: bytesOf(node).byteLength,
                   }
                 : {
                     fileType: FileType.Directory,
                     modifiedMs: undefined,
+                    realPath: path,
                     size: 0,
                   },
           ),

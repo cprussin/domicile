@@ -2019,13 +2019,15 @@ pub enum SystemReply {
     Created,
     /// A directory's entries, in no particular order.
     Entries { entries: Vec<DirEntry> },
-    /// A path's type, size in bytes and modification time in milliseconds
-    /// since the epoch. Files under `/sys` and `/proc` report a size of 4096
-    /// or 0 whatever they hold.
+    /// A path's type, size in bytes, modification time in milliseconds
+    /// since the epoch, and absolute path with every link resolved. Files
+    /// under `/sys` and `/proc` report a size of 4096 or 0 whatever they
+    /// hold.
     Stat {
         file_type: FileType,
         size: u64,
         modified_ms: Option<u64>,
+        real_path: Option<String>,
     },
     /// What a D-Bus method returned: JSON text for its body, as
     /// [`SystemRequest::DbusCall`] takes one, and the signature to read it by.

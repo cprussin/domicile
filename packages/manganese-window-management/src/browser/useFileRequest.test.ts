@@ -43,6 +43,7 @@ const NO_FOLDERS: Folders = {
     throw new Error("unexpected create");
   },
   list: () => Promise.resolve([]),
+  userFolders: () => Promise.resolve([]),
   watch: () => () => undefined,
 };
 

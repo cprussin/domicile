@@ -77,7 +77,12 @@ export const fakeSysfs = (interfaces: Interfaces) => {
         Promise.resolve(
           fileOf(path) === undefined
             ? Err(notFound(path))
-            : Ok({ fileType: FileType.Directory, modifiedMs: 0, size: 0 }),
+            : Ok({
+                fileType: FileType.Directory,
+                modifiedMs: 0,
+                realPath: path,
+                size: 0,
+              }),
         ),
     },
   };

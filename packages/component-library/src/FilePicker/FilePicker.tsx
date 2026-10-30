@@ -11,6 +11,7 @@ import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
 import { FileAudioIcon } from "@phosphor-icons/react/dist/ssr/FileAudio";
 import { FileCodeIcon } from "@phosphor-icons/react/dist/ssr/FileCode";
+import { FileDashedIcon } from "@phosphor-icons/react/dist/ssr/FileDashed";
 import { FileImageIcon } from "@phosphor-icons/react/dist/ssr/FileImage";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/ssr/FilePdf";
 import { FilesIcon } from "@phosphor-icons/react/dist/ssr/Files";
@@ -29,6 +30,7 @@ import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { MusicNotesIcon } from "@phosphor-icons/react/dist/ssr/MusicNotes";
 import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import type { FocusEvent, KeyboardEvent, ReactNode, Ref } from "react";
 import { useId, useState } from "react";
@@ -50,6 +52,9 @@ import type { Row } from "./rows";
 import { RowKind, rowsIn } from "./rows";
 import { stemEnd } from "./stem";
 import { ListingState, useListing } from "./useListing";
+import type { UserPlace } from "./user-folders";
+import { UserFolder } from "./user-folders";
+import { useUserFolders } from "./useUserFolders";
 import { crumbsOf, parentOf, shownPath, walked } from "./walk-path";
 
 /** The filter box's accessible name. */
@@ -61,18 +66,17 @@ const ICON_SIZE = 16;
 /** The icon size for empty-state placeholders. */
 const PLACEHOLDER_ICON_SIZE = 40;
 
-/**
- * The standard home folders and their icons, in file manager order. The
- * sidebar shows those that exist.
- */
-const STANDARD_PLACES: readonly (readonly [string, typeof FolderIcon])[] = [
-  ["Desktop", DesktopIcon],
-  ["Documents", FileTextIcon],
-  ["Downloads", DownloadSimpleIcon],
-  ["Music", MusicNotesIcon],
-  ["Pictures", ImageIcon],
-  ["Videos", FilmStripIcon],
-];
+/** Each user folder's sidebar icon. */
+const USER_FOLDER_GLYPHS: Record<UserFolder, typeof FolderIcon> = {
+  [UserFolder.Desktop]: DesktopIcon,
+  [UserFolder.Documents]: FileTextIcon,
+  [UserFolder.Downloads]: DownloadSimpleIcon,
+  [UserFolder.Music]: MusicNotesIcon,
+  [UserFolder.Pictures]: ImageIcon,
+  [UserFolder.Public]: UsersIcon,
+  [UserFolder.Templates]: FileDashedIcon,
+  [UserFolder.Videos]: FilmStripIcon,
+};
 
 type Props = {
   /**
@@ -143,8 +147,7 @@ export const FilePicker = ({ ref, request }: Props) => {
   const saving = request.mode === ChooserMode.Save;
   const listing = useListing(request.folders, directory);
   const entries = listing.state === ListingState.Listed ? listing.entries : [];
-  // Lists the home directory to find which standard folders exist.
-  const homeListing = useListing(request.folders, request.home);
+  const userFolders = useUserFolders(request.folders, request.home);
   const clash = saving ? clashOf(entries, name) : Clash.None;
   const rows = rowsIn({
     accept: filter === undefined ? request.accept : filter.extensions,
@@ -320,33 +323,30 @@ export const FilePicker = ({ ref, request }: Props) => {
         </header>
         <aside className={sidebarStyles}>
           <nav aria-label="Places" className={placesStyles}>
-            {placesOf(
-              request.home,
-              homeListing.state === ListingState.Listed
-                ? homeListing.entries
-                : [],
-            ).map(({ glyph: Glyph, label, path }) => (
-              <Button
-                aria-current={path === directory ? "location" : undefined}
-                beforeIcon={
-                  <Glyph
-                    size={ICON_SIZE}
-                    weight={path === directory ? "fill" : "duotone"}
-                  />
-                }
-                key={path}
-                onClick={() => {
-                  go(path);
-                }}
-                // The keyboard stays in the box.
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                }}
-                variant="ghost"
-              >
-                {label}
-              </Button>
-            ))}
+            {placesOf(request.home, userFolders).map(
+              ({ glyph: Glyph, label, path }) => (
+                <Button
+                  aria-current={path === directory ? "location" : undefined}
+                  beforeIcon={
+                    <Glyph
+                      size={ICON_SIZE}
+                      weight={path === directory ? "fill" : "duotone"}
+                    />
+                  }
+                  key={path}
+                  onClick={() => {
+                    go(path);
+                  }}
+                  // The keyboard stays in the box.
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  variant="ghost"
+                >
+                  {label}
+                </Button>
+              ),
+            )}
           </nav>
         </aside>
         <section className={mainStyles}>
@@ -1397,15 +1397,20 @@ const SelectedPath = ({ path }: { path: string }) => {
   );
 };
 
-/** The sidebar entries: home, the standard folders present, and root. */
+/**
+ * The sidebar entries: home, the user's folders, and root. Each user folder
+ * goes by its own name, which may be in the user's language.
+ */
 const placesOf = (
   home: string,
-  entries: readonly string[],
+  userFolders: readonly UserPlace[],
 ): readonly Place[] => [
   { glyph: HouseIcon, label: "Home", path: home },
-  ...STANDARD_PLACES.filter(([label]) => entries.includes(`${label}/`)).map(
-    ([label, glyph]) => ({ glyph, label, path: pathIn(home, label) }),
-  ),
+  ...userFolders.map(({ folder, path }) => ({
+    glyph: USER_FOLDER_GLYPHS[folder],
+    label: path.slice(path.lastIndexOf("/") + 1),
+    path,
+  })),
   { glyph: HardDrivesIcon, label: "Computer", path: "/" },
 ];
 
