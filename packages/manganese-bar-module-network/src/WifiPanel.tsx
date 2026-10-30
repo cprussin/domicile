@@ -117,8 +117,15 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
               content="Scan"
               tone="overPhoto"
               trigger={
-                <IconButton busy={scanning} label="Scan" onClick={scan}>
-                  <ArrowClockwiseIcon aria-hidden size={14} weight="bold" />
+                // Small, as tall as the switch, so the heading keeps its
+                // height when the radio turns off and the button goes.
+                <IconButton
+                  busy={scanning}
+                  label="Scan"
+                  onClick={scan}
+                  size="sm"
+                >
+                  <ArrowClockwiseIcon aria-hidden size={12} weight="bold" />
                 </IconButton>
               }
             />
