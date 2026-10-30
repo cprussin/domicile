@@ -9,26 +9,43 @@ const two = notification({ id: 2 });
 const three = notification({ id: 3 });
 
 const staying = (...items: (typeof one)[]): Row[] =>
-  items.map((item) => ({ leaving: undefined, notification: item }));
+  items.map((item) => ({
+    arriving: false,
+    leaving: undefined,
+    notification: item,
+  }));
 
 describe("nextRows", () => {
   it("is each notification, in order, staying", () => {
-    expect(nextRows([], [one, two], true)).toEqual(staying(one, two));
+    expect(nextRows([], [one, two], false)).toEqual(staying(one, two));
+  });
+
+  it("has a notification new while it may animate arrive", () => {
+    expect(nextRows(staying(one), [two, one], true)).toEqual([
+      { arriving: true, leaving: undefined, notification: two },
+      { arriving: false, leaving: undefined, notification: one },
+    ]);
+  });
+
+  it("has none arrive when it may not animate, or once they have", () => {
+    const rows = nextRows(staying(one), [two, one], true);
+
+    expect(nextRows(rows, [two, one], false)).toEqual(staying(two, one));
   });
 
   it("keeps a cleared notification where it was, leaving", () => {
     expect(nextRows(staying(one, two, three), [one, three], true)).toEqual([
-      { leaving: undefined, notification: one },
-      { leaving: 0, notification: two },
-      { leaving: undefined, notification: three },
+      { arriving: false, leaving: undefined, notification: one },
+      { arriving: false, leaving: 0, notification: two },
+      { arriving: false, leaving: undefined, notification: three },
     ]);
   });
 
   it("orders the notifications cleared together, top to bottom", () => {
     expect(nextRows(staying(one, two, three), [], true)).toEqual([
-      { leaving: 0, notification: one },
-      { leaving: 1, notification: two },
-      { leaving: 2, notification: three },
+      { arriving: false, leaving: 0, notification: one },
+      { arriving: false, leaving: 1, notification: two },
+      { arriving: false, leaving: 2, notification: three },
     ]);
   });
 
@@ -36,9 +53,9 @@ describe("nextRows", () => {
     const rows = nextRows(staying(one, two, three), [one, three], true);
 
     expect(nextRows(rows, [], true)).toEqual([
-      { leaving: 0, notification: one },
-      { leaving: 0, notification: two },
-      { leaving: 1, notification: three },
+      { arriving: false, leaving: 0, notification: one },
+      { arriving: false, leaving: 0, notification: two },
+      { arriving: false, leaving: 1, notification: three },
     ]);
   });
 
@@ -46,9 +63,9 @@ describe("nextRows", () => {
     const rows = nextRows(staying(one, two), [one], true);
 
     expect(nextRows(rows, [three, one], true)).toEqual([
-      { leaving: undefined, notification: three },
-      { leaving: undefined, notification: one },
-      { leaving: 0, notification: two },
+      { arriving: true, leaving: undefined, notification: three },
+      { arriving: false, leaving: undefined, notification: one },
+      { arriving: false, leaving: 0, notification: two },
     ]);
   });
 

@@ -8,6 +8,7 @@ import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-st
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -258,6 +259,30 @@ describe("NotificationDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Work/v }));
 
     expect(asked).toContainEqual(["open inbox", 0]);
+  });
+
+  it("slides in only a notification that arrives while it is open", async () => {
+    const view = drawer([notification({ id: 1, summary: "Older" })], [], {
+      open: false,
+    });
+
+    view.update([notification({ id: 1, summary: "Older" })], { open: true });
+    expect(document.querySelectorAll("li[data-arriving]")).toHaveLength(0);
+    view.update(
+      [
+        notification({ id: 2, summary: "Newer" }),
+        notification({ id: 1, summary: "Older" }),
+      ],
+      { open: true },
+    );
+
+    expect(
+      [...document.querySelectorAll("li[data-arriving]")].map(
+        (row) => row.textContent,
+      ),
+    ).toEqual([expect.stringContaining("Newer")]);
+    // Lets the popover finish placing itself.
+    await act(async () => undefined);
   });
 
   describe("clearing", () => {

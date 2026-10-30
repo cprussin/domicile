@@ -193,10 +193,11 @@ const Notifications = ({
     </div>
   ) : (
     <ul className={listStyles}>
-      {rows.map(({ leaving, notification }) => (
+      {rows.map(({ arriving, leaving, notification }) => (
         <li
           aria-hidden={leaving === undefined ? undefined : true}
           className={rowStyles}
+          data-arriving={arriving ? "" : undefined}
           data-leaving={leaving === undefined ? undefined : ""}
           inert={leaving !== undefined}
           key={notification.id}
@@ -274,20 +275,22 @@ const listStyles = flex({
 });
 
 // Each card on its own tile, lit on hover, as a list's filled rows. A card
-// that arrives while the drawer is open slides in like a toast. A cleared one
-// slides out, then closes its height and the list's gap below it; the row is a
-// one-row grid so the height can close.
+// that arrives while the drawer is open slides in like a toast; the cards there
+// as it opens do not. A cleared one slides out, then closes its height and the
+// list's gap below it; the row is a one-row grid so the height can close.
 const rowStyles = css({
   _hover: { backgroundColor: "fillHover" },
-  _starting: {
-    opacity: 0,
-    transform: "translateX({spacing.4})",
-  },
   // Critical notifications get a danger ring, as their toasts do. A ring
   // drawn inside, as a border would keep the closed row a line high.
   "&:has([data-urgency=critical])": {
     boxShadow:
       "inset 0 0 0 1px color-mix(in oklab, {colors.danger} 55%, transparent)",
+  },
+  "&[data-arriving]": {
+    _starting: {
+      opacity: 0,
+      transform: "translateX({spacing.4})",
+    },
   },
   "&[data-leaving]": {
     gridTemplateRows: "0fr",
