@@ -4,6 +4,7 @@ import {
   Popover,
 } from "@domicile-desktop/component-library/Popover";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import {
@@ -260,7 +261,12 @@ describe("NotificationDrawer", () => {
   });
 
   describe("clearing", () => {
-    it("slides a cleared notification out before the rest close up", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../styled-system/styles.css", import.meta.url),
+    );
+
+    it("slides a cleared notification out, clipped, before the rest close up", () => {
       const view = drawer([
         notification({ id: 2, summary: "Newer" }),
         notification({ id: 1, summary: "Older" }),
@@ -272,6 +278,10 @@ describe("NotificationDrawer", () => {
         expect.stringContaining("Newer"),
       ]);
       expect(screen.getAllByRole("listitem")).toHaveLength(1);
+      // Sliding sideways past the pane would scroll it and flash scrollbars.
+      expect(
+        globalThis.getComputedStyle(screen.getByRole("list")).overflowX,
+      ).toBe("clip");
       finishLeaving();
       expect(leaving()).toEqual([]);
       expect(screen.queryByText("Newer")).not.toBeInTheDocument();
