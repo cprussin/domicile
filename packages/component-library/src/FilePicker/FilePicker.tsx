@@ -820,13 +820,16 @@ const sidebarStyles = flex({
 
 const placesStyles = flex({
   "& > button": {
+    // 13px, the desktop's text size, as the folder's rows.
+    fontSize: "0.8125rem",
     gap: 2.5,
     inlineSize: "100%",
     justifyContent: "flex-start",
   },
   "& > button[aria-current=location]": {
-    backgroundColor: "color-mix(in oklab, {colors.accent} 16%, transparent)",
-    color: "accent",
+    backgroundColor:
+      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
+    color: "foreground",
     fontWeight: "semibold",
   },
   direction: "column",
@@ -883,7 +886,11 @@ const crumbSeparatorStyles = css({
 });
 
 const resultsStyles = css({
-  backgroundColor: "color-mix(in oklab, {colors.background} 30%, transparent)",
+  // White in light mode, as a document is.
+  backgroundColor: {
+    _light: "color-mix(in oklab, {colors.white} 80%, transparent)",
+    base: "color-mix(in oklab, {colors.background} 30%, transparent)",
+  },
   border: "1px solid {colors.border}",
   borderRadius: "lg",
   flex: "1 1 auto",
@@ -902,7 +909,8 @@ const columnsStyles = grid({
   backgroundColor: "color-mix(in oklab, {colors.card} 70%, transparent)",
   color: "textTertiary",
   columnGap: 3,
-  fontSize: "2xs",
+  // 11px, which has no scale token.
+  fontSize: "0.6875rem",
   fontWeight: "semibold",
   gridTemplateColumns: "minmax(0, 1fr) {spacing.32}",
   insetBlockStart: 0,
@@ -927,21 +935,14 @@ const rowStyles = grid({
   _hoverEnabled: {
     backgroundColor: "color-mix(in oklab, {colors.foreground} 5%, transparent)",
   },
-  // The tile color shows the file kind. Tones that blend two hues mix in
-  // OKLCH, since OKLab mixing passes through gray.
-  "& [data-row-tile]": {
-    backgroundColor: "color-mix(in oklab, var(--tone) 16%, transparent)",
-    borderColor: "color-mix(in oklab, var(--tone) 26%, transparent)",
-    color: "var(--tone)",
-  },
+  "--tone": "{colors.muted}",
+  // A plain glyph, teal for a folder and gray for anything else, so folders
+  // stand out without a tile behind every row.
+  "& [data-row-tile]": { color: "var(--tone)" },
+  // A neutral wash: color is kept for focus and the main action.
   "&[data-highlighted]": {
-    backgroundImage:
-      "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
-  },
-  "&[data-highlighted] [data-row-tile]": {
-    backgroundColor: "color-mix(in oklab, {colors.accent} 28%, transparent)",
-    borderColor: "color-mix(in oklab, {colors.accent} 45%, transparent)",
-    color: "accent",
+    backgroundColor:
+      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
   },
   "&[data-marked] [data-row-tile]": {
     backgroundColor: "accent",
@@ -952,24 +953,8 @@ const rowStyles = grid({
   "&[data-replaced]": {
     backgroundColor: "color-mix(in oklab, {colors.warning} 14%, transparent)",
   },
-  "&[data-tone=archive]": { "--tone": "{colors.warning}" },
-  "&[data-tone=audio]": {
-    "--tone": "color-mix(in oklch, {colors.warning} 50%, {colors.danger})",
-  },
-  "&[data-tone=code]": { "--tone": "{colors.success}" },
-  "&[data-tone=document]": {
-    "--tone": "color-mix(in oklab, {colors.accent} 45%, {colors.foreground})",
-  },
   "&[data-tone=folder]": { "--tone": "{colors.accent}" },
-  "&[data-tone=image]": {
-    "--tone": "color-mix(in oklch, {colors.danger} 55%, {colors.accent})",
-  },
-  "&[data-tone=other]": { "--tone": "{colors.muted}" },
-  "&[data-tone=parent]": { "--tone": "{colors.muted}", color: "muted" },
-  "&[data-tone=pdf]": { "--tone": "{colors.danger}" },
-  "&[data-tone=video]": {
-    "--tone": "color-mix(in oklch, {colors.danger} 80%, {colors.warning})",
-  },
+  "&[data-tone=parent]": { color: "muted" },
   alignItems: "center",
   borderRadius: "md",
   color: "foreground",
@@ -994,7 +979,8 @@ const rowTileStyles = css({
 });
 
 const rowNameStyles = css({
-  fontSize: "sm",
+  // 13px, the desktop's text size, between the scale's 12px and 14px.
+  fontSize: "0.8125rem",
   fontWeight: "medium",
   overflow: "hidden",
   textOverflow: "ellipsis",
