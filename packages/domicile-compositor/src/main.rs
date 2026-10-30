@@ -904,7 +904,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         display = ?socket_name,
         "domicile-compositor: apps connect here (WAYLAND_DISPLAY)"
     );
-    info!(
+    debug!(
         display = ?chrome_socket_name,
         "domicile-compositor: the chrome connects here (WAYLAND_DISPLAY)"
     );

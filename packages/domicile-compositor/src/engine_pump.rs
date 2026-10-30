@@ -13,7 +13,7 @@ use smithay::wayland::{
     selection::data_device::set_data_device_selection,
     selection::primary_selection::set_primary_selection,
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::compositor_casts::capturer;
 use crate::configure_answers::{ConfigureAnswers, Resize, Resized};
@@ -433,7 +433,7 @@ impl DomicileCompositor {
                 self.tell_the_engine_the_copies();
                 // And with no virtual monitors.
                 self.state_the_virtual_monitors();
-                info!(
+                debug!(
                     shown = rejoined.shown.len(),
                     blank = rejoined.blank.len(),
                     returned = rejoined.releases.len(),

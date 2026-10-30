@@ -9,7 +9,7 @@ use std::io;
 
 use domicile_host::priority::{nice, set_nice, Tid};
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 use zbus::blocking::Connection;
 
 /// The nice value Chromium gives the threads that draw and present frames
@@ -47,13 +47,13 @@ pub fn raise_and_say(tid: Tid, thread: &str) {
         |nice| set_nice(tid, nice),
         |nice| through_rtkit(&Connection::system()?, tid, nice),
     ) {
-        Ok(Raised::Directly) => info!(thread, nice = LATENCY_CRITICAL, "raised the thread"),
-        Ok(Raised::ThroughRtkit) => info!(
+        Ok(Raised::Directly) => debug!(thread, nice = LATENCY_CRITICAL, "raised the thread"),
+        Ok(Raised::ThroughRtkit) => debug!(
             thread,
             nice = LATENCY_CRITICAL,
             "raised the thread through rtkit"
         ),
-        Ok(Raised::AlreadyHigher) => info!(thread, nice = current, "the thread already runs high"),
+        Ok(Raised::AlreadyHigher) => debug!(thread, nice = current, "the thread already runs high"),
         Err(refused) => warn!(
             thread,
             nice = current,

@@ -13,7 +13,7 @@ use smithay::wayland::{
     output::OutputHandler,
 };
 use smithay::{delegate_fractional_scale, delegate_output};
-use tracing::{debug, info};
+use tracing::debug;
 
 use domicile_config::Config;
 
@@ -287,7 +287,7 @@ impl DomicileCompositor {
             return;
         }
         let plan = self.screens.rearranged_into(&screens);
-        info!(
+        debug!(
             displays = screens.outputs().count(),
             retired = plan.retired.len(),
             "taking up a reloaded desktop"
