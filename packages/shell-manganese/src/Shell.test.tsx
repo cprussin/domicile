@@ -941,6 +941,19 @@ describe("Shell", () => {
       );
     });
 
+    it("draws text in the shell's font option", () => {
+      renderShell();
+
+      act(() => {
+        domicile.fake.set({ shellOptions: '{"font":"DejaVu Sans"}' });
+      });
+
+      expect(
+        document.documentElement.style.getPropertyValue("--desktop-font"),
+      ).toBe('"DejaVu Sans"');
+      document.documentElement.style.removeProperty("--desktop-font");
+    });
+
     it("lays out every item of manganese's when it is given none", () => {
       renderShell();
 
