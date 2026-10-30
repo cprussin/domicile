@@ -97,6 +97,10 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
     `ActivationToken` and asks that way.
   - An app that has quit is started instead, from its `desktop-entry` hint,
     when its bus name is gone. The portal starts its own apps.
+  - An app still running with no window, as Slack closed to its tray, hears
+    the press and is started again too, which shows its window. "No window"
+    means none from the process that sent the notification. A site's
+    notification is never started: its `desktop-entry` is the browser's.
   - A press in the drawer closes the drawer, which would cover the window.
 - **A site raises its own window.** Its `client.focus()` or `window.focus()`
   fires `domicile-focus-request` on the `<webview>`
