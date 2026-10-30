@@ -162,9 +162,8 @@ export const Launcher = memo(
       // view would read as a click in it and move the keyboard there.
       returnFocus={false}
       screen={screen}
-      // Wide enough for the rows and the preview side by side, and narrow
-      // enough to read as a quick panel rather than a window.
-      size="lg"
+      // Wide enough for the rows and a readable preview side by side.
+      size="xl"
       // Translucent, so the desktop stays visible behind a brief overlay.
       surface="glass"
       // The search box heads the panel, so the title is for screen readers.

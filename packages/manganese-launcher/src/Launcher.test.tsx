@@ -294,10 +294,10 @@ describe("Launcher", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
-  it("opens wide enough for the rows and a preview, and no wider", () => {
+  it("opens wide enough for roomy rows beside a preview", () => {
     using _panel = launcher();
 
-    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("lg");
+    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("xl");
   });
 
   it("sizes its rows to its own screen, not the page every monitor shares", () => {
