@@ -112,10 +112,9 @@ export const TrayIcon = ({
 // Same size as extension icons, so both read as one row.
 const imageStyles = css({ blockSize: 4, inlineSize: 4 });
 
-// The same box as an image, so the row does not shift. Ten pixels, the bar's
-// size, which has no font-size token.
+// The same box as an image, so the row does not shift.
 const letterStyles = center({
   blockSize: 4,
-  fontSize: "0.625rem",
+  fontSize: "ui",
   inlineSize: 4,
 });

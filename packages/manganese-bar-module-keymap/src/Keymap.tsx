@@ -89,7 +89,7 @@ const triggerStyles = css({
   cursor: "pointer",
   display: "inline-flex",
   flexShrink: 0,
-  fontSize: "0.625rem",
+  fontSize: "ui",
   fontWeight: "semibold",
   gap: 1,
   justifyContent: "center",

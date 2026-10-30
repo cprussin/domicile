@@ -334,7 +334,7 @@ const lineFor = (suggestion: AddressSuggestion): Suggestion<string> => {
 // never mistaken for an ordinary one.
 const barStyles = hstack({
   // The address in 13px, the desktop's text size, rather than the field's.
-  "& input[aria-label=Address]": { fontSize: "0.8125rem" },
+  "& input[aria-label=Address]": { fontSize: "ui" },
   "&[data-private]": {
     backgroundColor:
       "color-mix(in oklab, {colors.private} 35%, {colors.background})",

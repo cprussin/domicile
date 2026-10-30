@@ -567,6 +567,11 @@ export const domicilePreset = definePreset({
           // too linear.
           outQuart: { value: "cubic-bezier(0.25, 1, 0.5, 1)" },
         },
+        fontSizes: {
+          // The desktop's one text size, 13px: bar items, tab and window
+          // titles, the address bar, list rows. Between `xs` and `sm`.
+          ui: { value: "0.8125rem" },
+        },
         fonts: {
           // The desktop's face: `--desktop-font`, which a shell sets from its
           // options (see `applyFont`), then Inter, which `fonts/inter.css`

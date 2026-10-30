@@ -11,6 +11,6 @@ export const Mode = () => {
 
 // Uses capitals rather than a color, since the bar's text is always white.
 const modeStyles = css({
-  fontSize: "0.625rem",
+  fontSize: "ui",
   textTransform: "uppercase",
 });
