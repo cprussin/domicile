@@ -59,6 +59,55 @@ TEST(DeskCursorImageTest, AnEmptyBitmapIsAHiddenPointer) {
   EXPECT_FALSE(Pixel(0).hidden());
 }
 
+// A `width` by `height` image whose pixels are `blues`, rows top to bottom,
+// each opaque with that blue.
+DeskCursorImage Image(int width,
+                      int height,
+                      gfx::Point hotspot,
+                      const std::vector<uint8_t>& blues) {
+  DeskCursorImage image;
+  image.size = gfx::Size(width, height);
+  image.hotspot = hotspot;
+  for (uint8_t blue : blues) {
+    image.bgra.insert(image.bgra.end(), {blue, 0, 0, 255});
+  }
+  return image;
+}
+
+// Upright:   1 2 3
+//            4 5 6
+// hot at the 2. The turned images are what
+// `wm::ScaleAndRotateCursorBitmapAndHotpoint` makes of it.
+DeskCursorImage Upright() {
+  return Image(3, 2, gfx::Point(1, 0), {1, 2, 3, 4, 5, 6});
+}
+
+TEST(DeskCursorImageTest, AQuarterTurnIsUndone) {
+  const DeskCursorImage turned =
+      Image(2, 3, gfx::Point(2, 1), {4, 1, 5, 2, 6, 3});
+
+  EXPECT_EQ(UprightDeskCursorImage(turned, 1), Upright());
+}
+
+TEST(DeskCursorImageTest, AHalfTurnIsUndone) {
+  const DeskCursorImage turned =
+      Image(3, 2, gfx::Point(2, 2), {6, 5, 4, 3, 2, 1});
+
+  EXPECT_EQ(UprightDeskCursorImage(turned, 2), Upright());
+}
+
+TEST(DeskCursorImageTest, AThreeQuarterTurnIsUndone) {
+  const DeskCursorImage turned =
+      Image(2, 3, gfx::Point(0, 2), {3, 6, 2, 5, 1, 4});
+
+  EXPECT_EQ(UprightDeskCursorImage(turned, 3), Upright());
+}
+
+TEST(DeskCursorImageTest, AnUnturnedOrHiddenPointerIsKept) {
+  EXPECT_EQ(UprightDeskCursorImage(Upright(), 0), Upright());
+  EXPECT_TRUE(UprightDeskCursorImage(DeskCursorImage(), 1).hidden());
+}
+
 // Every control channel hears it: there is one per shell page.
 TEST(DeskCursorImageSourceTest, EveryListenerHearsEachChange) {
   DeskCursorImageSource source;
