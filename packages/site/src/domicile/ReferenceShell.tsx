@@ -2,7 +2,6 @@ import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
 import { Accent } from "../page/Accent";
-import { Eyebrow } from "../page/Eyebrow";
 import { LinkButton } from "../page/LinkButton";
 import { repoFile } from "../page/repo";
 import { Section } from "../page/Section";
@@ -21,7 +20,6 @@ export const ReferenceShell = () => (
     <Accent product="manganese">
       <div className={bandStyles}>
         <div className={textStyles}>
-          <Eyebrow>The reference shell</Eyebrow>
           <h2 className={titleStyles}>
             Don't start from zero. Start from manganese.
           </h2>

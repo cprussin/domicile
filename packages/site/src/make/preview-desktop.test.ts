@@ -1,18 +1,19 @@
 import { describe, expect, it } from "bun:test";
 
 import { previewDesktop } from "./preview-desktop";
+import { launchedStandIn } from "./stand-ins";
 
 describe("previewDesktop", () => {
   it("has the stand-in windows, the first one focused", () => {
     const { domicile } = previewDesktop();
 
     expect(domicile.windows.list.map((window) => window.title)).toEqual([
-      "Terminal",
-      "Editor",
+      "Browser",
+      "Chat",
       "Music",
       "Files",
     ]);
-    expect(domicile.windows.focused).toBe("terminal");
+    expect(domicile.windows.focused).toBe("browser");
   });
 
   it("moves the focus where the shell asks, as the engine does", async () => {
@@ -35,10 +36,8 @@ describe("previewDesktop", () => {
     });
 
     expect(domicile.windows.list.at(-1)?.title).toBe("firefox");
-    expect(standIns().at(-1)).toEqual({
-      appId: "launched-1",
-      body: "$ firefox --new-window",
-      title: "firefox",
-    });
+    expect(standIns().at(-1)).toEqual(
+      launchedStandIn("launched-1", ["firefox", "--new-window"]),
+    );
   });
 });

@@ -55,11 +55,15 @@ app {
 }`;
 
 /**
- * The hero's code over a capture of the desktop it draws: the shell and its
+ * A capture of a desktop over the code that draws it: the shell and its
  * stylesheet side by side, each wide enough for its longest line.
  */
 export const HeroMedia = () => (
   <section className={sectionStyles}>
+    <Media
+      alt="SuperTuxKart racing on the left; GitHub over Big Buck Bunny on the right, each window a page element"
+      name="hero"
+    />
     <div className={codeStyles}>
       <DocTabs
         tabs={[
@@ -79,10 +83,6 @@ export const HeroMedia = () => (
         <CodeBlock code={STYLES} frame="bare" language="css" />
       </div>
     </div>
-    <Media
-      alt="SuperTuxKart racing on the left; GitHub over Big Buck Bunny on the right, each window a page element"
-      name="hero"
-    />
   </section>
 );
 
@@ -91,7 +91,7 @@ const sectionStyles = flex({
   gap: 5,
   marginInline: "auto",
   maxInlineSize: "6xl",
-  paddingBlockEnd: 24,
+  paddingBlockEnd: 6,
   paddingBlockStart: 4,
   paddingInline: 6,
 });

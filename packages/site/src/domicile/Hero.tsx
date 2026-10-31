@@ -1,9 +1,7 @@
-import { css } from "../../styled-system/css";
 import { Hero as PageHero } from "../page/Hero";
 import { LinkButton } from "../page/LinkButton";
-import { SectionLinks } from "./SectionLinks";
 
-/** The Domicile page's opening: what it is, where to start, and what's on the page. */
+/** The Domicile page's opening: why to use it, and where to start. */
 export const Hero = () => (
   <PageHero
     actions={
@@ -16,26 +14,11 @@ export const Hero = () => (
         </LinkButton>
       </>
     }
-    lede={
-      <>
-        Games, video and every Linux app run natively, at full speed. Only the
-        desktop around them is web. With Domicile, a shell is a JavaScript
-        module. Native windows are{" "}
-        <code className={codeStyles}>&lt;app&gt;</code> elements and web pages
-        are <code className={codeStyles}>&lt;webview&gt;</code>s, side by side
-        in the same DOM. So anything a web page can do, your desktop can do.
-        Write it in React, Tailwind or plain CSS, or describe it to your coding
-        agent. It already knows the web.
-      </>
-    }
+    lede="If you can build a web page, you can build a desktop. Use React, CSS and anything on npm, or just describe it to your coding agent. Your apps still run natively, at full speed."
     tag={{
-      href: "#platform",
+      href: "/docs/reference/elements",
       label: "Build a Wayland compositor with web technologies",
     }}
-    title="Your desktop, built like a web page."
-  >
-    <SectionLinks />
-  </PageHero>
+    title="The fastest way to build a Linux desktop."
+  />
 );
-
-const codeStyles = css({ color: "foreground", fontFamily: "code" });

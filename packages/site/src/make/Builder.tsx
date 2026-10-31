@@ -106,9 +106,6 @@ export const Builder = () => {
         </p>
       </div>
       <Hint text={model.hint} />
-      <p className={noteStyles}>
-        The windows are stand-ins. On your computer, they're your real apps.
-      </p>
       <div className={actionsStyles}>
         <RunForReal code={code} />
         <CopyPrompt code={code} />
@@ -220,8 +217,6 @@ const statusStyles = css({
   position: "absolute",
   textAlign: "end",
 });
-
-const noteStyles = css({ color: "muted", fontSize: "sm" });
 
 const actionsStyles = hstack({ flexWrap: "wrap", gap: 3 });
 

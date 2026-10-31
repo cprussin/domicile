@@ -5,7 +5,7 @@ import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
 import type { StandIn } from "./stand-ins";
-import { STAND_INS } from "./stand-ins";
+import { launchedStandIn, STAND_INS } from "./stand-ins";
 
 /**
  * A test desktop with the stand-in windows. Focusing a window moves the
@@ -24,15 +24,14 @@ export const previewDesktop = (): {
   }
   fake.set({ focusedWindow: STAND_INS[0].appId });
   const launch = (argv: readonly string[]) => {
-    const [command] = argv;
+    const [command, ...rest] = argv;
     if (command === undefined) {
       throw new Error("launch needs a command");
     }
-    const launched = {
-      appId: `launched-${String(standIns.length - STAND_INS.length + 1)}`,
-      body: `$ ${argv.join(" ")}`,
-      title: command,
-    };
+    const launched = launchedStandIn(
+      `launched-${String(standIns.length - STAND_INS.length + 1)}`,
+      [command, ...rest],
+    );
     standIns.push(launched);
     fake.appear(launched.appId, { title: launched.title });
   };
