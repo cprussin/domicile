@@ -63,10 +63,10 @@ type Offered = Choice & { source: CastSource };
  * the desk shot as it opened, which outlines each pick. A browser window is
  * its page alone, from the engine. Picks one, or several when the
  * application asks for more, or, when it may have a region, an area dragged
- * over the desk shot as the screenshot picker's is. Without a desk shot, the
- * region is drawn over the page instead. Dismissing it cancels. For a cast to a
- * TV, it is titled for the TV rather than for who asks. For the shell's own
- * screen recording, it offers to record instead.
+ * over the desk shot as the screenshot picker's is, or selected on the live
+ * screen. Dismissing it cancels. For a cast to a TV, it is titled for the TV
+ * rather than for who asks. For the shell's own screen recording, it offers
+ * to record instead.
  */
 export const ScreenCastDialog = ({
   answer,
@@ -155,11 +155,19 @@ export const ScreenCastDialog = ({
   const offered = [...whole, ...screens, ...windows];
   return drawing ? (
     <RegionPicker
-      cancel={() => {
+      actions={[
+        {
+          label: action(castTo, record),
+          pick: (region) => {
+            answer(Answer.ScreenCast([Source.Region(region)]));
+          },
+        },
+      ]}
+      back={() => {
         setDrawing(false);
       }}
-      pick={(position, size) => {
-        answer(Answer.ScreenCast([Source.Region({ position, size })]));
+      cancel={() => {
+        answer(Answer.Canceled());
       }}
     />
   ) : (
@@ -167,14 +175,14 @@ export const ScreenCastDialog = ({
       closeButton={false}
       footer={
         <>
-          {body.region && desk === undefined ? (
+          {body.region ? (
             <Button
               onClick={() => {
                 setDrawing(true);
               }}
               variant="ghost"
             >
-              Draw a region
+              Select on screen
             </Button>
           ) : undefined}
           <Button
