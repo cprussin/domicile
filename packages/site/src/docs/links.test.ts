@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { resolveHref } from "./links";
 
 const PAGES = [
-  { slug: "manganese/lock", source: "docs/LOCK.md" },
-  { slug: "manganese/keys", source: "packages/wm/docs/KEYS.md" },
+  { slug: "manganese/lock", source: "docs/LOCK.md", title: "Lock" },
+  { slug: "manganese/keys", source: "packages/wm/docs/KEYS.md", title: "Keys" },
 ];
 
 describe("resolveHref", () => {

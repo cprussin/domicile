@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { Markdown } from "./Markdown";
 
-const PAGES = [{ slug: "manganese/idle", source: "docs/IDLE.md" }];
+const PAGES = [
+  { slug: "manganese/idle", source: "docs/IDLE.md", title: "Idle and sleep" },
+];
 
 const render = (source: string) =>
   renderToStaticMarkup(
@@ -25,6 +27,20 @@ describe("Markdown", () => {
     expect(html).toContain(
       'href="https://github.com/cprussin/domicile/blob/stable/src/"',
     );
+  });
+
+  test("a link named for its page's file reads as the page's title", () => {
+    const html = render(
+      "See [IDLE.md](IDLE.md#clocks), [`IDLE.md`](./IDLE.md) and [docs/IDLE.md](/docs/IDLE.md).",
+    );
+    expect(html).not.toContain("IDLE.md");
+    expect(html.match(/>Idle and sleep<\/a>/g)).toHaveLength(3);
+  });
+
+  test("a link with its own words, or to a file, keeps them", () => {
+    const html = render("See [idle](IDLE.md) and [RUNNING.md](RUNNING.md).");
+    expect(html).toContain(">idle</a>");
+    expect(html).toContain(">RUNNING.md</a>");
   });
 
   test("inline text keeps its emphasis and code", () => {

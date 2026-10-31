@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 
-import type { Nodes, RootContent } from "mdast";
+import type { Link, Nodes, RootContent } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFromMarkdown } from "mdast-util-gfm";
 import { gfm } from "micromark-extension-gfm";
@@ -11,7 +11,7 @@ import type { Language } from "../code/highlight";
 import { Media } from "../media/Media";
 import { DocTabs } from "./DocTabs";
 import type { Routed } from "./links";
-import { resolveHref } from "./links";
+import { linkLabel, resolveHref } from "./links";
 import { slugger } from "./slugger";
 
 type Props = {
@@ -130,7 +130,7 @@ const Node = ({ node, context }: { node: RootContent; context: Context }) => {
           className={linkStyles}
           href={resolveHref(node.url, context.from, context.pages)}
         >
-          {nodes(node.children, context)}
+          <LinkText context={context} node={node} />
         </a>
       );
     }
@@ -219,6 +219,23 @@ const Node = ({ node, context }: { node: RootContent; context: Context }) => {
       return undefined;
     }
   }
+};
+
+/**
+ * A link's words. One named for its docs page's file, `[KEYS.md](KEYS.md)`
+ * or in code, reads as the page's title instead.
+ */
+const LinkText = ({ node, context }: { node: Link; context: Context }) => {
+  const [only, ...rest] = node.children;
+  if (
+    only === undefined ||
+    rest.length > 0 ||
+    (only.type !== "text" && only.type !== "inlineCode")
+  ) {
+    return nodes(node.children, context);
+  }
+  const label = linkLabel(only.value, node.url, context.from, context.pages);
+  return label === only.value ? nodes(node.children, context) : label;
 };
 
 const HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
