@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 31 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a canvas read-back does not wait for the screen's
+ flip
+
+A 2D canvas read-back (getImageData) took about one frame on a tty:
+9.4ms at 120Hz, where Chromium nested in the same desktop takes 0.45ms.
+A page reading back a hundred small canvases froze for over a second.
+
+GbmSurfaceless completed each swap at submission with the commit's
+out-fence as its release fence. The fence signals at the flip. Viz makes
+the GPU wait on it before drawing into the released buffer, and the
+display shares its GL context with raster, so every GPU job queued after
+that draw waited for the flip too. A read-back blocks in glReadPixels
+until its own draw is done (stack from lyra: _mesa_ReadPixels ->
+amdgpu_bo_wait).
+
+- OnSubmission no longer completes the swap. It completes in
+  OnPresentation, at the flip, with no release fence, as it does on a
+  device that gives no out-fence. The buffer viz gets back is off the
+  screen by then, so its next draw needs no wait.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/platform/drm/gpu/gbm_surfaceless.cc | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc b/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc
+index 151bfe6..9925b6a 100644
+--- a/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc
++++ b/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc
+@@ -236,10 +236,11 @@ void GbmSurfaceless::FenceRetired(uint32_t frame_id) {
+ void GbmSurfaceless::OnSubmission(gfx::SwapResult result,
+                                   gfx::GpuFenceHandle release_fence) {
+   submitted_frame_->swap_result = result;
+-  if (!release_fence.is_null()) {
+-    std::move(submitted_frame_->completion_callback)
+-        .Run(gfx::SwapCompletionResult(result, std::move(release_fence)));
+-  }
++  // Domicile's engine fork: the swap completes at presentation, with no
++  // release fence. The fence is the commit's out-fence, which signals at the
++  // flip. Viz makes the GPU wait on it before drawing into a released buffer,
++  // and the display shares its GL context with raster, so every later GPU
++  // job, a canvas read-back among them, would wait for the flip.
+ }
+ 
+ void GbmSurfaceless::OnPresentation(const gfx::PresentationFeedback& feedback) {
