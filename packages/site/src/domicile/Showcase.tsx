@@ -52,12 +52,6 @@ const ASKS: readonly {
     language: "css",
     note: "Unfortunately, also CSS.",
   },
-  {
-    ask: "Swap in my new shell without closing anything.",
-    code: "domicile load-shell ./shell.tsx",
-    language: "bash",
-    note: "Every window stays open, and a video keeps playing. A build that fails keeps the shell you had.",
-  },
 ];
 
 /** Things a desktop can do once it's built with the web, each as an ask and its code. */

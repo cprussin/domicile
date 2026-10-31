@@ -11,6 +11,7 @@ test("the page tells its story in order: build, start from manganese, what you g
   expect(sections).toEqual([
     "top",
     "make",
+    "swap",
     "manganese",
     "only",
     "batteries",
