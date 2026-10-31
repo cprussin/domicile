@@ -79,7 +79,7 @@ Ship it any way (tarball, git checkout, Nix derivation) and pass the module
 path:
 
 ```sh
-nix run github:cprussin/domicile/stable -- ./my-desktop/dist/shell.js
+domicile ./my-desktop/dist/shell.js
 ```
 
 - Pass the module, not the directory. A directory is refused.

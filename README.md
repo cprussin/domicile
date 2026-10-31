@@ -45,7 +45,7 @@ Domicile embeds Wayland surfaces directly into Chromium's layer tree. No screens
 A shell is a JavaScript module. You arrange the elements; Domicile handles the rest.
 
 ```sh
-nix run github:cprussin/domicile/stable -- ./dist/shell.js
+domicile ./dist/shell.js
 ```
 
 **[WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)** has the details.
@@ -54,6 +54,14 @@ nix run github:cprussin/domicile/stable -- ./dist/shell.js
 ## Manganese
 
 Ever thought Sway was great, but needed more `<div>`s? We got you.
+
+[Install it](docs/INSTALL.md) from your distribution's package manager, then:
+
+```sh
+domicile @domicile-desktop/manganese
+```
+
+Or try it with [Nix](https://nixos.org/download), with nothing installed:
 
 ```sh
 nix run github:cprussin/domicile/stable#manganese
@@ -64,8 +72,6 @@ Tiling, workspaces, a bar, native apps, and browser windows. No clone or Chromiu
 The [user guide](docs/use/README.md) covers installing, using and setting it up. [shell-manganese](packages/shell-manganese/README.md) has its options for developers.
 
 [shell-simple](packages/shell-simple/README.md) is the same terrible idea with fewer opinions.
-
-Not on Nix? There are packages for Debian, Ubuntu, Fedora, openSUSE and Arch: [install](docs/INSTALL.md).
 
 ## License
 

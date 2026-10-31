@@ -1,25 +1,33 @@
 # Running a desktop
 
 How to run, install and configure a Domicile desktop, in detail. For a
-friendlier start, read the [user guide](use/README.md). You need Nix, or a
-[package for your distribution](#other-distributions), and either a Wayland
-session or a console login.
+friendlier start, read the [user guide](use/README.md). You need a
+[package for your distribution](#other-distributions) or [Nix](#on-nixos),
+and either a Wayland session or a console login.
 
 ```sh
-nix run github:cprussin/domicile/stable#manganese   # tiling, sway's keys, address bar
-nix run github:cprussin/domicile/stable#simple      # floating windows only
+domicile @domicile-desktop/manganese      # tiling, sway's keys, address bar
+domicile @domicile-desktop/shell-simple   # floating windows only
+```
+
+With Nix, run either without installing:
+
+```sh
+nix run github:cprussin/domicile/stable#manganese
+nix run github:cprussin/domicile/stable#simple
 ```
 
 - `stable` is the newest `main` built with the production engine (PGO, ThinLTO,
   no DCHECKs). After an engine change, `main` uses a slower checked build until
-  the nightly build is pinned. `stable` waits for that pin. Drop `/stable` to
-  run `main`.
-- Each desktop is its own app. Install one with `nix profile install`.
+  the nightly build is pinned. `stable` waits for that pin. With Nix, drop
+  `/stable` to run `main`.
+- With Nix, each desktop is its own app. Install one with
+  `nix profile install`.
 - In a Wayland session the desktop opens in a window. On a console login it
   takes the screen; no setting is needed
   ([how](/docs/architecture/A-DESKTOP-ON-A-TTY.md)).
-- The flake pins a prebuilt engine, so you do not build Chromium
-  ([how](/packages/domicile-engine/README.md#using-a-prebuilt-engine)).
+- The packages and the flake ship a prebuilt engine, so you do not build
+  Chromium ([how](/packages/domicile-engine/README.md#using-a-prebuilt-engine)).
 - Each desktop documents its own keys and settings:
   [simple](/packages/shell-simple/README.md),
   [manganese](/packages/shell-manganese/README.md).
@@ -28,7 +36,7 @@ nix run github:cprussin/domicile/stable#simple      # floating windows only
   ([status](/docs/architecture/WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)).
 - A tty desktop on a card with no 3D composites on the CPU
   ([how](/docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output)).
-- To run your own shell: `nix run github:cprussin/domicile/stable -- ./dist/shell.js`.
+- To run your own shell: `domicile ./dist/shell.js`.
   See [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 
 Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
@@ -351,7 +359,7 @@ Domicile is packaged for Debian, Ubuntu, Fedora, openSUSE and Arch, two ways:
 - **[Releases](#from-the-package-repositories)**, from signed package
   repositories and the AUR. Your package manager upgrades them.
 - **[Each `stable` commit](#a-stable-commit)**, as packages you download. They
-  run the same desktop as `nix run github:cprussin/domicile/stable`.
+  run the same desktop as the newest `stable` commit.
 
 ### From the package repositories
 

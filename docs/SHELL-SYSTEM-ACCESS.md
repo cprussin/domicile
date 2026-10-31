@@ -73,8 +73,9 @@ export const Shell = async (root, domicile) => {
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
 - `session.unlockRefusals()` streams why each passphrase did not unlock the desktop
   ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#drawing-the-lock-screen)).
-- Spawned programs are found on the compositor's `PATH`. The Nix wrapper
-  appends `pactl`, `parec` and `curl`, so a user's own copies win.
+- Spawned programs are found on the compositor's `PATH`. The distribution
+  packages recommend `pactl`, `parec` and `curl`; the Nix package appends
+  them to `PATH`, so a user's own copies win.
 - A reload starts every library from nothing: each reads its state again, so a
   readout is empty until its first reply.
 - A compositor restart keeps the page. A call it had open fails
