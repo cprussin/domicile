@@ -3,6 +3,12 @@
 **Meta+Shift+V** opens the clipboard history, newest first. Choosing a row
 makes it the current selection. Source: `src/`.
 
+- It steers like the launcher, on the same `ResultList` rows: a search box
+  keeps focus, typing narrows the rows to those holding every word, and the
+  keyboard and pointer move one highlight.
+- The highlight starts on the second row, since the first is already on the
+  clipboard.
+
 ## Why
 
 A Wayland selection lives in the client that copied it. Closing that client

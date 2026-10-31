@@ -1250,7 +1250,7 @@ describe("Shell", () => {
 
       expect(
         screen.getAllByRole("option").map((row) => row.textContent),
-      ).toStrictEqual(["the newest", "the oldest"]);
+      ).toStrictEqual(["the newestOn the clipboard now", "the oldest"]);
     });
 
     it("opens on the screen the keyboard is on", () => {
@@ -1267,7 +1267,10 @@ describe("Shell", () => {
       // By id, never by text: the page may only choose among entries already
       // on the seat's clipboard.
       renderShell();
-      copied([{ id: 7, preview: "ssh-rsa AAAA" }]);
+      copied([
+        { id: 8, preview: "the newest" },
+        { id: 7, preview: "ssh-rsa AAAA" },
+      ]);
       press("v", true);
 
       act(() => {

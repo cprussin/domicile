@@ -1,8 +1,6 @@
 // Marks the letters of a row that match the query, so users see why it matched.
-//
-// Mirrors the host's search (see `domicile_host::file_search`): every query
-// word appears in the path, ignoring case. Every occurrence of any word is
-// marked.
+// Matches as the launcher's file search does (`domicile_host::file_search`):
+// every query word, ignoring case. Every occurrence of any word is marked.
 
 /** A run of a row's text, and whether it matched the query. */
 export type Mark = {
