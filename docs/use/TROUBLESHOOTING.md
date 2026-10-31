@@ -15,9 +15,13 @@ The system's `domicile` login service is missing. See
 
 ## It stutters while the machine is busy
 
-Join the `domicile` group and log in again:
-`sudo usermod -aG domicile "$USER"`. On NixOS, add yourself to the group in
-your system configuration.
+Domicile asks rtkit to give its drawing work priority. rtkit comes with most
+desktops that use PipeWire. If it still stutters:
+
+- Make sure rtkit is installed.
+- Join the `domicile` group and log in again:
+  `sudo usermod -aG domicile "$USER"`. On NixOS, add
+  `users.users.<you>.extraGroups = ["domicile"]` to your system configuration.
 
 ## No battery, sound or network in the bar
 

@@ -445,6 +445,18 @@ source_set("portal_file_chooser") {
   ]
 }
 
+# Asks rtkit to raise the engine's threads when the limits refuse.
+source_set("rtkit") {
+  sources = [
+    "browser/rtkit.cc",
+    "browser/rtkit.h",
+  ]
+
+  public_deps = [ "//base" ]
+
+  deps = [ "//dbus" ]
+}
+
 # A <webview>'s downloads added up for the element. Its own target beside
 # :web_view_guest for the reason :file_choice is one: it needs no browser,
 # which is where its tests are.
@@ -1036,6 +1048,7 @@ source_set("unit_tests") {
     "browser/portal_request_unittest.cc",
     "browser/private_pages_unittest.cc",
     "browser/render_process_unittest.cc",
+    "browser/rtkit_unittest.cc",
     "browser/portal_picker_unittest.cc",
     "browser/portal_file_chooser_unittest.cc",
     "browser/screen_capture_unittest.cc",
@@ -1108,6 +1121,7 @@ source_set("unit_tests") {
     ":placeholder_stage",
     ":pointer_warp",
     ":portal_file_chooser",
+    ":rtkit",
     ":portal_request",
     ":private_pages",
     ":render_process",
