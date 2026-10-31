@@ -20,40 +20,51 @@ const switcher = (focused = true) => {
   return (name: string) => screen.getByRole("button", { name });
 };
 
-const lit = css({ backgroundColor: "fillOverPhoto" });
-const dimmed = css({
-  color: "color-mix(in oklab, {colors.white} 55%, transparent)",
-});
+const chip = css({ backgroundColor: "onPhoto" });
 
 describe("Workspaces", () => {
-  it("lights the one on screen and writes it in full white", () => {
+  it("draws the one on screen as a solid white chip with a black number", () => {
     const workspace = switcher();
 
-    expect(workspace("2").className).toContain(lit);
-    expect(workspace("2").className).toContain(css({ color: "white" }));
+    expect(workspace("2").className).toContain(chip);
+    expect(workspace("2").className).toContain(css({ color: "black" }));
+    expect(workspace("2").className).toContain(css({ textShadow: "none" }));
   });
 
-  it("gives the one on screen a fainter square on a screen the keyboard is not on", () => {
+  it("outlines the one on screen on a screen the keyboard is not on", () => {
     // One workspace has keyboard focus and it is on one screen: sway's
     // `focused_workspace` versus `active_workspace`.
     const workspace = switcher(false);
 
-    expect(workspace("2").className).not.toContain(lit);
+    expect(workspace("2").className).not.toContain(chip);
     expect(workspace("2").className).toContain(
-      css({
-        backgroundColor: "color-mix(in oklab, {colors.white} 8%, transparent)",
-      }),
+      css({ boxShadow: "inset 0 0 0 0.09375rem {colors.onPhoto}" }),
     );
   });
 
-  it("leaves the rest of them clear and dimmed", () => {
+  it("leaves the rest of them clear and only slightly dimmed", () => {
     const workspace = switcher();
 
     expect(workspace("1").className).toContain(
       css({ backgroundColor: "transparent" }),
     );
-    expect(workspace("1").className).toContain(dimmed);
-    expect(workspace("1").className).not.toContain(lit);
+    expect(workspace("1").className).toContain(
+      css({ color: "color-mix(in oklab, {colors.onPhoto} 85%, transparent)" }),
+    );
+    expect(workspace("1").className).not.toContain(chip);
+  });
+
+  it("keeps the chip white under the pointer", () => {
+    // `_hoverEnabled` skips `aria-current`, so hovering the chip doesn't
+    // swap its fill for the hover square.
+    const workspace = switcher();
+
+    expect(workspace("1").className).toContain(
+      css({ _hoverEnabled: { backgroundColor: "fillOverPhoto" } }),
+    );
+    expect(workspace("1").className).not.toContain(
+      css({ _hover: { backgroundColor: "fillOverPhoto" } }),
+    );
   });
 
   it("centers the number rather than its baseline", () => {

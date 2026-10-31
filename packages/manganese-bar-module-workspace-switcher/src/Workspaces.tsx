@@ -15,9 +15,9 @@ type Props = {
  * The workspace switcher at the bar's start. Like sway's bar, it shows this
  * screen's workspaces that have windows, plus the one on screen.
  *
- * Each is a number. The focused workspace sits on a lit square like a hovered
- * bar button; one visible on another screen gets a fainter square; the rest
- * are dimmed until hovered.
+ * Each is a number. The focused workspace is a solid white chip, so it stands
+ * out over a bright wallpaper; one visible on another screen gets a white
+ * outline; the rest are slightly dimmed and light up under the pointer.
  *
  * A plain `<button>` rather than the library's `Button`, which does not support
  * `aria-current` styling or an external `className`. It inherits the bar's
@@ -54,12 +54,13 @@ const listStyles = hstack({ gap: 0.5 });
 
 const workspaceStyles = cva({
   base: {
-    _hover: { backgroundColor: "fillOverPhoto", color: "white" },
+    // Skips `aria-current`, so the chip keeps its fill under the pointer.
+    _hoverEnabled: { backgroundColor: "fillOverPhoto", color: "onPhoto" },
     backgroundColor: "transparent",
     blockSize: 6,
     borderRadius: "lg",
     borderStyle: "none",
-    color: "color-mix(in oklab, {colors.white} 55%, transparent)",
+    color: "color-mix(in oklab, {colors.onPhoto} 85%, transparent)",
     cursor: "pointer",
     // A block, not flex: `text-box` trim below works only on block containers.
     display: "block",
@@ -87,16 +88,20 @@ const workspaceStyles = cva({
   },
   variants: {
     shown: {
+      // A solid chip. Black needs no shadow, and one would smudge it.
       focused: {
-        backgroundColor: "fillOverPhoto",
-        color: "white",
+        backgroundColor: "onPhoto",
+        color: "black",
         fontWeight: "semibold",
+        textShadow: "none",
       },
       hidden: {},
-      // Visible on another screen: a fainter square.
+      // Visible on another screen: an outline, 1.5px, between the spacing
+      // scale's 1px and 2px steps.
       visible: {
-        backgroundColor: "color-mix(in oklab, {colors.white} 8%, transparent)",
-        color: "white",
+        boxShadow: "inset 0 0 0 0.09375rem {colors.onPhoto}",
+        color: "onPhoto",
+        fontWeight: "semibold",
       },
     },
   },
