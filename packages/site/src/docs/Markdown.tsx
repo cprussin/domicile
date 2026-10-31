@@ -240,6 +240,8 @@ const languageOf = (lang: string | null | undefined): Language =>
 const LANGUAGES: Readonly<Record<string, Language>> = {
   bash: "bash",
   css: "css",
+  // The TypeScript grammar reads JavaScript too.
+  js: "tsx",
   json: "json",
   sh: "bash",
   ts: "tsx",
