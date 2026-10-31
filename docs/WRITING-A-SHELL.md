@@ -72,7 +72,7 @@ Exceptions:
 ## Running it
 
 ```sh
-nix run github:cprussin/domicile/stable -- ./my-desktop/dist/shell.js
+domicile ./my-desktop/dist/shell.js
 ```
 
 - The module path is the whole interface. Name the file what you like.

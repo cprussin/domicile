@@ -312,7 +312,7 @@ Applications read the rest through the settings portal
 - Served as `org.gnome.desktop.interface`'s `icon-theme`. Unset leaves it to
   the next portal backend; a reload that unsets it signals `hicolor`.
 - Install the theme so it is under a data directory's `icons`, such as
-  `~/.nix-profile/share/icons`.
+  `~/.local/share/icons`.
 - Shells read it with `watchIconTheme` from `@domicile-desktop/sdk/icon-theme`
   and look icons up with `@domicile-desktop/system-apps/app-icons`.
 - Portal dialogs draw applications in it: `describeApps` reads it each time

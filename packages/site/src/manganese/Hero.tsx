@@ -22,8 +22,8 @@ export const Hero = () => (
   >
     <CopyCommand command="nix run github:cprussin/domicile/stable#manganese" />
     <span className={noteStyles}>
-      Try it in a window first. Packages for Debian, Ubuntu, Fedora, openSUSE
-      and Arch are{" "}
+      With Nix, try it in a window first. Packages for Debian, Ubuntu, Fedora,
+      openSUSE and Arch are{" "}
       <a className={linkStyles} href="#install">
         below
       </a>
