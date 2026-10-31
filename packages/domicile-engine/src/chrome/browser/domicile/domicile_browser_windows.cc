@@ -183,18 +183,20 @@ class DeskWindows final : public base::SupportsUserData::Data,
         base::BindRepeating(&AttachTabHelpers));
   }
 
-  // Lists a window MakeOpened made. Content navigates it, so this does not.
+  // Lists a window MakeOpened made, at the `size` its page asked for.
+  // Content navigates it, so this does not.
   void Adopt(std::unique_ptr<content::WebContents> contents,
-             const GURL& target_url) {
+             const GURL& target_url,
+             const gfx::Size& size) {
     std::unique_ptr<WebViewGuest> guest =
         WebViewGuest::AdoptOpenedWindow(std::move(contents));
     const std::string id = guest->window_id();
     auto watch = std::make_unique<Watch>(
         guest->contents(),
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
-    windows_.push_back(Window{id, std::move(guest), std::move(watch), 0, 0,
-                              /*app=*/false, /*app_id=*/std::string(),
-                              target_url});
+    windows_.push_back(Window{
+        id, std::move(guest), std::move(watch), size.width(), size.height(),
+        /*app=*/false, /*app_id=*/std::string(), target_url});
     Changed();
   }
 
@@ -497,9 +499,10 @@ class Host final : public BrowserWindowHost {
   }
 
   void AdoptOpenedWindow(std::unique_ptr<content::WebContents> contents,
-                         const GURL& target_url) override {
+                         const GURL& target_url,
+                         const gfx::Size& size) override {
     content::BrowserContext& context = *contents->GetBrowserContext();
-    Windows(context).Adopt(std::move(contents), target_url);
+    Windows(context).Adopt(std::move(contents), target_url, size);
   }
 
   void OpenPopupWindow(content::BrowserContext& context,

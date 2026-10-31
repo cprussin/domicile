@@ -117,7 +117,7 @@ Headless.
 | `guard-webview-wake-lock.sh` | a page's `navigator.wakeLock` turns the shell's `wakeLock` on, and its release turns it off (patch 0158) |
 | `guard-webview-context-menu.sh` | a right click fires `domicile-context-menu` with the link and image under it; its `inspect` opens DevTools in a browser window (patch 0092); a right click in DevTools draws its HTML menu; closing the inspected window closes DevTools' too, and the engine survives it |
 | `guard-webview-new-window.sh` | a `target="_blank"` form opens a browser window, the shell's `<webview window>` shows it, and its page gets the form's POST |
-| `guard-webview-window-open.sh` | a page's `window.open()` returns a handle, the window is listed, keeps its opener and name, and posts back to its opener (patch 0115) |
+| `guard-webview-window-open.sh` | a page's `window.open()` returns a handle, the window is listed at the size it asked for, keeps its opener and name, and posts back to its opener (patch 0115) |
 | `guard-webview-private.sh` | a cookie set in a `<webview private>` reaches private pages and windows, never ordinary ones; a private window is listed `isPrivate`; the cookie is gone once every private page closes |
 | `guard-webview-partition.sh` | storage in a `<webview partition>` is apart from the user's and from other partitions; a window from `openBrowserWindow(url, partition)` is listed and stored in its partition; `persist:` outlives a restart and any other name does not |
 | `guard-webview-will-navigate.sh` | a page's own navigation asks the shell as `domicile-will-navigate`; `preventDefault()` keeps it from being requested (patch 0134); the shell's own `src` does not ask |
