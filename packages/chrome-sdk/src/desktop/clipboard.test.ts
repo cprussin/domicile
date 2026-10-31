@@ -11,11 +11,13 @@ describe("clipboard", () => {
 
   it("lists the history and puts a row back", () => {
     const fake = new FakeDomicileHost();
-    fake.set({ clipboard: [{ id: 3, preview: "hello" }] });
+    fake.set({ clipboard: [{ id: 3, image: false, preview: "hello" }] });
     const { clipboard } = desktop(fake.host);
     clipboard.copy(3);
 
-    expect(clipboard.entries).toStrictEqual([{ id: 3, preview: "hello" }]);
+    expect(clipboard.entries).toStrictEqual([
+      { id: 3, image: false, preview: "hello" },
+    ]);
     expect(fake.calls).toStrictEqual([["copyClipboardEntry", 3]]);
   });
 

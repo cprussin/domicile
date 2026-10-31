@@ -31,7 +31,11 @@ export const HostShell = (_root, desktop) => {
 
 const readState = (host) => ({
   altKey: host.altKey,
-  clipboard: host.clipboard?.map(({ id, preview }) => ({ id, preview })),
+  clipboard: host.clipboard?.map(({ id, image, preview }) => ({
+    id,
+    image,
+    preview,
+  })),
   ctrlKey: host.ctrlKey,
   idle: host.idle,
   locked: host.locked,

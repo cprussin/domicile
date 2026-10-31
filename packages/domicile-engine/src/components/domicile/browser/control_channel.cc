@@ -1272,12 +1272,13 @@ void ControlChannel::DispatchLine(const std::string& line,
       // rather than carried with a zero in it, which would be a row that
       // pastes whatever the compositor happens to hold as entry 0.
       std::optional<int> id = entry->FindInt("id");
+      std::optional<bool> image = entry->FindBool("image");
       const std::string* preview = entry->FindString("preview");
-      if (!id || !preview) {
+      if (!id || !image || !preview) {
         continue;
       }
-      entries.push_back(
-          mojom::ClipboardEntry::New(static_cast<uint32_t>(*id), *preview));
+      entries.push_back(mojom::ClipboardEntry::New(static_cast<uint32_t>(*id),
+                                                   *image, *preview));
     }
     // Sent even when it is empty, for the reason `displays` and `files` are: a
     // desktop nothing has been copied on is an answer, and a panel that never

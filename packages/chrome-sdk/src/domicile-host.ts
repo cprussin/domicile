@@ -278,6 +278,11 @@ export type DomicileClipboardEntry = {
    */
   readonly id: number;
   /**
+   * Whether the copy is an image with no text, so a panel can draw it as one.
+   * Its preview then names its size or format.
+   */
+  readonly image: boolean;
+  /**
    * Enough of what was copied to recognize it by, and not necessarily all of
    * it: a long copy is cut down to a row, because this is what a panel draws
    * and the rest of a copied file is not a row.

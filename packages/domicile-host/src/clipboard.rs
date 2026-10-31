@@ -241,6 +241,7 @@ impl History {
             .iter()
             .map(|copy| ClipboardEntry {
                 id: copy.id,
+                image: copy.contents.text.is_none(),
                 preview: copy.contents.preview(),
             })
             .collect()

@@ -27,7 +27,8 @@ so the copy outlives the client that copied it.
   reaches the page.
 - Text and images. A copy keeps its text and one image (PNG if offered, else
   the first `image/` type). An image-only row reads `Image, 1920 × 1080`, or
-  `Image (image/webp)` when it is not a PNG. Selections with neither (file
+  `Image (image/webp)` when it is not a PNG. Its `image` is true, so the panel draws
+  it with an image glyph. Selections with neither (file
   drags) are skipped.
 - Memory only. Nothing is written to disk.
 - The clipboard only. The primary selection (highlighted text) stays out of

@@ -13,6 +13,7 @@ import {
 import { RowTile } from "@domicile-desktop/component-library/RowTile";
 import type { DomicileClipboardEntry } from "@domicile-desktop/sdk/domicile-host";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { LinkSimpleIcon } from "@phosphor-icons/react/dist/ssr/LinkSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
@@ -178,7 +179,7 @@ const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
           >
             {(entry) => (
               <>
-                <RowTile icon={glyphOf(kindOf(entry.preview))} />
+                <RowTile icon={glyphOf(kindOf(entry))} />
                 <span className={textStyles}>
                   <span className={lineStyles}>
                     <Marked query={query} text={lineOf(entry.preview)} />
@@ -226,6 +227,9 @@ const countOf = (copies: number, shown: number, query: string): string => {
 
 const glyphOf = (kind: CopyKind) => {
   switch (kind) {
+    case CopyKind.Image: {
+      return ImageIcon;
+    }
     case CopyKind.Link: {
       return LinkSimpleIcon;
     }

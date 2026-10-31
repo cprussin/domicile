@@ -24,10 +24,11 @@ class MODULES_EXPORT DomicileClipboardEntry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DomicileClipboardEntry(uint32_t id, const String& preview);
+  DomicileClipboardEntry(uint32_t id, bool image, const String& preview);
   ~DomicileClipboardEntry() override;
 
   uint32_t id() const { return id_; }
+  bool image() const { return image_; }
   const String& preview() const { return preview_; }
 
   void Trace(Visitor*) const override;
@@ -37,6 +38,8 @@ class MODULES_EXPORT DomicileClipboardEntry final : public ScriptWrappable {
   // an id a page is holding either names the row it was told about or names
   // nothing at all.
   uint32_t id_ = 0;
+  // An image with no text, whose preview names its size or format.
+  bool image_ = false;
   // Enough of what was copied to recognize it by, and not necessarily all of
   // it: the compositor cuts a long copy down to a row. What goes back on the
   // clipboard is always the whole thing.

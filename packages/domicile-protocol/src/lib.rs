@@ -2204,6 +2204,10 @@ pub struct ClipboardEntry {
     /// integers are signed 32-bit.
     pub id: u32,
 
+    /// Whether the copy is an image with no text, so a shell can draw it as
+    /// one. Its `preview` then names its size or format.
+    pub image: bool,
+
     /// A possibly truncated preview of the copied text, or the size of a
     /// copied image with no text (`Image, 1920 × 1080`).
     ///
