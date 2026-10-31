@@ -11,6 +11,7 @@ import { center, flex } from "../../styled-system/patterns";
 import { CheckboxRow, RadioRow } from "../ChoiceRow/ChoiceRow";
 import type { FramePoint } from "./frame-point";
 import { draggedArea, framePoint } from "./frame-point";
+import { SizeTag } from "./SizeTag";
 import type { DrawPreview } from "./useWindowPreview";
 import { useWindowPreview } from "./useWindowPreview";
 
@@ -429,9 +430,7 @@ const Outlines = ({
       key={key}
       style={placed(area, frame)}
     >
-      <span className={sizeStyles}>
-        {`${String(area.width)} × ${String(area.height)}`}
-      </span>
+      <SizeTag height={area.height} width={area.width} />
     </div>
   ));
 
@@ -523,21 +522,6 @@ const pickedStyles = css({
   border: "2px solid {colors.accent}",
   pointerEvents: "none",
   position: "absolute",
-});
-
-const sizeStyles = center({
-  backgroundColor: "accent",
-  borderEndEndRadius: "sm",
-  color: "background",
-  fontSize: "xs",
-  fontVariantNumeric: "tabular-nums",
-  fontWeight: "medium",
-  insetBlockStart: 0,
-  insetInlineStart: 0,
-  paddingBlock: 0.5,
-  paddingInline: 1.5,
-  position: "absolute",
-  whiteSpace: "nowrap",
 });
 
 const captionStyles = css({ color: "muted", fontSize: "xs" });

@@ -439,6 +439,31 @@ const drawnAtHalfSize = (element: HTMLElement): HTMLElement => {
   return element;
 };
 
+/** Drags from `from` to `to` over the whole page, selecting on screen. */
+const dragOnScreen = (
+  from: readonly [number, number],
+  to: readonly [number, number],
+): void => {
+  const page = screen.getByRole("application", {
+    name: "Drag to select an area",
+  });
+  fireEvent.pointerDown(page, { clientX: from[0], clientY: from[1] });
+  fireEvent.pointerMove(page, { clientX: to[0], clientY: to[1] });
+  fireEvent.pointerUp(page, { clientX: to[0], clientY: to[1] });
+};
+
+/** The selected area's handle at `corner`, which has no role to find it by. */
+const cornerOf = (corner: string): HTMLElement => {
+  const handle = document.querySelector<HTMLElement>(
+    `[data-corner='${corner}']`,
+  );
+  if (handle === null) {
+    throw new Error(`no ${corner} corner`);
+  } else {
+    return handle;
+  }
+};
+
 /** Loads `preview` as a 200x100 frame, as the browser would decode it. */
 const loaded200x100 = (preview: HTMLElement): void => {
   Object.defineProperty(preview, "naturalWidth", { value: 200 });
@@ -2009,6 +2034,80 @@ describe("PortalDialogs", () => {
       ]);
     });
 
+    describe("selected on screen", () => {
+      it("draws the frozen desk under the selection", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+
+        expect(screen.getByRole("img", { name: "The desk" })).toHaveStyle({
+          height: "50px",
+          left: "-10px",
+          top: "0px",
+          width: "150px",
+        });
+      });
+
+      it("saves the area in the frame's pixels", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([0, 10], [40, 30]);
+        await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(host.answers).toEqual([
+          [
+            1,
+            {
+              area: { height: 40, width: 80, x: 20, y: 20 },
+              copy: false,
+              kind: "screenshot",
+            },
+          ],
+        ]);
+      });
+
+      it("copies the area", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([0, 10], [40, 30]);
+        await userEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+        expect(host.answers).toEqual([
+          [
+            1,
+            {
+              area: { height: 40, width: 80, x: 20, y: 20 },
+              copy: true,
+              kind: "screenshot",
+            },
+          ],
+        ]);
+      });
+
+      it("takes no Ctrl+C for the picker's pick", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        await userEvent.keyboard("{Control>}c{/Control}");
+
+        expect(host.answers).toEqual([]);
+      });
+    });
+
     it("cancels", async () => {
       const host = new FakeHost();
       render(<PortalDialogs domicile={host.domicile} />);
@@ -2594,7 +2693,7 @@ describe("screen cast", () => {
       host.push([screenCast()]);
 
       expect(
-        screen.queryByRole("button", { name: "Draw a region" }),
+        screen.queryByRole("button", { name: "Select on screen" }),
       ).not.toBeInTheDocument();
     });
 
@@ -2688,20 +2787,6 @@ describe("screen cast", () => {
       ]);
     });
 
-    it("draws no separate region with a desk shot to drag on", () => {
-      const host = new FakeHost();
-      render(<PortalDialogs domicile={host.domicile} />);
-      host.push([
-        screenCast(false, MONITORS, true, {
-          desk: frozen(1, "screenshot").body,
-        }),
-      ]);
-
-      expect(
-        screen.queryByRole("button", { name: "Draw a region" }),
-      ).not.toBeInTheDocument();
-    });
-
     it("cannot be dragged when the application asks for no region", () => {
       const host = new FakeHost();
       render(<PortalDialogs domicile={host.domicile} />);
@@ -2716,62 +2801,169 @@ describe("screen cast", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("shares the rectangle drawn over the page without a desk shot", async () => {
-      const host = new FakeHost();
-      render(<PortalDialogs domicile={host.domicile} />);
-      host.push([screenCast(false, MONITORS, true)]);
-      await userEvent.click(
-        screen.getByRole("button", { name: "Draw a region" }),
-      );
-      const desk = screen.getByRole("application", {
-        name: "Drag to pick a region to share",
+    describe("selected on screen", () => {
+      it("is offered beside the desk shot", () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([
+          screenCast(false, MONITORS, true, {
+            desk: frozen(1, "screenshot").body,
+          }),
+        ]);
+
+        expect(
+          screen.getByRole("button", { name: "Select on screen" }),
+        ).toBeInTheDocument();
       });
-      fireEvent.pointerDown(desk, { clientX: 300, clientY: 200 });
-      fireEvent.pointerMove(desk, { clientX: 100, clientY: 50 });
-      fireEvent.pointerUp(desk, { clientX: 100, clientY: 50 });
 
-      expect(host.answers).toEqual([
-        [
-          5,
-          {
-            kind: "screen_cast",
-            sources: [
-              { position: [100, 50], size: [200, 150], type: "region" },
-            ],
-          },
-        ],
-      ]);
-    });
+      it("shares the area selected", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([300, 200], [100, 50]);
+        await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
-    it("goes back to the picker on Escape", async () => {
-      const host = new FakeHost();
-      render(<PortalDialogs domicile={host.domicile} />);
-      host.push([screenCast(false, MONITORS, true)]);
-      await userEvent.click(
-        screen.getByRole("button", { name: "Draw a region" }),
-      );
-      await userEvent.keyboard("{Escape}");
-
-      expect(
-        await screen.findByRole("button", { name: "Draw a region" }),
-      ).toBeInTheDocument();
-      expect(host.answers).toEqual([]);
-    });
-
-    it("ignores a click that draws nothing", async () => {
-      const host = new FakeHost();
-      render(<PortalDialogs domicile={host.domicile} />);
-      host.push([screenCast(false, MONITORS, true)]);
-      await userEvent.click(
-        screen.getByRole("button", { name: "Draw a region" }),
-      );
-      const desk = screen.getByRole("application", {
-        name: "Drag to pick a region to share",
+        expect(host.answers).toEqual([
+          [
+            5,
+            {
+              kind: "screen_cast",
+              sources: [
+                { position: [100, 50], size: [200, 150], type: "region" },
+              ],
+            },
+          ],
+        ]);
       });
-      fireEvent.pointerDown(desk, { clientX: 300, clientY: 200 });
-      fireEvent.pointerUp(desk, { clientX: 300, clientY: 200 });
 
-      expect(host.answers).toEqual([]);
+      it("resizes the area by a corner", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([100, 50], [300, 200]);
+        const corner = cornerOf("top-left");
+        fireEvent.pointerDown(corner, { clientX: 100, clientY: 50 });
+        fireEvent.pointerMove(corner, { clientX: 120, clientY: 40 });
+        fireEvent.pointerUp(corner, { clientX: 120, clientY: 40 });
+        await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+        expect(host.answers).toEqual([
+          [
+            5,
+            {
+              kind: "screen_cast",
+              sources: [
+                { position: [120, 40], size: [180, 160], type: "region" },
+              ],
+            },
+          ],
+        ]);
+      });
+
+      it("moves the area dragged from inside it", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([100, 50], [300, 200]);
+        const area = screen.getByRole("group", { name: "Selected area" });
+        fireEvent.pointerDown(area, { clientX: 150, clientY: 100 });
+        fireEvent.pointerMove(area, { clientX: 160, clientY: 130 });
+        fireEvent.pointerUp(area, { clientX: 160, clientY: 130 });
+        await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+        expect(host.answers).toEqual([
+          [
+            5,
+            {
+              kind: "screen_cast",
+              sources: [
+                { position: [110, 80], size: [200, 150], type: "region" },
+              ],
+            },
+          ],
+        ]);
+      });
+
+      it("puts its buttons inside the area when there is no room below", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([100, 50], [300, window.innerHeight - 10]);
+
+        expect(
+          screen.getByRole("toolbar", { name: "Selected area" }),
+        ).toHaveAttribute("data-inside");
+      });
+
+      it("goes back to the picker", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([300, 200], [100, 50]);
+        await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+        expect(
+          await screen.findByRole("button", { name: "Select on screen" }),
+        ).toBeInTheDocument();
+        expect(host.answers).toEqual([]);
+      });
+
+      it("goes back to the picker on Escape", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        await userEvent.keyboard("{Escape}");
+
+        expect(
+          await screen.findByRole("button", { name: "Select on screen" }),
+        ).toBeInTheDocument();
+        expect(host.answers).toEqual([]);
+      });
+
+      it("cancels", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([300, 200], [100, 50]);
+        await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+        expect(host.answers).toEqual([[5, { kind: "canceled" }]]);
+      });
+
+      it("selects nothing with a click", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([screenCast(false, MONITORS, true)]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([300, 200], [300, 200]);
+
+        expect(
+          screen.queryByRole("button", { name: "Share" }),
+        ).not.toBeInTheDocument();
+      });
     });
   });
 

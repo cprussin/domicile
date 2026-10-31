@@ -10,6 +10,9 @@ import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import type { App } from "../useApps/useApps";
+import { onFrame } from "./on-frame";
+import type { Region } from "./RegionPicker";
+import { RegionPicker } from "./RegionPicker";
 import type { Choice } from "./SourcePicker";
 import { SourcePicker } from "./SourcePicker";
 import type { ShownWindow } from "./shown-windows";
@@ -77,10 +80,11 @@ type Picked = Choice & { pick: Pick };
 
 /**
  * Picks what to save of a frozen desk: all of it, a screen or a window from
- * a list beside the desk, or an area dragged over the desk. The desk outlines
- * the pick, with its size. A window is saved from its own frame, so what is
- * over it, such as a notification, is left out. Copy, or Ctrl+C, copies the
- * pick to the clipboard instead of saving it. Dismissing it cancels.
+ * a list beside the desk, or an area dragged over the desk or selected on
+ * screen over the frozen desk. The desk outlines the pick, with its size. A
+ * window is saved from its own frame, so what is over it, such as a
+ * notification, is left out. Copy, or Ctrl+C, copies the pick to the
+ * clipboard instead of saving it. Dismissing it cancels.
  */
 export const ScreenshotDialog = ({
   answer,
@@ -135,9 +139,11 @@ export const ScreenshotDialog = ({
     typeof picked === "number"
       ? partOf(pickAt(choices, picked).pick, part)
       : Pick.Area(picked);
+  // Whether the area is being selected on screen, over the frozen desk.
+  const [drawing, setDrawing] = useState(false);
   useEffect(() => {
     const copy = (event: KeyboardEvent) => {
-      if (isCopy(event)) {
+      if (!drawing && isCopy(event)) {
         event.preventDefault();
         answer(answerOf(pick, true));
       }
@@ -146,12 +152,44 @@ export const ScreenshotDialog = ({
     return () => {
       document.removeEventListener("keydown", copy);
     };
-  }, [answer, pick]);
-  return (
+  }, [answer, drawing, pick]);
+  return drawing ? (
+    <RegionPicker
+      actions={[
+        {
+          label: "Copy",
+          pick: (region) => {
+            answer(Answer.Screenshot(onFrameOf(body, region), true));
+          },
+        },
+        {
+          label: "Save",
+          pick: (region) => {
+            answer(Answer.Screenshot(onFrameOf(body, region), false));
+          },
+        },
+      ]}
+      back={() => {
+        setDrawing(false);
+      }}
+      cancel={() => {
+        answer(Answer.Canceled());
+      }}
+      frozen={body}
+    />
+  ) : (
     <ModalDialog
       closeButton={false}
       footer={
         <>
+          <Button
+            onClick={() => {
+              setDrawing(true);
+            }}
+            variant="ghost"
+          >
+            Select on screen
+          </Button>
           <Button
             onClick={() => {
               answer(Answer.Canceled());
@@ -268,6 +306,21 @@ const answerOf = (pick: Pick, copy: boolean): PortalAnswer => {
       return Answer.ScreenshotWindow(pick.id, copy, pick.part);
     case PickKind.BrowserWindow:
       return Answer.ScreenshotBrowserWindow(pick.id, copy, pick.part);
+  }
+};
+
+/** `region` of the page in `desk`'s frame pixels; it must be on the desk. */
+const onFrameOf = (desk: FrozenDesk, region: Region): ShotRect => {
+  const area = onFrame(desk, {
+    height: region.size[1],
+    width: region.size[0],
+    x: region.position[0],
+    y: region.position[1],
+  });
+  if (area === undefined) {
+    throw new Error("an area selected off the desk");
+  } else {
+    return area;
   }
 };
 

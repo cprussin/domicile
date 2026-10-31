@@ -209,7 +209,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     (`SystemReply::Copied`).
   - The picker lists "Everything" (the whole desk), then screens, then
     windows, beside the frozen desk. The desk outlines the pick with its
-    size; arrow keys move through the list. A screen is named by its make and model, a window by
+    size; arrow keys move through the list. "Select on screen" selects an
+    area over the frozen desk drawn full size, as the screen cast picker's
+    does over the live page, and copies or saves it from there. A screen is named by its make and model, a window by
     its title over its application's desktop entry.
   - A window is answered `screenshot_window` and saved from the last frame
     it showed, which the engine still holds. What is over it, such as a
@@ -315,11 +317,13 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Asking for monitors offers windows too.** Electron apps (Slack,
   Discord) ask for `MONITOR` alone, and their own pickers have no other way
   to share a window.
-- **A region is dragged on the desk shot.** As in the screenshot picker,
-  the user drags over the picker's desk preview, and the area is turned
-  into the desktop's logical pixels, grown to whole ones. With no desk shot,
-  "Draw a region" closes the dialog and the user drags over the page, whose
-  pixels are the desktop's logical pixels.
+- **A region is dragged on the desk shot or selected on screen.** As in the
+  screenshot picker, the user drags over the picker's desk preview, and the
+  area is turned into the desktop's logical pixels, grown to whole ones.
+  "Select on screen" hides the dialog and the user drags over the live page,
+  whose pixels are the desktop's logical pixels (`RegionPicker`). The area
+  stays, with corners to resize it and a drag inside to move it, until the
+  user shares it, goes back (Back or Escape) or cancels.
 
 - **The frontend installs launchers.** `Install`, `Uninstall`,
   `LaunchDesktopFile`, `GetDesktopEntry` and `GetIcon` are frontend methods:
