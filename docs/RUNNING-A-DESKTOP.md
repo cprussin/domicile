@@ -266,14 +266,18 @@ desktop stays smooth while the machine is busy.
 | Process | Threads | How |
 |---|---|---|
 | compositor | the Wayland thread; `domicile-engine`, the engine library's IO thread | `setpriority`, then rtkit's `MakeThreadHighPriority` |
-| engine | the threads that draw and present frames | `setpriority`; the page-flip thread asks for `SCHED_RR` 6 |
+| engine | the threads that draw and present frames | `setpriority`, then rtkit's `MakeThreadHighPriorityWithPID` from the browser process; the page-flip thread asks for `SCHED_RR` 6 |
 
 - `setpriority` to -8 needs an `RLIMIT_NICE` of at least 28, or
   `CAP_SYS_NICE`. Most sessions have 0.
-- **NixOS:** join the [`domicile` group](#the-machines-half).
-- **[Distribution packages](#other-distributions):** join the `domicile`
-  group.
-- **Elsewhere:** grant the same limits in
+- **rtkit** raises a thread the limits refuse. The NixOS module enables it,
+  and the distribution packages recommend it. It grants each user 25 requests
+  per 20 seconds, so a burst of new engine threads, such as several pages
+  opening at once, can be refused.
+- **The `domicile` group** grants the limits, so every raise succeeds and
+  `SCHED_RR` works. Join it on NixOS with
+  `users.users.<you>.extraGroups = ["domicile"]`, and with the packages with
+  `sudo usermod -aG domicile "$USER"`. Elsewhere, grant the same limits in
   `/etc/security/limits.d/10-domicile.conf` and log in again:
 
   ```
@@ -281,12 +285,11 @@ desktop stays smooth while the machine is busy.
   @domicile - rtprio 8
   ```
 
-- **Home Manager alone** cannot grant limits; PAM is system configuration. If
-  rtkit runs (`security.rtkit.enable = true`, common with PipeWire), the
-  compositor's threads get -8 through it. The engine's threads still need the
-  limit.
+- **Home Manager alone** cannot grant limits or enable rtkit; both are system
+  configuration.
 - Without either, the compositor logs `could not raise the thread to nice -8`
-  once per thread and runs at the nice value it started at.
+  once per thread, and the engine logs `rtkit did not raise thread` once.
+  Those threads run at the nice value they started at.
 - Apps and the shell's processes start at the compositor's starting nice
   value, not at -8.
 - Threads the Wayland thread starts after it is raised (clipboard copies, the
@@ -323,9 +326,9 @@ It provides:
   session serves every desktop. Without the module,
   `services.displayManager.sessionPackages = [domicile]` adds it.
 - **The `domicile` PAM service**, which unlocks the desktop.
-- **The `domicile` group.** Its members' login sessions may lower nice values
-  to -10 and use realtime priority 8; see
-  [Thread priorities](#thread-priorities). Add yourself with
+- **rtkit**, and **the `domicile` group**. Both raise the desktop's threads;
+  the group's limits never refuse. See
+  [Thread priorities](#thread-priorities). Join the group with
   `users.users.<you>.extraGroups = ["domicile"]` and log in again.
 - **UPower**, which the battery readout reads. Without it, manganese shows no
   battery. Set `services.upower.enable = false` to opt out.
@@ -438,10 +441,9 @@ Then install it:
 
 ### After installing
 
-1. Join the `domicile` group: `sudo usermod -aG domicile "$USER"`.
-2. Name a shell in `~/.config/domicile/domicile.json`:
+1. Name a shell in `~/.config/domicile/domicile.json`:
    `{ "shell": "@domicile-desktop/manganese" }`.
-3. Log out and pick the **Domicile** session in your display manager.
+2. Log out and pick the **Domicile** session in your display manager.
 
 The package installs what [the NixOS module](#the-machines-half) provides:
 
@@ -463,8 +465,9 @@ The package installs what [the NixOS module](#the-machines-half) provides:
   user namespaces, and their AppArmor predates the profile's `userns` rule.
 - **Shutdown, Reboot and Logout** launcher entries, which ask in Domicile's
   dialog first.
-- **Recommended** (optional on Arch): UPower (the battery readout), hwdata
-  (monitor makers), `pactl` (the volume readout), curl, `xdg-desktop-portal`.
+- **Recommended** (optional on Arch): UPower (the battery readout), rtkit
+  ([thread priorities](#thread-priorities)), hwdata (monitor makers), `pactl`
+  (the volume readout), curl, `xdg-desktop-portal`.
 
 Upgrade a `stable` package by downloading and installing it again.
 
