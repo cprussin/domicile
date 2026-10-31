@@ -49,7 +49,24 @@ it shows seconds.
 ## Change what it shows
 
 The bar's items are set in a [config module](CONFIGURE.md#a-config-module),
-in three columns:
+in three columns: `left`, `center` and `right`.
+
+To keep the default items and add one, start from `DEFAULT_BAR`. This puts
+the battery at the start of the right column:
+
+```tsx
+import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
+import { Battery } from "@domicile-desktop/manganese-bar-module-battery";
+
+export const Shell = runManganese({
+  bar: {
+    ...DEFAULT_BAR,
+    right: [<Battery key="battery" />, ...DEFAULT_BAR.right],
+  },
+});
+```
+
+To choose every item yourself, list them all:
 
 ```tsx
 import { runManganese } from "@domicile-desktop/manganese";
