@@ -245,6 +245,7 @@ const FAKE_INBOXES: readonly Inbox[] = [
   Inbox.Watched({
     icon: EnvelopeSimpleIcon,
     name: "Work",
+    notifiesAs: "Work",
     open: () => undefined,
     read: () =>
       sharedWatch((onReading) => {
@@ -257,7 +258,8 @@ const FAKE_INBOXES: readonly Inbox[] = [
     countUnread: () => () => undefined,
     icon: EnvelopeSimpleIcon,
     name: "Fake inbox",
-    url: "https://chat.example.com/",
+    notifiesAs: "inbox.example.com",
+    url: "https://inbox.example.com/",
   }),
 ];
 
@@ -1557,6 +1559,23 @@ describe("Shell", () => {
       ).toBeVisible();
     });
 
+    it("leaves the inboxes' own notifications out of the bell, which counts their conversations already", async () => {
+      renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
+      domicile.set({ notifications: [] });
+
+      domicile.set({
+        notifications: [
+          { ...arrived(1, "New mail"), appName: "Work" },
+          { ...arrived(2, "New text"), appName: "inbox.example.com" },
+          arrived(3, "New message"),
+        ],
+      });
+
+      expect(
+        await screen.findByRole("button", { name: "Notifications, 3 unread" }),
+      ).toBeVisible();
+    });
+
     it("opens an inbox's app window, and closes the notifications", async () => {
       renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
       await userEvent.click(
@@ -1569,7 +1588,7 @@ describe("Shell", () => {
 
       expect(domicile.calls).toContainEqual([
         "openAppWindow",
-        "https://chat.example.com/",
+        "https://inbox.example.com/",
         "fake-chat",
         "focus",
       ]);

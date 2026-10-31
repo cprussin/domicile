@@ -223,7 +223,13 @@ export const Desktop = ({
   // Notifications, subscribed once for the desk. One toast manager for the
   // page's life, because the toaster subscribes to it once.
   const [toasts] = useState(createToastManager);
-  const notifications = useNotifications(domicile, toasts);
+  // An inbox's notifications stay out of the bell, which counts its unread
+  // conversations already.
+  const inboxSenders = useMemo(
+    () => inboxes.map(({ notifiesAs }) => notifiesAs),
+    [inboxes],
+  );
+  const notifications = useNotifications(domicile, toasts, inboxSenders);
   const { dismiss: dismissNotifications, read } = notifications;
   // What `notifications clear` dismisses, as the drawer's "Clear all" does.
   const notificationIds = useMemo(

@@ -10,7 +10,10 @@ import { toastTimeout } from "./toast-timeout";
 export type NotificationCenter = {
   /** Every uncleared notification, newest first. */
   items: readonly Notification[];
-  /** How many arrived since the drawer was last opened. */
+  /**
+   * How many arrived since the drawer was last opened, but for those from an
+   * uncounted sender.
+   */
   unread: number;
   /** Mark everything as seen; called when the drawer opens. */
   read: () => void;
@@ -52,6 +55,8 @@ type Desk = {
 export const useNotifications = (
   domicile: Pick<Domicile, "notifications">,
   toasts: ToastManager,
+  /** The senders `unread` leaves out, by `appName`, such as the inboxes'. */
+  uncounted: readonly string[],
 ): NotificationCenter => {
   const [desk, setDesk] = useState<Desk>({
     items: [],
@@ -136,7 +141,10 @@ export const useNotifications = (
     read,
     reply,
     setDoNotDisturb,
-    unread: desk.items.filter(({ time }) => time > (desk.readUpTo ?? 0)).length,
+    unread: desk.items.filter(
+      ({ appName, time }) =>
+        time > (desk.readUpTo ?? 0) && !uncounted.includes(appName),
+    ).length,
   };
 };
 

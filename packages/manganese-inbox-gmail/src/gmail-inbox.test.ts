@@ -24,6 +24,10 @@ describe(gmailInbox, () => {
     expect(inbox().name).toBe("Work");
   });
 
+  it("notifies new mail under its nickname", () => {
+    expect(inbox().notifiesAs).toBe("Work");
+  });
+
   it("reads signed out before the account signs in", async () => {
     const watch = inbox().read(new FakeDomicileHost().domicile);
 

@@ -63,6 +63,12 @@ type Named = {
    * given.
    */
   launcherName?: string;
+  /**
+   * The sender its new conversations are notified under, such as a site's
+   * origin. Those notifications stay out of the bell's count, which already
+   * holds the inbox's unread conversations.
+   */
+  notifiesAs: string;
 };
 
 /**

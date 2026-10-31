@@ -349,7 +349,9 @@ export const Shell = runManganese({
 
 - Each row shows the inbox's unread conversations in a badge on its icon,
   and its conversation count where known. They add to the bell's count.
-  Opening the drawer clears only the notifications' part.
+  Opening the drawer clears only the notifications' part. The inbox's own
+  notifications (its `notifiesAs` sender) stay out of the count, so new mail
+  counts once.
 - A press closes the drawer and opens the inbox in an app window of its own,
   or brings that window up: one window per inbox.
 - **The launcher** lists each inbox that opens a window, by its

@@ -34,6 +34,7 @@ const inboxes = (asked: Asked = []): DrawerInboxes => ({
     Inbox.Watched({
       icon: EnvelopeSimpleIcon,
       name: "Work",
+      notifiesAs: "Work",
       open: () => undefined,
       read: () => sharedWatch(() => () => undefined),
     }),
@@ -42,6 +43,7 @@ const inboxes = (asked: Asked = []): DrawerInboxes => ({
       countUnread: () => () => undefined,
       icon: ChatCircleTextIcon,
       name: "Chat",
+      notifiesAs: "chat.example.com",
       url: "https://chat.example.com/",
     }),
   ],

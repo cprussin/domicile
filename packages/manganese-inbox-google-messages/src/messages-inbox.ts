@@ -22,5 +22,6 @@ export const messagesInbox = ({ launcherName }: Options = {}): Inbox =>
     icon: ChatCircleTextIcon,
     ...(launcherName === undefined ? {} : { launcherName }),
     name: "Messages",
+    notifiesAs: "messages.google.com",
     url: "https://messages.google.com/web/",
   });

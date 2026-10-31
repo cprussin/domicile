@@ -43,11 +43,11 @@ const toasts = () => {
   return { added, closed, manager };
 };
 
-const mounted = () => {
+const mounted = (uncounted: readonly string[] = []) => {
   const host = client();
   const shown = toasts();
   const { result, unmount } = renderHook(() =>
-    useNotifications(host.domicile, shown.manager),
+    useNotifications(host.domicile, shown.manager, uncounted),
   );
   return { host, result, shown, unmount };
 };
@@ -172,6 +172,18 @@ describe("useNotifications", () => {
       });
 
       expect(result.current.unread).toBe(0);
+    });
+
+    it("leaves out the senders it is told not to count", () => {
+      const { host, result } = mounted(["Work"]);
+      host.says([]);
+      host.says([
+        notification({ appName: "Work", id: 1, time: 1 }),
+        notification({ appName: "Firefox", id: 2, time: 2 }),
+      ]);
+
+      expect(result.current.unread).toBe(1);
+      expect(result.current.items).toHaveLength(2);
     });
   });
 
