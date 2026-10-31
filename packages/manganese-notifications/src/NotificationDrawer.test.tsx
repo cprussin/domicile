@@ -303,10 +303,10 @@ describe("NotificationDrawer", () => {
         expect.stringContaining("Newer"),
       ]);
       expect(screen.getAllByRole("listitem")).toHaveLength(1);
-      // Sliding sideways past the pane would scroll it and flash scrollbars.
-      expect(
-        globalThis.getComputedStyle(screen.getByRole("list")).overflowX,
-      ).toBe("clip");
+      // Sliding sideways, or the last row's closing gap, would scroll the pane
+      // and flash scrollbars.
+      const list = globalThis.getComputedStyle(screen.getByRole("list"));
+      expect([list.overflowX, list.overflowY]).toEqual(["clip", "clip"]);
       finishLeaving();
       expect(leaving()).toEqual([]);
       expect(screen.queryByText("Newer")).not.toBeInTheDocument();
