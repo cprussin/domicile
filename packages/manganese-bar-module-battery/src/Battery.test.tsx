@@ -142,6 +142,20 @@ describe("Battery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("fits the quick settings button: no inset, and no room kept for `100%`", () => {
+    const battery = heldBattery();
+    const { container } = render(
+      <Battery battery={battery.battery} fitted hardware={UNCHECKED} />,
+    );
+
+    battery.report({ charge: 0.5, charging: false });
+
+    expect(readout(container).className).not.toContain(
+      css({ paddingInline: 1.5 }),
+    );
+    expect(screen.queryByText("100%")).not.toBeInTheDocument();
+  });
+
   it("follows the battery as it drains", () => {
     const battery = heldBattery();
     render(<Battery battery={battery.battery} hardware={UNCHECKED} />);
