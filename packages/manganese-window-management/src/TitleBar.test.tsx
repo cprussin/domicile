@@ -280,6 +280,33 @@ describe("TitleBar", () => {
       );
     });
 
+    // Its contents ease from under the whole strip. Grown from its slot, the
+    // bar would leave the rest of the strip's row clear as it went.
+    it("eases from its whole strip when it leaves a tabbed container", () => {
+      const { played, settler } = recordedSettles();
+      const strip = { ...MIDDLE_TAB, box: { ...ON_SCREEN, width: 1000 } };
+      const { rerender } = render(
+        <TitleBar
+          {...barProps}
+          rect={{ ...ON_SCREEN, width: 240, x: 240 }}
+          settler={settler}
+          strip={strip}
+          tabbed={Layout.Tabbed}
+        />,
+      );
+
+      rerender(
+        <TitleBar
+          {...barProps}
+          frame={{ ...FRAME, width: 500, x: 500 }}
+          rect={{ ...ON_SCREEN, width: 500, x: 500 }}
+          settler={settler}
+        />,
+      );
+
+      expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: -250, y: 0 }]);
+    });
+
     it("goes there at once while it plays a motion", () => {
       expect(moved({ motion: "opening" }).played).toStrictEqual([undefined]);
     });

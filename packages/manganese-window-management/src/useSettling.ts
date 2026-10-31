@@ -29,8 +29,11 @@ export type Settler = {
  */
 export const UPRIGHT = "data-upright";
 
-/** The box an element was given last, and the origin it scaled about. */
-type Placed = { origin: Point; rect: Rect };
+/**
+ * The box an element was given last, the origin it scaled about, and the row
+ * it was a piece of.
+ */
+type Placed = { origin: Point; rect: Rect; row: Rect | undefined };
 
 /** `T` with every field possibly missing, as for an element off screen. */
 type Unknown<T> = { [K in keyof T]: T[K] | undefined };
@@ -44,6 +47,12 @@ type Options = {
   origin: Point | undefined;
   /** The element's box, or `undefined` when it is off screen. */
   rect: Rect | undefined;
+  /**
+   * The row the element is a piece of, such as a tab's strip, or `undefined`.
+   * An element that leaves its row eases from the whole row, as the rest of
+   * its window does.
+   */
+  row?: Rect | undefined;
   settler?: Settler | undefined;
   /**
    * Keys of the part the element draws. An element new in a commit that
@@ -84,6 +93,7 @@ export const useSettling = ({
   element,
   origin,
   rect,
+  row,
   settler = WEB_ANIMATIONS,
   shared = NO_KEYS,
   still,
@@ -92,13 +102,18 @@ export const useSettling = ({
   const last = useRef<Placed | undefined>(undefined);
   const { x, y, width, height } = rect ?? {};
   const { x: originX, y: originY } = origin ?? {};
+  const { x: rowX, y: rowY, width: rowWidth, height: rowHeight } = row ?? {};
   const handoffs = useHandoffs();
   const keys = shared.join("\n");
   const taken = [...shared, ...takesOver].join("\n");
   useLayoutEffect(() => {
     const was = last.current;
     const shown = element.current;
-    const now = placedOf({ height, width, x, y }, { x: originX, y: originY });
+    const now = placedOf(
+      { height, width, x, y },
+      { x: originX, y: originY },
+      rowOf({ height: rowHeight, width: rowWidth, x: rowX, y: rowY }),
+    );
     last.current = now;
     if (shown !== null && now !== undefined) {
       if (was === undefined) {
@@ -113,7 +128,7 @@ export const useSettling = ({
       } else if (!sameBox(was.rect, now.rect)) {
         settler.play(
           shown,
-          still ? undefined : offsetTo(shown, was, now, settler),
+          still ? undefined : offsetTo(shown, leftRow(was, now), now, settler),
           uprightIn(shown),
         );
       }
@@ -124,6 +139,10 @@ export const useSettling = ({
     height,
     originX,
     originY,
+    rowHeight,
+    rowWidth,
+    rowX,
+    rowY,
     settler,
     still,
     taken,
@@ -171,10 +190,29 @@ const takenOver = (
     .map((key) => handoffs?.get(key))
     .find((drawn) => drawn !== undefined);
 
+/** The row, or `undefined` for none. */
+const rowOf = ({ height, width, x, y }: Unknown<Rect>): Rect | undefined =>
+  x === undefined ||
+  y === undefined ||
+  width === undefined ||
+  height === undefined
+    ? undefined
+    : { height, width, x, y };
+
+/**
+ * Where the element was placed, as it eases to `now`: its whole row, if it
+ * just left it.
+ */
+const leftRow = (was: Placed, now: Placed): Placed =>
+  was.row === undefined || now.row !== undefined
+    ? was
+    : { ...was, rect: was.row };
+
 /** The box and origin, or `undefined` for an element off screen. */
 const placedOf = (
   { height, width, x, y }: Unknown<Rect>,
   origin: Unknown<Point>,
+  row: Rect | undefined,
 ): Placed | undefined => {
   if (
     x === undefined ||
@@ -189,6 +227,7 @@ const placedOf = (
     return {
       origin: { x: origin.x, y: origin.y },
       rect: { height, width, x, y },
+      row,
     };
   }
 };
