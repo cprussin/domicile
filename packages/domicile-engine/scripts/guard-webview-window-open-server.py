@@ -2,7 +2,8 @@
 """Serves the pages guard-webview-window-open.sh presses to open a window.
 
   /page     a plain top half and a bottom half that is one button. A press on
-            the button calls `window.open("/child", "named")`; a press on the
+            the button calls `window.open("/child", "named", "width=320,
+            height=240")`, a sized window like a call's; a press on the
             top half opens nothing. Logs `GUARD page-loaded`, `GUARD
             page-mousedown` for each press, which shows a press reached the
             guest, `GUARD page-handle=B` for whether window.open() returned a
@@ -52,7 +53,8 @@ PAGE_HTML = """<!doctype html>
       });
 
       document.getElementById("open").addEventListener("click", () => {
-        say(`page-handle=${window.open("/child", "named") !== null}`);
+        const opened = window.open("/child", "named", "width=320,height=240");
+        say(`page-handle=${opened !== null}`);
       });
 
       say("page-loaded");

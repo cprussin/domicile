@@ -206,8 +206,8 @@ export type DomicileBrowserWindow = {
    */
   readonly popupWindow: number | null;
   /**
-   * The size the popup window asked for, in CSS pixels. 0 on an axis it left
-   * unset.
+   * The size the popup window, or a page's window.open(), asked for, in CSS
+   * pixels. 0 on an axis it left unset.
    */
   readonly width: number;
   readonly height: number;

@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 31 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview's new window keeps the size its page
+ asked for
+
+`window.open(url, name, "width=640,height=420")` in a browser window
+reached WebViewGuest::AddNewContents at 1x1 on a headless engine:
+ShowCreatedWindow fits the requested bounds to the screen nearest the
+opener, and a guest's screen there is 1x1. The shell sizes and places
+browser windows itself, so it needs the size the page asked for.
+
+- ShowCreatedWindow keeps the requested size for a guest's new window.
+  The display it picks, and the fullscreen drop on it, are unchanged.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ content/browser/web_contents/web_contents_impl.cc | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index f48a458..2db9e97 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -6137,6 +6137,12 @@ WebContents* WebContentsImpl::ShowCreatedWindow(
+   // TODO(crbug.com/40092782): Utilize window_features.has_x and others.
+   blink::mojom::WindowFeatures adjusted_features = window_features;
+   int64_t display_id = AdjustWindowRect(&adjusted_features.bounds, opener);
++  // DOMICILE: a guest's new window keeps the size its page asked for. The
++  // shell sizes and places browser windows, and fitting the size to the
++  // guest's screen can shrink it (to 1x1 on a headless engine).
++  if (GetBrowserPluginGuest()) {
++    adjusted_features.bounds.set_size(window_features.bounds.size());
++  }
+ 
+   // Drop fullscreen when opening a WebContents to prohibit deceptive behavior.
+   // Only drop fullscreen on the specific destination display, if it is known.
+-- 
+2.43.0
+
