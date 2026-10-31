@@ -318,7 +318,7 @@ export const TitleBar = ({
                 </Button>
               </span>
             )}
-            <span className={cx(hidden && onHoverStyles)}>
+            <span className={cx(closeStyles, hidden && onHoverStyles)}>
               <Button label="Close" onClick={onClose} size="sm" variant="ghost">
                 <AnimatedCloseIcon size={14} />
               </Button>
@@ -667,6 +667,10 @@ const onHoverStyles = css({
   maxInlineSize: 0,
   overflow: "hidden",
 });
+
+// A flex box rather than a line box, whose strut sat the close button above
+// the bar's middle.
+const closeStyles = css({ display: "flex" });
 
 // Hidden in a bar too narrow to keep its title beside them. The bar is the
 // query container (see `barStyles` and `tabStyles`).

@@ -422,6 +422,18 @@ describe("TitleBar", () => {
       ).toContain(css({ paddingBlockEnd: "1px" }));
     });
 
+    // A line box would add its strut under the button and lift it above the
+    // tab's middle.
+    it("centers its close button on the tab", () => {
+      tab({});
+      const holder = screen
+        .getByRole("button", { name: "Close" })
+        .closest("span");
+
+      expect(holder).not.toBeNull();
+      expect(holder?.className).toContain(css({ display: "flex" }));
+    });
+
     it("edges the open tab stronger in a strip inside another group's well", () => {
       const strong = css({
         borderColor:
