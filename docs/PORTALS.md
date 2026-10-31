@@ -312,6 +312,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Asking for monitors offers a region too.** A region is part of a
   monitor, so a `types` with `MONITOR` or `VIRTUAL` lets the user drag one.
   Browsers ask for monitors and windows, never `VIRTUAL`.
+- **Asking for monitors offers windows too.** Electron apps (Slack,
+  Discord) ask for `MONITOR` alone, and their own pickers have no other way
+  to share a window.
 - **A region is dragged on the desk shot.** As in the screenshot picker,
   the user drags over the picker's desk preview, and the area is turned
   into the desktop's logical pixels, grown to whole ones. With no desk shot,
