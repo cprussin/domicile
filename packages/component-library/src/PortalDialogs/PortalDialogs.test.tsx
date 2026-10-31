@@ -2095,7 +2095,7 @@ describe("PortalDialogs", () => {
         ]);
       });
 
-      it("takes no Ctrl+C for the picker's pick", async () => {
+      it("copies the area with Ctrl+C, once one is selected", async () => {
         const host = new FakeHost();
         render(<PortalDialogs domicile={host.domicile} />);
         host.push([frozen(1, "screenshot")]);
@@ -2103,8 +2103,20 @@ describe("PortalDialogs", () => {
           screen.getByRole("button", { name: "Select on screen" }),
         );
         await userEvent.keyboard("{Control>}c{/Control}");
-
         expect(host.answers).toEqual([]);
+        dragOnScreen([0, 10], [40, 30]);
+        await userEvent.keyboard("{Control>}c{/Control}");
+
+        expect(host.answers).toEqual([
+          [
+            1,
+            {
+              area: { height: 40, width: 80, x: 20, y: 20 },
+              copy: true,
+              kind: "screenshot",
+            },
+          ],
+        ]);
       });
     });
 

@@ -161,6 +161,7 @@ export const ScreenshotDialog = ({
           pick: (region) => {
             answer(Answer.Screenshot(onFrameOf(body, region), true));
           },
+          shortcut: isCopy,
         },
         {
           label: "Save",

@@ -15,8 +15,12 @@ type Pair = readonly [number, number];
 /** A rectangle in page pixels: the desktop's logical pixels. */
 export type Region = { position: Pair; size: Pair };
 
-/** A button that takes the region selected. */
-export type RegionAction = { label: string; pick: (region: Region) => void };
+/** A button that takes the region selected, and a key that presses it. */
+export type RegionAction = {
+  label: string;
+  pick: (region: Region) => void;
+  shortcut?: ((event: KeyboardEvent) => boolean) | undefined;
+};
 
 type Props = {
   /** The buttons beside Back and Cancel; the last is the main one. */
@@ -57,16 +61,20 @@ export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
   const [grab, setGrab] = useState<Grab | undefined>(undefined);
 
   useEffect(() => {
-    const goBack = (event: KeyboardEvent) => {
+    const press = (event: KeyboardEvent) => {
+      const pressed = actions.find(({ shortcut }) => shortcut?.(event));
       if (event.key === "Escape") {
         back();
+      } else if (pressed !== undefined && selected !== undefined) {
+        event.preventDefault();
+        pressed.pick(selected);
       }
     };
-    document.addEventListener("keydown", goBack);
+    document.addEventListener("keydown", press);
     return () => {
-      document.removeEventListener("keydown", goBack);
+      document.removeEventListener("keydown", press);
     };
-  }, [back]);
+  }, [actions, back, selected]);
 
   return (
     <div
