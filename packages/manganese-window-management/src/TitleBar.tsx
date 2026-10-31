@@ -193,6 +193,10 @@ export const TitleBar = ({
     element,
     origin,
     rect,
+    // A tab leaving its strip grows from the whole strip, over its contents,
+    // so no part of the strip's row is left clear. A stack's bars already
+    // span it.
+    row: tabbed === Layout.Tabbed ? strip?.box : undefined,
     settler,
     shared: groupTabKeysOf(group, strip),
     still: dragging || isMoving(motion),
