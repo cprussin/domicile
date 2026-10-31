@@ -317,6 +317,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Asking for monitors offers windows too.** Electron apps (Slack,
   Discord) ask for `MONITOR` alone, and their own pickers have no other way
   to share a window.
+- **An app's casts started together share one pick.** A `Start` while
+  another session of the same D-Bus connection has the picker up waits for
+  that pick, whatever types it asked for. Slack lists screens and windows in
+  two sessions at once, which put up two pickers.
 - **A region is dragged on the desk shot or selected on screen.** As in the
   screenshot picker, the user drags over the picker's desk preview, and the
   area is turned into the desktop's logical pixels, grown to whole ones.

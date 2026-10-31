@@ -6,7 +6,10 @@
 //!   application asked for, unless a restore token names sources that are
 //!   there, and starts a [`Casting`] stream of each. The picker previews the
 //!   sources on a frame of the desk, and offers browser windows from the
-//!   engine's own list when windows were asked for.
+//!   engine's own list when windows were asked for. A `Start` from the same
+//!   D-Bus connection while its picker is up takes that pick instead of
+//!   asking again: Electron apps (Slack) list screens and windows in two
+//!   sessions at once.
 //! - The capture is listed for the shell's sharing indicator until it ends.
 //!   Closing the session, the shell's stop, or every stream ending ends it.
 //!
@@ -34,7 +37,7 @@ use super::session;
 use crate::casting::{
     self, Candidate, Casting, CursorMode, Event, Heard, Region, Source, StreamId,
 };
-use crate::reply::{reply, Replier};
+use crate::reply::{reply, Replier, Reply};
 
 /// The `org.freedesktop.impl.portal.ScreenCast` version implemented.
 const INTERFACE_VERSION: u32 = 5;
@@ -73,7 +76,13 @@ pub struct ScreenCast {
     /// Takes the frame of the desk the picker previews sources on.
     shoot: Shoot,
     picks: Picks,
+    asking: Asking,
 }
+
+/// The `Start`s waiting on each connection's open picker, by the sender part
+/// of their session handles. A connection is in the map while its picker is
+/// up.
+type Asking = Arc<Mutex<HashMap<String, Vec<Replier<Vec<CastPick>>>>>>;
 
 /// What each running stream's node shows, for [`CastPicks`].
 type Picks = Arc<Mutex<HashMap<u32, Pick>>>;
@@ -138,6 +147,7 @@ impl ScreenCast {
             grants: Arc::new(Mutex::new(grants)),
             shoot,
             picks: Arc::default(),
+            asking: Arc::default(),
         }
     }
 
@@ -266,36 +276,64 @@ impl ScreenCast {
             .cloned()
             .collect();
         let open: Vec<Candidate> = listed
-            .into_iter()
+            .iter()
             .filter(|candidate| asked_for(&selected, &candidate.source))
+            .cloned()
             .collect();
         let picked = match self.recalled(&selected, &open, &monitors) {
             Some(picked) => picked,
-            None => {
-                let kind = dialog(&selected, &open, preview(&self.shoot).await);
-                match ask(
-                    &self.queue,
-                    connection.object_server(),
-                    handle,
-                    app_id.clone(),
-                    &parent_window,
-                    kind,
-                )
-                .await
-                {
-                    PortalAnswer::ScreenCast { sources } => {
-                        match chosen(&sources, &open, &selected) {
-                            Some(picked) => picked,
-                            None => {
-                                warn!(?sources, "the shell picked sources that cannot be cast");
-                                return (2, HashMap::new());
+            None => match self.join(&session_handle) {
+                // The user picked for this connection's other session; its
+                // types bound that pick, not this one.
+                Some(joined) => match joined.await {
+                    Some(sources) => match chosen(
+                        &sources,
+                        &listed,
+                        &Selected {
+                            types: SOURCE_TYPES,
+                            ..selected.clone()
+                        },
+                    ) {
+                        Some(picked) => picked,
+                        None => {
+                            warn!(?sources, "the shell picked sources that cannot be cast");
+                            return (2, HashMap::new());
+                        }
+                    },
+                    None => return (1, HashMap::new()),
+                },
+                None => {
+                    let picker = Picker {
+                        asking: Arc::clone(&self.asking),
+                        sender: sender(&session_handle),
+                        sources: None,
+                    };
+                    let kind = dialog(&selected, &open, preview(&self.shoot).await);
+                    match ask(
+                        &self.queue,
+                        connection.object_server(),
+                        handle,
+                        app_id.clone(),
+                        &parent_window,
+                        kind,
+                    )
+                    .await
+                    {
+                        PortalAnswer::ScreenCast { sources } => {
+                            picker.picked(&sources);
+                            match chosen(&sources, &open, &selected) {
+                                Some(picked) => picked,
+                                None => {
+                                    warn!(?sources, "the shell picked sources that cannot be cast");
+                                    return (2, HashMap::new());
+                                }
                             }
                         }
+                        PortalAnswer::Canceled => return (1, HashMap::new()),
+                        _ => return (2, HashMap::new()),
                     }
-                    PortalAnswer::Canceled => return (1, HashMap::new()),
-                    _ => return (2, HashMap::new()),
                 }
-            }
+            },
         };
         let ending = Ending {
             queue: Arc::clone(&self.queue),
@@ -375,6 +413,24 @@ impl ScreenCast {
 }
 
 impl ScreenCast {
+    /// The pick of the picker up for `session_handle`'s connection, awaited:
+    /// `None` inside when it was canceled. `None` when none is up, and then
+    /// the caller puts one up.
+    fn join(&self, session_handle: &OwnedObjectPath) -> Option<Reply<Vec<CastPick>>> {
+        let mut asking = self.asking.lock().unwrap();
+        match asking.get_mut(&sender(session_handle)) {
+            Some(waiting) => {
+                let (replier, joined) = reply();
+                waiting.push(replier);
+                Some(joined)
+            }
+            None => {
+                asking.insert(sender(session_handle), Vec::new());
+                None
+            }
+        }
+    }
+
     /// The sources the application's restore token names, if every one is
     /// there and of a type it asked for. `open` is what it may pick, and
     /// `monitors` every monitor, which a region is kept on.
@@ -667,6 +723,44 @@ pub(super) fn dialog(
         browser_windows: selected.types & WINDOW_TYPES != 0,
         desk,
     })
+}
+
+/// A connection's picker while it is up. Dropped, it hands its pick to the
+/// `Start`s waiting on it, or cancels them when there is none.
+struct Picker {
+    asking: Asking,
+    sender: String,
+    sources: Option<Vec<CastPick>>,
+}
+
+impl Picker {
+    /// Hand `sources` to every `Start` waiting on this picker.
+    fn picked(mut self, sources: &[CastPick]) {
+        self.sources = Some(sources.to_vec());
+    }
+}
+
+impl Drop for Picker {
+    fn drop(&mut self) {
+        let waiting = self.asking.lock().unwrap().remove(&self.sender);
+        if let Some(sources) = &self.sources {
+            for waiting in waiting.into_iter().flatten() {
+                waiting.send(sources.clone());
+            }
+        }
+    }
+}
+
+/// The sender part of a session handle,
+/// `/org/freedesktop/portal/desktop/session/SENDER/TOKEN`: one D-Bus
+/// connection's sessions share it.
+fn sender(session_handle: &OwnedObjectPath) -> String {
+    session_handle
+        .as_str()
+        .rsplit('/')
+        .nth(1)
+        .expect("a session handle has a sender")
+        .to_string()
 }
 
 /// Stream `stream`'s listener: hands its node to `ready`, and tells `ending`
@@ -1208,12 +1302,21 @@ mod tests {
 
     /// Create a session and select sources with `select`.
     fn select(client: &zbus::blocking::Connection, select: Vec<(&str, Value<'static>)>) {
+        select_on(client, SESSION, select);
+    }
+
+    /// [`select`], on session `session`.
+    fn select_on(
+        client: &zbus::blocking::Connection,
+        session: &str,
+        select: Vec<(&str, Value<'static>)>,
+    ) {
         let (response, _) = call(
             client,
             "CreateSession",
             &(
                 path("/org/freedesktop/portal/desktop/request/1_7/a"),
-                path(SESSION),
+                path(session),
                 "us.zoom.Zoom",
                 options(vec![]),
             ),
@@ -1224,7 +1327,7 @@ mod tests {
             "SelectSources",
             &(
                 path("/org/freedesktop/portal/desktop/request/1_7/b"),
-                path(SESSION),
+                path(session),
                 "us.zoom.Zoom",
                 options(select),
             ),
@@ -1236,14 +1339,27 @@ mod tests {
     fn start(
         client: &zbus::blocking::Connection,
     ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+        start_on(
+            client,
+            SESSION,
+            "/org/freedesktop/portal/desktop/request/1_7/c",
+        )
+    }
+
+    /// [`start`], on session `session` with request `request`.
+    fn start_on(
+        client: &zbus::blocking::Connection,
+        session: &'static str,
+        request: &'static str,
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
         let client = client.clone();
         thread::spawn(move || {
             call(
                 &client,
                 "Start",
                 &(
-                    path("/org/freedesktop/portal/desktop/request/1_7/c"),
-                    path(SESSION),
+                    path(request),
+                    path(session),
                     "us.zoom.Zoom",
                     "",
                     options(vec![]),
@@ -1745,6 +1861,47 @@ mod tests {
                 name: "drm-2".into(),
                 description: String::new(),
             })]
+        );
+    }
+
+    /// Slack asks for its screens and its windows in two sessions at once;
+    /// the one pick answers both.
+    #[test]
+    fn a_cast_started_while_its_apps_picker_is_up_takes_that_pick() {
+        const SECOND: &str = "/org/freedesktop/portal/desktop/session/1_7/second";
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(1u32))]);
+        select_on(&served.client, SECOND, vec![("types", Value::from(2u32))]);
+        let first = start(&served.client);
+        let (items, _) = next(&served.published);
+        let second = start_on(
+            &served.client,
+            SECOND,
+            "/org/freedesktop/portal/desktop/request/1_7/d",
+        );
+        // Let the second `Start` reach the picker.
+        thread::sleep(Duration::from_millis(200));
+
+        served.queue.answer(
+            items[0].id,
+            PortalAnswer::ScreenCast {
+                sources: vec![CastPick::Monitor {
+                    name: "drm-2".into(),
+                }],
+            },
+        );
+
+        for starting in [first, second] {
+            let (response, results) = starting.join().expect("Start returned");
+            assert_eq!(response, 0);
+            assert_eq!(read::<u32>(&streams(&results)[0], "source_type"), 1);
+        }
+        assert!(
+            served
+                .published
+                .try_iter()
+                .all(|(items, _)| items.is_empty()),
+            "no second picker"
         );
     }
 
