@@ -81,6 +81,20 @@ Every bar and the lock screen share one watch per system readout. See
 The theme selector, idle inhibitor, brightness, volume, Bluetooth, network and
 battery items are still exported, for a bar that wants them one by one.
 
+To keep the defaults and add to them, spread `DEFAULT_BAR`:
+
+```tsx
+import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
+import { Battery } from "@domicile-desktop/manganese-bar-module-battery";
+
+export const Shell = runManganese({
+  bar: {
+    ...DEFAULT_BAR,
+    right: [<Battery key="battery" />, ...DEFAULT_BAR.right],
+  },
+});
+```
+
 ## On the lock screen
 
 - The lock screen draws the same bar on every screen, with only the keymap
