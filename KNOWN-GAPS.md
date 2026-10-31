@@ -5,6 +5,8 @@ the detail, when there is one. Remove a gap when it's fixed.
 
 ## Windows and clients
 
+- **No Xwayland, so X11-only apps don't run.** Electron, SDL and Qt apps are
+  started in Wayland mode (`client_command` in `spawning.rs`).
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate

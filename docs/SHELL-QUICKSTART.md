@@ -243,9 +243,9 @@ Then put `// @ts-check` at the top of `shell.js` and
   options.
 - [Hooks](/packages/react/README.md): displays, theme, idle, lock, portals.
 - [Browser windows](SHELL-BROWSER-WINDOWS.md) are `<webview>`s.
-- [Dialogs](PORTALS.md): until a shell answers an app's portal request (a file
-  picker, a screen share), the app waits. Draw them with
-  `@domicile-desktop/component-library`'s `PortalDialogs`, or refuse them.
+- [Dialogs](PORTALS.md): a shell that draws no dialogs refuses every portal
+  request, so apps get no file picker and no screen share. Mount
+  `@domicile-desktop/component-library`'s `<PortalDialogs />` to get them all.
 - [Ship it](SHELL-PACKAGING.md): bundle and distribute your shell.
 - This shell is [`examples/react-shell`](/examples/react-shell) in React and
   [`examples/vanilla-shell`](/examples/vanilla-shell) in JavaScript.

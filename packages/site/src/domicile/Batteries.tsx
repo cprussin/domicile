@@ -27,7 +27,7 @@ import {
 
 const SHOWN: readonly { picture: ReactNode; title: string; body: string }[] = [
   {
-    body: "Install extensions from the Chrome Web Store. They work in every web window, and their buttons can sit in your bar.",
+    body: "Install extensions from the Chrome Web Store. They work in browser windows, and their buttons can sit in your bar.",
     picture: <ExtensionsPicture />,
     title: "Chrome extensions",
   },
@@ -37,7 +37,7 @@ const SHOWN: readonly { picture: ReactNode; title: string; body: string }[] = [
     title: "One place for notifications",
   },
   {
-    body: "Share a window, a monitor or a region from any video call or OBS, with its sound. Your shell draws the picker.",
+    body: "Share a window, a monitor or a region with video calls and OBS, with its sound. Your shell draws the picker.",
     picture: <SharingPicture />,
     title: "Screen sharing",
   },
@@ -90,7 +90,7 @@ const LISTED: readonly { icon: ReactNode; title: string; body: string }[] = [
     title: "Monitor profiles",
   },
   {
-    body: "Discord, Steam and every other app that puts an icon in the tray just works.",
+    body: "Discord, Slack and other apps that put an icon in the tray show it in yours.",
     icon: <TrayIcon />,
     title: "Tray icons",
   },
@@ -121,33 +121,108 @@ const LISTED: readonly { icon: ReactNode; title: string; body: string }[] = [
   },
 ];
 
-/** What Domicile builds in, so every shell gets it. */
+/** Who provides what: Domicile, a ready-made component, or the shell. */
+const GROUPS: readonly { title: string; items: readonly string[] }[] = [
+  {
+    items: [
+      "Screen sharing and screenshots",
+      "Notifications, tray icons and global shortcuts",
+      "Chrome extensions in browser windows",
+      "Night light, monitor profiles and dark mode for apps",
+      "A lock screen that stays locked",
+    ],
+    title: "Domicile does it",
+  },
+  {
+    items: [
+      "Dialogs for file pickers, sharing and printing",
+      "Wi-Fi, Bluetooth, sound and battery controls",
+      "A launcher, a notification drawer and clipboard history",
+    ],
+    title: "Ready-made components",
+  },
+  {
+    items: [
+      "The bar, the window layout and the look",
+      "Which dialogs to show, and how. With none, requests are refused.",
+    ],
+    title: "Your shell draws it",
+  },
+];
+
+/** What Domicile builds in, what's ready-made, and what a shell draws. */
 export const Batteries = () => (
   <Section
     id="batteries"
-    lede="Screen sharing, night light, notifications and the rest come built into Domicile, so every shell gets them for free. Your shell just draws the buttons."
+    lede="Domicile does the hard parts. Your shell decides how they look, or uses a ready-made component."
     title="Batteries included."
   >
-    <div className={shownStyles}>
-      {SHOWN.map((feature) => (
-        <div className={shownCardStyles} key={feature.title}>
-          {feature.picture}
-          <h3 className={shownTitleStyles}>{feature.title}</h3>
-          <p className={bodyStyles}>{feature.body}</p>
+    <div className={groupsStyles}>
+      {GROUPS.map((group) => (
+        <div className={listedCardStyles} key={group.title}>
+          <h3 className={listedTitleStyles}>{group.title}</h3>
+          <ul className={itemsStyles}>
+            {group.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
         </div>
       ))}
     </div>
-    <div className={listedStyles}>
-      {LISTED.map((feature) => (
-        <div className={listedCardStyles} key={feature.title}>
-          <IconTile>{feature.icon}</IconTile>
-          <h3 className={listedTitleStyles}>{feature.title}</h3>
-          <p className={bodyStyles}>{feature.body}</p>
-        </div>
-      ))}
-    </div>
+    <details className={moreStyles}>
+      <summary className={summaryStyles}>
+        Everything Domicile handles for you
+      </summary>
+      <div className={shownStyles}>
+        {SHOWN.map((feature) => (
+          <div className={shownCardStyles} key={feature.title}>
+            {feature.picture}
+            <h3 className={shownTitleStyles}>{feature.title}</h3>
+            <p className={bodyStyles}>{feature.body}</p>
+          </div>
+        ))}
+      </div>
+      <div className={listedStyles}>
+        {LISTED.map((feature) => (
+          <div className={listedCardStyles} key={feature.title}>
+            <IconTile>{feature.icon}</IconTile>
+            <h3 className={listedTitleStyles}>{feature.title}</h3>
+            <p className={bodyStyles}>{feature.body}</p>
+          </div>
+        ))}
+      </div>
+    </details>
   </Section>
 );
+
+const groupsStyles = grid({
+  gap: 4,
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))",
+});
+
+const itemsStyles = css({
+  "& li + li": { marginBlockStart: 1 },
+  color: "muted",
+  fontSize: "sm",
+  listStyle: "disc",
+  paddingInlineStart: 5,
+});
+
+const moreStyles = css({ marginBlockStart: 4 });
+
+// The marker is the browser's own disclosure triangle.
+const summaryStyles = css({
+  _focusVisible: {
+    outline: "2px solid {colors.accent}",
+    outlineOffset: "2px",
+  },
+  borderRadius: "md",
+  color: "accent",
+  cursor: "pointer",
+  fontWeight: "semibold",
+  marginBlockEnd: 4,
+  width: "fit-content",
+});
 
 const shownStyles = grid({
   gap: 4,

@@ -106,7 +106,7 @@ const Desktop = () => {
 
 export const Shell = mount(Desktop);
 `,
-    hint: "Change `grid-cols-[3fr_2fr]` to `grid-cols-2`, or `ring-violet-400` to `ring-emerald-400`.",
+    hint: "In the Code tab, change `grid-cols-[3fr_2fr]` to `grid-cols-2`, or `ring-violet-400` to `ring-emerald-400`.",
     id: "tiling",
     label: "Tiling",
   },
@@ -175,7 +175,7 @@ const Desktop = () => (
 
 export const Shell = mount(Desktop);
 `,
-    hint: "Drag the title bars. Then add `-rotate-2` to a window's classes.",
+    hint: "Drag the title bars. Then, in the Code tab, add `-rotate-2` to a window's classes.",
     id: "floating",
     label: "Floating",
   },
@@ -269,7 +269,7 @@ const Desktop = () => {
 
 export const Shell = mount(Desktop);
 `,
-    hint: "Scroll to zoom, drag the background, and double-click a title bar. Then change `480` and `340` to spread the windows out.",
+    hint: "Scroll to zoom, drag the background, and double-click a title bar. Then, in the Code tab, change `480` and `340` to spread the windows out.",
     id: "canvas",
     label: "Infinite canvas",
   },
@@ -324,7 +324,7 @@ const Desktop = () => {
 
 export const Shell = mount(Desktop);
 `,
-    hint: "Click the title bars. Then change `rotateY` or `brightness-50`.",
+    hint: "Click the title bars. Then, in the Code tab, change `rotateY` or `brightness-50`.",
     id: "deck",
     label: "Deck of cards",
   },
@@ -379,7 +379,7 @@ const Desktop = () => {
 
 export const Shell = mount(Desktop);
 `,
-    hint: "Click the tabs. Then make them a sidebar: `flex-row` on `main` and `flex-col` on `nav`.",
+    hint: "Click the tabs. Then, in the Code tab, make them a sidebar: `flex-row` on `main` and `flex-col` on `nav`.",
     id: "tabs",
     label: "Tabs",
   },

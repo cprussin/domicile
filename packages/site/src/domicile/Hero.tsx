@@ -14,10 +14,10 @@ export const Hero = () => (
         </LinkButton>
       </>
     }
-    lede="If you can build a web page, you can build a desktop. Use React, CSS and anything on npm, or just describe it to your coding agent. Your apps still run natively, at full speed."
+    lede="If you can build a web page, you can build a desktop. Use React, CSS and anything on npm, or just describe it to your coding agent. Wayland apps still run natively."
     tag={{
       href: "/docs/reference/elements",
-      label: "Build a Wayland compositor with web technologies",
+      label: "Build your Wayland desktop with web technologies",
     }}
     title="The fastest way to build a Linux desktop."
   />

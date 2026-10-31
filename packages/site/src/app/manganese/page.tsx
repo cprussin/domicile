@@ -1,5 +1,3 @@
-import type { Metadata } from "next";
-
 import { BuiltOnDomicile } from "../../manganese/BuiltOnDomicile";
 import { Configure } from "../../manganese/Configure";
 import { DOCS } from "../../manganese/docs";
@@ -15,12 +13,14 @@ import { REPO, repoFile } from "../../page/repo";
 import { Section } from "../../page/Section";
 import { SiteFooter } from "../../page/SiteFooter";
 import { SiteHeader } from "../../page/SiteHeader";
+import { shared } from "../../page/shared";
 
-export const metadata: Metadata = {
+export const metadata = shared({
   description:
     "A tiling Wayland desktop with Sway's layout and keys, built on Domicile.",
-  title: "Manganese",
-};
+  path: "/manganese",
+  title: "Manganese: a tiling Wayland desktop",
+});
 
 /** domicile-desktop.com/manganese: the reference shell, for its users. */
 const ManganesePage = () => (

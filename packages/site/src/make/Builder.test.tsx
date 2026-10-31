@@ -53,6 +53,20 @@ describe("Builder", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows how to make the desktop the one you log in to", async () => {
+    render(<Builder />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Run it for real" }),
+    );
+
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        '{ "shell": "./my-desktop.tsx" }',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("copies a prompt for a coding agent with the code in it", async () => {
     render(<Builder />);
 

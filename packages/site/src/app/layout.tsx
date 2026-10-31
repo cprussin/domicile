@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  description: "Build a Wayland compositor with web technologies.",
+  description: "Build your Linux desktop with web technologies.",
   metadataBase: new URL("https://domicile-desktop.com"),
   title: { default: "Domicile", template: "%s · Domicile" },
 };

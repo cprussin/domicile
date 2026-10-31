@@ -147,7 +147,17 @@ const RunForReal = ({ code }: { code: string }) => (
           <code>{`domicile ~/Downloads/${FILE}`}</code>
         </pre>
       </li>
-      <li>To make it your desktop, pick Domicile when you log in.</li>
+      <li>
+        To make it your desktop, move it to{" "}
+        <code className={codeStyles}>~/.config/domicile/</code> and name it in{" "}
+        <code className={codeStyles}>~/.config/domicile/domicile.json</code>:
+        <pre className={commandStyles}>
+          <code>{`{ "shell": "./${FILE}" }`}</code>
+        </pre>
+      </li>
+      <li>
+        Log out, and pick <strong>Domicile</strong> in your login screen.
+      </li>
     </ol>
   </ModalDialog>
 );
