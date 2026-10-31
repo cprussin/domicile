@@ -20,7 +20,7 @@ import { DomicileMark } from "../../../domicile/DomicileMark";
 import { ManganeseMark } from "../../../manganese/ManganeseMark";
 import type { ProductName } from "../../../page/Accent";
 import { Accent } from "../../../page/Accent";
-import { REPO, repoFile } from "../../../page/repo";
+import { repoFile } from "../../../page/repo";
 import { SiteFooter } from "../../../page/SiteFooter";
 import { SiteHeader } from "../../../page/SiteHeader";
 
@@ -68,12 +68,7 @@ const DocPage = async ({ params }: Params) => {
           </a>
         </main>
       </div>
-      <SiteFooter
-        links={[
-          { href: REPO, label: "GitHub" },
-          { href: repoFile("LICENSE"), label: "MIT license" },
-        ]}
-      >
+      <SiteFooter links={[{ href: repoFile("LICENSE"), label: "MIT license" }]}>
         <span>{chrome.footer}</span>
       </SiteFooter>
     </Accent>
@@ -98,7 +93,6 @@ const CHROME: Record<
     links: [
       { href: "/", label: "Domicile" },
       { href: "/manganese", label: "Manganese" },
-      { href: REPO, label: "GitHub" },
     ],
   },
   manganese: {
@@ -112,7 +106,6 @@ const CHROME: Record<
     links: [
       { href: "/manganese", label: "Manganese" },
       { href: "/", label: "Domicile" },
-      { href: REPO, label: "GitHub" },
     ],
   },
 };

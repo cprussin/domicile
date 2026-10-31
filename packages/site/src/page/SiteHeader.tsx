@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
+import { COMMUNITY, CommunityIcon } from "./community";
 import { LinkButton } from "./LinkButton";
 
 type Props = {
@@ -21,6 +22,19 @@ export const SiteHeader = ({ brand, links, action }: Props) => (
           {link.label}
         </a>
       ))}
+      <span className={iconsStyles}>
+        {COMMUNITY.map((link) => (
+          <a
+            aria-label={link.label}
+            className={iconLinkStyles}
+            href={link.href}
+            key={link.href}
+            title={link.label}
+          >
+            <CommunityIcon icon={link.icon} />
+          </a>
+        ))}
+      </span>
       <LinkButton href={action.href}>{action.label}</LinkButton>
     </nav>
   </header>
@@ -49,4 +63,22 @@ const linkStyles = css({
   _hover: { color: "foreground" },
   color: "muted",
   transition: "color {durations.fast} {easings.out}",
+});
+
+const iconsStyles = flex({ align: "center", gap: 1 });
+
+// The icon alone, in a square as tall as the button beside it, so it is easy
+// to hit.
+const iconLinkStyles = flex({
+  _focusVisible: { outline: "2px solid {colors.accent}", outlineOffset: "2px" },
+  _hover: { backgroundColor: "card", color: "foreground" },
+  align: "center",
+  blockSize: 9,
+  borderRadius: "md",
+  color: "muted",
+  fontSize: "lg",
+  inlineSize: 9,
+  justify: "center",
+  transition:
+    "color {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}",
 });
