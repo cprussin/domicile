@@ -1,7 +1,11 @@
 # Start from manganese
 
-Manganese is a set of React packages. Build your shell from it: change its
-options, add your own bar items, or take its parts into a shell of your own.
+Manganese is Domicile's reference shell: a complete, ready-to-use desktop
+([more about manganese](https://www.domicile-desktop.com/manganese)).
+
+Manganese is also a set of React packages. Build your shell from it: change
+its options, add your own bar items, or take its parts into a shell of your
+own.
 
 ## Change its options
 
