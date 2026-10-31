@@ -12,6 +12,7 @@ In this order:
 
 1. **Site shortcuts**: `!wiki`, `!yt` and the other tags listed at the
    bottom search that site. `!gh cprussin/domicile` goes to that GitHub page.
+   Type `!` to see every tag and what it does; Enter or Tab fills one in.
 2. **A web address**, if you typed one.
 3. **Apps and bookmarks**, by name.
 4. **A path**, if you typed one.

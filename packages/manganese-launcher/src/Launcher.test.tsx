@@ -627,6 +627,54 @@ describe("Launcher", () => {
     ]);
   });
 
+  describe("a tag being typed", () => {
+    it("lists the tags it could be, each with what it does", async () => {
+      using panel = launcher();
+
+      await panel.user.type(panel.box(), "!");
+
+      expect((await panel.rows()).slice(0, 6)).toStrictEqual([
+        "!gh Search GitHub",
+        "!im Search Google Images",
+        "!maps Search Google Maps",
+        "!p Open in a private browser",
+        "!wiki Search Wikipedia",
+        "!yt Search YouTube",
+      ]);
+    });
+
+    it("fills in the tag on Enter, Tab or a click, launching nothing", async () => {
+      using panel = launcher();
+
+      await panel.user.type(panel.box(), "kate bush !y{Enter}");
+      expect(panel.box()).toHaveValue("kate bush !yt ");
+
+      await panel.user.type(panel.box(), "!wi{Tab}");
+      expect(panel.box()).toHaveValue("kate bush !yt !wiki ");
+
+      await panel.user.type(panel.box(), "!p");
+      await panel.user.click(
+        await screen.findByRole("option", {
+          name: "!p Open in a private browser",
+        }),
+      );
+      expect(panel.box()).toHaveValue("kate bush !yt !wiki !p ");
+      expect(panel.launched).toStrictEqual([]);
+    });
+
+    it("explains the highlighted tag in the preview", async () => {
+      using panel = launcher();
+
+      await panel.user.type(panel.box(), "!yt");
+
+      expect(
+        await within(previewPane()).findByText(
+          "Add !yt anywhere in what you type to search YouTube instead of Google. Press Enter or Tab to add it.",
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("starts with !p when opened from a private browser", () => {
     using panel = launcher(FILES, false, [], [], true);
 

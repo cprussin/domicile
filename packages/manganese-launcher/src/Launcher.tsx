@@ -240,6 +240,17 @@ const Query = ({
     setLearned(learnedIcons());
   }, []);
 
+  // A tag fills in the box; any other row launches, asking what to open a
+  // file with if `openWith`.
+  const choose = (choice: Choice, openWith: boolean) => {
+    if (choice.kind === ChoiceKind.Tag) {
+      setQuery(choice.line);
+      setStepped(0);
+    } else {
+      onLaunch(openWith ? openWithOf(choice) : launchOf(choice));
+    }
+  };
+
   useEffect(() => keepKeyboardIn(mounted(box)), []);
   useEffect(() => scrollOnWheel(mounted(pane)), []);
 
@@ -274,10 +285,14 @@ const Query = ({
               // Taken, or the engine forwards it to the window the launch
               // focuses.
               event.preventDefault();
-              onLaunch(event.shiftKey ? openWithOf(chosen) : launchOf(chosen));
+              choose(chosen, event.shiftKey);
             } else if (event.key === "Tab") {
-              // Keep focus in the box (see `keepKeyboardIn`).
+              // Keep focus in the box (see `keepKeyboardIn`), and fill in a
+              // highlighted tag as a shell completes a word.
               event.preventDefault();
+              if (chosen?.kind === ChoiceKind.Tag) {
+                choose(chosen, false);
+              }
             }
           }}
           placeholder={PROMPT}
@@ -317,7 +332,7 @@ const Query = ({
                 id={rowId(listId, at)}
                 key={keyOf(choice)}
                 onClick={() => {
-                  onLaunch(launchOf(choice));
+                  choose(choice, false);
                 }}
                 // The pointer moves the highlight instead of a separate hover
                 // state, so only one row looks selected. Pointer move rather
@@ -467,6 +482,17 @@ const ChoiceRow = ({
           <span className={rowNameStyles}>
             <span className={rowVerbStyles}>Search for</span> {choice.query}
             <InPrivate isPrivate={choice.isPrivate} />
+          </span>
+        </>
+      );
+    }
+    case ChoiceKind.Tag: {
+      return (
+        <>
+          <RowTile icon={tagLogoOf(choice.engine)} />
+          <span className={rowNameStyles}>
+            <Marked marks={marked(choice.tag, query)} />{" "}
+            <span className={rowVerbStyles}>{tagDoesOf(choice.engine)}</span>
           </span>
         </>
       );
@@ -724,6 +750,15 @@ const ChoicePreview = ({
         <BookmarkPreview key={choice.url} onLearn={onLearn} url={choice.url} />
       );
     }
+    case ChoiceKind.Tag: {
+      return (
+        <Placeholder
+          icon={tagLogoOf(choice.engine)}
+          note={`Add ${choice.tag} anywhere in what you type to ${tagUseOf(choice.engine)}. Press Enter or Tab to add it.`}
+          title={tagDoesOf(choice.engine)}
+        />
+      );
+    }
     // Private, so a page the user only looked at leaves nothing behind.
     case ChoiceKind.Site:
     case ChoiceKind.Search:
@@ -979,6 +1014,9 @@ const keyOf = (choice: Choice): string => {
     case ChoiceKind.Search: {
       return `search:${privacyOf(choice.isPrivate)}:${choice.url}`;
     }
+    case ChoiceKind.Tag: {
+      return `tag:${choice.tag}`;
+    }
     case ChoiceKind.TaggedSearch: {
       return `tagged:${privacyOf(choice.isPrivate)}:${choice.url}`;
     }
@@ -1029,6 +1067,22 @@ const nameOf = (engine: Engine): string => {
     }
   }
 };
+
+/** A tag row's glyph: its site's logo, or the private browser's. */
+const tagLogoOf = (engine: Engine | undefined): typeof FileIcon =>
+  engine === undefined ? DetectiveIcon : logoOf(engine);
+
+/** What a tag does, as its row says it. */
+const tagDoesOf = (engine: Engine | undefined): string =>
+  engine === undefined
+    ? "Open in a private browser"
+    : `Search ${nameOf(engine)}`;
+
+/** What adding a tag does, for its preview. */
+const tagUseOf = (engine: Engine | undefined): string =>
+  engine === undefined
+    ? "open sites and searches in a private browser"
+    : `search ${nameOf(engine)} instead of Google`;
 
 /** A row's DOM id, for `aria-activedescendant`. */
 const rowId = (listId: string, at: number): string =>

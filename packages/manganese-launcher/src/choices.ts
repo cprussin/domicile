@@ -1,14 +1,16 @@
 // The launcher's rows for a query. Each row is an action Enter can take.
 //
 // Order:
-// 1. The page a `!` tag's site has for the words, if any.
-// 2. The tagged search, if the query has a tag.
-// 3. A site, if the query is a URL. A full URL is almost always meant as one.
-// 4. Matching applications and bookmarks, as one list.
-// 5. A path, if the query is spelled like one.
-// 6. Matching files. Applications rank above files because they are asked
+// 1. The tags the word being typed could be, if it starts with `!`. Choosing
+//    one fills it in.
+// 2. The page a `!` tag's site has for the words, if any.
+// 3. The tagged search, if the query has a tag.
+// 4. A site, if the query is a URL. A full URL is almost always meant as one.
+// 5. Matching applications and bookmarks, as one list.
+// 6. A path, if the query is spelled like one.
+// 7. Matching files. Applications rank above files because they are asked
 //    for more often.
-// 7. A Google search for the query, always, as the fallback.
+// 8. A Google search for the query, always, as the fallback.
 //
 // The site and the search each have a private row beside them. `!p` anywhere
 // in the query offers only the web rows, all private.
@@ -17,11 +19,13 @@
 // address bar agree.
 
 import type {
+  Engine,
   TaggedSearch,
   TaggedSite,
 } from "@domicile-desktop/manganese-address/search";
 import {
   googleUrl,
+  TAGS,
   taggedSearch,
   taggedSite,
 } from "@domicile-desktop/manganese-address/search";
@@ -40,6 +44,7 @@ export enum ChoiceKind {
   File,
   Site,
   Search,
+  Tag,
   TaggedSearch,
   TaggedSite,
 }
@@ -75,6 +80,17 @@ export const Choice = {
     kind: ChoiceKind.Site as const,
     url,
   }),
+  /**
+   * A tag the word being typed could be. `engine` is `undefined` for
+   * `PRIVATE_TAG`, which picks no site. `line` is the box's text with the tag
+   * filled in.
+   */
+  Tag: (tag: string, engine: Engine | undefined, line: string) => ({
+    engine,
+    kind: ChoiceKind.Tag as const,
+    line,
+    tag,
+  }),
   /** A search on the site a tag names. */
   TaggedSearch: (search: TaggedSearch, isPrivate: boolean) => ({
     isPrivate,
@@ -90,6 +106,9 @@ export const Choice = {
 };
 
 export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
+
+/** A row Enter launches: every row but a tag, which fills in the box. */
+export type Launchable = Exclude<Choice, ReturnType<typeof Choice.Tag>>;
 
 /** The tag that makes every row private. */
 export const PRIVATE_TAG = "!p";
@@ -109,16 +128,19 @@ export const choicesFor = (
 ): Choice[] => {
   const words = query.split(/\s+/).filter((word) => word !== "");
   const typed = words.filter((word) => word !== PRIVATE_TAG).join(" ");
-  return words.includes(PRIVATE_TAG)
-    ? [...taggedChoicesFor(typed, true), ...webChoicesFor(typed, true)]
-    : [
-        ...taggedChoicesFor(query, false),
-        ...plainChoicesFor(query, found, apps, bookmarks),
-      ];
+  return [
+    ...tagsFor(query),
+    ...(words.includes(PRIVATE_TAG)
+      ? [...taggedChoicesFor(typed, true), ...webChoicesFor(typed, true)]
+      : [
+          ...taggedChoicesFor(query, false),
+          ...plainChoicesFor(query, found, apps, bookmarks),
+        ]),
+  ];
 };
 
 /** The launch for `choice`. */
-export const launchOf = (choice: Choice): Launch => {
+export const launchOf = (choice: Launchable): Launch => {
   switch (choice.kind) {
     case ChoiceKind.App: {
       return Launch.Ran(choice.entry.command);
@@ -139,10 +161,33 @@ export const launchOf = (choice: Choice): Launch => {
 };
 
 /** The launch for `choice` with Shift: a file asks what to open it with. */
-export const openWithOf = (choice: Choice): Launch =>
+export const openWithOf = (choice: Launchable): Launch =>
   choice.kind === ChoiceKind.File
     ? Launch.OpenedWith(choice.row.path)
     : launchOf(choice);
+
+/**
+ * The tags `query`'s last word starts, by tag, leaving out tags the line
+ * already has. None once a space ends the word.
+ */
+const tagsFor = (query: string): Choice[] => {
+  const words = query.split(/\s+/);
+  const typing = words.at(-1) ?? "";
+  return typing.startsWith("!")
+    ? [...Object.keys(TAGS), PRIVATE_TAG]
+        .filter(
+          (tag) => tag.startsWith(typing) && !words.slice(0, -1).includes(tag),
+        )
+        .toSorted()
+        .map((tag) =>
+          Choice.Tag(
+            tag,
+            TAGS[tag],
+            `${query.slice(0, query.length - typing.length)}${tag} `,
+          ),
+        )
+    : [];
+};
 
 /** The page and search `query`'s tag names, if any. */
 const taggedChoicesFor = (query: string, isPrivate: boolean): Choice[] => {

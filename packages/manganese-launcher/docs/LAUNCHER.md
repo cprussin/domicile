@@ -16,6 +16,10 @@ Every row is something Enter can do. Source: `src/`.
 5. Files from the compositor's index of the home directory.
 6. A Google search for the line as typed. Always present.
 
+While the last word starts with `!`, the tags it could be (`!p` included) head
+the list, each with what it does. Enter, Tab or a click fills the tag in rather
+than launching.
+
 The site (2) and the search (6) each have a row beside them that opens them in
 a private browser. `!p` anywhere in the line offers only the web rows (1, 2
 and 6), all private. Opened over a private browser window, the box starts

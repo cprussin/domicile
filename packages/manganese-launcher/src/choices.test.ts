@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
 import { Engine } from "@domicile-desktop/manganese-address/search";
-import { Choice, choicesFor, launchOf, openWithOf } from "./choices";
+import {
+  Choice,
+  ChoiceKind,
+  choicesFor,
+  launchOf,
+  openWithOf,
+} from "./choices";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
@@ -79,7 +85,7 @@ describe("choicesFor", () => {
     });
 
     it("reads the tag anywhere in the line", () => {
-      expect(choicesFor("kate bush !p", [], [], [])).toStrictEqual([
+      expect(choicesFor("kate !p bush", [], [], [])).toStrictEqual([
         search("kate bush", true),
       ]);
     });
@@ -146,6 +152,47 @@ describe("choicesFor", () => {
       ),
       ...searches("!gh cprussin"),
     ]);
+  });
+
+  describe("a tag being typed", () => {
+    it("offers every tag for a bare !, above the rows the line gets", () => {
+      expect(choicesFor("!", [], [], [])).toStrictEqual([
+        Choice.Tag("!gh", Engine.GitHub, "!gh "),
+        Choice.Tag("!im", Engine.GoogleImages, "!im "),
+        Choice.Tag("!maps", Engine.GoogleMaps, "!maps "),
+        Choice.Tag("!p", undefined, "!p "),
+        Choice.Tag("!wiki", Engine.Wikipedia, "!wiki "),
+        Choice.Tag("!yt", Engine.YouTube, "!yt "),
+        ...searches("!"),
+      ]);
+    });
+
+    it("offers the tags the last word starts, filled in after the words", () => {
+      expect(choicesFor("kate bush !y", [], [], []).slice(0, 1)).toStrictEqual([
+        Choice.Tag("!yt", Engine.YouTube, "kate bush !yt "),
+      ]);
+    });
+
+    it("leaves out a tag the line already has", () => {
+      expect(choicesFor("!p !", [], [], [])[3]).toStrictEqual(
+        Choice.Tag("!wiki", Engine.Wikipedia, "!p !wiki "),
+      );
+      expect(choicesFor("!yt cats !", [], [], []).slice(0, 5)).toStrictEqual([
+        Choice.Tag("!gh", Engine.GitHub, "!yt cats !gh "),
+        Choice.Tag("!im", Engine.GoogleImages, "!yt cats !im "),
+        Choice.Tag("!maps", Engine.GoogleMaps, "!yt cats !maps "),
+        Choice.Tag("!p", undefined, "!yt cats !p "),
+        Choice.Tag("!wiki", Engine.Wikipedia, "!yt cats !wiki "),
+      ]);
+    });
+
+    it("offers no tags once the word is done or matches none", () => {
+      const kinds = (query: string) =>
+        choicesFor(query, [], [], []).map(({ kind }) => kind);
+      expect(kinds("!y ")).not.toContain(ChoiceKind.Tag);
+      expect(kinds("!zz")).not.toContain(ChoiceKind.Tag);
+      expect(kinds("hello!")).not.toContain(ChoiceKind.Tag);
+    });
   });
 
   it("offers a path spelled like one, whether or not the host found it", () => {
