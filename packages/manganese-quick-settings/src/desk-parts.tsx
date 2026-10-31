@@ -1,6 +1,8 @@
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
-import { Battery } from "@domicile-desktop/manganese-bar-module-battery";
-import { BatteryCharge } from "@domicile-desktop/manganese-bar-module-battery/quick-settings";
+import {
+  BatteryCharge,
+  BatteryIndicator,
+} from "@domicile-desktop/manganese-bar-module-battery/quick-settings";
 import {
   BluetoothCard,
   BluetoothDevices,
@@ -41,7 +43,7 @@ export const DESK_PARTS: QuickSettingsParts = {
         {!locked && <NetworkIndicator />}
         <BluetoothIndicator />
         <SoundIndicator />
-        <Battery />
+        <BatteryIndicator />
       </>
     );
   },

@@ -23,6 +23,11 @@ type Props = {
   battery: SharedWatch<Option<BatteryReading>>;
   /** Whether the machine has a battery, from `/sys`. */
   hardware: SharedWatch<Result<boolean, SystemError>>;
+  /**
+   * Inside the quick settings button, which pads its own ends and spaces its
+   * icons: no inset, and only as wide as the figure shown.
+   */
+  fitted?: boolean | undefined;
 };
 
 /**
@@ -32,44 +37,42 @@ type Props = {
  * The bolt matters because a full battery and a machine on AC look the same on
  * the meter.
  *
- * Holds the width of `100%`, so the items beside it never move.
+ * On its own, holds the width of `100%`, so the items beside it never move.
  *
  * Until UPower reports the battery, a dimmed empty outline on a machine with
  * one, and nothing on a machine without, so it shows no false empty meter.
  */
-export const Battery = ({ battery, hardware }: Props) => {
+export const Battery = ({ battery, fitted = false, hardware }: Props) => {
   const reading = useSharedWatch(battery)?.match({
     None: () => undefined,
     Some: (found) => found,
   });
   const present = useSharedWatch(hardware);
   if (reading === undefined) {
-    return isAbsent(present) ? undefined : <Unavailable />;
+    return isAbsent(present) ? undefined : <Unavailable fitted={fitted} />;
   } else {
-    return <Meter reading={reading} />;
+    return <Meter fitted={fitted} reading={reading} />;
   }
 };
 
 /** The outline alone, dimmed, as wide as the meter and its percentage. */
-const Unavailable = () => (
+const Unavailable = ({ fitted }: { fitted: boolean }) => (
   <Tooltip
     content="Battery unavailable"
     tone="overPhoto"
     trigger={
       <div
         aria-label="Battery unavailable"
-        className={cx(rootStyles({ charge: "fine" }), unavailableStyles)}
+        className={cx(
+          rootStyles({ charge: "fine", fitted }),
+          unavailableStyles,
+        )}
         role="img"
       >
         <svg aria-hidden className={meterStyles} viewBox="0 0 24 12">
           <Outline />
         </svg>
-        <span className={percentSlotStyles}>
-          <span aria-hidden className={percentSizerStyles}>
-            100%
-          </span>
-          <span className={percentStyles}>–</span>
-        </span>
+        <Percent figure="–" fitted={fitted} />
       </div>
     }
   />
@@ -98,12 +101,21 @@ const Outline = () => (
  * The meter is one SVG, 1 unit to a CSS pixel, so its outline has the same
  * weight on every side at any display scale.
  */
-const Meter = ({ reading }: { reading: BatteryReading }) => {
+const Meter = ({
+  fitted,
+  reading,
+}: {
+  fitted: boolean;
+  reading: BatteryReading;
+}) => {
   const percent = Math.round(reading.charge * 100);
   const halo = useId();
   return (
     <div
-      className={rootStyles({ charge: chargeOf(percent, reading.charging) })}
+      className={rootStyles({
+        charge: chargeOf(percent, reading.charging),
+        fitted,
+      })}
     >
       <svg
         aria-label="Battery"
@@ -147,25 +159,30 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
           <AnimatedLightningIcon label="Charging" size={8} x={7.5} y={2} />
         )}
       </svg>
-      <span className={percentSlotStyles}>
-        <span aria-hidden className={percentSizerStyles}>
-          100%
-        </span>
-        <span className={percentStyles}>{percent}%</span>
-      </span>
+      <Percent figure={`${percent.toString()}%`} fitted={fitted} />
     </div>
   );
 };
+
+/** The figure, in a slot as wide as `100%` unless `fitted`. */
+const Percent = ({ figure, fitted }: { figure: string; fitted: boolean }) =>
+  fitted ? (
+    <span className={percentStyles}>{figure}</span>
+  ) : (
+    <span className={percentSlotStyles}>
+      <span aria-hidden className={percentSizerStyles}>
+        100%
+      </span>
+      <span className={percentStyles}>{figure}</span>
+    </span>
+  );
 
 /**
  * Every part of the readout uses `currentcolor`, so setting `color` here turns
  * it all red, and one animation flashes it all.
  */
 const rootStyles = cva({
-  // The inset matches the icon buttons beside it, so the gaps on either side
-  // look like the gaps between them. 6px, not their 6.5px, so the meter's
-  // outline stays on whole pixels.
-  base: hstack.raw({ gap: 1, paddingInline: 1.5 }),
+  base: hstack.raw({ gap: 1 }),
   variants: {
     charge: {
       // The whole readout turns red, not just the meter.
@@ -178,6 +195,13 @@ const rootStyles = cva({
         animationName: "chargeFlashing",
         color: "danger",
       },
+    },
+    fitted: {
+      // The inset matches the icon buttons beside it, so the gaps on either
+      // side look like the gaps between them. 6px, not their 6.5px, so the
+      // meter's outline stays on whole pixels.
+      false: { paddingInline: 1.5 },
+      true: {},
     },
   },
 });

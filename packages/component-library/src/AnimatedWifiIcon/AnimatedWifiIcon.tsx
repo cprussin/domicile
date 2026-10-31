@@ -20,8 +20,9 @@ type Props = {
 
 /**
  * Phosphor's bold `WifiHigh`, `WifiMedium`, `WifiLow` and `WifiSlash` in one.
- * Arcs fill outward from the dot as the signal grows, pulse while
- * connecting, and ripple while the control the icon is in is pointed at.
+ * Arcs light outward from the dot as the signal grows, the rest dimmed. They
+ * pulse while connecting, and ripple while the control the icon is in is
+ * pointed at.
  */
 export const AnimatedWifiIcon = ({
   bars,
@@ -55,16 +56,14 @@ const arcStyles = css({
   },
   "&[data-state=lit]": {
     opacity: 1,
-    transform: "none",
-    transition:
-      "opacity {durations.slow} {easings.out}, transform {durations.slow} {easings.outBack}",
+    transition: "opacity {durations.slow} {easings.out}",
     transitionDelay: "calc(var(--part-order) * {durations.faster})",
   },
+  // Dimmed, not hidden, so the icon keeps its shape and sits centered at any
+  // signal.
   "&[data-state=unlit]": {
-    opacity: 0,
-    transform: "scale(0.86)",
-    transition:
-      "opacity {durations.normal} {easings.in}, transform {durations.normal} {easings.in}",
+    opacity: "inactive",
+    transition: "opacity {durations.normal} {easings.in}",
   },
 });
 
