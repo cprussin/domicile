@@ -87,6 +87,7 @@ import { WorkspacesContext } from "@domicile-desktop/manganese-window-management
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
+import { DEFAULT_NOTIFICATION_ACTION } from "@domicile-desktop/sdk/notification";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import { deskSound } from "@domicile-desktop/system-audio/react";
@@ -263,6 +264,21 @@ export const Desktop = ({
     inboxes,
     onClose: closeNotifications,
   });
+  // Pressing an inbox's notification brings up its window too.
+  const { invoke: invokeNotification, items: notificationItems } =
+    notifications;
+  const { notificationPressed } = inboxDrawer;
+  const pressNotification = useCallback(
+    (id: number, action: string) => {
+      invokeNotification(id, action);
+      // Not found if it cleared since it was drawn.
+      const pressed = notificationItems.find((item) => item.id === id);
+      if (action === DEFAULT_NOTIFICATION_ACTION && pressed !== undefined) {
+        notificationPressed(pressed.appName);
+      }
+    },
+    [invokeNotification, notificationItems, notificationPressed],
+  );
 
   // Lock state belongs to the compositor, which is what blocks input. The page
   // cannot set it, and reloading the page does not unlock the desk.
@@ -661,7 +677,7 @@ export const Desktop = ({
       <NotificationToasts
         manager={toasts}
         now={now}
-        onAction={notifications.invoke}
+        onAction={pressNotification}
         onReply={notifications.reply}
         screen={windows.focused}
         shown={!(lock.locked || casting)}
@@ -689,7 +705,7 @@ export const Desktop = ({
         inboxes={inboxes.length === 0 ? undefined : inboxDrawer.drawer}
         items={notifications.items}
         now={now}
-        onAction={notifications.invoke}
+        onAction={pressNotification}
         onClose={closeNotifications}
         onDismiss={notifications.dismiss}
         onDoNotDisturb={notifications.setDoNotDisturb}
