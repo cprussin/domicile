@@ -5,39 +5,189 @@ How to build a shell into one module and ship it. Part of
 
 ## Bundling
 
-Build one module with a fixed name:
+`domicile ./src/index.ts` builds a shell for you
+([Distributing](#distributing)), so you need none of this to run one. To ship
+a built module, build it yourself with Vite. A complete project:
+
+```
+my-desktop/
+  package.json
+  vite.config.ts
+  src/
+    index.tsx (or index.ts)
+    style.css
+```
+
+<!-- tab: React -->
+
+```json
+{
+  "name": "my-desktop",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build" },
+  "dependencies": {
+    "@domicile-desktop/react": "next",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "vite": "^8.2.2"
+  }
+}
+```
+
+```tsx
+// src/index.tsx
+/// <reference types="@domicile-desktop/react/elements" />
+/// <reference types="vite/client" />
+import "./style.css";
+
+import { mount } from "@domicile-desktop/react/mount";
+import { useWindows } from "@domicile-desktop/react/windows";
+
+/** Every window side by side. */
+const Desktop = () => (
+  <main>
+    {useWindows()
+      .filter((window) => window.parent === undefined)
+      .map((window) => (
+        <app app-id={window.appId} key={window.appId} />
+      ))}
+  </main>
+);
+
+export const Shell = mount(Desktop);
+```
+
+<!-- tab: JavaScript -->
+
+```json
+{
+  "name": "my-desktop",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build" },
+  "devDependencies": {
+    "@domicile-desktop/sdk": "next",
+    "vite": "^8.2.2"
+  }
+}
+```
+
+```ts
+// src/index.ts
+/// <reference types="vite/client" />
+import "./style.css";
+
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
+
+/** Every window side by side. */
+export const Shell: ShellModule = (root, domicile) => {
+  const main = document.createElement("main");
+  root.append(main);
+  const show = () => {
+    const windows = (domicile.windows.list ?? []).filter(
+      (window) => window.parent === undefined,
+    );
+    main.replaceChildren(
+      ...windows.map((window) => {
+        const app = document.createElement("app");
+        app.setAttribute("app-id", window.appId);
+        return app;
+      }),
+    );
+  };
+  show();
+  domicile.windows.on("change", show);
+};
+```
+
+<!-- /tabs -->
 
 ```ts
 // vite.config.ts
+import { defineConfig, type Plugin } from "vite";
+
+// Domicile's document has no <link> for a stylesheet, so the CSS Vite
+// extracts goes into the module as a <style>.
+const cssInTheModule = (): Plugin => ({
+  enforce: "post",
+  generateBundle(_options, bundle) {
+    const css = Object.keys(bundle).filter((name) => name.endsWith(".css"));
+    const entry = Object.values(bundle).find(
+      (output) => output.type === "chunk" && output.isEntry,
+    );
+    if (entry?.type !== "chunk") {
+      return;
+    }
+    for (const name of css) {
+      const asset = bundle[name];
+      if (asset?.type === "asset") {
+        entry.code = `document.head.append(Object.assign(document.createElement("style"), { textContent: ${JSON.stringify(String(asset.source))} }));\n${entry.code}`;
+        delete bundle[name];
+      }
+    }
+  },
+  name: "css-in-the-module",
+});
+
 export default defineConfig({
   base: "./",
   build: {
     outDir: "dist",
     rollupOptions: {
-      input: "src/index.ts",
+      input: "src/index.tsx", // src/index.ts in JavaScript
       output: { entryFileNames: "shell.js" },
       preserveEntrySignatures: "exports-only",
     },
   },
+  plugins: [cssInTheModule()],
 });
 ```
 
-`outDir` is up to you. The other four settings are required, and each fails
-silently without it:
+```css
+/* src/style.css */
+main {
+  display: flex;
+  gap: 8px;
+  height: 100vh;
+  padding: 8px;
+  box-sizing: border-box;
+}
 
-- **`input`:** a `.ts` file, so no HTML document is emitted.
+app {
+  flex: 1;
+  border-radius: 8px;
+}
+```
+
+```sh
+bun install
+bun run build
+domicile ./dist/shell.js
+```
+
+`outDir` is up to you. The rest is required, and each fails silently without
+it:
+
+- **`input`:** a script, not an HTML file, so no HTML document is emitted.
 - **`entryFileNames`:** fixed. Vite hashes it by default, and the path is what
   users pass to `domicile`.
 - **`preserveEntrySignatures: "exports-only"`:** keeps the `Shell` export. An
   app build drops it, along with all code only it reaches.
 - **`base: "./"`:** makes emitted URLs relative to Domicile's document.
+- **`cssInTheModule`:** Vite extracts imported CSS into a separate file for a
+  `<link>`, and Domicile's document has none. This repo's own version is
+  [`@domicile-desktop/component-library/vite-shell`](/packages/component-library/src/vite-shell.ts).
+
+`domicile`'s builder sets all of these itself, and resolves
+`@domicile-desktop/*` and React from the running Domicile. A standalone build
+bundles its own copies.
 
 Other rules:
 
-- **CSS:** inline it into the bundle. Vite extracts imported CSS into a
-  separate file for a `<link>`, and Domicile's document has none. Use a
-  `generateBundle` plugin; this repo's is
-  [`@domicile-desktop/component-library/vite-shell`](/packages/component-library/src/vite-shell.ts).
 - **Dependencies:** the bundle must contain everything. Nothing resolves at
   run time and there is no `node_modules`. Vite's browser build does this by
   default.

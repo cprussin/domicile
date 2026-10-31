@@ -66,7 +66,9 @@ export const Shell = runManganese();
   `OutputConfig`, …) and `Config` for the whole file.
 - `@domicile-desktop/sdk/config.schema.json` is the JSON Schema. A JSON config
   names it for editors, and the compositor ignores the key:
-  `{ "$schema": "https://unpkg.com/@domicile-desktop/sdk/config.schema.json" }`.
+  `{ "$schema": "https://domicile-desktop.com/config.schema.json" }`. That copy
+  is built from the commit these docs are, so it matches them. The SDK's copy
+  matches the SDK version you installed.
 - Both are generated from `domicile-config`'s Rust types; see the SDK's
   [Generated types](/packages/chrome-sdk/README.md#generated-types).
 

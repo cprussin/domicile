@@ -2,7 +2,8 @@
 
 React for a Domicile shell or app: mount it on the desktop, read the desktop
 from context, and follow its state with hooks. See
-[With React](/docs/WRITING-A-SHELL.md#with-react).
+[With React](/docs/WRITING-A-SHELL.md#with-react). Every hook's full
+signature and docs ship in the package's `.d.ts`, so your editor shows them.
 
 ## Usage
 
@@ -58,7 +59,10 @@ export const Shell = mount(Focused);
 - `@cprussin/option-result` for `watchPresence`'s `Result`.
 - `react` and `react-dom` are peers: the shell's own copies.
 
-## Test
+## Working on this package
+
+For contributors to this repository. Shell authors don't need it.
+
 
 ```sh
 bun run turbo test --filter @domicile-desktop/react

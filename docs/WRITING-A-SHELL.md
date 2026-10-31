@@ -10,12 +10,11 @@ repository.
   [`@domicile-desktop/react`](#with-react). This guide's examples use the
   `domicile` object `Shell` is handed; in React, `useDomicile()` returns it.
 - [`examples/minimal-shell`](/examples/minimal-shell) is the worked example.
-  It pins the SDK published from a `stable` commit and runs on that commit.
-  [`scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh)
-  builds it against the packed SDK on every `./scripts/check.sh shell`;
-  [`example-shell-from-npm.sh`](/.github/scripts/example-shell-from-npm.sh)
-  builds it from npm. If this guide and the example disagree, the example is
-  right.
+  It pins the SDK published from a `stable` commit and runs on that commit,
+  and CI builds it. If this guide and the example disagree,
+  the example is right.
+- A shell is trusted with the whole session. What that reaches, and what it
+  doesn't: [Security](SHELL-SYSTEM-ACCESS.md#security).
 - To contribute to Domicile itself, see [`/AGENTS.md`](/AGENTS.md).
 
 More:
@@ -64,8 +63,11 @@ tree, so CSS applies to it directly. `z-index`, `transform`, `border-radius`,
 ordinary element ([measurements](/docs/architecture/ENGINE-FORK-MEASUREMENTS.md)).
 Exceptions:
 
-- A client that draws in shared memory instead of on the GPU shows a blank
-  window.
+- A client that draws in shared memory instead of on the GPU is copied into a
+  GPU buffer. Checked on NVIDIA's driver and on llvmpipe, untested on Mesa
+  hardware drivers (AMD, Intel). With no GPU device to copy into, its window
+  stays blank. A desktop that composites on the CPU shows it from memory
+  ([status](/docs/architecture/WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)).
 - `backdrop-filter` over an `<app>` renders but is not pixel-verified; see
   [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md).
 

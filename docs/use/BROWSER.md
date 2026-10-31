@@ -91,6 +91,27 @@ it.
 
 <!-- /tabs -->
 
+## Differences from Chrome
+
+The browser is Chromium, with the desktop in place of Chrome's own window and
+menus. So:
+
+- **No saved passwords, autofill or translation.** Use a password manager
+  extension. Bitwarden is the one checked here: its popup, sign-in window and
+  passkeys. Others are untested.
+- **Passkeys come from your password manager extension.** The browser has no
+  passkey prompt of its own.
+- **No Chrome sign-in or sync.** Chrome's settings and profile menu aren't
+  here.
+- **No `chrome://` pages and no Print Preview.** Ctrl+Shift+P prints through
+  the desktop's print dialog.
+- **Manifest V3 extensions only.** uBlock Origin Lite works; uBlock Origin
+  does not.
+- **Some extension features are missing,** such as items in the right-click
+  menu, extension shortcuts and moving tabs.
+
+Sites are told the browser is Google Chrome, as some sign-ins require.
+
 ## History and site data
 
 - **History**, in the launcher, lists the pages you visited by day, with

@@ -183,6 +183,41 @@ Applications ask for dialogs through `xdg-desktop-portal`, and the compositor
 is its backend. The shell draws each one. See
 [PORTALS.md](PORTALS.md).
 
+A shell must answer each request. One that ignores them leaves the app waiting
+for an answer: a file picker that never opens, a call that never shares.
+Either draw them or refuse them:
+
+<!-- tab: React -->
+
+```tsx
+import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+
+// Put it anywhere in your shell.
+const Dialogs = () => <PortalDialogs domicile={useDomicile()} />;
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { PortalAnswer, PortalKind } from "@domicile-desktop/sdk/portal";
+
+// In your Shell: refuse every request. Inhibitors need no answer.
+const refuse = () => {
+  for (const request of domicile.portals.requests ?? []) {
+    if (request.kind !== PortalKind.Inhibit) {
+      domicile.portals.answer(request.id, PortalAnswer.Refused());
+    }
+  }
+};
+refuse();
+domicile.portals.on("change", refuse);
+```
+
+<!-- /tabs -->
+
+The full props, for a shell with monitors and keybindings of its own:
+
 ```tsx
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 

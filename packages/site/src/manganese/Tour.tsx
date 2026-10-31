@@ -66,7 +66,7 @@ const FEATURES: readonly {
     title: "Screenshots",
   },
   {
-    body: "It locks when you go idle, before the machine sleeps, or on Meta+Shift+Return.",
+    body: "Lock it with Meta+Shift+Return. It also locks before the machine sleeps, and after the idle time you set.",
     media: "tour-lock",
     shows: "The lock screen over the wallpaper",
     title: "Lock screen",
