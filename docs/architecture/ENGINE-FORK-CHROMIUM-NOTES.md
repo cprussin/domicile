@@ -91,6 +91,19 @@ GPU. Every gate in `WaylandBufferManagerGpu::GetGbmDevice()` passes on `crux`:
 - `GPU=1` on the spike scripts sets the path.
 - `packages/e2e-harness/tests/e2e-dmabuf.sh` passes on `crux`.
 
+## DRM out-fences stall the GPU main thread
+
+On drm, a commit's out-fence signals at the flip. Upstream
+`GbmSurfaceless` hands it to viz as the swap's release fence, and viz makes the
+GPU wait on it before drawing into the released buffer.
+
+- The display shares its GL context with raster, so every GPU job queued
+  after that draw waits for the flip.
+- A canvas read-back (`getImageData`) blocks in `glReadPixels` until its draw
+  is done: about one frame each, against 0.45ms nested.
+- Patch 0164 completes the swap at presentation, with no fence. Tested by
+  `packages/domicile-engine/tests/test-a-canvas-read-back-does-not-wait-for-the-flip.sh`.
+
 ## `SurfaceLayerBridge` vs the OOPIF path
 
 An OOPIF differs from a `<div>` by 255 edge pixels under `transform`; an
