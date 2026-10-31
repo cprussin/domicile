@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useMemo } from "react";
 
 import { Button } from "../Button/Button";
+import { Input } from "../Input/Input";
 import { DisplayProvider } from "../Screen/DisplayProvider";
 import type { DisplaySource } from "../Screen/display-source";
 
@@ -319,6 +320,29 @@ describe(ModalDialog, () => {
       await user.click(screen.getByRole("button", { name: "Custom" }));
       expect(onOpenChange).toHaveBeenCalled();
       expect(onOpenChange.mock.calls[0]?.[0]).toBe(false);
+    });
+  });
+
+  describe("reopening", () => {
+    it("starts fresh when reopened before it finished closing", async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <ModalDialog open title="Find">
+          <Input aria-label="Query" />
+        </ModalDialog>,
+      );
+      await user.type(screen.getByRole("textbox"), "old");
+      rerender(
+        <ModalDialog open={false} title="Find">
+          <Input aria-label="Query" />
+        </ModalDialog>,
+      );
+      rerender(
+        <ModalDialog open title="Find">
+          <Input aria-label="Query" />
+        </ModalDialog>,
+      );
+      expect(screen.getByRole("textbox")).toHaveValue("");
     });
   });
 

@@ -6,6 +6,7 @@ import type {
   ReactElement,
   ReactNode,
 } from "react";
+import { Fragment, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { center, flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
@@ -93,6 +94,7 @@ const ModalDialogComponent = ({
   ...rootProps
 }: Props) => {
   const region = useScreenRegion(screen);
+  const openings = useOpenings(rootProps.open);
   return (
     <BaseDialog.Root {...rootProps}>
       {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
@@ -157,7 +159,12 @@ const ModalDialogComponent = ({
                   hasTitle: title !== undefined && !titleHidden,
                 })}
               >
-                {children}
+                {/*
+                Keyed to the opening: reopened before its exit animation
+                ends, the popup never unmounts, and would keep the last
+                opening's state.
+              */}
+                <Fragment key={openings}>{children}</Fragment>
               </div>
               {footer !== undefined && (
                 <footer className={footerStyles}>{footer}</footer>
@@ -168,6 +175,19 @@ const ModalDialogComponent = ({
       </BaseDialog.Portal>
     </BaseDialog.Root>
   );
+};
+
+/** Counts the times `open` turned on, so each opening can key fresh content. */
+const useOpenings = (open: boolean | undefined) => {
+  const [seen, setSeen] = useState(open);
+  const [openings, setOpenings] = useState(0);
+  if (open !== seen) {
+    setSeen(open);
+    if (open === true) {
+      setOpenings((count) => count + 1);
+    }
+  }
+  return openings;
 };
 
 export const ModalDialog = Object.assign(ModalDialogComponent, {
