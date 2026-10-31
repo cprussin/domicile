@@ -4,14 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { Apps } from "./Apps";
 import { HeroMedia } from "./HeroMedia";
-import { Platform } from "./Platform";
 import { Quickstart } from "./Quickstart";
 
 // The landing page's examples come in React and in plain JavaScript, as the
 // docs' do.
 describe.each<[string, ReactElement]>([
   ["the hero", <HeroMedia key="hero" />],
-  ["the platform", <Platform key="platform" />],
   ["the quickstart", <Quickstart key="quickstart" />],
   ["apps", <Apps key="apps" />],
 ])("%s", (_, section) => {

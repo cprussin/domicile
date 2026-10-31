@@ -9,8 +9,6 @@ import { CodeBlock } from "../code/CodeBlock";
 import type { Language } from "../code/highlight";
 import { DocTabs } from "../docs/DocTabs";
 import { REPO_ROOT } from "../docs/pages";
-import { Media } from "../media/Media";
-import { Eyebrow } from "../page/Eyebrow";
 import { Section } from "../page/Section";
 
 // Above `STEPS`, which uses them as the module loads.
@@ -69,7 +67,7 @@ const steps = (file: string, example: string): readonly Step[] => [
 
 /**
  * From nothing to a running shell: the steps, wide enough for the shell's
- * longest line, then a capture of them.
+ * longest line.
  */
 export const Quickstart = () => (
   <Section id="quickstart" title="A shell in five minutes">
@@ -90,10 +88,6 @@ export const Quickstart = () => (
           },
         ]}
       />
-      <Media
-        alt="The four steps, then a CSS edit and domicile load-shell"
-        name="quickstart"
-      />
     </div>
   </Section>
 );
@@ -103,7 +97,7 @@ const Steps = ({ steps }: { steps: readonly Step[] }) => (
   <ol className={listStyles}>
     {steps.map((step, at) => (
       <li className={stepStyles} key={step.title}>
-        <Eyebrow>{`${String(at + 1).padStart(2, "0")} · ${step.title}`}</Eyebrow>
+        <h3 className={stepTitleStyles}>{`${at + 1}. ${step.title}`}</h3>
         <CodeBlock code={step.code} language={step.language} />
         {step.note === undefined ? undefined : (
           <span className={noteStyles}>{step.note}</span>
@@ -128,6 +122,12 @@ const stepStyles = flex({
   direction: "column",
   gap: 2.5,
   padding: 5,
+});
+
+const stepTitleStyles = css({
+  fontFamily: "display",
+  fontSize: "lg",
+  fontWeight: "semibold",
 });
 
 const noteStyles = css({ color: "muted", fontSize: "sm" });

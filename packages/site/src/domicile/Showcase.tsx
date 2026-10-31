@@ -12,21 +12,15 @@ const ASKS: readonly {
   note?: string;
 }[] = [
   {
-    ask: "Make the bar thinner.",
-    code: "# save shell.tsx, then\ndomicile load-shell ./shell.tsx",
-    language: "bash",
-    note: "Every window stays open, and a video keeps playing. A build that fails keeps the shell you had.",
-  },
-  {
     ask: "Blur every window except the one I'm typing in.",
     code: "app:not(.focused) {\n  filter: blur(6px) grayscale(1);\n}",
     language: "css",
   },
   {
-    ask: "Put my texts in the notification drawer.",
-    code: "runManganese({\n  inboxes: [messagesInbox()],\n});",
+    ask: "Pin my calendar to the desktop.",
+    code: '<webview\n  src="https://calendar.google.com"\n  className="h-96 w-80"\n/>',
     language: "tsx",
-    note: "Google Messages for web, as a part of your desktop.",
+    note: "Any website is an element you place, like a window.",
   },
   {
     ask: "Slide windows to the other screen when I switch workspaces.",
@@ -35,16 +29,22 @@ const ASKS: readonly {
     note: "One page spans every monitor, so a window just moves.",
   },
   {
-    ask: "Block ads in every app, not just the browser.",
-    code: '{\n  "extensions": {\n    "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"]\n  }\n}',
+    ask: "Put my password manager in the bar.",
+    code: '{\n  "extensions": {\n    "web_store": ["nngceckbapebfimnlniiiahkandclblb"]\n  }\n}',
     language: "json",
-    note: "Chrome extensions work in every web app, and their buttons go in your bar.",
+    note: "Bitwarden from the Chrome Web Store. It fills logins in every browser window, and your shell puts its button in your bar.",
   },
   {
-    ask: "Run all of manganese in a window of my own desktop.",
-    code: 'import { runManganese } from "@domicile-desktop/manganese";\n\n<NestedShell shell={runManganese()} />',
+    ask: "Run someone else's desktop in a window of mine.",
+    code: 'import { Shell } from "@someone/their-desktop";\n\n<NestedShell shell={Shell} />',
     language: "tsx",
-    note: "Shells, bars and panels are npm packages. Use anyone's, or nest a whole shell in yours.",
+    note: "Desktops, bars and panels are npm packages. Use anyone's, or nest a whole desktop in yours.",
+  },
+  {
+    ask: "Swap in my new shell without closing anything.",
+    code: "domicile load-shell ./shell.tsx",
+    language: "bash",
+    note: "Every window stays open, and a video keeps playing. A build that fails keeps the shell you had.",
   },
 ];
 
@@ -69,7 +69,10 @@ export const Showcase = () => (
   </Section>
 );
 
-const gridStyles = grid({ gap: 4, minChildWidth: "20rem" });
+const gridStyles = grid({
+  gap: 4,
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))",
+});
 
 const cardStyles = flex({
   backgroundColor: "card",

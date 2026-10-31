@@ -127,10 +127,11 @@ const NpmPicture = () => (
 
 const linksStyles = grid({
   gap: 3,
-  inlineSize: "100%",
-  marginBlockStart: 6,
+  marginInline: "auto",
+  maxInlineSize: "6xl",
   minChildWidth: "12rem",
-  textAlign: "start",
+  paddingBlockEnd: 28,
+  paddingInline: 6,
 });
 
 // Lifts toward the pointer, with its title in the accent, so the card reads

@@ -67,7 +67,7 @@ const LISTED: readonly { icon: ReactNode; title: string; body: string }[] = [
   {
     body: "Write real desktop apps with HTML, CSS and JavaScript. They run on the engine Domicile already has, so there is no browser to bundle.",
     icon: <CodeIcon />,
-    title: "Web Native Apps - no Electron needed",
+    title: "Apps without Electron",
   },
   {
     body: "Install any website as an app, with its own window and icon.",
@@ -171,7 +171,10 @@ const shownTitleStyles = css({
   marginBlockStart: 2,
 });
 
-const listedStyles = grid({ gap: 4, minChildWidth: "16rem" });
+const listedStyles = grid({
+  gap: 4,
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))",
+});
 
 const listedCardStyles = flex({
   backgroundColor: "card",

@@ -6,7 +6,6 @@ import { css } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
 import type { Language } from "../code/highlight";
-import { Eyebrow } from "../page/Eyebrow";
 import { IconTile } from "../page/IconTile";
 import { Section } from "../page/Section";
 
@@ -39,7 +38,6 @@ export const Npm = () => (
       <Card
         code={PUBLISH}
         icon={<PackageIcon />}
-        label="Your whole desktop"
         language="bash"
         title="Publish your desktop"
       >
@@ -49,7 +47,6 @@ export const Npm = () => (
       <Card
         code={MIX}
         icon={<PuzzlePieceIcon />}
-        label="Pieces of it"
         language="tsx"
         title="Mix and match components"
       >
@@ -62,20 +59,18 @@ export const Npm = () => (
 
 type CardProps = {
   icon: ReactNode;
-  label: string;
   title: string;
   children: ReactNode;
   code: string;
   language: Language;
 };
 
-const Card = ({ icon, label, title, children, code, language }: CardProps) => (
+const Card = ({ icon, title, children, code, language }: CardProps) => (
   <div className={cardStyles}>
-    <div className={labelStyles}>
+    <div className={headingStyles}>
       <IconTile>{icon}</IconTile>
-      <Eyebrow>{label}</Eyebrow>
+      <h3 className={titleStyles}>{title}</h3>
     </div>
-    <h3 className={titleStyles}>{title}</h3>
     <p className={bodyStyles}>{children}</p>
     <CodeBlock code={code} language={language} />
   </div>
@@ -94,7 +89,7 @@ const cardStyles = flex({
   padding: 7,
 });
 
-const labelStyles = hstack({ gap: 3 });
+const headingStyles = hstack({ gap: 3 });
 
 const titleStyles = css({
   fontFamily: "display",
