@@ -414,6 +414,24 @@ scene_cleanup() {
   fi
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null || true
+    # A process that outlives the TERM would hold `wait` until the job's
+    # timeout, as one did after `hero` on 2026-10-31 (mpv was still up).
+    # Ten seconds, then KILL.
+    local pid alive
+    for _ in $(seq 1 40); do
+      alive=0
+      for pid in "${STARTED[@]}"; do
+        kill -0 "$pid" 2>/dev/null && alive=1
+      done
+      [ "$alive" = 0 ] && break
+      sleep 0.25
+    done
+    for pid in "${STARTED[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        echo "$pid ($(ps -o comm= -p "$pid" 2>/dev/null || true)) ignored TERM; killing it" >&2
+        kill -KILL "$pid" 2>/dev/null || true
+      fi
+    done
     wait "${STARTED[@]}" 2>/dev/null || true
   fi
 }
