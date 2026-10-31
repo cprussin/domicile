@@ -1,0 +1,180 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 31 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: rtkit raises a thread the limits will not
+
+Chromium raises the threads that draw and present frames to nice -8,
+and realtime audio to nice -10 when SCHED_RR is refused. setpriority()
+refuses both without RLIMIT_NICE or CAP_SYS_NICE, so on a machine
+without the `domicile` group's limits they compete with a build at
+nice 0.
+
+- base: SetThreadTypeLinux hands a refused raise to
+  PlatformThreadLinux's RaiseRefusedCallback. Refusals before one is
+  set are held, up to 32, for the browser's early threads.
+- chrome: PreBrowserStart sets it to domicile::AskRtkitWhenTheLimitsRefuse,
+  which asks rtkit's MakeThreadHighPriorityWithPID on a thread of its
+  own. The other processes' threads are raised from the browser
+  already, so the browser's callback covers them.
+- rtkit grants each user 25 requests per 20 seconds by default, so a
+  burst of new threads can still be refused. The limits remain the
+  full fix.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ base/threading/platform_thread.h        |  9 ++++
+ base/threading/platform_thread_linux.cc | 68 ++++++++++++++++++++++++-
+ chrome/browser/chrome_browser_main.cc   |  5 ++
+ 3 files changed, 81 insertions(+), 1 deletion(-)
+
+diff --git a/base/threading/platform_thread.h b/base/threading/platform_thread.h
+index 8496fc0..3c82287 100644
+--- a/base/threading/platform_thread.h
++++ b/base/threading/platform_thread.h
+@@ -366,6 +366,15 @@ class BASE_EXPORT PlatformThreadLinux : public PlatformThreadBase {
+   // must be externally synchronized with any call to SetCurrentThreadType.
+   static void SetThreadTypeDelegate(ThreadTypeDelegate* delegate);
+ 
++  // Domicile's engine fork: runs when setpriority() refuses to raise a
++  // thread, as it does without RLIMIT_NICE or CAP_SYS_NICE. It runs on the
++  // thread that asked, which may be any thread. Refusals before it is set are
++  // held, up to 32, and handed to it when it is.
++  using RaiseRefusedCallback = void (*)(ProcessId process_id,
++                                        PlatformThreadId thread_id,
++                                        int nice);
++  static void SetRaiseRefusedCallback(RaiseRefusedCallback callback);
++
+   // Toggles a specific thread's type at runtime. This can be used to
+   // change the priority of a thread in a different process and will fail
+   // if the calling process does not have proper permissions. The
+diff --git a/base/threading/platform_thread_linux.cc b/base/threading/platform_thread_linux.cc
+index b0dab76..6b89033 100644
+--- a/base/threading/platform_thread_linux.cc
++++ b/base/threading/platform_thread_linux.cc
+@@ -19,6 +19,7 @@
+ #include <atomic>
+ #include <cstdint>
+ #include <optional>
++#include <vector>
+ 
+ #include "base/base_switches.h"
+ #include "base/command_line.h"
+@@ -33,6 +34,8 @@
+ #include "base/process/internal_linux.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
++#include "base/synchronization/lock.h"
++#include "base/thread_annotations.h"
+ #include "base/threading/platform_thread_internal_posix.h"
+ #include "base/threading/thread_id_name_manager.h"
+ #include "base/threading/thread_type_delegate.h"
+@@ -44,6 +47,49 @@ namespace {
+ 
+ ThreadTypeDelegate* g_thread_type_delegate = nullptr;
+ 
++// Domicile's engine fork: see PlatformThreadLinux::SetRaiseRefusedCallback.
++struct RaiseRefusal {
++  ProcessId process_id;
++  PlatformThreadId thread_id;
++  int nice;
++};
++
++// Enough for the browser's threads that start before the callback is set.
++constexpr size_t kHeldRaiseRefusals = 32;
++
++struct RaiseRefusals {
++  Lock lock;
++  PlatformThreadLinux::RaiseRefusedCallback callback GUARDED_BY(lock) =
++      nullptr;
++  std::vector<RaiseRefusal> held GUARDED_BY(lock);
++};
++
++RaiseRefusals& GetRaiseRefusals() {
++  static NoDestructor<RaiseRefusals> refusals;
++  return *refusals;
++}
++
++void RaiseRefused(ProcessId process_id,
++                  PlatformThreadId thread_id,
++                  int nice) {
++  RaiseRefusals& refusals = GetRaiseRefusals();
++  PlatformThreadLinux::RaiseRefusedCallback callback;
++  {
++    AutoLock hold(refusals.lock);
++    callback = refusals.callback;
++    if (!callback) {
++      if (refusals.held.size() < kHeldRaiseRefusals) {
++        refusals.held.push_back({process_id, thread_id, nice});
++      } else {
++        DVLOG(1) << "Too many refused raises held; thread " << thread_id
++                 << " stays at its nice value";
++      }
++      return;
++    }
++  }
++  callback(process_id, thread_id, nice);
++}
++
+ const FilePath::CharType kCgroupDirectory[] =
+     FILE_PATH_LITERAL("/sys/fs/cgroup");
+ 
+@@ -239,6 +285,21 @@ void PlatformThreadLinux::SetThreadTypeDelegate(ThreadTypeDelegate* delegate) {
+   g_thread_type_delegate = delegate;
+ }
+ 
++// static
++void PlatformThreadLinux::SetRaiseRefusedCallback(
++    RaiseRefusedCallback callback) {
++  RaiseRefusals& refusals = GetRaiseRefusals();
++  std::vector<RaiseRefusal> held;
++  {
++    AutoLock hold(refusals.lock);
++    refusals.callback = callback;
++    held.swap(refusals.held);
++  }
++  for (const RaiseRefusal& refusal : held) {
++    callback(refusal.process_id, refusal.thread_id, refusal.nice);
++  }
++}
++
+ // static
+ void PlatformThreadLinux::SetThreadCgroupsForThreadType(
+     PlatformThreadId thread_id,
+@@ -282,7 +343,12 @@ void SetThreadTypeLinux(ProcessId process_id,
+     DPLOG(ERROR) << "Failed to set realtime priority for thread " << thread_id;
+   }
+ 
+-  SetThreadNiceFromType(thread_id, thread_type);
++  // Domicile's engine fork: a raise the limits refuse goes to the callback,
++  // which asks rtkit.
++  const int nice = ThreadTypeToNiceValue(thread_type);
++  if (!SetThreadNiceFromType(thread_id, thread_type) && nice < 0) {
++    RaiseRefused(process_id, thread_id, nice);
++  }
+ }
+ 
+ int ThreadTypeToNiceValue(const ThreadType thread_type) {
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index dd112ac..f37205c 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/domicile/domicile_file_dialogs.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/desktop_prefs.h"
++#include "components/domicile/browser/rtkit.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/content_settings/core/common/content_settings.h"
+@@ -1732,6 +1733,10 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+ void ChromeBrowserMainParts::PreBrowserStart() {
+   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreBrowserStart");
+ 
++  // Domicile's engine fork: rtkit raises the threads the limits refuse to.
++  // Refusals before here were held for it.
++  domicile::AskRtkitWhenTheLimitsRefuse();
++
+   // Domicile's engine fork: every file dialog asks the shell rather than
+   // drawing over the desk -- whose input it would stop. Before the first
+   // window, so no page ever had Chrome's.

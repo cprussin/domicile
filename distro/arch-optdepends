@@ -2,6 +2,7 @@
 # adds: what the other formats in `distro/nfpm.yaml` recommend, except GTK
 # and Mesa's drivers, which Arch's required `mesa` holds.
 upower: the battery readout
+rtkit: smooth drawing while the machine is busy, without the domicile group
 hwdata: monitor makers' names
 libpulse: pactl, for the volume readout
 curl: bookmark icons and the captive portal check

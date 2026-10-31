@@ -59,6 +59,9 @@ source_set("domicile") {
     "domicile_window_controller.h",
   ]
 
+  # Public so //chrome/browser, which depends only on this target, starts it.
+  public_deps = [ "//components/domicile:rtkit" ]
+
   deps = [
     "//base",
     # The TVs the shell casts the desktop to, through Chrome's Media Router.
