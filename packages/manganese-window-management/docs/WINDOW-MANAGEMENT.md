@@ -208,6 +208,10 @@ Such a window:
 The decision is made once, when the window first draws: the compositor
 announces a window only then, so its title, app id and limits are known.
 
+A browser window opens floating at the size it asked for when an extension's
+`chrome.windows.create` or a page's `window.open()` gave a width or height,
+such as a Slack huddle.
+
 ## Dragging windows and tabs
 
 - **Meta+drag**, or dragging its title bar, picks up a tiled window. An

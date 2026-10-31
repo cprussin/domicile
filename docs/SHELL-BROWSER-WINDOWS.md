@@ -68,8 +68,10 @@ plus.addEventListener("click", () => {
   the engine lists it. `browser.on("change")` fires when a window opens, closes,
   navigates or changes title. A window you have not drawn is new; a missing
   one was closed. Each has `id`, `url` and `title`. An extension's popup
-  window also has `popupWindow`, `width` and `height`
-  ([SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md)).
+  window also has `popupWindow` ([SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md)).
+  `width` and `height` are the size an extension's popup window or a page's
+  `window.open()` asked for, such as a call's small window; 0 on an axis it
+  left unset. Manganese floats a window with either at that size.
 - **`browser.open(url)` and `browser.close(id)`** are for your own
   UI. The result arrives in the next list. Other windows open without you
   ([New windows](#new-windows)). A page may ask to stay before it closes

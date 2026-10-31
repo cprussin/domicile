@@ -50,6 +50,7 @@ judge() { # $1 NEGATIVE, then NAME=value overrides
     SAW_MADE=1
     SAW_HANDLE=1
     SAW_LISTED=1
+    SAW_SIZED=1
     SAW_CHILD=1
     SAW_MESSAGE=1
     SAW_ANY=1
@@ -83,8 +84,8 @@ blames() { # $1 word, then the args judge takes
 
 # The control presses the plain half, so it opens no window.
 control() {
-  verdict 1 SAW_MADE=0 SAW_HANDLE=0 SAW_LISTED=0 SAW_CHILD=0 SAW_MESSAGE=0 \
-    SAW_ANY=0 "$@"
+  verdict 1 SAW_MADE=0 SAW_HANDLE=0 SAW_LISTED=0 SAW_SIZED=0 SAW_CHILD=0 \
+    SAW_MESSAGE=0 SAW_ANY=0 "$@"
 }
 
 echo "a run that never got as far as measuring anything"
@@ -109,6 +110,8 @@ expect "a browser that made no window blames patch 0115" "yes" \
 expect "a null handle is a failure" "fail" "$(verdict 0 SAW_HANDLE=0)"
 expect "an unlisted window blames AddNewContents" "yes" \
   "$(blames "AddNewContents" 0 SAW_LISTED=0)"
+expect "a window listed without its size blames AddNewContents" "yes" \
+  "$(blames "AddNewContents" 0 SAW_SIZED=0)"
 expect "a window without its opener or name is a failure" "fail" \
   "$(verdict 0 SAW_CHILD=0)"
 expect "an opener that never heard the window is a failure" "fail" \

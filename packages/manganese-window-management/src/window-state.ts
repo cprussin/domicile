@@ -1555,7 +1555,9 @@ const listBrowsers = (
         if (entry.isApp && backgroundApps.includes(entry.appId)) {
           return openHidden(opening, window);
         }
-        return window.popupWindow === undefined
+        return window.popupWindow === undefined &&
+          entry.width === 0 &&
+          entry.height === 0
           ? openWindow(opening, window)
           : openPopupWindow(opening, window, entry.width, entry.height);
       },
@@ -1593,8 +1595,9 @@ const pagesShown = (
       : { ...now, description: drawn.description, icon: drawn.icon };
   });
 
-// Extension popups float at their requested size, as sway floats dialogs; a
-// tile would ignore the size the page was designed for.
+// Extension popups, and pages' windows opened at a size (`window.open()` with
+// `width` or `height`), float at that size, as sway floats dialogs; a tile
+// would ignore the size the page was designed for.
 const openPopupWindow = (
   state: WindowState,
   window: ShellWindow,

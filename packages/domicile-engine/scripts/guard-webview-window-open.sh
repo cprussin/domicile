@@ -27,6 +27,7 @@
 #   the browser made a window        CreateNewGuestWindow ran
 #   the page got a handle            window.open() returned a window
 #   the shell listed the window      AddNewContents adopted it, at /child
+#   at the size the page asked for   so a shell can float it at that size
 #   the window has its opener        the opener and the name `named` survived
 #     and name
 #   the opener heard the window      the two script each other
@@ -219,6 +220,7 @@ SAW_PRESS=$(saw "GUARD page-mousedown")
 SAW_MADE=$(saw "$MADE_LINE")
 SAW_HANDLE=$(saw "GUARD page-handle=true")
 SAW_LISTED=$(saw "GUARD new-window url=$SITE/child")
+SAW_SIZED=$(saw "GUARD new-window url=$SITE/child size=320x240")
 SAW_CHILD=$(saw "GUARD child-loaded opener=true name=named")
 SAW_MESSAGE=$(saw "GUARD page-message hello")
 SAW_ANY=$( (grep -qF "GUARD page-handle" "$ENGINE_LOG" ||
@@ -229,7 +231,7 @@ SAW_ANY=$( (grep -qF "GUARD page-handle" "$ENGINE_LOG" ||
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE"
 echo "presses: chrome=$SAW_CHROME page=$SAW_PRESS"
-echo "window: made=$SAW_MADE handle=$SAW_HANDLE listed=$SAW_LISTED child=$SAW_CHILD message=$SAW_MESSAGE any=$SAW_ANY"
+echo "window: made=$SAW_MADE handle=$SAW_HANDLE listed=$SAW_LISTED sized=$SAW_SIZED child=$SAW_CHILD message=$SAW_MESSAGE any=$SAW_ANY"
 echo
 
 # The verdict: names the component to blame. Checks run in dependency order.
@@ -270,6 +272,11 @@ elif [ "$SAW_LISTED" != "1" ]; then
   FAILURE="the page got its handle and the shell never listed the window at \
 /child. Content never handed it to AddNewContents, or AdoptOpenedWindow did \
 not list it with its address"
+elif [ "$SAW_SIZED" != "1" ]; then
+  FAILURE="the shell listed the window without the 320x240 the page asked \
+for, so a shell tiles a call's small window. ShowCreatedWindow fitted it to \
+the guest's screen (patch 0165), AddNewContents dropped window_features, or \
+the list does not carry the size"
 elif [ "$SAW_CHILD" != "1" ]; then
   FAILURE="the window was listed and its page never ran with its opener and \
 the name 'named'. The renderer did not navigate it, or CreateParams lost the \
