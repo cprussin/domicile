@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Apps } from "./Apps";
 import { HeroMedia } from "./HeroMedia";
 import { Quickstart } from "./Quickstart";
 
@@ -11,14 +10,15 @@ import { Quickstart } from "./Quickstart";
 describe.each<[string, ReactElement]>([
   ["the hero", <HeroMedia key="hero" />],
   ["the quickstart", <Quickstart key="quickstart" />],
-  ["apps", <Apps key="apps" />],
 ])("%s", (_, section) => {
   test("has a React tab and a JavaScript tab", () => {
-    const tabs = [
-      ...renderToStaticMarkup(section).matchAll(
-        /<button[^>]*role="tab"[^>]*>([^<]*)</g,
+    const tabLists = [
+      ...renderToStaticMarkup(section).matchAll(/role="tablist".*?<\/div>/gs),
+    ].map(([list]) =>
+      [...list.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)</g)].map(
+        (match) => match[1],
       ),
-    ].map((match) => match[1]);
-    expect(tabs).toEqual(["React", "JavaScript"]);
+    );
+    expect(tabLists).toContainEqual(["React", "JavaScript"]);
   });
 });

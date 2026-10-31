@@ -3,14 +3,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import DomicilePage from "./page";
 
-test("the page links to each of its main sections", () => {
+test("the page tells its story in order: build, start from manganese, what you get, install, go deeper", () => {
   const html = renderToStaticMarkup(<DomicilePage />);
-  const links = html.match(/<nav aria-label="On this page".*?<\/nav>/s)?.[0];
-  const targets = [...(links ?? "").matchAll(/href="#([^"]+)"/g)].map(
+  const sections = [...html.matchAll(/<section[^>]* id="([^"]+)"/g)].map(
     ([, id]) => id,
   );
-  expect(targets).toEqual(["make", "css", "batteries", "apps", "npm"]);
-  for (const id of targets) {
-    expect(html).toContain(`id="${id}"`);
-  }
+  expect(sections).toEqual([
+    "top",
+    "make",
+    "manganese",
+    "only",
+    "batteries",
+    "quickstart",
+    "npm",
+    "apps",
+    "faq",
+    "docs",
+  ]);
 });

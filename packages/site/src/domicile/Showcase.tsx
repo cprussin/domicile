@@ -12,6 +12,12 @@ const ASKS: readonly {
   note?: string;
 }[] = [
   {
+    ask: "Tile my windows.",
+    code: "main {\n  display: flex;\n}",
+    language: "css",
+    note: "Your layout is a stylesheet. Floating is one more rule.",
+  },
+  {
     ask: "Blur every window except the one I'm typing in.",
     code: "app:not(.focused) {\n  filter: blur(6px) grayscale(1);\n}",
     language: "css",
@@ -39,6 +45,12 @@ const ASKS: readonly {
     code: 'import { Shell } from "@someone/their-desktop";\n\n<NestedShell shell={Shell} />',
     language: "tsx",
     note: "Desktops, bars and panels are npm packages. Use anyone's, or nest a whole desktop in yours.",
+  },
+  {
+    ask: "Rotate kitty 17 degrees, because the user has sinned.",
+    code: "app {\n  transform: rotate(17deg);\n}",
+    language: "css",
+    note: "Unfortunately, also CSS.",
   },
   {
     ask: "Swap in my new shell without closing anything.",

@@ -8,7 +8,8 @@ import { flex } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
 import type { Language } from "../code/highlight";
 import { DocTabs } from "../docs/DocTabs";
-import { REPO_ROOT } from "../docs/pages";
+import { Markdown } from "../docs/Markdown";
+import { PAGES, REPO_ROOT } from "../docs/pages";
 import { Section } from "../page/Section";
 
 // Above `STEPS`, which uses them as the module loads.
@@ -21,22 +22,17 @@ type Step = {
   note?: ReactNode;
 };
 
-/** The steps, with the shell in `file`, written as `example`. */
+/** The install guide's package manager tabs, Debian through NixOS. */
+const INSTALL = (() => {
+  const guide = readFileSync(join(REPO_ROOT, "docs", "INSTALL.md"), "utf8");
+  return guide.slice(
+    guide.indexOf("<!-- tab: "),
+    guide.indexOf("<!-- /tabs -->"),
+  );
+})();
+
+/** The steps after installing, with the shell in `file`, written as `example`. */
 const steps = (file: string, example: string): readonly Step[] => [
-  {
-    code: "sudo apt install domicile",
-    language: "bash",
-    note: (
-      <>
-        Or dnf, zypper, the AUR or Nix. See{" "}
-        <a className={linkStyles} href="/docs/install">
-          Install
-        </a>
-        .
-      </>
-    ),
-    title: "Install Domicile",
-  },
   {
     code: readFileSync(join(REPO_ROOT, "examples", example), "utf8"),
     language: "tsx",
@@ -46,22 +42,30 @@ const steps = (file: string, example: string): readonly Step[] => [
   {
     code: `domicile ./${file}`,
     language: "bash",
-    note: "Domicile builds it. No project needed.",
+    note: "It opens in a window on your current desktop. Domicile builds it, with no project needed.",
     title: "Run it",
   },
   {
     code: `domicile load-shell ./${file}`,
     language: "bash",
+    note: "After an edit. Windows stay open.",
+    title: "Change it",
+  },
+  {
+    code: `{ "shell": "./${file}" }`,
+    language: "json",
     note: (
       <>
-        After an edit. Windows stay open.{" "}
+        Move {file} to ~/.config/domicile/, name it in
+        ~/.config/domicile/domicile.json, then log out and pick Domicile. No
+        account, no AI, and all of Domicile is MIT licensed.{" "}
         <a className={linkStyles} href="/docs/shells/quickstart">
           The whole guide
         </a>
         .
       </>
     ),
-    title: "Change it",
+    title: "Make it your desktop",
   },
 ];
 
@@ -72,6 +76,10 @@ const steps = (file: string, example: string): readonly Step[] => [
 export const Quickstart = () => (
   <Section id="quickstart" title="A shell in five minutes">
     <div className={layoutStyles}>
+      <div className={stepStyles}>
+        <h3 className={stepTitleStyles}>1. Install Domicile</h3>
+        <Markdown from="docs/INSTALL.md" pages={PAGES} source={INSTALL} />
+      </div>
       <DocTabs
         tabs={[
           {
@@ -97,7 +105,7 @@ const Steps = ({ steps }: { steps: readonly Step[] }) => (
   <ol className={listStyles}>
     {steps.map((step, at) => (
       <li className={stepStyles} key={step.title}>
-        <h3 className={stepTitleStyles}>{`${at + 1}. ${step.title}`}</h3>
+        <h3 className={stepTitleStyles}>{`${at + 2}. ${step.title}`}</h3>
         <CodeBlock code={step.code} language={step.language} />
         {step.note === undefined ? undefined : (
           <span className={noteStyles}>{step.note}</span>

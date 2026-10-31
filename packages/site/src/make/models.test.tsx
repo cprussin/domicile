@@ -35,6 +35,13 @@ describe("MODELS", () => {
     });
   }
 
+  // The preview shows first, so an edit says where the code is.
+  it("each hint that asks for an edit says it's in the Code tab", () => {
+    for (const model of MODELS.filter(({ hint }) => hint.includes("`"))) {
+      expect(model.hint).toMatch(/in the Code tab/i);
+    }
+  });
+
   // The download runs as is: Tailwind is an npm package, not a build step.
   it("each styles itself with Tailwind's in-browser build", () => {
     for (const model of MODELS) {
