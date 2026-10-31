@@ -3,11 +3,16 @@
 import { Input } from "@domicile-desktop/component-library/Input";
 import {
   highlightIn,
-  keepInView,
   stepOf,
   steppedTo,
 } from "@domicile-desktop/component-library/list-walk";
+import { Marked } from "@domicile-desktop/component-library/Marked";
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
+import {
+  ResultList,
+  resultId,
+} from "@domicile-desktop/component-library/ResultList";
+import { RowTile } from "@domicile-desktop/component-library/RowTile";
 import { Engine } from "@domicile-desktop/manganese-address/search";
 import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
 import { FilePreviewKind } from "@domicile-desktop/sdk/file-preview";
@@ -31,7 +36,6 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGl
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
 import type { ReactNode, RefObject } from "react";
 import {
-  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -41,7 +45,7 @@ import {
   useState,
 } from "react";
 import { css } from "../styled-system/css";
-import { flex, hstack, vstack } from "../styled-system/patterns";
+import { hstack, vstack } from "../styled-system/patterns";
 import { AudioPreview } from "./AudioPreview";
 import type { Choice } from "./choices";
 import {
@@ -57,8 +61,6 @@ import type { DesktopEntry, FoundApps } from "./found-apps";
 import type { Launch } from "./launch";
 import type { LearnedIcons } from "./learned-icons";
 import { learnedIcons, learnIcon } from "./learned-icons";
-import type { Mark } from "./marked";
-import { marked } from "./marked";
 import { homeUrl, MediaKind, mediaOf } from "./media";
 import { TextPreview } from "./TextPreview";
 import type { Found } from "./useFound";
@@ -84,7 +86,7 @@ const DOM_DELTA_PIXEL = 0;
 /** Glyph size in a preview pane with no image. */
 const EMPTY_ICON_SIZE = 64;
 
-/** Glyph size in rows and the box. */
+/** Glyph size in the box and the indexing notice. */
 const ICON_SIZE = 16;
 
 type Props = {
@@ -259,7 +261,9 @@ const Query = ({
       <div className={searchStyles}>
         <Input
           aria-activedescendant={
-            highlighted === undefined ? undefined : rowId(listId, highlighted)
+            highlighted === undefined
+              ? undefined
+              : resultId(listId, highlighted)
           }
           aria-controls={listId}
           aria-expanded
@@ -317,41 +321,20 @@ const Query = ({
           typing.
         */}
         <div className={resultsStyles}>
-          {/*
-            A listbox rather than buttons, since focus stays in the box (see
-            `aria-activedescendant`). Divs rather than `ul`/`li`, because lint
-            rejects interactive roles on list elements.
-          */}
-          <div className={listStyles} id={listId} role="listbox">
-            {choices.map((choice, at) => (
-              // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox above owns the keyboard for these rows, which is the whole point of `aria-activedescendant`
-              <div
-                aria-selected={at === highlighted}
-                className={rowStyles}
-                data-highlighted={at === highlighted ? "" : undefined}
-                id={rowId(listId, at)}
-                key={keyOf(choice)}
-                onClick={() => {
-                  choose(choice, false);
-                }}
-                // The pointer moves the highlight instead of a separate hover
-                // state, so only one row looks selected. Pointer move rather
-                // than enter, so rows scrolling under a still pointer don't
-                // steal the highlight.
-                onPointerMove={() => {
-                  setStepped(at);
-                }}
-                // A stable function on the highlighted row only, so React
-                // calls it only when the highlight moves.
-                ref={at === highlighted ? keepInView : undefined}
-                role="option"
-                // Out of the tab order; focus stays in the box.
-                tabIndex={-1}
-              >
-                <ChoiceRow choice={choice} learned={learned} query={query} />
-              </div>
-            ))}
-          </div>
+          <ResultList
+            highlighted={highlighted}
+            id={listId}
+            items={choices}
+            keyOf={keyOf}
+            onChoose={(choice) => {
+              choose(choice, false);
+            }}
+            onHighlight={setStepped}
+          >
+            {(choice) => (
+              <ChoiceRow choice={choice} learned={learned} query={query} />
+            )}
+          </ResultList>
           {/*
             After the rows, in the scroll area but outside the listbox, which
             may hold only options.
@@ -438,7 +421,7 @@ const ChoiceRow = ({
         <>
           <AppTile icon={choice.entry.icon} />
           <span className={rowNameStyles}>
-            <Marked marks={marked(choice.entry.name, query)} />
+            <Marked query={query} text={choice.entry.name} />
           </span>
         </>
       );
@@ -454,7 +437,7 @@ const ChoiceRow = ({
             learned={learned[choice.url]}
           />
           <span className={rowNameStyles}>
-            <Marked marks={marked(choice.name, query)} />
+            <Marked query={query} text={choice.name} />
           </span>
         </>
       );
@@ -491,7 +474,7 @@ const ChoiceRow = ({
         <>
           <RowTile icon={tagLogoOf(choice.engine)} />
           <span className={rowNameStyles}>
-            <Marked marks={marked(choice.tag, query)} />{" "}
+            <Marked query={query} text={choice.tag} />{" "}
             <span className={rowVerbStyles}>{tagDoesOf(choice.engine)}</span>
           </span>
         </>
@@ -540,32 +523,14 @@ const FileChoice = ({ query, row }: { query: string; row: FileRow }) => (
     <span className={rowTextStyles}>
       {row.directory !== undefined && (
         <span className={rowDirectoryStyles}>
-          <Marked marks={marked(row.directory, query)} />
+          <Marked query={query} text={row.directory} />
         </span>
       )}
       <span className={rowNameStyles}>
-        <Marked marks={marked(row.name, query)} />
+        <Marked query={query} text={row.name} />
       </span>
     </span>
   </>
-);
-
-/**
- * A row's glyph in a tile.
- *
- * Renders both the outline and fill weights and shows one, since CSS can't
- * change a Phosphor glyph's weight. Same approach as the component library's
- * `_control/PrefixIconStack`.
- */
-const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
-  <span className={rowTileStyles} data-row-tile="">
-    <span className={rowGlyphStyles} data-row-glyph="resting">
-      <Icon size={ICON_SIZE} />
-    </span>
-    <span className={rowGlyphStyles} data-row-glyph="reached">
-      <Icon size={ICON_SIZE} weight="fill" />
-    </span>
-  </span>
 );
 
 /** An application's icon, or a generic glyph if none was found. */
@@ -961,26 +926,6 @@ const FilePreviewPane = ({
 };
 
 /**
- * A row's text with the query's matches highlighted.
- *
- * Uses `mark` for its semantics, which screen readers understand.
- */
-const Marked = ({ marks }: { marks: readonly Mark[] }) => (
-  <>
-    {marks.map((mark, at) =>
-      mark.matched ? (
-        // Runs have no identity beyond their position.
-        <mark className={markStyles} key={at}>
-          {mark.text}
-        </mark>
-      ) : (
-        <Fragment key={at}>{mark.text}</Fragment>
-      ),
-    )}
-  </>
-);
-
-/**
  * A notice that the home index is still building.
  *
  * `role="status"` so screen readers announce it.
@@ -1083,10 +1028,6 @@ const tagUseOf = (engine: Engine | undefined): string =>
   engine === undefined
     ? "open sites and searches in a private browser"
     : `search ${nameOf(engine)} instead of Google`;
-
-/** A row's DOM id, for `aria-activedescendant`. */
-const rowId = (listId: string, at: number): string =>
-  `${listId}-${at.toString()}`;
 
 // The search box is the panel's header, set off by a line under it.
 const searchStyles = css({
@@ -1198,53 +1139,6 @@ const viewStyles = css({
   inlineSize: "100%",
 });
 
-const listStyles = flex({
-  direction: "column",
-  gap: 0.5,
-});
-
-const rowStyles = hstack({
-  // A neutral wash, so color is left for what needs attention. There is no
-  // separate hover style; the pointer moves the highlight.
-  "&[data-highlighted]": {
-    backgroundColor:
-      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
-  },
-  // A filled glyph on the highlighted row, since an outline glyph loses
-  // contrast on the lighter background.
-  "&[data-highlighted] [data-row-glyph=reached]": { opacity: 1 },
-  "&[data-highlighted] [data-row-glyph=resting]": { opacity: 0 },
-  "&[data-highlighted] [data-row-tile]": {
-    backgroundColor:
-      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
-    borderColor: "color-mix(in oklab, {colors.foreground} 20%, transparent)",
-    color: "foreground",
-  },
-  borderRadius: "md",
-  color: "foreground",
-  cursor: "pointer",
-  fontSize: "sm",
-  gap: 2.5,
-  paddingBlock: 1.5,
-  paddingInline: 2,
-  transition: "background-color {durations.fast} {easings.out}",
-});
-
-// A fixed-size tile aligns every row's text and gives the highlight something
-// to color.
-const rowTileStyles = css({
-  blockSize: 7,
-  border: "1px solid color-mix(in oklab, {colors.foreground} 8%, transparent)",
-  borderRadius: "sm",
-  color: "muted",
-  display: "grid",
-  flexShrink: 0,
-  inlineSize: 7,
-  placeItems: "center",
-  transition:
-    "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
-});
-
 // The tile's size, without its frame.
 const pictureTileStyles = css({
   blockSize: 7,
@@ -1259,26 +1153,6 @@ const rowPictureStyles = css({
   blockSize: 5,
   inlineSize: 5,
   objectFit: "contain",
-});
-
-// Both weights share one grid cell, so swapping doesn't shift layout.
-const rowGlyphStyles = css({
-  // Hidden by default; `rowStyles` shows it on the highlighted row.
-  "&[data-row-glyph=reached]": { opacity: 0 },
-  display: "inline-flex",
-  gridArea: "1 / 1",
-  transition: "opacity {durations.fast} {easings.out}",
-});
-
-// Matched letters in bold, in the row's own color instead of `mark`'s yellow.
-// Emboldened with a stroke rather than font weight, which would widen letters
-// and shift the row on every key. `paint-order: stroke` keeps letter holes
-// open.
-const markStyles = css({
-  backgroundColor: "transparent",
-  color: "inherit",
-  paintOrder: "stroke",
-  WebkitTextStroke: "{borderWidths.fauxBold} currentColor",
 });
 
 // Directory over name, each truncating independently.

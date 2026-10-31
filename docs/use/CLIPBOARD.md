@@ -2,6 +2,9 @@
 
 Meta+Shift+V shows what you copied, newest first. Pick one to paste it next.
 
+- It opens on the copy before your current one, so Enter swaps back to it.
+- Type to narrow the list. Arrows or the pointer pick another row.
+
 ![Clipboard history](../media/tour-clipboard.png)
 
 - It keeps the last 32 copies, text and images.

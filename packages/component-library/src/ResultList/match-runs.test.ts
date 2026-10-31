@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { marked } from "./marked";
+import { marked } from "./match-runs";
 
 describe("marked", () => {
   it("leaves a line nobody has narrowed in one piece", () => {

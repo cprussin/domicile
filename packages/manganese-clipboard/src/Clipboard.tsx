@@ -1,12 +1,32 @@
+import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
+import { Input } from "@domicile-desktop/component-library/Input";
+import {
+  stepOf,
+  steppedTo,
+} from "@domicile-desktop/component-library/list-walk";
+import { Marked } from "@domicile-desktop/component-library/Marked";
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
+import {
+  ResultList,
+  resultId,
+} from "@domicile-desktop/component-library/ResultList";
+import { RowTile } from "@domicile-desktop/component-library/RowTile";
 import type { DomicileClipboardEntry } from "@domicile-desktop/sdk/domicile-host";
-import { memo, useEffect, useId, useRef, useState } from "react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { LinkSimpleIcon } from "@phosphor-icons/react/dist/ssr/LinkSimple";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
+import { memo, useId, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { flex, vstack } from "../styled-system/patterns";
+import { CopyKind, kindOf } from "./copy-kind";
 
-/** The list's accessible name. */
-const HISTORY = "What has been copied";
+/** The box's placeholder and accessible name. */
+const PROMPT = "Search what you copied";
+
+/** Glyph size in the box. */
+const ICON_SIZE = 16;
 
 type Props = {
   /** The clipboard history, newest first, from the compositor. */
@@ -21,19 +41,21 @@ type Props = {
 };
 
 /**
- * The clipboard history panel, for restoring an earlier copy.
+ * The clipboard history panel, for restoring an earlier copy. Looks and
+ * steers like the launcher: a search box over its rows.
  *
  * A Wayland selection lasts only while the copying client runs, so the
  * compositor keeps the history. Choosing a row asks the compositor to serve
  * that entry as the selection.
  *
- * Open state is desktop state, as with `launcher/Launcher.tsx`. Choosing a row
- * reports both the choice and the dismissal, so the panel is gone before the
- * paste.
+ * Open state is desktop state, as with the launcher. Choosing a row reports
+ * both the choice and the dismissal, so the panel is gone before the paste.
  */
 export const Clipboard = memo(
   ({ entries, onCopy, onDismiss, open, screen }: Props) => (
     <ModalDialog
+      // Keyboard-driven, as the launcher; Escape closes it.
+      closeButton={false}
       onOpenChange={(next) => {
         if (!next) {
           onDismiss();
@@ -41,13 +63,25 @@ export const Clipboard = memo(
       }}
       open={open}
       screen={screen}
-      title="Clipboard"
+      // Translucent, as the launcher.
+      surface="glass"
+      // The search box heads the panel, so the title is for screen readers.
+      title="Clipboard history"
+      titleHidden
     >
       {/*
       Inside the dialog so it unmounts on close, and every open starts with
-      nothing highlighted.
+      an empty box on the previous copy.
     */}
-      <History entries={entries} onCopy={onCopy} onDismiss={onDismiss} />
+      {entries.length === 0 ? (
+        <EmptyState
+          hint="Things you copy show up here."
+          icon={ClipboardTextIcon}
+          title="Nothing copied yet"
+        />
+      ) : (
+        <History entries={entries} onCopy={onCopy} onDismiss={onDismiss} />
+      )}
     </ModalDialog>
   ),
 );
@@ -59,143 +93,202 @@ type HistoryProps = {
 };
 
 /**
- * The rows and their keyboard navigation.
+ * The search box and the rows it narrows.
  *
- * A focused listbox rather than a combobox, since there is nothing to type.
- * `aria-activedescendant` reports the highlight while focus stays on the list.
+ * A combobox over a listbox, as in the launcher: focus stays in the box and
+ * `aria-activedescendant` marks the highlighted row.
  */
 const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
-  const list = useRef<HTMLDivElement>(null);
   const listId = useId();
-  // The highlighted row, or `undefined` until an arrow key is pressed. Nothing
-  // starts highlighted: the newest entry is already on the clipboard.
-  const [stepped, setStepped] = useState<number | undefined>(undefined);
+  const [query, setQuery] = useState("");
+  // The newest copy is already on the clipboard, so the highlight starts on
+  // the one before it.
+  const [stepped, setStepped] = useState(entries.length > 1 ? 1 : 0);
+  const shown = matching(entries, query);
+  const highlighted =
+    shown.length === 0 ? undefined : Math.min(stepped, shown.length - 1);
+  const current = entries[0]?.id;
 
-  // Focus the list explicitly. base-ui would focus the close button, and the
-  // first arrow key would do nothing.
-  useEffect(() => {
-    list.current?.focus();
-  }, []);
-
-  const pick = (entry: number) => {
-    onCopy(entry);
+  const pick = (entry: DomicileClipboardEntry) => {
+    onCopy(entry.id);
     onDismiss();
   };
 
-  return entries.length === 0 ? (
-    <p className={emptyStyles}>Nothing has been copied yet</p>
-  ) : (
-    <div
-      aria-activedescendant={
-        stepped === undefined ? undefined : rowId(listId, stepped)
-      }
-      aria-label={HISTORY}
-      className={listStyles}
-      id={listId}
-      onKeyDown={(event) => {
-        switch (event.key) {
-          case "ArrowDown": {
-            // Keeps the list from scrolling past the highlighted row.
-            event.preventDefault();
-            setStepped(steppedTo(stepped, 1, entries.length));
-            break;
+  return (
+    <div className={panelStyles}>
+      <div className={searchStyles}>
+        <Input
+          aria-activedescendant={
+            highlighted === undefined
+              ? undefined
+              : resultId(listId, highlighted)
           }
-          case "ArrowUp": {
-            event.preventDefault();
-            setStepped(steppedTo(stepped, -1, entries.length));
-            break;
-          }
-          case "Enter": {
-            const chosen = stepped === undefined ? undefined : entries[stepped];
-            // Enter with nothing highlighted chooses nothing.
-            if (chosen !== undefined) {
-              pick(chosen.id);
-            }
-            break;
-          }
-        }
-      }}
-      ref={list}
-      role="listbox"
-      tabIndex={0}
-    >
-      {entries.map((entry, at) => (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: the listbox above owns the keyboard for these rows, which is the whole point of `aria-activedescendant`
-        <div
-          aria-selected={at === stepped}
-          className={rowStyles}
-          data-highlighted={at === stepped ? "" : undefined}
-          id={rowId(listId, at)}
-          key={entry.id}
-          onClick={() => {
-            pick(entry.id);
+          aria-controls={listId}
+          aria-expanded
+          aria-label={PROMPT}
+          autoFocus
+          flush
+          onChange={(event) => {
+            setQuery(event.target.value);
+            // Reset, since the old index refers to the previous list.
+            setStepped(0);
           }}
-          role="option"
-          // Not in the tab order: focus stays on the list, so navigating and
-          // choosing are one gesture.
-          tabIndex={-1}
-        >
-          {entry.preview}
-        </div>
-      ))}
+          onKeyDown={(event) => {
+            const step = stepOf(event);
+            const chosen =
+              highlighted === undefined ? undefined : shown[highlighted];
+            if (step !== undefined) {
+              // Stop the box from moving the caret.
+              event.preventDefault();
+              setStepped(steppedTo(highlighted ?? 0, step, shown.length));
+            } else if (event.key === "Enter" && chosen !== undefined) {
+              event.preventDefault();
+              pick(chosen);
+            }
+          }}
+          placeholder={PROMPT}
+          prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
+          role="combobox"
+          size="lg"
+          // Copies are often code or addresses, which would be flagged as
+          // misspellings.
+          spellCheck={false}
+          suffixIcon={
+            <span aria-hidden="true" className={countStyles}>
+              {countOf(entries.length, shown.length, query)}
+            </span>
+          }
+          value={query}
+        />
+      </div>
+      <div className={rowsStyles}>
+        {shown.length === 0 ? (
+          <EmptyState
+            icon={MagnifyingGlassIcon}
+            title="Nothing copied matches"
+          />
+        ) : (
+          <ResultList
+            highlighted={highlighted}
+            id={listId}
+            items={shown}
+            keyOf={(entry) => entry.id.toString()}
+            onChoose={pick}
+            onHighlight={setStepped}
+          >
+            {(entry) => (
+              <>
+                <RowTile icon={glyphOf(kindOf(entry.preview))} />
+                <span className={textStyles}>
+                  <span className={lineStyles}>
+                    <Marked query={query} text={lineOf(entry.preview)} />
+                  </span>
+                  {entry.id === current && (
+                    <span className={detailStyles}>On the clipboard now</span>
+                  )}
+                </span>
+              </>
+            )}
+          </ResultList>
+        )}
+      </div>
     </div>
   );
 };
 
-/**
- * Where an arrow key lands, clamped rather than wrapped, as in the launcher.
- * Wrapping would jump from the newest to the oldest entry.
- */
-const steppedTo = (
-  from: number | undefined,
-  by: number,
-  count: number,
-): number | undefined => {
-  if (from === undefined) {
-    return by > 0 ? 0 : count - 1;
+/** A copy on one line: every run of spaces and line breaks is one space. */
+const lineOf = (preview: string): string =>
+  preview.trim().replaceAll(/\s+/g, " ");
+
+/** The copies whose line holds every word of `query`, ignoring case. */
+const matching = (
+  entries: readonly DomicileClipboardEntry[],
+  query: string,
+): readonly DomicileClipboardEntry[] => {
+  const words = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word !== "");
+  return entries.filter((entry) => {
+    const line = lineOf(entry.preview).toLowerCase();
+    return words.every((word) => line.includes(word));
+  });
+};
+
+/** The count at the box's end: every copy, or the matches once narrowed. */
+const countOf = (copies: number, shown: number, query: string): string => {
+  if (query.trim() === "") {
+    return copies === 1 ? "1 copy" : `${copies.toString()} copies`;
   } else {
-    return Math.min(Math.max(from + by, 0), count - 1);
+    return `${shown.toString()} matched`;
   }
 };
 
-/** A row's element ID, for `aria-activedescendant`. */
-const rowId = (listId: string, at: number): string =>
-  `${listId}-${at.toString()}`;
+const glyphOf = (kind: CopyKind) => {
+  switch (kind) {
+    case CopyKind.Link: {
+      return LinkSimpleIcon;
+    }
+    case CopyKind.Text: {
+      return TextTIcon;
+    }
+  }
+};
 
-// Usual right after the desktop starts: the history does not survive a
-// restart.
-const emptyStyles = css({
-  color: "muted",
-  fontSize: "sm",
-  paddingBlock: 2,
-});
-
-// Tall enough to scroll, short enough to leave the backdrop visible, like the
-// launcher.
-const listStyles = vstack({
+const panelStyles = vstack({
   alignItems: "stretch",
-  gap: 1,
-  maxBlockSize: 80,
-  overflowY: "auto",
+  gap: 3,
 });
 
-const rowStyles = flex({
-  _hover: { backgroundColor: "card" },
-  "&[data-highlighted]": {
-    backgroundColor:
-      "color-mix(in oklab, {colors.accent} 25%, {colors.background})",
-  },
-  align: "center",
-  borderRadius: "sm",
-  color: "foreground",
-  cursor: "pointer",
-  fontFamily: "mono",
-  fontSize: "sm",
-  // The compositor already truncates long entries; this keeps an embedded
-  // newline from turning a row into a paragraph.
+// The search box is the panel's header, set off by a line under it, as in
+// the launcher.
+const searchStyles = css({
+  borderBlockEnd:
+    "1px solid color-mix(in oklab, {colors.foreground} 10%, transparent)",
+  // Up into the popup's top padding, which is sized for a title.
+  marginBlockStart: -3,
+  marginInline: -5,
+  paddingBlockEnd: 2,
+  paddingInline: 3,
+});
+
+// Tabular figures, so the count doesn't shift as it changes.
+const countStyles = css({
+  color: "muted",
+  fontSize: "xs",
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "nowrap",
+});
+
+// The launcher's results well. Tall enough to scroll, short enough to leave
+// the backdrop visible.
+const rowsStyles = css({
+  backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
+  borderRadius: "md",
+  maxBlockSize: "60cqh",
+  overflowY: "auto",
+  padding: 1,
+  scrollbarColor: "{colors.border} transparent",
+  scrollbarWidth: "thin",
+  // Keeps a row scrolled by `keepInView` off the edge.
+  scrollPaddingBlock: 1,
+});
+
+const textStyles = flex({
+  direction: "column",
+  flex: "1 1 auto",
+  minInlineSize: 0,
+});
+
+// The compositor already cuts long copies short; this cuts them to the row.
+const lineStyles = css({
+  fontSize: "md",
   overflow: "hidden",
-  paddingBlock: 1,
-  paddingInline: 2,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+});
+
+const detailStyles = css({
+  color: "muted",
+  fontSize: "xs",
 });
