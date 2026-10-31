@@ -1,72 +1,73 @@
 import { css } from "../../styled-system/css";
-import { flex } from "../../styled-system/patterns";
+import { flex, grid } from "../../styled-system/patterns";
 import { Media } from "../media/Media";
 import { Section } from "../page/Section";
 
-/** Each feature and the capture that shows it, named in `docs/media/`. */
-const FEATURES: readonly {
-  media: string;
-  title: string;
-  body: string;
-  shows: string;
-}[] = [
+type Feature = { media: string; title: string; body: string; shows: string };
+
+/** Why to pick manganese, one capture each, named in `docs/media/`. */
+const REASONS: readonly Feature[] = [
   {
-    body: "Split, tab, stack, float and the scratchpad, with Sway's layout.",
+    body: "Split, tab, stack, float and the scratchpad, on Sway's keys and with Sway's command names. Your fingers already know it.",
     media: "tour-tiling",
     shows: "Blender, GIMP and a film tabbed, then split, then one floated",
-    title: "Tiling, Sway-style",
+    title: "Tiling that feels like Sway",
   },
   {
-    body: "Web pages are windows, under an address bar, tiled next to your apps. Private windows too.",
+    body: "Put the page you're reading beside the document you're writing. Web pages tile, tab, float and move between workspaces like every other window, with the same keys.",
     media: "tour-browser",
     shows: "LibreOffice beside a browser window with the address bar focused",
-    title: "A browser, built in",
+    title: "Websites are windows",
   },
   {
-    body: "Name them in the config. Their toolbar buttons and popups work in every browser window.",
+    body: "Add your password manager or ad blocker from the Chrome Web Store. Their buttons sit in the top bar, and they work in every browser window.",
     media: "tour-extensions",
-    shows: "An extension popup open from the toolbar",
-    title: "Chrome extensions",
+    shows: "An extension popup open from the top bar",
+    title: "Chrome extensions, on the desktop",
   },
+];
+
+/** The rest of a complete desktop, smaller. */
+const EVERYTHING_ELSE: readonly Feature[] = [
   {
-    body: "Apps, files in your home and bookmarks in one search. Meta+Space.",
+    body: "Apps, files and bookmarks in one search. Meta+Space.",
     media: "tour-launcher",
     shows: "The launcher opening, then a search for Settings",
     title: "The launcher",
   },
   {
-    body: "Any site can be an app window without an address bar, and without Electron.",
+    body: "Any site as its own app window, without an address bar.",
     media: "tour-web-apps",
     shows: "A web app window tiled beside LibreOffice",
     title: "Web apps",
   },
   {
-    body: "Workspaces, tray, volume, network, battery and the clock, see-through over your wallpaper.",
+    body: "Workspaces, tray, quick settings and the clock.",
     media: "tour-bar",
     shows:
       "The clock and status icons at the right end of the bar, over a browser window",
     title: "The top bar",
   },
   {
-    body: "Toasts, plus a drawer that keeps the ones you missed.",
+    body: "Toasts, and a drawer that keeps the ones you missed.",
     media: "tour-notifications",
     shows: "Two toasts arriving, then the drawer opening",
     title: "Notifications",
   },
   {
-    body: "Meta+Shift+V. It keeps what you copied even after the app that copied it closes.",
+    body: "Meta+Shift+V. It keeps what you copied after the app closes.",
     media: "tour-clipboard",
     shows: "The clipboard history open with text and an image",
     title: "Clipboard history",
   },
   {
-    body: "Press Print, pick an area, then save it or copy it.",
+    body: "Press Print, pick an area, then save or copy it.",
     media: "tour-screenshots",
     shows: "The screenshot dialog open over a film and a browser",
     title: "Screenshots",
   },
   {
-    body: "Lock it with Meta+Shift+Return. It also locks before the machine sleeps, and after the idle time you set.",
+    body: "Meta+Shift+Return, before the machine sleeps, or after the idle time you set.",
     media: "tour-lock",
     shows: "The lock screen over the wallpaper",
     title: "Lock screen",
@@ -78,22 +79,18 @@ const FEATURES: readonly {
     title: "Several monitors",
   },
   {
-    body: "Apps for displays, theme and shell options, and for your browsing history.",
+    body: "Displays, theme, shell options and your browsing history.",
     media: "tour-settings",
     shows: "The Settings app beside GIMP",
     title: "Settings and History",
   },
 ];
 
-/** What manganese does, one capture each. */
+/** Why manganese: its reasons, large. */
 export const Tour = () => (
-  <Section
-    id="tour"
-    lede="Plus a few things other desktops don't have."
-    title="Everything a desktop needs"
-  >
+  <Section id="tour" title="Why manganese">
     <div className={rowsStyles}>
-      {FEATURES.map((feature) => (
+      {REASONS.map((feature) => (
         <article className={rowStyles} key={feature.title}>
           <div className={mediaStyles}>
             <Media alt={feature.shows} name={feature.media} />
@@ -102,6 +99,25 @@ export const Tour = () => (
             <h3 className={titleStyles}>{feature.title}</h3>
             <p className={bodyStyles}>{feature.body}</p>
           </div>
+        </article>
+      ))}
+    </div>
+  </Section>
+);
+
+/** Everything else a desktop needs, as a grid of small captures. */
+export const EverythingElse = () => (
+  <Section
+    id="everything-else"
+    lede="The rest of a complete desktop, ready when you log in."
+    title="And everything else"
+  >
+    <div className={gridStyles}>
+      {EVERYTHING_ELSE.map((feature) => (
+        <article className={cardStyles} key={feature.title}>
+          <Media alt={feature.shows} name={feature.media} />
+          <h3 className={cardTitleStyles}>{feature.title}</h3>
+          <p className={cardBodyStyles}>{feature.body}</p>
         </article>
       ))}
     </div>
@@ -139,3 +155,19 @@ const titleStyles = css({
 });
 
 const bodyStyles = css({ color: "muted", fontSize: "md" });
+
+const gridStyles = grid({
+  gap: 6,
+  gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 18rem), 1fr))",
+});
+
+const cardStyles = flex({ direction: "column", gap: 2, minInlineSize: 0 });
+
+const cardTitleStyles = css({
+  fontFamily: "display",
+  fontSize: "lg",
+  fontWeight: "semibold",
+  marginBlockStart: 1,
+});
+
+const cardBodyStyles = css({ color: "muted", fontSize: "sm" });
