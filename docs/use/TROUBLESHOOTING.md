@@ -43,8 +43,8 @@ desktop restarts: `domicile disable-while-typing off`.
 
 ## Graphics problems
 
-See [TTY-DEBUGGING.md](../TTY-DEBUGGING.md) and the
-[GPU flags](../RUNNING-A-DESKTOP.md#gpu-flags).
+See [GPU and display issues](../TTY-DEBUGGING.md): how to get your old desktop
+back, find where it fails, and report it.
 
 ## Still stuck
 

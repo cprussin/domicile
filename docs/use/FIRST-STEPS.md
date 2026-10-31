@@ -31,6 +31,16 @@ monitors and more. Every setting is also a line in a
 
 ## Your apps
 
-Any Linux app runs here. Websites can be apps too: they open in their own
-window without an address bar, and show in the launcher. See
-[Web apps](BROWSER.md#web-apps).
+Linux apps that speak Wayland run here: GTK, Qt, SDL and Electron apps are
+started in Wayland mode. There is no Xwayland, so apps that only speak X11
+don't run ([Known gaps](/KNOWN-GAPS.md)).
+
+Websites can be apps too: they open in their own window without an address
+bar, and show in the launcher. See [Web apps](BROWSER.md#web-apps).
+
+### Apps we check
+
+The website's screenshots and videos are taken on a real desktop, so each
+capture checks that these apps open and draw: SuperTuxKart, mpv, Blender,
+GIMP 3, LibreOffice and foot. They run on an NVIDIA card. Other Wayland apps
+are expected to work, but nothing checks them.

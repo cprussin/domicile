@@ -75,10 +75,16 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   `base::Value`; the SDK parses it with Zod. One engine change serves every
   kind, so a new portal needs no four-hour engine build. A typed mojom union
   per kind adds nothing: the compositor and SDK already validate both ends.
-- **No dialog listener means refusal.** If no listener takes a request, it is
-  refused with response `2`, as `domicile-file-chooser` does for `<webview>`.
-  `<PortalDialogs />` is one element, so shell-simple and the example shell
-  get every dialog by mounting it.
+- **Who answers, and when.**
+  - No shell page connected: the compositor refuses the request at once,
+    with response `2`, as `domicile-file-chooser` does for `<webview>`.
+  - A shell that ignores `domicile.portals`: the request stays pending, and
+    the app waits until it gives up or the shell answers. A shell that draws
+    no dialogs refuses them itself
+    ([Application dialogs](SHELL-DESKTOP-EVENTS.md#application-dialogs)).
+  - `<PortalDialogs />`: draws every kind it knows and refuses the rest. It is
+    one element, so shell-simple gets every dialog by mounting it.
+  - `Inhibit` requests are listed but need no answer.
 - **Dialogs are modal over their parent.** `parent_window`
   (`wayland:<handle>`) resolves through the compositor's `xdg_foreign` export
   to an app id. The shell draws the dialog over that `<app>`. A missing or

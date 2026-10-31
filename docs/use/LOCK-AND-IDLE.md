@@ -35,9 +35,13 @@ Leave a key out to never do it.
 ## If it won't unlock
 
 The password is checked by the system's `domicile` login service. The
-packages and the NixOS module add it. Without it the screen locks and nothing
-unlocks it; switch to a console (Ctrl+Alt+F2) and add
-`/etc/pam.d/domicile`. See [LOCK.md](../LOCK.md#verifiers).
+packages and the NixOS module add it; `nix run` doesn't. Without it the screen
+locks and nothing unlocks it:
+
+- In a window on another desktop, close the window.
+- Otherwise, switch to a console (Ctrl+Alt+F2), log in, and add
+  `/etc/pam.d/domicile` ([LOCK.md](../LOCK.md#verifiers)). Then unlock with
+  your password.
 
 To check passwords with another service, set it in Settings' **Power &
 lock** (**PAM service**) or in the config as `lock.pam_service`.

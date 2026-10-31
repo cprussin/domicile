@@ -9,6 +9,9 @@ Domicile runs on Linux. One package has all of it:
 
 Install it from your distribution's package manager, or with Nix.
 
+Domicile runs Wayland apps. There is no Xwayland, so apps that only speak X11
+don't run ([Your apps](use/FIRST-STEPS.md#your-apps)).
+
 <!-- tab: Debian and Ubuntu -->
 
 Debian 13+ and Ubuntu 24.04+. On Debian 12 and Ubuntu 22.04, write `legacy`
@@ -62,7 +65,8 @@ sudo pacman -Syu domicile
 
 <!-- tab: NixOS -->
 
-Add the flake to your system and home configurations:
+Add the flake to your system and home configurations. A complete flake that
+does it: [`examples/nixos`](/examples/nixos).
 
 ```nix
 # configuration.nix
@@ -121,6 +125,13 @@ current desktop, with nothing installed:
 ```sh
 nix run github:cprussin/domicile/stable#manganese
 ```
+
+`nix run` installs nothing on the system, so the password check the lock
+screen uses (`/etc/pam.d/domicile`) is missing. In a trial, don't lock the
+screen or let the machine sleep, which locks it too: nothing would unlock it.
+If it locks anyway, close the window. From a console login, switch to another
+console (Ctrl+Alt+F3), log in and run `pkill -f domicile`. To lock for real,
+install a package or add the file ([LOCK.md](LOCK.md#verifiers)).
 
 ## The newest build
 

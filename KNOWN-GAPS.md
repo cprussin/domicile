@@ -7,6 +7,9 @@ the detail, when there is one. Remove a gap when it's fixed.
 
 - **No Xwayland, so X11-only apps don't run.** Electron, SDL and Qt apps are
   started in Wayland mode (`client_command` in `spawning.rs`).
+- **Software-drawn windows are untested on AMD and Intel GPUs.** Their copy
+  into a GPU buffer is checked on NVIDIA and llvmpipe.
+  [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu).
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate

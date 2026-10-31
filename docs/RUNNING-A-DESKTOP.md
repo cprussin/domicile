@@ -31,8 +31,8 @@ nix run github:cprussin/domicile/stable#simple
 - Each desktop documents its own keys and settings:
   [simple](/packages/shell-simple/README.md),
   [manganese](/packages/shell-manganese/README.md).
-- Clients that draw in software are copied into a GPU buffer. This is tested
-  only on NVIDIA's driver
+- Clients that draw in software are copied into a GPU buffer. This is checked
+  on NVIDIA's driver and llvmpipe, not on Mesa hardware drivers
   ([status](/docs/architecture/WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)).
 - A tty desktop on a card with no 3D composites on the CPU
   ([how](/docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output)).

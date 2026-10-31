@@ -6,8 +6,12 @@ Types and helpers for a Domicile shell: the desktop it is handed, the
 - Published to npm. To write a shell, start with
   [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md); this README is the package
   reference.
-- Ships built JavaScript and `.d.ts` from `dist/`. Run `bun run build` before
-  anything outside the workspace imports it.
+- Every call's full signature and docs ship in the package's `.d.ts`, so
+  your editor shows them. Each namespace's source is
+  `src/desktop/<namespace>.ts`, such as
+  [`windows.ts`](src/desktop/windows.ts).
+- How far a shell's trust reaches:
+  [Security](/docs/SHELL-SYSTEM-ACCESS.md#security).
 
 ## Usage
 
@@ -37,8 +41,7 @@ export const Shell: ShellModule = (root, domicile) => {
   events too. The engine holds each until its first listener exists.
 - A call the compositor answers resolves a `Result`. A newer `files.search`
   rejects the older with an `AbortError`.
-- Only Domicile calls a shell. Develop against the real desktop with
-  `packages/dev-shell/bin/dev-shell.sh <shell>`.
+- Only Domicile calls a shell. Run yours with `domicile ./src/index.ts`.
 - Render `<app app-id="…">` and `<webview window="…">` as normal DOM. CSS
   (rounding, blur, transforms, z-index) applies to the live surface.
 - The engine sends the pointer, wheel and keys over an `<app>` to its client,
@@ -99,7 +102,16 @@ speaks it.
 - **The SDK is the desktop's types, the layer that builds it, and pure
   helpers.** The host types under it are generated from the IDL, below.
 
-## The desktop layer
+## Working on this package
+
+For contributors to this repository. Shell authors don't need it.
+
+- Ships built JavaScript and `.d.ts` from `dist/`. Run `bun run build` before
+  anything outside the workspace imports it.
+- Develop a shell against the real desktop with
+  `packages/dev-shell/bin/dev-shell.sh <shell>`.
+
+### The desktop layer
 
 The engine hands a shell the `Domicile` that `src/desktop/desktop.ts`'s
 `desktop(host)` builds, and an app the `AppDomicile` of `appDesktop(host)`.
@@ -117,7 +129,7 @@ bun run generate    # after changing anything under src/desktop/
 - The engine's guards export `HostShell` instead of `Shell` to be handed the
   host itself; see [GUARDS.md](/packages/domicile-engine/docs/GUARDS.md).
 
-## Generated types
+### Generated types
 
 `src/domicile-host.ts` is generated from the engine's WebIDL in
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`,
@@ -143,13 +155,13 @@ the Rust doc comments as its docs. `bun run generate` writes both and needs
 - `scripts/test-config-types-match-the-schema.sh` fails when either file is
   stale.
 
-## Dependencies
+### Dependencies
 
 - `zod` only. Its schemas parse the keywords and rows a newer engine may send
   unknown values for, such as `./cursor-shape`.
 - `@cprussin/option-result` gives `./system`'s calls their `Result`.
 
-## Test
+### Test
 
 ```sh
 bun run turbo test --filter @domicile-desktop/sdk

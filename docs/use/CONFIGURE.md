@@ -32,7 +32,7 @@ windows stay open.
 
 ```json
 {
-  "$schema": "https://unpkg.com/@domicile-desktop/sdk/config.schema.json",
+  "$schema": "https://domicile-desktop.com/config.schema.json",
   "shell": "@domicile-desktop/manganese",
   "theme": { "mode": "dark" },
   "idle": { "blank_after_seconds": 600, "lock_after_seconds": 900 }

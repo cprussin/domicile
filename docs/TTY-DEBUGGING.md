@@ -1,8 +1,54 @@
-# Debugging a tty desktop
+# GPU and display issues
 
-Overview: [A-DESKTOP-ON-A-TTY.md](architecture/A-DESKTOP-ON-A-TTY.md).
+What to do when the desktop doesn't start, stays black or draws wrong.
 
-## Seeing a modeset
+## Get your old desktop back
+
+- **In a window on another desktop:** close the window, or press Ctrl+C in
+  the terminal that started it.
+- **At login:** log out, or switch to a console (Ctrl+Alt+F2) and log in. At
+  the login screen, pick the session you used before.
+- **If the login screen keeps coming back:** switch to a console, log in and
+  set `"shell"` in `~/.config/domicile/domicile.json` to
+  `@domicile-desktop/manganese`, to rule out your own shell.
+
+## Find where it fails
+
+1. **Run it in a window** on the desktop you already use:
+   `domicile @domicile-desktop/manganese`. If that fails too, the cause is the
+   config or the engine, not your monitors. It prints which config it used and
+   why it stops. Then try your own shell the same way.
+2. **Check the config:**
+   `domicile check-config ~/.config/domicile/domicile.json`.
+3. **Run it from a console** (Ctrl+Alt+F2): `domicile`. This is how the login
+   session runs it, with the shell your config names, and it prints its errors
+   to that console.
+
+## Report it
+
+[Open an issue](https://github.com/cprussin/domicile/issues) with:
+
+- What you did and what you saw, and whether it was in a window or at login.
+- Your distribution (`cat /etc/os-release`), kernel (`uname -r`) and
+  Domicile's package version (`dpkg -s domicile`, `rpm -q domicile` or
+  `pacman -Q domicile`).
+- Your graphics card and driver: `lspci -k | grep -A3 -E 'VGA|3D'`.
+- The output of `domicile` from step 3 above.
+
+## Workarounds
+
+- **Ubuntu 24.04+:** the engine needs the package's AppArmor profile.
+  Reinstall the package if it's missing.
+- **GPU flags** can turn GPU features on for your driver. None is safe on
+  every driver, so each is opt-in: see
+  [GPU flags](RUNNING-A-DESKTOP.md#gpu-flags) for each one's tradeoff.
+
+## For developers
+
+The rest of this page is for debugging the engine on a tty. Overview:
+[A-DESKTOP-ON-A-TTY.md](architecture/A-DESKTOP-ON-A-TTY.md).
+
+### Seeing a modeset
 
 `DRM configuring:` and `Modeset succeeded.` are `VLOG(1)` in
 `ui/ozone/platform/drm/gpu/screen_manager.cc`. `--vmodule=drm*=1` does not
@@ -16,7 +62,7 @@ match that file. Name it:
 - `Modeset commit failed after a successful test-modeset.` is misleading: it
   prints on any commit failure, and `DrmModeset` never runs a test-modeset.
 
-## A black screen with a clean log
+### A black screen with a clean log
 
 Usual causes:
 
@@ -33,7 +79,7 @@ Usual causes:
   - a cursor with a bitmap (`BitmapCursorFactory` gives none);
   - a touchpad branch in `CreateConverter`.
 
-## A primary plane display cannot read
+### A primary plane display cannot read
 
     Not scanning out a <format> buffer (<size>, modifier <n>) allocated or imported without GBM_BO_USE_SCANOUT
 
@@ -51,7 +97,7 @@ Usual causes:
   `DRM_FORMAT_ABGR8888` buffer here means that check did not apply
   ([A tty desktop in a virtio-gpu VM](HARDWARE-CHECKS.md#a-tty-desktop-in-a-virtio-gpu-vm)).
 
-## Scanout and render cards can differ
+### Scanout and render cards can differ
 
 A GPU process that falls back to software on its own, often after restarts on
 `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`, draws a desktop whose windows are

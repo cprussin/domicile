@@ -144,7 +144,7 @@ const GROUPS: readonly { title: string; items: readonly string[] }[] = [
   {
     items: [
       "The bar, the window layout and the look",
-      "Which dialogs to show, and how. With none, requests are refused.",
+      "Which dialogs to show, and how. Draw them, or refuse them.",
     ],
     title: "Your shell draws it",
   },

@@ -842,44 +842,50 @@
       # its namespace, instead of adding home-manager as an input and its
       # closure to every check. `xdg.mimeApps` is left out so that setting it
       # is an evaluation error.
-      checks.${system} = {
-        home-manager-module =
-          let
-            stub = { lib, ... }: {
-              options = {
-                home.packages = lib.mkOption {
-                  type = lib.types.listOf lib.types.package;
-                  default = [ ];
-                };
-                xdg.configFile = lib.mkOption {
-                  type = lib.types.attrsOf (lib.types.submodule {
-                    options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
-                  });
-                  default = { };
-                };
-                # Where a removed option names its replacement.
-                assertions = lib.mkOption {
-                  type = lib.types.listOf lib.types.unspecified;
-                  default = [ ];
-                };
-                warnings = lib.mkOption {
-                  type = lib.types.listOf lib.types.str;
-                  default = [ ];
-                };
-                xdg.portal.extraPortals = lib.mkOption {
-                  type = lib.types.listOf lib.types.package;
-                  default = [ ];
-                };
-                xdg.portal.configPackages = lib.mkOption {
-                  type = lib.types.listOf lib.types.package;
-                  default = [ ];
-                };
-                xdg.desktopEntries = lib.mkOption {
-                  type = lib.types.attrsOf lib.types.attrs;
-                  default = { };
-                };
+      checks.${system} =
+        let
+          # The home-manager options the modules here set, for checks that
+          # evaluate a home module without home-manager.
+          homeManagerStub = { lib, ... }: {
+            options = {
+              home.packages = lib.mkOption {
+                type = lib.types.listOf lib.types.package;
+                default = [ ];
+              };
+              xdg.configFile = lib.mkOption {
+                type = lib.types.attrsOf (lib.types.submodule {
+                  options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
+                });
+                default = { };
+              };
+              # Where a removed option names its replacement.
+              assertions = lib.mkOption {
+                type = lib.types.listOf lib.types.unspecified;
+                default = [ ];
+              };
+              warnings = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+              };
+              xdg.portal.extraPortals = lib.mkOption {
+                type = lib.types.listOf lib.types.package;
+                default = [ ];
+              };
+              xdg.portal.configPackages = lib.mkOption {
+                type = lib.types.listOf lib.types.package;
+                default = [ ];
+              };
+              xdg.desktopEntries = lib.mkOption {
+                type = lib.types.attrsOf lib.types.attrs;
+                default = { };
               };
             };
+          };
+        in
+        {
+        home-manager-module =
+          let
+            stub = homeManagerStub;
             # A config using each part of the schema: a rotated monitor at a
             # fractional scale, a disabled one, a described display and a
             # keyboard.
@@ -1193,6 +1199,41 @@
             ${expect "a removed setting at the top fails with its note" (failing { gone = 1; } == [ "programs.domicile.settings.gone is removed. top note" ])}
             ${expect "a removed setting in a section fails with its note" (failing { section.gone = 1; } == [ "programs.domicile.settings.section.gone is removed. section note" ])}
             ${expect "a removed setting in a list's element fails with its note" (failing { items = [ { } { gone = 1; } ]; } == [ "programs.domicile.settings.items[].gone is removed. item note" ])}
+            touch "$out"
+          '';
+
+        # examples/nixos, which the install docs link: its system and home
+        # modules evaluate with this flake as `domicile`. Evaluation builds no
+        # system.
+        nixos-example =
+          let
+            machine = nixpkgs.lib.nixosSystem {
+              inherit system;
+              specialArgs.domicile = self;
+              modules = [
+                ./examples/nixos/configuration.nix
+                {
+                  # Stands in for the machine's hardware-configuration.nix.
+                  boot.loader.grub.enable = false;
+                  fileSystems."/" = {
+                    device = "nodev";
+                    fsType = "tmpfs";
+                  };
+                }
+              ];
+            };
+            home = pkgs.lib.evalModules {
+              modules = [
+                homeManagerStub
+                ({ lib, ... }: { options.home.stateVersion = lib.mkOption { type = lib.types.str; }; })
+                ./examples/nixos/home.nix
+              ];
+              specialArgs = { inherit pkgs; domicile = self; };
+            };
+          in
+          pkgs.runCommandLocal "nixos-example-evaluates" { } ''
+            echo ${builtins.unsafeDiscardStringContext machine.config.system.build.toplevel.drvPath}
+            echo ${builtins.unsafeDiscardStringContext home.config.xdg.configFile."domicile/domicile.json".source}
             touch "$out"
           '';
 
