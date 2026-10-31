@@ -33,15 +33,15 @@ describe("useClipboard", () => {
     const host = client();
     const { result } = renderHook(() => useClipboard(host.domicile));
 
-    host.says([{ id: 1, preview: "first" }]);
+    host.says([{ id: 1, image: false, preview: "first" }]);
     host.says([
-      { id: 2, preview: "second" },
-      { id: 1, preview: "first" },
+      { id: 2, image: false, preview: "second" },
+      { id: 1, image: false, preview: "first" },
     ]);
 
     expect(result.current).toEqual([
-      { id: 2, preview: "second" },
-      { id: 1, preview: "first" },
+      { id: 2, image: false, preview: "second" },
+      { id: 1, image: false, preview: "first" },
     ]);
   });
 
@@ -51,7 +51,7 @@ describe("useClipboard", () => {
     const host = client();
     const { result } = renderHook(() => useClipboard(host.domicile));
 
-    host.says([{ id: 1, preview: "first" }]);
+    host.says([{ id: 1, image: false, preview: "first" }]);
     host.says([]);
 
     expect(result.current).toEqual([]);

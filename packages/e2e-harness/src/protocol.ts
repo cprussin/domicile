@@ -318,6 +318,7 @@ const foundFilesSchema = z.looseObject({
 // of copied passwords. Copy one back with `copy_clipboard_entry`.
 const clipboardEntrySchema = z.looseObject({
   id: z.number(),
+  image: z.boolean(),
   preview: z.string(),
 });
 
