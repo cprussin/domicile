@@ -1437,7 +1437,7 @@ void DomicileHost::Clipboard(
   history.reserve(entries.size());
   for (const auto& entry : entries) {
     history.push_back(MakeGarbageCollected<DomicileClipboardEntry>(
-        entry->id, entry->preview));
+        entry->id, entry->image, entry->preview));
   }
   clipboard_ = MakeGarbageCollected<FrozenArray<DomicileClipboardEntry>>(
       std::move(history));

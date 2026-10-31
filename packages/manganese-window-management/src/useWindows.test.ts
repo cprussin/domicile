@@ -406,7 +406,11 @@ describe("a command", () => {
       const { host, result } = desktop([LEFT, RIGHT]);
       act(() => {
         host.fake.set({
-          clipboard: copied.map((preview, at) => ({ id: at, preview })),
+          clipboard: copied.map((preview, at) => ({
+            id: at,
+            image: false,
+            preview,
+          })),
         });
       });
 
@@ -451,7 +455,9 @@ describe("a command", () => {
         },
       ]);
       act(() => {
-        host.fake.set({ clipboard: [{ id: 0, preview: "hello world" }] });
+        host.fake.set({
+          clipboard: [{ id: 0, image: false, preview: "hello world" }],
+        });
       });
 
       act(() => {

@@ -6,8 +6,12 @@ import { memoizeLast } from "./memoize-last";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
 
-/** One copy: an id and enough of it to recognize. */
-export type ClipboardEntry = { readonly id: number; readonly preview: string };
+/** One copy: an id, whether it is an image, and enough of it to recognize. */
+export type ClipboardEntry = {
+  readonly id: number;
+  readonly image: boolean;
+  readonly preview: string;
+};
 
 export type ClipboardListeners = {
   change: () => void;

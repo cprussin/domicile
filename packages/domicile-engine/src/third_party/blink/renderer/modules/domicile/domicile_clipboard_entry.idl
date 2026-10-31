@@ -18,6 +18,10 @@
   // keeps every id.
   readonly attribute unsigned long id;
 
+  // Whether the copy is an image with no text, so a panel can draw it as one.
+  // Its preview then names its size or format.
+  readonly attribute boolean image;
+
   // Enough of what was copied to recognize it by, and not necessarily all of
   // it: a long copy is cut down to a row, because this is what a panel draws
   // and the rest of a copied file is not a row.
