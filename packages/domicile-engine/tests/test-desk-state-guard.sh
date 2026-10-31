@@ -13,7 +13,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 PARTIAL='{"altKey":null,"clipboard":null,"ctrlKey":null,"idle":true,"locked":false,"shellOptions":null,"shiftKey":null,"theme":"light","tray":null,"windowsTheme":"dark"}'
-COMPLETE='{"altKey":true,"clipboard":[{"id":7,"preview":"hello"}],"ctrlKey":false,"idle":true,"locked":false,"shellOptions":"{\"gaps\":4}","shiftKey":true,"theme":"light","tray":[{"bus":":1.42","id":"nm","itemIsMenu":false,"menu":"/MenuBar","title":"Network"},{"bus":"org.kde.StatusNotifierItem-7-1","id":"sync","itemIsMenu":true,"menu":"","title":"Sync"}],"windowsTheme":"dark"}'
+COMPLETE='{"altKey":true,"clipboard":[{"id":7,"image":false,"preview":"hello"},{"id":8,"image":true,"preview":"Image, 3 × 2"}],"ctrlKey":false,"idle":true,"locked":false,"shellOptions":"{\"gaps\":4}","shiftKey":true,"theme":"light","tray":[{"bus":":1.42","id":"nm","itemIsMenu":false,"menu":"/MenuBar","title":"Network"},{"bus":"org.kde.StatusNotifierItem-7-1","id":"sync","itemIsMenu":true,"menu":"","title":"Sync"}],"windowsTheme":"dark"}'
 
 FAILED=0
 expect() { # what, want, got

@@ -8,9 +8,9 @@ import userEvent from "@testing-library/user-event";
 import { Clipboard } from "./Clipboard";
 
 const HISTORY = [
-  { id: 3, preview: "https://example.invalid/a/long/address" },
-  { id: 2, preview: "Thanks, see you\nTuesday" },
-  { id: 1, preview: "the first thing copied" },
+  { id: 3, image: false, preview: "https://example.invalid/a/long/address" },
+  { id: 2, image: false, preview: "Thanks, see you\nTuesday" },
+  { id: 1, image: false, preview: "the first thing copied" },
 ];
 
 /** The panel open over that history, recording copy requests. */
@@ -95,7 +95,7 @@ describe("Clipboard", () => {
     });
 
     it("starts on the only copy when there is one", async () => {
-      const panel = clipboard([{ id: 7, preview: "alone" }]);
+      const panel = clipboard([{ id: 7, image: false, preview: "alone" }]);
 
       await panel.user.keyboard("{Enter}");
 

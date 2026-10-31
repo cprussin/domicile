@@ -35,7 +35,7 @@
 {"type":"appearance","accent_color":"#3584e4","high_contrast":true,"reduced_motion":false}
 {"type":"appearance","high_contrast":false,"reduced_motion":false}
 {"type":"appearance","high_contrast":false,"reduced_motion":false,"cursor":{"name":"Bibata-Modern-Amber-Right","size":64}}
-{"type":"clipboard","entries":[{"id":3,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"preview":"the first thing copied"}]}
+{"type":"clipboard","entries":[{"id":3,"image":false,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"image":true,"preview":"Image, 1920 × 1080"}]}
 {"type":"idle","idle":true}
 {"type":"locked","locked":true}
 {"type":"tray","items":[{"id":":1.42/StatusNotifierItem","title":"Network","icon":"data:image/png;base64,iVBORw0KGgo=","bus":":1.42","menu":"/MenuBar","item_is_menu":false},{"id":"org.kde.StatusNotifierItem-4071-1/StatusNotifierItem","title":"Syncthing","bus":"org.kde.StatusNotifierItem-4071-1","item_is_menu":true}]}

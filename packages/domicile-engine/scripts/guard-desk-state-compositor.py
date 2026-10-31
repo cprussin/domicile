@@ -21,7 +21,10 @@ SEQUENCE = [
     {"type": "locked", "locked": False},
     {"type": "theme", "theme": "light"},
     {"type": "windows_theme", "theme": "dark"},
-    {"type": "clipboard", "entries": [{"id": 7, "preview": "hello"}]},
+    {"type": "clipboard", "entries": [
+        {"id": 7, "image": False, "preview": "hello"},
+        {"id": 8, "image": True, "preview": "Image, 3 × 2"},
+    ]},
     {"type": "tray", "items": [
         {"id": "nm", "title": "Network", "icon": "", "bus": ":1.42",
          "menu": "/MenuBar", "item_is_menu": False},

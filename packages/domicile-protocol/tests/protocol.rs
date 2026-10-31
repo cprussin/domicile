@@ -173,11 +173,13 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
         entries: vec![
             ClipboardEntry {
                 id: 3,
+                image: false,
                 preview: "the newest".into(),
             },
             ClipboardEntry {
                 id: 1,
-                preview: "the oldest".into(),
+                image: true,
+                preview: "Image, 3 × 2".into(),
             },
         ],
     })
@@ -186,8 +188,8 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
     assert_eq!(
         v["entries"],
         serde_json::json!([
-            {"id": 3, "preview": "the newest"},
-            {"id": 1, "preview": "the oldest"},
+            {"id": 3, "image": false, "preview": "the newest"},
+            {"id": 1, "image": true, "preview": "Image, 3 × 2"},
         ])
     );
 }

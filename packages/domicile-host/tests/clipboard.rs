@@ -229,6 +229,7 @@ fn an_image_is_a_row_named_for_its_size() {
 
     let entry = &history.entries()[0];
     assert_eq!(entry.preview, "Image, 3 × 2");
+    assert!(entry.image);
     assert_eq!(history.contents(entry.id), Some(&image));
 }
 
@@ -242,7 +243,7 @@ fn an_image_that_is_not_png_is_named_by_its_format() {
     assert_eq!(previews(&history), vec!["Image (image/webp)"]);
 }
 
-/// A copy with both text and an image is shown by its text.
+/// A copy with both text and an image is shown by its text, as text.
 #[test]
 fn a_copy_with_text_and_an_image_is_shown_by_its_text() {
     let mut history = History::default();
@@ -253,6 +254,7 @@ fn a_copy_with_text_and_an_image_is_shown_by_its_text() {
     });
 
     assert_eq!(previews(&history), vec!["a caption"]);
+    assert!(!history.entries()[0].image);
 }
 
 /// The same image copied twice is one row.

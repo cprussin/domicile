@@ -6,8 +6,9 @@
 namespace blink {
 
 DomicileClipboardEntry::DomicileClipboardEntry(uint32_t id,
+                                               bool image,
                                                const String& preview)
-    : id_(id), preview_(preview) {}
+    : id_(id), image_(image), preview_(preview) {}
 
 DomicileClipboardEntry::~DomicileClipboardEntry() = default;
 
