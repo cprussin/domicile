@@ -365,9 +365,9 @@ export const Shell = runManganese({
   account in. It reads as the [Gmail](#gmail) item does.
 - **`Inbox.Window`**: a page in an app window that runs in the background. It
   opens hidden when the shell starts, shows on the current workspace when
-  pressed or when its page asks to be in front (as a press of one of its
-  notifications does), and hides when closed, so its notifications keep
-  coming. Its unread count comes from the window's page. `messagesInbox` is
+  pressed, when one of its notifications (its `notifiesAs` sender) is
+  pressed, or when its page asks to be in front, and hides when closed, so
+  its notifications keep coming. Its unread count comes from the window's page. `messagesInbox` is
   one (app id `google-messages`). Don't also use the
   [Google Messages](#google-messages) item: Messages runs one web session at
   a time.

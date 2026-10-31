@@ -168,6 +168,31 @@ describe("useInboxDrawer", () => {
     ]);
     expect(opened).toEqual([["close"]]);
   });
+
+  it("brings up an inbox's window when its notification is pressed", () => {
+    const { fake, hook, opened } = drawer();
+
+    act(() => {
+      hook.result.current.notificationPressed("chat.example.com");
+    });
+
+    expect(appsOpened(fake)).toEqual([
+      ["openAppWindow", CHAT_URL, "chat", "focus"],
+    ]);
+    expect(opened).toEqual([]);
+  });
+
+  it("leaves other notifications' presses to their senders", () => {
+    const { fake, hook, opened } = drawer();
+
+    act(() => {
+      hook.result.current.notificationPressed("Work");
+      hook.result.current.notificationPressed("other.example.com");
+    });
+
+    expect(appsOpened(fake)).toEqual([]);
+    expect(opened).toEqual([]);
+  });
 });
 
 describe(launcherAppsOf, () => {

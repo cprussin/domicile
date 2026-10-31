@@ -29,7 +29,9 @@ type Options = {
 
 /**
  * The notification drawer's inboxes: what each reads, what a press opens, and
- * the unread conversations the bell adds to its count.
+ * the unread conversations the bell adds to its count. `notificationPressed`
+ * takes a pressed notification's sender, and brings up the window of the inbox
+ * in a window it notifies for.
  *
  * An inbox in a window runs in the background: its window opens at start if
  * none is open, and its count is read from that window.
@@ -67,7 +69,22 @@ export const useInboxDrawer = ({ domicile, inboxes, onClose }: Options) => {
     () => readings.reduce((sum, reading) => sum + unreadIn(reading), 0),
     [readings],
   );
-  return { drawer, unread };
+  // A page may not answer its notification's press by asking to be in front,
+  // so the press brings an inbox's window up itself.
+  const notificationPressed = useCallback(
+    (appName: string) => {
+      const inbox = inboxes.find(
+        (candidate) =>
+          candidate.kind === InboxKind.Window &&
+          candidate.notifiesAs === appName,
+      );
+      if (inbox !== undefined) {
+        openInbox(domicile, inbox, undefined);
+      }
+    },
+    [domicile, inboxes],
+  );
+  return { drawer, notificationPressed, unread };
 };
 
 /**
