@@ -39,6 +39,10 @@ describe("Markdown", () => {
     expect(html).toContain(">const<");
   });
 
+  test("JavaScript code blocks are highlighted", () => {
+    expect(render("```js\nconst a = 1;\n```")).toContain(">const<");
+  });
+
   test("a code block in an unknown language is plain", () => {
     expect(render("```nix\n{ a = 1; }\n```")).toContain(">{ a = 1; }<");
   });
