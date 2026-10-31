@@ -211,7 +211,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     windows, beside the frozen desk. The desk outlines the pick with its
     size; arrow keys move through the list. "Select on screen" selects an
     area over the frozen desk drawn full size, as the screen cast picker's
-    does over the live page, and copies or saves it from there. A screen is named by its make and model, a window by
+    does over the live page, and copies (Copy, or Ctrl+C) or saves it from
+    there. A screen is named by its make and model, a window by
     its title over its application's desktop entry.
   - A window is answered `screenshot_window` and saved from the last frame
     it showed, which the engine still holds. What is over it, such as a
