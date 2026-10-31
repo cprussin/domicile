@@ -2,8 +2,8 @@
 #
 # `distro/nix/home-manager.nix` configures the desk itself. This module
 # provides the `domicile` login session and its user units, the PAM service
-# the lock uses, UPower for the battery, portal routing, and the `domicile`
-# group whose sessions may raise the engine's frame threads. See
+# the lock uses, UPower for the battery, portal routing, rtkit, and the
+# `domicile` group whose sessions may raise the engine's frame threads. See
 # docs/RUNNING-A-DESKTOP.md#on-nixos.
 #
 # The session runs whichever shell the config names. The module sets no
@@ -67,6 +67,11 @@ in {
     # screen show the battery. NixOS enables it only for desktops that ask.
     services.upower.enable = lib.mkDefault true;
 
+    # Raises the compositor's and the engine's frame threads for a user
+    # outside the `domicile` group. See
+    # docs/RUNNING-A-DESKTOP.md#thread-priorities.
+    security.rtkit.enable = lib.mkDefault true;
+
     # `domicile-miracast`: the TV opens RTSP to this computer, and LAN TVs are
     # found over mDNS.
     networking.firewall.allowedTCPPorts = lib.mkIf cfg.miracast [7236];
@@ -79,9 +84,8 @@ in {
     # The engine and compositor ask for nice -8 on the threads that draw and
     # present frames. The engine asks for SCHED_RR 8 on its realtime audio
     # threads, falling back to nice -10.
-    # Without these limits each request fails and the threads compete with a
-    # build at nice 0. Granted to a group, as NixOS's PipeWire and JACK modules
-    # do. Listed first (`mkBefore`) because a later pam_limits line for another
+    # Without these limits each request goes to rtkit, which may refuse a
+    # burst. Granted to a group, as NixOS's PipeWire and JACK modules do. Listed first (`mkBefore`) because a later pam_limits line for another
     # group overrides an earlier one, so a larger grant such as PipeWire's wins.
     users.groups.domicile = {};
     security.pam.loginLimits = lib.mkBefore [

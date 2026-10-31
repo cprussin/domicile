@@ -65,7 +65,6 @@ Add the flake to your system and home configurations:
   imports = [domicile.nixosModules.default];
   programs.domicile.enable = true;
   services.displayManager.defaultSession = "domicile";
-  users.users.<you>.extraGroups = ["domicile"];
 }
 ```
 
@@ -93,15 +92,13 @@ three newest releases.
 
 On every distribution but NixOS:
 
-1. Join the `domicile` group, so the desktop stays smooth while the machine is
-   busy: `sudo usermod -aG domicile "$USER"`.
-2. Pick manganese as your desktop in `~/.config/domicile/domicile.json`:
+1. Pick manganese as your desktop in `~/.config/domicile/domicile.json`:
 
    ```json
    { "shell": "@domicile-desktop/manganese" }
    ```
 
-3. Log out, and pick **Domicile** in your login screen.
+2. Log out, and pick **Domicile** in your login screen.
 
 Then read [First steps](FIRST-STEPS.md).
 
