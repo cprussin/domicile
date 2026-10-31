@@ -48,6 +48,12 @@ const VIRTUAL: u32 = 4;
 /// part of a monitor, so asking for monitors is asking for regions too.
 const REGION_TYPES: u32 = MONITOR | VIRTUAL;
 
+/// The types an application may ask for to be offered a window. Electron apps
+/// (Slack, Discord) ask for monitors alone, and their own pickers have no
+/// other way to share a window, so asking for monitors is asking for windows
+/// too.
+const WINDOW_TYPES: u32 = MONITOR | WINDOW;
+
 /// `AvailableSourceTypes`: every type.
 const SOURCE_TYPES: u32 = MONITOR | WINDOW | VIRTUAL;
 
@@ -658,7 +664,7 @@ pub(super) fn dialog(
             })
             .collect(),
         region: selected.types & REGION_TYPES != 0,
-        browser_windows: selected.types & WINDOW != 0,
+        browser_windows: selected.types & WINDOW_TYPES != 0,
         desk,
     })
 }
@@ -804,8 +810,9 @@ fn part_of(pick: &CastPick) -> Option<casting::Rect> {
 /// Whether `source` is of a type the application asked for.
 fn asked_for(selected: &Selected, source: &Source) -> bool {
     let types = match source {
+        Source::Monitor(_) => MONITOR,
+        Source::Window(_) | Source::BrowserWindow(_) => WINDOW_TYPES,
         Source::Region(_) => REGION_TYPES,
-        _ => source_type(source),
     };
     selected.types & types != 0
 }
@@ -1387,13 +1394,11 @@ mod tests {
     }
 
     #[test]
-    fn the_shell_offers_monitors_and_a_region_when_asked_for() {
+    fn the_shell_offers_monitors_windows_and_a_region_when_monitors_are_asked_for() {
         let served = served(Grants::default());
         select(
             &served.client,
             vec![
-                // A region is part of a monitor, so asking for monitors is
-                // asking for regions too.
                 ("types", Value::from(1u32)),
                 ("multiple", Value::from(true)),
             ],
@@ -1407,6 +1412,16 @@ mod tests {
             PortalKind::ScreenCast(ScreenCastDialog {
                 multiple: true,
                 sources: vec![
+                    CastSource::Window {
+                        id: "app-3".into(),
+                        title: "Notes".into(),
+                        app_id: "org.gnome.TextEditor".into(),
+                    },
+                    CastSource::Window {
+                        id: "app-4".into(),
+                        title: "Todo".into(),
+                        app_id: String::new(),
+                    },
                     CastSource::Monitor {
                         name: "drm-1".into(),
                         description: "BOE NE135A1M-NY1".into(),
@@ -1419,7 +1434,7 @@ mod tests {
                     },
                 ],
                 region: true,
-                browser_windows: false,
+                browser_windows: true,
                 desk: None,
             })
         );
@@ -2033,8 +2048,13 @@ mod tests {
             "windows only"
         );
         assert!(
-            chosen(&[meet()], &open, &asked(1)).is_none(),
+            chosen(&[meet()], &open, &asked(4)).is_none(),
             "a browser window is a window"
+        );
+        assert_eq!(
+            chosen(&[window("app-4")], &open, &asked(1)),
+            Some(vec![windows()[1].clone()]),
+            "asking for monitors is asking for windows too"
         );
         assert!(
             chosen(&[region((10, 10))], &open, &asked(2)).is_none(),
