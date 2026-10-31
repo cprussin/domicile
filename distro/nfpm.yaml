@@ -113,6 +113,8 @@ overrides:
       - systemd
     recommends:
       - upower
+      # Raises the desktop's threads when the `domicile` group's limits do not.
+      - rtkit
       - hwdata
       - pulseaudio-utils
       - curl
@@ -170,6 +172,8 @@ overrides:
       - systemd
     recommends:
       - upower
+      # Raises the desktop's threads when the `domicile` group's limits do not.
+      - rtkit
       - hwdata
       - pulseaudio-utils
       - curl

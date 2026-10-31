@@ -70,7 +70,6 @@ Add the flake to your system and home configurations:
   imports = [domicile.nixosModules.default];
   programs.domicile.enable = true;
   services.displayManager.defaultSession = "domicile";
-  users.users.<you>.extraGroups = ["domicile"];
 }
 ```
 
@@ -100,9 +99,7 @@ three newest releases. This is the same install as manganese's
 
 On every distribution but NixOS:
 
-1. Join the `domicile` group, so the desktop stays smooth while the machine is
-   busy: `sudo usermod -aG domicile "$USER"`.
-2. Name the shell the login session runs in `~/.config/domicile/domicile.json`:
+1. Name the shell the login session runs in `~/.config/domicile/domicile.json`:
    manganese, as here, or your own
    ([The config file](SHELL-CONFIG.md#where-it-is)).
 
@@ -110,7 +107,7 @@ On every distribution but NixOS:
    { "shell": "@domicile-desktop/manganese" }
    ```
 
-3. Log out, and pick **Domicile** in your login screen.
+2. Log out, and pick **Domicile** in your login screen.
 
 You don't need the login session to write a shell: `domicile ./shell.tsx`
 runs one in a window on your current desktop. Start with the
