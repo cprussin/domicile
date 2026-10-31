@@ -10,6 +10,7 @@ import { Inbox, InboxReading } from "./inbox";
 const WORK = Inbox.Watched({
   icon: EnvelopeSimpleIcon,
   name: "Work",
+  notifiesAs: "Work",
   open: () => undefined,
   read: () => sharedWatch(() => () => undefined),
 });
@@ -19,6 +20,7 @@ const CHAT = Inbox.Window({
   countUnread: () => () => undefined,
   icon: EnvelopeSimpleIcon,
   name: "Chat",
+  notifiesAs: "chat.example.com",
   url: "https://chat.example.com/",
 });
 

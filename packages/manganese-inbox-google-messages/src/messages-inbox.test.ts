@@ -11,6 +11,7 @@ describe(messagesInbox, () => {
       countUnread: watchUnreadWith,
       kind: InboxKind.Window,
       name: "Messages",
+      notifiesAs: "messages.google.com",
       url: "https://messages.google.com/web/",
     });
   });

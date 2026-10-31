@@ -45,6 +45,7 @@ export const gmailInbox = ({
     icon: EnvelopeSimpleIcon,
     ...(launcherName === undefined ? {} : { launcherName }),
     name: nickname,
+    notifiesAs: nickname,
     open: (domicile, reading) => {
       if (reading?.kind === InboxReadingKind.SignedOut) {
         deskInbox(domicile)(email, client, nickname).signIn();

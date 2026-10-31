@@ -31,6 +31,7 @@ const inboxes = () => {
     Inbox.Watched({
       icon: EnvelopeSimpleIcon,
       name: "Work",
+      notifiesAs: "Work",
       open: (_domicile, read) => {
         opened.push(["open work", read]);
       },
@@ -51,6 +52,7 @@ const inboxes = () => {
       },
       icon: EnvelopeSimpleIcon,
       name: "Chat",
+      notifiesAs: "chat.example.com",
       url: CHAT_URL,
     }),
   ];
@@ -180,6 +182,7 @@ describe(launcherAppsOf, () => {
           icon: EnvelopeSimpleIcon,
           launcherName: "Email",
           name: "Home",
+          notifiesAs: "Home",
           open: () => undefined,
           read: () => sharedWatch(() => () => undefined),
         }),
