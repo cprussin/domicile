@@ -82,6 +82,7 @@
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
@@ -2194,9 +2195,14 @@ content::WebContents* WebViewGuest::AddNewContents(
     const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
-  // `disposition` and `window_features` are dropped: the shell lays out
-  // browser windows itself. Content navigates the window after this returns.
-  Host().AdoptOpenedWindow(std::move(new_contents), target_url);
+  // Only the size the page asked for is kept, so the shell can float a sized
+  // window, such as a call's, at that size. The shell places windows itself.
+  // Content navigates the window after this returns.
+  Host().AdoptOpenedWindow(
+      std::move(new_contents), target_url,
+      gfx::Size(window_features.has_width ? window_features.bounds.width() : 0,
+                window_features.has_height ? window_features.bounds.height()
+                                           : 0));
   return nullptr;
 }
 

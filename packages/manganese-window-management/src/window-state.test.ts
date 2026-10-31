@@ -558,6 +558,39 @@ describe("the windows an extension asks for", () => {
   });
 });
 
+// `window.open()` with a size (such as Slack's huddle), which the engine lists
+// with that size and no extension popup window.
+describe("the windows a page asks for at a size", () => {
+  it("opens one floating in front, the size it asked for", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([
+        listed("1", "https://app.slack.com/huddle", {
+          height: 420,
+          popupWindow: 0,
+          width: 640,
+        }),
+      ]),
+    );
+
+    expect(activeIdOf(state)).toBe(BROWSER("1"));
+    expect(workspaceHere(state).floats).toEqual([
+      expect.objectContaining({ height: 420, width: 640 }),
+    ]);
+  });
+
+  it("tiles one that asked for no size", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([
+        listed("1", "https://app.slack.com/client"),
+      ]),
+    );
+
+    expect(workspaceHere(state).floats).toEqual([]);
+  });
+});
+
 describe("the screens", () => {
   it("is one screen nobody has named until the host describes a desk", () => {
     // A window can open before the handshake, so a screen always exists. No

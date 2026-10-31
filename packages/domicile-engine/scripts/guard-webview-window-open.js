@@ -68,7 +68,9 @@ export const HostShell = (_root, desktop) => {
   desktop.addEventListener("browserwindowschanged", () => {
     for (const window of desktop.browserWindows) {
       if (reported.get(window.id) !== window.url) {
-        say(`new-window url=${window.url}`);
+        say(
+          `new-window url=${window.url} size=${window.width}x${window.height}`,
+        );
       }
       if (!reported.has(window.id)) {
         const opened = document.createElement("webview");
