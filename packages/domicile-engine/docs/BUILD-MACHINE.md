@@ -64,12 +64,18 @@ Past roll conflicts and what to check:
 
 ### What CI does
 
-Every engine workflow runs two scripts, under the tree lock:
+Every engine workflow runs three scripts, under the tree lock:
 
 | Script | Role |
 |---|---|
 | `.github/scripts/engine-reset.sh` | fetches the revision if the checkout lacks it, then resets onto it |
 | `.github/scripts/engine-sync.sh` | runs `gclient sync` so everything in `DEPS` matches the pin |
+| `.github/scripts/engine-apply.sh` | applies the series |
+
+- The reset and apply rewrite every file the series touches. Ninja rebuilds
+  by mtime, so `engine-keep-mtimes.sh` gives each file that comes back with
+  the same bytes its old mtime. A one-patch change rebuilds only what that
+  patch touches.
 
 - The last synced pin is stored next to the checkout, in
   `/build/chromium/.domicile-synced-pin`. A run whose pin matches it skips

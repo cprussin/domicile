@@ -79,8 +79,6 @@ git -C "$CHROMIUM" cat-file -e "$pin^{commit}" 2>/dev/null || {
   exit 1
 }
 
-git -C "$CHROMIUM" reset --hard "$pin"
-
 # Remove the previous run's series files as well as this one's, since another
 # branch may have added files this branch lacks. Each run records its file list
 # in a manifest beside the checkout. Files on neither list are left alone.
@@ -89,10 +87,28 @@ series_files() { (cd "$SERIES" && find . -type f | sed 's|^\./||'); }
 
 # Drop absolute paths and `..` from the manifest, since its paths are
 # removed.
+laid_down() {
+  {
+    grep -Ev '^/|(^|/)\.\.(/|$)' "$MANIFEST" 2>/dev/null || true
+    series_files
+  } | sort -u
+}
+
+# The reset and apply rewrite every file the old and new series touch. Note
+# their mtimes so engine-apply.sh can give them back to the files that come
+# back unchanged; otherwise ninja rebuilds everything that includes them. The
+# patched files are only known when HEAD is a series over this pin; after a
+# repin most of the tree changes anyway.
 {
-  grep -Ev '^/|(^|/)\.\.(/|$)' "$MANIFEST" 2>/dev/null || true
-  series_files
-} | sort -u |
+  if git -C "$CHROMIUM" merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+    git -C "$CHROMIUM" diff --name-only --no-renames "$pin" HEAD
+  fi
+  laid_down
+} | "$ROOT/.github/scripts/engine-keep-mtimes.sh" save "$CHROMIUM"
+
+git -C "$CHROMIUM" reset --hard "$pin"
+
+laid_down |
   while IFS= read -r file; do
     [ -n "$file" ] || continue
     rm -f "$CHROMIUM/$file"

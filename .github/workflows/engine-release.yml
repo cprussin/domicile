@@ -130,17 +130,11 @@ jobs:
       - name: Reset the checkout to the pin, sync its DEPS and apply the series
         run: |
           set -euo pipefail
-          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
           .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-reset.sh "$CHROMIUM"
           # The reset does not move DEPS. A no-op unless the pin changed.
           .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-sync.sh "$CHROMIUM"
-          # Not through Chromium's shell, whose sandbox hides apply.sh's exit
-          # status and output. See engine.yml.
-          packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
-          [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
-            echo "::error::the checkout is still at the pin, so no patch was applied" >&2
-            exit 1
-          }
+          # See .github/scripts/engine-apply.sh.
+          .github/scripts/engine-apply.sh "$CHROMIUM"
 
       # Not build.sh, which is the measured configuration a person runs by
       # hand. This build differs in is_component_build and the crashpad
