@@ -3,7 +3,12 @@ import { describe, expect, it } from "bun:test";
 import { Axis, Direction } from "./direction";
 import { FLOAT_STEP } from "./floating/float";
 import { Layout, LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
-import { focusedNodeOf, focusedWindowIn, windowsOf } from "./tree/tiling";
+import {
+  focusedNodeOf,
+  focusedWindowIn,
+  windowsOf,
+  withFocusOn,
+} from "./tree/tiling";
 import type { Workspace } from "./workspace";
 import {
   childFocused,
@@ -187,8 +192,19 @@ const selectedIn = (workspace: Workspace) => {
 };
 
 /** `a` tiled beside `b` and `c`, which share a vertical split; `c` focused. */
-const grouped = () =>
-  opened(containerSplit(tiling("a", "b"), Axis.Vertical), "c");
+const grouped = (): Workspace => ({
+  ...emptyWorkspace("1"),
+  tiling: withFocusOn(
+    {
+      depth: 0,
+      root: Node.Container(Layout.Tabbed, [
+        Node.Window("a"),
+        Node.Container(Layout.SplitV, [Node.Window("b"), Node.Window("c")]),
+      ]),
+    },
+    "c",
+  ),
+});
 
 describe("a floating group", () => {
   const floated = () => floatToggled(parentFocused(grouped()), SCREEN);
@@ -435,9 +451,9 @@ describe("the keyed commands", () => {
     });
   });
 
-  it("splits the focused window's own box", () => {
+  it("splits the focused window out of its group", () => {
     expect(
-      containerSplit(tiling("a"), Axis.Vertical).tiling.root,
+      containerSplit(tiling("a", "b"), Axis.Vertical).tiling.root,
     ).toMatchObject({ layout: Layout.SplitV });
   });
 });

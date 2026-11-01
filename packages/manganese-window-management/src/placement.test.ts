@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Axis } from "./direction";
+import { Axis, Direction } from "./direction";
 import type { Geometry } from "./placement";
 import {
   contentsOf,
@@ -39,6 +39,18 @@ const desktop = (...appIds: readonly string[]): WindowState =>
   reduce(
     NO_WINDOWS,
     ...appIds.map((appId) => WindowAction.AppAppeared(appId, appId)),
+  );
+
+/** Mail, and a tab holding a row of kitty and the editor; the row selected. */
+const nested = (): WindowState =>
+  reduce(
+    desktop("kitty", "editor", "mail"),
+    WindowAction.ContainerSplit(Axis.Vertical),
+    WindowAction.FocusStepped(Direction.Up),
+    WindowAction.ContainerSplit(Axis.Horizontal),
+    WindowAction.ParentFocused(),
+    WindowAction.ParentFocused(),
+    WindowAction.WindowStepped(Direction.Down),
   );
 
 /** What the screen of `geometry` shows. */
@@ -215,9 +227,9 @@ describe("placementsOf", () => {
     // `mod+a` then `mod+Shift+Tab` over a vertical split floats the split
     // whole.
     const state = reduce(
-      desktop("kitty", "editor"),
+      desktop("kitty", "editor", "mail"),
       WindowAction.ContainerSplit(Axis.Vertical),
-      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
       WindowAction.ParentFocused(),
       WindowAction.FloatToggled(),
     );
@@ -237,10 +249,7 @@ describe("placementsOf", () => {
 
   it("stacks the tabs of a floating group with the group", () => {
     const state = reduce(
-      desktop("kitty", "editor"),
-      WindowAction.ContainerSplit(Axis.Vertical),
-      WindowAction.AppAppeared("mail", "mail"),
-      WindowAction.ParentFocused(),
+      nested(),
       WindowAction.ParentFocused(),
       WindowAction.FloatToggled(),
     );
@@ -364,11 +373,7 @@ describe("placementsOf", () => {
 
     it("draws the tabs of the groups inside it over everything", () => {
       const state = reduce(
-        desktop("kitty", "editor"),
-        WindowAction.ContainerSplit(Axis.Vertical),
-        WindowAction.AppAppeared("mail", "mail"),
-        WindowAction.ParentFocused(),
-        WindowAction.LayoutSet(Layout.Tabbed),
+        nested(),
         WindowAction.ParentFocused(),
         WindowAction.FullscreenToggled(false),
       );
@@ -506,6 +511,7 @@ describe("the focus box", () => {
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ParentFocused(),
       WindowAction.ParentFocused(),
     );
 

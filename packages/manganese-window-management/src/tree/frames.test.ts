@@ -110,31 +110,6 @@ describe("framesOf", () => {
     });
   });
 
-  it("leaves room at the end of a split of one, where the next window opens", () => {
-    const lone = (layout: Layout) =>
-      framesOf(
-        {
-          depth: 1,
-          root: LayoutNode.Container(layout, [LayoutNode.Window("a")]),
-        },
-        AREA,
-        20,
-      );
-
-    expect(frameFor(lone(Layout.SplitH), "a").bar).toEqual({
-      height: TITLE_BAR,
-      width: 936,
-      x: 0,
-      y: 0,
-    });
-    expect(frameFor(lone(Layout.SplitV), "a").surface).toEqual({
-      height: 936 - TITLE_BAR + SURFACE_TUCK,
-      width: 1000,
-      x: 0,
-      y: TITLE_BAR - SURFACE_TUCK,
-    });
-  });
-
   it("divides a column the other way", () => {
     const tiled = framesOf(
       {

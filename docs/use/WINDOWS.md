@@ -1,19 +1,23 @@
 # Windows and workspaces
 
-Windows tile: each new one takes a share of the screen, beside the window you
-are in. Apps and browser windows tile, float and close the same way.
+Windows tile in tab groups: each new one opens as a tab beside the window you
+are in. Split groups to see them side by side. Apps and browser windows tile,
+float and close the same way.
 
 ![Windows tiling](../media/tour-tiling.png)
 
 ## Tiling
 
-- A new window opens next to the focused one. Closing a window gives its
-  space to the rest.
+- A new window opens as a tab next to the focused one. Closing a window gives
+  its space to the rest.
 - **Focus follows the pointer.** The window under it gets the keyboard; a
   click raises it.
-- Windows sit in groups. A group lays its windows out side by side, in tabs
-  (Meta+W) or stacked (Meta+S). Meta+B or Meta+V before opening a window puts
-  it beside or below.
+- Every window sits in a group, shown as tabs (Meta+W) or stacked (Meta+S).
+  Meta+B or Meta+V moves the window out of its group, to the right or below,
+  into a group of its own. Meta+E splits every tab of a group out side by
+  side.
+- Meta+Shift+arrow moves a window along its tabs, then out of its group. A
+  window alone in its group joins the next group that way.
 - Meta+A selects the whole group, so the next key moves, floats or
   fullscreens it.
 - Drag a window by its title bar, or anywhere with Meta held, to move it. A

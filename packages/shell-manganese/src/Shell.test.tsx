@@ -739,12 +739,9 @@ const glowBox = (container: HTMLElement): string => {
   ].join(" ");
 };
 
-/**
- * Whether `focus parent` targets a group: the focused window's bar marks
- * itself apart from the group.
- */
+/** Whether `focus parent` targets a group, which the tint covers. */
 const pointedAtGroup = (container: HTMLElement): boolean =>
-  titleBars(container).some((bar) => bar.dataset.focus === "leaf");
+  tinted(container) !== undefined;
 
 /** An element's laid-out box. */
 const boxOf = (element: HTMLElement) => ({
@@ -2784,6 +2781,7 @@ describe("Shell", () => {
       clientAppears("one");
       clientAppears("two");
       press("e");
+      press("a");
 
       press("h", true);
 
@@ -2791,26 +2789,23 @@ describe("Shell", () => {
       expect(boxOf(appBox(container, "one"))).toMatchObject({ x: "970px" });
     });
 
-    it("makes one group of a split window and a window moved into it", () => {
-      // `mod+v` wraps the focused window in a one-window column, so the window
-      // moved toward it joins the column instead of swapping.
+    it("splits a window out of its group, and back in as a tab", () => {
+      // `mod+v` moves the window out below its group. Alone in its own group,
+      // moving it back joins the group as a tab instead of swapping.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
 
       press("v");
-      press("h");
-      press("l", true);
-
-      // One column of two full-width windows, not a swap.
-      expect(boxOf(appBox(container, "one"))).toMatchObject({
-        width: "1880px",
-        y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
-      });
       expect(boxOf(appBox(container, "two"))).toMatchObject({
         width: "1880px",
         y: `${(TOP_BAR + TOP_GAP + 499 + 20 + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
+
+      press("k", true);
+
+      expect(tabOrder(container)).toEqual(["app:one", "app:two"]);
+      expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 
     it("lays the container out in tabs, which are the windows' own bars", () => {
@@ -2840,15 +2835,17 @@ describe("Shell", () => {
       expect(lit(container)).toEqual(["app:two"]);
       expect(tinted(container)).toBeUndefined();
 
+      // Past the group of one the window is in, to the split.
+      press("a");
       press("a");
 
-      // The glow takes in every window in it, a tint covers them all, and
-      // every bar is raised, the focused one marked apart.
+      // The glow takes in every window in it and a tint covers them all.
+      // Each bar is a tab, which keeps its own state.
       expect(lit(container)).toEqual(["app:one", "app:two"]);
       expect(tinted(container)).toBe(glowBox(container));
-      expect(barFor(container, "app:one").dataset.focus).toBe("selected");
-      expect(barFor(container, "app:two").dataset.focus).toBe("leaf");
+      expect(barFor(container, "app:two").dataset.focus).toBe("focused");
       // `mod+Shift+a` returns to the window.
+      press("a", true);
       press("a", true);
       expect(lit(container)).toEqual(["app:two"]);
       expect(tinted(container)).toBeUndefined();
@@ -2902,18 +2899,21 @@ describe("Shell", () => {
     });
 
     it("offers to tile a floating group from the tab that stands for it", () => {
-      // A tabbed container holding a column, floated whole.
+      // A tabbed container holding a row, floated whole.
       renderShell();
       clientAppears("one");
       clientAppears("two");
-      press("w");
-      press("v");
       clientAppears("three");
+      press("v");
+      press("k");
+      press("b");
       press("a");
+      press("a");
+      press("j", true);
       press("a");
       press("Tab", true);
 
-      expect(screen.getByRole("img", { name: "Column of 2" })).toBeDefined();
+      expect(screen.getByRole("img", { name: "Row of 2" })).toBeDefined();
       expect(screen.queryAllByRole("button", { name: "Float" })).toEqual([]);
     });
 
@@ -2940,10 +2940,14 @@ describe("Shell", () => {
 
     it("grows the glow in with the window that opened", () => {
       // A full-size glow around a growing window would stick out past it.
+      // It opens beside the selected split, in a box of its own.
       const { container } = renderShell();
       clientAppears("one");
-      press("e");
       clientAppears("two");
+      press("b");
+      press("a");
+      press("a");
+      clientAppears("three");
 
       expect(glowing(container).className).toContain(
         movingStyles({ motion: "opening" }),
@@ -3743,18 +3747,23 @@ describe("Shell", () => {
       // The window took focus without a key press. The pointer is still over
       // the previous window, and the next pointer event would take focus
       // back.
+      // It opens beside the selected split, in a box of its own.
       const { container } = renderShell();
       clientAppears("one");
+      clientAppears("two");
       press("b");
+      press("a");
+      press("a");
+      pointerAt(485, 566);
       domicile.calls.length = 0;
 
-      clientAppears("two");
+      clientAppears("three");
 
-      expect(domicile.calls).toContainEqual(["warpPointer", 1435, 566]);
-      expect(boxOf(appBox(container, "two"))).toMatchObject({
+      expect(domicile.calls).toContainEqual(["warpPointer", 1594, 566]);
+      expect(boxOf(appBox(container, "three"))).toMatchObject({
         height: "989px",
-        width: "930px",
-        x: "970px",
+        width: "613px",
+        x: "1287px",
         y: "71px",
       });
     });
