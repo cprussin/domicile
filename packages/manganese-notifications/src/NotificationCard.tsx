@@ -7,7 +7,7 @@ import {
 } from "@domicile-desktop/sdk/notification";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-import type { MouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { css, cva } from "../styled-system/css";
 import { grid, hstack } from "../styled-system/patterns";
@@ -30,11 +30,8 @@ type Props = {
   body?: ReactNode | undefined;
   /** The close button's label: dismissing a toast differs from clearing it. */
   closeLabel: string;
-  /**
-   * Called when an action is pressed; `"default"` for the card itself. The
-   * event lets a toast tell a click from the end of a swipe.
-   */
-  onAction: (key: string, event: MouseEvent<HTMLElement>) => void;
+  /** Called when an action is pressed; `"default"` for the card itself. */
+  onAction: (key: string) => void;
   onClose: () => void;
   /** Called with what is typed in the reply field. */
   onReply: (text: string) => void;
@@ -63,8 +60,8 @@ export const NotificationCard = ({
   onReply,
   summary,
 }: Props) => {
-  const pressed = (event: MouseEvent<HTMLElement>) => {
-    onAction(DEFAULT_NOTIFICATION_ACTION, event);
+  const pressed = () => {
+    onAction(DEFAULT_NOTIFICATION_ACTION);
   };
   const reply = notification.actions.find(
     ({ key }) => key === INLINE_REPLY_NOTIFICATION_ACTION,
@@ -118,7 +115,7 @@ export const NotificationCard = ({
             onClick={(event) => {
               // Stop the press from also reaching the card.
               event.stopPropagation();
-              pressed(event);
+              pressed();
             }}
             type="button"
           >
@@ -142,7 +139,7 @@ export const NotificationCard = ({
                 onClick={(event) => {
                   // Stop the press from also reaching the card.
                   event.stopPropagation();
-                  onAction(key, event);
+                  onAction(key);
                 }}
                 rounded
                 size="xs"

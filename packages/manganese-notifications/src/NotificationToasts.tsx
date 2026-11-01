@@ -75,13 +75,8 @@ const Deck = ({
             closeLabel="Dismiss"
             notification={notification}
             now={now}
-            onAction={(key, event) => {
-              // Ignore the pointer release that ends a dismissing swipe.
-              if (
-                event.currentTarget.closest("[data-swipe-direction]") === null
-              ) {
-                onAction(notification.id, key);
-              }
+            onAction={(key) => {
+              onAction(notification.id, key);
             }}
             onClose={() => {
               close(toast.id);

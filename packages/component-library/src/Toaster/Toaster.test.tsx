@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   act,
+  fireEvent,
   render,
   screen,
   waitForElementToBeRemoved,
@@ -119,6 +120,76 @@ describe(Toaster, () => {
       });
 
       await waitForElementToBeRemoved(() => screen.queryByText("Downloaded"));
+    });
+  });
+
+  describe("pressing", () => {
+    /**
+     * A toast drawn as a clickable card, with each click it gets kept in
+     * `clicks`.
+     */
+    const clickable = async (clicks: string[]) => {
+      const manager = createToastManager();
+      render(
+        <Toaster.Provider toastManager={manager}>
+          <Toaster label="Notifications">
+            {() => (
+              // biome-ignore lint/a11y/noStaticElementInteractions: stands in for a card the pointer presses
+              // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same stand-in
+              // biome-ignore lint/a11y/useKeyWithClickEvents: the same stand-in
+              <div
+                onClick={() => {
+                  clicks.push("card");
+                }}
+              >
+                <Toaster.Title />
+              </div>
+            )}
+          </Toaster>
+        </Toaster.Provider>,
+      );
+      act(() => {
+        manager.add({ title: "New message" });
+      });
+      const title = await screen.findByText("New message");
+      const toast = title.closest("[data-toast]");
+      if (toast === null) {
+        throw new Error("the toast has no root");
+      } else {
+        return { title, toast };
+      }
+    };
+
+    // The swipe captures the pointer on the toast's root, so the browser
+    // sends a press's click to the root rather than to what was pressed.
+    it("clicks what a press started on when the swipe took its click", async () => {
+      const clicks: string[] = [];
+      const { title, toast } = await clickable(clicks);
+
+      fireEvent.pointerDown(title, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.click(toast, { clientX: 11, clientY: 10 });
+
+      expect(clicks).toEqual(["card"]);
+    });
+
+    it("clicks nothing at the end of a drag", async () => {
+      const clicks: string[] = [];
+      const { title, toast } = await clickable(clicks);
+
+      fireEvent.pointerDown(title, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.click(toast, { clientX: 60, clientY: 10 });
+
+      expect(clicks).toEqual([]);
+    });
+
+    it("leaves a click that reached its target alone", async () => {
+      const clicks: string[] = [];
+      const { title } = await clickable(clicks);
+
+      fireEvent.pointerDown(title, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.click(title, { clientX: 10, clientY: 10 });
+
+      expect(clicks).toEqual(["card"]);
     });
   });
 });

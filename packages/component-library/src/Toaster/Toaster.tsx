@@ -1,6 +1,7 @@
 import type { ToastObject } from "@base-ui/react/toast";
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import type { CSSProperties, ReactNode } from "react";
+import { useRef } from "react";
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
 
@@ -43,30 +44,82 @@ const ToasterComponent = <Data extends object>({
       {...viewportProps}
     >
       {toasts.map((toast) => (
-        <BaseToast.Root
-          className={rootStyles}
-          data-toast=""
-          key={toast.id}
-          swipeDirection={["right", "up"]}
-          toast={toast}
-        >
-          <BaseToast.Content className={contentStyles}>
-            {children(toast)}
-          </BaseToast.Content>
-          {toast.timeout !== undefined && toast.timeout > 0 && (
-            <span
-              aria-hidden
-              className={countdownStyles}
-              data-toast-countdown=""
-              // Not a token: the bar must end when the toast does.
-              style={
-                { "--toast-timeout": `${toast.timeout}ms` } as CSSProperties
-              }
-            />
-          )}
-        </BaseToast.Root>
+        <ToastRoot key={toast.id} toast={toast}>
+          {children(toast)}
+        </ToastRoot>
       ))}
     </BaseToast.Viewport>
+  );
+};
+
+/** How far a press may move and still click; further is a swipe. */
+const CLICK_SLOP = 5;
+
+/** Where a press on a toast started. */
+type Press = { target: EventTarget; x: number; y: number };
+
+/**
+ * One toast: its card, its content and its countdown.
+ *
+ * The swipe captures the pointer on this root, so the browser sends a press's
+ * click here rather than to what was pressed. A press that barely moved is
+ * clicked again on the element it started on.
+ */
+const ToastRoot = <Data extends object>({
+  children,
+  toast,
+}: {
+  children: ReactNode;
+  toast: ToastObject<Data>;
+}) => {
+  const press = useRef<Press>(undefined);
+  return (
+    <BaseToast.Root
+      className={rootStyles}
+      data-toast=""
+      onClick={(event) => {
+        const start = press.current;
+        if (
+          start !== undefined &&
+          event.target === event.currentTarget &&
+          start.target !== event.currentTarget &&
+          Math.hypot(event.clientX - start.x, event.clientY - start.y) <=
+            CLICK_SLOP
+        ) {
+          start.target.dispatchEvent(
+            new MouseEvent("click", {
+              bubbles: true,
+              button: event.button,
+              cancelable: true,
+              clientX: event.clientX,
+              clientY: event.clientY,
+            }),
+          );
+        }
+      }}
+      onPointerDown={(event) => {
+        press.current = {
+          target: event.target,
+          x: event.clientX,
+          y: event.clientY,
+        };
+      }}
+      swipeDirection={["right", "up"]}
+      toast={toast}
+    >
+      <BaseToast.Content className={contentStyles}>
+        {children}
+      </BaseToast.Content>
+      {toast.timeout !== undefined && toast.timeout > 0 && (
+        <span
+          aria-hidden
+          className={countdownStyles}
+          data-toast-countdown=""
+          // Not a token: the bar must end when the toast does.
+          style={{ "--toast-timeout": `${toast.timeout}ms` } as CSSProperties}
+        />
+      )}
+    </BaseToast.Root>
   );
 };
 
