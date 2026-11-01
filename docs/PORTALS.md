@@ -1,13 +1,64 @@
 # Portals
 
+Apps ask for file pickers, screen sharing, screenshots and other dialogs
+through `xdg-desktop-portal`. The shell draws them.
+
+## Quick start
+
+Mount `PortalDialogs` once, anywhere in a React shell:
+
+```tsx
+/// <reference types="@domicile-desktop/react/elements" />
+
+import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { mount } from "@domicile-desktop/react/mount";
+import { useWindows } from "@domicile-desktop/react/windows";
+
+const Desktop = () => (
+  <>
+    {useWindows().map(({ appId }) => (
+      <app app-id={appId} key={appId} />
+    ))}
+    <PortalDialogs domicile={useDomicile()} />
+  </>
+);
+
+export const Shell = mount(Desktop);
+```
+
+- `useDomicile()` reads the desktop from the `DomicileProvider` that `mount`
+  puts around `Desktop`. Outside it, it throws.
+- It shows one dialog at a time, oldest first, over the app that asked.
+- It refuses every request kind it has no dialog for. The app gets response
+  `2` and stops waiting.
+- What each request becomes depends on the shell:
+
+  | Shell | Request |
+  |---|---|
+  | No shell page connected | Refused at once |
+  | Connected, ignores `domicile.portals` | Pending: the app waits until it gives up |
+  | Mounts `PortalDialogs` | Drawn as a dialog, or refused |
+
+Next:
+
+- Its props, the kinds it draws, and refusing every request from a shell
+  without React:
+  [Application dialogs](SHELL-DESKTOP-EVENTS.md#application-dialogs).
+- Drawing your own dialogs: read `domicile.portals.requests` and answer each
+  with `domicile.portals.answer(id, answer)`. The kinds and answers are in
+  `@domicile-desktop/sdk/portal`.
+- How requests reach the shell: [Design](#design) and
+  [Key decisions](#key-decisions) below.
+
+## Design
+
 Domicile is the session's only `xdg-desktop-portal` backend:
 
 - The compositor implements every portal interface except `Secret`, which
   goes to the keyring.
 - The shell draws every portal dialog.
 - `xdg-desktop-portal-gtk` is not in the session.
-
-## Design
 
 ```
 app ──org.freedesktop.portal.*──▶ xdg-desktop-portal ──impl.portal.*──▶ compositor

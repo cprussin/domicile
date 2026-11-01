@@ -41,7 +41,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `Notice` | Pill that briefly shows a change, such as a zoom level or volume, with an optional level meter. Key it per change. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. Parts: `Item`, `CheckboxItem`, `RadioGroup` and `RadioItem`, `Submenu`, `Separator`. Items take an `icon` and a `mnemonic`, whose letter chooses them. |
-| `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. `omitScreenCasts` leaves screen casts out of its indicator. See [PORTALS.md](/docs/PORTALS.md). |
+| `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `domicile={domicile}`; it refuses kinds it cannot draw. `omitScreenCasts` leaves screen casts out of its indicator. See [PORTALS.md](/docs/PORTALS.md). |
 | `Panel` | Titled panel: a `PanelHeader`, then its content a step apart. `PanelAction` puts the content's controls in the header. |
 | `PanelFooter` | A panel's last line under a rule: a summary and an action. |
 | `PanelHeader` | A panel's title, with a back button when one level in and controls at the end. |

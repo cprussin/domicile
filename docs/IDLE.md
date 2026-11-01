@@ -10,7 +10,8 @@ input, and locks the desktop after `idle.lock_after_seconds`
 - Both timeouts count from the same last input, and the same inhibitors hold
   both off. Either may be the shorter.
 - Blanking does not lock. Without `lock_after_seconds` the desktop locks only
-  when the shell calls `lock()`.
+  when the shell calls `lock()`, before the machine sleeps, or when logind
+  locks the session ([LOCK.md](LOCK.md#sleep-and-logind)).
 - `Idle::lock_due` reports the lock edge once per spell without input. The
   timer, and any inhibitor change, checks it before a modeset, so the lock
   screen is up before a screen lights.
