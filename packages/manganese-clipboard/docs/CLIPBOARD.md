@@ -1,7 +1,7 @@
 # The clipboard
 
 **Meta+Shift+V** opens the clipboard history, newest first. Choosing a row
-makes it the current selection. Source: `src/`.
+makes it the current selection and moves it to the top. Source: `src/`.
 
 - It steers like the launcher, on the same `ResultList` rows: a search box
   keeps focus, typing narrows the rows to those holding every word, and the

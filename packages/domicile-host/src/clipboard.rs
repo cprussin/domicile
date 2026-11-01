@@ -265,6 +265,18 @@ impl History {
             .map(|copy| &copy.contents)
     }
 
+    /// Moves entry `id` to the front, since restoring it puts it back on the
+    /// clipboard, and returns what it holds.
+    ///
+    /// `None` if the entry has dropped off the end of the history.
+    pub fn restore(&mut self, id: u32) -> Option<Contents> {
+        let held = self.entries.iter().position(|copy| copy.id == id)?;
+        let copy = self.entries.remove(held);
+        let contents = copy.contents.clone();
+        self.entries.insert(0, copy);
+        Some(contents)
+    }
+
     /// Puts a copy at the front, moving an existing equal entry instead of
     /// duplicating it.
     ///

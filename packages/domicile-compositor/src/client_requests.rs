@@ -408,10 +408,13 @@ impl DomicileCompositor {
             ClientRequest::AnswerPortalRequest { id, answer } => {
                 self.hub.portals.answer(id, answer);
             }
-            ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.contents(entry) {
-                // Paste now yields this entry, not the newest. See
-                // [`DomicileCompositor::holding`].
-                Some(contents) => self.hold_on_the_clipboard(contents.clone()),
+            ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.restore(entry) {
+                // Paste now yields this entry, which is now the newest row.
+                // See [`DomicileCompositor::holding`].
+                Some(contents) => {
+                    self.tell_the_chromes_the_clipboard();
+                    self.hold_on_the_clipboard(contents);
+                }
                 // The history dropped this entry. Set nothing rather than
                 // substitute another entry for what the user picked.
                 None => warn!(
