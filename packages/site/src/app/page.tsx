@@ -11,6 +11,7 @@ import { Npm } from "../domicile/Npm";
 import { Quickstart } from "../domicile/Quickstart";
 import { ReferenceShell } from "../domicile/ReferenceShell";
 import { Showcase } from "../domicile/Showcase";
+import { Swap } from "../domicile/Swap";
 import { Accent } from "../page/Accent";
 import { LinkColumns } from "../page/LinkColumns";
 import { repoFile } from "../page/repo";
@@ -42,6 +43,7 @@ const DomicilePage = () => (
       <Hero />
       <HeroMedia />
       <Make />
+      <Swap />
       <ReferenceShell />
       <Showcase />
       <Batteries />
