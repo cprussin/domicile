@@ -11,7 +11,7 @@ import {
   resultId,
 } from "@domicile-desktop/component-library/ResultList";
 import { RowTile } from "@domicile-desktop/component-library/RowTile";
-import type { DomicileClipboardEntry } from "@domicile-desktop/sdk/domicile-host";
+import type { ClipboardEntry } from "@domicile-desktop/sdk/desktop/clipboard";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
 import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { LinkSimpleIcon } from "@phosphor-icons/react/dist/ssr/LinkSimple";
@@ -31,7 +31,7 @@ const ICON_SIZE = 16;
 
 type Props = {
   /** The clipboard history, newest first, from the compositor. */
-  entries: readonly DomicileClipboardEntry[];
+  entries: readonly ClipboardEntry[];
   /** Restores this entry, by its compositor ID, to the clipboard. */
   onCopy: (entry: number) => void;
   /** Escape, a backdrop click, or a chosen row. The desktop decides. */
@@ -88,7 +88,7 @@ export const Clipboard = memo(
 );
 
 type HistoryProps = {
-  entries: readonly DomicileClipboardEntry[];
+  entries: readonly ClipboardEntry[];
   onCopy: (entry: number) => void;
   onDismiss: () => void;
 };
@@ -110,7 +110,7 @@ const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
     shown.length === 0 ? undefined : Math.min(stepped, shown.length - 1);
   const current = entries[0]?.id;
 
-  const pick = (entry: DomicileClipboardEntry) => {
+  const pick = (entry: ClipboardEntry) => {
     onCopy(entry.id);
     onDismiss();
   };
@@ -179,7 +179,10 @@ const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
           >
             {(entry) => (
               <>
-                <RowTile icon={glyphOf(kindOf(entry))} />
+                <RowTile
+                  icon={glyphOf(kindOf(entry))}
+                  picture={entry.thumbnail}
+                />
                 <span className={textStyles}>
                   <span className={lineStyles}>
                     <Marked query={query} text={lineOf(entry.preview)} />
@@ -203,9 +206,9 @@ const lineOf = (preview: string): string =>
 
 /** The copies whose line holds every word of `query`, ignoring case. */
 const matching = (
-  entries: readonly DomicileClipboardEntry[],
+  entries: readonly ClipboardEntry[],
   query: string,
-): readonly DomicileClipboardEntry[] => {
+): readonly ClipboardEntry[] => {
   const words = query
     .toLowerCase()
     .split(/\s+/)

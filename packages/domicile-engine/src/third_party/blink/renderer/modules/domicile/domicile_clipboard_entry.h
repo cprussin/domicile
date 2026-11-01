@@ -24,12 +24,16 @@ class MODULES_EXPORT DomicileClipboardEntry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DomicileClipboardEntry(uint32_t id, bool image, const String& preview);
+  DomicileClipboardEntry(uint32_t id,
+                         bool image,
+                         const String& preview,
+                         const String& thumbnail);
   ~DomicileClipboardEntry() override;
 
   uint32_t id() const { return id_; }
   bool image() const { return image_; }
   const String& preview() const { return preview_; }
+  const String& thumbnail() const { return thumbnail_; }
 
   void Trace(Visitor*) const override;
 
@@ -44,6 +48,8 @@ class MODULES_EXPORT DomicileClipboardEntry final : public ScriptWrappable {
   // it: the compositor cuts a long copy down to a row. What goes back on the
   // clipboard is always the whole thing.
   String preview_;
+  // A small picture of an image with no text, as a PNG `data:` URL, or empty.
+  String thumbnail_;
 };
 
 }  // namespace blink
