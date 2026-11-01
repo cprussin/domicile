@@ -3,14 +3,23 @@ import {
   OnOneScreen,
   SCREEN,
 } from "@domicile-desktop/manganese-window-management/screens/fixture";
+import type { ClipboardEntry } from "@domicile-desktop/sdk/desktop/clipboard";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Clipboard } from "./Clipboard";
 
+/** A row's text, with no picture. */
+const text = (id: number, preview: string): ClipboardEntry => ({
+  id,
+  image: false,
+  preview,
+  thumbnail: undefined,
+});
+
 const HISTORY = [
-  { id: 3, image: false, preview: "https://example.invalid/a/long/address" },
-  { id: 2, image: false, preview: "Thanks, see you\nTuesday" },
-  { id: 1, image: false, preview: "the first thing copied" },
+  text(3, "https://example.invalid/a/long/address"),
+  text(2, "Thanks, see you\nTuesday"),
+  text(1, "the first thing copied"),
 ];
 
 /** The panel open over that history, recording copy requests. */
@@ -67,6 +76,14 @@ describe("Clipboard", () => {
       ]);
     });
 
+    it("shows a copied image's thumbnail", () => {
+      const thumbnail = "data:image/png;base64,iVBORw0KGgo=";
+      clipboard([{ id: 4, image: true, preview: "Image, 3 × 2", thumbnail }]);
+
+      const row = screen.getByRole("option", { name: /^Image, 3 × 2/ });
+      expect(row.querySelector("img")?.getAttribute("src")).toBe(thumbnail);
+    });
+
     it("counts the copies", () => {
       clipboard();
 
@@ -95,7 +112,7 @@ describe("Clipboard", () => {
     });
 
     it("starts on the only copy when there is one", async () => {
-      const panel = clipboard([{ id: 7, image: false, preview: "alone" }]);
+      const panel = clipboard([text(7, "alone")]);
 
       await panel.user.keyboard("{Enter}");
 

@@ -2215,6 +2215,12 @@ pub struct ClipboardEntry {
     /// `domicile_host::clipboard::PREVIEW_CHARACTERS`; restoring the entry
     /// always restores the whole copy.
     pub preview: String,
+
+    /// A small picture of a copied image with no text, as a PNG `data:` URL,
+    /// at most `domicile_host::thumbnail::LONGEST_SIDE` pixels a side.
+    /// Absent for text, and for an image the compositor could not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumbnail: Option<String>,
 }
 
 /// One display, in logical units (CSS pixels).

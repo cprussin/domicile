@@ -8,6 +8,8 @@
 
 use domicile_protocol::ClipboardEntry;
 
+use crate::thumbnail::thumbnail;
+
 /// Number of copies kept. Bounded by count, and by [`HELD_BYTES`].
 pub const REMEMBERED: usize = 32;
 
@@ -83,6 +85,29 @@ pub struct Contents {
 pub struct Image {
     pub mime: String,
     pub bytes: Vec<u8>,
+    /// A small PNG of it as a `data:` URL, for its row. `None` for a format
+    /// that is not read, or bytes that do not decode.
+    ///
+    /// Made once, with the image, so a row is not decoded on every broadcast.
+    /// Copies are read off the Wayland thread, so that is where it is made.
+    thumbnail: Option<String>,
+}
+
+impl Image {
+    /// An image of type `mime`.
+    pub fn new(mime: impl Into<String>, bytes: Vec<u8>) -> Image {
+        let mime = mime.into();
+        let thumbnail = if mime.eq_ignore_ascii_case(PNG) {
+            thumbnail(&bytes)
+        } else {
+            None
+        };
+        Image {
+            mime,
+            bytes,
+            thumbnail,
+        }
+    }
 }
 
 impl Contents {
@@ -98,10 +123,7 @@ impl Contents {
     pub fn image(mime: impl Into<String>, bytes: Vec<u8>) -> Contents {
         Contents {
             text: None,
-            image: Some(Image {
-                mime: mime.into(),
-                bytes,
-            }),
+            image: Some(Image::new(mime, bytes)),
         }
     }
 
@@ -118,7 +140,7 @@ impl Contents {
         };
         Contents {
             text: take(text_mime(&mimes)).and_then(|(_, bytes)| String::from_utf8(bytes).ok()),
-            image: take(image_mime(&mimes)).map(|(mime, bytes)| Image { mime, bytes }),
+            image: take(image_mime(&mimes)).map(|(mime, bytes)| Image::new(mime, bytes)),
         }
     }
 
@@ -173,6 +195,14 @@ impl Contents {
                 .image
                 .as_ref()
                 .is_some_and(|image| image.bytes.len() > LONGEST_IMAGE)
+    }
+
+    /// The thumbnail of a copy that is only an image, which its row shows.
+    fn thumbnail(&self) -> Option<String> {
+        match (&self.text, &self.image) {
+            (None, Some(image)) => image.thumbnail.clone(),
+            _ => None,
+        }
     }
 
     /// The row a shell shows: the start of the text, else the image's size.
@@ -243,6 +273,7 @@ impl History {
                 id: copy.id,
                 image: copy.contents.text.is_none(),
                 preview: copy.contents.preview(),
+                thumbnail: copy.contents.thumbnail(),
             })
             .collect()
     }

@@ -768,7 +768,12 @@ const browserWindow = (container: HTMLElement): HTMLElement => {
 
 /** The compositor reports the clipboard history, newest first. */
 const copied = (
-  entries: readonly { id: number; image: boolean; preview: string }[],
+  entries: readonly {
+    id: number;
+    image: boolean;
+    preview: string;
+    thumbnail: string;
+  }[],
 ): void => {
   domicile.set({ clipboard: entries });
 };
@@ -1244,8 +1249,8 @@ describe("Shell", () => {
       // The compositor pushes the history; the panel does not ask for it.
       renderShell();
       copied([
-        { id: 2, image: false, preview: "the newest" },
-        { id: 1, image: false, preview: "the oldest" },
+        { id: 2, image: false, preview: "the newest", thumbnail: "" },
+        { id: 1, image: false, preview: "the oldest", thumbnail: "" },
       ]);
 
       press("v", true);
@@ -1270,8 +1275,8 @@ describe("Shell", () => {
       // on the seat's clipboard.
       renderShell();
       copied([
-        { id: 8, image: false, preview: "the newest" },
-        { id: 7, image: false, preview: "ssh-rsa AAAA" },
+        { id: 8, image: false, preview: "the newest", thumbnail: "" },
+        { id: 7, image: false, preview: "ssh-rsa AAAA", thumbnail: "" },
       ]);
       press("v", true);
 

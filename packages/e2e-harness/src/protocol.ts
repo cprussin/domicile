@@ -320,6 +320,7 @@ const clipboardEntrySchema = z.looseObject({
   id: z.number(),
   image: z.boolean(),
   preview: z.string(),
+  thumbnail: z.string().optional(),
 });
 
 const clipboardSchema = z.looseObject({

@@ -219,7 +219,8 @@ fn a_selection_with_no_image_has_no_image_to_read() {
     assert_eq!(image_mime(&offered), None);
 }
 
-/// A copied image is a row named for its size, and comes back whole.
+/// A copied image is a row named for its size, with a thumbnail of it, and
+/// comes back whole.
 #[test]
 fn an_image_is_a_row_named_for_its_size() {
     let mut history = History::default();
@@ -230,6 +231,10 @@ fn an_image_is_a_row_named_for_its_size() {
     let entry = &history.entries()[0];
     assert_eq!(entry.preview, "Image, 3 × 2");
     assert!(entry.image);
+    assert!(entry
+        .thumbnail
+        .as_deref()
+        .is_some_and(|url| url.starts_with("data:image/png;base64,")));
     assert_eq!(history.contents(entry.id), Some(&image));
 }
 
@@ -241,9 +246,11 @@ fn an_image_that_is_not_png_is_named_by_its_format() {
     history.record(Contents::image("image/webp", vec![1, 2, 3]));
 
     assert_eq!(previews(&history), vec!["Image (image/webp)"]);
+    assert_eq!(history.entries()[0].thumbnail, None);
 }
 
-/// A copy with both text and an image is shown by its text, as text.
+/// A copy with both text and an image is shown by its text, as text, with
+/// no thumbnail.
 #[test]
 fn a_copy_with_text_and_an_image_is_shown_by_its_text() {
     let mut history = History::default();
@@ -255,6 +262,7 @@ fn a_copy_with_text_and_an_image_is_shown_by_its_text() {
 
     assert_eq!(previews(&history), vec!["a caption"]);
     assert!(!history.entries()[0].image);
+    assert_eq!(history.entries()[0].thumbnail, None);
 }
 
 /// The same image copied twice is one row.
@@ -298,10 +306,7 @@ fn large_images_push_old_rows_out_before_the_count_does() {
 fn contents_are_offered_as_every_text_type_and_the_image_type() {
     let contents = Contents {
         text: Some("words".into()),
-        image: Some(Image {
-            mime: "image/png".into(),
-            bytes: vec![9],
-        }),
+        image: Some(Image::new("image/png", vec![9])),
     };
 
     assert_eq!(
@@ -334,10 +339,7 @@ fn contents_from_offered_types_keep_the_text_and_the_image() {
         contents,
         Contents {
             text: Some("words".into()),
-            image: Some(Image {
-                mime: "image/png".into(),
-                bytes: vec![7],
-            }),
+            image: Some(Image::new("image/png", vec![7])),
         }
     );
 }

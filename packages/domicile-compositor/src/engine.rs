@@ -2282,10 +2282,10 @@ mod tests {
             contents_from(&items),
             Contents {
                 text: Some("words".into()),
-                image: Some(domicile_host::clipboard::Image {
-                    mime: "image/png".into(),
-                    bytes: vec![1, 2],
-                }),
+                image: Some(domicile_host::clipboard::Image::new(
+                    "image/png",
+                    vec![1, 2]
+                )),
             }
         );
     }
@@ -2297,10 +2297,7 @@ mod tests {
     fn contents_cross_as_one_item_per_part() {
         let contents = Contents {
             text: Some("words".into()),
-            image: Some(domicile_host::clipboard::Image {
-                mime: "image/png".into(),
-                bytes: vec![3],
-            }),
+            image: Some(domicile_host::clipboard::Image::new("image/png", vec![3])),
         };
 
         let items = Items::of(&contents);

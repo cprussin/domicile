@@ -193,6 +193,9 @@ struct ClipboardEntry {
   // An image with no text, whose preview names its size or format.
   bool image;
   string preview;
+  // A small picture of an image with no text, as a PNG `data:` URL. Empty for
+  // text, and for an image the compositor could not read.
+  string thumbnail;
 };
 
 // One icon in the system tray: an application's StatusNotifierItem, as the

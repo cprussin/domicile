@@ -292,6 +292,12 @@ export type DomicileClipboardEntry = {
    * in the compositor, and a password manager's copy is a row in this list.
    */
   readonly preview: string;
+  /**
+   * A small picture of an image with no text, as a PNG `data:` URL, so a
+   * panel can show what was copied. Empty for text, and for an image the
+   * compositor could not read; its preview still names it.
+   */
+  readonly thumbnail: string;
 };
 
 /**
