@@ -16,7 +16,9 @@ type Props = {
 
 /**
  * Brief popovers over a page saying what just changed: its zoom, or a finished
- * download. Each count keys its notice, so each change shows it again.
+ * download. Each count keys its notice, so each change shows it again. The
+ * keys carry the notice's kind: equal counts must not let React swap one
+ * notice's state for the other's.
  */
 export const PageNotices = ({
   downloadsFinished,
@@ -25,12 +27,18 @@ export const PageNotices = ({
 }: Props) => (
   <div className={noticesStyles}>
     {zoomsAnnounced === 0 ? undefined : (
-      <Notice icon={<MagnifyingGlassIcon size={16} />} key={zoomsAnnounced}>
+      <Notice
+        icon={<MagnifyingGlassIcon size={16} />}
+        key={`zoom-${zoomsAnnounced}`}
+      >
         {zoomPercent(zoom)}
       </Notice>
     )}
     {downloadsFinished === 0 ? undefined : (
-      <Notice icon={<DownloadSimpleIcon size={16} />} key={downloadsFinished}>
+      <Notice
+        icon={<DownloadSimpleIcon size={16} />}
+        key={`download-${downloadsFinished}`}
+      >
         Download finished
       </Notice>
     )}
