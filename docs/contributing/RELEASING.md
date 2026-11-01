@@ -77,9 +77,9 @@ Two repository rulesets keep what a release published from moving:
 | `DOMICILE_SIGNING_KEY` | secret | The armored GPG key that signs the repositories. Backed up in `pass` with its revocation certificate. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secret | An R2 token that reads and writes the bucket. |
 | `AUR_SSH_KEY` | secret | The AUR account's SSH key. |
-| `R2_ACCOUNT_ID` | variable | The Cloudflare account. |
-| `DOMICILE_R2_BUCKET` | variable | The bucket. |
-| `DOMICILE_REPO_URL` | variable | The bucket's public address. |
+| `R2_ACCOUNT_ID` | optional variable | Overrides the Cloudflare account. |
+| `DOMICILE_R2_BUCKET` | optional variable | Overrides the bucket, `domicile-packages`. |
+| `DOMICILE_REPO_URL` | optional variable | Overrides the bucket's public address, https://packages.domicile-desktop.com. |
 
 npm needs none: it trusts `publish-packages.yml` by name, which is why the
 release is in that workflow.

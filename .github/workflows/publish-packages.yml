@@ -25,8 +25,8 @@ name: Publish packages
 # by hand with a placeholder version and given its trusted publisher there.
 #
 # A release reads the secrets `DOMICILE_SIGNING_KEY`, `R2_ACCESS_KEY_ID`,
-# `R2_SECRET_ACCESS_KEY` and `AUR_SSH_KEY`, and the variables `R2_ACCOUNT_ID`,
-# `DOMICILE_R2_BUCKET` and `DOMICILE_REPO_URL`.
+# `R2_SECRET_ACCESS_KEY` and `AUR_SSH_KEY`. The variables `R2_ACCOUNT_ID`,
+# `DOMICILE_R2_BUCKET` and `DOMICILE_REPO_URL` override the scripts' defaults.
 on:
   push:
     branches: [main]
@@ -164,7 +164,7 @@ jobs:
         run: |
           version="$(distro/version.sh . arch)"
           nix shell --inputs-from . nixpkgs#libarchive --command .github/scripts/release-aur.sh \
-            "distro-repo/arch/x86_64/domicile-$version-1-x86_64.pkg.tar.zst" "$DOMICILE_REPO_URL"
+            "distro-repo/arch/x86_64/domicile-$version-1-x86_64.pkg.tar.zst"
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           DOMICILE_REPO_URL: ${{ vars.DOMICILE_REPO_URL }}

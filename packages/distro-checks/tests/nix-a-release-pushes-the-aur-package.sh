@@ -63,8 +63,8 @@ release() { # package, environment...
   shift
   # No git identity, as on a CI runner.
   (cd "$ROOT" && env DOMICILE_AUR_REMOTE="$AUR" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
-    EMAIL= "$@" \
-    .github/scripts/release-aur.sh "$package" https://packages.invalid 2>&1)
+    EMAIL= DOMICILE_REPO_URL=https://packages.invalid "$@" \
+    .github/scripts/release-aur.sh "$package" 2>&1)
 }
 commits() { git -C "$AUR" log --format=%s master 2>/dev/null; }
 

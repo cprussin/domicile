@@ -80,4 +80,14 @@ else
   expect "is refused before anything runs" "" "$(cat "$WORK/log")"
 fi
 
+echo "== a release with neither account nor bucket set =="
+if out="$(run R2_ACCOUNT_ID= DOMICILE_R2_BUCKET=)"; then
+  expect "uses Domicile's account and bucket" \
+    "aws s3 sync s3://domicile-packages $WORK/repo --endpoint-url https://9e3478be0713138076f5a66696ba7817.r2.cloudflarestorage.com --only-show-errors $CREDENTIALS" \
+    "$(head -1 "$WORK/log")"
+else
+  printf '  FAIL  the release succeeds\n    %s\n' "$out"
+  FAILED=$((FAILED + 1))
+fi
+
 [ "$FAILED" -eq 0 ]
