@@ -1,11 +1,14 @@
 import { BuiltOnDomicile } from "../../manganese/BuiltOnDomicile";
 import { Configure } from "../../manganese/Configure";
+import { Customize } from "../../manganese/Customize";
 import { DOCS } from "../../manganese/docs";
+import { FromSway } from "../../manganese/FromSway";
 import { Hero } from "../../manganese/Hero";
 import { Install } from "../../manganese/Install";
 import { Keys } from "../../manganese/Keys";
 import { ManganeseMark } from "../../manganese/ManganeseMark";
-import { Tour } from "../../manganese/Tour";
+import { EverythingElse, Tour } from "../../manganese/Tour";
+import { Try } from "../../manganese/Try";
 import { Media } from "../../media/Media";
 import { Accent } from "../../page/Accent";
 import { LinkColumns } from "../../page/LinkColumns";
@@ -17,7 +20,7 @@ import { shared } from "../../page/shared";
 
 export const metadata = shared({
   description:
-    "A tiling Wayland desktop with Sway's layout and keys, built on Domicile.",
+    "A tiling Wayland desktop that feels like Sway, where websites are windows too. Customize it in React and CSS.",
   path: "/manganese",
   title: "Manganese: a tiling Wayland desktop",
 });
@@ -30,8 +33,9 @@ const ManganesePage = () => (
       brand={<ManganeseMark />}
       links={[
         { href: "#tour", label: "Tour" },
+        { href: "#customize", label: "Customize" },
+        { href: "#sway", label: "From Sway" },
         { href: "#keys", label: "Keys" },
-        { href: "#configure", label: "Configure" },
         { href: "#docs", label: "Docs" },
       ]}
     />
@@ -44,6 +48,10 @@ const ManganesePage = () => (
         />
       </Section>
       <Tour />
+      <Customize />
+      <EverythingElse />
+      <FromSway />
+      <Try />
       <Keys />
       <Install />
       <Configure />

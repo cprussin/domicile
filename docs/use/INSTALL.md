@@ -125,6 +125,12 @@ login, switch to another console (Ctrl+Alt+F3), log in and run `pkill -f
 domicile`. To lock for real, install a package or add the file
 ([LOCK.md](../LOCK.md#verifiers)).
 
+Installed already? From a terminal on your current Wayland desktop:
+
+```sh
+domicile @domicile-desktop/manganese
+```
+
 ## The newest build
 
 To run the newest `stable` build before it is released, download its package

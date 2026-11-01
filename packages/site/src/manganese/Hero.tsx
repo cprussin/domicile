@@ -8,15 +8,15 @@ export const Hero = () => (
   <PageHero
     actions={
       <>
-        <LinkButton href="#install" size="lg">
-          Install manganese
+        <LinkButton href="#try" size="lg">
+          Try manganese
         </LinkButton>
         <LinkButton href="#tour" size="lg" variant="outline">
           Take the tour
         </LinkButton>
       </>
     }
-    lede="Manganese is a tiling Wayland desktop with Sway's layout and keys. It comes with a browser built in, a launcher, a top bar and notifications."
+    lede="A tiling Wayland desktop that feels like Sway, where websites are windows too. Change its bar, launcher or anything else in React and CSS, without writing a desktop."
     tag={{ href: "/", label: "The reference shell for Domicile →" }}
     title="Sway, with more <div>s."
   >

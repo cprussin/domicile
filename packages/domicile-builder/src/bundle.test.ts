@@ -135,6 +135,27 @@ describe("bundle", () => {
     expect(built).toContain("royalblue");
   }, 120_000);
 
+  // The bar item the manganese homepage shows, on manganese.
+  it("builds the manganese bar item example", async () => {
+    const entry = path.join(
+      DOMICILE,
+      "examples",
+      "manganese-bar-item",
+      "domicile.tsx",
+    );
+    const out = path.join(
+      mkdtempSync(path.join(tmpdir(), "domicile-builder-")),
+      "out",
+    );
+
+    await bundle(entry, out, DOMICILE);
+
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
+    expect(built).toMatch(/export\s*\{[^}]*\bas Shell\b/);
+    expect(built).toContain("Asia/Tokyo");
+    expect(built).toContain("margin-inline-start");
+  }, 120_000);
+
   // The same shell in plain JavaScript, which the quickstart's other tab
   // teaches.
   it("builds the plain JavaScript example shell", async () => {
