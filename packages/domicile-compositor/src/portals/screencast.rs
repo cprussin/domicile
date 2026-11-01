@@ -8,8 +8,10 @@
 //!   sources on a frame of the desk, and offers browser windows from the
 //!   engine's own list when windows were asked for. A `Start` from the same
 //!   D-Bus connection while its picker is up is canceled once that picker
-//!   closes: Electron apps (Slack) list screens and windows in two sessions at
-//!   once, and their own pickers break when both get the pick.
+//!   closes, and so is one that asks for windows soon after that connection
+//!   answered a picker for screens. Electron apps (Slack) ask for screens,
+//!   then for windows, then for both when the user clicks their own Share,
+//!   each in a new session; only the first needs the picker.
 //! - The capture is listed for the shell's sharing indicator until it ends.
 //!   Closing the session, the shell's stop, or every stream ending ends it.
 //!
@@ -19,6 +21,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use domicile_host::cast_grants::{
     matched, mostly_on, Grants, Open, Persist, Placed, Restored, Shared,
@@ -57,6 +60,11 @@ const REGION_TYPES: u32 = MONITOR | VIRTUAL;
 /// too.
 const WINDOW_TYPES: u32 = MONITOR | WINDOW;
 
+/// How long after a connection answers a picker for screens its asks for
+/// windows are part of the same share. Slack's last ask comes when the user
+/// clicks its own Share.
+const SAME_SHARE: Duration = Duration::from_secs(60);
+
 /// `AvailableSourceTypes`: every type.
 const SOURCE_TYPES: u32 = MONITOR | WINDOW | VIRTUAL;
 
@@ -77,12 +85,17 @@ pub struct ScreenCast {
     shoot: Shoot,
     picks: Picks,
     asking: Asking,
+    answered: Answered,
 }
 
 /// The `Start`s waiting on each connection's open picker, by the sender part
 /// of their session handles. A connection is in the map while its picker is
 /// up.
 type Asking = Arc<Mutex<HashMap<String, Vec<Replier<()>>>>>;
+
+/// When each connection last answered a picker that asked for monitors alone,
+/// by the sender part of its session handles. See [`same_share`].
+type Answered = Arc<Mutex<HashMap<String, Instant>>>;
 
 /// What each running stream's node shows, for [`CastPicks`].
 type Picks = Arc<Mutex<HashMap<u32, Pick>>>;
@@ -148,6 +161,7 @@ impl ScreenCast {
             shoot,
             picks: Arc::default(),
             asking: Arc::default(),
+            answered: Arc::default(),
         }
     }
 
@@ -280,8 +294,27 @@ impl ScreenCast {
             .filter(|candidate| asked_for(&selected, &candidate.source))
             .cloned()
             .collect();
+        let answered = self
+            .answered
+            .lock()
+            .unwrap()
+            .get(&sender(&session_handle))
+            .copied();
         let picked = match self.recalled(&selected, &open, &monitors) {
             Some(picked) => picked,
+            None if same_share(
+                selected.types,
+                selected.restore.as_deref(),
+                answered,
+                Instant::now(),
+            ) =>
+            {
+                debug!(
+                    types = selected.types,
+                    "an ask for windows soon after a picked screen is canceled"
+                );
+                return (1, HashMap::new());
+            }
             None => match self.join(&session_handle) {
                 // The user picks once, for this connection's other session.
                 Some(closed) => {
@@ -292,6 +325,7 @@ impl ScreenCast {
                 None => {
                     let _picker = Picker {
                         asking: Arc::clone(&self.asking),
+                        answered: (selected.types == MONITOR).then(|| Arc::clone(&self.answered)),
                         sender: sender(&session_handle),
                     };
                     let kind = dialog(&selected, &open, preview(&self.shoot).await);
@@ -710,16 +744,35 @@ pub(super) fn dialog(
 }
 
 /// A connection's picker while it is up. Dropped, it wakes the `Start`s
-/// waiting on it.
+/// waiting on it, and notes when a picker for monitors alone was answered.
 struct Picker {
     asking: Asking,
+    /// Set when the picker asked for monitors alone.
+    answered: Option<Answered>,
     sender: String,
 }
 
 impl Drop for Picker {
     fn drop(&mut self) {
         self.asking.lock().unwrap().remove(&self.sender);
+        if let Some(answered) = &self.answered {
+            answered
+                .lock()
+                .unwrap()
+                .insert(self.sender.clone(), Instant::now());
+        }
     }
+}
+
+/// Whether an ask for `types` with restore token `restore` is part of the
+/// share whose picker for monitors alone its connection `answered`: it asks
+/// for windows with no token, within [`SAME_SHARE`]. Electron apps (Slack)
+/// list windows in sessions of their own and share what the first picker
+/// gave them.
+fn same_share(types: u32, restore: Option<&str>, answered: Option<Instant>, now: Instant) -> bool {
+    restore.is_none()
+        && types & WINDOW != 0
+        && answered.is_some_and(|answered| now < answered + SAME_SHARE)
 }
 
 /// The sender part of a session handle,
@@ -1876,6 +1929,80 @@ mod tests {
                 .all(|(items, _)| items.is_empty()),
             "no second picker"
         );
+    }
+
+    /// Slack asks for its screens, then for its windows once the user
+    /// picked, and again for both when the user clicks its own Share. Only
+    /// the first needs the picker; Slack shares what came back from it.
+    #[test]
+    fn an_apps_asks_for_windows_after_it_picked_a_screen_are_canceled() {
+        const LATER: &str = "/org/freedesktop/portal/desktop/session/1_7/later";
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(1u32))]);
+        let first = start(&served.client);
+        let (items, _) = next(&served.published);
+        served.queue.answer(
+            items[0].id,
+            PortalAnswer::ScreenCast {
+                sources: vec![CastPick::Monitor {
+                    name: "drm-2".into(),
+                }],
+            },
+        );
+        assert_eq!(first.join().expect("Start returned").0, 0);
+
+        for types in [2u32, 3] {
+            select_on(&served.client, LATER, vec![("types", Value::from(types))]);
+            let later = start_on(
+                &served.client,
+                LATER,
+                "/org/freedesktop/portal/desktop/request/1_7/e",
+            );
+            assert_eq!(later.join().expect("Start returned").0, 1, "types {types}");
+        }
+        assert!(
+            served
+                .published
+                .try_iter()
+                .all(|(items, _)| items.is_empty()),
+            "no second picker"
+        );
+    }
+
+    #[test]
+    fn a_share_is_one_share_for_a_while_after_its_screen_was_picked() {
+        let picked = Instant::now();
+        let later = |after: Duration| picked + after;
+
+        assert!(same_share(
+            WINDOW,
+            None,
+            Some(picked),
+            later(Duration::ZERO)
+        ));
+        assert!(same_share(
+            MONITOR | WINDOW,
+            None,
+            Some(picked),
+            later(SAME_SHARE / 2)
+        ));
+        // A new share.
+        assert!(!same_share(WINDOW, None, Some(picked), later(SAME_SHARE)));
+        assert!(!same_share(WINDOW, None, None, later(Duration::ZERO)));
+        // Slack's first ask, for screens, always gets the picker.
+        assert!(!same_share(
+            MONITOR,
+            None,
+            Some(picked),
+            later(Duration::ZERO)
+        ));
+        // A token the picker did not answer still asks.
+        assert!(!same_share(
+            WINDOW,
+            Some("gone"),
+            Some(picked),
+            later(Duration::ZERO)
+        ));
     }
 
     #[test]
