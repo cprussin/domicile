@@ -3,6 +3,7 @@
 import { Input } from "@domicile-desktop/component-library/Input";
 import {
   highlightIn,
+  pageOf,
   stepOf,
   steppedTo,
 } from "@domicile-desktop/component-library/list-walk";
@@ -235,6 +236,7 @@ const Query = ({
   );
   const box = useRef<HTMLInputElement>(null);
   const pane = useRef<HTMLElement>(null);
+  const results = useRef<HTMLDivElement>(null);
   // Icons learned from bookmark previews. Read on open and on each new icon.
   const [learned, setLearned] = useState(learnedIcons);
   const learn = useCallback((bookmark: string, icon: string) => {
@@ -278,7 +280,7 @@ const Query = ({
             setStepped(0);
           }}
           onKeyDown={(event) => {
-            const step = stepOf(event);
+            const step = stepOf(event, pageOf(results.current));
             if (step !== undefined) {
               // Stop the box from moving the caret.
               event.preventDefault();
@@ -320,7 +322,7 @@ const Query = ({
           Fixed size, so the panel doesn't resize as results change while
           typing.
         */}
-        <div className={resultsStyles}>
+        <div className={resultsStyles} ref={results}>
           <ResultList
             highlighted={highlighted}
             id={listId}

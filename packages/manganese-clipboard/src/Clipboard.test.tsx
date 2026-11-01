@@ -127,6 +127,14 @@ describe("Clipboard", () => {
       expect(panel.copied).toStrictEqual([1]);
     });
 
+    it("copies the row Page Down walked to", async () => {
+      const panel = clipboard();
+
+      await panel.user.keyboard("{PageDown}{Enter}");
+
+      expect(panel.copied).toStrictEqual([1]);
+    });
+
     it("narrows to the copies holding every typed word, and takes the first", async () => {
       const panel = clipboard();
 

@@ -607,6 +607,16 @@ describe("FilePicker", () => {
       await cancel(answered);
     });
 
+    it("moves between folders a page at a time", async () => {
+      const answered = picker(ChooserMode.Save, { suggestedName: "photo.png" });
+      await rows();
+
+      await userEvent.type(nameBox(), "{PageDown}{PageDown}{Enter}");
+
+      expect(where()).toStrictEqual(["~", "Pictures"]);
+      await cancel(answered);
+    });
+
     it("moves between folders with the arrows, and keeps the name", async () => {
       const answered = picker(ChooserMode.Save, { suggestedName: "photo.png" });
       await rows();

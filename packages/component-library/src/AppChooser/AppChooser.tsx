@@ -5,7 +5,7 @@ import { useId, useState } from "react";
 import { css } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
-import { keepInView, stepOf, steppedTo } from "../list-walk";
+import { keepInView, pageOf, stepOf, steppedTo } from "../list-walk";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { preselected } from "./app-choices";
 import { useDescribedChoices } from "./useDescribedChoices";
@@ -124,7 +124,8 @@ export const AppChooser = ({
           aria-label="Applications"
           className={listStyles}
           onKeyDown={(event) => {
-            const step = stepOf(event);
+            // The listbox is its own scroller.
+            const step = stepOf(event, pageOf(event.currentTarget));
             const next = apps[steppedTo(at, step ?? 0, apps.length)];
             if (event.key === "Enter") {
               event.preventDefault();

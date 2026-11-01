@@ -1,6 +1,7 @@
 import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { Input } from "@domicile-desktop/component-library/Input";
 import {
+  pageOf,
   stepOf,
   steppedTo,
 } from "@domicile-desktop/component-library/list-walk";
@@ -17,7 +18,7 @@ import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { LinkSimpleIcon } from "@phosphor-icons/react/dist/ssr/LinkSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
-import { memo, useId, useState } from "react";
+import { memo, useId, useRef, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { flex, vstack } from "../styled-system/patterns";
@@ -101,6 +102,7 @@ type HistoryProps = {
  */
 const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
   const listId = useId();
+  const rows = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   // The newest copy is already on the clipboard, so the highlight starts on
   // the one before it.
@@ -135,7 +137,7 @@ const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
             setStepped(0);
           }}
           onKeyDown={(event) => {
-            const step = stepOf(event);
+            const step = stepOf(event, pageOf(rows.current));
             const chosen =
               highlighted === undefined ? undefined : shown[highlighted];
             if (step !== undefined) {
@@ -162,7 +164,7 @@ const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
           value={query}
         />
       </div>
-      <div className={rowsStyles}>
+      <div className={rowsStyles} ref={rows}>
         {shown.length === 0 ? (
           <EmptyState
             icon={MagnifyingGlassIcon}
