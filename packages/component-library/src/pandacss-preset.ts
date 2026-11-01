@@ -539,6 +539,8 @@ export const domicilePreset = definePreset({
           // A text stroke painted under the glyphs (`paintOrder: "stroke"`)
           // to look semibold without a wider font weight shifting layout.
           fauxBold: { value: "0.05em" },
+          // As `fauxBold`, but about as heavy as a medium weight.
+          fauxMedium: { value: "0.025em" },
         },
         durations: {
           // Wallpaper crossfade. Long because nothing waits on it.

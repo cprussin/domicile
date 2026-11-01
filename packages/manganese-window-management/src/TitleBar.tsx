@@ -487,6 +487,16 @@ const tabSlotStyles = cva({
 });
 
 /**
+ * A heavier look for the title being worked in. A stroke under the glyphs
+ * rather than a heavier weight, whose wider letters would shift the title
+ * sideways as focus moves.
+ */
+const fauxMedium = {
+  paintOrder: "stroke",
+  WebkitTextStroke: "{borderWidths.fauxMedium} currentColor",
+} as const;
+
+/**
  * A tab, in its slot of the strip. The open tab is raised with an edge, and
  * covers the strip's bottom edge to meet its window. Hidden tabs lie flat on
  * the strip.
@@ -501,6 +511,8 @@ const tabStyles = cva({
     borderStyle: "solid",
     containerType: "inline-size",
     flex: 1,
+    // See `fauxMedium`.
+    fontWeight: "normal",
     gap: 1.5,
     justify: "space-between",
     minInlineSize: 0,
@@ -550,10 +562,10 @@ const tabStyles = cva({
   variants: {
     // Weight as well as color, for users who cannot tell the colors apart.
     focus: {
-      focused: { fontWeight: "medium" },
-      leaf: { fontWeight: "medium" },
-      resting: { fontWeight: "normal" },
-      selected: { fontWeight: "normal" },
+      focused: fauxMedium,
+      leaf: fauxMedium,
+      resting: {},
+      selected: {},
     },
     // Over the strip's bottom row, which draws the window's top edge. The
     // padding fills that row, so the title stays level with a hidden tab's.
@@ -588,6 +600,8 @@ const barStyles = cva({
     borderBlockEndWidth: "1px",
     containerType: "inline-size",
     flex: 1,
+    // See `fauxMedium`.
+    fontWeight: "normal",
     gap: 1.5,
     justify: "space-between",
     minInlineSize: 0,
@@ -603,7 +617,7 @@ const barStyles = cva({
         color: "foreground",
         // Weight as well as color, for users who cannot tell the colors
         // apart.
-        fontWeight: "medium",
+        ...fauxMedium,
       },
       // The focused window inside a `focus parent` selection. The group's
       // bars use the open tab's background, so this one mixes in the accent.
@@ -611,19 +625,18 @@ const barStyles = cva({
         backgroundColor:
           "color-mix(in oklab, {colors.accent} 45%, {colors.chrome})",
         color: "foreground",
-        fontWeight: "medium",
+        ...fauxMedium,
       },
       // The strip's color, so a title bar reads as a strip with one tab.
       resting: {
         backgroundColor: "tabRail",
         color: "muted",
-        fontWeight: "normal",
       },
       // A bar in the `focus parent` selection.
       selected: {
         backgroundColor: "chrome",
         color: "foreground",
-        fontWeight: "medium",
+        ...fauxMedium,
       },
     },
   },

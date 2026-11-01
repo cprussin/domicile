@@ -24,6 +24,11 @@ loadEmittedStylesheet(
 /** The address bar's surface, which the bar or open tab above matches. */
 const RAISED = "chrome";
 
+/** The heavier look of the bar or tab being worked in. */
+const FAUX_MEDIUM = css({
+  WebkitTextStroke: "{borderWidths.fauxMedium} currentColor",
+});
+
 /** An arbitrary bar position. */
 const ON_SCREEN = { height: 30, width: 1200, x: 0, y: 32 };
 
@@ -361,14 +366,29 @@ describe("TitleBar", () => {
   it("sets the name of the window being worked in in a heavier face", () => {
     // Weight as well as color, for users who cannot tell the colors apart.
     const focused = render(<TitleBar {...barProps} focus="focused" />);
-    expect(face(focused.container).className).toContain(
-      css({ fontWeight: "medium" }),
-    );
+    expect(face(focused.container).className).toContain(FAUX_MEDIUM);
 
     const resting = render(<TitleBar {...barProps} />);
-    expect(face(resting.container).className).not.toContain(
-      css({ fontWeight: "medium" }),
-    );
+    expect(face(resting.container).className).not.toContain(FAUX_MEDIUM);
+  });
+
+  it("keeps the name of the window being worked in as wide as any other", () => {
+    // A wider face would push the title's letters sideways on focus.
+    for (const focus of ["focused", "leaf", "resting", "selected"] as const) {
+      const own = render(<TitleBar {...barProps} focus={focus} />);
+      const tab = render(
+        <TitleBar {...barProps} focus={focus} strip={MIDDLE_TAB} />,
+      );
+
+      for (const { container } of [own, tab]) {
+        expect(face(container).className).toContain(
+          css({ fontWeight: "normal" }),
+        );
+        expect(face(container).className).not.toContain(
+          css({ fontWeight: "medium" }),
+        );
+      }
+    }
   });
 
   it("raises the bar being worked in to the address bar, and sinks the rest below it", () => {
@@ -406,7 +426,7 @@ describe("TitleBar", () => {
           "color-mix(in oklab, {colors.accent} 45%, {colors.chrome})",
       }),
     );
-    expect(face(container).className).toContain(css({ fontWeight: "medium" }));
+    expect(face(container).className).toContain(FAUX_MEDIUM);
   });
 
   describe("a tab", () => {
