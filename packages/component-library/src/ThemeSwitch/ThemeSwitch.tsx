@@ -6,6 +6,7 @@ import { Tooltip } from "../Tooltip/Tooltip";
 import type { ThemeControl } from "./ThemeProvider";
 import { useTheme } from "./ThemeProvider";
 import type { Theme } from "./theme-core";
+import "../stylesheet";
 
 const LABELS: Record<Theme, string> = {
   dark: "Dark theme — click for light",

@@ -6,6 +6,8 @@ the other packages extend.
 - Components wrap [`@base-ui/react`](https://base-ui.com) where it has a
   primitive. base-ui handles focus, keyboard navigation, portals and
   validation. This package adds styling and a simpler API.
+- Each component loads the prebuilt stylesheet (`styled-system/styles.css`,
+  from `panda cssgen`), so a shell that renders one needs no Panda step.
 - Apps use these components instead of raw HTML buttons, inputs or dialogs.
   If one is missing, add it here. See
   [/docs/guidelines/STYLING.md](../../docs/guidelines/STYLING.md).
@@ -81,7 +83,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 bun run start:dev        # Storybook on port 4000
 bun run build:storybook  # build Storybook into storybook-static/
 bun run start:prod       # serve that build on port 4000
-bun run prepare          # Panda codegen into styled-system/
+bun run prepare          # Panda codegen and stylesheet into styled-system/
 bun run test:unit        # bun:test + happy-dom
 bun run test:types       # tsc --noEmit
 ```

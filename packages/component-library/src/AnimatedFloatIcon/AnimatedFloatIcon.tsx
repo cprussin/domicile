@@ -6,6 +6,7 @@ import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { SQUARES_REGULAR } from "../_icon/phosphor-parts";
 import { BROWSERS_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** The centers of the squares, which they shrink about. */
 const SQUARE_CENTERS = [

@@ -16,6 +16,7 @@ import { useStableRef } from "../_control/useStableRef";
 import { wrapperBase } from "../_control/wrapperBase";
 import { CONTROL_HEIGHT } from "../control-sizes";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 export { SIZES, type Size } from "../control-sizes";
 

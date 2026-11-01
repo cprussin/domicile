@@ -7,6 +7,7 @@ import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import type { ExtendProps } from "../extend-props";
 import { useScreenRegion } from "../Screen/DisplayProvider";
+import "../stylesheet";
 
 export const { createHandle } = BaseDialog;
 

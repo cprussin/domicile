@@ -3,6 +3,7 @@ import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { KEYBOARD_BOLD } from "../_icon/phosphor-parts";
 import { useCue } from "../_icon/useCue";
+import "../stylesheet";
 
 type Props = {
   /** Plays each time it changes, such as to the keymap in use. */

@@ -2,6 +2,7 @@ import type { CSSProperties, PropsWithChildren } from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import type { Display, DisplaySource } from "./display-source";
+import "../stylesheet";
 
 /**
  * The desktop's displays, for `<Screen>` and {@link useDisplays}.

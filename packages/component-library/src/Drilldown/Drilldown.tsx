@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { css, cva } from "../../styled-system/css";
 import { Panel } from "../Panel/Panel";
+import "../stylesheet";
 
 /** The detail view: a title and its content. */
 export type DrilldownDetail = {

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 /** What a row shows: `icon`, then `name` over `detail`. */
 type Content = {

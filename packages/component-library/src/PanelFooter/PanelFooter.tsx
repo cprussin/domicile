@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { hstack } from "../../styled-system/patterns";
+import "../stylesheet";
 
 type Props = {
   /** A button at the end, such as one to clear the list. */

@@ -3,6 +3,7 @@ import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { ROWS_REGULAR, TABS_REGULAR } from "../_icon/phosphor-parts";
 import { SQUARE_SPLIT_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** How a group lays out its windows. */
 export type GroupLayout = "column" | "row" | "stack" | "tabs";

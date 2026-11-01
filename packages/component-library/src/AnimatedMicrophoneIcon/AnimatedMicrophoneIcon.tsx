@@ -3,6 +3,7 @@ import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { MICROPHONE_FILL, MICROPHONE_REGULAR } from "../_icon/phosphor-parts";
 import { useCue } from "../_icon/useCue";
+import "../stylesheet";
 
 const PARTS = { fill: MICROPHONE_FILL, regular: MICROPHONE_REGULAR };
 

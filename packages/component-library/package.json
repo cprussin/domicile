@@ -132,7 +132,6 @@
   "files": [
     "src/**",
     "styled-system/**",
-    "!styled-system/styles.css",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
     "!src/**/*.stories.tsx",

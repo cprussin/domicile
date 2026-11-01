@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import "../stylesheet";
 
 type Props = {
   /** What the notice is about, such as the label's new value. */

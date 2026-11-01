@@ -12,6 +12,7 @@ import { useControlValue } from "../_control/useControlValue";
 import { useStableRef } from "../_control/useStableRef";
 import { wrapperBase } from "../_control/wrapperBase";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 export { SIZES, type Size } from "../control-sizes";
 

@@ -9,6 +9,7 @@ import {
   SPEAKER_FILL,
   SPEAKER_REGULAR,
 } from "../_icon/phosphor-parts";
+import "../stylesheet";
 
 const PARTS = {
   bold: SPEAKER_BOLD,

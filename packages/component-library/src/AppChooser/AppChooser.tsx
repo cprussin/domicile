@@ -10,6 +10,7 @@ import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { LogoTile, RowTile } from "../ResultList/RowTile";
 import { preselected } from "./app-choices";
 import { useDescribedChoices } from "./useDescribedChoices";
+import "../stylesheet";
 
 /** The one application's icon, beside the title. */
 const TITLE_ICON_SIZE = 32;

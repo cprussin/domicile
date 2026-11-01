@@ -1,6 +1,7 @@
 import type { Icon } from "@phosphor-icons/react";
 
 import { css, cva } from "../../styled-system/css";
+import "../stylesheet";
 
 /** The glyph's size in its tile. */
 const ICON_SIZE = 16;

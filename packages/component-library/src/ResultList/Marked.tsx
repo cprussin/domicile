@@ -2,6 +2,7 @@ import { Fragment } from "react";
 
 import { css } from "../../styled-system/css";
 import { marked } from "./match-runs";
+import "../stylesheet";
 
 type Props = {
   query: string;

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { css } from "../../styled-system/css";
 import { center, flex } from "../../styled-system/patterns";
+import "../stylesheet";
 
 type Props = {
   /** What is missing, such as Wi-Fi's slashed fan for Wi-Fi turned off. */

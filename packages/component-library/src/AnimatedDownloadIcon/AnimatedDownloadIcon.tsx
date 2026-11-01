@@ -3,6 +3,7 @@ import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { DOWNLOAD_REGULAR } from "../_icon/phosphor-parts";
 import { useCue } from "../_icon/useCue";
+import "../stylesheet";
 
 /** The tray's floor, which it gives toward. */
 const FLOOR = [128, 216] as const;

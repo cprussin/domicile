@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 /** The tab-bar text size and padding. `md` is the default. */
 export const SIZES = ["sm", "md", "lg"] as const;

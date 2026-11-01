@@ -4,6 +4,7 @@ import { useId } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 type Props = ExtendProps<
   typeof BaseSwitch.Root,

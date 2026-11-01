@@ -2,6 +2,7 @@ import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
 import type { ReactNode } from "react";
 
 import { cva } from "../../styled-system/css";
+import "../stylesheet";
 
 export const TONES = ["quiet", "warning"] as const;
 export type Tone = (typeof TONES)[number];

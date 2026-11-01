@@ -2,6 +2,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { PLUS_BOLD, PLUS_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** The way each arm reaches: across, then down. */
 const REACHES = [

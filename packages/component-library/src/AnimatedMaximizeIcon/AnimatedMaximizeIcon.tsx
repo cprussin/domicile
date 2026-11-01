@@ -6,6 +6,7 @@ import {
   CORNERS_IN_REGULAR,
   CORNERS_OUT_REGULAR,
 } from "../_icon/phosphor-parts";
+import "../stylesheet";
 
 type Props = {
   /** Names the icon; without one it is decorative. */

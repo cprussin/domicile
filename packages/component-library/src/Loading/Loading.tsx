@@ -2,6 +2,7 @@ import type { Icon } from "@phosphor-icons/react";
 
 import { css, cva } from "../../styled-system/css";
 import { center } from "../../styled-system/patterns";
+import "../stylesheet";
 
 export const LAYOUTS = ["panel", "glyph"] as const;
 export type Layout = (typeof LAYOUTS)[number];

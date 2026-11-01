@@ -2,6 +2,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import type { ReactNode } from "react";
 
 import { css, cva } from "../../styled-system/css";
+import "../stylesheet";
 
 type Props = {
   /** A short status under the label, such as the network's name. */

@@ -3,6 +3,7 @@ import { useId } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
+import "../stylesheet";
 
 type Props = {
   /** Controls beside the label, such as a switch. */

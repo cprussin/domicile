@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { css, cva } from "../../styled-system/css";
 import type { Tone } from "../Popover/Popover";
 import { Tooltip } from "../Tooltip/Tooltip";
+import "../stylesheet";
 
 type Props = {
   /** Why it is the way it is, such as what else keeps the screens on, in a tooltip. */

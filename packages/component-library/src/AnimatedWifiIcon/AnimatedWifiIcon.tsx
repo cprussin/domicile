@@ -2,6 +2,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { WIFI_BOLD } from "../_icon/phosphor-parts";
+import "../stylesheet";
 
 /** The dot the arcs spread from. */
 const DOT = [128, 204] as const;

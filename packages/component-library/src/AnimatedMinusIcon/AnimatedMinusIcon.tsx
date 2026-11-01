@@ -2,6 +2,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { MINUS_BOLD } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** The bar draws in across, the opposite of the plus's arms reaching. */
 const DRAWS_IN = [-1, 0] as const;

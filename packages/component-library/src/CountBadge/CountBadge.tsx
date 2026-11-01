@@ -1,4 +1,5 @@
 import { cva } from "../../styled-system/css";
+import "../stylesheet";
 
 /** The highest count the badge shows before it switches to "N+". */
 const MOST_COUNTED = 9;

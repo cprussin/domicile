@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { cva } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 export const SIZES = ["sm", "md"] as const;
 export type Size = (typeof SIZES)[number];

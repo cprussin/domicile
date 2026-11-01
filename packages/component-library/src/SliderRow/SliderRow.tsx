@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import "../stylesheet";
 
 type Props = {
   /** The slider. */

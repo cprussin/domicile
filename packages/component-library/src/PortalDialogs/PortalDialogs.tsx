@@ -45,6 +45,7 @@ import { drawnWindows } from "./shown-windows";
 import { UsbDialog } from "./UsbDialog";
 import { useCastClaims } from "./useCastClaims";
 import { WallpaperDialog } from "./WallpaperDialog";
+import "../stylesheet";
 
 /** What the dialogs read and draw through. */
 export type DialogDesktop = {

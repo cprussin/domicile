@@ -2,6 +2,7 @@ import type { PropsWithChildren } from "react";
 
 import { ThemeProvider } from "../ThemeSwitch/ThemeProvider";
 import type { ThemeSource } from "../ThemeSwitch/theme-source";
+import "../stylesheet";
 
 type Props = {
   /**

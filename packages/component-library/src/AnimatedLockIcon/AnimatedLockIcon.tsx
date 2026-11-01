@@ -2,6 +2,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { LOCK_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** The keyhole's middle, which it swells about. */
 const KEYHOLE = [128, 152] as const;
