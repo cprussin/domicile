@@ -6,6 +6,7 @@ import { flex, grid } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
 
 import { FieldErrorPopover } from "./FieldErrorPopover";
+import "../stylesheet";
 
 type Props = ExtendProps<
   typeof BaseField.Root,

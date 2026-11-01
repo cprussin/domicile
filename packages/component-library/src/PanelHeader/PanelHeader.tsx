@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { IconButton } from "../IconButton/IconButton";
+import "../stylesheet";
 
 type Props = {
   /** Controls at the header's end, such as a switch. */

@@ -3,6 +3,7 @@ import { useId } from "react";
 import { css } from "../../styled-system/css";
 import { stack } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 type Props = ExtendProps<"section", { title?: string | undefined }>;
 

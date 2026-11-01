@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useRef } from "react";
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 export const { createToastManager, useToastManager } = BaseToast;
 

@@ -61,6 +61,7 @@ import type { UserPlace } from "./user-folders";
 import { UserFolder } from "./user-folders";
 import { useUserFolders } from "./useUserFolders";
 import { crumbsOf, parentOf, shownPath, walked } from "./walk-path";
+import "../stylesheet";
 
 /** The filter box's accessible name. */
 const PROMPT = "Filter or go to a path";

@@ -135,6 +135,28 @@ describe("bundle", () => {
     expect(built).toContain("royalblue");
   }, 120_000);
 
+  // A shell of its own that mounts only the portal dialogs gets the component
+  // library's prebuilt stylesheet, with no Panda step.
+  it("builds the component library's styles into a shell that mounts only `PortalDialogs`", async () => {
+    const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
+    const entry = path.join(desk, "shell.tsx");
+    writeFileSync(
+      entry,
+      `import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
+         import { mount } from "@domicile-desktop/react/mount";
+         import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+         const Desktop = () => <PortalDialogs domicile={useDomicile()} />;
+         export const Shell = mount(Desktop);`,
+    );
+
+    const out = path.join(desk, "out");
+    await bundle(entry, out, DOMICILE);
+
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
+    expect(built).toContain("@layer tokens");
+    expect(built).toContain("@layer utilities");
+  }, 120_000);
+
   // The bar item the manganese homepage shows, on manganese.
   it("builds the manganese bar item example", async () => {
     const entry = path.join(

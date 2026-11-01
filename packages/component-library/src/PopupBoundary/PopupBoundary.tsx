@@ -1,5 +1,6 @@
 import type { ReactNode, RefCallback } from "react";
 import { createContext, useCallback, useContext, useState } from "react";
+import "../stylesheet";
 
 /** A box in page pixels. */
 export type Box = { height: number; width: number; x: number; y: number };

@@ -2,6 +2,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { CHECK_BOLD } from "../_icon/phosphor-parts";
+import "../stylesheet";
 
 type Props = {
   /** Names the icon; without one it is decorative. */

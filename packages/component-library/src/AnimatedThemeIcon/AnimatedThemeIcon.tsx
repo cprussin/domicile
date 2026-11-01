@@ -8,6 +8,7 @@ import {
   SUN_FILL,
 } from "../_icon/phosphor-parts";
 import { useCue } from "../_icon/useCue";
+import "../stylesheet";
 
 const PARTS = {
   bold: { moon: MOON_BOLD.moon, sun: SUN_BOLD },

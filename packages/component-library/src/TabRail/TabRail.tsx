@@ -6,6 +6,7 @@ import { css, cx } from "../../styled-system/css";
 import { hstack, stack } from "../../styled-system/patterns";
 
 import { Button } from "../Button/Button";
+import "../stylesheet";
 
 /** `MouseEvent.button` for the middle button, which closes a tab. */
 const MIDDLE_BUTTON = 1;

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { flex, hstack } from "../../styled-system/patterns";
 import { keepInView } from "../list-walk";
+import "../stylesheet";
 
 type Props<Item> = {
   /** Draws an item's row, such as a `RowTile` and its name. */

@@ -3,6 +3,7 @@ import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { BELL_FILL } from "../_icon/phosphor-parts";
 import { useCue } from "../_icon/useCue";
+import "../stylesheet";
 
 /** Where the bell hangs from. */
 const PIVOT = [128, 24] as const;

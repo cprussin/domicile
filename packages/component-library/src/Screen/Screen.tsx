@@ -2,6 +2,7 @@ import type { PropsWithChildren } from "react";
 import { css } from "../../styled-system/css";
 import { useDisplays } from "./DisplayProvider";
 import type { Display } from "./display-source";
+import "../stylesheet";
 
 /**
  * Which displays a `<Screen>` covers. The options are mutually exclusive.

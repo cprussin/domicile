@@ -3,6 +3,7 @@ import { DIAGONALS } from "../_icon/diagonals";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { SQUARES_REGULAR } from "../_icon/phosphor-parts";
+import "../stylesheet";
 
 type Props = {
   /** Names the icon; without one it is decorative. */

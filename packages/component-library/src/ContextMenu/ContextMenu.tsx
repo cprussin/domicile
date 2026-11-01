@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
+import "../stylesheet";
 
 /** A point in the viewport, in CSS pixels. */
 export type Point = { x: number; y: number };

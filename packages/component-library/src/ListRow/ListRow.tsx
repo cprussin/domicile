@@ -5,6 +5,7 @@ import { Children, useId, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
+import "../stylesheet";
 
 export const SURFACES = ["plain", "filled"] as const;
 export type Surface = (typeof SURFACES)[number];

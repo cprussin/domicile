@@ -2,6 +2,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { X_BOLD, X_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** Which way each stroke swings as the X snips. */
 const SWINGS = [

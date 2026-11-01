@@ -18,6 +18,7 @@ import {
   OTHER_THEME,
 } from "./theme-core";
 import type { ThemeSource } from "./theme-source";
+import "../stylesheet";
 
 /**
  * The current `theme` and a `flip` that requests the other one.

@@ -7,6 +7,7 @@ import type { ExtendProps } from "../extend-props";
 import type { Alignment, Side, Tone } from "../Popover/Popover";
 import { PopoverContainer } from "../Popover/Popover";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
+import "../stylesheet";
 
 type Props = ExtendProps<
   typeof BaseTooltip.Root,

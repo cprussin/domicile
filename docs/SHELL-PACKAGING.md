@@ -270,7 +270,8 @@ domicile @domicile-desktop/manganese     # Domicile's own, prebuilt
 ## Build config
 
 `domicile` builds an entry with Vite, transpiling and bundling only. Packages
-ship their CSS prebuilt; manganese's covers all of its packages.
+ship their CSS prebuilt: manganese's covers all of its packages, and the
+component library's components each load the library's own.
 
 To add a tool, put a `vite.config` in the entry's project (the directory with
 its `package.json`, or the entry's own directory). For Tailwind:

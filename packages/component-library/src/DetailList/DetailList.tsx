@@ -5,6 +5,7 @@ import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import { AnimatedCheckIcon } from "../AnimatedCheckIcon/AnimatedCheckIcon";
 import { IconButton } from "../IconButton/IconButton";
+import "../stylesheet";
 
 /** How long a copy button shows its check. */
 const COPIED_MS = 1500;

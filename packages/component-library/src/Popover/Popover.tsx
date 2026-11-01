@@ -13,6 +13,7 @@ import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 import { Tooltip } from "../Tooltip/Tooltip";
+import "../stylesheet";
 
 export const { createHandle } = BasePopover;
 

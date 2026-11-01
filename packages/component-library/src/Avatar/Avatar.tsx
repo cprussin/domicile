@@ -7,6 +7,7 @@ import type { ExtendProps } from "../extend-props";
 
 import { getGradient } from "./gradient";
 import { getInitials } from "./initials";
+import "../stylesheet";
 
 export const AVATAR_SIZES = [
   "2xs",

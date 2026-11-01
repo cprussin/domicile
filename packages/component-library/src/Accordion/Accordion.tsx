@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 /** One accordion section: its `value` key, button `label` and `content`. */
 export type AccordionItem = {

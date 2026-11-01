@@ -4,6 +4,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { CARET_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** Which way the caret points. */
 export type CaretPointing = keyof typeof CARET_REGULAR;

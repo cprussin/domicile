@@ -20,6 +20,7 @@ import { wrapperBase } from "../_control/wrapperBase";
 import type { Size } from "../control-sizes";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
+import "../stylesheet";
 
 export { SIZES, type Size } from "../control-sizes";
 

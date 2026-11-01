@@ -21,7 +21,9 @@ import { rememberedTheme } from "./theme/remembered-theme";
 // The desktop's default face, which the `font` option can replace.
 import "@domicile-desktop/component-library/fonts/inter.css";
 // Prebuilt by `panda cssgen` (`prepare`), with the rules for every manganese
-// package, so a shell that imports manganese needs no Panda step.
+// package, so a shell that imports manganese needs no Panda step. After
+// `./Manganese`, so it comes after the component library's own sheet, whose
+// rules it repeats in its own order.
 import "../styled-system/styles.css";
 
 export { DEFAULT_BAR } from "./default-bars";

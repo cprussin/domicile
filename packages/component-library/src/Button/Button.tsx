@@ -7,6 +7,7 @@ import { control } from "../../styled-system/recipes";
 import type { ColorToken } from "../../styled-system/tokens";
 import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 export { SIZES, type Size } from "../control-sizes";
 

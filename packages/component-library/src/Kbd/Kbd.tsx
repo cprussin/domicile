@@ -1,5 +1,6 @@
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
+import "../stylesheet";
 
 export const Kbd = (props: ExtendProps<"kbd">) => (
   <kbd {...props} className={kbdStyles} />

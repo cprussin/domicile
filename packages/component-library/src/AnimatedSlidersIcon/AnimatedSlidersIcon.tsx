@@ -4,6 +4,7 @@ import { css } from "../../styled-system/css";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { SLIDERS_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** The way each knob slides: the top one along, the bottom one back. */
 const SLIDES = [

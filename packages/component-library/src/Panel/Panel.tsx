@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { PanelHeader } from "../PanelHeader/PanelHeader";
+import "../stylesheet";
 
 type Props = {
   /** Sections, lists and notes, a step apart. */

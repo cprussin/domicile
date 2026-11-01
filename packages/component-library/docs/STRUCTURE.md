@@ -18,6 +18,9 @@ Other rules:
   `ThemeSwitch/ThemeProvider.tsx`.
 - No style files (`.css`, `.module.scss`). Styles live in the component's
   `.tsx`.
+- Every exported `.tsx` imports `src/stylesheet.ts`, which loads the
+  prebuilt stylesheet, after its other imports. `src/stylesheet.test.ts`
+  checks this.
 
 ## File organization within a component file
 

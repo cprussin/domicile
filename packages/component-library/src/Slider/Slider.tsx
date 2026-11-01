@@ -1,6 +1,7 @@
 import { Slider as BaseSlider } from "@base-ui/react/slider";
 
 import { css } from "../../styled-system/css";
+import "../stylesheet";
 
 type Props = Omit<
   BaseSlider.Root.Props<number>,

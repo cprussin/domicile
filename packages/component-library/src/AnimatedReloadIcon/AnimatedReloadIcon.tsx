@@ -3,6 +3,7 @@ import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { ARROW_CLOCKWISE_REGULAR } from "../_icon/phosphor-parts";
 import { X_REGULAR } from "../_icon/redrawn-parts";
+import "../stylesheet";
 
 /** Which way each of the X's strokes swings. */
 const SWINGS = [
