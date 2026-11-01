@@ -3,6 +3,9 @@
 #
 #   .github/scripts/engine-build-in-shell.sh <path to chromium/src>
 #
+# Reports progress to the commit $DOMICILE_BUILD_SHA names and counts steps in
+# $DOMICILE_JOB_TMP across restarts; see engine-build-progress.sh.
+#
 # The build needs Chromium's toolchain shell (`$CHROMIUM/tools/nix`) for the
 # host tools `gn` probes for. The guards use Domicile's `.#full` shell instead.
 #
@@ -34,15 +37,16 @@ echo "nixpkgs is $nixpkgs"
 export NIX_PATH="nixpkgs=$nixpkgs"
 
 # The log is printed only once the build ends, so say how far it has got
-# every ten minutes meanwhile.
-"$ROOT/.github/scripts/engine-build-progress.sh" --every 600 "$LOG" &
+# every five minutes meanwhile.
+"$ROOT/.github/scripts/engine-build-progress.sh" --every 300 \
+  --total "${DOMICILE_JOB_TMP:?}/build-steps" --status "${DOMICILE_BUILD_SHA:?}" "$LOG" &
 progress=$!
 
 # `nix-shell`, not `nix develop`: the directory has a shell.nix and no
 # flake.nix. NIX_SHELL_RUN gets a script path because its contents are
-# re-quoted twice.
+# re-quoted twice. The build runs the branch's code, so it gets no GH_TOKEN.
 if NIX_SHELL_RUN="$ROOT/.github/scripts/engine-build.sh $CHROMIUM $DONE" \
-     nix-shell "$CHROMIUM/tools/nix/shell.nix" >"$LOG" 2>&1; then
+     env -u GH_TOKEN nix-shell "$CHROMIUM/tools/nix/shell.nix" >"$LOG" 2>&1; then
   echo "the shell exited 0"
 else
   echo "the shell exited $?"
@@ -56,6 +60,11 @@ grep -aE 'error:|FAILED:|ninja: build stopped|Error:' "$LOG" |
   tail -40 | sed 's/^/  E /' || true
 tail -120 "$LOG" | sed 's/^/  | /'
 
+if [ -e "$DONE" ]; then
+  "$ROOT/.github/scripts/engine-build-status.sh" "$DOMICILE_BUILD_SHA" success "built" || true
+else
+  "$ROOT/.github/scripts/engine-build-status.sh" "$DOMICILE_BUILD_SHA" failure "the build failed" || true
+fi
 [ -e "$DONE" ] || {
   echo "::error::Chromium's shell did not run the build; its last words are above" >&2
   exit 1
