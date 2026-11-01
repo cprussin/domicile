@@ -5,11 +5,12 @@ use std::time::Instant;
 
 use smithay::reexports::{
     calloop::timer::{TimeoutAction, Timer},
+    wayland_protocols::xdg::shell::server::xdg_toplevel,
     wayland_server::protocol::wl_surface::WlSurface,
 };
 use smithay::wayland::{
     compositor::with_states,
-    shell::xdg::{SurfaceCachedState, ToplevelSurface},
+    shell::xdg::{SurfaceCachedState, ToplevelSurface, XdgToplevelSurfaceData},
 };
 use tracing::debug;
 
@@ -25,6 +26,17 @@ use crate::{CalloopData, DomicileCompositor};
 /// A window's smallest and largest size, `(width, height)` each, as
 /// `xdg_toplevel` states them. Zero is no limit.
 pub type SizeLimits = ((i32, i32), (i32, i32));
+
+/// The states in which a client must fit the configured size, as the shell
+/// laid its window out.
+const HELD: [xdg_toplevel::State; 6] = [
+    xdg_toplevel::State::Maximized,
+    xdg_toplevel::State::Fullscreen,
+    xdg_toplevel::State::TiledLeft,
+    xdg_toplevel::State::TiledRight,
+    xdg_toplevel::State::TiledTop,
+    xdg_toplevel::State::TiledBottom,
+];
 
 impl DomicileCompositor {
     pub fn toplevel_for(&self, app_id: &str) -> Option<ToplevelSurface> {
@@ -129,6 +141,34 @@ impl DomicileCompositor {
         if let Some(message) = resized {
             debug!(%app_id, ?size, "toplevel resized -> app_resized");
             self.hub.broadcast(message);
+        }
+    }
+
+    /// Configure a tiled, maximized or fullscreen `toplevel` again when it
+    /// drew at `size` instead of the size it acked, so the engine does not
+    /// stretch it over its box. See
+    /// [`crate::configure_answers::ConfigureAnswers::drew`].
+    pub fn hold_to_the_box(&mut self, app_id: &str, toplevel: &ToplevelSurface, size: (f64, f64)) {
+        let states = toplevel.current_state().states;
+        let held = HELD.iter().any(|state| states.contains(*state));
+        let acked = with_states(toplevel.wl_surface(), |states| {
+            states
+                .data_map
+                .get::<XdgToplevelSurfaceData>()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .current_serial
+        });
+        let drawn = (size.0.round() as u32, size.1.round() as u32);
+        let again = self
+            .configure_answers
+            .get_mut(app_id)
+            .filter(|_| held)
+            .and_then(|answers| answers.drew(acked, drawn));
+        if let Some(resize) = again {
+            debug!(%app_id, ?drawn, size = ?resize.size, "toplevel drew another size -> configure again");
+            self.send_resize(app_id, toplevel, resize);
         }
     }
 
