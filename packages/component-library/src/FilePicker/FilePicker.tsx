@@ -65,8 +65,14 @@ import { crumbsOf, parentOf, shownPath, walked } from "./walk-path";
 /** The filter box's accessible name. */
 const PROMPT = "Filter or go to a path";
 
-/** The icon size for rows and the filter box. */
+/** The icon size for buttons and the filter box. */
 const ICON_SIZE = 16;
+
+/**
+ * The icon size for list rows: larger than {@link ICON_SIZE} since the glyph
+ * has no tile frame, but fits the same tile so rows match the launcher's.
+ */
+const ROW_ICON_SIZE = 20;
 
 /** The icon size for empty-state placeholders. */
 const PLACEHOLDER_ICON_SIZE = 40;
@@ -1178,23 +1184,26 @@ const RowGlyph = ({
   row: Row;
 }) => {
   if (marked) {
-    return <CheckIcon size={ICON_SIZE} weight="bold" />;
+    return <CheckIcon size={ROW_ICON_SIZE} weight="bold" />;
   } else {
     switch (row.kind) {
       case RowKind.Parent: {
-        return <ArrowBendLeftUpIcon size={ICON_SIZE} weight="bold" />;
+        return <ArrowBendLeftUpIcon size={ROW_ICON_SIZE} weight="bold" />;
       }
       case RowKind.Directory: {
         return highlighted ? (
-          <FolderOpenIcon size={ICON_SIZE} weight="fill" />
+          <FolderOpenIcon size={ROW_ICON_SIZE} weight="fill" />
         ) : (
-          <FolderIcon size={ICON_SIZE} weight="fill" />
+          <FolderIcon size={ROW_ICON_SIZE} weight="fill" />
         );
       }
       case RowKind.File: {
         const Glyph = glyphOf(fileKindOf(row.name));
         return (
-          <Glyph size={ICON_SIZE} weight={highlighted ? "fill" : "duotone"} />
+          <Glyph
+            size={ROW_ICON_SIZE}
+            weight={highlighted ? "fill" : "duotone"}
+          />
         );
       }
     }
