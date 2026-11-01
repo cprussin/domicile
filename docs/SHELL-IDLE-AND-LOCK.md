@@ -111,10 +111,17 @@ await (await domicile.session.idleWarnings()).match({
 
 ## Locking
 
-The compositor locks the desktop after `idle.lock_after_seconds` without
-input, before the machine sleeps, when logind locks the session, or when the
-shell calls `session.lock()`. That timeout is separate from
-blanking. The user's password unlocks it, checked by PAM.
+Every desktop has a lock; no config turns it on. The compositor locks it:
+
+- when the shell calls `session.lock()`,
+- before the machine sleeps, and when logind locks the session
+  (`loginctl lock-session`),
+- after `idle.lock_after_seconds` without input, if that is set. This clock is
+  separate from blanking.
+
+PAM is the only way to unlock it. The compositor checks the passphrase through
+the PAM service `lock.pam_service`, or `domicile` when that is unset
+([The config file](SHELL-CONFIG.md#lock)).
 
 <!-- tab: React -->
 
@@ -232,9 +239,12 @@ the page in devtools does not unlock the desktop.
   during a check is dropped.
 - A newly loaded page reads the current state. A reloaded shell must check it
   before drawing an unlocked desktop.
-- The shell cannot tell whether the config uses PAM or a passphrase.
-- With no `lock` configured, `locked` stays `null` and the desktop cannot
-  lock.
+- `locked` is `undefined` only until the compositor's first message. After
+  that it is `true` or `false`.
+- Without the PAM service's file (`/etc/pam.d/domicile` by default), the
+  desktop still locks and every passphrase is refused `Unverifiable`. Say so
+  on the lock screen instead of "wrong password". Adding the file fixes the
+  next attempt, with no restart ([LOCK.md](LOCK.md#failures-fail-closed)).
 
 Manganese's lock screen:
 [`lock/Lock.tsx`](/packages/manganese-lock/src/Lock.tsx),

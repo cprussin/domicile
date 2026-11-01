@@ -246,8 +246,9 @@ on. `idle.lock_after_seconds` is how long before it locks.
   Unset means no warning. It must be at least `1` and less than
   `blank_after_seconds`.
 - `idle.lock_after_seconds` runs on its own clock from the same input, so it
-  may be shorter or longer than `blank_after_seconds`. Unset means the desktop
-  locks only when the shell asks. `0` is an error.
+  may be shorter or longer than `blank_after_seconds`. Unset means no lock on
+  idle; the desktop still locks when the shell asks and before the machine
+  sleeps ([Locking](SHELL-IDLE-AND-LOCK.md#locking)). `0` is an error.
 - Apps can block blanking and locking (for example, during a video) with
   `zwp_idle_inhibit_manager_v1`. This involves only the app and the
   compositor.
@@ -256,7 +257,8 @@ on. `idle.lock_after_seconds` is how long before it locks.
 
 ## Lock
 
-The user's password unlocks the desktop, checked by PAM.
+The desktop always has a lock, with or without this section. The user's
+password unlocks it, checked by PAM. There is no other way to unlock it.
 
 - `lock.pam_service`: the PAM service that checks it. Unset is `domicile`,
   which the NixOS module and the distribution packages declare. Empty, or a

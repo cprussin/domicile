@@ -1,3 +1,4 @@
+import { css } from "../../styled-system/css";
 import { Hero as PageHero } from "../page/Hero";
 import { LinkButton } from "../page/LinkButton";
 
@@ -20,5 +21,26 @@ export const Hero = () => (
       label: "Build your Wayland desktop with web technologies",
     }}
     title="The fastest way to build a Linux desktop."
-  />
+  >
+    {/* A window needs a Wayland session: there is no X11 backend. */}
+    <p className={trialStyles}>
+      <a className={trialLinkStyles} href="/docs/install#try-it-first">
+        Try it in a window
+      </a>{" "}
+      on your current Wayland desktop.
+    </p>
+  </PageHero>
 );
+
+// Pulled toward the buttons it qualifies, past the hero's gap.
+const trialStyles = css({
+  color: "muted",
+  fontSize: "sm",
+  marginBlockStart: -2,
+});
+
+const trialLinkStyles = css({
+  _hover: { color: "accent" },
+  color: "foreground",
+  textDecoration: "underline",
+});

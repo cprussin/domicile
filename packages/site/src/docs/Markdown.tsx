@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 
-import type { Link, Nodes, RootContent } from "mdast";
+import type { Link, RootContent } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFromMarkdown } from "mdast-util-gfm";
 import { gfm } from "micromark-extension-gfm";
@@ -13,6 +13,7 @@ import { DocTabs } from "./DocTabs";
 import type { Routed } from "./links";
 import { linkLabel, resolveHref } from "./links";
 import { slugger } from "./slugger";
+import { textOf } from "./text-of";
 
 type Props = {
   /** The markdown. */
@@ -240,16 +241,6 @@ const LinkText = ({ node, context }: { node: Link; context: Context }) => {
 
 const HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
 
-/** The plain text inside a node, for a heading's id. */
-const textOf = (node: Nodes): string => {
-  if ("value" in node) {
-    return node.value;
-  }
-  return "children" in node
-    ? node.children.map((child: Nodes) => textOf(child)).join("")
-    : "";
-};
-
 /** A fence's language as `CodeBlock` names it; anything else is plain. */
 const languageOf = (lang: string | null | undefined): Language =>
   LANGUAGES[lang ?? ""] ?? "plain";
@@ -300,6 +291,8 @@ const inlineCodeStyles = css({
   borderRadius: "sm",
   fontFamily: "code",
   fontSize: "0.875em",
+  // Long paths break rather than widen a phone's page.
+  overflowWrap: "anywhere",
   paddingInline: 1,
 });
 
