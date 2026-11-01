@@ -39,7 +39,7 @@ and both blobs are that file's.
  4 files changed, 27 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 8bea5aa..eefe3ec 100644
+index 3ff500e..f19bb5f 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -5,6 +5,7 @@
@@ -50,7 +50,7 @@ index 8bea5aa..eefe3ec 100644
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/desktop_prefs.h"
  
-@@ -1619,6 +1620,9 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1629,6 +1630,9 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
    // download saved to a folder nobody chose is a file the user never sees
    // arrive -- this desktop has no download shelf to show it on.
    profile->GetPrefs()->SetBoolean(prefs::kPromptForDownload, true);
@@ -61,7 +61,7 @@ index 8bea5aa..eefe3ec 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
-index b9cdb33..95a1739 100644
+index dcbede1..d220c32 100644
 --- a/chrome/browser/extensions/BUILD.gn
 +++ b/chrome/browser/extensions/BUILD.gn
 @@ -275,6 +275,8 @@ source_set("extensions") {
@@ -100,7 +100,7 @@ index 1e1d95c..dfedf25 100644
    if (function_->dispatcher()) {
      if (WindowController* window_controller =
 diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
-index aeb80f6..40301ba 100644
+index 91501be..27caa63 100644
 --- a/chrome/browser/extensions/extension_tab_util.cc
 +++ b/chrome/browser/extensions/extension_tab_util.cc
 @@ -24,6 +24,7 @@
@@ -135,7 +135,7 @@ index aeb80f6..40301ba 100644
    // Prerendering tab is not visible and it cannot be in `TabStripModel`, if the
    // tab id exists as a prerendering tab, and the API will returns
    // `api::tabs::TAB_INDEX_NONE` for `out_tab_index` and a valid `WebContents`.
-@@ -1209,6 +1220,8 @@ void ExtensionTabUtil::ForEachTab(
+@@ -1210,6 +1221,8 @@ void ExtensionTabUtil::ForEachTab(
      callback.Run(tab->GetContents());
      return true;
    });

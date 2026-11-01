@@ -16,10 +16,10 @@ edit in files Chromium already owns.
  2 files changed, 4 insertions(+)
 
 diff --git a/components/BUILD.gn b/components/BUILD.gn
-index 8d0e1c1..31fbfa8 100644
+index 7e7c047..1474433 100644
 --- a/components/BUILD.gn
 +++ b/components/BUILD.gn
-@@ -233,6 +233,7 @@ test("components_unittests") {
+@@ -230,6 +230,7 @@ test("components_unittests") {
      "//components/device_reauth:unit_tests",
      "//components/device_signals/core:unit_tests",
      "//components/dom_distiller/core:unit_tests",
@@ -28,10 +28,10 @@ index 8d0e1c1..31fbfa8 100644
      "//components/encrypted_messages:unit_tests",
      "//components/enterprise/device_trust/core/attestation:unit_tests",
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 8cc4642..19975ce 100644
+index 4f2a849..fdee194 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -151,6 +151,7 @@ source_set("browser") {
+@@ -163,6 +163,7 @@ source_set("browser") {
      "//components/discardable_memory/common",
      "//components/discardable_memory/service",
      "//components/download/database",
@@ -39,7 +39,7 @@ index 8cc4642..19975ce 100644
      "//components/download/public/common:public",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",
-@@ -947,6 +948,8 @@ source_set("browser") {
+@@ -959,6 +960,8 @@ source_set("browser") {
      "dom_storage/dom_storage_context_wrapper.h",
      "dom_storage/session_storage_namespace_handle_impl.cc",
      "dom_storage/session_storage_namespace_handle_impl.h",

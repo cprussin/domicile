@@ -21,7 +21,7 @@ job builds it on `crux`.
  3 files changed, 5 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 9ccd56f..51ae479 100644
+index 9c955fc..7645f50 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
 @@ -1216,6 +1216,8 @@ generated_interface_sources_in_core = [
@@ -46,10 +46,10 @@ index 4aac954..907c2fa 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index 71e6bd6..c195722 100644
+index 2986748..30447ab 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
-@@ -102,6 +102,8 @@ blink_core_sources_html = [
+@@ -104,6 +104,8 @@ blink_core_sources_html = [
    "domicile/domicile_permission_request_event.h",
    "domicile/domicile_device_request_event.cc",
    "domicile/domicile_device_request_event.h",

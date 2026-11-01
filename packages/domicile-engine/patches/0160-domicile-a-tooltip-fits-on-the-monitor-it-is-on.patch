@@ -129,6 +129,3 @@ index 2c7eea4..66c10ca 100644
  
    // If tooltip is out of bounds on the x axis, we simply shift it
    // horizontally by the offset variation.
--- 
-2.43.0
-

@@ -22,10 +22,10 @@ panels, What's New and the WebUI gallery are pages nothing can reach.
  2 files changed, 1 insertion(+), 27 deletions(-)
 
 diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-index 105d9e9..a291524 100644
+index 535a318..b1301b7 100644
 --- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 +++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-@@ -337,8 +337,6 @@ void RegisterChromeWebUIConfigs() {
+@@ -336,8 +336,6 @@ void RegisterChromeWebUIConfigs() {
    map.AddWebUIConfig(std::make_unique<WebRtcLogsUIConfig>());
    map.AddWebUIConfig(std::make_unique<RegionalCapabilitiesInternalsUIConfig>());
  #if BUILDFLAG(ENABLE_WEBUI_NTP)
@@ -34,7 +34,7 @@ index 105d9e9..a291524 100644
    map.AddWebUIConfig(std::make_unique<CustomizeChromeUIConfig>());
  #endif  // BUILDFLAG(ENABLE_WEBUI_NTP)
  
-@@ -403,11 +401,9 @@ void RegisterChromeWebUIConfigs() {
+@@ -402,11 +400,9 @@ void RegisterChromeWebUIConfigs() {
    map.AddWebUIConfig(
        std::make_unique<on_device_internals::OnDeviceInternalsUIConfig>());
    map.AddWebUIConfig(std::make_unique<PageActionInternalsUIConfig>());
@@ -45,8 +45,8 @@ index 105d9e9..a291524 100644
 -  map.AddWebUIConfig(std::make_unique<settings::SettingsUIConfig>());
    map.AddWebUIConfig(std::make_unique<ShoppingInsightsSidePanelUIConfig>());
    map.AddWebUIConfig(std::make_unique<SupportToolUIConfig>());
-   map.AddWebUIConfig(std::make_unique<SyncConfirmationUIConfig>());
-@@ -421,7 +417,6 @@ void RegisterChromeWebUIConfigs() {
+   map.AddWebUIConfig(std::make_unique<SystemInfoUIConfig>());
+@@ -419,7 +415,6 @@ void RegisterChromeWebUIConfigs() {
    map.AddWebUIConfig(std::make_unique<WebNNInternalsUIConfig>());
    map.AddWebUIConfig(std::make_unique<IndigoInternalsUIConfig>());
    map.AddWebUIConfig(std::make_unique<WebUIBrowserUIConfig>());
@@ -54,7 +54,7 @@ index 105d9e9..a291524 100644
    map.AddWebUIConfig(std::make_unique<WebUIJsErrorUIConfig>());
    map.AddWebUIConfig(std::make_unique<WebUIToolbarConfig>());
  #endif  // BUILDFLAG(IS_ANDROID)
-@@ -466,7 +461,6 @@ void RegisterChromeWebUIConfigs() {
+@@ -464,7 +459,6 @@ void RegisterChromeWebUIConfigs() {
    map.AddWebUIConfig(std::make_unique<HistorySyncOptinUIConfig>());
    map.AddWebUIConfig(std::make_unique<OnDeviceTranslationInternalsUIConfig>());
    map.AddWebUIConfig(std::make_unique<WebAppSettingsUIConfig>());

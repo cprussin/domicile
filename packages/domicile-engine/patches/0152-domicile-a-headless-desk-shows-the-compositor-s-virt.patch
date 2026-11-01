@@ -29,7 +29,7 @@ job builds it on `crux`.
  4 files changed, 97 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/headless/BUILD.gn b/ui/ozone/platform/headless/BUILD.gn
-index dc07e2b6..c2823a71 100644
+index dc07e2b..c2823a7 100644
 --- a/ui/ozone/platform/headless/BUILD.gn
 +++ b/ui/ozone/platform/headless/BUILD.gn
 @@ -10,6 +10,8 @@ source_set("headless") {
@@ -70,7 +70,7 @@ index dc07e2b6..c2823a71 100644
      "//ui/ozone:test_support",
    ]
 diff --git a/ui/ozone/platform/headless/headless_screen.cc b/ui/ozone/platform/headless/headless_screen.cc
-index 8d7bd278..69e8d2f1 100644
+index 8d7bd27..69e8d2f 100644
 --- a/ui/ozone/platform/headless/headless_screen.cc
 +++ b/ui/ozone/platform/headless/headless_screen.cc
 @@ -240,4 +240,27 @@ bool HeadlessScreen::IsHeadless() const {
@@ -102,7 +102,7 @@ index 8d7bd278..69e8d2f1 100644
 +
  }  // namespace ui
 diff --git a/ui/ozone/platform/headless/headless_screen.h b/ui/ozone/platform/headless/headless_screen.h
-index 2dfb61ff..d6529774 100644
+index 2dfb61f..d652977 100644
 --- a/ui/ozone/platform/headless/headless_screen.h
 +++ b/ui/ozone/platform/headless/headless_screen.h
 @@ -51,6 +51,10 @@ class HeadlessScreen : public PlatformScreen,
@@ -117,7 +117,7 @@ index 2dfb61ff..d6529774 100644
    void CreateDisplayList();
  
 diff --git a/ui/ozone/platform/headless/ozone_platform_headless.cc b/ui/ozone/platform/headless/ozone_platform_headless.cc
-index 559973c1..6ac568e3 100644
+index 559973c..6ac568e 100644
 --- a/ui/ozone/platform/headless/ozone_platform_headless.cc
 +++ b/ui/ozone/platform/headless/ozone_platform_headless.cc
 @@ -5,9 +5,14 @@
@@ -230,6 +230,3 @@ index 559973c1..6ac568e3 100644
  };
  
  }  // namespace
--- 
-2.43.0
-

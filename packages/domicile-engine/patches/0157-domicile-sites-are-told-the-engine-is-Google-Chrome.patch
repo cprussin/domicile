@@ -36,6 +36,3 @@ index 8332938..1d8f36a 100644
  
    std::string brand_version =
        output_version_type == blink::UserAgentBrandVersionType::kFullVersion
--- 
-2.43.0
-

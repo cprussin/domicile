@@ -4,6 +4,7 @@
 #include "chrome/browser/domicile/domicile_devtools.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -96,7 +97,8 @@ class WebViewDevToolsDelegate : public DevToolsUIBindings::Delegate {
     Waiting().push_back(std::move(host));
     GuestOf(frontend_).RequestWindow(FrontendURL());
   }
-  void OpenInNewTab(const std::string& url) override {
+  void OpenInNewTab(const std::string& url,
+                    const std::optional<std::string>& initiator_id) override {
     GuestOf(frontend_).RequestWindow(GURL(url));
   }
   // Close with the inspected page, as Chrome does.

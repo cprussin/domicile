@@ -156,7 +156,7 @@ index b0dab76..6b89033 100644
  
  int ThreadTypeToNiceValue(const ThreadType thread_type) {
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index dd112ac..f37205c 100644
+index 9c88fed..eb1c729 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -11,6 +11,7 @@
@@ -167,7 +167,7 @@ index dd112ac..f37205c 100644
  #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
  #include "components/content_settings/core/browser/host_content_settings_map.h"
  #include "components/content_settings/core/common/content_settings.h"
-@@ -1732,6 +1733,10 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1750,6 +1751,10 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
  void ChromeBrowserMainParts::PreBrowserStart() {
    TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreBrowserStart");
  

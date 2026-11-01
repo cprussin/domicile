@@ -10,9 +10,12 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/memory/self_deleting.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
@@ -134,6 +137,29 @@ class ExtensionTray final
   }
 
  private:
+  // Sends `action.onClicked` for extension `id` on `tab`. Called after the
+  // grant, so either may be gone by then, as in
+  // ExtensionActionRunner::DispatchExtensionActionClicked.
+  void DispatchClicked(const std::string& id,
+                       base::WeakPtr<content::WebContents> tab) {
+    const Extension* extension = extensions::ExtensionRegistry::Get(context_)
+                                     ->enabled_extensions()
+                                     .GetByID(id);
+    ExtensionAction* action =
+        extension == nullptr
+            ? nullptr
+            : extensions::ExtensionActionManager::Get(context_)
+                  ->GetExtensionAction(*extension);
+    if (action == nullptr || !tab) {
+      LOG(WARNING) << "domicile: the tray's click on " << id
+                   << " outlived its extension or tab.";
+      return;
+    }
+    LOG(INFO) << "domicile: the tray activated " << id << ".";
+    extensions::ExtensionActionDispatcher::Get(context_)
+        ->DispatchExtensionActionClicked(*action, tab.get(), extension);
+  }
+
   ~ExtensionTray() override {
     if (observing_desk_) {
       RemoveDeskObserver(context_, this);
@@ -171,40 +197,43 @@ class ExtensionTray final
     // The click applies to the active tab: the <webview> last focused.
     content::WebContents* tab = ActiveDeskTab(context_);
 
-    // Grant activeTab first, as ExtensionActionRunner::RunAction does, since
-    // onClicked and the popup expect access already. With no desk tab, the
-    // page is the shell, which gets no grant.
-    if (tab != nullptr) {
-      extensions::ActiveTabPermissionGranter* granter =
-          extensions::ActiveTabPermissionGranter::FromWebContents(tab);
-      // AttachTabHelpers gives every tab an extensions::TabHelper, which
-      // creates the granter.
-      CHECK(granter);
-      granter->GrantIfRequested(extension);
-      // guard-webview-active-tab.sh reads this line.
-      if (granter->IsGranted(extension)) {
-        LOG(INFO) << "domicile: the tray granted " << id
-                  << " activeTab on tab " << TabIdOf(tab) << ".";
-      }
+    // Chrome sends no onClicked for an action with a popup; the shell opens
+    // the popup.
+    const bool has_popup = action->HasPopup(TabIdOf(tab));
+    if (has_popup) {
+      LOG(INFO) << "domicile: the tray opened " << id << "'s popup.";
     }
 
-    // The shell opens popups, and Chrome sends no onClicked for an action
-    // with a popup.
-    if (action->HasPopup(TabIdOf(tab))) {
-      LOG(INFO) << "domicile: the tray opened " << id << "'s popup.";
+    // With no desk tab, the page is the shell, which gets no grant.
+    // `DispatchExtensionActionClicked` needs a WebContents, so pass the
+    // shell's page.
+    if (tab == nullptr) {
+      if (!has_popup) {
+        DispatchClicked(id, content::WebContents::FromRenderFrameHost(
+                                &render_frame_host())
+                                ->GetWeakPtr());
+      }
       return;
     }
 
-    // `DispatchExtensionActionClicked` needs a WebContents, so without a desk
-    // tab, pass the shell's page.
-    LOG(INFO) << "domicile: the tray activated " << id << ".";
-    extensions::ExtensionActionDispatcher::Get(context_)
-        ->DispatchExtensionActionClicked(
-            *action,
-            tab != nullptr ? tab
-                           : content::WebContents::FromRenderFrameHost(
-                                 &render_frame_host()),
-            extension);
+    // Grant activeTab first, as ExtensionActionRunner::RunAction does, and
+    // dispatch onClicked once the grant reaches the network service, so the
+    // listener can use it.
+    extensions::ActiveTabPermissionGranter* granter =
+        extensions::ActiveTabPermissionGranter::FromWebContents(tab);
+    // AttachTabHelpers gives every tab an extensions::TabHelper, which
+    // creates the granter.
+    CHECK(granter);
+    granter->GrantIfRequested(
+        extension, has_popup ? base::DoNothing()
+                             : base::BindOnce(&ExtensionTray::DispatchClicked,
+                                              weak_factory_.GetWeakPtr(), id,
+                                              tab->GetWeakPtr()));
+    // guard-webview-active-tab.sh reads this line.
+    if (granter->IsGranted(extension)) {
+      LOG(INFO) << "domicile: the tray granted " << id << " activeTab on tab "
+                << TabIdOf(tab) << ".";
+    }
   }
 
   // extensions::ExtensionRegistryObserver:
@@ -305,6 +334,8 @@ class ExtensionTray final
   base::ScopedMultiSourceObservation<extensions::IconImage,
                                      extensions::IconImage::Observer>
       icons_{this};
+
+  base::WeakPtrFactory<ExtensionTray> weak_factory_{this};
 };
 
 }  // namespace

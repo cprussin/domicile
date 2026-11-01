@@ -286,10 +286,10 @@ index 8a3dc68..d598c54 100644
    base::test::ScopedFeatureList feature_list;
    feature_list.InitAndEnableFeature(display::features::kFastDrmMasterDrop);
 diff --git a/ui/ozone/platform/drm/gpu/fake_drm_device.cc b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
-index aa37f2a..580b15b 100644
+index 75977ee..7d834ca 100644
 --- a/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 +++ b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
-@@ -983,6 +983,10 @@ bool FakeDrmDevice::DropMaster() {
+@@ -982,6 +982,10 @@ bool FakeDrmDevice::DropMaster() {
    return succeed_drm_master_drop_;
  }
  

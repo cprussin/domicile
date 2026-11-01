@@ -16,10 +16,10 @@ name in a generated-bindings list.
  2 files changed, 12 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 18b22f8..4b17389 100644
+index ca055dd..e8eb5d0 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -335,6 +335,8 @@ generated_dictionary_sources_in_modules = [
+@@ -303,6 +303,8 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event_init.h",
@@ -28,7 +28,7 @@ index 18b22f8..4b17389 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
-@@ -2422,6 +2424,12 @@ generated_interface_sources_in_modules = [
+@@ -2386,6 +2388,12 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.h",
@@ -42,10 +42,10 @@ index 18b22f8..4b17389 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 3cec358..4a1552a 100644
+index 8c8e397..068aa3f 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -321,6 +321,10 @@ static_idl_files_in_modules = [
+@@ -315,6 +315,10 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_tray_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_tray_event_init.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_tray_item.idl",

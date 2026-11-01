@@ -188,10 +188,10 @@ index a46cc0f..f7a9c78 100644
    for (const auto& drm : devices) {
      drm->AssumeMaster(false);
 diff --git a/ui/ozone/platform/drm/gpu/fake_drm_device.cc b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
-index 580b15b..e64497c 100644
+index 7d834ca..dff2441 100644
 --- a/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 +++ b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
-@@ -991,6 +991,10 @@ bool FakeDrmDevice::has_master() const {
+@@ -990,6 +990,10 @@ bool FakeDrmDevice::has_master() const {
    return has_master_;
  }
  
