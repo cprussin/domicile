@@ -8,8 +8,8 @@ fn home(paths: &[&str]) -> FileSearch {
 
 #[test]
 fn every_word_has_to_appear_in_any_order_and_any_case() {
-    // Matches `fzf --exact`, as the launcher it is modeled on: no ranking,
-    // index order kept.
+    // Matches `fzf --exact`, as the launcher it is modeled on: no relevance
+    // ranking.
     let search = home(&["Notes/2026/Plan.org", "plan-b.txt", "src/plan.rs"]);
 
     assert_eq!(
@@ -57,5 +57,24 @@ fn a_directory_is_marked_with_a_slash_whether_or_not_what_is_in_it_matched() {
             "Notes-old".to_string(),
             "Notes/today.org".to_string(),
         ]
+    );
+}
+
+#[test]
+fn shallower_paths_come_first_and_index_order_breaks_ties() {
+    // What sits near home is usually what the person is after, and the cap
+    // would otherwise fill with deep paths from early in the alphabet.
+    let search = home(&["a/b/deep.txt", "a/mid.txt", "b/mid.txt", "top.txt"]);
+
+    assert_eq!(
+        search.find("t", 3),
+        Found {
+            files: vec![
+                "top.txt".to_string(),
+                "a/mid.txt".to_string(),
+                "b/mid.txt".to_string(),
+            ],
+            matched: 4,
+        }
     );
 }

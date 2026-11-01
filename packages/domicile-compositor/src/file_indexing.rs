@@ -443,7 +443,7 @@ mod tests {
 
         assert_eq!(
             walked(&announcements, &go_on),
-            ["Early/", "Early/plan.org", "Notes/", "Notes/today.org"],
+            ["Early/", "Notes/", "Early/plan.org", "Notes/today.org"],
             "the walk read the home after the index said it was building"
         );
     }
@@ -463,7 +463,7 @@ mod tests {
         fs::write(home.path().join("Late/plan.org"), "").expect("the file");
         go_on.send(()).expect("the index goes on");
 
-        let expected = ["Late/", "Late/plan.org", "Notes/", "Notes/today.org"];
+        let expected = ["Late/", "Notes/", "Late/plan.org", "Notes/today.org"];
         while last != expected {
             last = next(&announcements).0;
             let _ = go_on.send(());

@@ -44,13 +44,13 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
         "",
         &[
             "Notes/",
-            "Notes/2026/",
-            "Notes/2026/april/",
-            "Notes/2026/april/plan.org",
             "src/",
-            "src/domicile/",
-            "src/domicile/README.md",
             "todo.txt",
+            "Notes/2026/",
+            "src/domicile/",
+            "Notes/2026/april/",
+            "src/domicile/README.md",
+            "Notes/2026/april/plan.org",
         ],
     );
     // Only matches are sent; a real home's index is tens of megabytes.
@@ -87,8 +87,8 @@ fn a_file_written_afterward_is_found_by_the_next_search() {
         &[
             "Notes/",
             "Notes/2026/",
-            "Notes/2026/plan.org",
             "Notes/today.org",
+            "Notes/2026/plan.org",
         ],
     );
 }
@@ -133,7 +133,7 @@ fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
         &compositor,
         &mut chrome,
         "",
-        &[".config/", ".config/domicile.json", "src/", "src/main.rs"],
+        &[".config/", "src/", ".config/domicile.json", "src/main.rs"],
     );
 
     compositor.reconfigure(&omitting(r#""**/.*""#));

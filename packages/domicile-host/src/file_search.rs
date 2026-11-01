@@ -4,8 +4,8 @@
 //! thousands of paths, too many to send to the page.
 //!
 //! Matches like `fzf --exact`: every query word must appear in the path,
-//! case-insensitively. Results keep index order, so narrowing a query does not
-//! reorder the list.
+//! case-insensitively. Results come shallowest first, then in index order. The
+//! order is fixed per index, so narrowing a query does not reorder the list.
 
 /// A searchable snapshot of the file index.
 ///
@@ -17,12 +17,14 @@ pub struct FileSearch {
     paths: Vec<String>,
     /// `paths` lowercased, for matching.
     lowered: Vec<String>,
+    /// Indexes into `paths`, shallowest first, then in byte order.
+    ranked: Vec<usize>,
 }
 
 /// A query's results.
 #[derive(Debug, PartialEq)]
 pub struct Found {
-    /// The first matches, in index order.
+    /// The first matches, shallowest first, then in index order.
     ///
     /// A path with other paths under it ends in `/`, marking it a directory.
     pub files: Vec<String>,
@@ -34,7 +36,14 @@ impl FileSearch {
     /// A search over `paths`, which must be in byte order.
     pub fn new(paths: Vec<String>) -> Self {
         let lowered = paths.iter().map(|path| path.to_lowercase()).collect();
-        FileSearch { paths, lowered }
+        let mut ranked: Vec<usize> = (0..paths.len()).collect();
+        // Stable, so paths at one depth keep byte order.
+        ranked.sort_by_key(|&at| paths[at].matches('/').count());
+        FileSearch {
+            paths,
+            lowered,
+            ranked,
+        }
     }
 
     /// The first `limit` matches for `query`, and the total match count.
@@ -42,11 +51,10 @@ impl FileSearch {
         let query = query.to_lowercase();
         let words: Vec<&str> = query.split_whitespace().collect();
         let mut matched = self
-            .paths
+            .ranked
             .iter()
-            .zip(&self.lowered)
-            .filter(|(_, lowered)| words.iter().all(|word| lowered.contains(word)))
-            .map(|(path, _)| path);
+            .filter(|&&at| words.iter().all(|word| self.lowered[at].contains(word)))
+            .map(|&at| &self.paths[at]);
         let files = matched
             .by_ref()
             .take(limit)
