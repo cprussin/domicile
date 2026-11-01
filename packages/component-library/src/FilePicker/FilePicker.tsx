@@ -29,7 +29,6 @@ import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { MusicNotesIcon } from "@phosphor-icons/react/dist/ssr/MusicNotes";
-import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import type { FocusEvent, KeyboardEvent, ReactNode, Ref } from "react";
@@ -107,15 +106,14 @@ type NewFolder = { failure: string | undefined; name: string };
  * Starts in `currentFolder`, or the home, and lists one directory at a time,
  * again whenever it changes; nothing is indexed. One box has the keyboard:
  * the filter, or the file name when saving. A `/` in the filter walks the
- * path like a shell (see `walked`); the path box takes a path in any mode.
+ * path like a shell (see `walked`).
  * Opening, a click or arrow key selects a file; Enter, a double click or the
  * button chooses it. Saving, the arrows pick a folder to enter and Enter
  * saves, asking first before replacing a file. Clicking a directory enters
  * it.
  *
  * Keys: arrows move, Enter opens, Backspace in an empty box goes up,
- * Ctrl+Enter confirms, Ctrl+L opens the path box, Ctrl+H shows hidden files,
- * Escape cancels, and Tab marks a file in multi-select, as in fzf.
+ * Ctrl+Enter confirms, Ctrl+H shows hidden files, Escape cancels, and Tab marks a file in multi-select, as in fzf.
  */
 export const FilePicker = ({ ref, request }: Props) => {
   const titleId = useId();
@@ -139,8 +137,6 @@ export const FilePicker = ({ ref, request }: Props) => {
   const [replacing, setReplacing] = useState(false);
   // Whether dotfiles show without a dot typed.
   const [hidden, setHidden] = useState(false);
-  // The path box's text while it is open.
-  const [typedPath, setTypedPath] = useState<string | undefined>(undefined);
   const [newFolder, setNewFolder] = useState<NewFolder | undefined>(undefined);
   const [filter, setFilter] = useState<FileFilter | undefined>(
     request.filters?.[request.currentFilter ?? 0],
@@ -201,22 +197,6 @@ export const FilePicker = ({ ref, request }: Props) => {
   const reconsider = () => {
     setReplacing(false);
     box.current?.focus();
-  };
-
-  const closePath = () => {
-    setTypedPath(undefined);
-    box.current?.focus();
-  };
-
-  const goTyped = (typed: string) => {
-    go(
-      walked({
-        directory,
-        home: request.home,
-        typed: typed.endsWith("/") ? typed : `${typed}/`,
-      }).directory,
-    );
-    closePath();
   };
 
   const closeNewFolder = () => {
@@ -308,8 +288,6 @@ export const FilePicker = ({ ref, request }: Props) => {
           event.preventDefault();
           if (asking) {
             reconsider();
-          } else if (typedPath !== undefined) {
-            closePath();
           } else if (newFolder === undefined) {
             request.cancel();
           } else {
@@ -358,71 +336,37 @@ export const FilePicker = ({ ref, request }: Props) => {
         </aside>
         <section className={mainStyles}>
           <div className={locationStyles}>
-            {typedPath === undefined ? (
-              <nav aria-label="Path" className={pathBarStyles}>
-                {crumbsOf(directory, request.home).map((crumb, at, crumbs) => (
-                  <span className={crumbStyles} key={crumb.path}>
-                    {at > 0 && (
-                      <span aria-hidden className={crumbSeparatorStyles}>
-                        <CaretRightIcon size={12} weight="bold" />
-                      </span>
-                    )}
-                    <Button
-                      aria-current={
-                        at === crumbs.length - 1 ? "location" : undefined
-                      }
-                      beforeIcon={
-                        at === 0 ? (
-                          <CrumbGlyph label={crumb.label} />
-                        ) : undefined
-                      }
-                      onClick={() => {
-                        go(crumb.path);
-                      }}
-                      // The keyboard stays in the box.
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {crumb.label}
-                    </Button>
-                  </span>
-                ))}
-              </nav>
-            ) : (
-              <Input
-                aria-label="Path"
-                onChange={(event) => {
-                  setTypedPath(event.target.value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    goTyped(event.currentTarget.value);
-                  }
-                }}
-                ref={focusOnAttach}
-                size="sm"
-                spellCheck={false}
-                value={typedPath}
-              />
-            )}
+            <nav aria-label="Path" className={pathBarStyles}>
+              {crumbsOf(directory, request.home).map((crumb, at, crumbs) => (
+                <span className={crumbStyles} key={crumb.path}>
+                  {at > 0 && (
+                    <span aria-hidden className={crumbSeparatorStyles}>
+                      <CaretRightIcon size={12} weight="bold" />
+                    </span>
+                  )}
+                  <Button
+                    aria-current={
+                      at === crumbs.length - 1 ? "location" : undefined
+                    }
+                    beforeIcon={
+                      at === 0 ? <CrumbGlyph label={crumb.label} /> : undefined
+                    }
+                    onClick={() => {
+                      go(crumb.path);
+                    }}
+                    // The keyboard stays in the box.
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {crumb.label}
+                  </Button>
+                </span>
+              ))}
+            </nav>
             <div className={toolsStyles}>
-              <Button
-                label="Type a path"
-                onClick={() => {
-                  setTypedPath(typedPathOf(directory, request.home));
-                }}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                <PencilSimpleIcon size={ICON_SIZE} />
-              </Button>
               <Button
                 aria-pressed={hidden}
                 beforeIcon={
@@ -490,9 +434,6 @@ export const FilePicker = ({ ref, request }: Props) => {
               } else if (isChord(event, "h")) {
                 event.preventDefault();
                 setHidden(!hidden);
-              } else if (isChord(event, "l")) {
-                event.preventDefault();
-                setTypedPath(typedPathOf(directory, request.home));
               } else if (
                 event.key === "Enter" &&
                 !event.ctrlKey &&
@@ -864,7 +805,7 @@ const pathBarStyles = flex({
   rowGap: 0.5,
 });
 
-// The path bar, or the path box, then the folder's tools.
+// The path bar, then the folder's tools.
 const locationStyles = hstack({
   gap: 2,
   justifyContent: "space-between",
@@ -1597,12 +1538,6 @@ const selectStem = (event: FocusEvent<HTMLInputElement>) => {
 /** Ctrl, or Cmd, and `key`. */
 const isChord = (event: KeyboardEvent, key: string): boolean =>
   event.key === key && (event.ctrlKey || event.metaKey);
-
-/** The path box's text for `directory`, ready for a name after it. */
-const typedPathOf = (directory: string, home: string): string => {
-  const shown = shownPath(directory, home);
-  return shown === "/" ? shown : `${shown}/`;
-};
 
 /** Why a folder could not be made, for the user. */
 const failureOf = (error: SystemError): string => {

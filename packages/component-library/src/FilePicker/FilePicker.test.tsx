@@ -327,47 +327,6 @@ describe("FilePicker", () => {
       await cancel(answered);
     });
 
-    it("goes to a path typed in the path box, opened with Ctrl+L or its button", async () => {
-      const answered = picker(ChooserMode.Open);
-      await rows();
-
-      await userEvent.type(box(), "{Control>}l{/Control}");
-      const path = screen.getByRole("textbox", { name: "Path" });
-      expect(path).toHaveFocus();
-      expect(path).toHaveValue("~/");
-      await userEvent.type(path, "Pictures/trips{Enter}");
-
-      expect(where()).toStrictEqual(["~", "Pictures", "trips"]);
-      expect(box()).toHaveFocus();
-
-      await userEvent.click(
-        screen.getByRole("button", { name: "Type a path" }),
-      );
-      await userEvent.clear(screen.getByRole("textbox", { name: "Path" }));
-      await userEvent.type(
-        screen.getByRole("textbox", { name: "Path" }),
-        "/tmp{Enter}",
-      );
-      expect(where()).toStrictEqual(["/", "tmp"]);
-      await cancel(answered);
-    });
-
-    it("puts the path box away on Escape, and stays open", async () => {
-      const answered = picker(ChooserMode.Open);
-      await rows();
-      await userEvent.type(box(), "{Control>}l{/Control}");
-      expect(screen.getByRole("textbox", { name: "Path" })).toHaveFocus();
-
-      await userEvent.keyboard("{Escape}");
-
-      expect(
-        screen.queryByRole("textbox", { name: "Path" }),
-      ).not.toBeInTheDocument();
-      expect(box()).toHaveFocus();
-      expect(await unanswered(answered)).toBe(true);
-      await cancel(answered);
-    });
-
     it("starts in the folder the request names", async () => {
       const answered = picker(ChooserMode.Open, {
         currentFolder: `${HOME}/Pictures`,
@@ -634,7 +593,7 @@ describe("FilePicker", () => {
       expect(await answered).toStrictEqual([`${HOME}/photo.png`]);
     });
 
-    // Paths go in the path box, so a name is only a name.
+    // A name is only a name; the folder is picked in the list.
     it("keeps a slash typed into the name, and saves nothing with one", async () => {
       const answered = picker(ChooserMode.Save);
       await rows();
