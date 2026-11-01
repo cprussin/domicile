@@ -14,11 +14,11 @@ bun run build:next
   package. `Accent` sets `accent` to the product's color: violet for
   Domicile, the preset's cyan for manganese.
 - **Code blocks:** highlighted at build time (`src/code/`).
-- **Screenshots and videos:** `public/media` links to `docs/media`, which
-  `packages/site/scripts/docs-media.sh` captures on crux. Vercel can't deploy a link out of
-  the root directory, so its build swaps the link for a copy. A slot whose capture does not
-  exist yet says what it will show. See
-  [docs/media/README.md](/docs/media/README.md).
+- **Screenshots and videos:** `docs/media`, captured on crux by
+  `packages/site/scripts/docs-media.sh`, served from R2 at
+  `media.domicile-desktop.com` under each file's hash (`src/media/mediaUrl.ts`),
+  so deployments don't carry them. A slot whose capture does not exist yet says
+  what it will show. See [docs/media/README.md](/docs/media/README.md).
 - **Docs pages** render the repository's markdown at build time
   (`src/docs/`). `src/docs/pages.ts` lists which files the site renders,
   under which routes and sidebar sections. A link to one of them goes to its

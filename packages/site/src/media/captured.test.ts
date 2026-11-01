@@ -5,7 +5,7 @@ import { captured } from "./captured";
 const having =
   (...files: string[]) =>
   (file: string) =>
-    files.includes(file);
+    files.includes(file) ? `https://media.test/${file}` : undefined;
 
 describe("captured", () => {
   test("a video with its picture as the poster", () => {
@@ -13,16 +13,16 @@ describe("captured", () => {
       captured("hero", having("hero.webm", "hero.mp4", "hero.png")),
     ).toEqual({
       kind: "video",
-      mp4: "/media/hero.mp4",
-      poster: "/media/hero.png",
-      webm: "/media/hero.webm",
+      mp4: "https://media.test/hero.mp4",
+      poster: "https://media.test/hero.png",
+      webm: "https://media.test/hero.webm",
     });
   });
 
   test("a video needs both formats", () => {
     expect(captured("hero", having("hero.webm", "hero.png"))).toEqual({
       kind: "picture",
-      png: "/media/hero.png",
+      png: "https://media.test/hero.png",
     });
   });
 

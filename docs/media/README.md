@@ -6,6 +6,10 @@ captured by a script, never by hand, so it can be retaken for each release.
 - **Retake them:** run the `Docs media` workflow (`.github/workflows/docs-media.yml`)
   on a branch. It captures on `crux` and commits the results to that branch.
   A pull request that changes a scene does the same.
+- **Serving them:** the `Docs media upload` workflow
+  (`.github/workflows/docs-media-upload.yml`) puts each file on R2 under its
+  hash. The site links there (`media.domicile-desktop.com`), so deployments
+  don't carry the files.
 - **Locally:** `packages/site/scripts/docs-media.sh [scene...]` on a machine with a GPU.
   Without a DRM render node, app windows come out blank.
 
