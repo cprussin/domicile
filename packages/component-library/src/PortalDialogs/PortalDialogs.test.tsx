@@ -625,7 +625,7 @@ describe("PortalDialogs", () => {
         screen.getByRole("dialog", {
           name: "Choose an app to open report.pdf",
         }),
-      ).toHaveTextContent("App wants to open report.pdf.");
+      ).toHaveTextContent("App asks");
       const firefox = await screen.findByRole("option", { name: "Firefox" });
       expect(firefox).toHaveAttribute("aria-selected", "true");
       expect(
@@ -659,7 +659,7 @@ describe("PortalDialogs", () => {
       ]);
 
       const dialog = await screen.findByRole("dialog", { name: "Open Gone?" });
-      expect(dialog).toHaveTextContent("App wants to open this link in Gone.");
+      expect(dialog).toHaveTextContent("Opens this link in Gone.");
       expect(dialog).toHaveTextContent("https://example.com/");
     });
 

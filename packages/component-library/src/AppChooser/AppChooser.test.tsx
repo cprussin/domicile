@@ -49,14 +49,14 @@ const chosen = (
 
 describe("AppChooser", () => {
   describe("with several applications", () => {
-    it("asks which one, and who wants it opened", async () => {
+    it("asks which one, and names who asks", async () => {
       const answer = chosen(undefined, "Chromium");
 
       expect(
         await screen.findByRole("dialog", {
           name: "Choose an app to open this link",
         }),
-      ).toHaveTextContent("Chromium wants to open this link.");
+      ).toHaveTextContent("Chromium asks");
       await userEvent.keyboard("{Escape}");
       expect(await answer).toBeUndefined();
     });
@@ -91,9 +91,11 @@ describe("AppChooser", () => {
     it("asks whether to open it, by name", async () => {
       const answer = chosen(["editor"], "Chromium");
 
-      expect(
-        await screen.findByRole("dialog", { name: "Open Editor?" }),
-      ).toHaveTextContent("Chromium wants to open this link in Editor.");
+      const dialog = await screen.findByRole("dialog", {
+        name: "Open Editor?",
+      });
+      expect(dialog).toHaveTextContent("Opens this link in Editor.");
+      expect(dialog).toHaveTextContent("Chromium asks");
       expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
       await userEvent.click(
         screen.getByRole("button", { name: "Open Editor" }),
@@ -114,13 +116,11 @@ describe("AppChooser", () => {
     it("says so and only closes", async () => {
       const answer = chosen([], "Chromium");
 
-      expect(
-        await screen.findByRole("dialog", {
-          name: "No app can open this link",
-        }),
-      ).toHaveTextContent(
-        "Chromium wants to open this link, but no app on this computer can open it.",
-      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "No app can open this link",
+      });
+      expect(dialog).toHaveTextContent("No app on this computer can open it.");
+      expect(dialog).toHaveTextContent("Chromium asks");
       expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Open" }),
