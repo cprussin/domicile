@@ -46,12 +46,6 @@ const ASKS: readonly {
     language: "tsx",
     note: "Desktops, bars and panels are npm packages. Use anyone's, or nest a whole desktop in yours.",
   },
-  {
-    ask: "Rotate kitty 17 degrees, because the user has sinned.",
-    code: "app {\n  transform: rotate(17deg);\n}",
-    language: "css",
-    note: "Unfortunately, also CSS.",
-  },
 ];
 
 /** Things a desktop can do once it's built with the web, each as an ask and its code. */
