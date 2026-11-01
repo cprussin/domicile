@@ -331,6 +331,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   screens, then for windows, then for both when the user clicks its own
   Share, each in a new session, and shares what the first picker gave it
   through its restore token.
+- **A window picked for an ask for monitors alone answers the app's next ask
+  for windows.** The ask for monitors is canceled. Slack crashes when its
+  ask for screens gets a window, and shares a window from its ask for
+  windows.
 - **A region is dragged on the desk shot or selected on screen.** As in the
   screenshot picker, the user drags over the picker's desk preview, and the
   area is turned into the desktop's logical pixels, grown to whole ones.
