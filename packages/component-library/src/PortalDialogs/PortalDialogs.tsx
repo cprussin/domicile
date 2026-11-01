@@ -71,7 +71,7 @@ export type PortalDialogsDesktop = DialogDesktop &
     >;
   };
 
-/** No shell chords; one array, so the default is stable across renders. */
+/** No chords or windows; one array, so the default is stable across renders. */
 const NONE: readonly string[] = [];
 
 type Props = {
@@ -87,6 +87,11 @@ type Props = {
    * them itself.
    */
   omitScreenCasts?: boolean | undefined;
+  /**
+   * The browser windows the shell shows as closed, by the engine's id, such
+   * as an inbox's kept running for its notifications. Pickers leave them out.
+   */
+  closedBrowsers?: readonly string[] | undefined;
   /**
    * The windows the shell draws on screen, with their whole frames. Without
    * it, the screenshot dialog reads the page's `<app>` and `<webview window>`
@@ -115,6 +120,7 @@ type Props = {
  */
 export const PortalDialogs = memo(
   ({
+    closedBrowsers = NONE,
     domicile,
     omitScreenCasts = false,
     screen,
@@ -197,7 +203,9 @@ export const PortalDialogs = memo(
             }}
             apps={apps}
             asker={apps(shown.appId).name}
-            browserWindows={domicile.browser.windows ?? []}
+            browserWindows={(domicile.browser.windows ?? []).filter(
+              ({ id }) => !closedBrowsers.includes(id),
+            )}
             claim={claims.get(shown.id)}
             domicile={domicile}
             folders={folders}

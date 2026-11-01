@@ -245,7 +245,9 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   frame around it) and
   `PickColor` (pick a pixel of it, with a magnifier). Answer `Access`,
   `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to allow, and
-  `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.
+  `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`. Pass
+  `closedBrowsers` for browser windows you keep running but show as closed,
+  such as a background inbox's; the window pickers leave them out.
 - The app list, the file picker, the account picture and the wallpaper
   preview read the system through `domicile.files` (desktop entries,
   `mimeapps.list`, directories, pictures).
