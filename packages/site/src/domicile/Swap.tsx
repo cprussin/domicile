@@ -31,12 +31,12 @@ ${ruleOf("stacked.js")}`;
 export const Swap = () => (
   <Section
     id="swap"
-    lede="Change your code and run one command. The new shell takes over, and every window stays open. The film doesn't even stop. A build that fails keeps the shell you had."
+    lede="Change your code and run one command. The new shell takes over, and every window stays open. The race doesn't even stop. A build that fails keeps the shell you had."
     title="Swap the shell. Keep your windows."
   >
     <div className={layoutStyles}>
       <Media
-        alt="A race and a film side by side. domicile load-shell swaps in a shell that stacks them, and both keep playing."
+        alt="A race and a terminal aquarium side by side. domicile load-shell swaps in a shell that stacks them, and both keep going."
         name="live-swap"
       />
       <div className={codeStyles}>
