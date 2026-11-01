@@ -102,6 +102,25 @@ const heldCasting = () => {
   };
 };
 
+/** Opens the panel from the bar item named `name`. */
+const open = async (name = "Cast to a TV") => {
+  await userEvent.click(screen.getByRole("button", { name }));
+};
+
+/** The panel's section labeled `name`. */
+const section = (name: string) => within(screen.getByRole("region", { name }));
+
+/** The panel's row for the TV `name`. */
+const row = (name: string) => {
+  const found = screen
+    .getAllByRole("listitem")
+    .find((item) => within(item).queryByText(name) !== null);
+  if (found === undefined) {
+    throw new Error(`No row for ${name}`);
+  }
+  return within(found);
+};
+
 describe("Cast", () => {
   it("is hidden while no TV is near", () => {
     const { backend } = backendFinding([]);
@@ -121,6 +140,14 @@ describe("Cast", () => {
     ).toHaveTextContent("Cast to a TV");
   });
 
+  it("is a panel titled Cast", async () => {
+    const { backend } = backendFinding([LIVING_ROOM]);
+    render(<Cast backends={[backend]} casting={heldCasting().casting} />);
+    await open();
+
+    expect(screen.getByRole("heading", { name: "Cast" })).toBeInTheDocument();
+  });
+
   it("lists every backend's TVs, saying why one cannot be cast to", async () => {
     const first = backendFinding([LIVING_ROOM]);
     const second = backendFinding([BEDROOM]);
@@ -130,59 +157,52 @@ describe("Cast", () => {
         casting={heldCasting().casting}
       />,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Cast to a TV" }));
+    await open();
 
-    const tvs = within(screen.getByRole("list", { name: "TVs" }));
-    expect(
-      tvs.getByRole("button", { name: "Living Room TV" }),
-    ).not.toBeDisabled();
-    expect(
-      tvs.getByRole("button", { name: "Bedroom TV Needs Wi-Fi Direct" }),
-    ).toBeDisabled();
+    const nearby = section("TVs nearby");
+    expect(nearby.getAllByRole("listitem")).toHaveLength(2);
+    expect(nearby.getByText("Ready")).toBeInTheDocument();
+    expect(nearby.getByText("Needs Wi-Fi Direct")).toBeInTheDocument();
+    expect(row("Bedroom TV").queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("extends the desktop onto the TV picked", async () => {
+  it("extends the desktop onto a TV", async () => {
     const { backend } = backendFinding([LIVING_ROOM]);
     const held = heldCasting();
     render(<Cast backends={[backend]} casting={held.casting} />);
-    await userEvent.click(screen.getByRole("button", { name: "Cast to a TV" }));
+    await open();
     await userEvent.click(
-      screen.getByRole("button", { name: "Living Room TV" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Extend desktop" }),
+      row("Living Room TV").getByRole("button", { name: "Extend" }),
     );
 
     expect(held.started).toEqual([["1", CastMode.Extend]]);
   });
 
-  it("casts what the share picker picks to the TV picked", async () => {
+  it("casts what the share picker picks to a TV", async () => {
     const { backend } = backendFinding([LIVING_ROOM]);
     const held = heldCasting();
     render(<Cast backends={[backend]} casting={held.casting} />);
-    await userEvent.click(screen.getByRole("button", { name: "Cast to a TV" }));
+    await open();
     await userEvent.click(
-      screen.getByRole("button", { name: "Living Room TV" }),
+      row("Living Room TV").getByRole("button", { name: "Show…" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Cast…" }));
 
     expect(held.started).toEqual([["1", CastMode.Pick]]);
   });
 
-  it("says why a cast failed on its TV", async () => {
+  it("says why a cast failed under its TV", async () => {
     const { backend } = backendFinding([LIVING_ROOM]);
     const held = heldCasting();
     render(<Cast backends={[backend]} casting={held.casting} />);
-    await userEvent.click(screen.getByRole("button", { name: "Cast to a TV" }));
+    await open();
     await userEvent.click(
-      screen.getByRole("button", { name: "Living Room TV" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Extend desktop" }),
+      row("Living Room TV").getByRole("button", { name: "Extend" }),
     );
     await held.refuse("The TV is busy");
 
-    expect(screen.getByText("The TV is busy")).toBeInTheDocument();
+    expect(section("TVs nearby").getByRole("status")).toHaveTextContent(
+      "The TV is busy",
+    );
   });
 
   it("says what it casts to, and stops it", async () => {
@@ -190,13 +210,17 @@ describe("Cast", () => {
     const held = heldCasting();
     render(<Cast backends={[backend]} casting={held.casting} />);
     held.running(backend, LIVING_ROOM, CastMode.Extend);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Casting to Living Room TV" }),
-    );
+    await open("Casting to Living Room TV");
 
-    expect(screen.getByText("Extended desktop")).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "TVs" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Stop casting" }));
+    expect(
+      section("Casting").getByText("Used as another screen"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "TVs nearby" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      row("Living Room TV").getByRole("button", { name: "Stop" }),
+    );
 
     expect(held.stopped).toEqual(["1"]);
   });
@@ -213,20 +237,16 @@ describe("Cast", () => {
     ).toBeInTheDocument();
   });
 
-  it("still lists a TV found again while casting to another", async () => {
+  it("still lists the other TVs while casting to one", async () => {
     const { backend } = backendFinding([LIVING_ROOM, tv("3", "Office TV")]);
     const held = heldCasting();
     render(<Cast backends={[backend]} casting={held.casting} />);
     held.running(backend, LIVING_ROOM, CastMode.Pick);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Casting to Living Room TV" }),
-    );
+    await open("Casting to Living Room TV");
 
+    expect(section("TVs nearby").getAllByRole("listitem")).toHaveLength(1);
     expect(
-      within(screen.getByRole("list", { name: "TVs" })).getAllByRole(
-        "listitem",
-      ),
-    ).toHaveLength(1);
-    expect(screen.getByText("Casting")).toBeInTheDocument();
+      section("Casting").getByText("Showing a window or screen"),
+    ).toBeInTheDocument();
   });
 });

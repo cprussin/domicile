@@ -1,5 +1,10 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
+import { Panel } from "@domicile-desktop/component-library/Panel";
+import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
+import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type {
   CastBackend,
   Casting,
@@ -9,8 +14,7 @@ import type {
 import { CastMode } from "@domicile-desktop/sdk/cast";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
 import { useEffect, useState } from "react";
-import { css, cva } from "../styled-system/css";
-import { flex, hstack } from "../styled-system/patterns";
+import { css } from "../styled-system/css";
 
 type Props = {
   /** What finds TVs and sends to them. */
@@ -24,8 +28,9 @@ type Found = { backend: CastBackend; key: string; target: CastTarget };
 
 /**
  * The Cast item on the bar, shown while a TV is near or a cast runs. Its panel
- * lists the TVs; pick one to extend the desktop onto it or to cast what the
- * share picker picks. Lit while casting, when the panel stops each cast.
+ * lists the running casts, each with a button to stop it, and the TVs nearby,
+ * each with buttons to extend the desktop onto it or to cast what the share
+ * picker picks.
  */
 export const Cast = ({ backends, casting }: Props) => {
   const found = useFound(backends);
@@ -41,17 +46,13 @@ export const Cast = ({ backends, casting }: Props) => {
       tone="overPhoto"
       tooltip={label}
       trigger={
-        <button
-          aria-label={label}
-          className={triggerStyles({ casting: casts.length > 0 })}
-          type="button"
-        >
+        <button aria-label={label} className={triggerStyles} type="button">
           <TelevisionSimpleIcon size={15} weight="bold" />
         </button>
       }
       wide
     >
-      <Panel
+      <CastPanel
         casting={casting}
         casts={casts}
         found={found.filter(
@@ -67,7 +68,7 @@ export const Cast = ({ backends, casting }: Props) => {
 };
 
 /** The running casts, and the TVs to start one on. */
-const Panel = ({
+const CastPanel = ({
   casting,
   casts,
   found,
@@ -76,7 +77,6 @@ const Panel = ({
   casts: readonly Running[];
   found: readonly Found[];
 }) => {
-  const [chosen, setChosen] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<string | undefined>(undefined);
   const [failed, setFailed] = useState<
     { key: string; why: string } | undefined
@@ -91,9 +91,7 @@ const Panel = ({
           Err: (why) => {
             setFailed({ key, why });
           },
-          Ok: () => {
-            setChosen(undefined);
-          },
+          Ok: () => undefined,
         });
       },
       (error: unknown) => {
@@ -104,72 +102,85 @@ const Panel = ({
     );
   };
   return (
-    <div className={panelStyles}>
+    <Panel title="Cast" width="standard">
       {casts.length > 0 && (
-        <ul className={listStyles}>
-          {casts.map((cast) => (
-            <li className={rowStyles} key={cast.target.id}>
-              <span className={headStyles}>
-                <span className={nameStyles}>{cast.target.name}</span>
-                <span className={noteStyles}>{modeName(cast.mode)}</span>
-              </span>
-              <Button onClick={cast.stop} size="xs" variant="danger">
-                Stop casting
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <PanelSection label="Casting">
+          <List>
+            {casts.map((cast) => (
+              <ListRow
+                detail={modeName(cast.mode)}
+                end={
+                  <Button onClick={cast.stop} size="xs" variant="primary">
+                    Stop
+                  </Button>
+                }
+                icon={<TelevisionSimpleIcon size={15} weight="bold" />}
+                key={cast.target.id}
+                label={cast.target.name}
+                surface="filled"
+              />
+            ))}
+          </List>
+        </PanelSection>
       )}
       {found.length > 0 && (
-        <ul aria-label="TVs" className={listStyles}>
-          {found.map((tv) => (
-            <li className={rowStyles} key={tv.key}>
-              <button
-                aria-expanded={chosen === tv.key}
-                className={tvStyles}
-                disabled={tv.target.unreachable !== undefined}
-                onClick={() => {
-                  setChosen(chosen === tv.key ? undefined : tv.key);
-                }}
-                type="button"
+        <PanelSection label="TVs nearby">
+          <List>
+            {found.map((tv) => (
+              <ListRow
+                detail={tv.target.unreachable ?? "Ready"}
+                end={
+                  tv.target.unreachable === undefined && (
+                    <>
+                      <Tooltip
+                        content="Use the TV as another screen"
+                        tone="overPhoto"
+                        trigger={
+                          <Button
+                            disabled={pending !== undefined}
+                            loading={pending === tv.key}
+                            onClick={() => {
+                              start(tv, CastMode.Extend);
+                            }}
+                            size="xs"
+                            variant="accent"
+                          >
+                            Extend
+                          </Button>
+                        }
+                      />
+                      <Tooltip
+                        content="Pick a window or screen to show on the TV"
+                        tone="overPhoto"
+                        trigger={
+                          <Button
+                            disabled={pending !== undefined}
+                            onClick={() => {
+                              start(tv, CastMode.Pick);
+                            }}
+                            size="xs"
+                          >
+                            Show…
+                          </Button>
+                        }
+                      />
+                    </>
+                  )
+                }
+                icon={<TelevisionSimpleIcon size={15} weight="bold" />}
+                key={tv.key}
+                label={tv.target.name}
+                surface="filled"
               >
-                <span className={nameStyles}>{tv.target.name}</span>
-                {tv.target.unreachable !== undefined && (
-                  <span className={noteStyles}>{tv.target.unreachable}</span>
+                {failed?.key === tv.key && (
+                  <PanelNote tone="warning">{failed.why}</PanelNote>
                 )}
-              </button>
-              {chosen === tv.key && (
-                <span className={choicesStyles}>
-                  <Button
-                    disabled={pending !== undefined}
-                    loading={pending === tv.key}
-                    onClick={() => {
-                      start(tv, CastMode.Extend);
-                    }}
-                    size="xs"
-                  >
-                    Extend desktop
-                  </Button>
-                  <Button
-                    disabled={pending !== undefined}
-                    onClick={() => {
-                      start(tv, CastMode.Pick);
-                    }}
-                    size="xs"
-                    variant="outline"
-                  >
-                    Cast…
-                  </Button>
-                </span>
-              )}
-              {failed?.key === tv.key && (
-                <span className={errorStyles}>{failed.why}</span>
-              )}
-            </li>
-          ))}
-        </ul>
+              </ListRow>
+            ))}
+          </List>
+        </PanelSection>
       )}
-    </div>
+    </Panel>
   );
 };
 
@@ -210,9 +221,9 @@ const useCasts = (casting: Casting): readonly Running[] => {
 const modeName = (mode: CastMode): string => {
   switch (mode) {
     case CastMode.Extend:
-      return "Extended desktop";
+      return "Used as another screen";
     case CastMode.Pick:
-      return "Casting";
+      return "Showing a window or screen";
   }
 };
 
@@ -224,85 +235,19 @@ const labelOf = (casts: readonly Running[]): string =>
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
 // unreadable over the wallpaper. Matches the Bluetooth item.
-const triggerStyles = cva({
-  base: {
-    _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-    alignItems: "center",
-    backgroundColor: "transparent",
-    blockSize: 7,
-    borderRadius: "lg",
-    borderStyle: "none",
-    color: "inherit",
-    cursor: "pointer",
-    display: "inline-flex",
-    flexShrink: 0,
-    inlineSize: 7,
-    justifyContent: "center",
-    padding: 0,
-    transition: "background-color {durations.fast} {easings.default}",
-  },
-  variants: {
-    casting: {
-      false: {},
-      true: { color: "accent" },
-    },
-  },
-});
-
-const panelStyles = flex({
-  direction: "column",
-  gap: 3,
-  inlineSize: 80,
-});
-
-const listStyles = flex({
-  direction: "column",
-  gap: 2,
-  listStyle: "none",
-  margin: 0,
-  maxBlockSize: "50vh",
-  overflowY: "auto",
-  padding: 0,
-});
-
-const rowStyles = hstack({
-  flexWrap: "wrap",
-  gap: 1.5,
-});
-
-const headStyles = flex({
-  direction: "column",
-  flex: "1 1 0",
-  minInlineSize: 0,
-});
-
-// A row's whole width, so the TV is easy to hit.
-const tvStyles = css({
-  _disabled: { cursor: "default" },
-  _hover: {
-    _enabled: {
-      backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
-    },
-  },
+const triggerStyles = css({
+  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
+  alignItems: "center",
   backgroundColor: "transparent",
-  borderRadius: "md",
+  blockSize: 7,
+  borderRadius: "lg",
   borderStyle: "none",
   color: "inherit",
   cursor: "pointer",
-  display: "flex",
-  flex: "1 1 100%",
-  flexDirection: "column",
-  font: "inherit",
-  paddingBlock: 1,
-  paddingInline: 2,
-  textAlign: "start",
+  display: "inline-flex",
+  flexShrink: 0,
+  inlineSize: 7,
+  justifyContent: "center",
+  padding: 0,
+  transition: "background-color {durations.fast} {easings.default}",
 });
-
-const choicesStyles = hstack({ gap: 1.5, paddingInlineStart: 2 });
-
-const nameStyles = css({ overflowWrap: "anywhere" });
-
-const noteStyles = css({ opacity: 0.75 });
-
-// Under the row, across its width.
-const errorStyles = css({ color: "warning", flexBasis: "100%" });

@@ -114,8 +114,8 @@ export const CastPicture = () => (
       <span className={accentStyles}>Connected</span>
     </span>
     <span className={castActionsStyles}>
-      <span className={actionStyles({ primary: true })}>Extend desktop</span>
-      <span className={actionStyles({ primary: false })}>Cast…</span>
+      <span className={actionStyles({ primary: true })}>Extend</span>
+      <span className={actionStyles({ primary: false })}>Show…</span>
     </span>
     <span className={tvStyles({ connected: false })}>
       <span className={tvNameStyles}>
