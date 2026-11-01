@@ -21,6 +21,11 @@ type Common = {
   disclosure?: string | undefined;
   /** At the row's end: a figure, a pill, or, on a row that isn't pressed, buttons. */
   end?: ReactNode | undefined;
+  /**
+   * Shows `end` only while the pointer is on the row or focus is in it, for a
+   * list of rows whose buttons would otherwise crowd it, such as downloads.
+   */
+  endOnHover?: boolean | undefined;
   /** 16px, before the label. */
   icon?: ReactNode | undefined;
   label: ReactNode;
@@ -59,6 +64,7 @@ export const ListRow = ({
   detail,
   disclosure,
   end,
+  endOnHover = false,
   icon,
   label,
   name,
@@ -112,6 +118,7 @@ export const ListRow = ({
   return (
     <li
       className={itemStyles({ surface })}
+      data-end-on-hover={endOnHover ? "" : undefined}
       data-icon={icon === undefined ? undefined : ""}
       data-surface={surface}
     >
@@ -241,7 +248,11 @@ const detailStyles = css({
   whiteSpace: "nowrap",
 });
 
+// Kept in the layout while hidden, so the label does not reflow on hover.
 const endStyles = flex({
+  "[data-end-on-hover]:not(:hover, :focus-within) &": {
+    visibility: "hidden",
+  },
   align: "center",
   color: "textSoft",
   flexShrink: 0,

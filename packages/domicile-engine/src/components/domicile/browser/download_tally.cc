@@ -19,7 +19,7 @@ DownloadTally TallyDownloads(const std::vector<DownloadReading>& downloads) {
         }
         break;
       case DownloadStage::kComplete:
-        ++tally.completed;
+        tally.completed.push_back(download.path);
         break;
       case DownloadStage::kStopped:
         break;

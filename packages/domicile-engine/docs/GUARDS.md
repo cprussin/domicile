@@ -132,7 +132,7 @@ Headless.
 | `guard-webview-media-devices.sh` | a `<webview>` lists the fake cameras, and `setMediaDevice` puts the chosen one first, the camera a page that names none gets (patch 0117) |
 | `guard-webview-count-matches.sh` | a `<webview>`'s `countMatches` counts a selector in its page's document, not the shell's, and throws a `SyntaxError` for a bad selector |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
-| `guard-webview-download.sh` | a download asks the shell, lands at the chosen path (patch 0053), and is counted in progress, then as finished until the shell clears it |
+| `guard-webview-download.sh` | a download asks the shell, lands at the chosen path (patch 0053), and is counted in progress, then as finished, with its path, until the shell removes it |
 | `guard-webview-save-picker.sh` | `showSaveFilePicker()` asks the shell (patch 0086) |
 | `guard-webview-passkey-extension.sh` | WebAuthn requests reach an extension on `chrome.webAuthenticationProxy` (patches 0048, 0069, 0084) |
 

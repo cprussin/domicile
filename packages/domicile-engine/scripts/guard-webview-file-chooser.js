@@ -14,10 +14,10 @@
 //   GUARD answered               the answer did not throw
 //   GUARD downloads count=…      the element's downloads changed
 //     received=… total=…
-//     completed=…
+//     completed=… paths=…
 //
-// Clears a finished download as soon as one is reported, with nothing in
-// progress.
+// Removes a finished download by its path as soon as one is reported, with
+// nothing in progress.
 //
 // The guest page logs what it received; see
 // guard-webview-file-chooser-server.py. Domicile calls `HostShell` once the module
@@ -86,10 +86,10 @@ export const HostShell = () => {
   document.addEventListener("domicile-downloads-change", (event) => {
     const view = event.target;
     say(
-      `downloads count=${view.downloadCount} received=${view.downloadReceivedBytes} total=${view.downloadTotalBytes} completed=${view.downloadCompletedCount}`,
+      `downloads count=${view.downloadCount} received=${view.downloadReceivedBytes} total=${view.downloadTotalBytes} completed=${view.downloadCompletedCount} paths=${view.downloadCompletedPaths.join(",")}`,
     );
     if (view.downloadCount === 0 && view.downloadCompletedCount > 0) {
-      view.clearCompletedDownloads();
+      view.removeCompletedDownload(view.downloadCompletedPaths[0]);
     }
   });
 

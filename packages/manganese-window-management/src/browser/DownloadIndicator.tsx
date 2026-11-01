@@ -2,6 +2,7 @@ import { AnimatedCheckIcon } from "@domicile-desktop/component-library/AnimatedC
 import { AnimatedCloseIcon } from "@domicile-desktop/component-library/AnimatedCloseIcon";
 import { AnimatedDownloadIcon } from "@domicile-desktop/component-library/AnimatedDownloadIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
+import type { Ref } from "react";
 
 import { hstack } from "../../styled-system/patterns";
 import type { Downloads } from "./downloads";
@@ -11,24 +12,45 @@ type Props = {
   downloads: Downloads;
   /** Stops showing the finished downloads. */
   onClear: () => void;
+  /** Shows the finished downloads' popup. */
+  onShow: () => void;
+  /** The indicator, for the downloads popup to hang from. */
+  ref: Ref<HTMLDivElement>;
 };
 
 /**
  * A browser window's downloads: how far the ones in progress have come, or,
- * once none are, that some finished, until the user clears them.
+ * once none are, that some finished, until the user clears them. Pressing the
+ * finished ones shows them.
  */
-export const DownloadIndicator = ({ downloads, onClear }: Props) =>
+export const DownloadIndicator = ({
+  downloads,
+  onClear,
+  onShow,
+  ref,
+}: Props) =>
   downloads.count === 0 ? (
-    <FinishedDownloads completed={downloads.completed} onClear={onClear} />
+    <FinishedDownloads
+      completed={downloads.completed}
+      onClear={onClear}
+      onShow={onShow}
+      ref={ref}
+    />
   ) : (
-    <DownloadProgress downloads={downloads} />
+    <DownloadProgress downloads={downloads} ref={ref} />
   );
 
 /**
  * A percentage beside a download icon. With a size unknown the icon pulses and
  * no amount is claimed.
  */
-const DownloadProgress = ({ downloads }: { downloads: Downloads }) => {
+const DownloadProgress = ({
+  downloads,
+  ref,
+}: {
+  downloads: Downloads;
+  ref: Ref<HTMLDivElement>;
+}) => {
   const percent =
     downloads.totalBytes === 0
       ? undefined
@@ -44,6 +66,7 @@ const DownloadProgress = ({ downloads }: { downloads: Downloads }) => {
       aria-valuenow={percent}
       className={indicatorStyles}
       data-size-unknown={percent === undefined ? "" : undefined}
+      ref={ref}
       role="progressbar"
     >
       <AnimatedDownloadIcon
@@ -55,19 +78,34 @@ const DownloadProgress = ({ downloads }: { downloads: Downloads }) => {
   );
 };
 
-/** A check and how many finished, with a button to clear them. */
+/**
+ * A check and how many finished, which shows them when pressed, with a button
+ * to clear them.
+ */
 const FinishedDownloads = ({
   completed,
   onClear,
+  onShow,
+  ref,
 }: {
   completed: number;
   onClear: () => void;
+  onShow: () => void;
+  ref: Ref<HTMLDivElement>;
 }) => (
-  <div className={indicatorStyles} data-finished="">
-    <span className={statusStyles} role="status">
-      <AnimatedCheckIcon size={14} />
-      {completed === 1 ? "Downloaded" : `${completed} downloaded`}
-    </span>
+  <div className={indicatorStyles} data-finished="" ref={ref}>
+    <Button
+      label={completed === 1 ? "Downloaded" : `${completed} downloaded`}
+      onClick={onShow}
+      rounded
+      size="xs"
+      variant="ghost"
+    >
+      <span className={statusStyles} role="status">
+        <AnimatedCheckIcon size={14} />
+        {completed === 1 ? "Downloaded" : `${completed} downloaded`}
+      </span>
+    </Button>
     <Button
       label="Clear finished downloads"
       onClick={onClear}
@@ -86,7 +124,7 @@ const FinishedDownloads = ({
 const indicatorStyles = hstack({
   "&[data-finished]": {
     color: "success",
-    paddingInlineEnd: 0.5,
+    paddingInline: 0.5,
   },
   "&[data-size-unknown] svg": {
     animation: "pulse {durations.pulse} {easings.in-out} infinite",

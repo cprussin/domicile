@@ -24,7 +24,7 @@
 #   the shell answered without throwing
 #   the file is at the shell's path with the site's bytes (the claim)
 #   the element counted the download in progress, then counted none
-#   the element kept it as finished until the shell cleared it
+#   the element kept it as finished, with its path, until the shell removed it
 #
 # NEGATIVE=1 runs a shell that cancels. Nothing may be saved anywhere in the
 # home, proving the browser does not save regardless of the answer, and the
@@ -215,9 +215,10 @@ SAW_GUEST_COUNTED=$(saw "domicile: a <webview> reported 1 downloads in progress.
 SAW_COUNTED=$(saw "GUARD downloads count=1 ")
 # The element starts at 0, so a change to 0 follows a count.
 SAW_CLEARED=$(saw "GUARD downloads count=0 ")
-SAW_FINISHED=$(saw " completed=1")
+# With the path it was saved at, absolute.
+SAW_FINISHED=$(saw " completed=1 paths=$HOME_DIR/$PICK")
 # The element starts at 0, so nothing in progress and nothing finished is only
-# reported after the shell clears the finished download.
+# reported after the shell removes the finished download.
 SAW_FORGOTTEN=$(saw "GUARD downloads count=0 received=0 total=0 completed=0")
 
 echo
@@ -225,7 +226,7 @@ echo "shell=$SAW_SHELL page=$SAW_PAGE press=$SAW_CHROME guest=$SAW_GUEST fetched
 echo "the browser asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED with the name=$SAW_SUGGESTED in the folder=$SAW_FOLDER and answered=$SAW_ANSWERED"
 echo "on the disk: where the shell said=$SAVED anywhere=$SAVED_ANYWHERE"
 echo "in progress: the guest counted=$SAW_GUEST_COUNTED; the shell heard=$SAW_COUNTED, then none=$SAW_CLEARED"
-echo "finished: kept=$SAW_FINISHED, cleared=$SAW_FORGOTTEN"
+echo "finished: kept=$SAW_FINISHED, removed=$SAW_FORGOTTEN"
 [ -n "$FOUND" ] && printf '  %s\n' $FOUND
 echo "everything in the home, for the record:"
 find "$HOME_DIR" -type f 2>/dev/null | sed 's/^/  /'
@@ -304,18 +305,19 @@ or the event's name"
 never went back to 0. OnDownloadUpdated did not report the finish"
   elif [ "$SAW_FINISHED" != "1" ]; then
     FAILURE="THE FINISHED DOWNLOAD WAS NOT KEPT: the element stopped counting \
-it in progress and never counted it in downloadCompletedCount. See \
-DownloadStageOf in web_view_guest.cc and TallyDownloads"
+it in progress and never counted it in downloadCompletedCount with its path \
+in downloadCompletedPaths. See DownloadStageOf and ReportDownloads in \
+web_view_guest.cc and TallyDownloads"
   elif [ "$SAW_FORGOTTEN" != "1" ]; then
-    FAILURE="the shell called clearCompletedDownloads() and the element still \
-counts the finished download: WebViewGuest::ClearCompletedDownloads, or the \
-call over WebViewGuest"
+    FAILURE="the shell called removeCompletedDownload() with its path and the \
+element still counts the finished download: \
+WebViewGuest::RemoveCompletedDownload, or the call over WebViewGuest"
   else
     PASSED="a download started inside a browser window asked the shell where \
 it goes -- carrying the site's name for it -- landed at the path the shell \
 answered with, relative to the home, with the bytes the site sent, and the \
 element counted it in progress until it finished, then as finished until the \
-shell cleared it"
+shell removed it by its path"
   fi
 elif [ "$SAVED_ANYWHERE" = "1" ]; then
   FAILURE="THE FILE LANDED SOMEWHERE ELSE: the shell chose $PICK and the \

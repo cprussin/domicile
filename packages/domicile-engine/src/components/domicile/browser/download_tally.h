@@ -5,6 +5,7 @@
 #define COMPONENTS_DOMICILE_BROWSER_DOWNLOAD_TALLY_H_
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace domicile {
@@ -27,6 +28,8 @@ struct DownloadReading {
   int64_t received_bytes;
   // 0 when the server sent no size.
   int64_t total_bytes;
+  // Where it is saved, as UTF-8. Empty until the shell has said.
+  std::string path;
 };
 
 // A <webview>'s downloads, as the element reports them. See DownloadsChanged
@@ -36,14 +39,15 @@ struct DownloadTally {
   int64_t received_bytes = 0;
   // 0 when any counted download's size is unknown.
   int64_t total_bytes = 0;
-  // Downloads that finished, until the shell clears them.
-  int32_t completed = 0;
+  // The paths of downloads that finished, until the shell clears them, in the
+  // order they started.
+  std::vector<std::string> completed;
 
   friend bool operator==(const DownloadTally&, const DownloadTally&) = default;
 };
 
 // Adds up the downloads in progress that the shell has placed, and counts the
-// finished ones.
+// finished ones' paths.
 DownloadTally TallyDownloads(const std::vector<DownloadReading>& downloads);
 
 }  // namespace domicile
