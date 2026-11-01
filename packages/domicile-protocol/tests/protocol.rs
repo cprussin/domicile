@@ -166,7 +166,7 @@ fn what_a_search_found_is_named_from_home() {
 }
 
 /// Clipboard entries carry an id and a preview, never the full text, newest
-/// first.
+/// first. Only an image row has a thumbnail.
 #[test]
 fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
     let v = serde_json::to_value(HostMessage::Clipboard {
@@ -175,11 +175,13 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
                 id: 3,
                 image: false,
                 preview: "the newest".into(),
+                thumbnail: None,
             },
             ClipboardEntry {
                 id: 1,
                 image: true,
                 preview: "Image, 3 × 2".into(),
+                thumbnail: Some("data:image/png;base64,iVBORw0KGgo=".into()),
             },
         ],
     })
@@ -189,7 +191,8 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
         v["entries"],
         serde_json::json!([
             {"id": 3, "image": false, "preview": "the newest"},
-            {"id": 1, "image": true, "preview": "Image, 3 × 2"},
+            {"id": 1, "image": true, "preview": "Image, 3 × 2",
+             "thumbnail": "data:image/png;base64,iVBORw0KGgo="},
         ])
     );
 }

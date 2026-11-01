@@ -57,6 +57,7 @@ pub mod shared_mime_info;
 pub mod shell_commands;
 pub mod system;
 pub mod theme_turnover;
+pub mod thumbnail;
 pub mod tray;
 pub mod unlock_refusals;
 pub mod usb_names;

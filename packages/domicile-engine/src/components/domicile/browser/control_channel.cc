@@ -1277,8 +1277,11 @@ void ControlChannel::DispatchLine(const std::string& line,
       if (!id || !image || !preview) {
         continue;
       }
-      entries.push_back(mojom::ClipboardEntry::New(static_cast<uint32_t>(*id),
-                                                   *image, *preview));
+      // Absent for a row with no picture, as a tray item's `icon` is.
+      const std::string* thumbnail = entry->FindString("thumbnail");
+      entries.push_back(mojom::ClipboardEntry::New(
+          static_cast<uint32_t>(*id), *image, *preview,
+          thumbnail ? *thumbnail : std::string()));
     }
     // Sent even when it is empty, for the reason `displays` and `files` are: a
     // desktop nothing has been copied on is an answer, and a panel that never

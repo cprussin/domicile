@@ -1,4 +1,4 @@
-import type { DomicileClipboardEntry } from "@domicile-desktop/sdk/domicile-host";
+import type { ClipboardEntry } from "@domicile-desktop/sdk/desktop/clipboard";
 
 /** What a copy holds, for its row's glyph. */
 export enum CopyKind {
@@ -14,7 +14,7 @@ const WEB = new Set(["http:", "https:"]);
 export const kindOf = ({
   image,
   preview,
-}: Pick<DomicileClipboardEntry, "image" | "preview">): CopyKind => {
+}: Pick<ClipboardEntry, "image" | "preview">): CopyKind => {
   if (image) {
     return CopyKind.Image;
   } else {

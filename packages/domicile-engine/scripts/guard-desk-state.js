@@ -31,10 +31,11 @@ export const HostShell = (_root, desktop) => {
 
 const readState = (host) => ({
   altKey: host.altKey,
-  clipboard: host.clipboard?.map(({ id, image, preview }) => ({
+  clipboard: host.clipboard?.map(({ id, image, preview, thumbnail }) => ({
     id,
     image,
     preview,
+    thumbnail,
   })),
   ctrlKey: host.ctrlKey,
   idle: host.idle,
