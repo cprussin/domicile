@@ -1147,6 +1147,18 @@ describe("PortalDialogs", () => {
       ]);
     });
 
+    it("moves the pick a page with Page Up", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.with(desktop())} />);
+      host.push([chooser(1)]);
+      await screen.findByRole("option", { name: "Firefox" });
+      await userEvent.keyboard("{PageUp}{Enter}");
+
+      expect(host.answers).toEqual([
+        [1, { choice: "org.gnome.Evince", kind: "app_chooser" }],
+      ]);
+    });
+
     it("moves the pick with the arrows and opens it with Enter", async () => {
       const host = new FakeHost();
       render(<PortalDialogs domicile={host.with(desktop())} />);

@@ -805,6 +805,22 @@ describe("Launcher", () => {
     );
   });
 
+  it("moves the highlight a page with Page Down and Ctrl+D, and back with Page Up and Ctrl+U", async () => {
+    // The test DOM has no layout, so a page is one row.
+    using panel = launcher();
+    await panel.rows();
+    const selected = () =>
+      screen
+        .getAllByRole("option")
+        .findIndex((row) => row.getAttribute("aria-selected") === "true");
+
+    await panel.user.keyboard("{PageDown}{Control>}d{/Control}");
+    expect(selected()).toBe(2);
+
+    await panel.user.keyboard("{PageUp}{Control>}u{/Control}");
+    expect(selected()).toBe(0);
+  });
+
   it("moves the highlight to the row the pointer is over", async () => {
     // The pointer moves the highlight, so Enter takes the hovered row.
     using panel = launcher();

@@ -33,7 +33,7 @@ import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import type { FocusEvent, KeyboardEvent, ReactNode, Ref } from "react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, grid, hstack, vstack } from "../../styled-system/patterns";
@@ -41,7 +41,13 @@ import { focusOnAttach } from "../_control/focusOnAttach";
 import { useStableRef } from "../_control/useStableRef";
 import { Button } from "../Button/Button";
 import { Input } from "../Input/Input";
-import { highlightIn, keepInView, stepOf, steppedTo } from "../list-walk";
+import {
+  highlightIn,
+  keepInView,
+  pageOf,
+  stepOf,
+  steppedTo,
+} from "../list-walk";
 import { Select } from "../Select/Select";
 import { Clash, clashOf } from "./clash";
 import { FileKind, fileKindOf, kindLabel } from "./file-kind";
@@ -114,6 +120,7 @@ type NewFolder = { failure: string | undefined; name: string };
 export const FilePicker = ({ ref, request }: Props) => {
   const titleId = useId();
   const listId = useId();
+  const results = useRef<HTMLDivElement>(null);
   const replaceTitleId = useId();
   const replaceNoteId = useId();
   const failureId = useId();
@@ -475,7 +482,7 @@ export const FilePicker = ({ ref, request }: Props) => {
             }}
             onFocus={saving ? selectStem : undefined}
             onKeyDown={(event) => {
-              const step = stepOf(event);
+              const step = stepOf(event, pageOf(results.current));
               const up = parentOf(directory);
               if (step !== undefined) {
                 event.preventDefault();
@@ -569,7 +576,7 @@ export const FilePicker = ({ ref, request }: Props) => {
               )}
             </div>
           )}
-          <div className={resultsStyles}>
+          <div className={resultsStyles} ref={results}>
             <div aria-hidden className={columnsStyles}>
               <span>Name</span>
               <span>Kind</span>
