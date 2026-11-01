@@ -410,6 +410,7 @@ describe("a command", () => {
             id: at,
             image: false,
             preview,
+            thumbnail: "",
           })),
         });
       });
@@ -456,7 +457,9 @@ describe("a command", () => {
       ]);
       act(() => {
         host.fake.set({
-          clipboard: [{ id: 0, image: false, preview: "hello world" }],
+          clipboard: [
+            { id: 0, image: false, preview: "hello world", thumbnail: "" },
+          ],
         });
       });
 

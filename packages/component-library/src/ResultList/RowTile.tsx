@@ -7,6 +7,12 @@ const ICON_SIZE = 16;
 
 type Props = {
   icon: Icon;
+  /**
+   * A picture shown in place of the glyph, cropped to fill the tile, such as
+   * a copied image's thumbnail. A URL the page can load, such as a `data:`
+   * URL.
+   */
+  picture?: string | undefined;
 };
 
 /**
@@ -16,14 +22,21 @@ type Props = {
  * Draws the outline and fill weights and shows one, since CSS can't change a
  * Phosphor glyph's weight. Same approach as `_control/PrefixIconStack`.
  */
-export const RowTile = ({ icon: Glyph }: Props) => (
+export const RowTile = ({ icon: Glyph, picture }: Props) => (
   <span aria-hidden className={tileStyles} data-row-tile="">
-    <span className={glyphStyles({ weight: "regular" })}>
-      <Glyph size={ICON_SIZE} />
-    </span>
-    <span className={glyphStyles({ weight: "fill" })}>
-      <Glyph size={ICON_SIZE} weight="fill" />
-    </span>
+    {picture === undefined ? (
+      <>
+        <span className={glyphStyles({ weight: "regular" })}>
+          <Glyph size={ICON_SIZE} />
+        </span>
+        <span className={glyphStyles({ weight: "fill" })}>
+          <Glyph size={ICON_SIZE} weight="fill" />
+        </span>
+      </>
+    ) : (
+      // Decorative: the row's text names what it shows.
+      <img alt="" className={pictureStyles} src={picture} />
+    )}
   </span>
 );
 
@@ -43,9 +56,17 @@ const tileStyles = css({
   display: "grid",
   flexShrink: 0,
   inlineSize: 7,
+  // Clips a picture to the rounded corners.
+  overflow: "hidden",
   placeItems: "center",
   transition:
     "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+});
+
+const pictureStyles = css({
+  blockSize: "full",
+  inlineSize: "full",
+  objectFit: "cover",
 });
 
 // Both weights share one grid cell, so swapping doesn't shift layout.
