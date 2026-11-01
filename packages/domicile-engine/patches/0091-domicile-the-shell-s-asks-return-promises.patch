@@ -19,10 +19,10 @@ job builds it on `crux`.
  2 files changed, 9 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index db265fc..ac1ba2f 100644
+index e119ce7..1b4b917 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -325,6 +325,12 @@ generated_dictionary_sources_in_modules = [
+@@ -293,6 +293,12 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event_init.h",
@@ -36,10 +36,10 @@ index db265fc..ac1ba2f 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 09dd33b..e263d55 100644
+index 5a363a5..9d18d5c 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -305,6 +305,9 @@ static_idl_files_in_modules = [
+@@ -299,6 +299,9 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_files_event_init.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_apps_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_apps_event_init.idl",

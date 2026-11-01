@@ -28,7 +28,7 @@ the engine job.
  3 files changed, 5 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 896eb92..d5b15c4 100644
+index 9e7fe9b..0c87a97 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
 @@ -1210,6 +1210,8 @@ generated_interface_sources_in_core = [
@@ -53,10 +53,10 @@ index c2cd11a..5807b67 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index a6f897c..91cc140 100644
+index 694aa99..674e32d 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
-@@ -98,6 +98,8 @@ blink_core_sources_html = [
+@@ -100,6 +100,8 @@ blink_core_sources_html = [
    "domicile/domicile_file_chooser_event.h",
    "domicile/domicile_new_window_event.cc",
    "domicile/domicile_new_window_event.h",

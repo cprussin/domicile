@@ -25,10 +25,10 @@ job builds it on `crux`.
  3 files changed, 29 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index b98cb57..de8103c 100644
+index 4f68683..8cd27c8 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2713,6 +2713,7 @@ source_set("browser") {
+@@ -2715,6 +2715,7 @@ source_set("browser") {
      "//components/domicile:color_scheme",
      "//components/domicile:control_channel",
      "//components/domicile:desktop_prefs",
@@ -62,7 +62,7 @@ index e4fec7e..abc0016 100644
                  // of its <webview>s is told to, and no other page.
                  domicile::Page{frame->GetGlobalId().child_id.value(),
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 4dc6b26..749093b 100644
+index 788c713..ea92efc 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,7 @@

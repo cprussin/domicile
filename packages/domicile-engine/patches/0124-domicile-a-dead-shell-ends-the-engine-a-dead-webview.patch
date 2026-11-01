@@ -26,10 +26,10 @@ guard-shell-crash.sh crash each kind of page.
  3 files changed, 16 insertions(+)
 
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 0772e0c..9da2c59 100644
+index 7d9ea38..33c139c 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -2264,6 +2264,8 @@ if (toolkit_views) {
+@@ -2268,6 +2268,8 @@ if (toolkit_views) {
        "//chrome/browser/ui/views/frame:browser_view_header",
        "//chrome/browser/ui/views/frame:contents_web_view",
        "//chrome/common",
@@ -64,7 +64,7 @@ index c0157e8..42231fa 100644
      // If the renderer was terminated to prevent an browser OOM crash, discard
      // the tab instead of showing a sad tab, unless the tab is visible. The tab
 diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
-index d2efef9..024040c 100644
+index cf6c833..5fd6b70 100644
 --- a/third_party/blink/renderer/core/frame/remote_frame.cc
 +++ b/third_party/blink/renderer/core/frame/remote_frame.cc
 @@ -43,6 +43,7 @@
@@ -75,10 +75,10 @@ index d2efef9..024040c 100644
  #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
  #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
  #include "third_party/blink/renderer/core/inspector/console_message.h"
-@@ -929,6 +930,12 @@ void RemoteFrame::ChildProcessGone() {
+@@ -927,6 +928,12 @@ void RemoteFrame::ChildProcessGone() {
    remote_process_gone_ = true;
    compositing_helper_->ChildFrameGone(
-       ancestor_widget_->GetOriginalScreenInfo().device_scale_factor);
+       ancestor_widget_->GetOriginalDeviceScaleFactor());
 +  // Domicile: a <webview> whose page lost its renderer draws nothing, not the
 +  // gray sad frame, so the shell's own message shows through. The element
 +  // reports why (`renderProcessGone`). A reload sets a new surface.

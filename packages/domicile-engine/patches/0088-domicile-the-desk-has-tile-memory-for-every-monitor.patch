@@ -73,10 +73,10 @@ index b41d27a..9d1a849 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index cfa0ca3..0af1d28 100644
+index a496830..aa0bd04 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1670,6 +1670,14 @@ void LayerTreeHost::SetDomicileDisplayRegions(DomicileDisplayRegions regions) {
+@@ -1694,6 +1694,14 @@ void LayerTreeHost::SetDomicileDisplayRegions(DomicileDisplayRegions regions) {
    SetNeedsCommit();
  }
  
@@ -92,7 +92,7 @@ index cfa0ca3..0af1d28 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index c13e605..dd3652d 100644
+index db9fe7f..01116a0 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
 @@ -674,6 +674,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
@@ -106,10 +106,10 @@ index c13e605..dd3652d 100644
    bool HasCompositorDrivenScrollAnimationForTesting() const {
      DCHECK(IsMainThread());
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index 2d305d0..15de5c5 100644
+index 2d53044..9c300aa 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
-@@ -4184,6 +4184,9 @@ void LayerTreeHostImpl::SetNeedsRedraw(bool animation_only,
+@@ -4180,6 +4180,9 @@ void LayerTreeHostImpl::SetNeedsRedraw(bool animation_only,
  
  ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
    ManagedMemoryPolicy actual = cached_managed_memory_policy_;
@@ -119,7 +119,7 @@ index 2d305d0..15de5c5 100644
    // The following may lower the cutoff, but should never raise it.
    if (debug_state_.rasterize_only_visible_content) {
      actual.priority_cutoff_when_visible =
-@@ -4197,6 +4200,14 @@ ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
+@@ -4193,6 +4196,14 @@ ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
    return actual;
  }
  
@@ -135,10 +135,10 @@ index 2d305d0..15de5c5 100644
    active_tree_->ReleaseResources();
    if (pending_tree_) {
 diff --git a/cc/trees/layer_tree_host_impl.h b/cc/trees/layer_tree_host_impl.h
-index 6afe325..43a7d61 100644
+index cfc3db5..6c42343 100644
 --- a/cc/trees/layer_tree_host_impl.h
 +++ b/cc/trees/layer_tree_host_impl.h
-@@ -683,6 +683,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
+@@ -682,6 +682,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
    void SetNeedsRedraw(bool animation_only, bool skip_if_inside_draw) override;
  
    ManagedMemoryPolicy ActualManagedMemoryPolicy() const;
@@ -148,7 +148,7 @@ index 6afe325..43a7d61 100644
  
    const gfx::Transform& DrawTransform() const;
  
-@@ -1164,6 +1167,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
+@@ -1163,6 +1166,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
    LayerTreeDebugState debug_state_;
    bool visible_ = false;
    ManagedMemoryPolicy cached_managed_memory_policy_;
@@ -157,7 +157,7 @@ index 6afe325..43a7d61 100644
    TileManager tile_manager_;
  
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
-index f7b62bc..8b3987d 100644
+index 4719d59..db4cd31 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.cc
 +++ b/third_party/blink/renderer/platform/widget/widget_base.cc
 @@ -13,6 +13,8 @@
@@ -169,7 +169,7 @@ index f7b62bc..8b3987d 100644
  #include "base/task/common/task_annotator.h"
  #include "base/trace_event/trace_event.h"
  #include "build/build_config.h"
-@@ -2031,6 +2033,19 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
+@@ -2034,6 +2036,19 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
    }
    LayerTreeHost()->SetDomicileDisplayRegions(cc::DomicileDisplayRegionsOf(
        displays, widget_screen_rect_.origin(), GetOriginalDeviceScaleFactor()));

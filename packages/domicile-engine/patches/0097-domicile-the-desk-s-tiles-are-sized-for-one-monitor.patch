@@ -30,7 +30,7 @@ scripts/test-the-desk-tiles-are-sized-for-one-monitor.sh.
  6 files changed, 25 insertions(+), 1 deletion(-)
 
 diff --git a/cc/layers/picture_layer.cc b/cc/layers/picture_layer.cc
-index d8071a0..09cad96 100644
+index 5f7f06d..6da9999 100644
 --- a/cc/layers/picture_layer.cc
 +++ b/cc/layers/picture_layer.cc
 @@ -59,8 +59,12 @@ void PictureLayer::PushDirtyPropertiesTo(LayerImpl* base_layer,
@@ -72,10 +72,10 @@ index 9d1a849..3163701 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index 0af1d28..d6c1914 100644
+index aa0bd04..8f28252 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1678,6 +1678,19 @@ void LayerTreeHost::SetDomicileTileBytes(size_t bytes) {
+@@ -1702,6 +1702,19 @@ void LayerTreeHost::SetDomicileTileBytes(size_t bytes) {
    SetNeedsCommit();
  }
  
@@ -96,7 +96,7 @@ index 0af1d28..d6c1914 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index dd3652d..6018e1f 100644
+index 01116a0..3c8d04e 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
 @@ -677,6 +677,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
@@ -110,10 +110,10 @@ index dd3652d..6018e1f 100644
    bool HasCompositorDrivenScrollAnimationForTesting() const {
      DCHECK(IsMainThread());
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
-index 8b3987d..25291ed 100644
+index db4cd31..6841488 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.cc
 +++ b/third_party/blink/renderer/platform/widget/widget_base.cc
-@@ -2033,6 +2033,8 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
+@@ -2036,6 +2036,8 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
    }
    LayerTreeHost()->SetDomicileDisplayRegions(cc::DomicileDisplayRegionsOf(
        displays, widget_screen_rect_.origin(), GetOriginalDeviceScaleFactor()));

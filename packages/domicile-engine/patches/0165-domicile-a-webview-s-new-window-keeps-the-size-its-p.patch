@@ -20,10 +20,10 @@ job builds it on `crux`.
  1 file changed, 6 insertions(+)
 
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index f48a458..2db9e97 100644
+index 8b353ce..cd7b9ec 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -6137,6 +6137,12 @@ WebContents* WebContentsImpl::ShowCreatedWindow(
+@@ -6174,6 +6174,12 @@ WebContents* WebContentsImpl::ShowCreatedWindow(
    // TODO(crbug.com/40092782): Utilize window_features.has_x and others.
    blink::mojom::WindowFeatures adjusted_features = window_features;
    int64_t display_id = AdjustWindowRect(&adjusted_features.bounds, opener);
@@ -36,6 +36,3 @@ index f48a458..2db9e97 100644
  
    // Drop fullscreen when opening a WebContents to prohibit deceptive behavior.
    // Only drop fullscreen on the specific destination display, if it is known.
--- 
-2.43.0
-

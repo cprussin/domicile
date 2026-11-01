@@ -44,7 +44,7 @@ index 0b4b3ba..5565f17 100644
      current_request_first_display_time_ = time;
    }
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index be94429..1d3959e 100644
+index 5c8fb50..c7fc546 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
 @@ -1210,6 +1210,8 @@ generated_interface_sources_in_core = [
@@ -69,10 +69,10 @@ index 6564ce6..1c009b3 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index 9f67b5e..213dc64 100644
+index e441e99..126883a 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
-@@ -98,6 +98,8 @@ blink_core_sources_html = [
+@@ -100,6 +100,8 @@ blink_core_sources_html = [
    "domicile/domicile_file_chooser_event.h",
    "domicile/domicile_context_menu_event.cc",
    "domicile/domicile_context_menu_event.h",

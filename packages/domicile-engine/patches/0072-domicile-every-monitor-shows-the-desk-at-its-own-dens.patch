@@ -38,10 +38,10 @@ See cc/domicile/display_regions.h.
  15 files changed, 283 insertions(+), 35 deletions(-)
 
 diff --git a/cc/BUILD.gn b/cc/BUILD.gn
-index cf514ff..66585d7 100644
+index 2745fe3..d28f47a 100644
 --- a/cc/BUILD.gn
 +++ b/cc/BUILD.gn
-@@ -510,6 +510,9 @@ cc_component("cc") {
+@@ -515,6 +515,9 @@ cc_component("cc") {
    public_deps = [
      ":layer_selection_bound",
      "//cc/base",
@@ -211,7 +211,7 @@ index 9c271f3..b5cda18 100644
   private:
    TilingResolution GetTilingResolutionForDebugBorders(
 diff --git a/cc/layers/tile_based_layer_impl.h b/cc/layers/tile_based_layer_impl.h
-index 7890c8d..46217f0 100644
+index 46acc07..96fe7b2 100644
 --- a/cc/layers/tile_based_layer_impl.h
 +++ b/cc/layers/tile_based_layer_impl.h
 @@ -215,6 +215,14 @@ class CC_EXPORT TileBasedLayerImpl : public LayerImpl {
@@ -558,10 +558,10 @@ index 9d88521..b41d27a 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index faf8a73..cfa0ca3 100644
+index 363c224..a496830 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1662,6 +1662,14 @@ void LayerTreeHost::SetRecordingScaleFactor(float recording_scale_factor) {
+@@ -1686,6 +1686,14 @@ void LayerTreeHost::SetRecordingScaleFactor(float recording_scale_factor) {
    recording_scale_factor_ = recording_scale_factor;
  }
  
@@ -577,7 +577,7 @@ index faf8a73..cfa0ca3 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index 582f288..c13e605 100644
+index 7368a33..db9fe7f 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
 @@ -33,6 +33,7 @@
@@ -669,7 +669,7 @@ index f0d1449..7c51a31 100644
    viz::LocalSurfaceId local_surface_id_from_parent_;
  
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
-index 97315d3..f7b62bc 100644
+index d22ef6c..4719d59 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.cc
 +++ b/third_party/blink/renderer/platform/widget/widget_base.cc
 @@ -19,6 +19,7 @@
@@ -688,7 +688,7 @@ index 97315d3..f7b62bc 100644
    std::move(callback).Run();
  }
  
-@@ -1967,6 +1969,7 @@ void WidgetBase::UpdateSurfaceAndScreenInfo(
+@@ -1969,6 +1971,7 @@ void WidgetBase::UpdateSurfaceAndScreenInfo(
      LayerTreeHost()->SetDisplayColorSpaces(
          screen_infos_.current().display_color_spaces);
    }
@@ -696,7 +696,7 @@ index 97315d3..f7b62bc 100644
  
    if (orientation_changed) {
      auto weak_this = weak_ptr_factory_.GetWeakPtr();
-@@ -2013,6 +2016,21 @@ void WidgetBase::SetScreenRects(const gfx::Rect& widget_screen_rect,
+@@ -2016,6 +2019,21 @@ void WidgetBase::SetScreenRects(const gfx::Rect& widget_screen_rect,
                                  const gfx::Rect& window_screen_rect) {
    widget_screen_rect_ = widget_screen_rect;
    window_screen_rect_ = window_screen_rect;

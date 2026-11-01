@@ -228,10 +228,10 @@ index cc61a86..1dd1abf 100644
    // changed, so we should update state for managing overlays.
    // |callback| will be run on origin thread.
 diff --git a/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc b/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
-index 836d51b..bb17940 100644
+index 87322c2..ab3688c 100644
 --- a/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
 +++ b/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
-@@ -33,7 +33,10 @@
+@@ -35,7 +35,10 @@
  #include "ui/ozone/common/native_pixmap_egl_binding.h"
  #include "ui/ozone/platform/drm/common/drm_util.h"
  #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
@@ -242,7 +242,7 @@ index 836d51b..bb17940 100644
  #include "ui/ozone/platform/drm/gpu/drm_thread_proxy.h"
  #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
  #include "ui/ozone/platform/drm/gpu/gbm_overlay_surface.h"
-@@ -205,6 +208,40 @@ class GLOzoneEGLGbm : public GLOzoneEGL {
+@@ -207,6 +210,40 @@ class GLOzoneEGLGbm : public GLOzoneEGL {
    gl::EGLDisplayPlatform native_display_;
  };
  
@@ -283,7 +283,7 @@ index 836d51b..bb17940 100644
  }  // namespace
  
  GbmSurfaceFactory::GbmDeviceAndFile::GbmDeviceAndFile(base::File file,
-@@ -351,9 +388,13 @@ std::unique_ptr<OverlaySurface> GbmSurfaceFactory::CreateOverlaySurface(
+@@ -353,9 +390,13 @@ std::unique_ptr<OverlaySurface> GbmSurfaceFactory::CreateOverlaySurface(
  
  std::unique_ptr<SurfaceOzoneCanvas> GbmSurfaceFactory::CreateCanvasForWidget(
      gfx::AcceleratedWidget widget) {

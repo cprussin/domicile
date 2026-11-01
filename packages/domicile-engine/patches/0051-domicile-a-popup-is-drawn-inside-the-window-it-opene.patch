@@ -53,10 +53,10 @@ index c5808a0..c7a7a46 100644
            params.type != views::Widget::InitParams::TYPE_MENU &&
            params.type != views::Widget::InitParams::TYPE_TOOLTIP)
 diff --git a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
-index ecdbbbb..61864b5 100644
+index 4a2358e..0c4ab88 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
-@@ -88,6 +88,10 @@
+@@ -86,6 +86,10 @@
  #include "ui/wm/core/window_properties.h"
  #endif
  
@@ -67,7 +67,7 @@ index ecdbbbb..61864b5 100644
  DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT,
                                         views::DesktopNativeWidgetAura*)
  
-@@ -99,6 +103,18 @@ DEFINE_UI_CLASS_PROPERTY_KEY(DesktopNativeWidgetAura*,
+@@ -97,6 +101,18 @@ DEFINE_UI_CLASS_PROPERTY_KEY(DesktopNativeWidgetAura*,
  
  namespace {
  
@@ -86,7 +86,7 @@ index ecdbbbb..61864b5 100644
  // This class provides functionality to create a top level widget to host a
  // child window.
  class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
-@@ -259,6 +275,15 @@ class DesktopNativeWidgetAuraWindowParentingClient
+@@ -257,6 +273,15 @@ class DesktopNativeWidgetAuraWindowParentingClient
                           ui::mojom::WindowShowState::kFullscreen;
      bool is_menu = window->GetType() == aura::client::WINDOW_TYPE_MENU;
  
