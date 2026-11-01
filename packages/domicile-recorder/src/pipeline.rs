@@ -89,11 +89,13 @@ impl Encoder {
     fn video(self) -> String {
         match self {
             // The frames come in system memory: `always-copy` copies a
-            // buffer, which a dmabuf cannot be.
+            // buffer, which a dmabuf cannot be. Constant QP: the default,
+            // CBR, picks 1/16 of the raw rate and AMD pads every frame up
+            // to it, over 300 Mbit/s near 4K, which players stall on.
             Encoder::Gpu(gpu) => format!(
                 "video/x-raw ! queue ! vapostproc ! \
                  video/x-raw(memory:VAMemory),format=NV12 ! queue ! \
-                 {} key-int-max=240 ! {}",
+                 {} rate-control=cqp key-int-max=240 ! {}",
                 gpu.element(),
                 gpu.parser(),
             ),
@@ -165,7 +167,7 @@ mod tests {
         assert!(described.contains(
             "video/x-raw ! queue ! vapostproc ! video/x-raw(memory:VAMemory),format=NV12"
         ));
-        assert!(described.contains("! vaav1enc "));
+        assert!(described.contains("! vaav1enc rate-control=cqp "));
         assert!(described.contains("! av1parse ! queue ! mux."));
         assert!(!described.contains("vp8enc"));
     }
