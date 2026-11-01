@@ -1,11 +1,13 @@
 //! A running recording pipeline.
 
+use std::sync::Mutex;
 use std::time::Duration;
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
-use crate::pipeline::Encoder;
+use crate::pipeline::{Encoder, FRAMES};
+use crate::stamps::Stamps;
 
 /// How long a pipeline may take to start, or to finish its file.
 const WITHIN: Duration = Duration::from_secs(10);
@@ -36,6 +38,7 @@ impl Recording {
     pub fn start(description: &str) -> Result<Recording, Failed> {
         gst::init().map_err(Failed::Init)?;
         let pipeline = gst::parse::launch(description).map_err(Failed::Pipeline)?;
+        keep_stamps_increasing(&pipeline);
         let recording = Recording { pipeline };
         recording.pipeline.set_state(gst::State::Playing)?;
         recording.until("start", |message| match message.view() {
@@ -108,6 +111,39 @@ impl Recording {
             }
         }
     }
+}
+
+/// Moves each video frame's timestamp after the last one's, on the way out
+/// of [`FRAMES`]. See [`crate::stamps`].
+fn keep_stamps_increasing(pipeline: &gst::Element) {
+    let frames = pipeline
+        .downcast_ref::<gst::Bin>()
+        .and_then(|bin| bin.by_name(FRAMES))
+        .expect("the pipeline has its frames element");
+    let pad = frames.static_pad("src").expect("an identity has a src pad");
+    let stamps = Mutex::new(Stamps::default());
+    pad.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
+        let Some(gst::PadProbeData::Buffer(buffer)) = info.data.as_mut() else {
+            unreachable!("a buffer probe sees buffers");
+        };
+        // An unstamped frame takes its place by the muxer's rules.
+        let Some(pts) = buffer.pts() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let next = stamps
+            .lock()
+            .expect("a probe does not panic holding the stamps")
+            .next(pts.nseconds());
+        if next != pts.nseconds() {
+            eprintln!(
+                "domicile-recorder: a frame was stamped {pts}, no later than the last; moved to {next} ns"
+            );
+            let buffer = buffer.make_mut();
+            buffer.set_pts(gst::ClockTime::from_nseconds(next));
+            buffer.set_dts(gst::ClockTime::from_nseconds(next));
+        }
+        gst::PadProbeReturn::Ok
+    });
 }
 
 /// The best encoder this machine has.

@@ -10,3 +10,4 @@ pub mod args;
 pub mod command;
 pub mod pipeline;
 pub mod recording;
+pub mod stamps;

@@ -31,6 +31,9 @@ impl Sources {
     }
 }
 
+/// The element each video frame passes on its way to the encoder.
+pub const FRAMES: &str = "frames";
+
 /// What encodes a recording's video.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Encoder {
@@ -112,7 +115,12 @@ impl Encoder {
 /// The pipeline that records `sources` into `file`, its video encoded by
 /// `encoder`.
 pub fn description(sources: &Sources, encoder: Encoder, file: &Path) -> String {
-    let video = format!("{} ! {} ! queue ! mux.", sources.video, encoder.video());
+    // `frames` is where `Recording` keeps the timestamps increasing.
+    let video = format!(
+        "{} ! identity name={FRAMES} ! {} ! queue ! mux.",
+        sources.video,
+        encoder.video()
+    );
     let sound = sources.sound.as_ref().map(|sound| {
         format!(
             " {sound} ! queue ! audioconvert ! audioresample ! \
@@ -187,6 +195,7 @@ mod tests {
         let described = description(&sources, Encoder::Cpu, Path::new("/tmp/a.webm"));
 
         assert!(described.starts_with("pipewiresrc path=42 "));
+        assert!(described.contains(" ! identity name=frames ! "));
         assert!(!described.contains("opusenc"));
         assert!(described.ends_with("filesink location=\"/tmp/a.webm\""));
     }
