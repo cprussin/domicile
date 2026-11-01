@@ -64,4 +64,5 @@ Real desktop apps, run as `domicile` runs them (Wayland only, in the scene's own
 | `tour-monitors.png`, `tour-monitors.webm`, `tour-monitors.mp4` | `tour-monitors` | Two monitors side by side, and SuperTuxKart moving from the left one to the right one mid-race, beside a browser window. |
 | `configure-settings.png` | `configure-settings` | The Settings app's Shell page, with the clock set to 12-hour. |
 | `quickstart.png`, `quickstart.webm`, `quickstart.mp4` | `quickstart` | The Domicile page's quickstart: nvim and the example shell, nvim beside a film, then a wider gap from an edit and `domicile load-shell`. Captions name each step. |
+| `live-swap.png`, `live-swap.webm`, `live-swap.mp4` | `live-swap` | The Domicile page's live swap: SuperTuxKart beside asciiquarium in a terminal, then `domicile load-shell` stacks them. Both keep going. |
 | `shell-quickstart.png` | `shell-quickstart` | The shell quickstart's example shell: nvim editing it, beside a film. |
