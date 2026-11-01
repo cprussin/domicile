@@ -108,6 +108,36 @@ laid_down() {
 
 git -C "$CHROMIUM" reset --hard "$pin"
 
+# Deps the pin folds into its own tree: a dep's checkout, with its own `.git`,
+# where the pin tracks a directory. `reset --hard` writes the pin's files over
+# it and leaves the rest of the checkout behind, and no sync removes it because
+# the pin tracks the directory. Chromium did this to
+# third_party/wayland-protocols/kde. Found from the untracked files rather than
+# the old HEAD, so a rerun after a reset that already moved HEAD finds it too.
+folded="$(git -C "$CHROMIUM" status --porcelain --untracked-files=all |
+  sed -n 's/^?? //p' |
+  while IFS= read -r path; do
+    dir="$(dirname "$path")"
+    while [ "$dir" != . ]; do
+      if [ -e "$CHROMIUM/$dir/.git" ] &&
+        [ "$(git -C "$CHROMIUM" cat-file -t "$pin:$dir" 2>/dev/null)" = tree ]; then
+        printf '%s\n' "$dir"
+        break
+      fi
+      dir="$(dirname "$dir")"
+    done
+  done | sort -u)"
+
+if [ -n "$folded" ]; then
+  echo "deps $pin tracks as files; replacing their old checkouts:"
+  printf '%s\n' "$folded" |
+    while IFS= read -r dep; do
+      echo "  $dep"
+      rm -rf "${CHROMIUM:?}/$dep"
+      git -C "$CHROMIUM" checkout --quiet "$pin" -- "$dep"
+    done
+fi
+
 laid_down |
   while IFS= read -r file; do
     [ -n "$file" ] || continue

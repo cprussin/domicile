@@ -78,7 +78,7 @@ each post-image is the pin's file with these lines in it.
  2 files changed, 95 insertions(+)
 
 diff --git a/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc b/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
-index 478e5ac..e960d49 100644
+index 85020fa..4659f84 100644
 --- a/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
 @@ -6,6 +6,7 @@
@@ -120,7 +120,7 @@ index 478e5ac..e960d49 100644
  bool ShouldSetBounds(PlatformWindowState state) {
    return state == PlatformWindowState::kNormal;
  }
-@@ -200,6 +215,9 @@ void WaylandToplevelWindow::Hide() {
+@@ -202,6 +217,9 @@ void WaylandToplevelWindow::Hide() {
    minimize_sync_callback_.reset();
    toplevel_session_.reset();
    appmenu_.reset();
@@ -130,7 +130,7 @@ index 478e5ac..e960d49 100644
  
    WaylandWindow::Hide();
    ClearInFlightRequestsSerial();
-@@ -1100,6 +1118,70 @@ void WaylandToplevelWindow::SetUpShellIntegration() {
+@@ -1104,6 +1122,70 @@ void WaylandToplevelWindow::SetUpShellIntegration() {
    // This method should be called after the XDG surface is initialized.
    DCHECK(xdg_toplevel_);
    TryAnnounceAppmenu();

@@ -23,7 +23,7 @@ the time the user picked a passkey.
  2 files changed, 15 insertions(+), 11 deletions(-)
 
 diff --git a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
-index 8d3bfe9..456b46e 100644
+index 9baaeaf..869177c 100644
 --- a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
 +++ b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
 @@ -257,19 +257,15 @@ void ChromeWebAuthenticationDelegate::

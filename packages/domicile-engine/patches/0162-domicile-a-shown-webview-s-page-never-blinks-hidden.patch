@@ -141,7 +141,7 @@ index 5ebc498..b5c2456 100644
  
  mojom::blink::WebFeature RemoteFrameView::SvgFilterPaintedCounter() const {
 diff --git a/third_party/blink/renderer/core/frame/remote_frame_view.h b/third_party/blink/renderer/core/frame/remote_frame_view.h
-index 8ad389f..d2258f5 100644
+index 4297ba1..2f78617 100644
 --- a/third_party/blink/renderer/core/frame/remote_frame_view.h
 +++ b/third_party/blink/renderer/core/frame/remote_frame_view.h
 @@ -18,6 +18,7 @@
@@ -152,7 +152,7 @@ index 8ad389f..d2258f5 100644
  #include "ui/gfx/geometry/rect.h"
  
  namespace cc {
-@@ -116,6 +117,10 @@ class CORE_EXPORT RemoteFrameView final
+@@ -115,6 +116,10 @@ class CORE_EXPORT RemoteFrameView final
    // animations.
    gfx::Rect ComputeCompositingRect() const;
  
@@ -163,7 +163,7 @@ index 8ad389f..d2258f5 100644
    // The properties and handling of the cycle between RemoteFrame
    // and its RemoteFrameView corresponds to that between LocalFrame
    // and LocalFrameView. Please see the LocalFrameView::frame_ comment for
-@@ -127,6 +132,16 @@ class CORE_EXPORT RemoteFrameView final
+@@ -126,6 +131,16 @@ class CORE_EXPORT RemoteFrameView final
  
    std::optional<NaturalSizingInfo> natural_sizing_info_;
    bool needs_occlusion_tracking_ = false;

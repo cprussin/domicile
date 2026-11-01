@@ -47,10 +47,10 @@ needs a new event type and that invalidates the generated bindings.
  2 files changed, 9 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index c6ce9af..b78d5a5 100644
+index 80fa256..67e10fb 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -325,6 +325,8 @@ generated_dictionary_sources_in_modules = [
+@@ -293,6 +293,8 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.h",
@@ -59,7 +59,7 @@ index c6ce9af..b78d5a5 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
-@@ -1602,6 +1604,8 @@ generated_enumeration_sources_in_modules = [
+@@ -1566,6 +1568,8 @@ generated_enumeration_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h",
@@ -68,7 +68,7 @@ index c6ce9af..b78d5a5 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_type.cc",
-@@ -2388,6 +2392,8 @@ generated_interface_sources_in_modules = [
+@@ -2352,6 +2356,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
@@ -78,10 +78,10 @@ index c6ce9af..b78d5a5 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index d232d1f..43b7e04 100644
+index 23da598..6d0f63e 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -305,6 +305,9 @@ static_idl_files_in_modules = [
+@@ -299,6 +299,9 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",

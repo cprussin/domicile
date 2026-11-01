@@ -165,7 +165,7 @@ index e9b64c7..93c5dd1 100644
  #endif
  
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index cfe335e..160a98cc 100644
+index cfe335e..160a98c 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -4,11 +4,15 @@

@@ -171,7 +171,7 @@ index cdf986a..95fb882 100644
  
  WakeLockServiceImpl::WakeLockServiceImpl(
 diff --git a/content/public/browser/web_contents_delegate.h b/content/public/browser/web_contents_delegate.h
-index afebf55..702356c 100644
+index 7e0c703..b3c8934 100644
 --- a/content/public/browser/web_contents_delegate.h
 +++ b/content/public/browser/web_contents_delegate.h
 @@ -567,6 +567,11 @@ class CONTENT_EXPORT WebContentsDelegate {
@@ -186,6 +186,3 @@ index afebf55..702356c 100644
    // Returns true if `web_contents` is, or is transitioning to, tab-fullscreen.
    virtual bool IsFullscreenForTabOrPending(const WebContents* web_contents);
  
--- 
-2.43.0
-

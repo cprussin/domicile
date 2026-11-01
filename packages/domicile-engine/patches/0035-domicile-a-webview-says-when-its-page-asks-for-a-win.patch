@@ -56,7 +56,7 @@ the shell opens for it -- runs on `crux` with the rest of the engine job.
  3 files changed, 5 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 931c5c9..f9a25b9 100644
+index 536b682..f5ef453 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
 @@ -1206,6 +1206,8 @@ generated_interface_sources_in_core = [
@@ -81,10 +81,10 @@ index 455daa1..3c062e9 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index 84ad708..c61bd88 100644
+index 2382141..04ac144 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
-@@ -94,6 +94,8 @@ blink_core_sources_html = [
+@@ -96,6 +96,8 @@ blink_core_sources_html = [
    "document_all_name_collection.h",
    "document_name_collection.cc",
    "document_name_collection.h",

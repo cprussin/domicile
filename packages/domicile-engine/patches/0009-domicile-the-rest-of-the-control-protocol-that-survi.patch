@@ -82,10 +82,10 @@ added together for that reason.
  2 files changed, 61 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 71cbcfa..c6ce9af 100644
+index 3003697..80fa256 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -306,7 +306,25 @@ generated_dictionary_sources_in_modules = [
+@@ -274,7 +274,25 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_close_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.h",
@@ -111,7 +111,7 @@ index 71cbcfa..c6ce9af 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
-@@ -1582,6 +1600,8 @@ generated_enumeration_sources_in_modules = [
+@@ -1546,6 +1564,8 @@ generated_enumeration_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_device_posture_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.h",
@@ -120,7 +120,7 @@ index 71cbcfa..c6ce9af 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_type.cc",
-@@ -2347,7 +2367,27 @@ generated_interface_sources_in_modules = [
+@@ -2311,7 +2331,27 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
@@ -149,10 +149,10 @@ index 71cbcfa..c6ce9af 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 523d5e7..d232d1f 100644
+index 163bee4..23da598 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -282,10 +282,31 @@ static_idl_files_in_modules = [
+@@ -276,10 +276,31 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/encryptedmedia/navigator_request_media_key_system_access.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source_init.idl",

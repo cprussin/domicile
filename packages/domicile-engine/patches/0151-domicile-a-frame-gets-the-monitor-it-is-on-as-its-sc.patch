@@ -24,7 +24,7 @@ job builds it on crux.
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/renderer_host/render_widget_host_view_child_frame.cc b/content/browser/renderer_host/render_widget_host_view_child_frame.cc
-index 4ef3ad2..23556e7 100644
+index 1adc151..49dd25c 100644
 --- a/content/browser/renderer_host/render_widget_host_view_child_frame.cc
 +++ b/content/browser/renderer_host/render_widget_host_view_child_frame.cc
 @@ -22,6 +22,7 @@
@@ -35,7 +35,7 @@ index 4ef3ad2..23556e7 100644
  #include "content/browser/gpu/compositor_util.h"
  #include "content/browser/renderer_host/cross_process_frame_connector.h"
  #include "content/browser/renderer_host/frame_connector.h"
-@@ -584,8 +585,13 @@ void RenderWidgetHostViewChildFrame::UpdateCursor(const ui::Cursor& cursor) {
+@@ -581,8 +582,13 @@ void RenderWidgetHostViewChildFrame::UpdateCursor(const ui::Cursor& cursor) {
  }
  
  void RenderWidgetHostViewChildFrame::UpdateScreenInfo() {

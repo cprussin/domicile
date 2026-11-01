@@ -24,10 +24,10 @@ pin's.
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/find_request_manager.cc b/content/browser/find_request_manager.cc
-index 3101b58..9662285 100644
+index 58e7f01..af8bd56 100644
 --- a/content/browser/find_request_manager.cc
 +++ b/content/browser/find_request_manager.cc
-@@ -686,11 +686,17 @@ void FindRequestManager::FindInternal(const FindRequest& request) {
+@@ -706,11 +706,17 @@ void FindRequestManager::FindInternal(const FindRequest& request) {
      // tracking (same search text as the request that started it).
  
      // The find next request will be directed at the focused frame if there is

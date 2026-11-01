@@ -52,10 +52,10 @@ the keymap decoding it as `o`/`VKEY_O`.
  2 files changed, 22 insertions(+), 4 deletions(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 23de01a..9ee623e 100644
+index b1640a3..153a683 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2698,10 +2698,11 @@ source_set("browser") {
+@@ -2700,10 +2700,11 @@ source_set("browser") {
      "//components/domain_reliability",
  
      # Domicile's engine fork: serving the shell over domicile://, the

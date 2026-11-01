@@ -29,10 +29,10 @@ job builds it on `crux`.
  4 files changed, 58 insertions(+)
 
 diff --git a/components/viz/service/BUILD.gn b/components/viz/service/BUILD.gn
-index f26d694..3f52bc0 100644
+index 8c421bc..f621c1e 100644
 --- a/components/viz/service/BUILD.gn
 +++ b/components/viz/service/BUILD.gn
-@@ -299,6 +299,9 @@ viz_component("service") {
+@@ -301,6 +301,9 @@ viz_component("service") {
      "//components/version_info",
      "//components/viz/client",
      "//components/viz/common",

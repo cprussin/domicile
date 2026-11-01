@@ -19,7 +19,7 @@ repository.
  3 files changed, 20 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 8d512494..a4da309a 100644
+index 8d51249..a4da309 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -124,6 +124,8 @@ source_set("gbm") {
@@ -56,7 +56,7 @@ index 8d512494..a4da309a 100644
      # `DrmInputControllerTest` builds the evdev input controller this
      # platform's evdev thread reports to, and the stub layout its keyboard
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 92af7cf0..f7e0bb7c 100644
+index 92af7cf..f7e0bb7 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -51,6 +51,7 @@
@@ -101,7 +101,7 @@ index 92af7cf0..f7e0bb7c 100644
  
    // Domicile's engine fork: what drives NativeDisplayDelegate so that
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 7bdde5bc..a10a3e03 100644
+index 7bdde5b..a10a3e0 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -448,8 +448,8 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
@@ -115,6 +115,3 @@ index 7bdde5bc..a10a3e03 100644
    virtual void InjectDomicileInput(const DomicileDeskInput& input) {}
    // DOMICILE: what the compositor says is on one of the desktop's clipboards.
    //
--- 
-2.43.0
-

@@ -124,10 +124,9 @@ interface DomicileExtension {
   - It grants `activeTab` on the active tab
     (`ActiveTabPermissionGranter::GrantIfRequested`). With no active tab, it
     grants nothing.
-  - It dispatches `action.onClicked` with that tab if the action has no popup.
-  - Patch 0070 sends the grant to the renderer before `GrantIfRequested`
-    returns. Upstream sends it after a network-service round trip, which an
-    `onClicked` listener's `executeScript` can beat.
+  - It dispatches `action.onClicked` with that tab if the action has no
+    popup, from `GrantIfRequested`'s callback, so the listener can use the
+    grant.
 - **Popups.** If the action has a popup, the shell opens
   `<webview extensionpopup src={popup}>` in a panel under the icon.
   - The page gets the full extension API from its `chrome-extension://`

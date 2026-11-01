@@ -26,7 +26,7 @@ Domicile repository.
  5 files changed, 127 insertions(+), 3 deletions(-)
 
 diff --git a/ui/ozone/platform/headless/BUILD.gn b/ui/ozone/platform/headless/BUILD.gn
-index c2823a71..ae2aa43c 100644
+index c2823a7..ae2aa43 100644
 --- a/ui/ozone/platform/headless/BUILD.gn
 +++ b/ui/ozone/platform/headless/BUILD.gn
 @@ -3,6 +3,7 @@
@@ -95,7 +95,7 @@ index c2823a71..ae2aa43c 100644
      "//ui/ozone:platform",
      "//ui/ozone:test_support",
 diff --git a/ui/ozone/platform/headless/headless_window.cc b/ui/ozone/platform/headless/headless_window.cc
-index a0061fa1..1be29c8e 100644
+index a0061fa..1be29c8 100644
 --- a/ui/ozone/platform/headless/headless_window.cc
 +++ b/ui/ozone/platform/headless/headless_window.cc
 @@ -8,10 +8,12 @@
@@ -125,7 +125,7 @@ index a0061fa1..1be29c8e 100644
  void HeadlessWindow::MoveCursorTo(const gfx::Point& location) {}
  
 diff --git a/ui/ozone/platform/headless/headless_window.h b/ui/ozone/platform/headless/headless_window.h
-index a7dc0249..c9931171 100644
+index a7dc024..c993117 100644
 --- a/ui/ozone/platform/headless/headless_window.h
 +++ b/ui/ozone/platform/headless/headless_window.h
 @@ -71,6 +71,11 @@ class HeadlessWindow : public PlatformWindow {
@@ -141,7 +141,7 @@ index a7dc0249..c9931171 100644
    PlatformWindowDelegate* delegate() { return delegate_; }
  
 diff --git a/ui/ozone/platform/headless/ozone_platform_headless.cc b/ui/ozone/platform/headless/ozone_platform_headless.cc
-index 6ac568e3..1effbd48 100644
+index 6ac568e..1effbd4 100644
 --- a/ui/ozone/platform/headless/ozone_platform_headless.cc
 +++ b/ui/ozone/platform/headless/ozone_platform_headless.cc
 @@ -12,20 +12,27 @@
@@ -281,7 +281,7 @@ index 6ac568e3..1effbd48 100644
  
  }  // namespace
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 0d911ffc..7bdde5bc 100644
+index 0d911ff..7bdde5b 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -132,6 +132,27 @@ struct DomicileWhitePoint {
@@ -323,6 +323,3 @@ index 0d911ffc..7bdde5bc 100644
    // DOMICILE: what the compositor says is on one of the desktop's clipboards.
    //
    // THE BROWSER IS TOLD RATHER THAN ASKED. The compositor reads every
--- 
-2.43.0
-

@@ -20,7 +20,7 @@ job builds it on `crux`.
  1 file changed, 5 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index f7d7fa1..dd112ac 100644
+index e2035fc..9c88fed 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -7,6 +7,7 @@
@@ -31,7 +31,7 @@ index f7d7fa1..dd112ac 100644
  #include "chrome/browser/domicile/domicile_file_dialogs.h"
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/desktop_prefs.h"
-@@ -1786,6 +1787,10 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+@@ -1804,6 +1805,10 @@ void ChromeBrowserMainParts::PostBrowserStart() {
    // input rather than any page's.
    domicile::StartDeskActivity();
  

@@ -27,7 +27,7 @@ domicile_unittests.
  1 file changed, 20 insertions(+), 5 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_widget_host_view_aura.cc b/content/browser/renderer_host/render_widget_host_view_aura.cc
-index 7294908..cdefd5e 100644
+index 51d15b3..979aa65 100644
 --- a/content/browser/renderer_host/render_widget_host_view_aura.cc
 +++ b/content/browser/renderer_host/render_widget_host_view_aura.cc
 @@ -73,6 +73,7 @@
@@ -46,7 +46,7 @@ index 7294908..cdefd5e 100644
  #include "ui/gfx/geometry/rect_conversions.h"
  #include "ui/gfx/geometry/size_conversions.h"
  #include "ui/gfx/geometry/skia_conversions.h"
-@@ -3178,9 +3180,6 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
+@@ -3200,9 +3202,6 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
    if (!root_window)
      return;
  
@@ -56,7 +56,7 @@ index 7294908..cdefd5e 100644
    display::Screen* screen = display::Screen::Get();
    CHECK(screen);
    gfx::Point root_window_point = screen->GetCursorScreenPoint();
-@@ -3191,8 +3190,24 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
+@@ -3213,8 +3212,24 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
          root_window, &root_window_point);
    }
  
@@ -83,6 +83,3 @@ index 7294908..cdefd5e 100644
  
    gfx::NativeCursor cursor = current_cursor_.GetNativeCursor();
    // Do not show loading cursor when the cursor is currently hidden.
--- 
-2.43.0
-
