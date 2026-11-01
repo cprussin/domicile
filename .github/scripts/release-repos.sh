@@ -10,9 +10,10 @@
 #
 # Needs `aws` and `distro/repo-tools` on PATH, and:
 #
-# - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`: an R2 token
-#   that can read and write the bucket;
-# - `DOMICILE_R2_BUCKET`: the bucket;
+# - `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`: an R2 token that can read and
+#   write the bucket;
+# - `R2_ACCOUNT_ID`, `DOMICILE_R2_BUCKET`: override Domicile's Cloudflare
+#   account and the `domicile-packages` bucket;
 # - `DOMICILE_SIGNING_KEY`: for `distro/repo.sh`.
 set -euo pipefail
 
@@ -25,8 +26,9 @@ REPO="$2"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-: "${R2_ACCOUNT_ID:?}" "${R2_ACCESS_KEY_ID:?}" "${R2_SECRET_ACCESS_KEY:?}"
-: "${DOMICILE_R2_BUCKET:?}" "${DOMICILE_SIGNING_KEY:?}"
+: "${R2_ACCESS_KEY_ID:?}" "${R2_SECRET_ACCESS_KEY:?}" "${DOMICILE_SIGNING_KEY:?}"
+R2_ACCOUNT_ID="${R2_ACCOUNT_ID:-9e3478be0713138076f5a66696ba7817}"
+DOMICILE_R2_BUCKET="${DOMICILE_R2_BUCKET:-domicile-packages}"
 export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
 export AWS_DEFAULT_REGION=auto
 BUCKET="s3://$DOMICILE_R2_BUCKET"

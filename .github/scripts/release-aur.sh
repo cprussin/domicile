@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publishes `domicile-bin` to the AUR for a release's Arch package.
 #
-#   AUR_SSH_KEY=<private key> .github/scripts/release-aur.sh <package> <repository url>
+#   AUR_SSH_KEY=<private key> .github/scripts/release-aur.sh <package>
 #
 # Commits `distro/aur.sh`'s files to the AUR's git repository and pushes. A
 # package the AUR already has commits nothing. `DOMICILE_RELEASE_DRY_RUN=1`
@@ -10,15 +10,16 @@
 #
 # - <package>: the Arch package as published, whose checksum the PKGBUILD
 #   names.
-# - <repository url>: where `distro/repo.sh`'s repositories are served.
+# - `DOMICILE_REPO_URL`: where `distro/repo.sh`'s repositories are served, if
+#   not https://packages.domicile-desktop.com.
 set -euo pipefail
 
-[ "$#" -eq 2 ] || {
-  echo "usage: release-aur.sh <package> <repository url>" >&2
+[ "$#" -eq 1 ] || {
+  echo "usage: release-aur.sh <package>" >&2
   exit 2
 }
 PACKAGE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-URL="$2"
+URL="${DOMICILE_REPO_URL:-https://packages.domicile-desktop.com}"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REMOTE="${DOMICILE_AUR_REMOTE:-ssh://aur@aur.archlinux.org/domicile-bin.git}"
