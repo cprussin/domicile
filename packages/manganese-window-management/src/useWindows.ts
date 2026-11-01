@@ -269,8 +269,7 @@ const takeScreenshot = (domicile: Pick<Domicile, "capture">) => {
  * The newest copy as a site or a search URL, or `undefined` when the clipboard
  * holds no text.
  *
- * Reads the row's preview, so a copy longer than its first 160 characters is
- * cut short.
+ * Reads the row's preview, so a long copy is cut short.
  */
 const clipboardUrl = (
   domicile: Pick<Domicile, "clipboard">,

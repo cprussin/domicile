@@ -64,21 +64,32 @@ describe("Clipboard", () => {
   });
 
   describe("rows", () => {
-    it("lists what was copied newest first, each on one line", () => {
-      // Kept in the compositor's order; the panel does not sort. A line
-      // break would turn a row into a paragraph.
+    it("shows the newest copy in its own group, as what is on the clipboard", () => {
+      // Choosing it would change nothing, so it is not a row.
+      clipboard();
+
+      const now = screen.getByRole("group", { name: "On your clipboard" });
+      expect(now.textContent).toContain(
+        "https://example.invalid/a/long/address",
+      );
+    });
+
+    it("lists the earlier copies newest first, keeping their line breaks", () => {
+      // Kept in the compositor's order; the panel does not sort.
       clipboard();
 
       expect(rows()).toStrictEqual([
-        "https://example.invalid/a/long/addressOn the clipboard now",
-        "Thanks, see you Tuesday",
+        "Thanks, see you\nTuesday",
         "the first thing copied",
       ]);
     });
 
     it("shows a copied image's thumbnail", () => {
       const thumbnail = "data:image/png;base64,iVBORw0KGgo=";
-      clipboard([{ id: 4, image: true, preview: "Image, 3 × 2", thumbnail }]);
+      clipboard([
+        text(5, "newer"),
+        { id: 4, image: true, preview: "Image, 3 × 2", thumbnail },
+      ]);
 
       const row = screen.getByRole("option", { name: /^Image, 3 × 2/ });
       expect(row.querySelector("img")?.getAttribute("src")).toBe(thumbnail);
@@ -87,7 +98,7 @@ describe("Clipboard", () => {
     it("counts the copies", () => {
       clipboard();
 
-      expect(screen.getByText("3 copies")).toBeDefined();
+      expect(screen.getByText("2 copied before")).toBeDefined();
     });
 
     it("says a desktop nothing was copied on is empty", () => {
@@ -102,7 +113,7 @@ describe("Clipboard", () => {
 
   describe("keyboard", () => {
     it("starts on the copy before the current one", async () => {
-      // The newest is already on the clipboard, so Enter alone swaps back.
+      // Enter alone swaps back.
       const panel = clipboard();
 
       await panel.user.keyboard("{Enter}");
@@ -111,12 +122,13 @@ describe("Clipboard", () => {
       expect(panel.dismissed).toStrictEqual([true]);
     });
 
-    it("starts on the only copy when there is one", async () => {
+    it("has nothing to choose with only the current copy", async () => {
       const panel = clipboard([text(7, "alone")]);
 
       await panel.user.keyboard("{Enter}");
 
-      expect(panel.copied).toStrictEqual([7]);
+      expect(panel.copied).toStrictEqual([]);
+      expect(screen.queryByRole("option")).toBeNull();
     });
 
     it("copies the row the arrows walked to", async () => {
@@ -140,7 +152,11 @@ describe("Clipboard", () => {
 
       await panel.user.keyboard("tues THANKS");
 
-      expect(rows()).toStrictEqual(["Thanks, see you Tuesday"]);
+      // The current copy is not searched, so its group goes.
+      expect(rows()).toStrictEqual(["Thanks, see you\nTuesday"]);
+      expect(
+        screen.queryByRole("group", { name: "On your clipboard" }),
+      ).toBeNull();
       expect(screen.getByText("1 matched")).toBeDefined();
       await panel.user.keyboard("{Enter}");
       expect(panel.copied).toStrictEqual([2]);

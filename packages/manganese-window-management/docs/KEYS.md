@@ -62,7 +62,7 @@ Manganese-only commands:
 | `launcher` | Toggle the launcher. |
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |
-| `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. The window is private when the active one is. Reads the first 160 characters. |
+| `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. The window is private when the active one is. Reads the first 480 characters. |
 | `resize grow left/right/up/down` | Grow the window that way: a tiled window by 1/50 of its container, a floating one by 10 px. Unbound by default. |
 | `volume up/down/mute` | Step the default output's volume, or toggle its mute. |
 | `mic mute` | Toggle the default microphone's mute. |

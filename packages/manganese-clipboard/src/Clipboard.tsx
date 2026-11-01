@@ -20,8 +20,8 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGl
 import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
 import { memo, useId, useRef, useState } from "react";
 
-import { css } from "../styled-system/css";
-import { flex, vstack } from "../styled-system/patterns";
+import { css, cx } from "../styled-system/css";
+import { hstack, vstack } from "../styled-system/patterns";
 import { CopyKind, kindOf } from "./copy-kind";
 
 /** The box's placeholder and accessible name. */
@@ -65,6 +65,8 @@ export const Clipboard = memo(
       }}
       open={open}
       screen={screen}
+      // Wide enough for several lines of a copy.
+      size="lg"
       // Translucent, as the launcher.
       surface="glass"
       // The search box heads the panel, so the title is for screen readers.
@@ -75,42 +77,51 @@ export const Clipboard = memo(
       Inside the dialog so it unmounts on close, and every open starts with
       an empty box on the previous copy.
     */}
-      {entries.length === 0 ? (
+      {entries[0] === undefined ? (
         <EmptyState
           hint="Things you copy show up here."
           icon={ClipboardTextIcon}
           title="Nothing copied yet"
         />
       ) : (
-        <History entries={entries} onCopy={onCopy} onDismiss={onDismiss} />
+        <History
+          earlier={entries.slice(1)}
+          now={entries[0]}
+          onCopy={onCopy}
+          onDismiss={onDismiss}
+        />
       )}
     </ModalDialog>
   ),
 );
 
 type HistoryProps = {
-  entries: readonly ClipboardEntry[];
+  /** The copies before `now`, newest first: the rows. */
+  earlier: readonly ClipboardEntry[];
+  /** The newest copy, already on the clipboard. */
+  now: ClipboardEntry;
   onCopy: (entry: number) => void;
   onDismiss: () => void;
 };
 
 /**
- * The search box and the rows it narrows.
+ * The search box over two groups: what is on the clipboard, then the rows the
+ * box narrows.
  *
  * A combobox over a listbox, as in the launcher: focus stays in the box and
- * `aria-activedescendant` marks the highlighted row.
+ * `aria-activedescendant` marks the highlighted row. The current copy is not
+ * a row, since choosing it would change nothing, and is not searched.
  */
-const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
+const History = ({ earlier, now, onCopy, onDismiss }: HistoryProps) => {
   const listId = useId();
+  const nowId = useId();
   const rows = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
-  // The newest copy is already on the clipboard, so the highlight starts on
-  // the one before it.
-  const [stepped, setStepped] = useState(entries.length > 1 ? 1 : 0);
-  const shown = matching(entries, query);
+  const [stepped, setStepped] = useState(0);
+  const searching = query.trim() !== "";
+  const shown = matching(earlier, query);
   const highlighted =
     shown.length === 0 ? undefined : Math.min(stepped, shown.length - 1);
-  const current = entries[0]?.id;
 
   const pick = (entry: ClipboardEntry) => {
     onCopy(entry.id);
@@ -137,13 +148,16 @@ const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
             setStepped(0);
           }}
           onKeyDown={(event) => {
+            // No rows to walk: only the current copy, or nothing matches.
+            if (highlighted === undefined) {
+              return;
+            }
             const step = stepOf(event, pageOf(rows.current));
-            const chosen =
-              highlighted === undefined ? undefined : shown[highlighted];
+            const chosen = shown[highlighted];
             if (step !== undefined) {
               // Stop the box from moving the caret.
               event.preventDefault();
-              setStepped(steppedTo(highlighted ?? 0, step, shown.length));
+              setStepped(steppedTo(highlighted, step, shown.length));
             } else if (event.key === "Enter" && chosen !== undefined) {
               event.preventDefault();
               pick(chosen);
@@ -158,55 +172,73 @@ const History = ({ entries, onCopy, onDismiss }: HistoryProps) => {
           spellCheck={false}
           suffixIcon={
             <span aria-hidden="true" className={countStyles}>
-              {countOf(entries.length, shown.length, query)}
+              {countOf(earlier.length, shown.length, searching)}
             </span>
           }
           value={query}
         />
       </div>
-      <div className={rowsStyles} ref={rows}>
-        {shown.length === 0 ? (
-          <EmptyState
-            icon={MagnifyingGlassIcon}
-            title="Nothing copied matches"
-          />
-        ) : (
-          <ResultList
-            highlighted={highlighted}
-            id={listId}
-            items={shown}
-            keyOf={(entry) => entry.id.toString()}
-            onChoose={pick}
-            onHighlight={setStepped}
-          >
-            {(entry) => (
-              <>
-                <RowTile
-                  icon={glyphOf(kindOf(entry))}
-                  picture={entry.thumbnail}
-                />
-                <span className={textStyles}>
-                  <span className={lineStyles}>
-                    <Marked query={query} text={lineOf(entry.preview)} />
-                  </span>
-                  {entry.id === current && (
-                    <span className={detailStyles}>On the clipboard now</span>
-                  )}
-                </span>
-              </>
+      {!searching && (
+        <div aria-labelledby={nowId} className={groupStyles} role="group">
+          <div className={groupLabelStyles} id={nowId}>
+            On your clipboard
+          </div>
+          <div className={wellStyles}>
+            <div className={nowRowStyles}>
+              <Copy entry={now} query="" />
+            </div>
+          </div>
+        </div>
+      )}
+      {(searching || earlier.length > 0) && (
+        <div className={groupStyles}>
+          {!searching && (
+            // The list carries the same name for screen readers.
+            <div aria-hidden className={groupLabelStyles}>
+              Copied before
+            </div>
+          )}
+          <div className={cx(wellStyles, rowsStyles)} ref={rows}>
+            {shown.length === 0 ? (
+              <EmptyState
+                icon={MagnifyingGlassIcon}
+                title="Nothing copied matches"
+              />
+            ) : (
+              <ResultList
+                highlighted={highlighted}
+                id={listId}
+                items={shown}
+                keyOf={(entry) => entry.id.toString()}
+                label="Copied before"
+                onChoose={pick}
+                onHighlight={setStepped}
+              >
+                {(entry) => <Copy entry={entry} query={query} />}
+              </ResultList>
             )}
-          </ResultList>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-/** A copy on one line: every run of spaces and line breaks is one space. */
-const lineOf = (preview: string): string =>
-  preview.trim().replaceAll(/\s+/g, " ");
+/** A copy's glyph, picture and text, with what `query` matched in bold. */
+const Copy = ({ entry, query }: { entry: ClipboardEntry; query: string }) => (
+  <>
+    <RowTile icon={glyphOf(kindOf(entry))} />
+    {entry.thumbnail !== undefined && (
+      // Decorative: the text beside it names what it shows.
+      <img alt="" className={pictureStyles} src={entry.thumbnail} />
+    )}
+    <span className={copyStyles}>
+      <Marked query={query} text={entry.preview.trim()} />
+    </span>
+  </>
+);
 
-/** The copies whose line holds every word of `query`, ignoring case. */
+/** The copies whose preview holds every word of `query`, ignoring case. */
 const matching = (
   entries: readonly ClipboardEntry[],
   query: string,
@@ -216,17 +248,17 @@ const matching = (
     .split(/\s+/)
     .filter((word) => word !== "");
   return entries.filter((entry) => {
-    const line = lineOf(entry.preview).toLowerCase();
-    return words.every((word) => line.includes(word));
+    const preview = entry.preview.toLowerCase();
+    return words.every((word) => preview.includes(word));
   });
 };
 
-/** The count at the box's end: every copy, or the matches once narrowed. */
-const countOf = (copies: number, shown: number, query: string): string => {
-  if (query.trim() === "") {
-    return copies === 1 ? "1 copy" : `${copies.toString()} copies`;
-  } else {
+/** The count at the box's end: the earlier copies, or the matches once narrowed. */
+const countOf = (copies: number, shown: number, searching: boolean): string => {
+  if (searching) {
     return `${shown.toString()} matched`;
+  } else {
+    return `${copies.toString()} copied before`;
   }
 };
 
@@ -269,35 +301,61 @@ const countStyles = css({
   whiteSpace: "nowrap",
 });
 
-// The launcher's results well. Tall enough to scroll, short enough to leave
-// the backdrop visible.
-const rowsStyles = css({
+// The launcher's results well, behind each group.
+const wellStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
   borderRadius: "md",
-  maxBlockSize: "60cqh",
-  overflowY: "auto",
   padding: 1,
+});
+
+// Tall enough to scroll, short enough to leave the backdrop and the current
+// copy's group on a small screen.
+const rowsStyles = css({
+  maxBlockSize: "50cqh",
+  overflowY: "auto",
   scrollbarColor: "{colors.border} transparent",
   scrollbarWidth: "thin",
   // Keeps a row scrolled by `keepInView` off the edge.
   scrollPaddingBlock: 1,
 });
 
-const textStyles = flex({
-  direction: "column",
+// Line breaks kept, so code and addresses keep their shape. The compositor
+// cuts long copies short; this cuts them to four lines.
+const copyStyles = css({
   flex: "1 1 auto",
-  minInlineSize: 0,
-});
-
-// The compositor already cuts long copies short; this cuts them to the row.
-const lineStyles = css({
   fontSize: "md",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+  lineClamp: 4,
+  minInlineSize: 0,
+  overflowWrap: "anywhere",
+  whiteSpace: "pre-wrap",
 });
 
-const detailStyles = css({
+// A copied image, at its own shape. Capped in width, so a wide image leaves
+// room for its size beside it.
+const pictureStyles = css({
+  blockSize: 20,
+  border: "1px solid color-mix(in oklab, {colors.foreground} 8%, transparent)",
+  borderRadius: "sm",
+  flexShrink: 0,
+  maxInlineSize: "60%",
+  objectFit: "contain",
+});
+
+// A group's name over its well.
+const groupLabelStyles = css({
   color: "muted",
   fontSize: "xs",
+  paddingInline: 3,
+});
+
+const groupStyles = vstack({
+  alignItems: "stretch",
+  gap: 1,
+});
+
+// The current copy, laid out as the rows below it but never lit.
+const nowRowStyles = hstack({
+  gap: 2.5,
+  paddingBlock: 1.5,
+  paddingInline: 2,
 });
