@@ -7,10 +7,10 @@ import { flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import { keepInView, pageOf, stepOf, steppedTo } from "../list-walk";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
+import { LogoTile, RowTile } from "../ResultList/RowTile";
 import { preselected } from "./app-choices";
 import { useDescribedChoices } from "./useDescribedChoices";
 
-const ICON_SIZE = 24;
 /** The one application's icon, beside the title. */
 const TITLE_ICON_SIZE = 32;
 
@@ -69,7 +69,7 @@ export const AppChooser = ({
     picked !== undefined && choices.includes(picked) ? picked : first;
   const at = apps.findIndex(({ id }) => id === chosen);
   const offer = offerOf(described === undefined, apps, asker);
-  const { text, title } = wording(offer, opened, asker);
+  const { text, title } = wording(offer, opened);
   const choose = (id: string | undefined) => {
     if (id !== undefined) {
       onChoose(id);
@@ -79,25 +79,30 @@ export const AppChooser = ({
     <ModalDialog
       closeButton={false}
       footer={
-        offer.kind === "none" ? (
-          // The only button, so it reads as the answer rather than a way out.
-          <Button onClick={onCancel}>Close</Button>
-        ) : (
-          <>
-            <Button onClick={onCancel} variant="outline">
-              Cancel
-            </Button>
-            <Button
-              disabled={chosen === undefined}
-              onClick={() => {
-                choose(chosen);
-              }}
-              variant="accent"
-            >
-              {offer.kind === "one" ? `Open ${offer.app.name}` : "Open"}
-            </Button>
-          </>
-        )
+        <>
+          {asker !== undefined && (
+            <p className={askerStyles}>{`${asker} asks`}</p>
+          )}
+          {offer.kind === "none" ? (
+            // The only button, so it reads as the answer rather than a way out.
+            <Button onClick={onCancel}>Close</Button>
+          ) : (
+            <>
+              <Button onClick={onCancel} variant="outline">
+                Cancel
+              </Button>
+              <Button
+                disabled={chosen === undefined}
+                onClick={() => {
+                  choose(chosen);
+                }}
+                variant="accent"
+              >
+                {offer.kind === "one" ? `Open ${offer.app.name}` : "Open"}
+              </Button>
+            </>
+          )}
+        </>
       }
       onOpenChange={(open) => {
         if (!open) {
@@ -109,7 +114,7 @@ export const AppChooser = ({
       title={
         offer.kind === "one" ? (
           <span className={titleStyles}>
-            <AppIcon app={offer.app} size={TITLE_ICON_SIZE} />
+            <TitleIcon app={offer.app} />
             {title}
           </span>
         ) : (
@@ -143,6 +148,7 @@ export const AppChooser = ({
             <div
               aria-selected={app.id === chosen}
               className={optionStyles}
+              data-highlighted={app.id === chosen ? "" : undefined}
               id={optionId(listId, index)}
               key={app.id}
               onClick={() => {
@@ -155,7 +161,7 @@ export const AppChooser = ({
               role="option"
               tabIndex={-1}
             >
-              <AppIcon app={app} size={ICON_SIZE} />
+              <AppTile app={app} />
               <span className={nameStyles}>{app.name}</span>
             </div>
           ))}
@@ -166,18 +172,26 @@ export const AppChooser = ({
   );
 };
 
-/** `app`'s icon, else a generic window. */
-const AppIcon = ({ app, size }: { app: DescribedApp; size: number }) =>
+/** `app`'s icon beside the title, else a generic window. */
+const TitleIcon = ({ app }: { app: DescribedApp }) =>
   app.icon === undefined ? (
-    <AppWindowIcon size={size} />
+    <AppWindowIcon size={TITLE_ICON_SIZE} />
   ) : (
     <img
       alt=""
       className={iconStyles}
-      height={size}
+      height={TITLE_ICON_SIZE}
       src={app.icon}
-      width={size}
+      width={TITLE_ICON_SIZE}
     />
+  );
+
+/** `app`'s icon at the start of its row, as in the launcher. */
+const AppTile = ({ app }: { app: DescribedApp }) =>
+  app.icon === undefined ? (
+    <RowTile icon={AppWindowIcon} />
+  ) : (
+    <LogoTile picture={app.icon} />
   );
 
 /** How many applications the dialog offers, and how it asks. */
@@ -205,32 +219,30 @@ const offerOf = (
   }
 };
 
-/** The title, and the line under it, for `offer`. */
+/**
+ * The title, and the line under it, for `offer`. Who asks is in the footer,
+ * as in the other dialogs.
+ */
 const wording = (
   offer: Offer,
   opened: string,
-  asker: string | undefined,
 ): { text: string | undefined; title: string } => {
   switch (offer.kind) {
     case "none": {
       return {
-        text:
-          asker === undefined
-            ? "No app on this computer can open it."
-            : `${asker} wants to open ${opened}, but no app on this computer can open it.`,
+        text: "No app on this computer can open it.",
         title: `No app can open ${opened}`,
       };
     }
     case "one": {
       return {
-        text: `${asker ?? "An application"} wants to open ${opened} in ${offer.app.name}.`,
+        text: `Opens ${opened} in ${offer.app.name}.`,
         title: `Open ${offer.app.name}?`,
       };
     }
     case "several": {
       return {
-        text:
-          asker === undefined ? undefined : `${asker} wants to open ${opened}.`,
+        text: undefined,
         title: `Choose an app to open ${opened}`,
       };
     }
@@ -239,7 +251,15 @@ const wording = (
 
 const titleStyles = hstack({ gap: 3 });
 
-const textStyles = css({ fontSize: "sm", margin: 0 });
+const textStyles = css({ color: "muted", margin: 0 });
+
+// Who asks sits opposite the buttons, as in the access dialog.
+const askerStyles = css({
+  color: "muted",
+  fontSize: "ui",
+  margin: 0,
+  marginInlineEnd: "auto",
+});
 
 // A URI can be hundreds of characters with no spaces, such as a sign-in link.
 const addressStyles = css({
@@ -253,19 +273,27 @@ const addressStyles = css({
   whiteSpace: "nowrap",
 });
 
+// The picked row's wash shows where the keyboard is, as in the launcher and
+// the file picker, so the list draws no focus ring of its own.
 const listStyles = flex({
+  _focusVisible: { outline: "none" },
+  // Under the line of text, when there is one.
+  "&:not(:first-child)": { marginBlockStart: 3 },
   direction: "column",
   gap: 0.5,
-  marginBlockStart: 3,
   maxBlockSize: 80,
   overflowY: "auto",
 });
 
-// As the file picker's rows.
+// As the launcher's and the file picker's rows: a neutral wash, color kept
+// for the main action.
 const optionStyles = hstack({
-  "&[aria-selected=true]": {
-    backgroundImage:
-      "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
+  _hover: {
+    backgroundColor: "color-mix(in oklab, {colors.foreground} 5%, transparent)",
+  },
+  "&[data-highlighted]": {
+    backgroundColor:
+      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
   },
   borderRadius: "md",
   color: "foreground",
@@ -279,9 +307,9 @@ const optionStyles = hstack({
 
 const iconStyles = css({ flexShrink: 0, objectFit: "contain" });
 
+// As the launcher's rows.
 const nameStyles = css({
-  fontSize: "sm",
-  fontWeight: "medium",
+  fontSize: "md",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",

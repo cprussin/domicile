@@ -40,6 +40,24 @@ export const RowTile = ({ icon: Glyph, picture }: Props) => (
   </span>
 );
 
+type LogoProps = {
+  /** Called when `picture` fails to load. */
+  onError?: (() => void) | undefined;
+  /** A URL the page can load, such as a `data:` URL. */
+  picture: string;
+};
+
+/**
+ * A logo, such as an application's icon, in a {@link RowTile}'s place. No
+ * frame, since logos have their own shape.
+ */
+export const LogoTile = ({ onError, picture }: LogoProps) => (
+  <span aria-hidden className={logoTileStyles}>
+    {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: `error` is the picture failing to load, not something a person does to it */}
+    <img alt="" className={logoStyles} onError={onError} src={picture} />
+  </span>
+);
+
 const tileStyles = css({
   // Lit with a filled glyph on the highlighted row, since an outline glyph
   // loses contrast on the lighter background.
@@ -61,6 +79,21 @@ const tileStyles = css({
   placeItems: "center",
   transition:
     "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+});
+
+const logoTileStyles = css({
+  blockSize: 7,
+  display: "grid",
+  flexShrink: 0,
+  inlineSize: 7,
+  placeItems: "center",
+});
+
+// Slightly larger than a glyph, since it has no frame.
+const logoStyles = css({
+  blockSize: 5,
+  inlineSize: 5,
+  objectFit: "contain",
 });
 
 const pictureStyles = css({

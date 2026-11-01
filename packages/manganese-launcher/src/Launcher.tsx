@@ -13,7 +13,7 @@ import {
   ResultList,
   resultId,
 } from "@domicile-desktop/component-library/ResultList";
-import { RowTile } from "@domicile-desktop/component-library/RowTile";
+import { LogoTile, RowTile } from "@domicile-desktop/component-library/RowTile";
 import { Engine } from "@domicile-desktop/manganese-address/search";
 import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
 import { FilePreviewKind } from "@domicile-desktop/sdk/file-preview";
@@ -540,7 +540,7 @@ const AppTile = ({ icon }: { icon: string | undefined }) =>
   icon === undefined ? (
     <RowTile icon={AppWindowIcon} />
   ) : (
-    <PictureTile picture={icon} />
+    <LogoTile picture={icon} />
   );
 
 /**
@@ -560,7 +560,7 @@ const BookmarkTile = ({
   return picture === undefined ? (
     <RowTile icon={BookmarkSimpleIcon} />
   ) : (
-    <PictureTile
+    <LogoTile
       onError={
         picture === learned
           ? () => {
@@ -572,23 +572,6 @@ const BookmarkTile = ({
     />
   );
 };
-
-/**
- * An image icon in place of a glyph tile, without the tile's frame, since
- * logos have their own shape.
- */
-const PictureTile = ({
-  onError,
-  picture,
-}: {
-  onError?: (() => void) | undefined;
-  picture: string;
-}) => (
-  <span className={pictureTileStyles}>
-    {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: `error` is the picture failing to load, not something a person does to it */}
-    <img alt="" className={rowPictureStyles} onError={onError} src={picture} />
-  </span>
-);
 
 /**
  * The preview pane's content. Never blank, since that looks broken; with no
@@ -1139,22 +1122,6 @@ const viewStyles = css({
   border: "none",
   display: "block",
   inlineSize: "100%",
-});
-
-// The tile's size, without its frame.
-const pictureTileStyles = css({
-  blockSize: 7,
-  display: "grid",
-  flexShrink: 0,
-  inlineSize: 7,
-  placeItems: "center",
-});
-
-// Slightly larger than a glyph, since it has no frame.
-const rowPictureStyles = css({
-  blockSize: 5,
-  inlineSize: 5,
-  objectFit: "contain",
 });
 
 // Directory over name, each truncating independently.
