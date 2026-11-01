@@ -4,7 +4,8 @@
 #   .github/scripts/engine-apply.sh <path to chromium/src>
 #
 # Runs outside Chromium's shell. `apply.sh` needs only git, grep, cp and find,
-# and the shell's sandbox hides the exit status and output.
+# and the shell's sandbox hides the exit status and output. Shared by all three
+# engine workflows.
 #
 # `git am` commits each patch, so a HEAD still at the pin means nothing applied.
 set -euo pipefail
@@ -19,9 +20,18 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
+# A failed apply leaves the tree for a person to finish, and a build after
+# that would make the snapshot stale. See engine-keep-mtimes.sh.
+packages/domicile-engine/scripts/apply.sh "$CHROMIUM" || {
+  .github/scripts/engine-keep-mtimes.sh drop "$CHROMIUM"
+  exit 1
+}
 [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
+  .github/scripts/engine-keep-mtimes.sh drop "$CHROMIUM"
   echo "::error::apply.sh succeeded but the checkout is still at the pin, so no patch was applied" >&2
   exit 1
 }
+# Unchanged files get the mtime they had before the reset, so ninja rebuilds
+# only what this series changed.
+.github/scripts/engine-keep-mtimes.sh restore "$CHROMIUM"
 echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) patches"
