@@ -7,9 +7,9 @@
 //!   there, and starts a [`Casting`] stream of each. The picker previews the
 //!   sources on a frame of the desk, and offers browser windows from the
 //!   engine's own list when windows were asked for. A `Start` from the same
-//!   D-Bus connection while its picker is up takes that pick instead of
-//!   asking again: Electron apps (Slack) list screens and windows in two
-//!   sessions at once.
+//!   D-Bus connection while its picker is up is canceled once that picker
+//!   closes: Electron apps (Slack) list screens and windows in two sessions at
+//!   once, and their own pickers break when both get the pick.
 //! - The capture is listed for the shell's sharing indicator until it ends.
 //!   Closing the session, the shell's stop, or every stream ending ends it.
 //!
@@ -82,7 +82,7 @@ pub struct ScreenCast {
 /// The `Start`s waiting on each connection's open picker, by the sender part
 /// of their session handles. A connection is in the map while its picker is
 /// up.
-type Asking = Arc<Mutex<HashMap<String, Vec<Replier<Vec<CastPick>>>>>>;
+type Asking = Arc<Mutex<HashMap<String, Vec<Replier<()>>>>>;
 
 /// What each running stream's node shows, for [`CastPicks`].
 type Picks = Arc<Mutex<HashMap<u32, Pick>>>;
@@ -283,30 +283,16 @@ impl ScreenCast {
         let picked = match self.recalled(&selected, &open, &monitors) {
             Some(picked) => picked,
             None => match self.join(&session_handle) {
-                // The user picked for this connection's other session; its
-                // types bound that pick, not this one.
-                Some(joined) => match joined.await {
-                    Some(sources) => match chosen(
-                        &sources,
-                        &listed,
-                        &Selected {
-                            types: SOURCE_TYPES,
-                            ..selected.clone()
-                        },
-                    ) {
-                        Some(picked) => picked,
-                        None => {
-                            warn!(?sources, "the shell picked sources that cannot be cast");
-                            return (2, HashMap::new());
-                        }
-                    },
-                    None => return (1, HashMap::new()),
-                },
+                // The user picks once, for this connection's other session.
+                Some(closed) => {
+                    closed.await;
+                    debug!("a cast started while its app's picker was up is canceled");
+                    return (1, HashMap::new());
+                }
                 None => {
-                    let picker = Picker {
+                    let _picker = Picker {
                         asking: Arc::clone(&self.asking),
                         sender: sender(&session_handle),
-                        sources: None,
                     };
                     let kind = dialog(&selected, &open, preview(&self.shoot).await);
                     match ask(
@@ -320,7 +306,6 @@ impl ScreenCast {
                     .await
                     {
                         PortalAnswer::ScreenCast { sources } => {
-                            picker.picked(&sources);
                             match chosen(&sources, &open, &selected) {
                                 Some(picked) => picked,
                                 None => {
@@ -413,10 +398,9 @@ impl ScreenCast {
 }
 
 impl ScreenCast {
-    /// The pick of the picker up for `session_handle`'s connection, awaited:
-    /// `None` inside when it was canceled. `None` when none is up, and then
-    /// the caller puts one up.
-    fn join(&self, session_handle: &OwnedObjectPath) -> Option<Reply<Vec<CastPick>>> {
+    /// The closing of the picker up for `session_handle`'s connection,
+    /// awaited. `None` when none is up, and then the caller puts one up.
+    fn join(&self, session_handle: &OwnedObjectPath) -> Option<Reply<()>> {
         let mut asking = self.asking.lock().unwrap();
         match asking.get_mut(&sender(session_handle)) {
             Some(waiting) => {
@@ -725,29 +709,16 @@ pub(super) fn dialog(
     })
 }
 
-/// A connection's picker while it is up. Dropped, it hands its pick to the
-/// `Start`s waiting on it, or cancels them when there is none.
+/// A connection's picker while it is up. Dropped, it wakes the `Start`s
+/// waiting on it.
 struct Picker {
     asking: Asking,
     sender: String,
-    sources: Option<Vec<CastPick>>,
-}
-
-impl Picker {
-    /// Hand `sources` to every `Start` waiting on this picker.
-    fn picked(mut self, sources: &[CastPick]) {
-        self.sources = Some(sources.to_vec());
-    }
 }
 
 impl Drop for Picker {
     fn drop(&mut self) {
-        let waiting = self.asking.lock().unwrap().remove(&self.sender);
-        if let Some(sources) = &self.sources {
-            for waiting in waiting.into_iter().flatten() {
-                waiting.send(sources.clone());
-            }
-        }
+        self.asking.lock().unwrap().remove(&self.sender);
     }
 }
 
@@ -1864,10 +1835,12 @@ mod tests {
         );
     }
 
-    /// Slack asks for its screens and its windows in two sessions at once;
-    /// the one pick answers both.
+    /// Slack asks for its screens and its windows in two sessions at once,
+    /// then offers what came back in its own picker. The one pick answers the
+    /// first; the second is canceled, as Slack's picker breaks when both share
+    /// it.
     #[test]
-    fn a_cast_started_while_its_apps_picker_is_up_takes_that_pick() {
+    fn a_cast_started_while_its_apps_picker_is_up_is_canceled_after_the_pick() {
         const SECOND: &str = "/org/freedesktop/portal/desktop/session/1_7/second";
         let served = served(Grants::default());
         select(&served.client, vec![("types", Value::from(1u32))]);
@@ -1881,6 +1854,7 @@ mod tests {
         );
         // Let the second `Start` reach the picker.
         thread::sleep(Duration::from_millis(200));
+        assert!(!second.is_finished(), "the second waits for the pick");
 
         served.queue.answer(
             items[0].id,
@@ -1891,11 +1865,10 @@ mod tests {
             },
         );
 
-        for starting in [first, second] {
-            let (response, results) = starting.join().expect("Start returned");
-            assert_eq!(response, 0);
-            assert_eq!(read::<u32>(&streams(&results)[0], "source_type"), 1);
-        }
+        let (response, results) = first.join().expect("Start returned");
+        assert_eq!(response, 0);
+        assert_eq!(read::<u32>(&streams(&results)[0], "source_type"), 1);
+        assert_eq!(second.join().expect("Start returned").0, 1);
         assert!(
             served
                 .published

@@ -327,6 +327,7 @@ impl DomicileCompositor {
                     self.announce_a_new_window(app_id, toplevel, size);
                 } else {
                     self.tell_the_size(app_id, size);
+                    self.hold_to_the_box(app_id, toplevel, size);
                 }
             }
         }

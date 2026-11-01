@@ -8,6 +8,10 @@
 //! It also paces resizes: at most [`UNANSWERED`] size changes per toplevel are
 //! unanswered. Newer boxes wait, and only the newest goes out when the client
 //! answers one or after [`PATIENCE`].
+//!
+//! A client that acks the newest configure but draws another size is sent it
+//! again, once: Electron apps (Slack's huddle) resize their own windows after
+//! they map, and the engine would stretch that frame over the box.
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -60,6 +64,10 @@ pub struct ConfigureAnswers<S> {
     unanswered: VecDeque<(S, Instant)>,
     /// The newest resize, held until the client answers.
     waiting: Option<Resize>,
+    /// The newest configure sent, and its resize.
+    newest: Option<(S, Resize)>,
+    /// The resize last sent again by [`ConfigureAnswers::drew`].
+    told_again: Option<Resize>,
 }
 
 impl<S: PartialOrd + Copy> ConfigureAnswers<S> {
@@ -69,6 +77,8 @@ impl<S: PartialOrd + Copy> ConfigureAnswers<S> {
             size: None,
             unanswered: VecDeque::new(),
             waiting: None,
+            newest: None,
+            told_again: None,
         }
     }
 
@@ -95,6 +105,7 @@ impl<S: PartialOrd + Copy> ConfigureAnswers<S> {
     pub fn sent(&mut self, serial: S, resize: Resize, now: Instant) -> bool {
         self.sent
             .push_back((serial, resize.number, resize.device_size));
+        self.newest = Some((serial, resize));
         let changed = self.size != Some(resize.size);
         if changed {
             self.size = Some(resize.size);
@@ -114,6 +125,20 @@ impl<S: PartialOrd + Copy> ConfigureAnswers<S> {
         } else {
             None
         }
+    }
+
+    /// The client committed a frame of logical size `drawn` after acking
+    /// `acked`. The resize to send again when it acked the newest configure
+    /// but drew another size, once per resize: a client that cannot fit keeps
+    /// its size.
+    pub fn drew(&mut self, acked: Option<S>, drawn: (u32, u32)) -> Option<Resize> {
+        let (serial, resize) = self.newest?;
+        let again =
+            acked == Some(serial) && drawn != resize.size && self.told_again != Some(resize);
+        again.then(|| {
+            self.told_again = Some(resize);
+            resize
+        })
     }
 
     /// The resize to send now because the client took too long to answer.
@@ -331,5 +356,45 @@ mod tests {
             answers.resize(resize(7, (700, 480)), late),
             Resized::Waits(late + PATIENCE)
         );
+    }
+
+    #[test]
+    fn a_client_that_draws_another_size_than_it_acked_is_told_again_once() {
+        let mut answers = ConfigureAnswers::new();
+        answers.sent(10_u32, resize(1, SIZE), Instant::now());
+
+        assert_eq!(answers.drew(Some(10), (400, 300)), Some(resize(1, SIZE)));
+        answers.sent(11, resize(1, SIZE), Instant::now());
+        // A client that cannot fit keeps its size.
+        assert_eq!(answers.drew(Some(11), (400, 300)), None);
+    }
+
+    #[test]
+    fn a_client_that_draws_the_size_it_acked_is_not_told_again() {
+        let mut answers = ConfigureAnswers::new();
+        answers.sent(10_u32, resize(1, SIZE), Instant::now());
+
+        assert_eq!(answers.drew(Some(10), SIZE), None);
+    }
+
+    #[test]
+    fn a_client_still_drawing_an_older_size_is_not_told_again() {
+        let mut answers = ConfigureAnswers::new();
+        answers.sent(10_u32, resize(1, (400, 300)), Instant::now());
+        answers.sent(11, resize(2, SIZE), Instant::now());
+
+        assert_eq!(answers.drew(Some(10), (400, 300)), None);
+        assert_eq!(answers.drew(None, (400, 300)), None);
+    }
+
+    #[test]
+    fn a_new_box_may_be_told_again() {
+        let mut answers = ConfigureAnswers::new();
+        answers.sent(10_u32, resize(1, SIZE), Instant::now());
+        answers.drew(Some(10), (400, 300));
+        answers.sent(11, resize(1, SIZE), Instant::now());
+        answers.sent(12, resize(2, SIZE), Instant::now());
+
+        assert_eq!(answers.drew(Some(12), (400, 300)), Some(resize(2, SIZE)));
     }
 }
