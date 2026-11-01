@@ -393,3 +393,19 @@ fn copying_the_same_thing_twice_still_names_its_row() {
 fn a_history_with_no_rows_has_no_newest() {
     assert_eq!(History::default().newest(), None);
 }
+
+/// Restoring a row puts it on the clipboard, so it becomes the first row,
+/// keeping its id.
+#[test]
+fn a_restored_row_moves_to_the_top() {
+    let mut history = History::default();
+    history.record(Contents::text("address"));
+    let first = history.entries()[0].id;
+    history.record(Contents::text("something else"));
+
+    let restored = history.restore(first);
+
+    assert_eq!(restored, Some(Contents::text("address")));
+    assert_eq!(previews(&history), vec!["address", "something else"]);
+    assert_eq!(history.entries()[0].id, first);
+}

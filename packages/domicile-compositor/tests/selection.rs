@@ -119,6 +119,51 @@ fn a_clipboard_manager_copies_into_the_history_and_pastes_from_it() {
     );
 }
 
+/// A restored row becomes the first row, so the shell marks it as what is on
+/// the clipboard now.
+#[test]
+fn a_restored_row_tops_the_history() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    // Each copier holds its selection until the next replaces it.
+    let mut copy = |text: &str| -> (Child, u32) {
+        let copying = compositor
+            .command("wl-copy")
+            .args(["--foreground", "--", text])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("wl-copy starts; it is in `nix develop .#full`");
+        let history = chrome
+            .wait_for(|message| {
+                matches!(message, HostMessage::Clipboard { entries }
+                    if entries.first().is_some_and(|entry| entry.preview == text))
+            })
+            .expect("each copy tops the shell's history");
+        let HostMessage::Clipboard { entries } = history else {
+            unreachable!("the wait matched on this variant")
+        };
+        (copying, entries[0].id)
+    };
+    let (copying_earlier, earlier) = copy("earlier");
+    let (copying_later, _) = copy("later");
+
+    chrome
+        .say(&ChromeMessage::CopyClipboardEntry { entry: earlier })
+        .expect("the chrome socket takes a restore");
+
+    chrome
+        .wait_for(|message| {
+            matches!(message, HostMessage::Clipboard { entries }
+                if entries.first().is_some_and(|entry| entry.id == earlier))
+        })
+        .expect("the restored row is sent back as the first row");
+    for copying in [copying_earlier, copying_later] {
+        let copied = finished(copying, Duration::from_secs(10));
+        assert!(copied.status.success(), "wl-copy failed: {}", copied.stderr);
+    }
+}
+
 /// A copied image reaches the history as a row named for its size, and a
 /// restored image row pastes back the same bytes after its copier has left.
 #[test]
