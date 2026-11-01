@@ -70,7 +70,9 @@ describe("Markdown", () => {
       />,
     );
     expect(html).toMatch(/<video[^>]*aria-label="The launcher over a browser"/);
-    expect(html).toContain('src="/media/tour-launcher.webm"');
+    expect(html).toMatch(
+      /src="https:\/\/media\.domicile-desktop\.com\/[0-9a-f]{16}\/tour-launcher\.webm"/,
+    );
   });
 
   test("tab markers make tabs, the first one open", () => {

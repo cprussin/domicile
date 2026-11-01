@@ -1,0 +1,47 @@
+name: Docs media upload
+
+# Puts docs/media on R2, where the site serves it from
+# media.domicile-desktop.com (.github/scripts/docs-media-upload.sh).
+#
+# - On a pull request, so its media is there before the site that names it
+#   deploys.
+# - On a push to main or stable, for media that reached them another way.
+# - On dispatch, to fill a new bucket.
+#
+# Keys are content hashes, so an upload never touches what a deployed site
+# reads.
+on:
+  pull_request:
+    paths:
+      - docs/media/**
+  push:
+    branches: [main, stable]
+    paths:
+      - docs/media/**
+  workflow_dispatch:
+
+concurrency:
+  group: docs-media-upload-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    # A fork's pull request has no R2 credentials.
+    if: >-
+      ${{ github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Upload
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          # Overrides; unset means the script's defaults.
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          DOCS_MEDIA_R2_BUCKET: ${{ vars.DOCS_MEDIA_R2_BUCKET }}
+        run: .github/scripts/docs-media-upload.sh

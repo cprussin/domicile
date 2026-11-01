@@ -22,7 +22,6 @@
       "!**/.turbo/**/*",
       "!**/.vite/**/*",
       "!**/.next/**/*",
-      "!packages/site/public/media",
       "!**/dist/**/*",
       "!**/coverage/**/*",
       "!**/target/**/*",

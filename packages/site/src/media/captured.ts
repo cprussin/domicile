@@ -1,11 +1,8 @@
 // Which docs media files exist, read at build time. The files are
-// `docs/media/`, captured on crux by `packages/site/scripts/docs-media.sh` and served from
-// `public/media`.
+// `docs/media/`, captured on crux by `packages/site/scripts/docs-media.sh` and
+// served from R2 (`mediaUrl`).
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-
-const MEDIA = join(process.cwd(), "public", "media");
+import { mediaUrl } from "./mediaUrl";
 
 /** What a slot shows: a captured video, a captured picture, or neither yet. */
 export type Captured =
@@ -19,16 +16,14 @@ export type Captured =
  */
 export const captured = (
   name: string,
-  exists: (file: string) => boolean = (file) => existsSync(join(MEDIA, file)),
+  url: typeof mediaUrl = mediaUrl,
 ): Captured => {
-  const png = exists(`${name}.png`) ? `/media/${name}.png` : undefined;
-  if (exists(`${name}.webm`) && exists(`${name}.mp4`)) {
-    return {
-      kind: "video",
-      mp4: `/media/${name}.mp4`,
-      poster: png,
-      webm: `/media/${name}.webm`,
-    };
+  const png = url(`${name}.png`);
+  const webm = url(`${name}.webm`);
+  const mp4 = url(`${name}.mp4`);
+  if (webm !== undefined && mp4 !== undefined) {
+    return { kind: "video", mp4, poster: png, webm };
+  } else {
+    return png === undefined ? { kind: "missing" } : { kind: "picture", png };
   }
-  return png === undefined ? { kind: "missing" } : { kind: "picture", png };
 };
