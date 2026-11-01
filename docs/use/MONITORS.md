@@ -83,7 +83,8 @@ When a Chromecast, Google TV, Fire TV, Roku or other TV that takes a cast is
 nearby, the **Cast** item shows in the [top bar](TOP-BAR.md). Click it, then
 on the TV:
 
-- **Extend** to use the TV as another monitor, or
+- **Extend** to use the TV as another monitor, above your screens: move
+  the pointer up off the top to reach it, or
 - **Show…** to show one window, monitor or area on it.
 
 Sound goes with it. While casting, notifications don't pop up, and the

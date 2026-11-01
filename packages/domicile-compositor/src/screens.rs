@@ -233,23 +233,28 @@ impl Screens {
     /// - Positions are the engine's. Ozone lays displays out from the origin,
     ///   so there is nothing to normalize.
     ///
-    /// The engine lays out pixels only. So when a virtual monitor in
-    /// `virtuals` is scaled, the compositor lays the desk out instead: each
-    /// other display where the engine put it, and the virtual ones extending
-    /// it at their scales (see [`Screens::extended_onto`]).
+    /// The engine lays out pixels in one row only. So the compositor lays the
+    /// desk out instead when a virtual monitor extends it: above the
+    /// monitors, or at a scale in `virtuals`. Each other display stays where
+    /// the engine put it, and the virtual ones extend it (see
+    /// [`Screens::extended_onto`]).
     pub fn from_the_engine(
         displays: &[Display],
         vendors: &Vendors,
         virtuals: &[VirtualDisplay],
     ) -> Screens {
-        if virtuals.iter().all(|display| display.scale == Scale::ONE) {
-            return Screens::as_the_engine_placed(displays, vendors);
-        }
         let monitors: Vec<Display> = displays
             .iter()
             .filter(|display| !display.is_virtual())
             .cloned()
             .collect();
+        let extended = displays.iter().any(Display::is_virtual);
+        let scaled = virtuals.iter().any(|display| display.scale != Scale::ONE);
+        // A desk of virtual monitors alone, as on a headless engine, is the
+        // engine's row unless one is scaled.
+        if !extended || (monitors.is_empty() && !scaled) {
+            return Screens::as_the_engine_placed(displays, vendors);
+        }
         let placed = if monitors.is_empty() {
             Screens {
                 follows_the_window: false,
@@ -415,9 +420,13 @@ impl Screens {
         profiled.extended_onto(displays, virtuals)
     }
 
-    /// This profile's desktop with each virtual display in `displays` added
-    /// right of it, top-aligned, at its scale in `virtuals` (1 if it has
-    /// none).
+    /// This desktop with the virtual displays in `displays` added in a row,
+    /// each at its scale in `virtuals` (1 if it has none).
+    ///
+    /// The row sits on the monitors' top edge, centered over them, so the
+    /// pointer reaches a TV by going up. The monitors move down (and right,
+    /// for a row wider than them) to keep the desktop's top-left at the
+    /// origin. A desk of virtual displays alone is the row itself, top-aligned.
     ///
     /// On the engine's desktop each goes past the end of the connectors' row,
     /// where the engine places a display the layout does not name.
@@ -435,14 +444,64 @@ impl Screens {
             .map(|connector| connector.origin.0 + as_coordinate(mode_of(connector.id).0))
             .max()
             .unwrap_or(0);
-        for display in displays.iter().filter(|display| display.is_virtual()) {
-            let scale = virtuals
+        let added: Vec<(&Display, f64, (u32, u32))> = displays
+            .iter()
+            .filter(|display| display.is_virtual())
+            .map(|display| {
+                let scale = virtuals
+                    .iter()
+                    .find(|virtual_display| virtual_display.id == display.id)
+                    .map_or(1.0, |virtual_display| virtual_display.scale.get());
+                (display, scale, logical_of(display.size, scale))
+            })
+            .collect();
+        let row = (
+            added
                 .iter()
-                .find(|virtual_display| virtual_display.id == display.id)
-                .map_or(1.0, |virtual_display| virtual_display.scale.get());
+                .map(|(_, _, logical)| as_coordinate(logical.0))
+                .sum::<i32>(),
+            added
+                .iter()
+                .map(|(_, _, logical)| as_coordinate(logical.1))
+                .max()
+                .unwrap_or(0),
+        );
+        let on_the_monitors = !self.outputs.is_empty();
+        let row_left = if on_the_monitors {
+            (self.size.0 - row.0).div_euclid(2)
+        } else {
+            0
+        };
+        let moved = if on_the_monitors {
+            ((-row_left).max(0), row.1)
+        } else {
+            (0, 0)
+        };
+        for output in &mut self.outputs {
+            output.position = (output.position.0 + moved.0, output.position.1 + moved.1);
+        }
+        for desk in self
+            .scanout
+            .iter_mut()
+            .filter_map(|connector| connector.desk.as_mut())
+        {
+            desk.position = (desk.position.0 + moved.0, desk.position.1 + moved.1);
+        }
+        let monitors_size = self.size;
+        self.size = (
+            (monitors_size.0 + moved.0).max(row_left + moved.0 + row.0),
+            monitors_size.1 + moved.1,
+        );
+        let mut next_left = row_left + moved.0;
+        for (display, scale, logical) in added {
             let mode = (as_coordinate(display.size.0), as_coordinate(display.size.1));
-            let logical = logical_of(display.size, scale);
-            let position = (self.size.0, 0);
+            // On the monitors' top edge; top-aligned on a desk of its own.
+            let top = if on_the_monitors {
+                row.1 - as_coordinate(logical.1)
+            } else {
+                0
+            };
+            let position = (next_left, top);
             self.scanout.push(Connector {
                 id: display.id,
                 enabled: true,
@@ -468,7 +527,8 @@ impl Screens {
                 refresh_mhz: display.refresh_mhz,
             });
             row_end += mode.0;
-            self.size = (self.size.0 + logical.0, self.size.1.max(logical.1));
+            next_left += logical.0;
+            self.size.1 = self.size.1.max(logical.1);
         }
         self
     }
@@ -2013,8 +2073,8 @@ mod tests {
 
     #[test]
     fn a_profile_extends_the_desk_onto_a_virtual_monitor() {
-        // The profile still matches with the TV there, and the TV goes right
-        // of the desk the profile laid out, at its mode.
+        // The profile still matches with the TV there, and the TV goes above
+        // the desk the profile laid out, centered, at its mode.
         let mut displays = two_plugged_in();
         displays.push(a_tv());
 
@@ -2029,7 +2089,7 @@ mod tests {
                 logical: (1920, 1080),
                 mode: (1920, 1080),
                 name: "virtual-1".into(),
-                position: (1920, 0),
+                position: (0, 0),
                 scale: 1.0,
                 transform: Transform::Normal,
                 description: "Living Room TV".into(),
@@ -2038,7 +2098,12 @@ mod tests {
                 refresh_mhz: 60_000,
             })
         );
-        assert_eq!(placed.size(), (3840, 3200));
+        assert_eq!(
+            placed.outputs().next().map(|monitor| monitor.position),
+            Some((0, 1080)),
+            "the monitors move down to make room"
+        );
+        assert_eq!(placed.size(), (1920, 4280));
         assert_eq!(
             placed.scanout().last(),
             Some(&Connector {
@@ -2049,11 +2114,77 @@ mod tests {
                 transform: Transform::Normal,
                 scale: 1.0,
                 desk: Some(Desk {
-                    position: (1920, 0),
+                    position: (0, 0),
                     size: (1920, 1080),
                 }),
             })
         );
+    }
+
+    #[test]
+    fn a_tv_goes_above_the_monitors_centered() {
+        // So the pointer reaches it by going up from the monitors.
+        let mut displays = plugged_in();
+        let laptop = displays[0].clone();
+        displays.push(a_tv());
+
+        let screens =
+            Screens::from_the_engine(&displays, &unspelled(), &[pane_at(1, (1920, 1080), 1.0)]);
+
+        assert_eq!(
+            screens
+                .outputs()
+                .map(|output| (output.name.as_str(), output.position))
+                .collect::<Vec<_>>(),
+            vec![("drm-1", (0, 1080)), ("virtual-1", (480, 0))]
+        );
+        assert_eq!(screens.size(), (2880, 3000));
+        assert_eq!(
+            screens.scanout(),
+            vec![
+                Connector {
+                    id: laptop.id,
+                    enabled: true,
+                    origin: (0, 0),
+                    transform: Transform::Normal,
+                    scale: 1.0,
+                    desk: Some(Desk {
+                        position: (0, 1080),
+                        size: (2880, 1920),
+                    }),
+                },
+                Connector {
+                    id: VirtualDisplay::id_of(1),
+                    enabled: true,
+                    // Past the laptop panel in the engine's row.
+                    origin: (2880, 0),
+                    transform: Transform::Normal,
+                    scale: 1.0,
+                    desk: Some(Desk {
+                        position: (480, 0),
+                        size: (1920, 1080),
+                    }),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_tv_wider_than_the_monitors_moves_them_right_to_stay_centered() {
+        let mut displays = plugged_in();
+        displays.push(a_pane(1, (2880, 0), (3840, 2160)));
+
+        let screens =
+            Screens::from_the_engine(&displays, &unspelled(), &[pane_at(1, (3840, 2160), 1.0)]);
+
+        assert_eq!(
+            screens
+                .outputs()
+                .map(|output| output.position)
+                .collect::<Vec<_>>(),
+            vec![(480, 2160), (0, 0)]
+        );
+        assert_eq!(screens.size(), (3840, 4080));
     }
 
     /// A pane of another desktop, as a headless engine reports it: at
@@ -2210,7 +2341,7 @@ mod tests {
     }
 
     #[test]
-    fn a_scaled_virtual_monitor_keeps_the_monitors_where_the_engine_put_them() {
+    fn a_scaled_virtual_monitor_keeps_the_monitors_in_the_engines_row() {
         // A layout darkens each connector it leaves out, so it names the
         // plugged-in monitor too, where the engine had it.
         let mut displays = plugged_in();
@@ -2230,7 +2361,8 @@ mod tests {
                 transform: Transform::Normal,
                 scale: 1.0,
                 desk: Some(Desk {
-                    position: monitor.position,
+                    // Below the pane's 600 logical pixels.
+                    position: (monitor.position.0, monitor.position.1 + 600),
                     size: monitor.size,
                 }),
             })
@@ -2245,7 +2377,7 @@ mod tests {
     }
 
     #[test]
-    fn unscaled_virtual_monitors_leave_the_engine_to_lay_out() {
+    fn a_desk_of_unscaled_virtual_monitors_alone_is_the_engines_to_lay_out() {
         let displays = [
             a_pane(1, (0, 0), (1920, 1080)),
             a_pane(2, (1920, 0), (1500, 900)),
@@ -2280,7 +2412,8 @@ mod tests {
             (advertised.logical, advertised.mode, advertised.scale),
             ((960, 540), (1920, 1080), 2.0)
         );
-        assert_eq!(placed.size(), (2880, 3200));
+        assert_eq!(advertised.position, (480, 0));
+        assert_eq!(placed.size(), (1920, 3740));
     }
 
     #[test]

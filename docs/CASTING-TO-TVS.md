@@ -26,8 +26,9 @@ Miracast.
 - **`Cast` bar item** (`manganese-bar-module-cast`). Its popover lists the
   TVs found nearby, by name. Protocols are never shown. A TV that cannot be
   reached says why ("Needs Wi-Fi Direct"). Each other TV has two buttons:
-  - **Extend.** The TV becomes a monitor at its mode, placed right of the
-    others. It shows in Settings > Displays like any monitor.
+  - **Extend.** The TV becomes a monitor at its mode, placed above the
+    others and centered, so the pointer reaches it by going up. It shows in
+    Settings > Displays like any monitor.
   - **Show…** The share picker opens, titled "Cast to <TV>". Whatever is
     picked (window, monitor, region) goes to the TV.
 - **Sound follows the source:** a window's own apps, or every app for a
@@ -79,7 +80,10 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 - The engine adds a `DisplaySnapshot` of type `NETWORK` for each to the DRM
   reading, with connector `virtual-<n>`. `DrmScreen` lists it like any
   display; `ModesetParamsFromSnapshots` skips it, so no CRTC lights.
-- `Screens` places it right of the other monitors, whatever profile matched.
+- `Screens` places it on the other monitors' top edge, centered, whatever
+  profile matched, moving them down to make room. Several sit in one row. The
+  engine only lays out a row, so the compositor sends the layout itself. A
+  headless desk of virtual monitors alone stays the engine's row.
 - A tty session only. Nested, the window is the desktop, so Extend is
   unavailable.
 - The browser opens a desk window on it as on any display. Its GPU window has
