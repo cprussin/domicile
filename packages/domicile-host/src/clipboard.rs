@@ -25,8 +25,8 @@ pub const LONGEST_IMAGE: usize = 32 * 1024 * 1024;
 pub const HELD_BYTES: usize = 128 * 1024 * 1024;
 
 /// Characters of each copy sent to the shell as a preview. Restoring a copy
-/// always uses the full text.
-pub const PREVIEW_CHARACTERS: usize = 160;
+/// always uses the full text. Enough to fill a few lines of a wide row.
+pub const PREVIEW_CHARACTERS: usize = 480;
 
 /// Text MIME types, preferred first.
 ///

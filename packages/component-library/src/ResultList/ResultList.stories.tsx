@@ -7,18 +7,13 @@ import { Marked } from "./Marked";
 import { ResultList as ResultListComponent } from "./ResultList";
 import { RowTile } from "./RowTile";
 
-type Found = { isFolder: boolean; name: string; picture?: string };
-
-// A row whose tile shows a picture in place of its glyph.
-const PICTURE = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 9"><rect width="16" height="9" fill="#7cc4f0"/><rect y="5" width="16" height="4" fill="#4e8a3a"/><circle cx="12" cy="3" r="1.5" fill="#ffd56b"/></svg>',
-)}`;
+type Found = { isFolder: boolean; name: string };
 
 const meta = {
   args: {
-    children: ({ isFolder, name, picture }) => (
+    children: ({ isFolder, name }) => (
       <>
-        <RowTile icon={isFolder ? FolderIcon : FileIcon} picture={picture} />
+        <RowTile icon={isFolder ? FolderIcon : FileIcon} />
         <span>
           <Marked query="notes" text={name} />
         </span>
@@ -30,7 +25,6 @@ const meta = {
       { isFolder: true, name: "Notes" },
       { isFolder: false, name: "notes.org" },
       { isFolder: false, name: "Quarterly notes.pdf" },
-      { isFolder: false, name: "Notes from the hike.png", picture: PICTURE },
     ],
     keyOf: ({ name }) => name,
     label: "Results",
@@ -40,7 +34,7 @@ const meta = {
   argTypes: {
     children: { control: false, table: { category: "Contents" } },
     highlighted: {
-      control: { max: 3, min: 0, type: "number" },
+      control: { max: 2, min: 0, type: "number" },
       table: { category: "State" },
     },
     id: { control: "text", table: { category: "Contents" } },

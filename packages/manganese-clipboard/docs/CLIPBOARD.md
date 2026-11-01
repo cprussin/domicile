@@ -1,13 +1,15 @@
 # The clipboard
 
-**Meta+Shift+V** opens the clipboard history, newest first. Choosing a row
-makes it the current selection and moves it to the top. Source: `src/`.
+**Meta+Shift+V** opens the clipboard history: what is on your clipboard, then
+what was copied before, newest first. Choosing a row makes it the current
+selection. Source: `src/`.
 
 - It steers like the launcher, on the same `ResultList` rows: a search box
   keeps focus, typing narrows the rows to those holding every word, and the
   keyboard and pointer move one highlight.
-- The highlight starts on the second row, since the first is already on the
-  clipboard.
+- The current copy is in its own group above the rows, not a row, since
+  choosing it would change nothing. Searching hides it and narrows only the
+  rows. The highlight starts on the copy before it.
 
 ## Why
 
@@ -22,14 +24,15 @@ so the copy outlives the client that copied it.
   `domicile_host::clipboard`, tested in `packages/domicile-host/tests/clipboard.rs`.
 - The compositor pushes the history to the page, so the panel is current when
   it opens.
-- A row is an id and a short preview. The full copy stays in the compositor;
-  `copyClipboardEntry` takes the id. This limits how much of a copied secret
-  reaches the page.
+- A row is an id and a preview of up to 480 characters. The full copy stays in
+  the compositor; `copyClipboardEntry` takes the id. This limits how much of a
+  copied secret reaches the page.
 - Text and images. A copy keeps its text and one image (PNG if offered, else
   the first `image/` type). An image-only row reads `Image, 1920 × 1080`, or
   `Image (image/webp)` when it is not a PNG. Its `image` is true, and a PNG's
-  row carries a `thumbnail` (a PNG `data:` URL at most 96 pixels a side), which
-  the panel shows in the row's tile. Other images get an image glyph.
+  row carries a `thumbnail` (a PNG `data:` URL at most 256 pixels a side), which
+  the panel shows beside the row's text. Every image row has an image glyph.
+- The panel shows up to four lines of each copy, keeping its line breaks.
   Selections with neither (file drags) are skipped.
 - Memory only. Nothing is written to disk.
 - The clipboard only. The primary selection (highlighted text) stays out of

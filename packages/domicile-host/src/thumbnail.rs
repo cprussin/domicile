@@ -7,9 +7,9 @@ use std::io::Cursor;
 
 use crate::data_url::data_url;
 
-/// Longest side of a thumbnail, in pixels. Enough for a shell to crop it to a
-/// row's tile on a high-density screen.
-pub const LONGEST_SIDE: u32 = 96;
+/// Longest side of a thumbnail, in pixels. Enough for a shell to show it a
+/// few lines tall on a high-density screen.
+pub const LONGEST_SIDE: u32 = 256;
 
 /// `png` shrunk to fit [`LONGEST_SIDE`], as a PNG `data:` URL, or `None` if
 /// `png` does not decode. A smaller image keeps its size.

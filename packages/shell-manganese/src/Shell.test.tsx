@@ -1242,19 +1242,23 @@ describe("Shell", () => {
   });
 
   describe("the clipboard", () => {
-    it("shows what has been copied, newest first", () => {
+    it("shows what has been copied, the newest apart", () => {
       // The compositor pushes the history; the panel does not ask for it.
       renderShell();
       copied([
-        { id: 2, image: false, preview: "the newest", thumbnail: "" },
+        { id: 3, image: false, preview: "the newest", thumbnail: "" },
+        { id: 2, image: false, preview: "the middle", thumbnail: "" },
         { id: 1, image: false, preview: "the oldest", thumbnail: "" },
       ]);
 
       press("v", true);
 
       expect(
+        screen.getByRole("group", { name: "On your clipboard" }).textContent,
+      ).toContain("the newest");
+      expect(
         screen.getAllByRole("option").map((row) => row.textContent),
-      ).toStrictEqual(["the newestOn the clipboard now", "the oldest"]);
+      ).toStrictEqual(["the middle", "the oldest"]);
     });
 
     it("opens on the screen the keyboard is on", () => {

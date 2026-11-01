@@ -107,13 +107,4 @@ describe(RowTile, () => {
     expect(container.querySelector("svg")).not.toBeNull();
     expect(screen.queryByRole("img")).toBeNull();
   });
-
-  it("draws a picture in place of its glyph, hidden from screen readers", () => {
-    const picture = "data:image/png;base64,iVBORw0KGgo=";
-    const { container } = render(<RowTile icon={FileIcon} picture={picture} />);
-
-    expect(container.querySelector("img")?.getAttribute("src")).toBe(picture);
-    expect(container.querySelector("svg")).toBeNull();
-    expect(screen.queryByRole("img")).toBeNull();
-  });
 });
