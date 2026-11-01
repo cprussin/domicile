@@ -15,6 +15,11 @@
 //! does. It is good for [`MINTED_FOR`], and only the newest is kept, so an
 //! app answering late cannot take the keyboard from a later choice.
 //!
+//! An app that holds the keyboard may hand it to another of its windows with
+//! a token made for any input, however old. Slack starting a huddle raises
+//! its main window and then the huddle's, both for the same click; the first
+//! handover makes that click older than the keyboard's last `enter`.
+//!
 //! Some apps ignore `ActivationToken` and ask with a token of their own, made
 //! for their last input (Electron before 42, so Slack). A press's token also
 //! lets the process that sent the notification raise its window that way,
@@ -60,19 +65,24 @@ pub fn invites(data: &XdgActivationTokenData, pid: u32) -> bool {
 }
 
 /// Whether a request with `data`'s token may move the keyboard, given the
-/// serial of the keyboard's last `enter`.
-pub fn granted(data: &XdgActivationTokenData, last_enter: Option<Serial>) -> bool {
+/// serial of the keyboard's last `enter` and whether the asking app holds it.
+pub fn granted(data: &XdgActivationTokenData, last_enter: Option<Serial>, holds: bool) -> bool {
     if data.user_data.get::<Minted>().is_some() {
         data.timestamp.elapsed() < MINTED_FOR
     } else {
-        earned(data.serial.as_ref().map(|(serial, _)| *serial), last_enter)
+        earned(
+            data.serial.as_ref().map(|(serial, _)| *serial),
+            last_enter,
+            holds,
+        )
     }
 }
 
 /// Whether a token made for `asked` may move the keyboard, given the serial of
-/// the keyboard's last `enter`.
-fn earned(asked: Option<Serial>, last_enter: Option<Serial>) -> bool {
+/// the keyboard's last `enter` and whether the asking app `holds` it.
+fn earned(asked: Option<Serial>, last_enter: Option<Serial>, holds: bool) -> bool {
     match (asked, last_enter) {
+        (Some(_), _) if holds => true,
         (Some(asked), Some(last_enter)) => asked.is_no_older_than(&last_enter),
         _ => false,
     }
@@ -88,26 +98,26 @@ mod tests {
 
     #[test]
     fn a_token_from_input_since_the_keyboard_last_moved_moves_it() {
-        assert!(earned(Some(Serial::from(7)), Some(Serial::from(5))));
-        assert!(earned(Some(Serial::from(5)), Some(Serial::from(5))));
+        assert!(earned(Some(Serial::from(7)), Some(Serial::from(5)), false));
+        assert!(earned(Some(Serial::from(5)), Some(Serial::from(5)), false));
     }
 
     #[test]
     fn a_token_from_before_the_keyboard_last_moved_does_not() {
         // A window handing itself the keyboard back after the user moved on.
-        assert!(!earned(Some(Serial::from(4)), Some(Serial::from(5))));
+        assert!(!earned(Some(Serial::from(4)), Some(Serial::from(5)), false));
     }
 
     #[test]
     fn a_token_without_a_serial_does_not() {
-        assert!(!earned(None, Some(Serial::from(5))));
+        assert!(!earned(None, Some(Serial::from(5)), false));
     }
 
     #[test]
     fn a_token_minted_for_the_user_moves_it_after_the_keyboard_moved() {
         // Closing the drawer hands the keyboard back to a window after the
         // notification click minted the token.
-        assert!(granted(&minted(None), Some(Serial::from(5))));
+        assert!(granted(&minted(None), Some(Serial::from(5)), false));
     }
 
     #[test]
@@ -116,7 +126,7 @@ mod tests {
             timestamp: Instant::now() - MINTED_FOR,
             ..minted(None)
         };
-        assert!(!granted(&stale, Some(Serial::from(5))));
+        assert!(!granted(&stale, Some(Serial::from(5)), false));
     }
 
     #[test]
@@ -145,7 +155,28 @@ mod tests {
     fn a_clients_own_token_still_needs_a_recent_serial() {
         assert!(!granted(
             &XdgActivationTokenData::default(),
-            Some(Serial::from(5))
+            Some(Serial::from(5)),
+            false
+        ));
+    }
+
+    #[test]
+    fn an_app_holding_the_keyboard_hands_it_to_another_of_its_windows() {
+        // Slack raised its main window for the click, then the huddle's.
+        assert!(earned(Some(Serial::from(4)), Some(Serial::from(5)), true));
+    }
+
+    #[test]
+    fn an_app_not_holding_it_still_needs_a_recent_serial() {
+        assert!(!earned(Some(Serial::from(4)), Some(Serial::from(5)), false));
+    }
+
+    #[test]
+    fn an_app_holding_it_still_needs_a_token_made_for_input() {
+        assert!(!granted(
+            &XdgActivationTokenData::default(),
+            Some(Serial::from(5)),
+            true
         ));
     }
 }
