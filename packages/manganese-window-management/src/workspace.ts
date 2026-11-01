@@ -24,6 +24,7 @@ import { INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
 import { arrivedOn, droppedOn } from "./tree/drop";
 import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
+import { grouped, groupedBelowRoot, groupedRef } from "./tree/grouped";
 import { inserted, insertedNode } from "./tree/insert";
 import { laidOut, split, splitToggled } from "./tree/layout";
 import { movedBy, pushedOff, pushedOn } from "./tree/move";
@@ -96,6 +97,38 @@ export const emptyWorkspace = (name: string): Workspace => ({
   name,
   tiling: NOTHING_TILED,
 });
+
+/**
+ * The workspace with every window in a tab group (see `tree/grouped.ts`): the
+ * tiling, and each float holding more than a bare window. A fullscreen group
+ * stays fullscreen. The same object when nothing changes.
+ */
+export const groupedOn = (workspace: Workspace): Workspace => {
+  const tiling = grouped(workspace.tiling);
+  const floats = workspace.floats.map((float) =>
+    retiled(float, groupedBelowRoot),
+  );
+  const { fullscreen } = workspace;
+  if (
+    tiling === workspace.tiling &&
+    floats.every((float, at) => float === workspace.floats[at])
+  ) {
+    return workspace;
+  } else {
+    return {
+      ...workspace,
+      floats,
+      fullscreen:
+        fullscreen === undefined
+          ? undefined
+          : {
+              ...fullscreen,
+              ...groupedRef(rootHolding(workspace, fullscreen.id), fullscreen),
+            },
+      tiling,
+    };
+  }
+};
 
 /** Every window on the workspace: the tiled ones, then the floating ones. */
 export const windowsOn = (workspace: Workspace): readonly string[] => [
@@ -544,7 +577,7 @@ export const windowGrown = (
     (tiling) => resized(tiling, direction),
   );
 
-/** `splith` / `splitv` on the focused window's own box. */
+/** `splith` / `splitv`: moves the focus out of its tab group. */
 export const containerSplit = (workspace: Workspace, axis: Axis): Workspace =>
   inLayer(workspace, (tiling) => split(tiling, axis));
 

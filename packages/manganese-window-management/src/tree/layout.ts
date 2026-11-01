@@ -1,44 +1,116 @@
 // Layout commands: `splith`, `splitv`, `layout tabbed`, `layout stacking` and
 // `layout toggle split`.
 //
-// As in sway, a split wraps the focused node, and a layout changes the
+// A split moves a tab out of its group, beside it. A layout changes the
 // container the focus is in (the node itself if `focus parent` selected a
-// container). A lone window gets a container, since sway always has a
-// workspace container.
+// container), as in sway. A lone window gets a container.
 
 import type { Axis } from "../direction";
-import type { LayoutNode } from "./node";
-import { Layout, LayoutNode as Node, NodeKind, splitFor } from "./node";
+import type { Container, LayoutNode } from "./node";
+import {
+  Layout,
+  LayoutNode as Node,
+  NodeKind,
+  showsOneChild,
+  splitFor,
+  withChildAt,
+} from "./node";
 import { nodeAt, replacedAt } from "./path";
+import { withoutAt } from "./remove";
 import type { Tiling } from "./tiling";
-import { focusPathOf, withCommandsOn } from "./tiling";
+import {
+  focusChainOf,
+  focusedChildIn,
+  focusedWindowIn,
+  focusPathOf,
+  withCommandsOn,
+  withFocusOn,
+} from "./tiling";
 
 /**
- * `splith` / `splitv`: wraps the focus in a one-child container. A lone child
- * relays its container instead, as in i3, so groups do not nest one in one.
+ * `splith` / `splitv`: moves the focus out of its tab group, to the group's
+ * right or below it. Unchanged unless the focus is one of several tabs.
  */
-export const split = (tiling: Tiling, axis: Axis): Tiling =>
-  rearranged(tiling, (root, path) => {
-    const parent = path.slice(0, -1);
-    const around = path.length === 0 ? undefined : nodeAt(root, parent);
-    return around?.kind === NodeKind.Container && around.children.length === 1
-      ? relaid(root, parent, () => splitFor(axis))
-      : replacedAt(root, path, (node) =>
-          Node.Container(splitFor(axis), [node]),
-        );
-  });
+export const split = (tiling: Tiling, axis: Axis): Tiling => {
+  const { root } = tiling;
+  const path = root === undefined ? [] : focusPathOf(root, tiling.depth);
+  const around = path.slice(0, -1);
+  const group =
+    root === undefined || path.length === 0 ? undefined : nodeAt(root, around);
+  if (
+    root === undefined ||
+    group?.kind !== NodeKind.Container ||
+    !showsOneChild(group.layout) ||
+    group.children.length === 1
+  ) {
+    return tiling;
+  } else {
+    const moving = nodeAt(root, path);
+    const rest = withoutAt(root, path);
+    if (rest === undefined) {
+      // Unreachable: the group keeps its other tabs.
+      throw new Error("layout tree: splitting out a tab left nothing");
+    } else {
+      return withCommandsOn(
+        { ...tiling, root: besideGroup(rest, around, moving, axis) },
+        moving,
+      );
+    }
+  }
+};
+
+// Puts `moving` after the node at `at`: in the split around it if that runs
+// along `axis`, else in a new split of the two.
+const besideGroup = (
+  root: LayoutNode,
+  at: readonly number[],
+  moving: LayoutNode,
+  axis: Axis,
+): LayoutNode => {
+  const index = at.at(-1);
+  const parent =
+    index === undefined ? undefined : nodeAt(root, at.slice(0, -1));
+  return index !== undefined &&
+    parent?.kind === NodeKind.Container &&
+    parent.layout === splitFor(axis)
+    ? replacedAt(root, at.slice(0, -1), () =>
+        withChildAt(parent, index + 1, moving),
+      )
+    : replacedAt(root, at, (node) =>
+        Node.Container(splitFor(axis), [node, moving], 1),
+      );
+};
 
 /** `layout tabbed` / `layout stacking` on the container around the focus. */
 export const laidOut = (tiling: Tiling, layout: Layout): Tiling =>
   rearranged(tiling, (root, path) => relaid(root, path, () => layout));
 
-/** `layout toggle split`: a row becomes a column, and anything else a row. */
+/**
+ * `layout toggle split`: a row becomes a column, and anything else a row. For
+ * a window alone in its group, the split around the group.
+ */
 export const splitToggled = (tiling: Tiling): Tiling =>
   rearranged(tiling, (root, path) =>
-    relaid(root, path, (was) =>
+    relaid(root, aloneIn(root, path), (was) =>
       was === Layout.SplitH ? Layout.SplitV : Layout.SplitH,
     ),
   );
+
+// The path to the container around the group of a window alone in its group,
+// which `relaid` then changes. Else `path`.
+const aloneIn = (
+  root: LayoutNode,
+  path: readonly number[],
+): readonly number[] => {
+  const around = path.slice(0, -1);
+  const group = path.length < 2 ? undefined : nodeAt(root, around);
+  return nodeAt(root, path).kind === NodeKind.Window &&
+    group?.kind === NodeKind.Container &&
+    showsOneChild(group.layout) &&
+    group.children.length === 1
+    ? around.slice(0, -1)
+    : path;
+};
 
 // Gives the container around the focus a new layout, creating one for a lone
 // window.
@@ -49,26 +121,12 @@ const relaid = (
 ): LayoutNode => {
   const focused = nodeAt(root, path);
   if (focused.kind === NodeKind.Container) {
-    return replacedAt(root, path, () =>
-      Node.Container(
-        into(focused.layout),
-        focused.children,
-        focused.focused,
-        focused.fractions,
-      ),
-    );
+    return replacedAt(root, path, () => relaidContainer(focused, into));
   } else {
     const parent = path.slice(0, -1);
     const around = nodeAt(root, parent);
     if (around.kind === NodeKind.Container) {
-      return replacedAt(root, parent, () =>
-        Node.Container(
-          into(around.layout),
-          around.children,
-          around.focused,
-          around.fractions,
-        ),
-      );
+      return replacedAt(root, parent, () => relaidContainer(around, into));
     } else {
       // A lone window gets a new container. A toggle treats it as `SplitH`.
       return replacedAt(root, parent, (node) =>
@@ -78,9 +136,43 @@ const relaid = (
   }
 };
 
-// Edits the tree, then re-points the commands at the same node, whose depth
-// may have changed. Re-points at the node, not its window, so a split keeps a
-// selected container selected.
+// The container in its new layout. A split turning into tabs or a stack merges
+// the groups it held, so their windows become its tabs.
+const relaidContainer = (
+  container: Container,
+  into: (was: Layout) => Layout,
+): Container => {
+  const layout = into(container.layout);
+  return showsOneChild(layout) && !showsOneChild(container.layout)
+    ? merged(container, layout)
+    : Node.Container(
+        layout,
+        container.children,
+        container.focused,
+        container.fractions,
+      );
+};
+
+const merged = (container: Container, layout: Layout): Container => {
+  const tabs = container.children.map((child) =>
+    child.kind === NodeKind.Container && showsOneChild(child.layout)
+      ? child.children
+      : [child],
+  );
+  const shown = focusedChildIn(container);
+  const within =
+    shown.kind === NodeKind.Container && showsOneChild(shown.layout)
+      ? shown.focused
+      : 0;
+  return Node.Container(
+    layout,
+    tabs.flat(),
+    tabs.slice(0, container.focused).flat().length + within,
+  );
+};
+
+// Edits the tree, then puts commands back on the same window, or on the same
+// container: a relaid container keeps its path.
 const rearranged = (
   tiling: Tiling,
   into: (root: LayoutNode, path: readonly number[]) => LayoutNode,
@@ -90,7 +182,12 @@ const rearranged = (
     return tiling;
   } else {
     const path = focusPathOf(root, tiling.depth);
-    const focused = nodeAt(root, path);
-    return withCommandsOn({ ...tiling, root: into(root, path) }, focused);
+    const after = withFocusOn(
+      { ...tiling, root: into(root, path) },
+      focusedWindowIn(root),
+    );
+    return path.length === focusChainOf(root).length
+      ? after
+      : { ...after, depth: path.length };
   }
 };

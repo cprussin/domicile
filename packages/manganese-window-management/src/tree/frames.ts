@@ -317,15 +317,8 @@ const within = (pointed: Path | undefined, at: number): Path | undefined =>
   pointed === undefined || pointed[0] !== at ? undefined : pointed.slice(1);
 
 /**
- * How much a split of one leaves empty at its end, where the next window
- * opens, so the group shows.
- */
-const LONE_SPLIT_ROOM = 64;
-
-/**
  * The part of `area` child `at` gets: its share of the space left after the
- * gaps, along the container's axis. A split of one leaves
- * {@link LONE_SPLIT_ROOM} instead.
+ * gaps, along the container's axis.
  *
  * Each edge rounds to a whole pixel, as a float's does, so a client's box
  * stays on the pixel grid. Shares stay exact, so a 1px drag moves an edge 1px.
@@ -336,10 +329,7 @@ const sliceOf = (
   gap: number,
   at: number,
 ): Rect => {
-  const gaps =
-    container.children.length === 1
-      ? LONE_SPLIT_ROOM
-      : gap * (container.children.length - 1);
+  const gaps = gap * (container.children.length - 1);
   const shares = container.fractions.slice(0, at);
   const before = shares.reduce((sum, fraction) => sum + fraction, 0);
   const fraction = container.fractions[at];

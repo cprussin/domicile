@@ -11,21 +11,31 @@ Manganese uses sway's layout model. For the key bindings, see
   bottom, which the focus glow lights. A lone window keeps the gap at the
   edges. The top edge has half the gap, 10px, since the top bar already
   separates windows from the screen's edge.
-- A new window or tab opens just after the focused one. Closing a window
-  gives its space to the rest.
+- Every tiled window is in a tab group, and a split holds only groups
+  (`tree/grouped.ts`). A new window opens as a tab just after the focused
+  one. Closing a window gives its space to the rest.
+- Splitting is a move: a window moved, dropped or split out of a group lands
+  in a group of its own. There is no opening straight into a split.
 - A window moved out of a group into a split takes an even share, and the
   rest keep their relative sizes. Moving it on into the next group gives the
   split its old sizes back.
 - Closing the focused window focuses the one in its group focused most
   recently before it, as sway's focus stack does. Each window records when it
   last took focus, and keeps that when it moves.
-- Every tiled window is in a group. The first window on a workspace opens in a
-  tab group of one, so the next window's place shows.
+- The first window on a workspace opens in a tab group of one, so the next
+  window's place shows.
 - A group changes only on request (a layout or split command, a move or a
   drop). Closing down to one window keeps the group. A group left holding only
-  another group is replaced by it.
-- A split of one window leaves 64px empty at its end, where the next window
-  opens.
+  another group is replaced by it, and so is a split left holding one group.
+- `split h` / `split v` (Meta+B / Meta+V) move the window out of its group, to
+  the group's right or below it. A window alone in its group stays put.
+- `layout toggle split` (Meta+E) on a group splits its tabs into groups of
+  their own. On a window alone in its group, it turns the split around the
+  group between a row and a column. `layout tabbed` or `layout stacking` on a split merges its groups'
+  windows into one group.
+- `move <direction>` moves a window alone in its group as the group would: into
+  the next group that way, as a tab. A tab moves along its strip, then out of
+  the group past its end.
 - Every edge of a split lies on a whole pixel, as a float's does. Shares are
   kept exact; only the boxes round.
 - There are 10 workspaces for the whole desktop, plus the scratchpad and floating
@@ -230,7 +240,7 @@ such as a Slack huddle.
   to a line would stretch its border and rounding into a blob.
 - The overlay is drawn over the open tabs of the windows it aims at.
 - **Dropping on the edge of a window in a tab group** puts the window beside
-  the group, as in sway. A group of one becomes a split.
+  the group, as in sway, in a group of its own.
 - **Dragging a tab over its own group** breaks it out of the group: it goes
   beside the group, on the half under the pointer.
 - **Dragging the empty end of a tab strip**, past its last tab, picks up the

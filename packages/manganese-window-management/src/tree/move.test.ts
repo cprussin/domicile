@@ -1,12 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
 import { Direction } from "../direction";
-import { movedBy } from "./move";
+import { movedBy, pushedOn } from "./move";
 import { Layout, LayoutNode } from "./node";
 import { removed } from "./remove";
 import {
   focusedIdOf,
   focusedNodeOf,
+  focusedParent,
   NOTHING_TILED,
   windowsOf,
   withFocusOn,
@@ -185,6 +186,83 @@ describe("movedBy", () => {
     );
   });
 
+  it("moves a window alone in its tab group into the group beside it", () => {
+    // The group of one is the window: it does not leave it for the same spot.
+    const groups = withFocusOn(
+      {
+        depth: 0,
+        root: LayoutNode.Container(Layout.SplitH, [
+          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
+        ]),
+      },
+      "b",
+    );
+
+    const moved = movedBy(groups, Direction.Left);
+
+    expect(moved.root).toMatchObject({
+      children: [{ id: "a" }, { id: "b" }],
+      layout: Layout.Tabbed,
+    });
+    expect(focusedNodeOf(moved)).toMatchObject({ id: "b" });
+  });
+
+  it("swaps a selected tab group with the tab group beside it", () => {
+    // Joining groups is `layout tabbed` on their split; a move reorders them.
+    const groups = withFocusOn(
+      {
+        depth: 0,
+        root: LayoutNode.Container(Layout.SplitH, [
+          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+          LayoutNode.Container(Layout.Tabbed, [
+            LayoutNode.Window("b"),
+            LayoutNode.Window("c"),
+          ]),
+        ]),
+      },
+      "b",
+    );
+
+    const moved = movedBy(focusedParent(groups), Direction.Left);
+
+    expect(moved.root).toMatchObject({
+      children: [
+        { children: [{ id: "b" }, { id: "c" }] },
+        { children: [{ id: "a" }] },
+      ],
+      layout: Layout.SplitH,
+    });
+    expect(focusedNodeOf(moved)).toMatchObject({ layout: Layout.Tabbed });
+  });
+
+  it("puts a selected tab group beside the groups of a split it enters", () => {
+    const row = withFocusOn(
+      {
+        depth: 0,
+        root: LayoutNode.Container(Layout.SplitH, [
+          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+          LayoutNode.Container(Layout.SplitV, [
+            LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
+            LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("c")]),
+          ]),
+        ]),
+      },
+      "a",
+    );
+
+    const moved = movedBy(focusedParent(row), Direction.Right);
+
+    expect(moved.root).toMatchObject({
+      children: [
+        { children: [{ id: "a" }] },
+        { children: [{ id: "b" }] },
+        { children: [{ id: "c" }] },
+      ],
+      layout: Layout.SplitV,
+    });
+  });
+
   it("moves a window into the container beside it", () => {
     // As in sway, a window moved at a container joins it instead of swapping.
     const moved = movedBy(withFocusOn(NESTED, "a"), Direction.Right);
@@ -313,15 +391,6 @@ describe("movedBy", () => {
         fractions: [expect.closeTo(0.7), expect.closeTo(0.3)],
       });
     });
-
-    it("gives a window that empties its group the group's share", () => {
-      const lone = movedBy(removed(groups, "a"), Direction.Right);
-
-      expect(lone.root).toMatchObject({
-        children: [{ id: "b" }, { layout: Layout.Tabbed }],
-        fractions: [expect.closeTo(0.7), expect.closeTo(0.3)],
-      });
-    });
   });
 
   it("moves a selected container into the container beside it", () => {
@@ -383,5 +452,26 @@ describe("movedBy", () => {
     const only = { depth: 0, root: LayoutNode.Window("a") };
 
     expect(movedBy(only, Direction.Right)).toBe(only);
+  });
+});
+
+describe("pushedOn", () => {
+  it("puts a tab group arriving at a tab group beside it", () => {
+    const arriving = LayoutNode.Container(Layout.Tabbed, [
+      LayoutNode.Window("a"),
+      LayoutNode.Window("b"),
+    ]);
+    const there = withFocusOn(
+      {
+        depth: 0,
+        root: LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("c")]),
+      },
+      "c",
+    );
+
+    expect(pushedOn(there, arriving, Direction.Right).root).toMatchObject({
+      children: [{ children: [{}, {}] }, { children: [{ id: "c" }] }],
+      layout: Layout.SplitH,
+    });
   });
 });

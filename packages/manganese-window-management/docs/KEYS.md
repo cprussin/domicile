@@ -12,7 +12,7 @@ replaces them.
 | Meta+Shift+H/J/K/L, Meta+Shift+arrows | Move the window in that direction (sway's `move`), onto the next screen past the edge. |
 | Meta+1 … Meta+0 | Go to workspace 1–10. |
 | Meta+Shift+1 … Meta+Shift+0 | Send the window, or the `focus parent` selection, to workspace 1–10 and stay. |
-| Meta+B / Meta+V | `splith` / `splitv`. |
+| Meta+B / Meta+V | `splith` / `splitv`: move the window out of its group, to the right / below. |
 | Meta+W / Meta+S / Meta+E | `layout tabbed` / `layout stacking` / `layout toggle split`. |
 | Meta+A / Meta+Shift+A | `focus parent` / `focus child`. |
 | Meta+F / Meta+Shift+F | Fullscreen on this screen / on every screen. |
@@ -44,12 +44,12 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 | `focus left/right/up/down` | Move focus. |
 | `focus parent` / `focus child` | Select the enclosing container, or go back to the window. |
 | `focus mode_toggle` | Switch between floating and tiled windows. |
-| `move left/right/up/down` | Move the window. |
+| `move left/right/up/down` | Move the window: along its tabs, then out of its group. A window alone in its group joins the next group that way. |
 | `move scratchpad` / `scratchpad show` | Hide the window / show the oldest hidden one, or hide the shown one, so presses rotate through them. |
 | `move container to workspace <name>` | Send the window, or the `focus parent` selection, to workspace `1`–`10`. |
 | `workspace <name>` | Go to workspace `1`–`10`, or back to the previous one if it is already shown. |
-| `split h` / `split v` | Wrap the focus in a new container. |
-| `layout stacking/tabbed/toggle split` | Set the container's layout. |
+| `split h` / `split v` | Move the window, or the `focus parent` selection, out of its tab group to the group's right / below it. |
+| `layout stacking/tabbed/toggle split` | Set the container's layout. A split turned into tabs or a stack merges its groups; tabs turned into a split each get a group. |
 | `fullscreen toggle [global]` | Fullscreen on this screen, or every screen. |
 | `floating toggle` | Float or tile the window. |
 | `exec <argv…>` | Spawn `argv` from the compositor's `PATH`. |
@@ -156,6 +156,9 @@ focus. Each press runs once. See
 - **`exec` takes an argv**, not a `sh -c` string. For pipes, `&&` or `$VAR`,
   use `exec("sh", "-c", "…")`.
 - **No per-window rules** (`for_window`). Every window opens tiled.
+- **Every window is in a tab group.** A new window always opens as a tab, and
+  `split h` / `split v` move a window out of its group instead of choosing
+  where the next one opens.
 - **No `reload` or `exit`.** There is no config to re-read or session to end
   from the page.
 - **No output, input or bar config.** The compositor's config sets displays and

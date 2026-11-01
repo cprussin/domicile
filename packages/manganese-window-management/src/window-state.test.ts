@@ -1131,19 +1131,17 @@ describe("moves across screens", () => {
     // sway's order: through the tiling, then to the screen that way.
     const state = reduce(
       twoScreens(),
-      WindowAction.WindowStepped(Direction.Left),
+      WindowAction.FocusStepped(Direction.Left),
       WindowAction.WindowStepped(Direction.Left),
     );
 
     expect(state.focused).toBe("left");
-    expect(activeIdOf(state)).toBe(APP("term"));
+    expect(activeIdOf(state)).toBe(APP("editor"));
     expect(windowsOf(workspaceNamed(state, "1").tiling)).toEqual([
       APP("kitty"),
-      APP("term"),
-    ]);
-    expect(windowsOf(workspaceNamed(state, "2").tiling)).toEqual([
       APP("editor"),
     ]);
+    expect(windowsOf(workspaceNamed(state, "2").tiling)).toEqual([APP("term")]);
   });
 
   it("comes in on the near edge of a row", () => {
@@ -1211,11 +1209,34 @@ describe("the keyed commands", () => {
     });
 
     const split = reduce(
-      desktop("kitty"),
+      desktop("kitty", "editor"),
       WindowAction.ContainerSplit(Axis.Vertical),
     );
     expect(workspaceHere(split).tiling.root).toMatchObject({
+      children: [
+        { children: [{ id: APP("kitty") }], layout: Layout.Tabbed },
+        { children: [{ id: APP("editor") }], layout: Layout.Tabbed },
+      ],
       layout: Layout.SplitV,
+    });
+  });
+
+  it("opens a window as a tab of one moved out of its group", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowStepped(Direction.Right),
+      WindowAction.AppAppeared("files", "files"),
+    );
+
+    expect(workspaceHere(state).tiling.root).toMatchObject({
+      children: [
+        { children: [{ id: APP("kitty") }], layout: Layout.Tabbed },
+        {
+          children: [{ id: APP("editor") }, { id: APP("files") }],
+          layout: Layout.Tabbed,
+        },
+      ],
+      layout: Layout.SplitH,
     });
   });
 

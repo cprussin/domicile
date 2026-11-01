@@ -50,6 +50,7 @@ import {
   focusStepped,
   fullscreenKept,
   fullscreenToggled,
+  groupedOn,
   holds,
   modeToggled,
   nodeArrived,
@@ -620,7 +621,7 @@ export const WindowAction = {
     kind: WindowActionKind.CommandExecuted as const,
   }),
 
-  /** `splith` / `splitv`. */
+  /** `splith` / `splitv`: moves the focus out of its tab group. */
   ContainerSplit: (axis: Axis) => ({
     axis,
     kind: WindowActionKind.ContainerSplit as const,
@@ -1076,7 +1077,18 @@ export type WindowAction = ReturnType<
 export const reduceWindows = (
   state: WindowState,
   action: WindowAction,
-): WindowState => rehomed(limited(state, reduceAction(state, action)));
+): WindowState =>
+  rehomed(limited(state, regrouped(reduceAction(state, action))));
+
+// Keeps every window in a tab group after any change (see `groupedOn`).
+const regrouped = (state: WindowState): WindowState => {
+  const workspaces = state.workspaces.map((workspace) => groupedOn(workspace));
+  return workspaces.every(
+    (workspace, index) => workspace === state.workspaces[index],
+  )
+    ? state
+    : { ...state, workspaces };
+};
 
 const reduceAction = (
   state: WindowState,

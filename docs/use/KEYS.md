@@ -28,10 +28,10 @@ or Super key).
 
 | Keys | Does |
 |---|---|
-| Meta+W | Tabs |
+| Meta+W | Tabs; merges a selected split into one group |
 | Meta+S | Stacked |
-| Meta+E | Side by side, switching between across and down |
-| Meta+B / Meta+V | Put the next window beside / below this one |
+| Meta+E | Splits a group's tabs side by side, switching between across and down |
+| Meta+B / Meta+V | Move the window out of its group, to the right / below |
 | Meta+A / Meta+Shift+A | Select the window's group / back to the window |
 
 ## The desktop
