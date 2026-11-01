@@ -590,7 +590,9 @@ it, or ignore it.
 Only requests made since the keyboard last moved arrive. The compositor drops a
 token whose serial is older than the keyboard's last `enter`, or has none: that
 is a window taking focus back on its own, not something the user did. Such a
-window is marked `urgent` instead.
+window is marked `urgent` instead. An app that holds the keyboard may pass it to
+another of its windows with any token made for input, as Slack does when a
+click raises its main window and then a huddle's.
 
 A request that arrives is the shell's to decide, so the compositor marks no
 window `urgent` for it: ignoring a request is silent, and the compositor cannot

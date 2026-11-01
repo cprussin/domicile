@@ -4,7 +4,10 @@
 use smithay::output::Output;
 use smithay::reexports::{
     wayland_protocols::xdg::shell::server::xdg_toplevel,
-    wayland_server::protocol::{wl_output, wl_seat, wl_surface::WlSurface},
+    wayland_server::{
+        protocol::{wl_output, wl_seat, wl_surface::WlSurface},
+        Resource,
+    },
 };
 use smithay::utils::{Serial, SERIAL_COUNTER};
 use smithay::wayland::{
@@ -319,7 +322,7 @@ impl XdgActivationHandler for DomicileCompositor {
     /// A client asked for a window to be activated. Forwarded, not granted.
     ///
     /// A token made before the keyboard last moved, or a stale one the
-    /// compositor minted, is dropped (see [`activation::granted`]): the window
+    /// compositor minted, is dropped, unless the asking app holds the keyboard (see [`activation::granted`]): the window
     /// is asking on its own, not for the user, and is marked urgent instead
     /// (`app_urgent`). Unless its process just had a notification pressed
     /// (see [`activation::invites`]), which uses that press up. The rest are
@@ -333,10 +336,17 @@ impl XdgActivationHandler for DomicileCompositor {
         // Always remove the token; nothing else prunes the pool, so clients
         // could grow it without bound.
         self.xdg_activation_state.remove_token(&token);
-        let last_enter = self.seat.get_keyboard().unwrap().last_enter();
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let last_enter = keyboard.last_enter();
+        // Whether the asking app holds the keyboard, so is moving it between
+        // its own windows.
+        let holds = keyboard
+            .current_focus()
+            .and_then(|focused| focused.client())
+            .is_some_and(|holder| surface.client().as_ref() == Some(&holder));
         // `None` for the chrome's own surface, which is never announced.
         let app_id = self.app_id_of(&surface);
-        if !activation::granted(&token_data, last_enter)
+        if !activation::granted(&token_data, last_enter, holds)
             && !(app_id.is_some() && self.invited(&surface))
         {
             let asked = token_data.serial.map(|(serial, _)| serial);
