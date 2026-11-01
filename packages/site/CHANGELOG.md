@@ -1,0 +1,159 @@
+# @domicile-desktop/site
+
+## 0.1.0
+
+### Minor Changes
+
+- f270614: The landing page leads with "Make your own desktop": pick a window model, edit its React and Tailwind live, then download it and run it for real. Also a showcase of asks and the code that does them, a "Made for fast iteration" section, and /llms.txt for coding agents.
+
+### Patch Changes
+
+- a1c6226: A "Build an app" guide: web apps, and app modules in React, on the site at /docs/apps/build.
+- 17b142c: The Cast popover matches the Bluetooth panel: a titled panel with Casting and TVs nearby sections. Each TV has Extend and Show… buttons, a running cast has Stop, and a failed cast says why under its TV. The bar icon no longer turns teal while casting.
+- 1161efd: `domicile --help` (or `-h`, `help`, or `<verb> --help`) lists every command.
+- a16de29: A reference page for every `domicile` command, on the site at /docs/reference/cli.
+- 64ffcb7: `domicile theme [light|dark|toggle]` switches the desktop's theme from a terminal, or prints it. It works with any shell and needs no pointer.
+- 348b5e3: Contributor docs move to docs/contributing; the site's Contributing link follows.
+- 22844b3: Docs audit: Wayland-only app support and the apps we check, the config schema served from domicile-desktop.com, locking in a `nix run` trial, portal requests a shell must answer, a complete packaging example, GPU troubleshooting for users, a NixOS flake example, differences from Chrome, and contributor-only sections labeled in the package references.
+- e01fbd8: Docs media scenes for the tour's extensions and monitors, and the Settings app's Shell page.
+- 32449d3: A docs link written as its page's file name, like `SHELL-FROM-MANGANESE.md`, reads as that page's title, like "Start from manganese". The quickstart's "Next" list links its own words.
+- e8cb518: Docs media: a scene whose process ignores TERM no longer hangs the capture job.
+- e44bc45: Docs screenshots can show full screen, like the videos, and captures draw the desktop in Inter rather than JetBrains Mono.
+- 24ef5af: Manganese page: smooth 60 fps videos, a tour with one big capture per row, an uncropped and longer hero, and tour captures for web apps, notifications, the bar and Settings.
+- 56dd6c1: The manganese tour describes its new captures.
+- bcbbd7d: Tabbed examples on docs pages no longer overlap what follows them and sit clear of their tab bar, and a docs page's pictures no longer nest a block in a paragraph.
+- 8a380bd: Docs: picking a tab no longer jumps the page, and `js` code blocks are highlighted.
+- 1c497d4: The docs site renders the new user guide (`docs/use`): tabs for the Settings app and the config file, screenshots from `docs/media`, and redirects from moved pages.
+- e7a3770: The Domicile docs have their own Install page; manganese's keeps the same steps.
+- e455955: `domicile open <file|folder|url>` opens anything: a web link in a browser window, anything else with its type's default from `mimeapps.list`, supertypes counted (a `text/plain` default opens Markdown and source code). `domicile open --app <url|module>` opens a site or app module as an app. Domicile's `xdg-open` and the launcher's Enter run it, so apps, terminals and the launcher agree. `open-url`, `open-app` and `run-app` are gone: use `open` and `open --app`.
+- ab2d2f0: The engine hands `Shell` the typed `Domicile` and an app's `main` the `AppDomicile`, built by the SDK's layer, which the engine bundles. Shells and apps no longer call `desktop()`/`appDesktop()`. The SDK drops `system()`, the portal watch helpers and `./appearance` from its public API; use the `Domicile` namespaces.
+- a93f4c5: Every "Make your own desktop" model starts apps: a command box at the bottom, and a terminal on Meta+Enter. The preview opens a window for each command.
+- 75b9403: Ghost and other buttons in Settings, History and the site lose the outline they drew when not focused. The preset now sets the page's color scheme, light or dark, so packages no longer replace its `html` rules. A switch in Settings says "Off" when it is off.
+- 5e57e17: The homepage gets ready for launch. Manganese moves up as three steps (use it, change a piece, make your own). The CSS examples join "Things you can do". Batteries is grouped by who provides what, with the full list behind a disclosure. The quickstart installs from the install guide, repository setup included, and ends with making the shell your login session's, and so does the builder's "Run it for real". Builder hints name the Code tab. Desktop apps is a short band, and there's a FAQ. Overclaims are fixed: the Steam tray, "at full speed" and "any video call". The homepage and the manganese page get their own titles, descriptions, canonical URLs and link preview images.
+- 9446014: The homepage shows the shell being swapped live: a race and a film keep playing while `domicile load-shell` stacks them. The new `live-swap` recording is captured on crux like the other docs media.
+- 1b3e994: The homepage leads with why: a new headline and a shorter intro, the real desktop capture right under them, fewer repeated sections and no eyebrow labels. The "Make your own desktop" preview draws its windows as apps, and "Things you can do" shows only Domicile features.
+- 48a9f9c: The roadmap is now a list of known gaps, KNOWN-GAPS.md; the site's link reads "Known gaps".
+- 2c0f9e7: Landing page: the feature cards under the hero lift and light up on hover and keyboard focus.
+- aac880d: The landing page's section cards drop "Start from manganese".
+- 5e0723d: Manganese page: why to pick it first (tiling, websites as windows, extensions), a bar item of your own with its capture, "Coming from Sway?", and a way to try it in a window before the keys. Install tabs now come from the install guide.
+- d99cf25: Docs videos can play full screen, and the recordings show each key pressed in a caption, with tighter timing. The manganese hero opens its terminal and browser from the launcher.
+- e0c0884: The homepage drops the "Rotate kitty 17 degrees" card.
+- 1c7e183: The desktop stays smooth while the machine is busy without joining the `domicile` group: the engine asks rtkit to raise its drawing threads when the limits refuse. The NixOS module enables rtkit, and the packages recommend it. The group is optional and gives the most reliable result.
+- b1041f8: The last package-specific scripts leave `scripts/`: `dev-shell` becomes a package the shells' `start:dev` runs, docs media capture moves into the site, `update-engine-release.sh` and the IDL check into the engine, and `smoke-compositor.sh` into the e2e harness.
+- e645e06: Shell author docs on the site, React first: a one-file quickstart, starting from manganese, the guides and the package references, each product with its own sidebar.
+- 66bfb0d: Shell and app examples, on the site and in the docs, come in React and in plain JavaScript, with a plain JavaScript example shell beside the React one.
+- 5f8475c: Domicile page: a "Batteries included" section, a section on desktop apps, and cards in the hero that jump to the main sections.
+- 1b6c11c: Docs pages: the manganese user guide, rendered from the repository's markdown under `/docs/`.
+- e634596: A capture shown full screen is letterboxed on a screen of another shape instead of cropped.
+- cc050c2: Give the real apt, dnf and zypper setup on the install tabs.
+- b4d7504: Add a command line section led by `domicile load-shell`, show a short example under each SDK feature, and trim the Chromium talk.
+- feb5cfe: The Matrix room, #domicile:prussin.net, in every page's header and footer, with GitHub, as icon links.
+- cdba491: Show real desktop apps in the site's captures (SuperTuxKart, Big Buck Bunny in mpv, Blender, GIMP, LibreOffice) instead of terminals, and retitle the hero "Your desktop, built like a web page."
+- c31745e: Fix the Vercel build: install the repository root's tools so turbo can build the site's workspace packages.
+- f6ffcb7: Stop Vercel deploying branches with a slash in their name.
+- Updated dependencies [bafd922]
+- Updated dependencies [fe90bca]
+- Updated dependencies [77fd631]
+- Updated dependencies [a62f35a]
+- Updated dependencies [923e65b]
+- Updated dependencies [44eb13c]
+- Updated dependencies [3980a9a]
+- Updated dependencies [c7a232d]
+- Updated dependencies [a2def76]
+- Updated dependencies [d3a65c5]
+- Updated dependencies [9d0934e]
+- Updated dependencies [a9a62e8]
+- Updated dependencies [fa78a81]
+- Updated dependencies [509f948]
+- Updated dependencies [a2ee8ea]
+- Updated dependencies [22844b3]
+- Updated dependencies [c03a44b]
+- Updated dependencies [40f5af3]
+- Updated dependencies [ab2d2f0]
+- Updated dependencies [17064a7]
+- Updated dependencies [a88ce23]
+- Updated dependencies [0e8c788]
+- Updated dependencies [a1569c6]
+- Updated dependencies [6fecbbd]
+- Updated dependencies [258d9aa]
+- Updated dependencies [d9f5353]
+- Updated dependencies [14e6071]
+- Updated dependencies [56e1c22]
+- Updated dependencies [98d378e]
+- Updated dependencies [e42226f]
+- Updated dependencies [506b12f]
+- Updated dependencies [00e5da2]
+- Updated dependencies [75b9403]
+- Updated dependencies [3f7e261]
+- Updated dependencies [b49fa3a]
+- Updated dependencies [35b8470]
+- Updated dependencies [6730912]
+- Updated dependencies [2a87739]
+- Updated dependencies [7a29c8f]
+- Updated dependencies [4967b5d]
+- Updated dependencies [be59aae]
+- Updated dependencies [9d4a876]
+- Updated dependencies [44d0983]
+- Updated dependencies [6825067]
+- Updated dependencies [cd02e0e]
+- Updated dependencies [840418d]
+- Updated dependencies [57b5b1f]
+- Updated dependencies [b2c6fd5]
+- Updated dependencies [a472a59]
+- Updated dependencies [93f015d]
+- Updated dependencies [b85d9bb]
+- Updated dependencies [01b9340]
+- Updated dependencies [fccc784]
+- Updated dependencies [e1205bb]
+- Updated dependencies [670713c]
+- Updated dependencies [8bc5b85]
+- Updated dependencies [4ee2c21]
+- Updated dependencies [3146073]
+- Updated dependencies [bbf849b]
+- Updated dependencies [e83ec4a]
+- Updated dependencies [7a786a4]
+- Updated dependencies [4759ab2]
+- Updated dependencies [3bb9bd5]
+- Updated dependencies [0f4582e]
+- Updated dependencies [d80e2f5]
+- Updated dependencies [c15ba93]
+- Updated dependencies [2fe5852]
+- Updated dependencies [52a1d65]
+- Updated dependencies [3e5b976]
+- Updated dependencies [d138939]
+- Updated dependencies [4064278]
+- Updated dependencies [f4a973d]
+- Updated dependencies [341debf]
+- Updated dependencies [ae7874c]
+- Updated dependencies [599d60f]
+- Updated dependencies [75799a0]
+- Updated dependencies [2430e48]
+- Updated dependencies [9fd298a]
+- Updated dependencies [c4fe915]
+- Updated dependencies [b1041f8]
+- Updated dependencies [20a1fc5]
+- Updated dependencies [065ff4b]
+- Updated dependencies [1e2aeca]
+- Updated dependencies [b39d80e]
+- Updated dependencies [21b82af]
+- Updated dependencies [427c184]
+- Updated dependencies [ee63a45]
+- Updated dependencies [66bfb0d]
+- Updated dependencies [5a6a4fc]
+- Updated dependencies [25b9bd3]
+- Updated dependencies [113dabe]
+- Updated dependencies [0bd0d2a]
+- Updated dependencies [d9f5353]
+- Updated dependencies [1971d87]
+- Updated dependencies [570e7bb]
+- Updated dependencies [2edc3c1]
+- Updated dependencies [b241f68]
+- Updated dependencies [6c3db42]
+- Updated dependencies [9c89f16]
+- Updated dependencies [ca86667]
+- Updated dependencies [ee1cc17]
+- Updated dependencies [eb6b52a]
+- Updated dependencies [63728a9]
+  - @domicile-desktop/component-library@2.0.0
+  - @domicile-desktop/sdk@1.1.0
+  - @domicile-desktop/react@0.1.0

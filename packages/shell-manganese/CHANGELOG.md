@@ -1,5 +1,282 @@
 # @domicile-desktop/manganese
 
+## 1.1.0
+
+### Minor Changes
+
+- 3980a9a: A `Cast` bar item lists the TVs nearby: extend the desktop onto one, or cast what the share picker picks to it. `@domicile-desktop/sdk/cast` runs the casts, and `<PortalDialogs />` answers a cast's own ScreenCast request. No backend finds TVs yet, so the item stays hidden.
+- 623860a: While a TV is cast to, the desk holds off idle blanking and holds notification banners, which the TV could show. `inhibitIdle` takes the reason the portal is told.
+- c429bd5: The notifications panel has a Do not disturb switch. While it is on, only critical notifications pop up; the rest still collect in the panel, and the bell shows struck through.
+- b49fa3a: Add a Google Messages bar item: Messages for web in a panel, with a count of its new messages. Popovers can stay mounted while closed and open from triggers on other bars, and a bar item's panel can keep the keyboard.
+- a113605: Inboxes open as app windows instead of a page in the notifications drawer. Messages is one window that keeps running in the background: closing it hides it. Each Gmail account has one window, reused by its inbox row, its bar counter and its new-mail notifications. `Inbox.Page` is replaced by `Inbox.Window`, and an inbox's `launcherName` adds a launcher entry that opens its window.
+- be59aae: Inboxes in the notification drawer: `runManganese({ inboxes })` lists inboxes above the notifications, and their unread conversations count toward the bell. An inbox is plain data (`Inbox.Watched` or `Inbox.Page`, from `@domicile-desktop/manganese-notifications/inbox`). New packages `@domicile-desktop/manganese-inbox-gmail` (`gmailInbox`) and `@domicile-desktop/manganese-inbox-google-messages` (`messagesInbox`, which opens in the drawer, widened, with a back button). The Gmail and Google Messages bar items stay, and export what the inboxes share. `SlideOver` gains `keepMounted`, `onBack` and `wide`.
+- 10ee944: A keep awake pill in the default bar shows while anything keeps the screens on, names the apps, and turns off your own hold. Quick settings' button drops its eye, and `KeepAwakeIndicator` is gone.
+- 44d0983: Switch keyboard layouts at runtime. `input.keyboard.keymaps` lists named keymaps; the first is the one the desktop starts on. The `keymap next` and `keymap <name>` commands switch every keyboard and show a toast, and the new `Keymap` bar item, in the default bar left of the theme toggle and on the lock screen, shows and switches it. The item's list and the toast show xkb's name for each layout. A switch lasts until the desktop restarts. The shell option `keymap.hideDefault` hides the item on the first keymap, and the Settings app's Keyboard page edits the list.
+  
+  The component library adds `ChoiceRow` (`RadioRow`, `CheckboxRow` and `ChoiceList`), the screenshot picker's rows as a component, and `ChoiceToast` takes a `detail` line.
+- 3757596: Manganese ships its CSS prebuilt, and the shell builder runs no Panda step: it only transpiles and bundles. Style custom bar items with a CSS import.
+- 1ad2756: Volume, microphone and brightness keys show the new level in a notice on the focused screen.
+- fccc784: Automatic brightness and a night light, as on macOS. The backlight follows the room's light from iio-sensor-proxy and learns from the levels the user sets. The night light warms every monitor from sunset to sunrise in the time zone's city, or on custom hours, with a switch in the brightness popover. Both are on by default and set in the Settings app's Shell page or under `shell_options`. Shells set the color temperature with `domicile.displays.setColorTemperature(kelvin)`.
+- a1f9bb9: `QuickSettings` moves to its own package, `@domicile-desktop/manganese-quick-settings`. `@domicile-desktop/manganese/QuickSettings` is gone. The separate hardware bar items stay.
+- 341debf: Quick settings: one bar item (`@domicile-desktop/manganese/QuickSettings`) replaces the theme, keep awake, brightness, volume, Bluetooth, network and battery items in `DEFAULT_BAR` and `LOCK_BAR`. Its button shows the network, sound and battery, plus the eye while the screens are kept on and Bluetooth while a device is connected. Its panel has labeled tiles (Wi-Fi or Wired, Bluetooth, Keep awake, Night light, Dark mode), the brightness and volume sliders, and the battery in words with the time left, and a Settings button. A tile's arrow opens the item's panel in place. Each hardware item exports its parts as `./quick-settings`; the component library adds `QuickTile`, and `system-battery` reads UPower's `TimeToEmpty` as `secondsLeft`.
+- f8b1742: New manganese command, for a key or `domicile send-shell`: `night-light` toggles the night light, as the brightness popover's switch does.
+- e97b6b2: New manganese commands, for a key or `domicile send-shell`: `virtual-monitor add [<width>x<height>]` adds a monitor with no connector, and `virtual-monitor remove` removes the newest one added.
+- 0abccd9: New manganese commands, for a key or `domicile send-shell`: `notifications` toggles the notification drawer, `notifications clear` clears it, and `idle-inhibitor` toggles keeping the screens on.
+- 2d0838f: The shell builder loads the project's own `vite.config`, so a shell can add tools such as Tailwind. The builder's shell output settings and Domicile's packages override the config. Without one, it transpiles and bundles only. Manganese exports its Panda config, for a shell's own Panda setup.
+- 0bd0d2a: The desktop draws its text in Inter, which ships with it, instead of the computer's default sans-serif face. The manganese `font` option picks another installed face.
+
+### Patch Changes
+
+- 8fa9c05: Automatic brightness and the shared backlight move into `@domicile-desktop/system-backlight`: `./auto-brightness`, `./shared-backlight`, `./host-backlight` and `./host-ambient-light` (no React), and `./react` with `useBacklightLevel`, `useHasBacklight`, `useAutoBrightness` and `deskBacklight`. The brightness bar module no longer exports `./desk-backlight`, `./useAutoBrightness` or `./fixture` (now `system-backlight/fixture`).
+- a2def76: Rework the clipboard history to look and steer like the launcher: a search box that narrows the copies, one highlight for keyboard and pointer, readable rows with a text or link glyph, and the previous copy highlighted on open so Enter swaps back. The launcher's result rows move to the component library as `ResultList`, `RowTile` and `Marked`.
+- 9d0934e: Network details can be copied. `DetailList` values can be selected, and a `copyable` row shows a copy button on each line under the pointer. Wi-Fi and wired details offer one for each address, gateway, DNS server, interface name and hardware address. DNS servers sit one to a line.
+- bb92965: Windows moving into a new split or between tiling and floating no longer stretch their contents. The window's box eases into place and crops the contents, which stay at their real size.
+- 1062efc: A workspace switch slides normally onto a browser window whose page has a dialog, file picker or find bar open.
+- ab2d2f0: The engine hands `Shell` the typed `Domicile` and an app's `main` the `AppDomicile`, built by the SDK's layer, which the engine bundles. Shells and apps no longer call `desktop()`/`appDesktop()`. The SDK drops `system()`, the portal watch helpers and `./appearance` from its public API; use the `Domicile` namespaces.
+- 64b22f3: Focus follows the pointer while Meta is held.
+- 6730912: A browser window hidden behind a tab can be screenshotted, previewed and shared: the engine lists it as `isCaptured` while a capture runs, and manganese keeps it laid out under the shown tab. The screenshot and share pickers keep their size when a pick shows a preview. A shared screen's cursor reaches consumers that read it as metadata, such as Chrome.
+- 7a29c8f: Icons in the bar, quick settings and level notices move when their state changes or they are pointed at: the bell swings, Wi-Fi arcs fill out, Bluetooth dots slide out, speaker waves pulse, a slash draws across what is off, the dark mode sun turns to a moon, and more. New `Animated*Icon` components and `_controlHover` / `_controlActive` conditions in the component library. The notifications bar item no longer exports a Panda preset.
+- 3ded272: Pressing a notification from an inbox in a window, such as Messages, brings up that inbox's window, whether or not its page asks to be in front.
+- d4b9da4: The bell counts an inbox's new mail or texts once: its own notifications stay out of the count, since its unread conversations already add to it. Every inbox names the sender its notifications arrive under, `notifiesAs`, and `useNotifications` takes the senders to leave out.
+- 9d4a876: The keep awake pill names the website a browser window keeps the screens on for ("Kept awake by youtube.com"), with its icon, instead of the engine. `<webview>` gains `wakeLock` and `domicile-wake-lock-change`, and the compositor lists the engine's own hold as `domicile-browser`.
+- cd02e0e: The volume, microphone and brightness toast is larger, with a big icon, the level as a number and a thick meter. Pressing a key again while it is up updates it in place instead of showing it again. The component library adds `LevelToast`.
+- 8946a22: Manganese mounts with `@domicile-desktop/react`'s `mount`, so it runs in strict mode and shows an error in place of the desktop if it throws.
+- e781b22: Moving a window into or out of a group nested in a tab moves only that window: the outer tab strip no longer flies out of or into the group's well, and the group's tab eases to its new slot instead of jumping.
+- 6b2a242: Nested tab groups animate and light properly: a tab switch or new window in a nested group no longer zooms its strip in from the outer group's, switching away from a nested group no longer shrinks its windows away, and a group selected inside a tab is lit around its own windows.
+- 1fcf33a: The notification drawer opens as a panel under the bell, like quick settings, instead of sliding in from the screen's edge. Its sections have clearer headings, inbox rows are tighter, and each notification sits on its own tile. "Clear all" is in a quieter footer. An inbox's page, such as Messages, widens the panel and has a back button.
+  
+  `NotificationsDrawer` (from `notifications-context`) now holds a popover `handle` that every bell opens, in place of `open(screen)`. `NotificationDrawer` takes `handle`, `onOpen(screen)` and `onClose()` in place of `onOpenChange`.
+- 3146073: Each package asks for the bun and Node its workspace does: `engines` is `bun >=1.4.2`, `node >=24`.
+- c15ba93: Shells and manganese packages take the typed `Domicile` instead of the raw host. `PortalDialogs` takes `domicile` (no more `host`/`desktopOf`), `usePortalWallpaper` and manganese-host's helpers take `Domicile` slices, and the SDK's `bindKeys`, `fireGlobalShortcuts`, `watchShellOptions` and `casting` take namespaces. Adds `portals.fireShortcut`.
+- 2fe5852: Everything that took `system(domicile)` takes `desktop(domicile)`, or the namespace it calls.
+  
+  - SDK: `keyboard.keymaps` and `keyboard.selectKeymap`. `watchMenu`, `readIconTheme`, `watchIconTheme` and `previewFile` take `{ dbus }` or `{ files }`. `MenuSystem`, `IconThemeSystem` and `PreviewSystem` are `MenuDesktop`, `IconThemeDesktop` and `PreviewDesktop`.
+  - system-apps: functions take `AppsDesktop` (`./apps-desktop`). `./fake-system`'s `fakeSystem` is `./fake-desktop`'s `fakeDesktop`.
+  - component-library: `AppChooser`'s `system` prop is `domicile`; `PortalDialogs`' `systemOf` is `desktopOf`, and its `host` is a whole `DomicileHost`; `systemFolders` is `desktopFolders`, over `domicile.files`; `usePictureUrl` and `useApps` take `domicile.files` and `AppsDesktop`.
+- c4fe915: The screenshot picker lists what to save beside one preview of the desk, which outlines the pick with its size. It fits on the screen, arrow keys move through the list, and a Copy button copies the pick.
+- b1041f8: The last package-specific scripts leave `scripts/`: `dev-shell` becomes a package the shells' `start:dev` runs, docs media capture moves into the site, `update-engine-release.sh` and the IDL check into the engine, and `smoke-compositor.sh` into the e2e harness.
+- 45c846a: The Meta+A selection tint covers a tab group's open tab too.
+- 0bbe0f9: An accent tint covers the container Meta+A selects, tabs and windows included. It replaces the accent line along a selected group's tabs.
+- 96a82ac: The user guide's `shell_options` examples nest groups, as the config reads them: `{ "clock": { "format": "12h" } }`, not `"clock.format"`.
+- 113dabe: The boot splash crossfades into manganese's themed background instead of white.
+- 1971d87: React hooks for system state. Each `system-*` package has a `/react` with hooks and one watch per desktop: `useBattery`, `useBluetooth`, `useNetwork`, `useWifi`, `useAudio` and more. `@domicile-desktop/react` gains the shared watches (`sharedWatch`, `perDesktop`, `useSharedWatch`, `useDeskWatch`, `watchPresence`). manganese-host's `domicile-context`, `per-host`, `shared-watch`, `useSharedWatch` and `watch-presence` move there, and manganese uses `<DomicileProvider>`.
+- f45bf2b: Dragging a window over any part of a tab strip adds it as a tab beside the nearest tab, shown as a line between the tabs. The drop overlay is drawn over open tabs.
+- 4096040: Pressing a title bar or tab inside a selected group selects just that window. A title bar's float and fullscreen buttons act on their own window, never the selected group, and a tab of a floating group tiles alone. `Stage` takes `onBarPress`, and `WindowAction.WindowBarPressed` is new.
+- de5d134: Document adding items to the default top bar with `DEFAULT_BAR`.
+- 6c3db42: A virtual monitor can be resized in place with `resize`, keeping its output, windows and casts.
+- Updated dependencies [a3c11aa]
+- Updated dependencies [bafd922]
+- Updated dependencies [fe90bca]
+- Updated dependencies [8fa9c05]
+- Updated dependencies [77fd631]
+- Updated dependencies [1caba05]
+- Updated dependencies [9e60e1e]
+- Updated dependencies [6bbc80b]
+- Updated dependencies [a62f35a]
+- Updated dependencies [923e65b]
+- Updated dependencies [44eb13c]
+- Updated dependencies [3980a9a]
+- Updated dependencies [623860a]
+- Updated dependencies [17b142c]
+- Updated dependencies [c7a232d]
+- Updated dependencies [59b3d65]
+- Updated dependencies [c99bfef]
+- Updated dependencies [d961736]
+- Updated dependencies [a2def76]
+- Updated dependencies [d3a65c5]
+- Updated dependencies [487c705]
+- Updated dependencies [9d0934e]
+- Updated dependencies [bb92965]
+- Updated dependencies [a9a62e8]
+- Updated dependencies [fa78a81]
+- Updated dependencies [509f948]
+- Updated dependencies [1062efc]
+- Updated dependencies [a2ee8ea]
+- Updated dependencies [c429bd5]
+- Updated dependencies [22844b3]
+- Updated dependencies [e455955]
+- Updated dependencies [c03a44b]
+- Updated dependencies [7c948b4]
+- Updated dependencies [f3cb310]
+- Updated dependencies [e60eb1f]
+- Updated dependencies [40f5af3]
+- Updated dependencies [ab2d2f0]
+- Updated dependencies [17064a7]
+- Updated dependencies [a88ce23]
+- Updated dependencies [0e8c788]
+- Updated dependencies [a1569c6]
+- Updated dependencies [6fecbbd]
+- Updated dependencies [258d9aa]
+- Updated dependencies [d9f5353]
+- Updated dependencies [14e6071]
+- Updated dependencies [56e1c22]
+- Updated dependencies [e0bf6c2]
+- Updated dependencies [7646678]
+- Updated dependencies [920763e]
+- Updated dependencies [98d378e]
+- Updated dependencies [83f9f2d]
+- Updated dependencies [64b22f3]
+- Updated dependencies [e42226f]
+- Updated dependencies [506b12f]
+- Updated dependencies [a390b06]
+- Updated dependencies [00e5da2]
+- Updated dependencies [75b9403]
+- Updated dependencies [bbcc610]
+- Updated dependencies [73dd960]
+- Updated dependencies [fd40a91]
+- Updated dependencies [690c592]
+- Updated dependencies [3f7e261]
+- Updated dependencies [b49fa3a]
+- Updated dependencies [9f441cd]
+- Updated dependencies [2b1b80f]
+- Updated dependencies [4856cc9]
+- Updated dependencies [35b8470]
+- Updated dependencies [c9c75a8]
+- Updated dependencies [8bc5b85]
+- Updated dependencies [6730912]
+- Updated dependencies [2a87739]
+- Updated dependencies [7a29c8f]
+- Updated dependencies [a113605]
+- Updated dependencies [f6f6e5b]
+- Updated dependencies [d4b9da4]
+- Updated dependencies [4967b5d]
+- Updated dependencies [be59aae]
+- Updated dependencies [9b8a4f0]
+- Updated dependencies [4917e8f]
+- Updated dependencies [9d4a876]
+- Updated dependencies [10ee944]
+- Updated dependencies [44d0983]
+- Updated dependencies [f18b865]
+- Updated dependencies [6825067]
+- Updated dependencies [cd02e0e]
+- Updated dependencies [452a746]
+- Updated dependencies [840418d]
+- Updated dependencies [57b5b1f]
+- Updated dependencies [1ad2756]
+- Updated dependencies [b2c6fd5]
+- Updated dependencies [a472a59]
+- Updated dependencies [93f015d]
+- Updated dependencies [b85d9bb]
+- Updated dependencies [e781b22]
+- Updated dependencies [01b9340]
+- Updated dependencies [6b2a242]
+- Updated dependencies [558794b]
+- Updated dependencies [59b63cd]
+- Updated dependencies [9a0cf19]
+- Updated dependencies [35bf5de]
+- Updated dependencies [fccc784]
+- Updated dependencies [0aa24da]
+- Updated dependencies [e1205bb]
+- Updated dependencies [1fcf33a]
+- Updated dependencies [c4b7781]
+- Updated dependencies [670713c]
+- Updated dependencies [cd52ce3]
+- Updated dependencies [8bc5b85]
+- Updated dependencies [4ee2c21]
+- Updated dependencies [3146073]
+- Updated dependencies [bbf849b]
+- Updated dependencies [e83ec4a]
+- Updated dependencies [7a786a4]
+- Updated dependencies [4759ab2]
+- Updated dependencies [48ab992]
+- Updated dependencies [3bb9bd5]
+- Updated dependencies [0f4582e]
+- Updated dependencies [d80e2f5]
+- Updated dependencies [c15ba93]
+- Updated dependencies [2fe5852]
+- Updated dependencies [1f1775a]
+- Updated dependencies [52a1d65]
+- Updated dependencies [3e5b976]
+- Updated dependencies [50f2549]
+- Updated dependencies [d138939]
+- Updated dependencies [9a2597b]
+- Updated dependencies [a1f9bb9]
+- Updated dependencies [4064278]
+- Updated dependencies [f4a973d]
+- Updated dependencies [341debf]
+- Updated dependencies [ae7874c]
+- Updated dependencies [599d60f]
+- Updated dependencies [75799a0]
+- Updated dependencies [2430e48]
+- Updated dependencies [9fd298a]
+- Updated dependencies [c4fe915]
+- Updated dependencies [b1041f8]
+- Updated dependencies [20a1fc5]
+- Updated dependencies [065ff4b]
+- Updated dependencies [1e2aeca]
+- Updated dependencies [45c846a]
+- Updated dependencies [0bbe0f9]
+- Updated dependencies [acfe355]
+- Updated dependencies [b39d80e]
+- Updated dependencies [21b82af]
+- Updated dependencies [427c184]
+- Updated dependencies [ee63a45]
+- Updated dependencies [f8b1742]
+- Updated dependencies [e97b6b2]
+- Updated dependencies [0abccd9]
+- Updated dependencies [66bfb0d]
+- Updated dependencies [5a6a4fc]
+- Updated dependencies [25b9bd3]
+- Updated dependencies [113dabe]
+- Updated dependencies [0bd0d2a]
+- Updated dependencies [d9f5353]
+- Updated dependencies [6a34b99]
+- Updated dependencies [da8b0a7]
+- Updated dependencies [1971d87]
+- Updated dependencies [48d5b1a]
+- Updated dependencies [559480f]
+- Updated dependencies [f45bf2b]
+- Updated dependencies [4096040]
+- Updated dependencies [46f285a]
+- Updated dependencies [570e7bb]
+- Updated dependencies [2edc3c1]
+- Updated dependencies [b241f68]
+- Updated dependencies [44f23d6]
+- Updated dependencies [6c3db42]
+- Updated dependencies [9c89f16]
+- Updated dependencies [ca86667]
+- Updated dependencies [ee1cc17]
+- Updated dependencies [eb6b52a]
+- Updated dependencies [d862eaa]
+- Updated dependencies [8b5c0ca]
+- Updated dependencies [42f1cd0]
+- Updated dependencies [1d6f437]
+- Updated dependencies [63728a9]
+- Updated dependencies [b4a16b1]
+  - @domicile-desktop/manganese-notifications@1.1.0
+  - @domicile-desktop/component-library@2.0.0
+  - @domicile-desktop/sdk@1.1.0
+  - @domicile-desktop/system-backlight@1.1.0
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.0
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.0
+  - @domicile-desktop/manganese-bar-module-cast@0.1.0
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.0
+  - @domicile-desktop/manganese-bar-module-keymap@0.1.0
+  - @domicile-desktop/manganese-bar-module-network@1.1.0
+  - @domicile-desktop/manganese-bar-module-notifications@1.1.0
+  - @domicile-desktop/manganese-bar-module-volume@2.0.0
+  - @domicile-desktop/manganese-quick-settings@0.1.0
+  - @domicile-desktop/manganese-bar-module-gmail@2.0.0
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.0
+  - @domicile-desktop/manganese-bar-module-launcher-button@1.0.1
+  - @domicile-desktop/manganese-bar@1.1.0
+  - @domicile-desktop/manganese-bar-module-battery@1.1.0
+  - @domicile-desktop/system-audio@1.1.0
+  - @domicile-desktop/manganese-host@2.0.0
+  - @domicile-desktop/manganese-bar-module-clock@1.0.1
+  - @domicile-desktop/manganese-window-management@1.1.0
+  - @domicile-desktop/manganese-bar-module-workspace-switcher@1.1.0
+  - @domicile-desktop/manganese-bar-module-tray@1.0.1
+  - @domicile-desktop/manganese-bar-module-sharing@1.1.0
+  - @domicile-desktop/manganese-clipboard@1.1.0
+  - @domicile-desktop/manganese-launcher@1.1.0
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.0
+  - @domicile-desktop/react@0.1.0
+  - @domicile-desktop/manganese-inbox-gmail@0.1.0
+  - @domicile-desktop/manganese-inbox-google-messages@0.1.0
+  - @domicile-desktop/manganese-lock@1.0.1
+  - @domicile-desktop/manganese-wallpaper@1.0.1
+
 ## 1.0.0
 
 ### Major Changes
