@@ -44,6 +44,7 @@ contains() {
 FAKE="$WORK/repo"
 mkdir -p "$FAKE/.github/scripts" "$FAKE/packages/domicile-engine/src/components/domicile"
 cp "$RESET_SH" "$FAKE/.github/scripts/engine-reset.sh"
+cp "$ROOT/.github/scripts/engine-keep-mtimes.sh" "$FAKE/.github/scripts/"
 cat >"$FAKE/packages/domicile-engine/src/components/domicile/thing.cc" <<'EOF'
 // the series' own file
 EOF
@@ -94,6 +95,15 @@ expect "and apply.sh will take the tree" "" "$(git -C "$TREE" status --porcelain
 # Twice in a row, as in CI: the second run starts from what the first left.
 lay_the_series_down
 expect "and again on the next run" ok "$(status "$(run_reset)")"
+
+# Before the reset rewrites them, the script notes the mtime of every file the
+# old series patched or laid down, so `engine-apply.sh` can give it back to
+# those the new series leaves unchanged.
+lay_the_series_down
+reset >/dev/null
+noted="$(cut -f3 "$WORK/chromium/.domicile-kept-mtimes/list" 2>/dev/null | sort | tr '\n' ' ')"
+expect "the reset notes the patched and laid-down files' mtimes" \
+  "components/domicile/thing.cc upstream.cc " "$noted"
 
 # An interrupted `git am` leaves .git/rebase-apply, and every git command
 # refuses until it is aborted. The script aborts it first.
