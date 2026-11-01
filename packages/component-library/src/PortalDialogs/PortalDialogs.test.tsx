@@ -2507,6 +2507,32 @@ describe("screen cast", () => {
       ]);
     });
 
+    it("leave out the windows the shell shows as closed", () => {
+      // "Messages" is an inbox's, kept running for its notifications.
+      const host = new FakeHost();
+      host.fake.set({
+        browserWindows: [
+          browserWindow("7", "Meet"),
+          browserWindow("8", "Messages"),
+        ],
+      });
+      render(
+        <PortalDialogs
+          closedBrowsers={["8"]}
+          domicile={host.domicile}
+          shownWindows={() => []}
+        />,
+      );
+      host.push([screenCast(false, WINDOWS, false, { browser_windows: true })]);
+
+      const windows = radiosNamed("Windows", [
+        "Firefox: Notes",
+        "Untitled window",
+        "Browser: Meet",
+      ]);
+      expect(windows.actual).toEqual(windows.expected);
+    });
+
     it("are not offered to an application that cannot take windows", () => {
       const host = new FakeHost();
       host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });

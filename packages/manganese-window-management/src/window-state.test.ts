@@ -9,6 +9,7 @@ import type { WindowState } from "./window-state";
 import {
   activeIdOf,
   activeIsPrivate,
+  closedBrowsersOf,
   closedIdsOf,
   currentHere,
   currentOn,
@@ -455,6 +456,17 @@ describe("the apps that run in the background", () => {
 
     expect(state.windows.map(({ id }) => id)).toContain(BROWSER("1"));
     expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
+  });
+
+  it("counts the window closed only while it is off every workspace and the scratchpad", () => {
+    const shown = reduce(running(), WindowAction.FocusRequested(BROWSER("1")));
+    const stashed = reduce(shown, WindowAction.WindowSentToScratchpad());
+    const closed = reduce(shown, WindowAction.WindowClosed(BROWSER("1")));
+
+    expect(closedBrowsersOf(running())).toEqual(["1"]);
+    expect(closedBrowsersOf(shown)).toEqual([]);
+    expect(closedBrowsersOf(stashed)).toEqual([]);
+    expect(closedBrowsersOf(closed)).toEqual(["1"]);
   });
 
   it("closes the window when the engine drops it", () => {

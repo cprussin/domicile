@@ -78,6 +78,7 @@ import { useWindows } from "@domicile-desktop/manganese-window-management/useWin
 import { WindowKind } from "@domicile-desktop/manganese-window-management/window";
 import {
   activeIsPrivate,
+  closedBrowsersOf,
   screenOfApp,
   WindowAction,
   WindowActionKind,
@@ -504,6 +505,8 @@ export const Desktop = ({
   // Frames with their bars; the page's own boxes leave those out and still
   // count a hidden tab.
   const shownWindows = useCallback(() => shownWindowsOf(screens), [screens]);
+  // Closed inboxes' windows, which keep running, are no one's to pick.
+  const closedBrowsers = useMemo(() => closedBrowsersOf(windows), [windows]);
   // What the bars' items read. Each is its own context, so an item redraws
   // only when what it reads changes.
   const launcherControl = useMemo(
@@ -720,6 +723,7 @@ export const Desktop = ({
         Screen casts show in the bar's sharing item when it has one.
       */}
       <PortalDialogs
+        closedBrowsers={closedBrowsers}
         domicile={domicile}
         omitScreenCasts={showsSharing(bar)}
         screen={windows.focused}

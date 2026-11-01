@@ -25,6 +25,7 @@ import type { NodeRef } from "./tree/path";
 import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
 import {
   appWindowId,
+  browserIdOf,
   browserWindowId,
   ShellWindow as Window,
   WindowKind,
@@ -310,6 +311,20 @@ export const activeIdOf = (state: WindowState): string | undefined =>
 /** The windows `kill` closes: every window in the node commands target. */
 export const killedIdsOf = (state: WindowState): readonly string[] =>
   commandedWindowsOn(workspaceHere(state));
+
+/**
+ * The engine's ids of the background windows shown as closed: off every
+ * workspace and the scratchpad, though their pages keep running. See
+ * {@link WindowState.background}.
+ */
+export const closedBrowsersOf = (state: WindowState): readonly string[] =>
+  state.background
+    .filter(
+      (id) =>
+        workspaceHolding(state, id) === undefined &&
+        !state.scratchpad.includes(id),
+    )
+    .map(engineIdOf);
 
 /**
  * Of `ids`, the windows a close request closes: all but a background app's,
@@ -1621,6 +1636,16 @@ const openHidden = (state: WindowState, window: ShellWindow): WindowState => ({
   background: [...state.background, window.id],
   windows: [...state.windows, window],
 });
+
+// The engine's id behind background window `id`, which is always a browser's.
+const engineIdOf = (id: string): string => {
+  const browser = browserIdOf(id);
+  if (browser === undefined) {
+    throw new Error(`shell: background window ${id} is not a browser's`);
+  } else {
+    return browser;
+  }
+};
 
 // Shows background window `id` on the current workspace, if it is hidden.
 const showBackground = (state: WindowState, id: string): WindowState =>
