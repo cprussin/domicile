@@ -80,14 +80,14 @@ follows the room's light, is here too.
 ## Cast to a TV
 
 When a Chromecast, Google TV, Fire TV, Roku or other TV that takes a cast is
-nearby, the **Cast** item shows in the [top bar](TOP-BAR.md). Click it, pick
-the TV, then:
+nearby, the **Cast** item shows in the [top bar](TOP-BAR.md). Click it, then
+on the TV:
 
-- **Extend desktop** to use the TV as another monitor, or
-- **Cast…** to show one window, monitor or area on it.
+- **Extend** to use the TV as another monitor, or
+- **Show…** to show one window, monitor or area on it.
 
 Sound goes with it. While casting, notifications don't pop up, and the
-screens stay on. **Stop casting** is in the same place.
+screens stay on. **Stop** is in the same place.
 
 Apple TVs and AirPlay aren't supported. More:
 [CASTING-TO-TVS.md](../CASTING-TO-TVS.md).

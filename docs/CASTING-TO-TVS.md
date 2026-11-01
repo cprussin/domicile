@@ -25,16 +25,14 @@ Miracast.
 
 - **`Cast` bar item** (`manganese-bar-module-cast`). Its popover lists the
   TVs found nearby, by name. Protocols are never shown. A TV that cannot be
-  reached says why ("Needs Wi-Fi Direct").
-- **Pick a TV, then:**
-  - **Extend desktop.** The TV becomes a monitor at its mode, placed right of
-    the others. It shows in Settings > Displays like any monitor.
-  - **Cast…** The share picker opens, titled "Cast to <TV>". Whatever is
+  reached says why ("Needs Wi-Fi Direct"). Each other TV has two buttons:
+  - **Extend.** The TV becomes a monitor at its mode, placed right of the
+    others. It shows in Settings > Displays like any monitor.
+  - **Show…** The share picker opens, titled "Cast to <TV>". Whatever is
     picked (window, monitor, region) goes to the TV.
 - **Sound follows the source:** a window's own apps, or every app for a
   monitor or region ([audio.rs](/packages/domicile-compositor/src/casting/audio.rs)).
-- **While casting,** the item is lit and the popover shows the TV, what is on
-  it, and **Stop casting**. The shell holds off idle blanking through the
+- **While casting,** the popover shows the TV, what is on it, and **Stop**. The shell holds off idle blanking through the
   Inhibit portal and holds notification banners, which the TV could show;
   notifications still reach the drawer
   ([cast-holds.ts](/packages/shell-manganese/src/cast-holds.ts)).
@@ -58,7 +56,7 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
   answers the backend's ScreenCast request with that monitor, so no picker
   shows. Restore tokens are per app, so they can't do this. Stopping the cast
   removes the monitor.
-- **Cast…** starts the cast and the share picker asks.
+- **Show…** starts the cast and the share picker asks.
 - **The SDK** (`@domicile-desktop/sdk/cast`): each backend is a
   `CastBackend` (`watchTargets`, `send`, and the app id its portal requests
   carry). `casting(host).start(backend, target, CastMode.Extend |
