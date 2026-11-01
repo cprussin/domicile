@@ -9,7 +9,7 @@ import { Tour } from "../../manganese/Tour";
 import { Media } from "../../media/Media";
 import { Accent } from "../../page/Accent";
 import { LinkColumns } from "../../page/LinkColumns";
-import { REPO, repoFile } from "../../page/repo";
+import { repoFile } from "../../page/repo";
 import { Section } from "../../page/Section";
 import { SiteFooter } from "../../page/SiteFooter";
 import { SiteHeader } from "../../page/SiteHeader";
@@ -33,7 +33,6 @@ const ManganesePage = () => (
         { href: "#keys", label: "Keys" },
         { href: "#configure", label: "Configure" },
         { href: "#docs", label: "Docs" },
-        { href: REPO, label: "GitHub" },
       ]}
     />
     <main>
@@ -53,12 +52,7 @@ const ManganesePage = () => (
         <LinkColumns columns={DOCS} />
       </Section>
     </main>
-    <SiteFooter
-      links={[
-        { href: REPO, label: "GitHub" },
-        { href: repoFile("LICENSE"), label: "MIT license" },
-      ]}
-    >
+    <SiteFooter links={[{ href: repoFile("LICENSE"), label: "MIT license" }]}>
       <span>
         Manganese is the reference shell for <a href="/">Domicile</a>.
       </span>

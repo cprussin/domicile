@@ -13,7 +13,7 @@ import { ReferenceShell } from "../domicile/ReferenceShell";
 import { Showcase } from "../domicile/Showcase";
 import { Accent } from "../page/Accent";
 import { LinkColumns } from "../page/LinkColumns";
-import { REPO, repoFile } from "../page/repo";
+import { repoFile } from "../page/repo";
 import { Section } from "../page/Section";
 import { SiteFooter } from "../page/SiteFooter";
 import { SiteHeader } from "../page/SiteHeader";
@@ -36,7 +36,6 @@ const DomicilePage = () => (
         { href: "#docs", label: "Docs" },
         { href: "/docs/reference/react", label: "API reference" },
         { href: "/manganese", label: "Manganese" },
-        { href: REPO, label: "GitHub" },
       ]}
     />
     <main>
@@ -57,7 +56,6 @@ const DomicilePage = () => (
     <SiteFooter
       links={[
         { href: "/manganese", label: "Manganese" },
-        { href: REPO, label: "GitHub" },
         { href: repoFile("LICENSE"), label: "MIT license" },
       ]}
     >
