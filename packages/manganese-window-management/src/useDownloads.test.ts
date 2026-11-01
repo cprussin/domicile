@@ -51,6 +51,7 @@ describe("useDownloads", () => {
     const { result } = renderHook(() => useDownloads(view.element));
     expect(result.current).toStrictEqual({
       completed: 0,
+      completedPaths: undefined,
       count: 1,
       receivedBytes: 10,
       totalBytes: 100,
@@ -64,16 +65,32 @@ describe("useDownloads", () => {
     view.changed();
     expect(result.current).toStrictEqual({
       completed: 1,
+      completedPaths: undefined,
       count: 2,
       receivedBytes: 30,
       totalBytes: 0,
     });
   });
 
+  it("reads where the finished downloads were saved", () => {
+    const view = guest();
+    const { result } = renderHook(() => useDownloads(view.element));
+    view.downloads(0, 0, 0, 1);
+    Object.defineProperty(view.element, "downloadCompletedPaths", {
+      configurable: true,
+      value: ["/home/me/Downloads/report.pdf"],
+    });
+    view.changed();
+    expect(result.current.completedPaths).toStrictEqual([
+      "/home/me/Downloads/report.pdf",
+    ]);
+  });
+
   it("says a window with no view of its own yet downloads nothing", () => {
     const { result } = renderHook(() => useDownloads(null));
     expect(result.current).toStrictEqual({
       completed: 0,
+      completedPaths: [],
       count: 0,
       receivedBytes: 0,
       totalBytes: 0,

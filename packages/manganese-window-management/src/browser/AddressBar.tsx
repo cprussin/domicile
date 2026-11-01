@@ -51,6 +51,8 @@ type Props = {
   canGoForward: boolean;
   /** The page's downloads, shown while any are in progress or finished. */
   downloads: Downloads;
+  /** Keeps the zoom controls at 100%, while the zoom popup hangs from them. */
+  holdZoom: boolean;
   /**
    * The cameras and microphones the site permissions panel picks from, or
    * nothing from an engine without them.
@@ -65,6 +67,8 @@ type Props = {
   onBack: () => void;
   /** Stops showing the page's finished downloads. */
   onClearDownloads: () => void;
+  /** Takes the download indicator, for the downloads popup to hang from. */
+  onDownloadsAnchor: (anchor: HTMLElement | null) => void;
   onForward: () => void;
   /** Loads `url`, already resolved from what was typed. */
   onNavigate: (url: string) => void;
@@ -74,7 +78,11 @@ type Props = {
     permission: WebViewPermission,
     setting: WebViewPermissionSetting,
   ) => void;
+  /** Shows the finished downloads' popup. */
+  onShowDownloads: () => void;
   onStop: () => void;
+  /** Takes the zoom controls, for the zoom popup to hang from. */
+  onZoomAnchor: (anchor: HTMLElement | null) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
@@ -102,17 +110,21 @@ export const AddressBar = ({
   canGoBack,
   canGoForward,
   downloads,
+  holdZoom,
   isPrivate,
   loadProgress,
   loading,
   mediaDevices,
   onBack,
   onClearDownloads,
+  onDownloadsAnchor,
   onForward,
   onNavigate,
   onReload,
   onSetSitePermission,
+  onShowDownloads,
   onStop,
+  onZoomAnchor,
   onZoomIn,
   onZoomOut,
   onZoomReset,
@@ -218,9 +230,15 @@ export const AddressBar = ({
         value={typed}
       />
       {/* At the inline end, as in Chrome, and only while the page is
-          zoomed. Styled as a capsule beside the address field. */}
-      {!isUnzoomed(zoom) && (
-        <div aria-label="Zoom" className={zoomStyles} role="group">
+          zoomed or the zoom popup hangs from it. Styled as a capsule beside
+          the address field. */}
+      {(!isUnzoomed(zoom) || holdZoom) && (
+        <div
+          aria-label="Zoom"
+          className={zoomStyles}
+          ref={onZoomAnchor}
+          role="group"
+        >
           <Button
             disabled={isFullyZoomedOut(zoom)}
             label="Zoom out"
@@ -259,7 +277,12 @@ export const AddressBar = ({
         </div>
       )}
       {downloads.count === 0 && downloads.completed === 0 ? undefined : (
-        <DownloadIndicator downloads={downloads} onClear={onClearDownloads} />
+        <DownloadIndicator
+          downloads={downloads}
+          onClear={onClearDownloads}
+          onShow={onShowDownloads}
+          ref={onDownloadsAnchor}
+        />
       )}
       {loading && (
         <div

@@ -5,13 +5,14 @@ import type { Downloads } from "./browser/downloads";
 
 const NONE: Downloads = {
   completed: 0,
+  completedPaths: [],
   count: 0,
   receivedBytes: 0,
   totalBytes: 0,
 };
 
 /**
- * A `<webview>`'s page's downloads: those in progress, and how many finished.
+ * A `<webview>`'s page's downloads: those in progress, and how many finished and where.
  *
  * Reads the properties on mount and on each event, like `useLoadProgress`.
  * Takes `null` because the element comes from a callback ref.
@@ -26,6 +27,7 @@ export const useDownloads = (view: HTMLWebViewElement | null): Downloads => {
       const read = () => {
         setDownloads({
           completed: view.downloadCompletedCount,
+          completedPaths: view.downloadCompletedPaths,
           count: view.downloadCount,
           receivedBytes: view.downloadReceivedBytes,
           totalBytes: view.downloadTotalBytes,

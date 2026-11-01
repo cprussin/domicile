@@ -10,17 +10,27 @@ const BAR = {
   address: "https://example.com",
   canGoBack: false,
   canGoForward: false,
-  downloads: { completed: 0, count: 0, receivedBytes: 0, totalBytes: 0 },
+  downloads: {
+    completed: 0,
+    completedPaths: [],
+    count: 0,
+    receivedBytes: 0,
+    totalBytes: 0,
+  },
+  holdZoom: false,
   isPrivate: false,
   loading: false,
   loadProgress: 0,
   onBack: () => undefined,
   onClearDownloads: () => undefined,
+  onDownloadsAnchor: () => undefined,
   onForward: () => undefined,
   onNavigate: () => undefined,
   onReload: () => undefined,
   onSetSitePermission: () => undefined,
+  onShowDownloads: () => undefined,
   onStop: () => undefined,
+  onZoomAnchor: () => undefined,
   onZoomIn: () => undefined,
   onZoomOut: () => undefined,
   onZoomReset: () => undefined,
@@ -161,6 +171,7 @@ describe("AddressBar", () => {
           {...BAR}
           downloads={{
             completed: 0,
+            completedPaths: [],
             count: 1,
             receivedBytes: 456,
             totalBytes: 1000,
@@ -181,6 +192,7 @@ describe("AddressBar", () => {
           {...BAR}
           downloads={{
             completed: 0,
+            completedPaths: [],
             count: 3,
             receivedBytes: 10,
             totalBytes: 100,
@@ -200,6 +212,7 @@ describe("AddressBar", () => {
           {...BAR}
           downloads={{
             completed: 0,
+            completedPaths: [],
             count: 1,
             receivedBytes: 10,
             totalBytes: 0,
@@ -221,6 +234,7 @@ describe("AddressBar", () => {
           {...BAR}
           downloads={{
             completed: 1,
+            completedPaths: [],
             count: 0,
             receivedBytes: 0,
             totalBytes: 0,
@@ -237,12 +251,57 @@ describe("AddressBar", () => {
       expect(calls).toStrictEqual(["clear"]);
     });
 
+    it("shows the finished downloads when pressed", async () => {
+      const calls: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{
+            completed: 1,
+            completedPaths: [],
+            count: 0,
+            receivedBytes: 0,
+            totalBytes: 0,
+          }}
+          onShowDownloads={() => {
+            calls.push("show");
+          }}
+        />,
+      );
+
+      await userEvent.click(control("Downloaded"));
+
+      expect(calls).toStrictEqual(["show"]);
+    });
+
+    it("hands over the indicator for the downloads popup to hang from", () => {
+      const anchors: (HTMLElement | null)[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{
+            completed: 1,
+            completedPaths: [],
+            count: 0,
+            receivedBytes: 0,
+            totalBytes: 0,
+          }}
+          onDownloadsAnchor={(anchor) => {
+            anchors.push(anchor);
+          }}
+        />,
+      );
+
+      expect(anchors.at(-1)).toContainElement(screen.getByRole("status"));
+    });
+
     it("says how many finished when there are several", () => {
       render(
         <AddressBar
           {...BAR}
           downloads={{
             completed: 2,
+            completedPaths: [],
             count: 0,
             receivedBytes: 0,
             totalBytes: 0,
@@ -260,6 +319,7 @@ describe("AddressBar", () => {
           {...BAR}
           downloads={{
             completed: 1,
+            completedPaths: [],
             count: 1,
             receivedBytes: 10,
             totalBytes: 100,
@@ -447,6 +507,27 @@ describe("AddressBar", () => {
       render(<AddressBar {...BAR} zoom={1} />);
 
       expect(screen.queryByRole("group", { name: "Zoom" })).toBeNull();
+    });
+
+    it("stays at 100% while the zoom popup hangs from it", () => {
+      render(<AddressBar {...BAR} holdZoom zoom={1} />);
+
+      expect(screen.getByRole("group", { name: "Zoom" })).toBeInTheDocument();
+    });
+
+    it("hands over its controls for the zoom popup to hang from", () => {
+      const anchors: (HTMLElement | null)[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          onZoomAnchor={(anchor) => {
+            anchors.push(anchor);
+          }}
+          zoom={1.25}
+        />,
+      );
+
+      expect(anchors.at(-1)).toBe(screen.getByRole("group", { name: "Zoom" }));
     });
 
     it("grays out zooming past either end", () => {
