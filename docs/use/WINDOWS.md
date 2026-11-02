@@ -19,7 +19,8 @@ float and close the same way.
 - Meta+Shift+arrow moves a window along its tabs, then out of its group. A
   window alone in its group joins the next group that way.
 - Meta+A selects the whole group, so the next key moves, floats or
-  fullscreens it.
+  fullscreens it. A window alone in its group skips it and selects the
+  windows around it.
 - Drag a window by its title bar, or anywhere with Meta held, to move it. A
   highlight shows where it will land: a side of a window, or the middle to
   join its tabs. Drag the border between windows to resize them.

@@ -27,6 +27,19 @@ const NESTED = {
   ),
 };
 
+// `b` alone in a tab group beside `a`.
+const LONE_TAB = {
+  depth: 2,
+  root: LayoutNode.Container(
+    Layout.SplitH,
+    [
+      LayoutNode.Window("a"),
+      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
+    ],
+    1,
+  ),
+};
+
 describe("windowsOf", () => {
   it("lists nothing for a workspace with nothing tiled on it", () => {
     expect(windowsOf(NOTHING_TILED)).toEqual([]);
@@ -116,11 +129,32 @@ describe("focusedParent", () => {
 
     expect(focusedNodeOf(root)).toMatchObject({ layout: Layout.SplitH });
   });
+
+  it("skips a tab group holding only the focused window", () => {
+    expect(focusedNodeOf(focusedParent(LONE_TAB))).toMatchObject({
+      layout: Layout.SplitH,
+    });
+  });
+
+  it("stays on the window when every container holds only it", () => {
+    const alone = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+    };
+
+    expect(focusedParent(alone)).toEqual(alone);
+  });
 });
 
 describe("focusedChild", () => {
   it("goes back down the way focusedParent came up", () => {
     expect(focusedNodeOf(focusedChild(focusedParent(NESTED)))).toEqual(
+      LayoutNode.Window("b"),
+    );
+  });
+
+  it("skips a tab group holding only the focused window", () => {
+    expect(focusedNodeOf(focusedChild(focusedParent(LONE_TAB)))).toEqual(
       LayoutNode.Window("b"),
     );
   });

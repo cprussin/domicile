@@ -2823,16 +2823,19 @@ describe("Shell", () => {
     });
 
     it("moves a window through the tiling with Shift held", () => {
+      // A group of two beside a lone window: `focus parent` selects the group.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
-      press("e");
+      clientAppears("three");
+      press("b");
+      press("h");
       press("a");
 
-      press("h", true);
+      press("l", true);
 
-      expect(boxOf(appBox(container, "two"))).toMatchObject({ x: "20px" });
-      expect(boxOf(appBox(container, "one"))).toMatchObject({ x: "970px" });
+      expect(boxOf(appBox(container, "three"))).toMatchObject({ x: "20px" });
+      expect(boxOf(appBox(container, "two"))).toMatchObject({ x: "970px" });
     });
 
     it("splits a window out of its group, and back in as a tab", () => {
@@ -2954,7 +2957,6 @@ describe("Shell", () => {
       press("k");
       press("b");
       press("a");
-      press("a");
       press("j", true);
       press("a");
       press("Tab", true);
@@ -3026,13 +3028,14 @@ describe("Shell", () => {
       clientAppears("one");
       clientAppears("two");
       clientAppears("three");
-      press("e");
+      clientAppears("four");
+      press("b");
       press("h");
+      press("b");
       press("h");
-      press("v");
       pointerAt(1700, 900);
 
-      // Move the group to the last of three.
+      // Move the group of one and two to the last of three.
       press("a");
       press("l", true);
       press("l", true);
@@ -3040,7 +3043,7 @@ describe("Shell", () => {
       // The cursor lands on a rounded pixel over a window outside the group.
       // Only this rule keeps the crossing from taking the selection.
       const [x, y] = warpedTo();
-      crossInto(appElement(container, "two"), Math.round(x), Math.round(y));
+      crossInto(appElement(container, "four"), Math.round(x), Math.round(y));
 
       expect(pointedAtGroup(container)).toBe(true);
     });

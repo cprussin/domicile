@@ -49,7 +49,6 @@ const nested = (): WindowState =>
     WindowAction.FocusStepped(Direction.Up),
     WindowAction.ContainerSplit(Axis.Horizontal),
     WindowAction.ParentFocused(),
-    WindowAction.ParentFocused(),
     WindowAction.WindowStepped(Direction.Down),
   );
 

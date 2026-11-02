@@ -251,7 +251,7 @@ describe("movedBy", () => {
       "a",
     );
 
-    const moved = movedBy(focusedParent(row), Direction.Right);
+    const moved = movedBy({ ...row, depth: 1 }, Direction.Right);
 
     expect(moved.root).toMatchObject({
       children: [

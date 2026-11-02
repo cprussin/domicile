@@ -81,9 +81,10 @@ describe("grouped", () => {
       "a",
     );
 
-    expect(
-      focusedNodeOf(grouped(focusedParent(focusedParent(split)))),
-    ).toMatchObject({ children: [{ id: "a" }], layout: Layout.Tabbed });
+    expect(focusedNodeOf(grouped({ ...split, depth: 1 }))).toMatchObject({
+      children: [{ id: "a" }],
+      layout: Layout.Tabbed,
+    });
   });
 
   it("puts a lone window in a tab group", () => {

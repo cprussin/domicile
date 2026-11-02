@@ -42,7 +42,7 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 |---|---|
 | `kill` | Close the window, or every window in the group `focus parent` selected. |
 | `focus left/right/up/down` | Move focus. |
-| `focus parent` / `focus child` | Select the enclosing container, or go back to the window. |
+| `focus parent` / `focus child` | Select the enclosing container, or go back to the window. Both skip a container holding one child, such as a tab group of one window. |
 | `focus mode_toggle` | Switch between floating and tiled windows. |
 | `move left/right/up/down` | Move the window: along its tabs, then out of its group. A window alone in its group joins the next group that way. |
 | `move scratchpad` / `scratchpad show` | Hide the window / show the oldest hidden one, or hide the shown one, so presses rotate through them. |

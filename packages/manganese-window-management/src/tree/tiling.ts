@@ -145,21 +145,39 @@ export const withCommandsOnWindow = (tiling: Tiling): Tiling => {
 export const selects = ({ depth, root }: Tiling, path: Path): boolean =>
   root !== undefined && focusPathOf(root, depth).join() === path.join();
 
-/** `focus parent`: select the enclosing container, stopping at the root. */
-export const focusedParent = (tiling: Tiling): Tiling => ({
-  ...tiling,
-  depth: Math.max(0, tiling.depth - 1),
-});
+/**
+ * `focus parent`: select the enclosing container, stopping at the root.
+ *
+ * Skips a container holding one child, such as a tab group of one window: it
+ * holds the same windows, so selecting it would change nothing.
+ */
+export const focusedParent = (tiling: Tiling): Tiling => {
+  const { depth, root } = tiling;
+  const above =
+    root === undefined
+      ? undefined
+      : Array.from({ length: depth }, (_, at) => at).findLast(
+          (at) => !holdsOneChild(root, at),
+        );
+  return above === undefined ? tiling : { ...tiling, depth: above };
+};
 
-/** `focus child`: select one level down, stopping at the window. */
+/**
+ * `focus child`: select one level down, stopping at the window.
+ *
+ * Skips a container holding one child, as {@link focusedParent} does.
+ */
 export const focusedChild = (tiling: Tiling): Tiling => {
-  const { root } = tiling;
-  return root === undefined
-    ? tiling
-    : {
-        ...tiling,
-        depth: Math.min(tiling.depth + 1, focusChainOf(root).length),
-      };
+  const { depth, root } = tiling;
+  if (root === undefined) {
+    return tiling;
+  } else {
+    const { length } = focusChainOf(root);
+    const below = Array.from({ length }, (_, at) => at + 1).find(
+      (at) => at > depth && !holdsOneChild(root, at),
+    );
+    return below === undefined ? tiling : { ...tiling, depth: below };
+  }
 };
 
 /**
@@ -209,4 +227,10 @@ const pointedAt = (
       focused: index,
     };
   }
+};
+
+// Whether the node `depth` steps down the focus chain is a container of one.
+const holdsOneChild = (root: LayoutNode, depth: number): boolean => {
+  const node = nodeAt(root, focusPathOf(root, depth));
+  return node.kind === NodeKind.Container && node.children.length === 1;
 };
