@@ -4,8 +4,9 @@
 //! thousands of paths, too many to send to the page.
 //!
 //! Matches like `fzf --exact`: every query word must appear in the path,
-//! case-insensitively. Results come shallowest first, then in index order. The
-//! order is fixed per index, so narrowing a query does not reorder the list.
+//! case-insensitively. Paths whose name holds a query word come first, then
+//! paths that match only in the folders above them. Within each, results come
+//! shallowest first, then in index order.
 
 /// A searchable snapshot of the file index.
 ///
@@ -24,7 +25,8 @@ pub struct FileSearch {
 /// A query's results.
 #[derive(Debug, PartialEq)]
 pub struct Found {
-    /// The first matches, shallowest first, then in index order.
+    /// The first matches: name matches before folder-only matches, each
+    /// shallowest first, then in index order.
     ///
     /// A path with other paths under it ends in `/`, marking it a directory.
     pub files: Vec<String>,
@@ -50,20 +52,34 @@ impl FileSearch {
     pub fn find(&self, query: &str, limit: usize) -> Found {
         let query = query.to_lowercase();
         let words: Vec<&str> = query.split_whitespace().collect();
-        let mut matched = self
-            .ranked
-            .iter()
-            .filter(|&&at| words.iter().all(|word| self.lowered[at].contains(word)))
-            .map(|&at| &self.paths[at]);
-        let files = matched
-            .by_ref()
-            .take(limit)
-            .map(|path| self.marked(path))
-            .collect::<Vec<_>>();
-        Found {
-            matched: files.len() + matched.count(),
-            files,
+        let mut named = Vec::new();
+        let mut in_folder = Vec::new();
+        let mut matched = 0;
+        for &at in &self.ranked {
+            let lowered = &self.lowered[at];
+            if !words.iter().all(|word| lowered.contains(word)) {
+                continue;
+            }
+            matched += 1;
+            let name = lowered
+                .rfind('/')
+                .map_or(lowered.as_str(), |slash| &lowered[slash + 1..]);
+            let tier = if words.iter().any(|word| name.contains(word)) {
+                &mut named
+            } else {
+                &mut in_folder
+            };
+            if tier.len() < limit {
+                tier.push(at);
+            }
         }
+        let files = named
+            .into_iter()
+            .chain(in_folder)
+            .take(limit)
+            .map(|at| self.marked(&self.paths[at]))
+            .collect();
+        Found { files, matched }
     }
 
     /// Whether the index holds `path`. Previews may read only such paths.
