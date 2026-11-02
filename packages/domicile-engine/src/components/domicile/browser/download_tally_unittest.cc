@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/download_tally.h"
 
+#include <string>
 #include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
@@ -56,12 +57,38 @@ TEST(DownloadTallyTest, CountsFinishedDownloadsApart) {
       {.stage = DownloadStage::kComplete,
        .has_target = true,
        .received_bytes = 100,
-       .total_bytes = 100},
+       .total_bytes = 100,
+       .path = "/home/me/Downloads/report.pdf"},
   };
-  EXPECT_EQ(TallyDownloads(downloads), (DownloadTally{.count = 1,
-                                                      .received_bytes = 10,
-                                                      .total_bytes = 100,
-                                                      .completed = 1}));
+  EXPECT_EQ(TallyDownloads(downloads),
+            (DownloadTally{.count = 1,
+                           .received_bytes = 10,
+                           .total_bytes = 100,
+                           .completed = {"/home/me/Downloads/report.pdf"}}));
+}
+
+// The shell names the files in its download popup, the newest last.
+TEST(DownloadTallyTest, ListsFinishedDownloadsInTheOrderTheyStarted) {
+  const std::vector<DownloadReading> downloads = {
+      {.stage = DownloadStage::kComplete,
+       .has_target = true,
+       .received_bytes = 1,
+       .total_bytes = 1,
+       .path = "/home/me/Downloads/a.jpg"},
+      {.stage = DownloadStage::kStopped,
+       .has_target = true,
+       .received_bytes = 1,
+       .total_bytes = 1,
+       .path = "/home/me/Downloads/b.jpg"},
+      {.stage = DownloadStage::kComplete,
+       .has_target = true,
+       .received_bytes = 1,
+       .total_bytes = 1,
+       .path = "/home/me/Downloads/c.jpg"},
+  };
+  EXPECT_EQ(TallyDownloads(downloads).completed,
+            (std::vector<std::string>{"/home/me/Downloads/a.jpg",
+                                      "/home/me/Downloads/c.jpg"}));
 }
 
 // A failed download is neither in progress nor finished.

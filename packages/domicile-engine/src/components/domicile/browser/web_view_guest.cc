@@ -1168,6 +1168,18 @@ void WebViewGuest::ClearCompletedDownloads() {
   ReportDownloads();
 }
 
+void WebViewGuest::RemoveCompletedDownload(const std::string& path) {
+  std::erase_if(downloads_, [this, &path](download::DownloadItem* item) {
+    if (item->GetState() != download::DownloadItem::COMPLETE ||
+        item->GetTargetFilePath().AsUTF8Unsafe() != path) {
+      return false;
+    }
+    download_observations_.RemoveObservation(item);
+    return true;
+  });
+  ReportDownloads();
+}
+
 void WebViewGuest::Reload() {
   CHECK(guest_contents_);
   // With `check_for_repost`, reloading a POST result calls content's no-op
@@ -1735,7 +1747,8 @@ void WebViewGuest::ReportDownloads() {
         {.stage = DownloadStageOf(item->GetState()),
          .has_target = !item->GetTargetFilePath().empty(),
          .received_bytes = item->GetReceivedBytes(),
-         .total_bytes = item->GetTotalBytes()});
+         .total_bytes = item->GetTotalBytes(),
+         .path = item->GetTargetFilePath().AsUTF8Unsafe()});
   }
   const DownloadTally tally = TallyDownloads(readings);
   if (tally != reported_downloads_) {

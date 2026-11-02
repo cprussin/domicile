@@ -27,6 +27,19 @@ describe(ListRow, () => {
       );
     });
 
+    it("says when its end shows only on hover, so the stylesheet can hide it", () => {
+      render(
+        <List>
+          <ListRow
+            end={<button type="button">Open</button>}
+            endOnHover
+            label="report.pdf"
+          />
+        </List>,
+      );
+      expect(screen.getByRole("listitem")).toHaveAttribute("data-end-on-hover");
+    });
+
     it("draws what goes under it, such as a field, in the item", () => {
       render(
         <List>

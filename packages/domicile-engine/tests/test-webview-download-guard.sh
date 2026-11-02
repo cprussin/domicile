@@ -131,10 +131,10 @@ expect "a download still counted once saved says so" "yes" \
   "$(blames "STILL IN PROGRESS" 0 SAW_CLEARED=0)"
 expect "a finished download not kept as finished says so" "yes" \
   "$(blames "NOT KEPT" 0 SAW_FINISHED=0 SAW_FORGOTTEN=0)"
-expect "a finished download the shell could not clear is a failure" "fail" \
+expect "a finished download the shell could not remove is a failure" "fail" \
   "$(verdict 0 SAW_FORGOTTEN=0)"
-expect "a finished download the shell could not clear names the call" "yes" \
-  "$(blames "clearCompletedDownloads" 0 SAW_FORGOTTEN=0)"
+expect "a finished download the shell could not remove names the call" "yes" \
+  "$(blames "removeCompletedDownload" 0 SAW_FORGOTTEN=0)"
 
 echo
 echo "the control run — a shell that cancels"

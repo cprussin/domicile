@@ -13,6 +13,7 @@ import {
   waitForElementToBeRemoved,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 
 import { Button } from "../Button/Button";
 import { Select } from "../Select/Select";
@@ -143,6 +144,38 @@ describe(Popover, () => {
       render(
         <Popover trigger={<Button>Details</Button>}>
           <button type="button">First</button>
+        </Popover>,
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "Details" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toHaveFocus();
+      });
+    });
+
+    it("leaves focus where it is when it opens quietly, by itself", async () => {
+      const Quiet = ({ open }: { open: boolean }) => (
+        <>
+          <input aria-label="Page" />
+          <Popover open={open} quiet trigger={<Button>Details</Button>}>
+            Body
+          </Popover>
+        </>
+      );
+      const { rerender } = render(<Quiet open={false} />);
+      screen.getByRole("textbox", { name: "Page" }).focus();
+
+      rerender(<Quiet open />);
+
+      await screen.findByText("Body");
+      expect(screen.getByRole("textbox", { name: "Page" })).toHaveFocus();
+    });
+
+    it("still takes focus when the pointer opens it quietly", async () => {
+      render(
+        <Popover quiet trigger={<Button>Details</Button>}>
+          Body
         </Popover>,
       );
 
@@ -288,6 +321,34 @@ describe(Popover, () => {
 
         await waitFor(() => {
           expect(panelRight()).toBeGreaterThanOrEqual(900);
+        });
+      });
+
+      it("hangs under an anchor it is given in place of a trigger", async () => {
+        const Anchored = ({ open }: { open: boolean }) => {
+          const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+          return (
+            <>
+              <span data-testid="anchor" ref={setAnchor} />
+              <Popover align="end" anchor={anchor} open={open}>
+                Body
+              </Popover>
+            </>
+          );
+        };
+        const { rerender } = render(<Anchored open={false} />);
+        drawAt(screen.getByTestId("anchor"), {
+          height: 0,
+          width: 0,
+          x: 800,
+          y: 40,
+        });
+        drawPopups("dialog", { height: 100, width: 300 });
+
+        rerender(<Anchored open />);
+
+        await waitFor(() => {
+          expect(panelRight()).toBe(800);
         });
       });
 

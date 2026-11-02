@@ -40,6 +40,11 @@ type Props = ExtendProps<
   typeof BasePopover.Root,
   {
     align?: Alignment | undefined;
+    /**
+     * What the panel hangs from when it has no trigger, such as a corner of
+     * a page. `null` until its ref is set.
+     */
+    anchor?: HTMLElement | null | undefined;
     children: ReactNode;
     /**
      * Drop the panel's padding and width cap, for content that is its own
@@ -51,6 +56,12 @@ type Props = ExtendProps<
      * keep running, such as an embedded page.
      */
     keepMounted?: boolean | undefined;
+    /**
+     * Opened by the app rather than the user, such as to say a download
+     * finished: opening it by setting `open` leaves focus where it is. A
+     * press on the trigger still focuses it.
+     */
+    quiet?: boolean | undefined;
     side?: Side | undefined;
     /** Let the panel leave its `PopupBoundary`, such as its window, for its screen. */
     spansWindows?: boolean | undefined;
@@ -92,10 +103,12 @@ type Props = ExtendProps<
 const PopoverComponent = ({
   actionsRef,
   align = "center",
+  anchor,
   children,
   flush = false,
   keepMounted = false,
   onOpenChange,
+  quiet = false,
   side = "bottom",
   spansWindows = false,
   title,
@@ -145,6 +158,7 @@ const PopoverComponent = ({
       <BasePopover.Portal container={container} keepMounted={keepMounted}>
         <BasePopover.Positioner
           align={align}
+          anchor={anchor}
           className={positionerStyles}
           collisionBoundary={boundary}
           onFocus={(event) => {
@@ -161,10 +175,21 @@ const PopoverComponent = ({
             data-withheld={withheld ? "" : undefined}
             // The keyboard lands on the first control; a pointer leaves
             // focus on the panel, so no control shows a focus ring it
-            // didn't ask for.
-            initialFocus={(openType) =>
-              openType === "keyboard" ? true : popupRef.current
-            }
+            // didn't ask for. A quiet one opened by no interaction at all
+            // leaves focus alone.
+            initialFocus={(openType) => {
+              switch (openType) {
+                case "keyboard": {
+                  return true;
+                }
+                case "": {
+                  return quiet ? false : popupRef.current;
+                }
+                default: {
+                  return popupRef.current;
+                }
+              }
+            }}
             ref={setPopupRef}
           >
             <CloseOnFocusOut
