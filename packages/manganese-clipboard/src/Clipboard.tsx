@@ -54,45 +54,53 @@ type Props = {
  * both the choice and the dismissal, so the panel is gone before the paste.
  */
 export const Clipboard = memo(
-  ({ entries, onCopy, onDismiss, open, screen }: Props) => (
-    <ModalDialog
-      // Keyboard-driven, as the launcher; Escape closes it.
-      closeButton={false}
-      onOpenChange={(next) => {
-        if (!next) {
-          onDismiss();
-        }
-      }}
-      open={open}
-      screen={screen}
-      // Wide enough for several lines of a copy.
-      size="lg"
-      // Translucent, as the launcher.
-      surface="glass"
-      // The search box heads the panel, so the title is for screen readers.
-      title="Clipboard history"
-      titleHidden
-    >
-      {/*
+  ({ entries, onCopy, onDismiss, open, screen }: Props) => {
+    // The history as of the last render open: choosing a copy moves it to
+    // the top, which would reorder the rows while the panel fades out.
+    const [shown, setShown] = useState(entries);
+    if (open && shown !== entries) {
+      setShown(entries);
+    }
+    return (
+      <ModalDialog
+        // Keyboard-driven, as the launcher; Escape closes it.
+        closeButton={false}
+        onOpenChange={(next) => {
+          if (!next) {
+            onDismiss();
+          }
+        }}
+        open={open}
+        screen={screen}
+        // Wide enough for several lines of a copy.
+        size="lg"
+        // Translucent, as the launcher.
+        surface="glass"
+        // The search box heads the panel, so the title is for screen readers.
+        title="Clipboard history"
+        titleHidden
+      >
+        {/*
       Inside the dialog so it unmounts on close, and every open starts with
       an empty box on the previous copy.
     */}
-      {entries[0] === undefined ? (
-        <EmptyState
-          hint="Things you copy show up here."
-          icon={ClipboardTextIcon}
-          title="Nothing copied yet"
-        />
-      ) : (
-        <History
-          earlier={entries.slice(1)}
-          now={entries[0]}
-          onCopy={onCopy}
-          onDismiss={onDismiss}
-        />
-      )}
-    </ModalDialog>
-  ),
+        {shown[0] === undefined ? (
+          <EmptyState
+            hint="Things you copy show up here."
+            icon={ClipboardTextIcon}
+            title="Nothing copied yet"
+          />
+        ) : (
+          <History
+            earlier={shown.slice(1)}
+            now={shown[0]}
+            onCopy={onCopy}
+            onDismiss={onDismiss}
+          />
+        )}
+      </ModalDialog>
+    );
+  },
 );
 
 type HistoryProps = {

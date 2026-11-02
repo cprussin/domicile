@@ -172,6 +172,32 @@ describe("Clipboard", () => {
     });
   });
 
+  it("keeps its rows while it closes, though the history moves", () => {
+    // Choosing an earlier copy moves it to the top while the panel fades.
+    const props = {
+      onCopy: () => undefined,
+      onDismiss: () => undefined,
+      screen: SCREEN,
+    };
+    const { rerender } = render(
+      <Clipboard {...props} entries={HISTORY} open />,
+      { wrapper: OnOneScreen },
+    );
+    const [newest, middle, first] = HISTORY;
+    if (newest === undefined || middle === undefined || first === undefined) {
+      throw new Error("test: history too short");
+    }
+
+    rerender(
+      <Clipboard {...props} entries={[first, newest, middle]} open={false} />,
+    );
+
+    expect(rows()).toStrictEqual([
+      "Thanks, see you\nTuesday",
+      "the first thing copied",
+    ]);
+  });
+
   it("copies the row that was clicked, and closes behind it", async () => {
     // Choosing closes the panel so the user can paste.
     const panel = clipboard();
