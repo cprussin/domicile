@@ -1,13 +1,22 @@
 import { describe, expect, it, jest } from "bun:test";
+import { Ok } from "@cprussin/option-result";
 import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
 import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import { THEMES } from "@domicile-desktop/component-library/theme-core";
 import { OnOneScreen } from "@domicile-desktop/manganese-window-management/screens/fixture";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
 import { act, fireEvent, render } from "@testing-library/react";
 import { css } from "../styled-system/css";
 import { token } from "../styled-system/tokens";
-import { WALLPAPER_FALLBACKS, WALLPAPER_PHOTOS } from "./photos";
+import type { Order } from "./order";
+import { inOrder } from "./order";
+import { DEFAULT_WALLPAPERS, WALLPAPER_FALLBACKS } from "./photos";
 import { Wallpaper } from "./Wallpaper";
+
+/** For photographs given by web address, which are never read as files. */
+const NO_FILES = {
+  read: () => Promise.reject(new Error("test: no photograph is a path")),
+};
 
 /** How long each photograph shows; one rotation tick. */
 const DWELL_MS = 60_000;
@@ -23,7 +32,7 @@ const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
  * the list, not its contents.
  */
 const photo = (theme: Theme, index: number): string => {
-  const url = WALLPAPER_PHOTOS[theme][index];
+  const url = DEFAULT_WALLPAPERS[theme][index];
   if (url === undefined) {
     throw new Error(
       `test: the ${theme} rotation has no photograph ${index.toString()}`,
@@ -65,7 +74,12 @@ const loadPhotos = (container: HTMLElement) => {
 describe("Wallpaper", () => {
   it("shows the picture an application set instead of the rotation", () => {
     const { container } = render(
-      <Wallpaper picture="blob:sky" theme="dark" />,
+      <Wallpaper
+        files={NO_FILES}
+        order={inOrder}
+        picture="blob:sky"
+        theme="dark"
+      />,
       {
         wrapper: OnOneScreen,
       },
@@ -79,14 +93,97 @@ describe("Wallpaper", () => {
     ).toEqual(["blob:sky"]);
   });
 
+  it("rotates the photographs it is given", () => {
+    jest.useFakeTimers();
+    const photos = {
+      dark: ["https://example.com/a.jpg", "https://example.com/b.jpg"],
+      light: ["https://example.com/c.jpg"],
+    };
+    const { container } = render(
+      <Wallpaper
+        files={NO_FILES}
+        order={inOrder}
+        photos={photos}
+        theme="dark"
+      />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
+    loadPhotos(container);
+
+    expect(layer(container, "dark", "current")).toEqual([
+      "https://example.com/a.jpg",
+    ]);
+    expect(layer(container, "light", "current")).toEqual([
+      "https://example.com/c.jpg",
+    ]);
+    act(() => {
+      jest.advanceTimersByTime(DWELL_MS);
+    });
+    expect(layer(container, "dark", "current")).toEqual([
+      "https://example.com/b.jpg",
+    ]);
+    jest.useRealTimers();
+  });
+
+  it("shows the photographs in the order it is given, each time round", () => {
+    jest.useFakeTimers();
+    // The second pass starts one photograph later.
+    const order: Order = (photos, pass) =>
+      pass === 0 ? photos : [...photos.slice(1), ...photos.slice(0, 1)];
+    const photos = {
+      dark: ["https://example.com/a.jpg", "https://example.com/b.jpg"],
+      light: ["https://example.com/c.jpg"],
+    };
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={order} photos={photos} theme="dark" />,
+      { wrapper: OnOneScreen },
+    );
+    const shown = [];
+    for (let tick = 0; tick < 4; tick++) {
+      loadPhotos(container);
+      shown.push(...layer(container, "dark", "current"));
+      act(() => {
+        jest.advanceTimersByTime(DWELL_MS);
+      });
+    }
+
+    expect(shown).toEqual([
+      "https://example.com/a.jpg",
+      "https://example.com/b.jpg",
+      "https://example.com/b.jpg",
+      "https://example.com/a.jpg",
+    ]);
+    jest.useRealTimers();
+  });
+
+  it("shows a photograph from a path, read through the files", async () => {
+    const files: Pick<Files, "read"> = {
+      read: () => Promise.resolve(Ok(new Uint8Array([1]))),
+    };
+    const photos = { dark: ["/srv/night.jpg"], light: ["/srv/day.jpg"] };
+    const { container } = render(
+      <Wallpaper files={files} order={inOrder} photos={photos} theme="dark" />,
+      { wrapper: OnOneScreen },
+    );
+    await act(() => Promise.resolve());
+    loadPhotos(container);
+
+    expect(layer(container, "dark", "current")[0]).toStartWith("blob:");
+  });
+
   it("starts on the first photograph with only the next one loading", () => {
     // The next photograph mounts a whole step early so it has loaded before it
     // fades in. The rest stay unmounted, so dozens of 4K photographs are not
     // held at once. The other theme's current one mounts too, so a theme
     // switch shows a loaded image.
-    const { container } = render(<Wallpaper theme="dark" />, {
-      wrapper: OnOneScreen,
-    });
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
     loadPhotos(container);
 
     expect(layer(container, "dark", "current")).toEqual([photo("dark", 0)]);
@@ -104,9 +201,12 @@ describe("Wallpaper", () => {
   it("holds the other theme's photograph until that theme is shown", () => {
     // A hidden rotation would load a 4K photograph every minute for nothing.
     jest.useFakeTimers();
-    const { container, rerender } = render(<Wallpaper theme="dark" />, {
-      wrapper: OnOneScreen,
-    });
+    const { container, rerender } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
     loadPhotos(container);
 
     act(() => {
@@ -116,7 +216,7 @@ describe("Wallpaper", () => {
     expect(layer(container, "light", "current")).toEqual([photo("light", 0)]);
     expect(layer(container, "light", "previous")).toEqual([]);
 
-    rerender(<Wallpaper theme="light" />);
+    rerender(<Wallpaper files={NO_FILES} order={inOrder} theme="light" />);
     expect(layer(container, "light", "current")).toEqual([photo("light", 0)]);
     expect(layer(container, "light", "waiting")).toEqual([photo("light", 1)]);
     expect(layer(container, "dark", "waiting")).toEqual([]);
@@ -132,9 +232,12 @@ describe("Wallpaper", () => {
 
   it("shows each theme's rotation only in that theme", () => {
     // Hidden rather than unmounted, so the photographs stay loaded.
-    const { container } = render(<Wallpaper theme="dark" />, {
-      wrapper: OnOneScreen,
-    });
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
 
     expect(rotation(container, "dark").className).toContain(
       css({ _light: { display: "none" } }),
@@ -148,26 +251,34 @@ describe("Wallpaper", () => {
     // Monitors of different sizes leave gaps in the page. A photograph over
     // the whole page would be drawn there too, and cropped to the page's
     // shape rather than each monitor's.
-    const { container } = render(<Wallpaper theme="dark" />, {
-      wrapper: ({ children }) => (
-        <DisplayProvider
-          source={{
-            displays: [
-              { name: "left", position: [0, 0], scale: 1, size: [1920, 1080] },
-              {
-                name: "right",
-                position: [1920, 120],
-                scale: 2,
-                size: [2560, 1440],
-              },
-            ],
-            onDisplays: () => () => undefined,
-          }}
-        >
-          {children}
-        </DisplayProvider>
-      ),
-    });
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      {
+        wrapper: ({ children }) => (
+          <DisplayProvider
+            source={{
+              displays: [
+                {
+                  name: "left",
+                  position: [0, 0],
+                  scale: 1,
+                  size: [1920, 1080],
+                },
+                {
+                  name: "right",
+                  position: [1920, 120],
+                  scale: 2,
+                  size: [2560, 1440],
+                },
+              ],
+              onDisplays: () => () => undefined,
+            }}
+          >
+            {children}
+          </DisplayProvider>
+        ),
+      },
+    );
     const screens = [
       ...(container.firstElementChild?.querySelectorAll<HTMLElement>(
         ":scope > *",
@@ -197,9 +308,12 @@ describe("Wallpaper", () => {
   // Windows hidden behind a tab sit at this depth. A wallpaper above them
   // would show through a window opening or closing in front of one.
   it("sits at the depth a window a tab hides is drawn at", () => {
-    const { container } = render(<Wallpaper theme="dark" />, {
-      wrapper: OnOneScreen,
-    });
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
 
     expect(container.firstElementChild?.className).toContain(
       css({ zIndex: -2 }),
@@ -210,9 +324,12 @@ describe("Wallpaper", () => {
     // The previous photograph stays opaque underneath while the next fades
     // in, so the background never shows through mid-fade.
     jest.useFakeTimers();
-    const { container } = render(<Wallpaper theme="dark" />, {
-      wrapper: OnOneScreen,
-    });
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
     loadPhotos(container);
 
     act(() => {
@@ -227,9 +344,12 @@ describe("Wallpaper", () => {
   it("holds the next photograph until the theme wipe is over", () => {
     // A crossfade under the wipe would show through the new theme's frame.
     jest.useFakeTimers();
-    const { container, rerender } = render(<Wallpaper held theme="dark" />, {
-      wrapper: OnOneScreen,
-    });
+    const { container, rerender } = render(
+      <Wallpaper files={NO_FILES} held order={inOrder} theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
     loadPhotos(container);
 
     act(() => {
@@ -237,7 +357,9 @@ describe("Wallpaper", () => {
     });
     expect(layer(container, "dark", "current")).toEqual([photo("dark", 0)]);
 
-    rerender(<Wallpaper held={false} theme="dark" />);
+    rerender(
+      <Wallpaper files={NO_FILES} held={false} order={inOrder} theme="dark" />,
+    );
     expect(layer(container, "dark", "current")).toEqual([photo("dark", 1)]);
     expect(layer(container, "dark", "previous")).toEqual([photo("dark", 0)]);
     jest.useRealTimers();
@@ -249,10 +371,13 @@ describe("Wallpaper", () => {
     // because the rotations can differ in length.
     for (const theme of THEMES) {
       jest.useFakeTimers();
-      const { container, unmount } = render(<Wallpaper theme={theme} />, {
-        wrapper: OnOneScreen,
-      });
-      const length = WALLPAPER_PHOTOS[theme].length;
+      const { container, unmount } = render(
+        <Wallpaper files={NO_FILES} order={inOrder} theme={theme} />,
+        {
+          wrapper: OnOneScreen,
+        },
+      );
+      const length = DEFAULT_WALLPAPERS[theme].length;
 
       // Each photograph loads while it is next.
       for (let tick = 0; tick < length; tick++) {
@@ -277,9 +402,12 @@ describe("Wallpaper", () => {
     // until its next turn comes near.
     for (const theme of THEMES) {
       jest.useFakeTimers();
-      const { container, unmount } = render(<Wallpaper theme={theme} />, {
-        wrapper: OnOneScreen,
-      });
+      const { container, unmount } = render(
+        <Wallpaper files={NO_FILES} order={inOrder} theme={theme} />,
+        {
+          wrapper: OnOneScreen,
+        },
+      );
       loadPhotos(container);
 
       // Two steps: the fade timer starts in the render after the tick.
@@ -293,7 +421,7 @@ describe("Wallpaper", () => {
       expect(layer(container, theme, "current")).toEqual([photo(theme, 1)]);
       expect(layer(container, theme, "previous")).toEqual([]);
       expect(layer(container, theme, "waiting")).toEqual([
-        photo(theme, 2 % WALLPAPER_PHOTOS[theme].length),
+        photo(theme, 2 % DEFAULT_WALLPAPERS[theme].length),
       ]);
       unmount();
       jest.useRealTimers();
@@ -303,9 +431,12 @@ describe("Wallpaper", () => {
   it("fades only the photograph coming in", () => {
     // Other role changes happen under an opaque photograph. A transition on
     // them could draw over the incoming photograph.
-    const { container } = render(<Wallpaper theme="dark" />, {
-      wrapper: OnOneScreen,
-    });
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
     const image = container.querySelector('img[data-wallpaper="waiting"]');
 
     expect(image?.className).toContain(
@@ -322,9 +453,12 @@ describe("Wallpaper", () => {
     // flash on every start before the first photograph loads.
 
     it("stays hidden while the first photographs load", () => {
-      const { container } = render(<Wallpaper theme="dark" />, {
-        wrapper: OnOneScreen,
-      });
+      const { container } = render(
+        <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+        {
+          wrapper: OnOneScreen,
+        },
+      );
 
       for (const theme of THEMES) {
         expect(layer(container, theme, "fallback")).toEqual([]);
@@ -336,9 +470,12 @@ describe("Wallpaper", () => {
 
     it("shows under each theme's rotation once the photographs are late", () => {
       jest.useFakeTimers();
-      const { container } = render(<Wallpaper theme="dark" />, {
-        wrapper: OnOneScreen,
-      });
+      const { container } = render(
+        <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+        {
+          wrapper: OnOneScreen,
+        },
+      );
 
       act(() => {
         jest.advanceTimersByTime(FALLBACK_DELAY_MS - 1);
@@ -359,9 +496,12 @@ describe("Wallpaper", () => {
     it("shows as soon as a photograph fails to load", () => {
       // Without a network a request fails at once, and the desktop would be
       // blank until the delay ran out.
-      const { container } = render(<Wallpaper theme="dark" />, {
-        wrapper: OnOneScreen,
-      });
+      const { container } = render(
+        <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+        {
+          wrapper: OnOneScreen,
+        },
+      );
       const failed = container.querySelector(`img[src="${photo("dark", 0)}"]`);
       if (failed === null) {
         throw new Error("test: the first photograph is not mounted");
@@ -377,9 +517,12 @@ describe("Wallpaper", () => {
 
     it("fades in", () => {
       // It shows over the bare page, not under another photograph.
-      const { container } = render(<Wallpaper theme="dark" />, {
-        wrapper: OnOneScreen,
-      });
+      const { container } = render(
+        <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+        {
+          wrapper: OnOneScreen,
+        },
+      );
       const image = container.querySelector(
         `img[src="${WALLPAPER_FALLBACKS.dark}"]`,
       );

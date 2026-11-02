@@ -55,7 +55,7 @@ import { runManganese } from "@domicile-desktop/manganese";
 
 export const theme = { mode: "dark" };
 export const Shell = runManganese({
-  // keybindings, bar, floating, applications
+  // keybindings, bar, floating, applications, wallpapers
 });
 ```
 

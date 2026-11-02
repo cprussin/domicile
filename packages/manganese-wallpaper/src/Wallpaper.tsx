@@ -4,13 +4,21 @@ import {
 } from "@domicile-desktop/component-library/DisplayProvider";
 import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import { THEMES } from "@domicile-desktop/component-library/theme-core";
+import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { token } from "../styled-system/tokens";
 import { Layer, layerStyles } from "./layer";
+import type { Order } from "./order";
+import { shuffledOrder } from "./order";
 import { Photo } from "./Photo";
-import { WALLPAPER_FALLBACKS, WALLPAPER_PHOTOS } from "./photos";
+import { DEFAULT_WALLPAPERS, WALLPAPER_FALLBACKS } from "./photos";
+import type { Wallpapers } from "./wallpapers";
+import { isWebAddress } from "./wallpapers";
+
+type FileCalls = Pick<Files, "read">;
 
 /** How long each photograph shows before the next fades in. */
 const DWELL_MS = 60_000;
@@ -28,6 +36,8 @@ const FALLBACK_DELAY_MS = 3000;
 const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
 
 type Props = {
+  /** Reads the photographs given by path. */
+  files: FileCalls;
   /**
    * Holds the rotation, as while the theme wipe plays: a crossfade under it
    * would show through the new theme's frame. A photograph due meanwhile
@@ -35,10 +45,17 @@ type Props = {
    */
   held?: boolean;
   /**
+   * The order each pass through a rotation shows its photographs in.
+   * Defaults to a fresh shuffle each pass.
+   */
+  order?: Order;
+  /**
    * A picture an application set through the Wallpaper portal, as a URL. Shown
    * on every screen in place of the rotation.
    */
   picture?: string | undefined;
+  /** Each theme's photographs. Defaults to the built-in ones. */
+  photos?: Wallpapers;
   /** The theme shown, whose rotation advances. */
   theme: Theme;
 };
@@ -62,8 +79,19 @@ const STARTS: Readonly<Record<Theme, number>> = { dark: 0, light: 0 };
  *   The other holds its photograph and loads no next one until it is shown.
  * - It takes no pointer events.
  */
-export const Wallpaper = ({ held = false, picture, theme }: Props) => {
+export const Wallpaper = ({
+  files,
+  held = false,
+  order: givenOrder,
+  photos = DEFAULT_WALLPAPERS,
+  picture,
+  theme,
+}: Props) => {
   const displays = useDisplays();
+  const [shuffled] = useState(() =>
+    shuffledOrder(Math.floor(Math.random() * 2 ** 32)),
+  );
+  const order = givenOrder ?? shuffled;
   const [steps, setSteps] = useState(STARTS);
   // Whether the shown rotation's fade has finished.
   const [settled, setSettled] = useState(true);
@@ -125,7 +153,10 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
         // desktop is not blank while it starts.
         <ScreenWallpaper
           fallback={fallback}
+          files={files}
           onPhotoError={showFallback}
+          order={order}
+          photos={photos}
           picture={picture}
           screen={undefined}
           settled={settled}
@@ -136,8 +167,11 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
         displays.map(({ name }) => (
           <ScreenWallpaper
             fallback={fallback}
+            files={files}
             key={name}
             onPhotoError={showFallback}
+            order={order}
+            photos={photos}
             picture={picture}
             screen={name}
             settled={settled}
@@ -153,8 +187,14 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
 type RotationProps = {
   /** Whether the photograph from the repository shows. */
   fallback: boolean;
+  /** Reads the photographs given by path. */
+  files: FileCalls;
   /** Called when a photograph fails to load. */
   onPhotoError: () => void;
+  /** The order each pass shows the photographs in. */
+  order: Order;
+  /** Each theme's photographs. */
+  photos: Wallpapers;
   /** Whether the shown rotation's fade has finished. */
   settled: boolean;
   /** The theme shown. */
@@ -196,7 +236,10 @@ const ScreenWallpaper = ({
  */
 const Rotation = ({
   fallback,
+  files,
   onPhotoError,
+  order,
+  photos,
   settled,
   shown,
   steps,
@@ -217,69 +260,115 @@ const Rotation = ({
           data-wallpaper={fallback ? Layer.Fallback : Layer.Waiting}
           src={WALLPAPER_FALLBACKS[theme]}
         />
-        {WALLPAPER_PHOTOS[theme].map((photo, index, photos) =>
-          isMounted(
-            index,
-            steps[theme],
-            photos.length,
-            settled,
-            theme === shown,
-          ) ? (
-            <Photo
-              key={photo}
-              layer={layerOf(
-                index,
-                steps[theme],
-                photos.length,
-                settled || theme !== shown,
-              )}
-              onError={onPhotoError}
-              src={photo}
-            />
-          ) : undefined,
-        )}
+        {mountedSteps(
+          steps[theme],
+          photos[theme].length,
+          settled,
+          theme === shown,
+        ).map((step) => (
+          <ConfiguredPhoto
+            files={files}
+            key={step}
+            layer={layerOf(step, steps[theme], settled || theme !== shown)}
+            onError={onPhotoError}
+            photo={photoAt(order, photos[theme], step)}
+          />
+        ))}
       </div>
     ))}
   </>
 );
 
 /**
- * Whether the photograph at `index` is mounted on this `step`: it is on
- * screen, fading out, or next in the `shown` rotation. The next one mounts a
- * whole step early so it has loaded before it fades in. The rest stay
- * unmounted, so the page does not hold every 4K photograph at once. A hidden
- * rotation mounts only its photograph on screen, which does not change.
+ * The photograph `photo`, a web address or a path. A path is read through
+ * `files` once mounted, so only the photographs on screen and next are held.
  */
-const isMounted = (
-  index: number,
+const ConfiguredPhoto = ({
+  files,
+  layer,
+  onError,
+  photo,
+}: {
+  files: FileCalls;
+  layer: Layer;
+  onError: () => void;
+  photo: string;
+}) =>
+  isWebAddress(photo) ? (
+    <Photo layer={layer} onError={onError} src={photo} />
+  ) : (
+    <PathPhoto files={files} layer={layer} onError={onError} path={photo} />
+  );
+
+/** The photograph at `path`, shown once read. */
+const PathPhoto = ({
+  files,
+  layer,
+  onError,
+  path,
+}: {
+  files: FileCalls;
+  layer: Layer;
+  onError: () => void;
+  path: string;
+}) => {
+  const url = usePictureUrl(files, path);
+  return url === undefined ? undefined : (
+    <Photo layer={layer} onError={onError} src={url} />
+  );
+};
+
+/**
+ * The steps whose photographs are mounted at `step`: on screen, fading out,
+ * or next in the `shown` rotation. Keyed by step, so the next photograph
+ * stays mounted as it becomes current. It mounts a whole step early so it has
+ * loaded before it fades in. The rest stay unmounted, so the page does not
+ * hold every 4K photograph at once. A hidden rotation mounts only its
+ * photograph on screen, which does not change.
+ */
+const mountedSteps = (
   step: number,
   length: number,
   settled: boolean,
   shown: boolean,
-): boolean =>
-  shown
-    ? index === (step + 1) % length ||
-      layerOf(index, step, length, settled) !== Layer.Waiting
-    : index === step % length;
+): number[] => {
+  if (length === 0) {
+    return [];
+  } else if (!shown) {
+    return [step];
+  } else if (settled || step === 0) {
+    return [step, step + 1];
+  } else {
+    return [step - 1, step, step + 1];
+  }
+};
 
-/**
- * The role of the photograph at `index` on this `step` of the rotation.
- *
- * At step 0 the previous index is `-1 % n`, which is `-1` and matches no
- * photograph. Once `settled`, there is no previous layer.
- */
-const layerOf = (
-  index: number,
-  step: number,
-  length: number,
-  settled: boolean,
-): Layer => {
-  if (index === step % length) {
+/** The role of the photograph of `photoStep` on this `step`. */
+const layerOf = (photoStep: number, step: number, settled: boolean): Layer => {
+  if (photoStep === step) {
     return Layer.Current;
-  } else if (!settled && index === (step - 1) % length) {
+  } else if (!settled && photoStep === step - 1) {
     return Layer.Previous;
   } else {
     return Layer.Waiting;
+  }
+};
+
+/** The photograph `photos` shows on `step`, in its pass's `order`. */
+const photoAt = (
+  order: Order,
+  photos: readonly string[],
+  step: number,
+): string => {
+  const photo = order(photos, Math.floor(step / photos.length))[
+    step % photos.length
+  ];
+  if (photo === undefined) {
+    throw new Error(
+      `the wallpaper order has no photograph for step ${step.toString()}`,
+    );
+  } else {
+    return photo;
   }
 };
 

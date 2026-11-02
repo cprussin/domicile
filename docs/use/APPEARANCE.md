@@ -80,8 +80,40 @@ darkens them while the desktop is dark:
 
 ## Wallpaper
 
-The wallpaper is a photograph that changes every minute: space in the dark
-theme, nature in the light one. An app that sets a wallpaper, such as an
-image viewer's "Set as wallpaper", replaces it.
+The wallpaper is a photograph that changes every minute: night scenes in the
+dark theme, daylight ones in the light theme, in a random order that
+reshuffles each time through. An app that sets a wallpaper, such as an image viewer's "Set as
+wallpaper", replaces it.
+
+### Choose the photos
+
+Set `wallpapers` in a [config module](CONFIGURE.md#a-config-module): a list
+for each theme. Each entry is one of:
+
+- a web address of an image;
+- an image file, such as `~/Pictures/beach.jpg`;
+- a folder: every image in it, by name.
+
+A theme you leave out keeps the built-in photos.
+
+```tsx
+import { runManganese } from "@domicile-desktop/manganese";
+
+export const Shell = runManganese({
+  wallpapers: {
+    dark: ["~/Pictures/Wallpapers/Dark"],
+    light: ["~/Pictures/Wallpapers/Light", "https://example.com/beach.jpg"],
+  },
+});
+```
+
+- Paths start with `/` or `~/`. A folder is read when the desktop starts.
+- To add to the built-in photos, start from `DEFAULT_WALLPAPERS`:
+  `dark: [...DEFAULT_WALLPAPERS.dark, "~/Pictures/Night"]`.
+- `commonsPhoto("File name.jpg")` gives the address of a
+  [Wikimedia Commons](https://commons.wikimedia.org) file, at 4K.
+- Both come from `@domicile-desktop/manganese`.
+- Use photos at least as wide as your widest monitor. They are cropped to fill
+  each monitor.
 
 All the options, with defaults: [SHELL-CONFIG.md](../SHELL-CONFIG.md#theme).

@@ -1,11 +1,14 @@
 {
   "dependencies": {
     "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
     "@pandacss/dev": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "zod": "catalog:"
   },
   "description": "Manganese's wallpaper: rotating photos per theme, crossfaded.",
   "devDependencies": {
+    "@cprussin/option-result": "catalog:",
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/manganese-window-management": "workspace:*",
     "@domicile-desktop/test-support": "workspace:*",
@@ -23,7 +26,10 @@
     "node": ">=24"
   },
   "exports": {
-    "./Wallpaper": "./src/Wallpaper.tsx"
+    "./photos": "./src/photos.ts",
+    "./useWallpapers": "./src/useWallpapers.ts",
+    "./Wallpaper": "./src/Wallpaper.tsx",
+    "./wallpapers": "./src/wallpapers.ts"
   },
   "files": [
     "src/**",

@@ -5,6 +5,7 @@ import { applyAppearance } from "@domicile-desktop/component-library/appearance"
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
+import type { Wallpapers } from "@domicile-desktop/manganese-wallpaper/wallpapers";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { useAppearance } from "@domicile-desktop/react/appearance";
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
@@ -20,6 +21,7 @@ type Props = {
   readonly floating: FloatingRules;
   readonly inboxes?: readonly Inbox[] | undefined;
   readonly keybindings?: ShellKeybindings | undefined;
+  readonly wallpapers?: Wallpapers | undefined;
 };
 
 /** Manganese, from `runManganese`'s parsed options. */
@@ -29,6 +31,7 @@ export const Manganese = ({
   floating,
   inboxes,
   keybindings,
+  wallpapers,
 }: Props) => {
   const domicile = useDomicile();
   // Once per desktop: the theme provider re-registers when the source changes.
@@ -47,6 +50,7 @@ export const Manganese = ({
       inboxes={inboxes}
       keybindings={keybindings}
       theme={theme}
+      wallpapers={wallpapers}
     />
   );
 };

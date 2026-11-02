@@ -11,6 +11,12 @@ describe("runManganese", () => {
     ).toThrow("http or https");
   });
 
+  it("refuses a wallpaper that is not a web address", () => {
+    expect(() => runManganese({ wallpapers: { dark: ["night.jpg"] } })).toThrow(
+      "http or https",
+    );
+  });
+
   it("refuses a floating rule that names nothing", () => {
     expect(() => runManganese({ floating: [{}] })).toThrow(
       "names an app, a title or both",

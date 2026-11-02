@@ -10,6 +10,8 @@ import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsOptions } from "@domicile-desktop/manganese-launcher/applications-config";
 import { applicationsConfigSchema } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
+import type { WallpapersOptions } from "@domicile-desktop/manganese-wallpaper/wallpapers";
+import { wallpapersSchema } from "@domicile-desktop/manganese-wallpaper/wallpapers";
 import type { FloatingOptions } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { floatingRulesSchema } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { mount } from "@domicile-desktop/react/mount";
@@ -26,6 +28,10 @@ import "@domicile-desktop/component-library/fonts/inter.css";
 // rules it repeats in its own order.
 import "../styled-system/styles.css";
 
+export {
+  commonsPhoto,
+  DEFAULT_WALLPAPERS,
+} from "@domicile-desktop/manganese-wallpaper/photos";
 export { DEFAULT_BAR } from "./default-bars";
 /** Read by the builder into `options.json`, for the Settings app. */
 export { options } from "./options";
@@ -61,6 +67,13 @@ export type ManganeseOptions = {
    * `DEFAULT_KEYBINDINGS` (sway's, on Meta).
    */
   readonly keybindings?: ShellKeybindings;
+  /**
+   * Each theme's wallpaper photographs, `dark` and `light`: web addresses,
+   * and paths to images or folders of them.
+   * A theme left out keeps `DEFAULT_WALLPAPERS`. See
+   * `@domicile-desktop/manganese-wallpaper`'s `docs/WALLPAPER.md`.
+   */
+  readonly wallpapers?: WallpapersOptions;
 };
 
 /** Build a `Shell` that mounts manganese with `options`. */
@@ -68,6 +81,7 @@ export const runManganese = (options: ManganeseOptions = {}): ShellModule => {
   // Parsed when the config is built, so a bad bookmark or pattern fails it.
   const applications = applicationsConfigSchema.parse(options.applications);
   const floating = floatingRulesSchema.parse(options.floating);
+  const wallpapers = wallpapersSchema.parse(options.wallpapers);
   const App = () => (
     <Manganese
       applications={applications}
@@ -75,6 +89,7 @@ export const runManganese = (options: ManganeseOptions = {}): ShellModule => {
       floating={floating}
       inboxes={options.inboxes}
       keybindings={options.keybindings}
+      wallpapers={wallpapers}
     />
   );
   return (root, domicile) => {

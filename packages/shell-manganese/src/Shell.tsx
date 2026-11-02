@@ -4,6 +4,8 @@ import type { ThemeSource } from "@domicile-desktop/component-library/theme-sour
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
+import { DEFAULT_WALLPAPERS } from "@domicile-desktop/manganese-wallpaper/photos";
+import type { Wallpapers } from "@domicile-desktop/manganese-wallpaper/wallpapers";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { DEFAULT_KEYBINDINGS } from "@domicile-desktop/manganese-window-management/keyboard/commands";
 import { hostDisplays } from "@domicile-desktop/manganese-window-management/screens/host-displays";
@@ -33,6 +35,8 @@ type Props = {
    * Must be stable: the provider re-registers when its identity changes.
    */
   theme: ThemeSource;
+  /** Each theme's wallpaper photographs. Defaults to manganese's. */
+  wallpapers?: Wallpapers | undefined;
 };
 
 /**
@@ -47,6 +51,7 @@ export const Shell = ({
   inboxes = NO_INBOXES,
   keybindings = DEFAULT_SHELL_KEYBINDINGS,
   theme,
+  wallpapers = DEFAULT_WALLPAPERS,
 }: Props) => {
   const domicile = useDomicile();
   // Once per desktop: the provider re-registers when the source changes.
@@ -60,6 +65,7 @@ export const Shell = ({
           floating={floating}
           inboxes={inboxes}
           keybindings={keybindings}
+          wallpapers={wallpapers}
         />
       </DisplayProvider>
     </Provider>

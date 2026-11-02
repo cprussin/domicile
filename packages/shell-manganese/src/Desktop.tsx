@@ -51,7 +51,9 @@ import type { NotificationsDrawer } from "@domicile-desktop/manganese-notificati
 import { NotificationsContext } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { useNotifications } from "@domicile-desktop/manganese-notifications/useNotifications";
 import { useNow } from "@domicile-desktop/manganese-notifications/useNow";
+import { useWallpapers } from "@domicile-desktop/manganese-wallpaper/useWallpapers";
 import { Wallpaper } from "@domicile-desktop/manganese-wallpaper/Wallpaper";
+import type { Wallpapers } from "@domicile-desktop/manganese-wallpaper/wallpapers";
 import { desktopClientIcons } from "@domicile-desktop/manganese-window-management/client-icons";
 import type { Direction } from "@domicile-desktop/manganese-window-management/direction";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
@@ -117,6 +119,9 @@ import { NoScreens } from "./screens/NoScreens";
 import { showsSharing } from "./shows-sharing";
 import { deskVirtualMonitors } from "./virtual-monitors";
 
+/** No photographs, while the config's folders are listed. */
+const NO_WALLPAPERS: Wallpapers = { dark: [], light: [] };
+
 type Props = {
   /** What the launcher offers beside files. */
   applications: ApplicationsConfig;
@@ -128,6 +133,8 @@ type Props = {
   inboxes: readonly Inbox[];
   /** The keys this desktop binds, merged under the config's. */
   keybindings: ShellKeybindings;
+  /** Each theme's wallpaper photographs. */
+  wallpapers: Wallpapers;
 };
 
 /**
@@ -144,6 +151,7 @@ export const Desktop = ({
   floating,
   inboxes,
   keybindings,
+  wallpapers,
 }: Props) => {
   const domicile = useDomicile();
   const displays = useDisplays();
@@ -183,6 +191,8 @@ export const Desktop = ({
   const portalWallpaper = usePortalWallpaper(domicile);
   const backgroundPicture = usePictureUrl(files, portalWallpaper.background);
   const lockPicture = usePictureUrl(files, portalWallpaper.lockscreen);
+  // The config's folders listed.
+  const listedWallpapers = useWallpapers(files, wallpapers);
   // Installed apps, the inboxes and bookmarks, read through the desktop.
   // Memoized because it holds what was read and the bookmarks' icons.
   const apps = useMemo(
@@ -594,7 +604,13 @@ export const Desktop = ({
         First, so it paints under everything. It does not wait for the
         desktop to connect.
       */}
-      <Wallpaper held={flipping} picture={backgroundPicture} theme={theme} />
+      <Wallpaper
+        files={files}
+        held={flipping}
+        photos={listedWallpapers ?? NO_WALLPAPERS}
+        picture={backgroundPicture}
+        theme={theme}
+      />
       {/*
         Every display the desktop has taken up. A new display appears one
         render after the host reports it, once the reducer gives it a

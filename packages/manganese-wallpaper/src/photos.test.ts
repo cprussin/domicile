@@ -1,20 +1,26 @@
 import { describe, expect, it } from "bun:test";
 import { THEMES } from "@domicile-desktop/component-library/theme-core";
 
-import { WALLPAPER_PHOTOS } from "./photos";
+import { DEFAULT_WALLPAPERS } from "./photos";
 
 /** Every photograph across all themes. */
-const EVERY_PHOTO = THEMES.flatMap((theme) => WALLPAPER_PHOTOS[theme]);
+const EVERY_PHOTO = THEMES.flatMap((theme) => DEFAULT_WALLPAPERS[theme]);
 
-describe("WALLPAPER_PHOTOS", () => {
+describe("DEFAULT_WALLPAPERS", () => {
   it("is several photographs for each theme, no two of them the same", () => {
     // A repeated URL would crossfade a photograph into itself, which looks
     // like no change. Unique across themes too, since a photograph suits only
     // one theme.
     for (const theme of THEMES) {
-      expect(WALLPAPER_PHOTOS[theme].length).toBeGreaterThan(1);
+      expect(DEFAULT_WALLPAPERS[theme].length).toBeGreaterThan(1);
     }
     expect(new Set(EVERY_PHOTO).size).toBe(EVERY_PHOTO.length);
+  });
+
+  it("is hundreds of photographs for each theme, so a day rarely repeats one", () => {
+    for (const theme of THEMES) {
+      expect(DEFAULT_WALLPAPERS[theme].length).toBeGreaterThanOrEqual(200);
+    }
   });
 
   it("asks Commons for a named file, encoded, at a width a 4K desktop can use", () => {
