@@ -171,7 +171,7 @@ expect "and says so" "yes" \
 
 echo "check-runner, running a run of checks"
 
-# What `check.sh` sees from `turbo run test:nix` without nix: turbo prefixes
+# What `check-runner` sees from `turbo run test:nix` without nix: turbo prefixes
 # each line, and the inner run passes with every check skipped.
 rm -f "$WORK"/checks/*.sh
 standin check-8-runs-checks '

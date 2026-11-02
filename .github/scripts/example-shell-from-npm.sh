@@ -7,7 +7,7 @@
 # `scripts/test-out-of-tree-shell.sh` swaps the SDK for a local tarball, so it
 # cannot see a dependency npm does not have. This copies the example out of the
 # repo untouched and installs from the registry. It needs the network, so it
-# runs in example-shell.yml rather than `./scripts/check.sh`.
+# runs in example-shell.yml rather than `turbo test`.
 #
 # Ordering: the example pins `0.0.0-alpha-<sha>`, which publish-packages.yml
 # published when <sha> landed on main. So the pin may only name a commit that

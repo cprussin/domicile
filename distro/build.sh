@@ -58,7 +58,7 @@ UNZIP="$(store_path 'nixpkgs#unzip^out')/bin/unzip"
 # `zstd` for `distro/arch-optdepends.sh` too.
 ZSTD_BIN="$(store_path 'nixpkgs#zstd^bin')/bin"
 PATH="$ZSTD_BIN:$PATH"
-# `jq` for `scripts/stamp-version.sh` and `distro/version.sh`.
+# `jq` for `distro/stamp-version.sh` and `distro/version.sh`.
 PATH="$(store_path 'nixpkgs#jq^bin')/bin:$PATH"
 READELF="$(store_path 'nixpkgs#binutils-unwrapped^out')/bin/readelf"
 ENGINE_TARBALL="$(store_path .#engine.src)"

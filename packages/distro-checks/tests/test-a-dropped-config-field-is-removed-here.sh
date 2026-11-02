@@ -19,7 +19,7 @@
 # Exits 77 when the base cannot be fetched.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MODULE="$ROOT/distro/nix/home-manager.nix"
 SRC=packages/domicile-config/src
 cd "$ROOT"

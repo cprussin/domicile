@@ -8,10 +8,10 @@
 # dependency instead. `DOMICILE_CHECK_STRICT=1` makes the skip fatal in CI,
 # where the library is installed.
 #
-# Tested by `scripts/test-a-check-that-cannot-run-says-so.sh`.
+# Tested by `tests/test-a-rust-check-that-cannot-link-says-so.sh`.
 
-# Exit status for "could not run" (automake's convention), read by `check.sh`.
-# Defined here too because this library may be sourced without `check.sh`.
+# Exit status for "could not run" (automake's convention), read by
+# `check-runner`. Defined here too because this library is sourced without it.
 readonly RUST_SKIPPED_STATUS=77
 
 # Exits the caller with a skip unless `cc` can link `-lxkbcommon`.

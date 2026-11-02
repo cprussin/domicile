@@ -2,7 +2,7 @@ name: Distro packages
 
 # Build the Debian, RPM and Arch packages (`distro/build.sh`) and their signed
 # repositories (`distro/repo.sh`), install each from its repository in its
-# distribution's container (`./scripts/check.sh distro`), and publish them
+# distribution's container (`distro-checks`' `test:distro`), and publish them
 # as a release when stable.yml calls this for a commit it promoted.
 #
 # On pull requests, only those that touch the packaging or the pins it reads.
@@ -14,7 +14,6 @@ on:
       - flake.nix
       - flake.lock
       - packages/domicile-engine/engine-*.nix
-      - scripts/check.sh
       - packages/check-runner/**
       - packages/distro-checks/**
       - .github/scripts/distro-packages-publish.sh
@@ -150,7 +149,7 @@ jobs:
           path: distro-repo/
       - uses: oven-sh/setup-bun@v2
       # Absolute: turbo runs the check from its package.
-      - run: ./scripts/check.sh distro
+      - run: bun run turbo run test:distro
         env:
           DOMICILE_DISTRO_REPO: ${{ github.workspace }}/distro-repo
           DOMICILE_DISTROS: ${{ matrix.distro }}

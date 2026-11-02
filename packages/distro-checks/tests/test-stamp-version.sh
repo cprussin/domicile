@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Tests `scripts/stamp-version.sh`, which gives the manifests that npm, the
+# Tests `distro/stamp-version.sh`, which gives the manifests that npm, the
 # distribution packages and the flake ship the version of their commit.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-STAMP="$ROOT/scripts/stamp-version.sh"
+STAMP="$ROOT/distro/stamp-version.sh"
 [ -x "$STAMP" ] || { echo "no $STAMP" >&2; exit 1; }
 
 WORK="$(mktemp -d)"

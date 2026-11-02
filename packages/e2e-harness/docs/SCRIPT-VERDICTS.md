@@ -1,6 +1,6 @@
 # Script verdicts
 
-How the shell checks (`scripts/*.sh` and each package's `tests/*.sh`) report
+How the shell checks (each package's `tests/*.sh`) report
 failures, and what `src/verdicts.ts` checks.
 
 ## Exit codes
@@ -10,7 +10,7 @@ failures, and what `src/verdicts.ts` checks.
 - `99`: the script's own machinery failed.
 - Any other non-zero: the code under test failed.
 
-`check.sh` treats 99 and 1 the same. Only the printed message tells them
+`check-runner` treats 99 and 1 the same. Only the printed message tells them
 apart, so a compositor crash reported as a harness fault hides the real
 failure.
 
@@ -49,12 +49,12 @@ fi
 Most scripts don't source the helpers. To list the ones that do:
 
 ```sh
-grep -l lib/harness.sh scripts/*.sh packages/*/tests/*.sh
+grep -l lib/harness.sh packages/*/tests/*.sh
 ```
 
 ## Rules in `src/verdicts.ts`
 
-Applied to every `.sh` directly in `scripts/` (not `scripts/lib/`):
+Applied to every `.sh` directly in a package's `tests/`:
 
 1. No bare `exit 99`.
 2. No local definition of any helper above.

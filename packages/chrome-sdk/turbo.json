@@ -1,0 +1,15 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:shell": {
+      "dependsOn": ["build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/bun.lock",
+        "$TURBO_ROOT$/examples/minimal-shell/**",
+        "$TURBO_ROOT$/packages/check-runner/**",
+        "$TURBO_ROOT$/packages/domicile-config/**"
+      ]
+    }
+  }
+}

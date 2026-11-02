@@ -373,7 +373,7 @@
           cp -a ${shellModules} "$out"
           chmod -R u+w "$out"
           bash ${./distro/shell-workspace.sh} files ${pkgs.bun}/bin/bun "$PWD" "$out"
-          bash scripts/stamp-version.sh ${self.rev or self.dirtyRev} \
+          bash distro/stamp-version.sh ${self.rev or self.dirtyRev} \
             "$out"/packages/*/package.json
           runHook postInstall
         '';
@@ -575,12 +575,12 @@
         pname = "domicile-binaries";
         version = "0.0.0";
         # Include everything cargo can reach, not only `.rs` files:
-        # `include_str!` reads shaders, and tests read `scripts/`. A narrower
-        # filter breaks with only "file missing".
+        # `include_str!` reads shaders. A narrower filter breaks with only "file
+        # missing".
         src = pkgs.lib.fileset.toSource {
           root = ./.;
           fileset = pkgs.lib.fileset.unions
-            ([ ./Cargo.toml ./Cargo.lock ./scripts ]
+            ([ ./Cargo.toml ./Cargo.lock ]
               ++ map (name: ./packages + "/${name}") rustCrates);
         };
         cargoLock = {
@@ -711,7 +711,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-2um4boMh7WLV29RXEqrmr2jvIgdgOo5odgrMNJuXGxQ=";
+        outputHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -737,7 +737,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-Jgw3kael/hLcGw/gOuN8GEyMB5K71XyLVf20bbLNbKo=";
+        outputHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       };
 
 
@@ -829,8 +829,8 @@
       legacyPackages.${system} = pkgs;
 
       # `nix run` offers running a desktop and claiming a new npm package.
-      # Checks, e2e scripts and measurements need a checkout; run them as
-      # `./scripts/<name>.sh`.
+      # Checks, e2e scripts and measurements need a checkout; run them with
+      # `bun run check` or their package's turbo task.
 
       # `nix flake check` evaluates the two modules, which nothing else does.
       #

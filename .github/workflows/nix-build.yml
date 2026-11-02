@@ -50,4 +50,4 @@ jobs:
       # from a checkout. Bun is here only to run turbo; a nix build has its own
       # node_modules.
       - uses: oven-sh/setup-bun@v2
-      - run: ./scripts/check.sh nix
+      - run: bun run turbo run test:nix

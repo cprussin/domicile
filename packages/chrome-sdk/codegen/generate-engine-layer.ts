@@ -5,7 +5,8 @@
 //   bun run generate              # in packages/chrome-sdk
 //   bun codegen/generate-engine-layer.ts <path>   # somewhere else
 //
-// `scripts/test-engine-layer-is-the-sdks.sh` checks the file is current.
+// `packages/domicile-engine/tests/test-engine-layer-is-the-sdks.sh` checks the
+// file is current.
 
 import { writeFileSync } from "node:fs";
 import path from "node:path";

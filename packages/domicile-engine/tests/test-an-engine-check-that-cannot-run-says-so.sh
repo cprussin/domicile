@@ -1,70 +1,17 @@
 #!/usr/bin/env bash
-# Tests the libraries that decide whether a check can run: `engine-guard.sh`,
-# `nix-check.sh` and `rust-check.sh`.
-#
-# `check.sh` reads exit 77 as "did not run" and other non-zero statuses as
-# failures. A missing prerequisite (nix, a built Chromium tree, a linkable
-# libxkbcommon) must exit 77: exit 1 makes `check.sh` fail on a laptop, and
-# exit 0 reports a pass that measured nothing.
-#
-# The libraries are sourced directly, so the test covers their behavior and
-# not a caller's wiring.
+# Tests that `lib-engine-guard.sh` skips a guard with no built engine, and
+# hands a guard the build and control its caller asked for.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 ENGINE_LIB="$ROOT/packages/domicile-engine/scripts/lib-engine-guard.sh"
-NIX_LIB="$ROOT/packages/distro-checks/lib/nix-check.sh"
-RUST_LIB="$ROOT/scripts/lib/rust-check.sh"
 [ -f "$ENGINE_LIB" ] || { echo "no $ENGINE_LIB" >&2; exit 1; }
-[ -f "$NIX_LIB" ] || { echo "no $NIX_LIB" >&2; exit 1; }
-[ -f "$RUST_LIB" ] || { echo "no $RUST_LIB" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-FAILED=0
-ok() { printf '  ok    %s\n' "$1"; }
-fail() {
-  printf '  FAIL  %s\n    %s\n' "$1" "$2"
-  FAILED=$((FAILED + 1))
-}
-
-# Sources a library in its own `bash -c` and runs a line, printing the output.
-# The libraries call `exit`, so each runs in a separate process.
-drive() { # library, line to run after sourcing
-  drive_in "$ROOT" "$@"
-}
-
-# Like `drive`, with a custom ROOT. ROOT must be set before sourcing, because
-# the library computes `ENGINE_SCRIPTS` from it at that point.
-drive_in() { # root, library, line to run after sourcing
-  bash -c "set -u; ROOT='$1'; . '$2'; $3" 2>&1
-}
-drive_status() { # library, line to run after sourcing
-  drive "$1" "$2" >/dev/null 2>&1
-  echo $?
-}
-
-says_it_skipped() { # what, output
-  case "$2" in
-    (*SKIP:*) return 0 ;;
-    (*) fail "$1" "it did not print a SKIP: line, so check.sh has no words for why: $2" ;;
-  esac
-  return 1
-}
-
-expect_skip() { # what, library, line
-  local status output
-  status="$(drive_status "$2" "$3")"
-  output="$(drive "$2" "$3")"
-  if [ "$status" -ne 77 ]; then
-    fail "$1" "it exited $status rather than 77, so check.sh reads it as $(
-      [ "$status" -eq 0 ] && echo 'a pass it never measured' || echo 'a failure of the code'
-    )"
-    return
-  fi
-  says_it_skipped "$1" "$output" && ok "$1"
-}
+# shellcheck source=packages/check-runner/src/skip-assertions.sh
+. "$ROOT/packages/check-runner/src/skip-assertions.sh"
 
 echo "an engine check with no warm tree"
 
@@ -222,67 +169,4 @@ case "$got" in
   (*) ok "opting out drops the control and not the guard" ;;
 esac
 
-echo "a rust check with nothing to link against"
-
-# A stand-in `cc`, since the library asks the compiler whether
-# `-lxkbcommon` links.
-STANDIN_CC="$WORK/cc"
-mkdir -p "$STANDIN_CC"
-cc_that() { # exit status the stand-in compiler gives every invocation
-  printf '#!/bin/sh\nexit %s\n' "$1" >"$STANDIN_CC/cc"
-  chmod +x "$STANDIN_CC/cc"
-}
-
-cc_that 1
-expect_skip "a cc that cannot resolve -lxkbcommon is a skip, not a failure of the code" \
-  "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries"
-
-# The skip message must name the library and how to get it.
-why="$(drive "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries")"
-case "$why" in
-  (*xkbcommon*"nix develop"*) ok "it names the library and where to get one" ;;
-  (*) fail "it names the library and where to get one" "the skip said: $why" ;;
-esac
-
-# With no `cc` at all, installing libxkbcommon would not help, so this has its
-# own message.
-expect_skip "no cc is a skip, not a failure of the code" \
-  "$RUST_LIB" "PATH='$WORK/nowhere' require_linkable_libraries"
-
-# A working `cc` must not skip; otherwise a library that always skips would
-# pass the cases above.
-cc_that 0
-status="$(drive_status "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries")"
-if [ "$status" -eq 0 ]; then
-  ok "a cc that links is not a skip"
-else
-  fail "a cc that links is not a skip" \
-    "it exited $status where the library resolved, so cargo test would never run"
-fi
-
-echo "a nix check with no nix"
-
-# An empty PATH, so nix cannot be found wherever it is installed.
-expect_skip "no nix is a skip, not a failure of the code" \
-  "$NIX_LIB" "PATH='$WORK/nowhere' require_nix"
-
-# A stub `nix` on PATH must not skip. A stub keeps this test runnable on CI
-# machines without nix, where strict mode forbids a skip.
-STUB="$WORK/stub-bin"
-mkdir -p "$STUB"
-printf '#!/bin/sh\nexit 0\n' >"$STUB/nix"
-chmod +x "$STUB/nix"
-
-status="$(drive_status "$NIX_LIB" "PATH='$STUB' require_nix")"
-if [ "$status" -eq 0 ]; then
-  ok "nix on PATH is not a skip"
-else
-  fail "nix on PATH is not a skip" \
-    "it exited $status with nix on PATH, so the nix group would never run"
-fi
-
-if [ "$FAILED" -gt 0 ]; then
-  echo "$FAILED failed"
-  exit 1
-fi
-echo "all ok"
+skip_assertions_end

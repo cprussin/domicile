@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Checks that workflows call checks defined in scripts (`scripts/`, a package's
-# task) instead of defining them in `run:` blocks.
+# Checks that workflows call checks defined in a package's task instead of
+# defining them in `run:` blocks.
 #
 # A check defined only in YAML cannot run outside CI, so copies of it drift
 # unnoticed. Workflows may still carry what is specific to CI: the runner
@@ -9,11 +9,11 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 WORKFLOWS="$ROOT/.github/workflows"
-CHECK="$ROOT/scripts/check.sh"
+MANIFEST="$ROOT/package.json"
 GUARDS="$ROOT/packages/domicile-engine/scripts"
 RUN_CHECKS="$GUARDS/run-checks.sh"
 [ -d "$WORKFLOWS" ] || { echo "no $WORKFLOWS" >&2; exit 1; }
-[ -f "$CHECK" ] || { echo "no $CHECK" >&2; exit 1; }
+[ -f "$MANIFEST" ] || { echo "no $MANIFEST" >&2; exit 1; }
 [ -d "$GUARDS" ] || { echo "no $GUARDS" >&2; exit 1; }
 
 FAILED=0
@@ -129,26 +129,26 @@ else
     "no workflow sets DOMICILE_GUARD_CONTROL=0, so the rule above has no subject"
 fi
 
-# --- every group is run by a workflow ---------------------------------------
+# --- every task is run by a workflow ----------------------------------------
 
-# Every `check.sh` group must be run by a workflow, or it runs only by hand.
-echo "every check.sh group is run by a workflow"
+# Every task `bun run check` runs must be run by a workflow, or it runs only by
+# hand.
+echo "every task in bun run check is run by a workflow"
 
-# `KNOWN` in `check.sh` lists every group. Read it from there so this script
-# holds no copy that can drift.
-known="$(sed -n 's/^KNOWN=(\(.*\))$/\1/p' "$CHECK")"
-if [ -z "$known" ]; then
-  fail "check.sh's groups were read at all" \
-    "no KNOWN=(...) assignment in $CHECK; the rules below asserted nothing"
+# Read from the root `check` script, so this script holds no copy that can
+# drift.
+tasks="$(sed -n 's/^ *"check": "bun run turbo run \([^"]*\) --continue",$/\1/p' "$MANIFEST")"
+if [ -z "$tasks" ]; then
+  fail "bun run check's tasks were read at all" \
+    "no \"check\": \"bun run turbo run ... --continue\" in $MANIFEST; the rules below asserted nothing"
 else
-  ok "check.sh's groups were read at all ($known)"
-  for group in $known; do
-    if grep -qE "check\.sh[^|;&]*[[:space:]]$group([[:space:]]|$)" \
-         "$WORKFLOWS"/*.yml; then
-      ok "the $group group is run by a workflow"
+  ok "bun run check's tasks were read at all ($tasks)"
+  for task in $tasks; do
+    if grep -qE "turbo run $task([[:space:]]|$)" "$WORKFLOWS"/*.yml; then
+      ok "$task is run by a workflow"
     else
-      fail "the $group group is run by a workflow" \
-        "no workflow names \`check.sh ... $group\`, so it runs only by hand"
+      fail "$task is run by a workflow" \
+        "no workflow runs \`turbo run $task\`, so it runs only by hand"
     fi
   done
 fi

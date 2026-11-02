@@ -38,7 +38,7 @@ want="$("$STAMP" identity)"
 
 # The series the pinned release was built from, as `update-engine-release.sh`
 # wrote it. Parsed, not evaluated, because `nix` is not on every machine that
-# runs `check.sh`.
+# runs `turbo test`.
 identity_in() {
   sed -n 's/^[[:space:]]*identity[[:space:]]*=[[:space:]]*"\([0-9a-f]*\)".*/\1/p' | head -1
 }

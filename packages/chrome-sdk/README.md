@@ -125,7 +125,7 @@ bun run generate    # after changing anything under src/desktop/
 
 - A change to the layer is an engine change: it needs an engine release
   ([RELEASES.md](/packages/domicile-engine/docs/RELEASES.md)).
-- `scripts/test-engine-layer-is-the-sdks.sh` fails when the file is stale.
+- `packages/domicile-engine/tests/test-engine-layer-is-the-sdks.sh` fails when the file is stale.
 - The engine's guards export `HostShell` instead of `Shell` to be handed the
   host itself; see [GUARDS.md](/packages/domicile-engine/docs/GUARDS.md).
 
@@ -152,7 +152,7 @@ the Rust doc comments as its docs. `bun run generate` writes both and needs
 
 - `codegen/json-schema.ts` parses the schema subset `schemars` emits. It
   throws on a keyword outside it.
-- `scripts/test-config-types-match-the-schema.sh` fails when either file is
+- `tests/test-config-types-match-the-schema.sh` fails when either file is
   stale.
 
 ### Dependencies
