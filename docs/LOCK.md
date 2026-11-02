@@ -122,8 +122,11 @@ The machine declares the service; a home-manager module cannot:
   distribution from `packages/distro/pam/`. Each includes the distribution's password
   stack.
 
-Without the file the desktop still locks, and nothing unlocks it. See
-[Failures fail closed](#failures-fail-closed).
+Without the file the desktop does not lock: locked, nothing could unlock it.
+`Lock::shut` asks the verifier on every lock, so adding the file turns the
+lock on with no restart. The compositor says so at startup in an urgent
+notification from Domicile, "This screen won't lock", and logs each lock it
+skips. See [Failures fail closed](#failures-fail-closed).
 
 Tests inject their own verifier: unit tests pass one to `Lock::held_by`, and
 `tests/running` starts the compositor with `--pam-confdir` pointing at a
@@ -187,8 +190,9 @@ Only `PAM_AUTH_ERR` means a wrong passphrase. Any other PAM failure is
 
 | When | Missing | Result |
 |---|---|---|
-| Startup or reload | `/etc/pam.d/<service>` | An error names the file and what to declare. The desktop starts and locks as usual |
-| Each attempt | `/etc/pam.d/<service>` | `Unverifiable`, naming the file. Adding the file fixes the next attempt, without a restart. Linux-PAM would otherwise fall back to its `other` service |
+| Startup or reload | `/etc/pam.d/<service>` | An error names the file and what to declare, and a notification says the screen won't lock. The desktop starts |
+| Each lock | `/etc/pam.d/<service>` | The desktop stays unlocked (`warn` log). Adding the file lets the next lock happen |
+| Each attempt | `/etc/pam.d/<service>` | `Unverifiable`, naming the file: it went missing after the desktop locked. Adding the file fixes the next attempt, without a restart. Linux-PAM would otherwise fall back to its `other` service |
 | Startup | `libpam.so.0` or its `pam_start_confdir` | The compositor exits, naming the library |
 | Startup | a user for the uid | The compositor exits |
 
@@ -217,7 +221,8 @@ a passphrase this desktop did not take; it stays locked
 a passphrase offered during the wait after refused ones; it was not checked
 the passphrase opened this desktop
 this desktop could not check a passphrase, so it stays locked
-this desktop locks, and cannot be unlocked until the file is added
+this desktop does not lock until the file is added
+this desktop does not lock: nothing could unlock it until the machine declares its PAM service (see docs/LOCK.md)
 taking up a reloaded lock
 the reloaded lock cannot be used; the current one stays
 ```

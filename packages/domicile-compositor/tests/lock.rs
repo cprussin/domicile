@@ -417,48 +417,35 @@ fn a_shell_can_lock_the_desk_on_purpose() {
     compositor.wait_for_log("this desktop is locked");
 }
 
-/// A machine that declares no PAM service still locks, says at startup which
-/// file to add, and opens to nothing.
+/// A machine that declares no PAM service, as in a `nix run` trial, does not
+/// lock: locked, nothing would open it. It says so at startup, in the log and
+/// in a notification.
 ///
-/// Failing open would leave the desk unlocked; PAM's `other` stack would let
-/// in whatever it lets in.
+/// Unlocking through PAM's `other` stack instead would let in whatever it lets
+/// in.
 #[test]
-fn a_desk_whose_pam_service_the_machine_lacks_locks_and_opens_to_nothing() {
+fn a_desk_whose_pam_service_the_machine_lacks_warns_and_does_not_lock() {
     let compositor = Compositor::started_where_pam_declares_nothing(A_DESK);
     compositor.wait_for_log("security.pam.services.domicile = {};");
     let mut chrome = compositor.chrome();
     chrome
-        .say(&ChromeMessage::SystemRequest {
-            id: 5,
-            request: SystemRequest::UnlockRefusals,
+        .wait_for(|message| match message {
+            HostMessage::Notifications { items } => items
+                .iter()
+                .any(|shown| shown.summary == "This screen won't lock"),
+            _ => false,
         })
-        .expect("the chrome socket takes a system call");
+        .expect("the desk says so before anybody tries to lock it");
 
     chrome
         .say(&ChromeMessage::Lock)
         .expect("the chrome socket takes a lock");
-    chrome
-        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
-        .expect("the desk locks although nothing can open it");
-    chrome
-        .say(&ChromeMessage::Unlock {
-            passphrase: Passphrase::from(THE_PASSPHRASE),
-        })
-        .expect("the chrome socket takes an unlock");
 
-    assert_eq!(
-        chrome
-            .wait_for(|message| matches!(message, HostMessage::SystemEvent { id: 5, .. }))
-            .expect("the page hears the refusal"),
-        HostMessage::SystemEvent {
-            id: 5,
-            event: SystemEvent::UnlockRefused {
-                refusal: UnlockRefusal::Unverifiable,
-                failures: 1,
-                retry_in_ms: 0,
-            },
-        }
-    );
+    compositor.wait_for_log("this desktop does not lock");
+    compositor
+        .chrome()
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
+        .expect("a desk nothing could open stays open");
 }
 
 /// A chrome on a desktop whose home is indexed, then locked.

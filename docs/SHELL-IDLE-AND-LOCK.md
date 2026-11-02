@@ -242,9 +242,11 @@ the page in devtools does not unlock the desktop.
 - `locked` is `undefined` only until the compositor's first message. After
   that it is `true` or `false`.
 - Without the PAM service's file (`/etc/pam.d/domicile` by default), the
-  desktop still locks and every passphrase is refused `Unverifiable`. Say so
-  on the lock screen instead of "wrong password". Adding the file fixes the
-  next attempt, with no restart ([LOCK.md](LOCK.md#failures-fail-closed)).
+  desktop does not lock: `lock()` and the idle timeout do nothing, and no
+  `lockchange` fires. If the file goes missing while locked, every passphrase
+  is refused `Unverifiable`. Say so on the lock screen instead of "wrong
+  password". Adding the file fixes the next attempt, with no restart
+  ([LOCK.md](LOCK.md#failures-fail-closed)).
 
 Manganese's lock screen:
 [`lock/Lock.tsx`](/packages/manganese-lock/src/Lock.tsx),

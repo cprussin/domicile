@@ -259,7 +259,8 @@ Configure it with `files.omit` and manganese's `applications` option:
   `security.pam.services.domicile = {};`. A home-manager module cannot. The
   [distribution packages](#other-distributions) install it. Elsewhere, add
   `/etc/pam.d/domicile` ([LOCK.md](LOCK.md#verifiers)). Without it the desktop
-  still locks, nothing unlocks it, and the log names the file to add.
+  does not lock, since nothing could unlock it. A notification says so, and
+  the log names the file to add.
 - A `lock` edit applies on reload. It never unlocks a locked desktop
   ([LOCK.md](LOCK.md#reloading)).
 

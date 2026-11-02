@@ -828,6 +828,10 @@ mod tests {
             fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict {
                 Ok(passphrase.as_str() == "friend")
             }
+
+            fn checks_passphrases(&self) -> bool {
+                true
+            }
         }
         let (told, heard) = std::sync::mpsc::channel();
         let mut lock = Lock::held_by(Box::new(Friendly), move |verdict| {

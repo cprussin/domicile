@@ -36,3 +36,9 @@ test("every link on the page goes to a section or a docs page that exists", () =
     );
   expect(broken).toEqual([]);
 });
+
+test("the first trial command says a trial's screen won't lock, and why", () => {
+  // The hero's `nix run` can be copied without reading the install guide.
+  const top = html.slice(0, html.indexOf('id="tour"'));
+  expect(top).toContain('href="/docs/manganese/install#try-it-first"');
+});

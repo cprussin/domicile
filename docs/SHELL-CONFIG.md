@@ -158,7 +158,7 @@ An edit applies to the running desktop, and windows stay open:
 - A keyboard xkb cannot compile, any of its keymaps included, is rejected
   and logged. The current layout stays.
 - A `lock.pam_service` the machine does not declare is taken, and logged:
-  nothing unlocks the desktop until the file is added
+  the desktop does not lock until the file is added
   ([LOCK.md](LOCK.md#failures-fail-closed)).
 
 ## Other sections
@@ -263,8 +263,8 @@ password unlocks it, checked by PAM. There is no other way to unlock it.
 - `lock.pam_service`: the PAM service that checks it. Unset is `domicile`,
   which the NixOS module and the distribution packages declare. Empty, or a
   name that is not a file name in `/etc/pam.d`, is an error.
-- Without `/etc/pam.d/<service>`, the desktop still locks and nothing unlocks
-  it. [LOCK.md](LOCK.md#verifiers) says which file to add.
+- Without `/etc/pam.d/<service>`, the desktop does not lock, since nothing
+  could unlock it. [LOCK.md](LOCK.md#verifiers) says which file to add.
 
 Shell side: [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#locking).
 Implementation: [LOCK.md](LOCK.md).

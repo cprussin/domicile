@@ -29,6 +29,12 @@ export const Hero = () => (
       </a>
       .
     </span>
+    <span className={noteStyles}>
+      A trial's screen doesn't lock, not even when the computer sleeps.{" "}
+      <a className={linkStyles} href="/docs/manganese/install#try-it-first">
+        Why
+      </a>
+    </span>
   </PageHero>
 );
 

@@ -38,6 +38,11 @@ pub const LOCK_SCREEN_DRAWS_WITHIN: Duration = Duration::from_secs(1);
 /// never passes through a type that prints itself.
 pub trait Verifier: Send + Sync {
     fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict;
+
+    /// Whether this verifier can check a passphrase at all. `false` when the
+    /// machine lacks what it checks against, such as the PAM service. The desk
+    /// does not lock then: nothing could open it.
+    fn checks_passphrases(&self) -> bool;
 }
 
 /// A verifier's answer: whether the passphrase matches, or why it could not
@@ -162,12 +167,17 @@ impl Lock {
 
     /// Locks the desktop. Returns `true` only when it was unlocked.
     ///
+    /// A desk whose verifier cannot check a passphrase stays open: locked, it
+    /// could never be opened. Asked on each lock, so adding the PAM service
+    /// lets the next one lock.
+    ///
     /// Blanking can repeat while locked. Sending `locked: true` again would
     /// make the shell redraw its lock screen and could discard a half-typed
     /// passphrase.
     pub fn shut(&mut self) -> bool {
         let mut state = self.state.lock().unwrap();
         match *state {
+            State::Open if !self.verifier.checks_passphrases() => false,
             State::Open => {
                 *state = State::Shut;
                 true
@@ -448,6 +458,10 @@ mod tests {
         fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict {
             Ok(passphrase.as_str() == self.0)
         }
+
+        fn checks_passphrases(&self) -> bool {
+            true
+        }
     }
 
     /// An unlocked lock that opens to `"friend"`, and its verdict channel.
@@ -513,6 +527,10 @@ mod tests {
                     .map(|()| true)
                     .map_err(|_| CouldNotCheck("nobody released it".into()))
             }
+
+            fn checks_passphrases(&self) -> bool {
+                true
+            }
         }
         let (release, released) = mpsc::channel();
         let (mut lock, heard) = held_by(UntilReleased(Mutex::new(released)));
@@ -567,6 +585,10 @@ mod tests {
             fn opens_the_desk(&self, _: &Passphrase) -> Verdict {
                 Err(CouldNotCheck("the module is not there".into()))
             }
+
+            fn checks_passphrases(&self) -> bool {
+                true
+            }
         }
         let (mut lock, heard) = held_by(Broken);
         lock.shut();
@@ -580,6 +602,31 @@ mod tests {
             "and it counts as a guess: some PAM stacks fail a wrong passphrase with an error"
         );
         assert!(lock.locked());
+    }
+
+    #[test]
+    fn a_desk_nothing_could_open_does_not_shut() {
+        // A machine without the lock's PAM service, as in a `nix run` trial.
+        // Locking would leave the desk shut for good.
+        struct Undeclared;
+        impl Verifier for Undeclared {
+            fn opens_the_desk(&self, _: &Passphrase) -> Verdict {
+                Err(CouldNotCheck("no /etc/pam.d/domicile".into()))
+            }
+            fn checks_passphrases(&self) -> bool {
+                false
+            }
+        }
+        let (mut lock, _) = held_by(Undeclared);
+
+        assert!(!lock.shut());
+        assert!(!lock.locked());
+
+        lock.rekeyed(Box::new(OnlyTheWord("friend")));
+        assert!(
+            lock.shut(),
+            "a reload naming a declared service locks again"
+        );
     }
 
     #[test]

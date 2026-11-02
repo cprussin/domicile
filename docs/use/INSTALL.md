@@ -118,12 +118,9 @@ nix run github:cprussin/domicile/stable#manganese
 From a console login, the same command takes the whole screen.
 
 `nix run` installs nothing on the system, so the password check the lock
-screen uses (`/etc/pam.d/domicile`) is missing. In a trial, don't lock the
-screen (Meta+Shift+Return) or let the machine sleep, which locks it too:
-nothing would unlock it. If it locks anyway, close the window. From a console
-login, switch to another console (Ctrl+Alt+F3), log in and run `pkill -f
-domicile`. To lock for real, install a package or add the file
-([LOCK.md](../LOCK.md#verifiers)).
+screen uses (`/etc/pam.d/domicile`) is missing. Without it the screen doesn't
+lock, not even when the computer sleeps, and a notification says so. To lock,
+install a package or add the file ([LOCK.md](../LOCK.md#verifiers)).
 
 Installed already? From a terminal on your current Wayland desktop:
 

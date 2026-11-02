@@ -6,8 +6,8 @@
 //! The system must declare the service (as with swaylock's
 //! `security.pam.services.swaylock`); a home-manager module cannot. Without
 //! the file, Linux-PAM would fall back to the `other` stack: a deny on NixOS,
-//! the login stack on Debian. So the file is checked on every attempt, and a
-//! desk without it still locks but opens to nothing until the file is added.
+//! the login stack on Debian. So the file is checked on every lock and every
+//! attempt. A desk without it does not lock, since nothing could open it.
 //!
 //! libpam is loaded at run time rather than linked, so a missing one is
 //! reported by name at startup. The flake puts `pam` on the compositor's
@@ -81,16 +81,17 @@ pub enum NoPam {
 pub fn for_the_desk(service: &str, confdir: &Path) -> Result<Pam, NoPam> {
     let pam = Pam::for_this_user(service, confdir)?;
     if let Some(why) = pam.undeclared() {
-        error!(%why, "this desktop locks, and cannot be unlocked until the file is added");
+        error!(%why, "this desktop does not lock until the file is added");
     }
     Ok(pam)
 }
 
-/// The machine does not declare the PAM service, so nothing unlocks the desk.
+/// The machine does not declare the PAM service, so nothing would unlock the
+/// desk, and it does not lock.
 #[derive(Debug, Error)]
 #[error(
-    "there is no {} for PAM to read the service {service:?} from, so this desktop locks and \
-     nothing unlocks it. Declare the service: on NixOS, `security.pam.services.{service} = \
+    "there is no {} for PAM to read the service {service:?} from, so this desktop does not \
+     lock: nothing could unlock it. Declare the service: on NixOS, `security.pam.services.{service} = \
      {{}};` in the system configuration; elsewhere, install Domicile's package or add that \
      file (see docs/LOCK.md)",
     file.display()
@@ -134,7 +135,7 @@ impl Pam {
         })
     }
 
-    /// Why nothing unlocks the desk, when the machine does not declare the
+    /// Why nothing would unlock the desk, when the machine does not declare the
     /// service.
     pub fn undeclared(&self) -> Option<Undeclared> {
         (!self.file.exists()).then(|| Undeclared {
@@ -166,6 +167,11 @@ impl Verifier for Pam {
                 None => self.libpam.authenticate(self, typed),
             }
         }
+    }
+
+    /// Whether the machine declares the service.
+    fn checks_passphrases(&self) -> bool {
+        self.undeclared().is_none()
     }
 }
 
@@ -534,9 +540,9 @@ mod tests {
 
     #[test]
     fn a_service_the_machine_does_not_declare_opens_nothing_until_it_is_added() {
-        // The desk still locks: refusing to would fail open. Every passphrase
-        // is an error naming the file, never PAM's `other` stack, and adding
-        // the file opens the desk without a restart.
+        // The desk does not lock without the file (see `Lock::shut`). A
+        // passphrase offered anyway is an error naming the file, never PAM's
+        // `other` stack, and adding the file opens the desk without a restart.
         let confdir = tempfile::tempdir().expect("a directory");
         let pam = Pam::for_this_user(SERVICE, confdir.path())
             .expect("PAM, for this user, before the service exists");
@@ -558,6 +564,7 @@ mod tests {
             why.contains(&file),
             "each attempt names the file too: {why}"
         );
+        assert!(!pam.checks_passphrases(), "so the desk does not lock");
 
         std::fs::write(
             confdir.path().join(SERVICE),
@@ -565,6 +572,7 @@ mod tests {
         )
         .expect("the service");
         assert!(pam.undeclared().is_none());
+        assert!(pam.checks_passphrases(), "and the next lock happens");
         assert_eq!(pam.opens_the_desk(&Passphrase::from("friend")), Ok(true));
     }
 

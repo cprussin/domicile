@@ -127,10 +127,8 @@ nix run github:cprussin/domicile/stable#manganese
 ```
 
 `nix run` installs nothing on the system, so the password check the lock
-screen uses (`/etc/pam.d/domicile`) is missing. In a trial, don't lock the
-screen or let the machine sleep, which locks it too: nothing would unlock it.
-If it locks anyway, close the window. From a console login, switch to another
-console (Ctrl+Alt+F3), log in and run `pkill -f domicile`. To lock for real,
+screen uses (`/etc/pam.d/domicile`) is missing. Without it the screen doesn't
+lock, not even when the machine sleeps, and a notification says so. To lock,
 install a package or add the file ([LOCK.md](LOCK.md#verifiers)).
 
 ## The newest build

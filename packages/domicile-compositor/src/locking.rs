@@ -43,6 +43,12 @@ impl DomicileCompositor {
             // wake the desktop.
             self.release_pressed_keys();
             self.tell_the_chromes_whether_the_desk_is_locked();
+        } else if !self.lock.locked() {
+            warn!(
+                why,
+                "this desktop does not lock: nothing could unlock it until the machine declares \
+                 its PAM service (see docs/LOCK.md)"
+            );
         }
     }
 

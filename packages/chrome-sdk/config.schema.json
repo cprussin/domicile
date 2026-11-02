@@ -299,7 +299,7 @@
     },
     "LockConfig": {
       "additionalProperties": false,
-      "description": "What unlocks this desk: the user's password, checked by PAM.\n\nIf `/etc/pam.d` lacks the service, the desk still locks, and nothing\nunlocks it until the file is added. See `docs/LOCK.md#verifiers`.",
+      "description": "What unlocks this desk: the user's password, checked by PAM.\n\nIf `/etc/pam.d` lacks the service, the desk does not lock, since nothing\ncould unlock it, until the file is added. See `docs/LOCK.md#verifiers`.",
       "properties": {
         "pam_service": {
           "default": null,

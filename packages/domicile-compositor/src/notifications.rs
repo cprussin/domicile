@@ -36,7 +36,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use domicile_host::app_names::{app, application_dirs};
 use domicile_host::mime_apps::launch_command;
 use domicile_host::notifications::{Application, Hints, Image, Notifications, Notified, Notify};
-use domicile_host::portal_notifications::{Invoked, PortalNotification, PortalNotifications};
+use domicile_host::portal_notifications::{
+    Invoked, PortalNotification, PortalNotifications, Priority,
+};
 use domicile_host::tray::TrayIcons;
 use domicile_protocol::Notification;
 use tracing::{debug, warn};
@@ -217,6 +219,28 @@ impl NotificationServer {
         {
             let _ = self.told.send(Event::Expired { id });
         }
+    }
+
+    /// Warn that the desk does not lock: the machine lacks the lock's PAM
+    /// service, as in a `nix run` trial, so nothing could unlock it. Urgent, so
+    /// the shell keeps it up until it is read.
+    pub fn warn_that_the_desk_does_not_lock(&self) {
+        self.add_from_portal(
+            "domicile".into(),
+            "does-not-lock".into(),
+            PortalNotification {
+                title: "This screen won't lock".into(),
+                body: "Domicile's password check isn't set up on this computer, so the screen \
+                       won't lock, even when the computer sleeps. Install Domicile to turn the \
+                       lock on."
+                    .into(),
+                icon: None,
+                priority: Priority::Urgent,
+                default_action: None,
+                buttons: Vec::new(),
+                display_hint: Vec::new(),
+            },
+        );
     }
 
     /// Remove `app_id`'s notification `id`, if held.
@@ -774,6 +798,7 @@ mod tests {
     use super::*;
     use crate::portals::socket_pair;
     use domicile_host::portal_notifications::{Action, Priority};
+    use domicile_protocol::Urgency;
     use zbus::zvariant::Value;
 
     #[test]
@@ -927,6 +952,32 @@ mod tests {
                 .and_then(|shown| shown.icon)
         });
         assert_eq!(icon, Some("data:image/svg+xml;base64,PHN2Zy8+".into()));
+    }
+
+    /// A trial run with no PAM service hears that its screen won't lock. See
+    /// `docs/LOCK.md`.
+    #[test]
+    fn a_desk_that_does_not_lock_says_so_from_the_start() {
+        let server = NotificationServer::unserved(Vec::new());
+
+        server.warn_that_the_desk_does_not_lock();
+
+        let shown = server.store.change(|held| {
+            held.notifications
+                .items()
+                .into_iter()
+                .map(|shown| (shown.app_name, shown.summary, shown.urgency))
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(
+            shown,
+            [(
+                "Domicile".to_string(),
+                "This screen won't lock".to_string(),
+                Urgency::Critical
+            )],
+            "from Domicile, and kept until read"
+        );
     }
 
     #[test]

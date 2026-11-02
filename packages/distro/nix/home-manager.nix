@@ -501,8 +501,8 @@ in {
 
                     security.pam.services.domicile = {};
 
-                Without it the desk still locks, and nothing unlocks it until
-                the service is declared. See docs/LOCK.md.
+                Without it the desk does not lock, since nothing could unlock
+                it, until the service is declared. See docs/LOCK.md.
 
                 The desk locks when `idle.lock_after_seconds` elapses or when
                 its shell asks. Applied on reload; a reload never unlocks a

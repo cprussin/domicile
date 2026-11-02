@@ -173,7 +173,7 @@ use crate::file_indexing::{keep_the_index, kept_at, Heard};
 use crate::idle::Idle;
 use crate::keymap::{compiled_keymap, listed_keymaps};
 use crate::latency_run::spike_latency_point;
-use crate::lock::{Lock, Verdict};
+use crate::lock::{Lock, Verdict, Verifier};
 use crate::modifiers::Held;
 use crate::once_per_window::OncePerWindow;
 use crate::outputs::{advertise_output, screens_at_startup, LiveOutput};
@@ -1231,14 +1231,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .pam_confdir
         .clone()
         .unwrap_or_else(|| PathBuf::from(pam::SERVICES));
-    let lock = Lock::held_by(
-        Box::new(pam::for_the_desk(config.lock.service(), &pam_confdir)?),
-        move |verdict| {
-            verdicts
-                .send(verdict)
-                .expect("the loop that hears a verdict outlives the lock that asked for one")
-        },
-    );
+    let verifier = pam::for_the_desk(config.lock.service(), &pam_confdir)?;
+    // Such a desk does not lock (see `Lock::shut`). Tell the person, not
+    // only the log.
+    if !verifier.checks_passphrases() {
+        hub.notifications
+            .get()
+            .expect("the notification server is handed to the hub before the lock is made")
+            .warn_that_the_desk_does_not_lock();
+    }
+    let lock = Lock::held_by(Box::new(verifier), move |verdict| {
+        verdicts
+            .send(verdict)
+            .expect("the loop that hears a verdict outlives the lock that asked for one")
+    });
     // Give chrome connections the lock state (see `answer_on_the_connection`).
     // Safe to set after connections start: the desktop starts unlocked, and
     // nothing can lock it before the event loop runs.

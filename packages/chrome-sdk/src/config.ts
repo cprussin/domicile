@@ -264,8 +264,8 @@ export type Keymap = {
 /**
  * What unlocks this desk: the user's password, checked by PAM.
  *
- * If `/etc/pam.d` lacks the service, the desk still locks, and nothing
- * unlocks it until the file is added. See `docs/LOCK.md#verifiers`.
+ * If `/etc/pam.d` lacks the service, the desk does not lock, since nothing
+ * could unlock it, until the file is added. See `docs/LOCK.md#verifiers`.
  */
 export type LockConfig = {
   /**

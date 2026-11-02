@@ -36,12 +36,21 @@ Leave a key out to never do it.
 
 The password is checked by the system's `domicile` login service. The
 packages and the NixOS module add it; `nix run` doesn't. Without it the screen
-locks and nothing unlocks it:
+doesn't lock at all, not even when the computer sleeps, and a notification
+from Domicile says so when it starts.
 
-- In a window on another desktop, close the window.
-- Otherwise, switch to a console (Ctrl+Alt+F2), log in, and add
-  `/etc/pam.d/domicile` ([LOCK.md](../LOCK.md#verifiers)). Then unlock with
-  your password.
+If the screen is locked and your password is refused, the check broke after
+it locked:
+
+- **In a window on another desktop:** close the window, or press Ctrl+C in
+  the terminal you started it from.
+- **On the whole screen:** press Ctrl+Alt+F3, sign in and fix the check
+  ([LOCK.md](../LOCK.md#verifiers)). Switch back and unlock with your
+  password. Nothing is lost.
+- **Or end that sign-in** from the other console. `loginctl list-sessions`
+  shows its session id by its `TTY`; run `loginctl terminate-session <id>`.
+  Anything unsaved in its windows is lost. Other Domicile desktops keep
+  running.
 
 To check passwords with another service, set it in Settings' **Power &
 lock** (**PAM service**) or in the config as `lock.pam_service`.
