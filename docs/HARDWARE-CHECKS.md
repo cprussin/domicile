@@ -63,7 +63,8 @@ Start a desktop with a browser window and a client open first. Expect:
 4. The shell never goes away, and the browser window keeps its page. The
    client's tab closes.
 
-The client does not come back.
+A client the shell launched starts again, with a fresh window. One started from
+a terminal does not come back.
 
 ## Dead engine with windows open
 

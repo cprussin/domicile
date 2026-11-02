@@ -223,11 +223,14 @@ domicile load-shell ./my-desktop/dist/shell.js
 
 ### Crashes are recovered
 
-| Exits | Restarted | Survives |
-|---|---|---|
-| engine | the engine | every window, with its last frame |
-| compositor | the compositor | the shell and browser windows |
-| the shell's renderer | the engine, which ends itself | as for the engine |
+| Exits | Restarted | Keeps running | Lost |
+|---|---|---|---|
+| engine | the engine | every Wayland app, with its window, state and last frame | browser windows, app modules, and state kept in the shell's page |
+| compositor | the compositor | the shell, browser windows and app modules | Wayland apps' connections: most apps exit, and the ones the shell launched start again, without unsaved work |
+| the shell's renderer | the engine, which ends itself | as for the engine | as for the engine |
+
+A reload or `load-shell` restarts nothing: every window keeps running, and only
+state kept in the shell's page starts over ([No watch mode](#no-watch-mode)).
 
 ```
 the engine exited (signal: 9 (SIGKILL))

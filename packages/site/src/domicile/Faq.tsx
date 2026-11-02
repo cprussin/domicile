@@ -24,14 +24,14 @@ const QUESTIONS: readonly {
   },
   {
     answer:
-      "Your windows stay open. A reload starts the shell's page over, so state kept in the page is lost. If the engine or the compositor crashes, it restarts and your apps' windows survive.",
+      "A reload or `domicile load-shell` keeps every window running and starts only the shell's page over. If the engine crashes, it restarts: your apps keep running with their state, but browser windows close. If the compositor crashes, browser windows stay, but apps lose their connection. Most exit, and the ones your shell launched start again fresh, without unsaved work.",
     link: {
       href: repoFile(
         "docs/architecture/THE-DOMICILE-BINARY.md#crashes-are-recovered",
       ),
       label: "Crash recovery",
     },
-    question: "What happens if the shell crashes or reloads?",
+    question: "What happens if the desktop crashes or reloads?",
   },
   {
     answer:
