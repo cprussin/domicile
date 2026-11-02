@@ -20,8 +20,11 @@
   [CEReactions] undefined stop();
   [CEReactions] undefined reload();
   // Stops counting the page's finished downloads in
-  // `downloadCompletedCount`.
+  // `downloadCompletedCount` and `downloadCompletedPaths`.
   [CEReactions] undefined clearCompletedDownloads();
+  // Stops counting the finished downloads saved at `path`, an entry of
+  // `downloadCompletedPaths`. Does nothing for any other path.
+  [CEReactions] undefined removeCompletedDownload(DOMString path);
 
   // Whether goBack() and goForward() would navigate. Properties so a shell
   // that mounts late reads the current value; `domicile-history-change`
@@ -41,12 +44,13 @@
   // The page's downloads in progress: how many, and their bytes received and
   // expected in all. `downloadTotalBytes` is 0 when any one's size is unknown.
   // A download counts once the shell has said where it goes. Also how many
-  // finished, until clearCompletedDownloads(). `domicile-downloads-change`
-  // signals a change.
+  // finished and where they were saved, in the order they started, until
+  // clearCompletedDownloads(). `domicile-downloads-change` signals a change.
   readonly attribute long downloadCount;
   readonly attribute long long downloadReceivedBytes;
   readonly attribute long long downloadTotalBytes;
   readonly attribute long downloadCompletedCount;
+  readonly attribute FrozenArray<DOMString> downloadCompletedPaths;
 
   // The guest's visible URL. Differs from `src` after a link or redirect.
   // Empty until the browser reports one.

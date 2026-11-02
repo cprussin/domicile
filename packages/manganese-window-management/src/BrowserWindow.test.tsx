@@ -138,8 +138,14 @@ const downloads = (
   fireEvent(element, new Event(WEBVIEW_DOWNLOADS_CHANGE_EVENT));
 };
 
-/** Fires a downloads change with one finished download and none in progress. */
-const finishesADownload = (element: HTMLWebViewElement): void => {
+/**
+ * Fires a downloads change with finished downloads saved at `paths` and none
+ * in progress.
+ */
+const finishesADownload = (
+  element: HTMLWebViewElement,
+  paths: readonly string[] = ["/home/me/Downloads/report.pdf"],
+): void => {
   Object.defineProperty(element, "downloadCount", {
     configurable: true,
     value: 0,
@@ -154,7 +160,11 @@ const finishesADownload = (element: HTMLWebViewElement): void => {
   });
   Object.defineProperty(element, "downloadCompletedCount", {
     configurable: true,
-    value: 1,
+    value: paths.length,
+  });
+  Object.defineProperty(element, "downloadCompletedPaths", {
+    configurable: true,
+    value: paths,
   });
   fireEvent(element, new Event(WEBVIEW_DOWNLOADS_CHANGE_EVENT));
 };
@@ -726,19 +736,23 @@ describe("BrowserWindow", () => {
         />,
       );
 
-    // An app window has no address bar, so the notices are all it shows.
-    it("says what it zoomed to and when a download finishes", () => {
+    // With no address bar, the popups hang from the page's corner.
+    it("says what it zoomed to, then that a download finished, one at a time", async () => {
       const { container } = renderApp("https://music.example/");
       zoomable(view(container), 1);
       hovers(view(container), "");
 
       guestPresses(view(container), { ctrlKey: true, key: "+" });
+      expect(await screen.findByRole("dialog")).toHaveTextContent("110%");
+
       downloads(view(container), 50, 100);
       finishesADownload(view(container));
-
-      expect(
-        screen.getAllByRole("status").map((status) => status.textContent),
-      ).toStrictEqual(["110%", "Download finished"]);
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toHaveTextContent(
+          "Download finished",
+        );
+      });
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
     });
 
     it("draws no address while its page is on the app's origin", () => {
@@ -1783,7 +1797,7 @@ describe("BrowserWindow", () => {
       ).toHaveAttribute("aria-valuenow", "25");
     });
 
-    it("says when the page's download finishes", () => {
+    it("says when the page's download finishes", async () => {
       const { container } = render(
         <BrowserWindow
           behindPanel={false}
@@ -1814,8 +1828,8 @@ describe("BrowserWindow", () => {
       finishesADownload(view(container));
 
       expect(
-        screen.getAllByRole("status").map((status) => status.textContent),
-      ).toContain("Download finished");
+        await screen.findByRole("heading", { name: "Download finished" }),
+      ).toBeInTheDocument();
     });
 
     it("clears the page's finished downloads when asked", async () => {
@@ -1853,6 +1867,120 @@ describe("BrowserWindow", () => {
       await userEvent.click(control("Clear finished downloads"));
 
       expect(driven).toStrictEqual(["clear"]);
+    });
+
+    describe("the finished downloads' popup", () => {
+      const renderLaunching = (launched: (readonly string[])[]) =>
+        render(
+          <BrowserWindow
+            behindPanel={false}
+            clickThrough={false}
+            covered={false}
+            depth={0}
+            domicile={{
+              ...silentDomicile,
+              processes: {
+                ...silentDomicile.processes,
+                launch: (argv) => {
+                  launched.push(argv);
+                },
+              },
+            }}
+            dragging={false}
+            focused
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onDescription={noDescription}
+            onFocusRequest={() => undefined}
+            onIcon={noIcon}
+            onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            resizing={false}
+            url="https://example.com"
+            window="1"
+          />,
+        );
+
+      it("opens a finished file with its default application", async () => {
+        const launched: (readonly string[])[] = [];
+        const { container } = renderLaunching(launched);
+        downloads(view(container), 50, 100);
+        finishesADownload(view(container));
+
+        await userEvent.click(
+          await screen.findByRole("button", { name: "Open" }),
+        );
+
+        expect(launched.at(-1)?.at(-1)).toBe("/home/me/Downloads/report.pdf");
+      });
+
+      it("opens the folder a finished file is in", async () => {
+        const launched: (readonly string[])[] = [];
+        const { container } = renderLaunching(launched);
+        downloads(view(container), 50, 100);
+        finishesADownload(view(container));
+
+        await userEvent.click(
+          await screen.findByRole("button", { name: "Show in folder" }),
+        );
+
+        expect(launched.at(-1)?.at(-1)).toBe("/home/me/Downloads");
+      });
+
+      it("takes one finished file off the list", async () => {
+        const removed: string[] = [];
+        const { container } = renderLaunching([]);
+        Object.defineProperty(view(container), "removeCompletedDownload", {
+          configurable: true,
+          value: (path: string) => {
+            removed.push(path);
+          },
+        });
+        downloads(view(container), 50, 100);
+        finishesADownload(view(container));
+
+        await userEvent.click(
+          await screen.findByRole("button", { name: "Remove from list" }),
+        );
+
+        expect(removed).toStrictEqual(["/home/me/Downloads/report.pdf"]);
+      });
+
+      it("clears them all", async () => {
+        const driven: string[] = [];
+        const { container } = renderLaunching([]);
+        view(container).clearCompletedDownloads = () => {
+          driven.push("clear");
+        };
+        downloads(view(container), 50, 100);
+        finishesADownload(view(container));
+
+        await userEvent.click(
+          await screen.findByRole("button", { name: "Clear all" }),
+        );
+
+        expect(driven).toStrictEqual(["clear"]);
+      });
+
+      it("comes back when the indicator is pressed", async () => {
+        const { container } = renderLaunching([]);
+        downloads(view(container), 50, 100);
+        finishesADownload(view(container));
+        await screen.findByRole("dialog");
+        await userEvent.keyboard("{Escape}");
+        await waitFor(() => {
+          expect(screen.queryByRole("dialog")).toBeNull();
+        });
+
+        await userEvent.click(control("Downloaded"));
+
+        expect(
+          await screen.findByRole("heading", { name: "Download finished" }),
+        ).toBeInTheDocument();
+      });
     });
   });
 
@@ -1963,7 +2091,7 @@ describe("BrowserWindow", () => {
       expect(asked).toStrictEqual([1.25]);
     });
 
-    it("says what it zoomed to", () => {
+    it("says what it zoomed to", async () => {
       const { container } = renderWindow();
       zoomable(view(container), 1);
       // Over no link, as the engine's element starts, so the zoom is the only
@@ -1972,7 +2100,7 @@ describe("BrowserWindow", () => {
 
       guestPresses(view(container), { ctrlKey: true, key: "+" });
 
-      expect(screen.getByRole("status")).toHaveTextContent("110%");
+      expect(await screen.findByRole("dialog")).toHaveTextContent("110%");
     });
   });
 
