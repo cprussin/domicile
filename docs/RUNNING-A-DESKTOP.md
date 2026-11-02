@@ -484,13 +484,13 @@ Upgrade a `stable` package by downloading and installing it again.
 `nix profile install github:cprussin/domicile/stable#domicile` installs
 Domicile without the machine's half. Add it by hand, from this repository:
 
-- **Session:** `distro/nix/domicile-session.desktop` as
+- **Session:** `packages/distro/share/domicile-session.desktop` as
   `/usr/local/share/wayland-sessions/domicile.desktop`, with `@bin@` replaced
   by your profile's `bin` as an absolute path (`/home/<you>/.nix-profile/bin`).
-- **PAM:** your distribution's file from `distro/pam/` as
+- **PAM:** your distribution's file from `packages/distro/pam/` as
   `/etc/pam.d/domicile`.
-- **Group and limits:** `distro/sysusers.conf` as
+- **Group and limits:** `packages/distro/sysusers.conf` as
   `/etc/sysusers.d/domicile.conf` (then `sudo systemd-sysusers`), and
-  `distro/limits.conf` as `/etc/security/limits.d/10-domicile.conf`.
+  `packages/distro/limits.conf` as `/etc/security/limits.d/10-domicile.conf`.
 - **User units:** link `~/.nix-profile/lib/systemd/user/domicile-*.target`
   into `~/.config/systemd/user/`.

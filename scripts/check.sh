@@ -7,7 +7,7 @@
 # Groups: `shell`, `rust`, `typescript`, `e2e`, `nix` and `distro`.
 # Workflows run groups only;
 # `packages/ci/tests/test-the-workflows-delegate-their-checks.sh` asserts that. `nix`
-# needs `nix` on PATH and `distro` needs packages from `distro/build.sh` and
+# needs `nix` on PATH and `distro` needs packages from `packages/distro/build.sh` and
 # docker; without them they skip. The engine's checks are its package's
 # `test:engine`.
 #
@@ -109,20 +109,20 @@ if wanted typescript; then
   run "turbo test" bun run turbo test
 fi
 
-# `distro-checks`' `test:nix`. A separate group because these need `nix`, and
+# `distro`' `test:nix`. A separate group because these need `nix`, and
 # the `shell` group runs strict on `ubuntu-latest` without it.
 if wanted nix; then
   echo
   echo "== nix =="
-  run "turbo test:nix" bun run turbo run test:nix --filter=@domicile-desktop/distro-checks
+  run "turbo test:nix" bun run turbo run test:nix --filter=@domicile-desktop/distro
 fi
 
-# `distro-checks`' `test:distro`. A separate group because these need the
-# packages `distro/build.sh` makes and docker; `distro-packages.yml` runs it.
+# `distro`' `test:distro`. A separate group because these need the
+# packages `packages/distro/build.sh` makes and docker; `distro-packages.yml` runs it.
 if wanted distro; then
   echo
   echo "== distro =="
-  run "turbo test:distro" bun run turbo run test:distro --filter=@domicile-desktop/distro-checks
+  run "turbo test:distro" bun run turbo run test:distro --filter=@domicile-desktop/distro
 fi
 
 if wanted e2e; then

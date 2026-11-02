@@ -117,9 +117,9 @@ library sends; the libraries' tests and the allowlist's both check it.
 The machine declares the service; a home-manager module cannot:
 
 - **NixOS:** `nixosModules.default`, or `security.pam.services.domicile = {};`.
-- **Distribution packages** install `/etc/pam.d/domicile` (`distro/pam/`).
+- **Distribution packages** install `/etc/pam.d/domicile` (`packages/distro/pam/`).
 - **Anywhere else**, add `/etc/pam.d/domicile`: copy the file for your
-  distribution from `distro/pam/`. Each includes the distribution's password
+  distribution from `packages/distro/pam/`. Each includes the distribution's password
   stack.
 
 Without the file the desktop still locks, and nothing unlocks it. See

@@ -603,7 +603,7 @@ pub struct LockConfig {
     ///
     /// Absent means `"domicile"`, which the NixOS module and the distribution
     /// packages declare.
-    // `pub` so `packages/distro-checks/tests/test-the-home-manager-module-agrees.sh` can check that
+    // `pub` so `packages/distro/tests/test-the-home-manager-module-agrees.sh` can check that
     // this struct accepts every key the home-manager module writes.
     pub pam_service: Option<String>,
 }

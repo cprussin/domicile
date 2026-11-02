@@ -149,7 +149,7 @@ jobs:
           DOMICILE_PUBLISH_DRY_RUN: ${{ inputs.dry_run && runner.temp || '' }}
       - name: The apt, rpm and pacman repositories
         run: |
-          mapfile -t tools < <(sed -n 's/^\([a-z]\)/nixpkgs#\1/p' distro/repo-tools)
+          mapfile -t tools < <(sed -n 's/^\([a-z]\)/nixpkgs#\1/p' packages/distro/repo-tools)
           nix shell --inputs-from . "${tools[@]}" --command \
             .github/scripts/release-repos.sh distro-out distro-repo
         env:
@@ -162,7 +162,7 @@ jobs:
       # PKGBUILD names.
       - name: The AUR
         run: |
-          version="$(distro/version.sh . arch)"
+          version="$(packages/distro/version.sh . arch)"
           nix shell --inputs-from . nixpkgs#libarchive --command .github/scripts/release-aur.sh \
             "distro-repo/arch/x86_64/domicile-$version-1-x86_64.pkg.tar.zst"
         env:
