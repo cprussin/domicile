@@ -56,6 +56,7 @@ export const PagePopup = ({
   }, [closesAfter, cue, held, onClose, open]);
 
   return open ? (
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: holds it up while the pointer rests on it, and Escape from one of its controls closes it, as a popover's would
     <div
       aria-label={label}
       className={popupStyles}
