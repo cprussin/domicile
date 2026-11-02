@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ContextMenu } from "./ContextMenu";
@@ -157,6 +163,84 @@ describe(ContextMenu, () => {
       await user.click(await screen.findByRole("menuitem", { name: "Reload" }));
       expect(await chosen.promise).toBe("reload");
       expect(await closed.promise).toBe(false);
+    });
+
+    // The right press that opened the menu, held and let go over an item, as
+    // in Chrome.
+    it("runs the item a held right button is let go over", async () => {
+      const chosen = Promise.withResolvers<string>();
+      render(
+        <ContextMenu at={{ x: 10, y: 20 }} label="Page" open>
+          <ContextMenu.Item
+            onClick={() => {
+              chosen.resolve("reload");
+            }}
+          >
+            Reload
+          </ContextMenu.Item>
+        </ContextMenu>,
+      );
+      // The press was in another document, so only the release comes here.
+      fireEvent.mouseUp(
+        await screen.findByRole("menuitem", { name: "Reload" }),
+        {
+          button: 2,
+          clientX: 40,
+          clientY: 40,
+        },
+      );
+      expect(await chosen.promise).toBe("reload");
+    });
+
+    it("runs nothing for a right button let go where it was pressed", async () => {
+      let chosen = false;
+      render(
+        <ContextMenu at={{ x: 10, y: 20 }} label="Page" open>
+          <ContextMenu.Item
+            onClick={() => {
+              chosen = true;
+            }}
+          >
+            Reload
+          </ContextMenu.Item>
+        </ContextMenu>,
+      );
+      // The press was in another document, so only the release comes here.
+      fireEvent.mouseUp(
+        await screen.findByRole("menuitem", { name: "Reload" }),
+        {
+          button: 2,
+          clientX: 10,
+          clientY: 20,
+        },
+      );
+      expect(chosen).toBe(false);
+    });
+
+    it("runs nothing for a right button let go over a disabled item", async () => {
+      let chosen = false;
+      render(
+        <ContextMenu at={{ x: 10, y: 20 }} label="Page" open>
+          <ContextMenu.Item
+            disabled
+            onClick={() => {
+              chosen = true;
+            }}
+          >
+            Reload
+          </ContextMenu.Item>
+        </ContextMenu>,
+      );
+      // The press was in another document, so only the release comes here.
+      fireEvent.mouseUp(
+        await screen.findByRole("menuitem", { name: "Reload" }),
+        {
+          button: 2,
+          clientX: 40,
+          clientY: 40,
+        },
+      );
+      expect(chosen).toBe(false);
     });
 
     it("opens a submenu from its item, keeping the menu open", async () => {

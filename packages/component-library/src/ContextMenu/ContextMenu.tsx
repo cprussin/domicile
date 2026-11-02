@@ -4,7 +4,7 @@ import type { BaseUIEvent } from "@base-ui/react/types";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
 import { DotIcon } from "@phosphor-icons/react/dist/ssr/Dot";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useMemo } from "react";
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
@@ -32,6 +32,10 @@ type Props = ExtendProps<
  * outside press) through `onOpenChange`. The press may not be in this
  * document, as with a click in a `<webview>`. The menu takes the keyboard while
  * open. It stays inside its `PopupBoundary`, such as its window.
+ *
+ * Letting go of the right button over an item chooses it, as in Chrome, so a
+ * right press held from opening the menu can pick an item. Not where the menu
+ * opened: that is the opening click's own release.
  *
  * A letter chooses the first enabled item in the open menu or submenu whose
  * mnemonic it is, and opens a submenu. Other letters go to base-ui's
@@ -65,6 +69,9 @@ const ContextMenuComponent = ({ at, children, label, ...rootProps }: Props) => {
             aria-label={label}
             className={popupStyles}
             onKeyDown={chooseByMnemonic}
+            onMouseUp={(event) => {
+              chooseByRelease(event, at);
+            }}
           >
             {children}
           </BaseMenu.Popup>
@@ -217,6 +224,9 @@ const Submenu = ({
             aria-label={label}
             className={popupStyles}
             onKeyDown={chooseByMnemonic}
+            onMouseUp={(event) => {
+              chooseByRelease(event, undefined);
+            }}
           >
             {children}
           </BaseMenu.Popup>
@@ -415,4 +425,41 @@ const mnemonicItem = (
         !candidate.hasAttribute("data-disabled"),
     );
   }
+};
+
+/**
+ * Chooses the enabled item a right button was let go over, unless it was let
+ * go at `opened`, where the press that opened the menu was. base-ui leaves
+ * this release alone off macOS, where it takes it to be the opening click's.
+ */
+const chooseByRelease = (
+  event: MouseEvent<HTMLDivElement>,
+  opened: Point | undefined,
+) => {
+  const item = releasedItem(event);
+  if (
+    item !== undefined &&
+    (opened === undefined ||
+      Math.abs(event.clientX - opened.x) > 1 ||
+      Math.abs(event.clientY - opened.y) > 1)
+  ) {
+    item.click();
+  }
+};
+
+/** The enabled item in `event`'s popup that a right button was let go over. */
+const releasedItem = (
+  event: MouseEvent<HTMLDivElement>,
+): HTMLElement | undefined => {
+  const item =
+    event.button === 2 && event.target instanceof Element
+      ? event.target.closest<HTMLElement>(
+          "[role=menuitem], [role=menuitemcheckbox], [role=menuitemradio]",
+        )
+      : null;
+  return item === null ||
+    !event.currentTarget.contains(item) ||
+    item.hasAttribute("data-disabled")
+    ? undefined
+    : item;
 };
