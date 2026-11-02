@@ -39,6 +39,8 @@ concurrency:
 # DOMICILE_WRITEBACK_TOKEN's, not this token's.
 permissions:
   contents: write
+  # The build posts its progress as a commit status.
+  statuses: write
   # The compile slot and the tree pool ask whether a holder's run is over.
   actions: read
 
@@ -142,6 +144,8 @@ jobs:
       # The shell must prove it ran the command (a sentinel file), and the
       # command is a script path rather than a string; see engine.yml.
       - name: Build
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           done=/tmp/domicile-release-build-ran
@@ -161,17 +165,19 @@ jobs:
           chmod +x /tmp/domicile-release-build
 
           # The log is printed only once the build ends, so say how far it
-          # has got every ten minutes meanwhile.
-          .github/scripts/engine-build-progress.sh --every 600 /tmp/domicile-shell.log &
+          # has got every five minutes meanwhile, in the log and as a commit
+          # status. See engine-build-progress.sh.
+          .github/scripts/engine-build-progress.sh --every 300 \
+            --total "$DOMICILE_JOB_TMP/build-steps" --status "$GITHUB_SHA" /tmp/domicile-shell.log &
           progress=$!
 
           # Under the render node lock as `noisy`, so the other runner's latency
           # guard waits for it. Yields the compile slot to any run that wants
-          # it; see the header.
+          # it; see the header. Only the progress status needs GH_TOKEN.
           if NIX_SHELL_RUN=/tmp/domicile-release-build \
                "$GITHUB_WORKSPACE/.github/scripts/engine-yielding-build.sh" "$LOCK_OWNER" -- \
                "$GITHUB_WORKSPACE/.github/scripts/engine-render-node-lock.sh" noisy "$LOCK_OWNER" -- \
-               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
+               env -u GH_TOKEN nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
             echo "the shell exited 0"
           else
             echo "the shell exited $?"
@@ -185,6 +191,11 @@ jobs:
             tail -40 | sed 's/^/  E /' || true
           tail -120 /tmp/domicile-shell.log | sed 's/^/  | /'
 
+          if [ -e "$done" ]; then
+            .github/scripts/engine-build-status.sh "$GITHUB_SHA" success "built" || true
+          else
+            .github/scripts/engine-build-status.sh "$GITHUB_SHA" failure "the build failed" || true
+          fi
           [ -e "$done" ] || {
             echo "::error::Chromium's shell did not run the build; its last words are above" >&2
             exit 1

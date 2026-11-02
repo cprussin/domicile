@@ -73,6 +73,8 @@ concurrency:
 permissions:
   contents: write
   actions: write
+  # The build posts its progress as a commit status.
+  statuses: write
 
 env:
   # Names who holds the tree and the compile slot, readable in a held-lock
@@ -345,6 +347,9 @@ jobs:
           STEP_ASIDE: ${{ needs.plan.outputs.cold != 'false' && steps.slot.outcome == 'success' }}
           # Taking it back waits as long as the first take did.
           DOMICILE_COMPILE_SLOT_WAIT: 36000
+          # The commit the build's progress status goes on.
+          DOMICILE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           build=(.github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-build-in-shell.sh "$CHROMIUM")

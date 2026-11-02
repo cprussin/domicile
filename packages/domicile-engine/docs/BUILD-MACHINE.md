@@ -116,8 +116,14 @@ rebuild.
 
 ## Build progress
 
-CI prints how far a build has got every ten minutes: steps done, the time so
-far, and the time left at that rate. To ask on `crux` yourself:
+CI reports how far a build has got every five minutes: the job's steps done,
+counted across restarts, and the time left at that rate.
+
+- **Log:** a `build progress:` line in the Build step.
+- **Commit status:** `Engine / build progress` or `Engine release / build
+  progress` on the pull request or commit, readable while the job runs.
+
+To ask on `crux` yourself:
 
 ```sh
 .github/scripts/engine-build-progress.sh /tmp/domicile-shell.log
