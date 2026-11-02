@@ -36,6 +36,7 @@ const SECTIONS: readonly DocSection[] = [
   {
     pages: [
       page("install", "INSTALL", "Install"),
+      page("compatibility", "COMPATIBILITY", "What it runs on"),
       page("first-steps", "FIRST-STEPS", "First steps"),
       page("keys", "KEYS", "Keys"),
     ],

@@ -5,6 +5,7 @@ import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Markdown } from "../docs/Markdown";
 import { PAGES, REPO_ROOT } from "../docs/pages";
+import { Compatibility } from "../page/Compatibility";
 import { Section } from "../page/Section";
 
 const GUIDE = "docs/use/INSTALL.md";
@@ -38,6 +39,7 @@ export const Install = () => (
     title="Install"
   >
     <div className={panelStyles}>
+      <Compatibility />
       <Markdown from={GUIDE} pages={PAGES} source={TABS} />
       <h3 className={stepStyles}>After installing</h3>
       <Markdown from={GUIDE} pages={PAGES} source={AFTER} />

@@ -1,6 +1,6 @@
 # Install
 
-Domicile runs on Linux. One package has all of it:
+One package has all of Domicile:
 
 - `domicile`, which runs a shell, in a window or on the whole screen
 - the **Domicile** login session
@@ -9,8 +9,8 @@ Domicile runs on Linux. One package has all of it:
 
 Install it from your distribution's package manager, or with Nix.
 
-Domicile runs Wayland apps. There is no Xwayland, so apps that only speak X11
-don't run ([Your apps](use/FIRST-STEPS.md#your-apps)).
+Domicile runs on `x86_64` Linux and runs Wayland apps, with no Xwayland. GPUs,
+distributions and what is checked: [What it runs on](use/COMPATIBILITY.md).
 
 <!-- tab: Debian and Ubuntu -->
 

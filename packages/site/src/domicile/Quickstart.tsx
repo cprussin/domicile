@@ -10,6 +10,7 @@ import type { Language } from "../code/highlight";
 import { DocTabs } from "../docs/DocTabs";
 import { Markdown } from "../docs/Markdown";
 import { PAGES, REPO_ROOT } from "../docs/pages";
+import { Compatibility } from "../page/Compatibility";
 import { Section } from "../page/Section";
 
 // Above `STEPS`, which uses them as the module loads.
@@ -79,6 +80,7 @@ export const Quickstart = () => (
       <div className={stepStyles}>
         <h3 className={stepTitleStyles}>1. Install Domicile</h3>
         <Markdown from="docs/INSTALL.md" pages={PAGES} source={INSTALL} />
+        <Compatibility />
       </div>
       <DocTabs
         tabs={[

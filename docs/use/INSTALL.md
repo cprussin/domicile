@@ -1,11 +1,11 @@
 # Install
 
-Manganese comes with Domicile, the desktop it runs on. Domicile runs on Linux.
-Install it from your distribution's package manager, or with Nix, then log in
-to the **Domicile** session.
+Manganese comes with Domicile, the desktop it runs on. Install it from your
+distribution's package manager, or with Nix, then log in to the **Domicile**
+session.
 
-Domicile runs Wayland apps. There is no Xwayland, so apps that only speak X11
-don't run ([Your apps](FIRST-STEPS.md#your-apps)).
+Domicile runs on `x86_64` Linux and runs Wayland apps, with no Xwayland. GPUs,
+distributions and what is checked: [What it runs on](COMPATIBILITY.md).
 
 <!-- tab: Debian and Ubuntu -->
 
