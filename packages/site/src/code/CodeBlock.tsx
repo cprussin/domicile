@@ -1,4 +1,5 @@
-import { cva } from "../../styled-system/css";
+import { css, cva, cx } from "../../styled-system/css";
+import { CopyButton } from "./CopyButton";
 import { HighlightedLines } from "./HighlightedLines";
 import type { Language } from "./highlight";
 
@@ -10,24 +11,35 @@ type Props = {
    * frame, for several blocks in one panel.
    */
   frame?: "bare" | "inset" | "panel" | undefined;
+  /** Show a button that copies `code`, beside the code, never over it. */
+  copy?: boolean | undefined;
 };
 
 /** Highlighted code, colored at build time. */
-export const CodeBlock = ({ code, language, frame = "inset" }: Props) => (
-  <pre className={preStyles({ frame })}>
-    <HighlightedLines code={code} language={language} />
-  </pre>
-);
+export const CodeBlock = ({
+  code,
+  language,
+  frame = "inset",
+  copy = false,
+}: Props) => {
+  const lines = <HighlightedLines code={code} language={language} />;
+  return copy ? (
+    <div className={cx(frameStyles({ frame }), copyableStyles)}>
+      <pre className={preStyles}>{lines}</pre>
+      <CopyButton text={code} />
+    </div>
+  ) : (
+    <pre className={cx(frameStyles({ frame }), preStyles)}>{lines}</pre>
+  );
+};
 
-const preStyles = cva({
+const frameStyles = cva({
   base: {
     backgroundColor: "syntax.ground",
     color: "syntax.plain",
     fontFamily: "code",
     fontSize: "sm",
     lineHeight: "relaxed",
-    margin: 0,
-    overflowX: "auto",
   },
   variants: {
     frame: {
@@ -45,4 +57,14 @@ const preStyles = cva({
       },
     },
   },
+});
+
+const preStyles = css({ margin: 0, minInlineSize: 0, overflowX: "auto" });
+
+// The button takes its own column, so it can't cover code or the scrollbar.
+const copyableStyles = css({
+  alignItems: "start",
+  columnGap: 3,
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
 });

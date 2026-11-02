@@ -55,6 +55,12 @@ describe("Markdown", () => {
     expect(html).toContain(">const<");
   });
 
+  test("code blocks can be copied", () => {
+    expect(render("```sh\nls\n```")).toMatch(
+      /<button[^>]*>(<span[^>]*>)?Copy</,
+    );
+  });
+
   test("JavaScript code blocks are highlighted", () => {
     expect(render("```js\nconst a = 1;\n```")).toContain(">const<");
   });

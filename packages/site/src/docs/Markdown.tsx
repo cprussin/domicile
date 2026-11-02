@@ -138,7 +138,7 @@ const Node = ({ node, context }: { node: RootContent; context: Context }) => {
     case "code": {
       return (
         <div className={blockStyles}>
-          <CodeBlock code={node.value} language={languageOf(node.lang)} />
+          <CodeBlock code={node.value} copy language={languageOf(node.lang)} />
         </div>
       );
     }

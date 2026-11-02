@@ -1,12 +1,8 @@
 "use client";
 
-import { Button } from "@domicile-desktop/component-library/Button";
-import { useState } from "react";
-
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
-
-const LABELS = { copied: "Copied", failed: "Copy failed", idle: "Copy" };
+import { CopyButton } from "../code/CopyButton";
 
 /**
  * A shell command with a button that copies it. A `message`, such as a prompt
@@ -18,35 +14,17 @@ export const CopyCommand = ({
 }: {
   command: string;
   kind?: "command" | "message";
-}) => {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  return (
-    <div className={boxStyles}>
-      {kind === "command" ? (
-        <span aria-hidden="true" className={promptStyles}>
-          $
-        </span>
-      ) : undefined}
-      <code className={commandStyles}>{command}</code>
-      <Button
-        onClick={() => {
-          navigator.clipboard
-            .writeText(command)
-            .then(() => {
-              setState("copied");
-            })
-            .catch(() => {
-              setState("failed");
-            });
-        }}
-        size="sm"
-        variant="outline"
-      >
-        {LABELS[state]}
-      </Button>
-    </div>
-  );
-};
+}) => (
+  <div className={boxStyles}>
+    {kind === "command" ? (
+      <span aria-hidden="true" className={promptStyles}>
+        $
+      </span>
+    ) : undefined}
+    <code className={commandStyles}>{command}</code>
+    <CopyButton text={command} />
+  </div>
+);
 
 const boxStyles = hstack({
   backgroundColor: "card",

@@ -106,7 +106,7 @@ const Steps = ({ steps }: { steps: readonly Step[] }) => (
     {steps.map((step, at) => (
       <li className={stepStyles} key={step.title}>
         <h3 className={stepTitleStyles}>{`${at + 2}. ${step.title}`}</h3>
-        <CodeBlock code={step.code} language={step.language} />
+        <CodeBlock code={step.code} copy language={step.language} />
         {step.note === undefined ? undefined : (
           <span className={noteStyles}>{step.note}</span>
         )}
