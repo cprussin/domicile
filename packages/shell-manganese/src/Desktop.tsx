@@ -108,6 +108,7 @@ import {
 import { KeymapNotice } from "./KeymapNotice";
 import type { LevelPress } from "./LevelNotice";
 import { LevelNotice } from "./LevelNotice";
+import { launcherGlancesOf } from "./launcher-glances";
 import { pressMediaKey } from "./media-keys";
 import { options } from "./options";
 import { Monitor } from "./screens/Monitor";
@@ -269,6 +270,11 @@ export const Desktop = ({
   const { invoke: invokeNotification, items: notificationItems } =
     notifications;
   const { notificationPressed } = inboxDrawer;
+  // The launcher previews each inbox it lists by its unread mail.
+  const glances = useMemo(
+    () => launcherGlancesOf(inboxes, inboxDrawer.drawer.readings, now),
+    [inboxDrawer.drawer.readings, inboxes, now],
+  );
   const pressNotification = useCallback(
     (id: number, action: string) => {
       invokeNotification(id, action);
@@ -634,6 +640,7 @@ export const Desktop = ({
       {/* Panels cover the whole desktop, not one screen. */}
       <Launcher
         fromPrivate={activeIsPrivate(windows)}
+        glances={glances}
         onClosed={launcherClosed}
         onDismiss={launcherDismissed}
         onLaunch={launched}

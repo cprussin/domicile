@@ -76,6 +76,10 @@ settles, and keeps the last preview until then.
 - **URL or search**: the page, in a private `<webview>`, so previewing stores
   nothing.
 - **Bookmark**: the page, signed in, so its icon can be learned.
+- **Inbox**: its account and unread count, and the sender, subject and age of
+  the newest message in each of its three newest unread conversations, from
+  the shell's `glances`. Gmail reads them with the API; Messages gives only a
+  count.
 - **Application**: the image named by `X-Domicile-Preview`, or else its
   description and the command Enter runs.
 

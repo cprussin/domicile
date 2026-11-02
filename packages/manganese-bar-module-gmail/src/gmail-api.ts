@@ -31,7 +31,12 @@ export type Mail = {
   /** The sender's name, or their address when the message names none. */
   from: string;
   subject: string;
+  /** When Gmail received it, in epoch milliseconds. */
+  receivedAt: number;
 };
+
+/** One unread message in the inbox's list. */
+export type Unread = { id: string; threadId: string };
 
 /** What changed in the inbox's unread messages between two reads. */
 export type MailNews = {
@@ -48,14 +53,14 @@ export const inboxCounts = (
 ): Promise<Result<Counts, string>> =>
   ask(domicile, accessToken, INBOX, labelSchema);
 
-/** Asks the Gmail API for the ids of the inbox's unread messages. */
+/** Asks the Gmail API for the inbox's unread messages, newest first. */
 export const unreadMail = (
   domicile: Fetch,
   accessToken: string,
-): Promise<Result<string[], string>> =>
+): Promise<Result<Unread[], string>> =>
   ask(domicile, accessToken, UNREAD, unreadSchema);
 
-/** Asks the Gmail API for message `id`'s sender and subject. */
+/** Asks the Gmail API for message `id`'s sender, subject and arrival. */
 export const mailHeaders = (
   domicile: Fetch,
   accessToken: string,
@@ -114,26 +119,35 @@ const labelSchema = jsonText.pipe(
 // Gmail leaves `messages` out when there are none.
 const unreadSchema = jsonText.pipe(
   z
-    .object({ messages: z.array(z.object({ id: z.string() })).default([]) })
-    .transform(({ messages }) => messages.map(({ id }) => id)),
+    .object({
+      messages: z
+        .array(z.object({ id: z.string(), threadId: z.string() }))
+        .default([]),
+    })
+    .transform(({ messages }) =>
+      messages.map(({ id, threadId }) => ({ id, threadId })),
+    ),
 );
 
 const headersSchema = jsonText.pipe(
   z
     .object({
       id: z.string(),
+      // Epoch milliseconds, as a string.
+      internalDate: z.coerce.number().int(),
       payload: z.object({
         headers: z.array(z.object({ name: z.string(), value: z.string() })),
       }),
       threadId: z.string(),
     })
-    .transform(({ id, payload, threadId }) => {
+    .transform(({ id, internalDate, payload, threadId }) => {
       const header = (name: string) =>
         payload.headers.find((one) => one.name.toLowerCase() === name)?.value;
       const subject = header("subject") ?? "";
       return {
         from: senderName(header("from") ?? "Unknown sender"),
         id,
+        receivedAt: internalDate,
         subject: subject === "" ? "(no subject)" : subject,
         threadId,
       };

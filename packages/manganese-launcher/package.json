@@ -32,6 +32,7 @@
     "node": ">=24"
   },
   "exports": {
+    "./app-glance": "./src/app-glance.ts",
     "./app-search": "./src/app-search.ts",
     "./applications-config": "./src/applications-config.ts",
     "./fixture": "./src/fixture.ts",

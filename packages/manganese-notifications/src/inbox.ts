@@ -9,11 +9,28 @@ export enum InboxReadingKind {
   Failed,
 }
 
+/** The newest message of an unread conversation. */
+export type UnreadMessage = {
+  /** The sender's name. */
+  from: string;
+  subject: string;
+  /** When it arrived, in epoch milliseconds. */
+  receivedAt: number;
+};
+
 /** What the drawer knows of one inbox. Counts are conversations. */
 export const InboxReading = {
-  /** Every conversation, and the unread ones. */
-  Counted: (total: number, unread: number) => ({
+  /**
+   * Every conversation, and the unread ones, with the newest message of each
+   * of the newest unread conversations, newest first.
+   */
+  Counted: (
+    total: number,
+    unread: number,
+    latest: readonly UnreadMessage[] = [],
+  ) => ({
     kind: InboxReadingKind.Counted as const,
+    latest,
     total,
     unread,
   }),
@@ -58,6 +75,8 @@ type Named = {
   icon: Icon;
   /** Its name in the list. */
   name: string;
+  /** The account it reads, such as an email address, if it has one. */
+  account?: string;
   /**
    * Its name in the launcher, which lists it as an app. `name` when not
    * given.

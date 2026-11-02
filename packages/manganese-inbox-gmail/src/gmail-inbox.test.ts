@@ -77,8 +77,9 @@ describe(gmailInbox, () => {
     ]);
   });
 
-  it("is listed in the launcher by the name given, else its nickname, as its window", () => {
+  it("is listed in the launcher by the name given, else its nickname, as its window, under its address", () => {
     expect(inbox().launcherName).toBeUndefined();
+    expect(inbox().account).toBe(EMAIL);
     expect(inbox().app).toEqual({
       appId: "gmail:me@example.com",
       url: "https://mail.google.com/mail/?authuser=me%40example.com",

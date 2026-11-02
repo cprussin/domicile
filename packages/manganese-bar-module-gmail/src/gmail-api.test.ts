@@ -65,7 +65,10 @@ describe("unreadMail", () => {
     });
 
     expect(await unreadMail(domicile, "acc3ss")).toStrictEqual(
-      Ok(["m2", "m1"]),
+      Ok([
+        { id: "m2", threadId: "t1" },
+        { id: "m1", threadId: "t1" },
+      ]),
     );
   });
 
@@ -79,11 +82,12 @@ describe("unreadMail", () => {
 });
 
 describe("mailHeaders", () => {
-  it("reads a message's sender and subject", async () => {
+  it("reads a message's sender, subject and arrival", async () => {
     const { domicile, fetched } = answering({
       [HEADERS("m1")]: [
         json(200, {
           id: "m1",
+          internalDate: "1761955200000",
           payload: {
             headers: [
               { name: "Subject", value: "Dinner Friday?" },
@@ -99,6 +103,7 @@ describe("mailHeaders", () => {
       Ok({
         from: "Alex Chen",
         id: "m1",
+        receivedAt: 1_761_955_200_000,
         subject: "Dinner Friday?",
         threadId: "t1",
       }),
@@ -118,6 +123,7 @@ describe("mailHeaders", () => {
         [HEADERS("m1")]: [
           json(200, {
             id: "m1",
+            internalDate: "1",
             payload: { headers: [{ name: "From", value: from }] },
             threadId: "t1",
           }),
@@ -125,7 +131,13 @@ describe("mailHeaders", () => {
       });
 
       expect(await mailHeaders(domicile, "acc3ss", "m1")).toStrictEqual(
-        Ok({ from: named, id: "m1", subject: "(no subject)", threadId: "t1" }),
+        Ok({
+          from: named,
+          id: "m1",
+          receivedAt: 1,
+          subject: "(no subject)",
+          threadId: "t1",
+        }),
       );
     },
   );
@@ -135,6 +147,7 @@ describe("mailHeaders", () => {
       [HEADERS("m1")]: [
         json(200, {
           id: "m1",
+          internalDate: "1",
           payload: { headers: [{ name: "Subject", value: "Hi" }] },
           threadId: "t1",
         }),
@@ -142,7 +155,13 @@ describe("mailHeaders", () => {
     });
 
     expect(await mailHeaders(domicile, "acc3ss", "m1")).toStrictEqual(
-      Ok({ from: "Unknown sender", id: "m1", subject: "Hi", threadId: "t1" }),
+      Ok({
+        from: "Unknown sender",
+        id: "m1",
+        receivedAt: 1,
+        subject: "Hi",
+        threadId: "t1",
+      }),
     );
   });
 });

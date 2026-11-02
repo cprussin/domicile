@@ -27,6 +27,7 @@ const NO_ICON = favicons(() => Promise.resolve(Ok(None())));
 const mail = (n: number): Mail => ({
   from: `Sender ${n.toString()}`,
   id: `m${n.toString()}`,
+  receivedAt: n,
   subject: `Subject ${n.toString()}`,
   threadId: `t${n.toString()}`,
 });

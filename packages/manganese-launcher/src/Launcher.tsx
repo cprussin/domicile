@@ -47,7 +47,9 @@ import {
 } from "react";
 import { css } from "../styled-system/css";
 import { hstack, vstack } from "../styled-system/patterns";
+import { AppGlancePreview } from "./AppGlancePreview";
 import { AudioPreview } from "./AudioPreview";
+import type { AppGlance } from "./app-glance";
 import type { Choice } from "./choices";
 import {
   ChoiceKind,
@@ -87,12 +89,20 @@ const DOM_DELTA_PIXEL = 0;
 /** Glyph size in a preview pane with no image. */
 const EMPTY_ICON_SIZE = 64;
 
+/** No app has a glance. */
+const NO_GLANCES: ReadonlyMap<string, AppGlance> = new Map();
+
 /** Glyph size in the box and the indexing notice. */
 const ICON_SIZE = 16;
 
 type Props = {
   /** Whether it opened over a private browser, so the box starts with `!p`. */
   fromPrivate: boolean;
+  /**
+   * What the shell knows of some apps, by desktop entry id, such as an
+   * inbox's unread mail. Their previews show it instead of what they run.
+   */
+  glances?: ReadonlyMap<string, AppGlance>;
   /** Called once it has finished closing, its exit animation included. */
   onClosed: () => void;
   /** Called on Escape or a backdrop click. The desktop decides what to do. */
@@ -137,6 +147,7 @@ type Learn = (bookmark: string, icon: string) => void;
 export const Launcher = memo(
   ({
     fromPrivate,
+    glances = NO_GLANCES,
     onClosed,
     onDismiss,
     onLaunch,
@@ -179,6 +190,7 @@ export const Launcher = memo(
     */}
       <Query
         fromPrivate={fromPrivate}
+        glances={glances}
         onLaunch={onLaunch}
         opening={opening}
         preview={preview}
@@ -191,6 +203,7 @@ export const Launcher = memo(
 
 type QueryProps = {
   fromPrivate: boolean;
+  glances: ReadonlyMap<string, AppGlance>;
   onLaunch: (launch: Launch) => void;
   opening: FoundApps;
   preview: Preview;
@@ -206,6 +219,7 @@ type QueryProps = {
  */
 const Query = ({
   fromPrivate,
+  glances,
   onLaunch,
   opening,
   preview,
@@ -344,7 +358,12 @@ const Query = ({
           {found.indexing && <StillIndexing />}
         </div>
         <section aria-label="Preview" className={previewStyles} ref={pane}>
-          <PreviewOf choice={shown} onLearn={learn} preview={preview} />
+          <PreviewOf
+            choice={shown}
+            glances={glances}
+            onLearn={learn}
+            preview={preview}
+          />
         </section>
       </div>
     </div>
@@ -579,10 +598,12 @@ const BookmarkTile = ({
  */
 const PreviewOf = ({
   choice,
+  glances,
   onLearn,
   preview,
 }: {
   choice: Choice | undefined;
+  glances: ReadonlyMap<string, AppGlance>;
   onLearn: Learn;
   preview: Preview;
 }) =>
@@ -593,19 +614,40 @@ const PreviewOf = ({
       title="Nothing selected"
     />
   ) : (
-    <ChoicePreview choice={choice} onLearn={onLearn} preview={preview} />
+    <ChoicePreview
+      choice={choice}
+      glances={glances}
+      onLearn={onLearn}
+      preview={preview}
+    />
   );
 
 /**
- * An application's preview image, or else its name, comment and command. The
- * command tells apart entries with the same name.
+ * An application's glance, else its preview image, else its name, comment
+ * and command. The command tells apart entries with the same name.
  */
-const AppPreview = ({ entry }: { entry: DesktopEntry }) =>
-  entry.preview === undefined ? (
-    <AppCard entry={entry} />
-  ) : (
-    <img alt={entry.name} className={mediaStyles} src={entry.preview} />
-  );
+const AppPreview = ({
+  entry,
+  glance,
+}: {
+  entry: DesktopEntry;
+  glance: AppGlance | undefined;
+}) => {
+  if (glance !== undefined) {
+    return (
+      <AppGlancePreview
+        glance={glance}
+        icon={entry.icon}
+        name={entry.name}
+        picture={<AppWindowIcon size={32} weight="thin" />}
+      />
+    );
+  } else if (entry.preview === undefined) {
+    return <AppCard entry={entry} />;
+  } else {
+    return <img alt={entry.name} className={mediaStyles} src={entry.preview} />;
+  }
+};
 
 /** An application's name, comment and command. */
 const AppCard = ({ entry }: { entry: DesktopEntry }) => (
@@ -670,17 +712,24 @@ const Placeholder = ({
  */
 const ChoicePreview = ({
   choice,
+  glances,
   onLearn,
   preview,
 }: {
   choice: Choice;
+  glances: ReadonlyMap<string, AppGlance>;
   onLearn: Learn;
   preview: Preview;
 }) => {
   switch (choice.kind) {
     // The row already has everything to show.
     case ChoiceKind.App: {
-      return <AppPreview entry={choice.entry} />;
+      return (
+        <AppPreview
+          entry={choice.entry}
+          glance={glances.get(choice.entry.id)}
+        />
+      );
     }
     case ChoiceKind.File: {
       // Keyed on the path, so state (a failed image, a playing song) resets

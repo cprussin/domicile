@@ -110,8 +110,9 @@ export const appSearch = (
   };
 };
 
-/** The launcher row id of `app`, beside the desktop file IDs. */
-const webAppId = ({ appId }: WebApp): string => `web-app:${appId}`;
+/** The launcher row id of web app `appId`, beside the desktop file IDs. */
+export const webAppId = ({ appId }: Pick<WebApp, "appId">): string =>
+  `web-app:${appId}`;
 
 /** `app` as a desktop entry would offer it. */
 const webAppEntry = (app: WebApp): InstalledEntry => ({

@@ -28,14 +28,15 @@ const ACCESS = json(200, {
 const counted = (unread: number, total: number) =>
   json(200, { threadsTotal: total, threadsUnread: unread });
 
-/** Gmail's list of unread messages, newest first. */
+/** Gmail's list of unread messages, newest first, each its own thread. */
 const unread = (...ids: readonly string[]) =>
   json(200, { messages: ids.map((id) => ({ id, threadId: `t-${id}` })) });
 
-/** Gmail's sender and subject of message `id`. */
+/** Gmail's sender, subject and arrival of message `id`. */
 const headers = (id: string) =>
   json(200, {
     id,
+    internalDate: "7",
     payload: {
       headers: [
         { name: "From", value: `Sender ${id}` },
@@ -48,6 +49,7 @@ const headers = (id: string) =>
 const mail = (id: string): Mail => ({
   from: `Sender ${id}`,
   id,
+  receivedAt: 7,
   subject: `Subject ${id}`,
   threadId: `t-${id}`,
 });
@@ -102,6 +104,54 @@ describe("inboxReader", () => {
     expect(
       await inboxReader(domicile, CLIENT, EMAIL, ignored, signedIn())(),
     ).toStrictEqual(Inbox.Counted(4, 2));
+  });
+
+  describe("newest unread", () => {
+    it("names the newest message of each of the three newest unread conversations", async () => {
+      const { domicile } = answering({
+        [HEADERS("m5")]: [headers("m5")],
+        [HEADERS("m3")]: [headers("m3")],
+        [HEADERS("m2")]: [headers("m2")],
+        [INBOX]: [counted(4, 9)],
+        [TOKEN]: [ACCESS],
+        [UNREAD]: [
+          json(200, {
+            messages: [
+              { id: "m5", threadId: "a" },
+              { id: "m4", threadId: "a" },
+              { id: "m3", threadId: "b" },
+              { id: "m2", threadId: "c" },
+              { id: "m1", threadId: "d" },
+            ],
+          }),
+        ],
+      });
+
+      expect(
+        await inboxReader(domicile, CLIENT, EMAIL, ignored, signedIn())(),
+      ).toStrictEqual(
+        Inbox.Counted(9, 4, [mail("m5"), mail("m3"), mail("m2")]),
+      );
+    });
+
+    it("asks for each message's sender and subject once", async () => {
+      const { domicile, fetched } = answering({
+        [HEADERS("m1")]: [headers("m1")],
+        [HEADERS("m2")]: [headers("m2")],
+        [INBOX]: [counted(2, 4)],
+        [TOKEN]: [ACCESS],
+        [UNREAD]: [unread("m1"), unread("m2", "m1")],
+      });
+      const read = inboxReader(domicile, CLIENT, EMAIL, ignored, signedIn());
+
+      await read();
+      expect(await read()).toStrictEqual(
+        Inbox.Counted(4, 2, [mail("m2"), mail("m1")]),
+      );
+      expect(
+        fetched.map(({ url }) => url).filter((url) => url.includes("format=")),
+      ).toStrictEqual([HEADERS("m1"), HEADERS("m2")]);
+    });
   });
 
   it("keeps the access token until it expires", async () => {
@@ -160,6 +210,7 @@ describe("inboxReader", () => {
   describe("new mail", () => {
     it("tells of none already unread at the first read", async () => {
       const { domicile } = answering({
+        [HEADERS("m1")]: [headers("m1")],
         [INBOX]: [counted(1, 4)],
         [TOKEN]: [ACCESS],
         [UNREAD]: [unread("m1")],
@@ -173,6 +224,7 @@ describe("inboxReader", () => {
 
     it("tells of each message that arrives after, once, and of each read after", async () => {
       const { domicile } = answering({
+        [HEADERS("m1")]: [headers("m1")],
         [HEADERS("m2")]: [headers("m2")],
         [HEADERS("m3")]: [headers("m3")],
         [INBOX]: [counted(1, 4)],
@@ -194,6 +246,8 @@ describe("inboxReader", () => {
 
     it("tells of none already unread when the account signs in again", async () => {
       const { domicile } = answering({
+        [HEADERS("m1")]: [headers("m1")],
+        [HEADERS("m2")]: [headers("m2")],
         [INBOX]: [counted(1, 4)],
         [TOKEN]: [ACCESS, json(400, { error: "invalid_grant" }), ACCESS],
         [UNREAD]: [unread("m1"), unread("m2", "m1")],
@@ -214,6 +268,7 @@ describe("inboxReader", () => {
 
     it("fails when Gmail gives no sender and subject", async () => {
       const { domicile } = answering({
+        [HEADERS("m1")]: [headers("m1")],
         [HEADERS("m2")]: [json(404, { error: { code: 404 } })],
         [INBOX]: [counted(1, 4)],
         [TOKEN]: [ACCESS],

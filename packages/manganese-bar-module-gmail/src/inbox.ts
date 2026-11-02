@@ -1,3 +1,5 @@
+import type { Mail } from "./gmail-api";
+
 export enum InboxKind {
   SignedOut,
   Counted,
@@ -6,9 +8,13 @@ export enum InboxKind {
 
 /** What the bar knows of one account's inbox. Counts are conversations. */
 export const Inbox = {
-  /** Every conversation, and the unread ones. */
-  Counted: (total: number, unread: number) => ({
+  /**
+   * Every conversation, and the unread ones, with the newest message of each
+   * of the newest unread conversations.
+   */
+  Counted: (total: number, unread: number, latest: readonly Mail[] = []) => ({
     kind: InboxKind.Counted as const,
+    latest,
     total,
     unread,
   }),

@@ -5,10 +5,9 @@ import {
 import type { GoogleClient } from "@domicile-desktop/manganese-bar-module-gmail/consent";
 import { deskInbox } from "@domicile-desktop/manganese-bar-module-gmail/desk-inbox";
 import type { Inbox as GmailReading } from "@domicile-desktop/manganese-bar-module-gmail/inbox";
-import { InboxKind as GmailKind } from "@domicile-desktop/manganese-bar-module-gmail/inbox";
+import type { InboxReading } from "@domicile-desktop/manganese-notifications/inbox";
 import {
   Inbox,
-  InboxReading,
   InboxReadingKind,
 } from "@domicile-desktop/manganese-notifications/inbox";
 import { perDesktop } from "@domicile-desktop/react/per-desktop";
@@ -16,6 +15,8 @@ import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { AppReuse } from "@domicile-desktop/sdk/desktop/browser";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
+
+import { asReading } from "./as-reading";
 
 type Options = {
   /** The Google Cloud OAuth client (Desktop app) it signs in with. */
@@ -41,6 +42,7 @@ export const gmailInbox = ({
   nickname,
 }: Options): Inbox =>
   Inbox.Watched({
+    account: email,
     app: { appId: gmailAppId(email), url: inboxAddress(email) },
     icon: EnvelopeSimpleIcon,
     ...(launcherName === undefined ? {} : { launcherName }),
@@ -71,14 +73,3 @@ const asReadings = (watch: SharedWatch<GmailReading>) =>
       }
     }),
   );
-
-const asReading = (reading: GmailReading): InboxReading => {
-  switch (reading.kind) {
-    case GmailKind.SignedOut:
-      return InboxReading.SignedOut();
-    case GmailKind.Counted:
-      return InboxReading.Counted(reading.total, reading.unread);
-    case GmailKind.Failed:
-      return InboxReading.Failed(reading.reason);
-  }
-};

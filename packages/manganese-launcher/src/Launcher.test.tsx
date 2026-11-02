@@ -26,6 +26,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AppGlance } from "./app-glance";
 import type { Bookmark, DesktopEntry } from "./found-apps";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
@@ -143,6 +144,7 @@ const launcher = (
   apps: readonly DesktopEntry[] = [],
   bookmarks: readonly Bookmark[] = [],
   fromPrivate = false,
+  glances: ReadonlyMap<string, AppGlance> = new Map(),
 ) => {
   previewed.length = 0;
   const launched: Launch[] = [];
@@ -150,6 +152,7 @@ const launcher = (
   const { unmount } = render(
     <Launcher
       fromPrivate={fromPrivate}
+      glances={glances}
       onClosed={() => undefined}
       onDismiss={() => {
         dismissed.push(true);
@@ -1156,6 +1159,46 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
       expect(previewPane()).toHaveTextContent("Text Editor");
       expect(previewPane()).toHaveTextContent("Edit text files");
+    });
+
+    describe("of an app it has a glance of", () => {
+      const glanced = (glance: AppGlance) =>
+        launcher([], false, [PAINT], [], false, new Map([[PAINT.id, glance]]));
+
+      it("tells its account, its state and its newest items instead of what it runs", async () => {
+        using panel = glanced({
+          account: "me@example.com",
+          items: [{ at: "3h", text: "Dinner Friday?", title: "Alex Chen" }],
+          status: "3 unread",
+        });
+
+        await panel.user.type(panel.box(), "paint");
+
+        const item = await within(previewPane()).findByRole("listitem");
+        expect(item).toHaveTextContent("Alex Chen");
+        expect(item).toHaveTextContent("Dinner Friday?");
+        expect(item).toHaveTextContent("3h");
+        expect(previewPane()).toHaveTextContent("Paint");
+        expect(previewPane()).toHaveTextContent("me@example.com");
+        expect(previewPane()).toHaveTextContent("3 unread");
+        expect(within(previewPane()).queryByText("paint")).toBeNull();
+      });
+
+      it("tells its state when it has no items, and not what it runs", async () => {
+        using panel = glanced({
+          account: undefined,
+          items: [],
+          status: "2 unread",
+        });
+
+        await panel.user.type(panel.box(), "paint");
+
+        expect(
+          await within(previewPane()).findByText("2 unread"),
+        ).toBeInTheDocument();
+        expect(previewPane()).toHaveTextContent("Paint");
+        expect(within(previewPane()).queryByText("paint")).toBeNull();
+      });
     });
 
     it("shows the highlighted application's icon", async () => {

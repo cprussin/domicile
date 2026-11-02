@@ -28,6 +28,7 @@
     "node": ">=24"
   },
   "exports": {
+    "./ago": "./src/ago.ts",
     "./inbox": "./src/inbox.ts",
     "./NotificationDrawer": "./src/NotificationDrawer.tsx",
     "./NotificationToasts": "./src/NotificationToasts.tsx",
