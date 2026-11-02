@@ -2130,6 +2130,27 @@ describe("PortalDialogs", () => {
           ],
         ]);
       });
+
+      it("takes the keyboard from the window focused before", async () => {
+        const host = new FakeHost();
+        render(
+          <>
+            <button type="button">Window</button>
+            <PortalDialogs domicile={host.domicile} />
+          </>,
+        );
+        screen.getByRole("button", { name: "Window" }).focus();
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        const page = screen.getByRole("application", {
+          name: "Drag to select an area",
+        });
+        await userEvent.pointer({ keys: "[MouseLeft]", target: page });
+
+        expect(page).toHaveFocus();
+      });
     });
 
     it("cancels", async () => {

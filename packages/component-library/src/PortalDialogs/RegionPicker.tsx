@@ -101,6 +101,10 @@ export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
         }
       }}
       role="application"
+      // Focusable, so a press keeps the keyboard here. On nothing, focus
+      // would go back to the browser window under the desk, and Ctrl+C and
+      // Escape with it.
+      tabIndex={-1}
     >
       {frozen !== undefined && (
         <img
