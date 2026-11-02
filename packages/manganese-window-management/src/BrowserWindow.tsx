@@ -737,7 +737,11 @@ export const BrowserWindow = ({
           {menu !== undefined && (
             <PageMenu
               at={menu.at}
-              items={pageMenuFor(menu.context, { canGoBack, canGoForward })}
+              items={pageMenuFor(menu.context, {
+                canGoBack,
+                canGoForward,
+                zoom,
+              })}
               onChoose={(command) => {
                 choosePageCommand(command, menu.context, {
                   browse: run,

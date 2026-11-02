@@ -2188,6 +2188,7 @@ describe("BrowserWindow", () => {
 
     it("draws the page's menu, with nothing in particular under the click", async () => {
       const { container } = renderWindow();
+      zoomable(view(container), 1);
       asksForAMenu(view(container), {});
 
       const menu = await screen.findByRole("menu", { name: "Page" });
@@ -2195,7 +2196,14 @@ describe("BrowserWindow", () => {
         [...menu.querySelectorAll("[role=menuitem]")].map(
           (item) => item.textContent,
         ),
-      ).toEqual(["Back", "Forward", "Reload", "InspectCtrl+Shift+I"]);
+      ).toEqual([
+        "BackAlt+←",
+        "ForwardAlt+→",
+        "ReloadCtrl+R",
+        "Zoom inCtrl++",
+        "Zoom outCtrl+−",
+        "InspectCtrl+Shift+I",
+      ]);
     });
 
     it("drives the view from the page's history", async () => {

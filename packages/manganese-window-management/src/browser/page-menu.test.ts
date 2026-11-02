@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-
+import { BrowserCommand } from "./browser-command";
 import type { PageContext } from "./page-menu";
 import {
+  choosePageCommand,
   MediaKind,
   PageMenuCommand,
   pageContextOf,
@@ -31,11 +32,11 @@ const plain = (overrides: Partial<PageContext> = {}): PageContext => ({
   ...overrides,
 });
 
-const history = { canGoBack: true, canGoForward: false };
+const page = { canGoBack: true, canGoForward: false, zoom: 1 };
 
 /** The commands a menu offers, group by group, and which are grayed out. */
 const commandsOf = (context: PageContext) =>
-  pageMenuFor(context, history).map((group) =>
+  pageMenuFor(context, page).map((group) =>
     group.map((item) => (item.disabled ? `(${item.command})` : item.command)),
   );
 
@@ -107,7 +108,37 @@ describe("pageMenuFor", () => {
         `(${PageMenuCommand.Forward})`,
         PageMenuCommand.Reload,
       ],
+      [PageMenuCommand.ZoomIn, PageMenuCommand.ZoomOut],
       [PageMenuCommand.Inspect],
+    ]);
+  });
+
+  it("offers to reset the zoom only when the page is zoomed", () => {
+    expect(pageMenuFor(plain(), { ...page, zoom: 1.25 })[1]).toContainEqual({
+      command: PageMenuCommand.ZoomReset,
+      disabled: false,
+      label: "Reset zoom",
+      shortcut: "Ctrl+0",
+    });
+  });
+
+  it("grays out zooming past either end", () => {
+    const zoomsAt = (zoom: number) =>
+      pageMenuFor(plain(), { ...page, zoom })[1]
+        ?.slice(0, 2)
+        .map((item) => item.disabled);
+    expect(zoomsAt(5)).toEqual([true, false]);
+    expect(zoomsAt(0.25)).toEqual([false, true]);
+  });
+
+  it("names the history and zoom chords beside their commands", () => {
+    expect(
+      pageMenuFor(plain(), page)
+        .slice(0, 2)
+        .map((group) => group.map((item) => item.shortcut)),
+    ).toEqual([
+      ["Alt+←", "Alt+→", "Ctrl+R"],
+      ["Ctrl++", "Ctrl+−"],
     ]);
   });
 
@@ -172,7 +203,7 @@ describe("pageMenuFor", () => {
         media: MediaKind.Video,
         source: "https://example.test/film.webm",
       }),
-      history,
+      page,
     );
     expect(media?.map((item) => item.label)).toEqual([
       "Open video in new window",
@@ -220,7 +251,7 @@ describe("pageMenuFor", () => {
   it("copies and searches for a selection outside a field", () => {
     const [selected] = pageMenuFor(
       plain({ can: { ...plain().can, copy: true }, selection: "domicile" }),
-      history,
+      page,
     );
     expect(selected?.map((item) => item.command)).toEqual([
       PageMenuCommand.Copy,
@@ -230,15 +261,32 @@ describe("pageMenuFor", () => {
   });
 
   it("shortens a long selection in its label", () => {
-    const [selected] = pageMenuFor(
-      plain({ selection: "a".repeat(100) }),
-      history,
-    );
+    const [selected] = pageMenuFor(plain({ selection: "a".repeat(100) }), page);
     expect(selected?.[1]?.label).toBe(`Search for “${"a".repeat(40)}…”`);
   });
 
   it("names DevTools' chord beside Inspect", () => {
-    const inspect = pageMenuFor(plain(), history).at(-1)?.[0];
+    const inspect = pageMenuFor(plain(), page).at(-1)?.[0];
     expect(inspect?.shortcut).toBe("Ctrl+Shift+I");
+  });
+});
+
+describe("choosePageCommand", () => {
+  it("zooms the way the window's chords do", () => {
+    const browsed: BrowserCommand[] = [];
+    const window = {
+      browse: (command: BrowserCommand) => {
+        browsed.push(command);
+      },
+      openWindow: () => undefined,
+    };
+    choosePageCommand(PageMenuCommand.ZoomIn, plain(), window);
+    choosePageCommand(PageMenuCommand.ZoomOut, plain(), window);
+    choosePageCommand(PageMenuCommand.ZoomReset, plain(), window);
+    expect(browsed).toEqual([
+      BrowserCommand.ZoomIn,
+      BrowserCommand.ZoomOut,
+      BrowserCommand.ZoomReset,
+    ]);
   });
 });

@@ -8,6 +8,7 @@ import type { WebViewContextMenuAction } from "@domicile-desktop/sdk/webview-ele
 import { WEBVIEW_MEDIA_TYPES } from "@domicile-desktop/sdk/webview-element";
 import { z } from "zod";
 import { BrowserCommand } from "./browser-command";
+import { isFullyZoomedIn, isFullyZoomedOut, isUnzoomed } from "./zoom-steps";
 
 /** What kind of thing was under the click. */
 export enum MediaKind {
@@ -25,6 +26,9 @@ export enum PageMenuCommand {
   Back = "Back",
   Forward = "Forward",
   Reload = "Reload",
+  ZoomIn = "ZoomIn",
+  ZoomOut = "ZoomOut",
+  ZoomReset = "ZoomReset",
   OpenLink = "OpenLink",
   SaveLinkAs = "SaveLinkAs",
   CopyLinkAddress = "CopyLinkAddress",
@@ -139,12 +143,12 @@ export const pageContextOf = (
 
 /**
  * The menu for `context`, in groups a line goes between: what is under the
- * click — a link, an image, a field, a selection — or the page's history when
- * there is nothing, and DevTools last, always.
+ * click — a link, an image, a field, a selection — or the page's history and
+ * zoom when there is nothing, and DevTools last, always.
  */
 export const pageMenuFor = (
   context: PageContext,
-  history: { canGoBack: boolean; canGoForward: boolean },
+  page: { canGoBack: boolean; canGoForward: boolean; zoom: number },
 ): PageMenuItem[][] => {
   const groups = [
     ...(context.link === undefined ? [] : [linkGroup()]),
@@ -152,7 +156,9 @@ export const pageMenuFor = (
     ...(context.editable ? editGroups(context) : selectionGroups(context)),
   ];
   return [
-    ...(groups.length === 0 ? [historyGroup(history)] : groups),
+    ...(groups.length === 0
+      ? [historyGroup(page), zoomGroup(page.zoom)]
+      : groups),
     [
       {
         command: PageMenuCommand.Inspect,
@@ -192,6 +198,18 @@ export const choosePageCommand = (
     }
     case PageMenuCommand.Reload: {
       window.browse(BrowserCommand.Reload);
+      break;
+    }
+    case PageMenuCommand.ZoomIn: {
+      window.browse(BrowserCommand.ZoomIn);
+      break;
+    }
+    case PageMenuCommand.ZoomOut: {
+      window.browse(BrowserCommand.ZoomOut);
+      break;
+    }
+    case PageMenuCommand.ZoomReset: {
+      window.browse(BrowserCommand.ZoomReset);
       break;
     }
     case PageMenuCommand.OpenLink: {
@@ -309,15 +327,28 @@ const item = (
   command: PageMenuCommand,
   label: string,
   disabled = false,
-): PageMenuItem => ({ command, disabled, label });
+  shortcut?: string,
+): PageMenuItem => ({ command, disabled, label, shortcut });
 
 const historyGroup = (history: {
   canGoBack: boolean;
   canGoForward: boolean;
 }): PageMenuItem[] => [
-  item(PageMenuCommand.Back, "Back", !history.canGoBack),
-  item(PageMenuCommand.Forward, "Forward", !history.canGoForward),
-  item(PageMenuCommand.Reload, "Reload"),
+  item(PageMenuCommand.Back, "Back", !history.canGoBack, "Alt+←"),
+  item(PageMenuCommand.Forward, "Forward", !history.canGoForward, "Alt+→"),
+  item(PageMenuCommand.Reload, "Reload", false, "Ctrl+R"),
+];
+
+/**
+ * The page's zoom: a step each way, as Ctrl+plus and Ctrl+minus, and back to
+ * normal once zoomed, as Ctrl+0.
+ */
+const zoomGroup = (zoom: number): PageMenuItem[] => [
+  item(PageMenuCommand.ZoomIn, "Zoom in", isFullyZoomedIn(zoom), "Ctrl++"),
+  item(PageMenuCommand.ZoomOut, "Zoom out", isFullyZoomedOut(zoom), "Ctrl+−"),
+  ...(isUnzoomed(zoom)
+    ? []
+    : [item(PageMenuCommand.ZoomReset, "Reset zoom", false, "Ctrl+0")]),
 ];
 
 const linkGroup = (): PageMenuItem[] => [
