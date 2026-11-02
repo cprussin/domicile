@@ -5,12 +5,15 @@ import { act, fireEvent, renderHook } from "@testing-library/react";
 import type { Focus, Shown, Spot } from "./pointer-warp";
 import { usePointerWarp } from "./usePointerWarp";
 
+// Without title bars, so each window's frame is its box.
 const LEFT = {
   box: { height: 500, width: 400, x: 0, y: 100 },
+  frame: { height: 500, width: 400, x: 0, y: 100 },
   id: "kitty",
 } satisfies Focus;
 const RIGHT = {
   box: { height: 500, width: 400, x: 400, y: 100 },
+  frame: { height: 500, width: 400, x: 400, y: 100 },
   id: "emacs",
 } satisfies Focus;
 
@@ -214,7 +217,7 @@ describe("usePointerWarp", () => {
     const { rerender } = warping(desktopOf(LEFT, [LEFT.id]));
     pointerAt(900, 10);
 
-    rerender(desktopOf({ box: LEFT.box, id: "firefox" }, [LEFT.id, "firefox"]));
+    rerender(desktopOf({ ...LEFT, id: "firefox" }, [LEFT.id, "firefox"]));
 
     expect(warps).toStrictEqual([]);
   });
@@ -223,9 +226,7 @@ describe("usePointerWarp", () => {
     const { rerender } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
-    rerender(
-      desktopOf({ box: RIGHT.box, id: "firefox" }, [...BOTH, "firefox"]),
-    );
+    rerender(desktopOf({ ...RIGHT, id: "firefox" }, [...BOTH, "firefox"]));
 
     expect(warps).toStrictEqual([[600, 350]]);
   });
@@ -412,9 +413,7 @@ describe("usePointerWarp", () => {
     act(() => {
       press();
     });
-    rerender(
-      desktopOf({ box: RIGHT.box, id: "firefox" }, [...BOTH, "firefox"]),
-    );
+    rerender(desktopOf({ ...RIGHT, id: "firefox" }, [...BOTH, "firefox"]));
 
     expect(warps).toStrictEqual([]);
   });
@@ -422,10 +421,10 @@ describe("usePointerWarp", () => {
   it("forgets the oldest place once too many go unanswered", () => {
     // Pins the cost of `IN_FLIGHT`: a landing at a dropped target reads as a
     // user move, which clears the remaining targets.
-    const strips = [0, 1, 2, 3, 4].map((at) => ({
-      box: { height: 100, width: 100, x: at * 200, y: 0 },
-      id: `strip${at.toString()}`,
-    }));
+    const strips = [0, 1, 2, 3, 4].map((at) => {
+      const box = { height: 100, width: 100, x: at * 200, y: 0 };
+      return { box, frame: box, id: `strip${at.toString()}` };
+    });
     const all = [...strips.map(({ id }) => id), LEFT.id];
     // Start elsewhere so all five presses warp.
     const { rerender, press, result } = warping(desktopOf(LEFT, all));
@@ -462,9 +461,7 @@ describe("usePointerWarp", () => {
     const { rerender } = warping(desktopOf(LEFT, [...BOTH, "firefox"]));
     pointerAt(200, 90);
 
-    rerender(
-      desktopOf({ box: LEFT.box, id: "firefox" }, [RIGHT.id, "firefox"]),
-    );
+    rerender(desktopOf({ ...LEFT, id: "firefox" }, [RIGHT.id, "firefox"]));
 
     expect(warps).toStrictEqual([]);
   });
@@ -483,7 +480,7 @@ describe("usePointerWarp", () => {
     act(() => {
       press();
     });
-    rerender(desktopOf({ box: RIGHT.box, id: "firefox" }, all));
+    rerender(desktopOf({ ...RIGHT, id: "firefox" }, all));
 
     expect(warps).toStrictEqual([[600, 350]]);
   });
@@ -492,6 +489,7 @@ describe("usePointerWarp", () => {
     /** A screen with no windows, where the screen itself is the focus. */
     const EMPTY: Focus = {
       box: { height: 600, width: 800, x: 0, y: 0 },
+      frame: { height: 600, width: 800, x: 0, y: 0 },
       id: undefined,
     };
 

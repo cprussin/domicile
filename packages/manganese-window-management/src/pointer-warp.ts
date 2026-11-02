@@ -1,8 +1,9 @@
-// Decides where to warp the pointer after a keyed focus change, like sway's
+// Decides where to warp the pointer after the desktop moves focus, like sway's
 // `mouse_warping`.
 //
-// Focus follows the pointer, so a window that moves under a stationary pointer
-// would take focus back. `usePointerWarp` performs the warp. See
+// The rule: the pointer moves only when it will not be over the newly focused
+// window once the layout settles. Every focus change `usePointerWarp` answers
+// goes through `warpTo`, which applies it. See
 // packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md#pointer-warping.
 
 import type { Rect } from "./rect";
@@ -13,9 +14,15 @@ import type { Rect } from "./rect";
  */
 export type Spot = readonly [x: number, y: number];
 
-/** The focused window and its box, or an empty screen's box. */
+/** The focused window or empty screen, where the layout puts it. */
 export type Focus = {
+  /** Its contents, whose middle the pointer warps to. */
   box: Rect;
+  /**
+   * The whole window, title bar included: the pointer anywhere in it is on the
+   * window. The layout's final place, not where an animation has it now.
+   */
+  frame: Rect;
   /** The window, or `undefined` for an empty screen. */
   id: string | undefined;
 };
@@ -39,11 +46,13 @@ type Move = {
  * Where to warp the pointer, or `undefined` to leave it.
  *
  * Warps only when the focus changed window or box (as `mod+shift+h` does) and
- * the pointer is outside the new box. Other keys, such as a split or the
- * launcher, must not move the cursor.
+ * the pointer will not be over the new window's frame. A window that slides in
+ * under the pointer, such as a neighbor filling a closed window's space, keeps
+ * it where it is. Other keys, such as a split or the launcher, must not move
+ * the cursor.
  */
 export const warpTo = ({ from, pointer, to }: Move): Spot | undefined =>
-  to === undefined || settled(from, to) || holds(to.box, pointer)
+  to === undefined || settled(from, to) || holds(to.frame, pointer)
     ? undefined
     : middleOf(to.box);
 

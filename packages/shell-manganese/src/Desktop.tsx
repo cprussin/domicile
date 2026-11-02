@@ -817,13 +817,11 @@ const BarProviders = ({
 );
 
 /**
- * The focused window's contents box, or the whole screen when it has no
- * focused window.
+ * The focused window's place in the layout, or the whole screen when it has
+ * no focused window.
  *
- * The pointer must be inside this box to keep focus: `pointerover` on the
- * `<app>` element moves focus (see `Stage`), so the bar does not count. A
- * window hidden behind a tab has only its bar. An empty screen uses its
- * center, as sway does.
+ * The warp aims for the middle of its contents. A window hidden behind a tab
+ * has only its bar. An empty screen uses its center, as sway does.
  *
  * `undefined` while the keyboard is on no screen the desktop has taken up.
  */
@@ -839,11 +837,19 @@ const focusOf = (
   if (screen === undefined) {
     return undefined;
   } else if (activeId === undefined) {
-    return { box: screen.geometry.screen, id: undefined };
+    return {
+      box: screen.geometry.screen,
+      frame: screen.geometry.screen,
+      id: undefined,
+    };
   } else if (placement === undefined) {
     throw new Error(`shell: window ${activeId} is not laid out on its screen`);
   } else {
-    return { box: placement.surface ?? placement.bar, id: placement.id };
+    return {
+      box: placement.surface ?? placement.bar,
+      frame: placement.frame,
+      id: placement.id,
+    };
   }
 };
 

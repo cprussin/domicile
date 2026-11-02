@@ -2,8 +2,17 @@ import { describe, expect, it } from "bun:test";
 
 import { warpTo } from "./pointer-warp";
 
-const LEFT = { box: { height: 500, width: 400, x: 0, y: 100 }, id: "kitty" };
-const RIGHT = { box: { height: 500, width: 400, x: 400, y: 100 }, id: "emacs" };
+// Each window's title bar is the 30 pixels above its contents.
+const LEFT = {
+  box: { height: 500, width: 400, x: 0, y: 100 },
+  frame: { height: 530, width: 400, x: 0, y: 70 },
+  id: "kitty",
+};
+const RIGHT = {
+  box: { height: 500, width: 400, x: 400, y: 100 },
+  frame: { height: 530, width: 400, x: 400, y: 70 },
+  id: "emacs",
+};
 
 describe("warpTo", () => {
   it("takes the pointer to the middle of the window the keyboard moved to", () => {
@@ -15,7 +24,8 @@ describe("warpTo", () => {
   it("asks for a whole pixel, which is what the engine will give", () => {
     // The engine rounds warps (`base::ClampRound`). A fractional target would
     // never match the arrival, which would then read as a user move.
-    const odd = { box: { height: 501, width: 401, x: 0, y: 0 }, id: "kitty" };
+    const box = { height: 501, width: 401, x: 0, y: 0 };
+    const odd = { box, frame: box, id: "kitty" };
 
     expect(warpTo({ from: LEFT, pointer: [900, 900], to: odd })).toStrictEqual([
       201, 251,
@@ -34,9 +44,9 @@ describe("warpTo", () => {
     // took its place.
     expect(
       warpTo({
-        from: { ...LEFT, id: "kitty" },
+        from: LEFT,
         pointer: [200, 300],
-        to: { box: RIGHT.box, id: "kitty" },
+        to: { ...RIGHT, id: "kitty" },
       }),
     ).toStrictEqual([600, 350]);
   });
@@ -47,8 +57,16 @@ describe("warpTo", () => {
       warpTo({
         from: LEFT,
         pointer: [200, 300],
-        to: { box: LEFT.box, id: "emacs" },
+        to: { ...LEFT, id: "emacs" },
       }),
+    ).toBeUndefined();
+  });
+
+  it("leaves it alone over that window's title bar", () => {
+    // Closing a group's last tab from its strip slides the neighbor's strip
+    // under the pointer. The pointer is already on the window it focuses.
+    expect(
+      warpTo({ from: LEFT, pointer: [600, 80], to: RIGHT }),
     ).toBeUndefined();
   });
 
