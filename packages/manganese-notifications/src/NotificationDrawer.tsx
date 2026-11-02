@@ -195,7 +195,12 @@ const Notifications = ({
       <EmptyState icon={BellSimpleIcon} title="You're all caught up" />
     </div>
   ) : (
-    <ul className={listStyles}>
+    <ul
+      className={listStyles}
+      data-emptying={
+        rows.every(({ leaving }) => leaving !== undefined) ? "" : undefined
+      }
+    >
       {rows.map(({ arriving, item: notification, leaving }) => (
         <LeavingRow
           key={notification.id}
@@ -255,14 +260,22 @@ const paneStyles = flex({
 // Clips the rows sliding in and out sideways, and a closing last row, which
 // sits below the list's end as its gap closes. Either would otherwise scroll
 // the pane and flash its scrollbars.
+//
+// As the last rows leave, it eases to the caught-up note's height while they
+// slide out, before they close. So the drawer goes straight to the note's
+// height, rather than shrinking to nothing and growing back for it.
 const listStyles = flex({
+  // `EmptyState`'s height.
+  "&[data-emptying]": { minBlockSize: 40 },
   direction: "column",
   gap: 1,
   listStyle: "none",
   margin: 0,
+  minBlockSize: 0,
   overflowX: "clip",
   overflowY: "clip",
   paddingInline: 0,
+  transition: "min-block-size {durations.normal} {easings.in-out}",
 });
 
 // Each card on its own tile, lit on hover, as a list's filled rows. Its row

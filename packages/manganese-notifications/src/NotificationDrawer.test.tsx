@@ -341,6 +341,21 @@ describe("NotificationDrawer", () => {
       );
     });
 
+    it("holds the caught-up note's height as the last leave, not shrinking first", () => {
+      const view = drawer([
+        notification({ id: 2, summary: "Newer" }),
+        notification({ id: 1, summary: "Older" }),
+      ]);
+      const list = screen.getByRole("list");
+
+      view.update([notification({ id: 1, summary: "Older" })]);
+      expect(globalThis.getComputedStyle(list).minBlockSize).toBe("0rem");
+      view.update([]);
+
+      // `EmptyState`'s height, spacing 40.
+      expect(globalThis.getComputedStyle(list).minBlockSize).toBe("10rem");
+    });
+
     it("drops a notification cleared while it is closed at once", () => {
       const view = drawer(
         [notification({ id: 2, summary: "Newer" }), notification({ id: 1 })],
