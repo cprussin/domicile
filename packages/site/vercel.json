@@ -8,5 +8,5 @@
     }
   },
   "ignoreCommand": "bash vercel-ignore.sh",
-  "installCommand": "cd ../.. && npx -y bun@1.4.3 install --frozen-lockfile --filter @domicile-desktop/site --filter ./"
+  "installCommand": "cd ../.. && npx -y bun@1.4.4 install --frozen-lockfile --filter @domicile-desktop/site --filter ./"
 }
