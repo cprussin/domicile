@@ -86,7 +86,7 @@ setup() { # checked series, official series
   git -C "$REPO" commit -qm pins
 }
 
-# What `distro/build.sh` writes.
+# What `packages/distro/build.sh` writes.
 PACKAGES="$WORK/packages"
 mkdir -p "$PACKAGES"
 V=0.20261013.120000

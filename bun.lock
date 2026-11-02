@@ -149,8 +149,8 @@
         "@domicile-desktop/check-runner": "workspace:*",
       },
     },
-    "packages/distro-checks": {
-      "name": "@domicile-desktop/distro-checks",
+    "packages/distro": {
+      "name": "@domicile-desktop/distro",
       "version": "0.0.1",
       "devDependencies": {
         "@domicile-desktop/check-runner": "workspace:*",
@@ -1454,7 +1454,7 @@
 
     "@domicile-desktop/dev-shell": ["@domicile-desktop/dev-shell@workspace:packages/dev-shell"],
 
-    "@domicile-desktop/distro-checks": ["@domicile-desktop/distro-checks@workspace:packages/distro-checks"],
+    "@domicile-desktop/distro": ["@domicile-desktop/distro@workspace:packages/distro"],
 
     "@domicile-desktop/e2e-harness": ["@domicile-desktop/e2e-harness@workspace:packages/e2e-harness"],
 

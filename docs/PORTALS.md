@@ -82,7 +82,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Ready-made dialogs for any shell | `@domicile-desktop/component-library/PortalDialogs` |
 | `parent_window` to window lookup | `zxdg_exporter_v2` / `v1` in the compositor |
 | EIS server: devices per grant, regions, translation to seat input | `packages/domicile-compositor/src/eis.rs` |
-| Interface routing | `distro/nix/domicile.portal`, `distro/nix/domicile-portals.conf` |
+| Interface routing | `packages/distro/share/domicile.portal`, `packages/distro/share/domicile-portals.conf` |
 
 ## Key decisions
 

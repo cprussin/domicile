@@ -3,18 +3,18 @@
 #
 #   .github/scripts/release-repos.sh <packages> <repo>
 #
-# Downloads the bucket into <repo>, runs `distro/repo.sh`, and uploads it: the
+# Downloads the bucket into <repo>, runs `packages/distro/repo.sh`, and uploads it: the
 # packages first, then the indexes that name them, deleting what `repo.sh`
 # pruned. A client never reads an index naming a package not yet uploaded.
 # `DOMICILE_RELEASE_DRY_RUN=1` shows the upload instead.
 #
-# Needs `aws` and `distro/repo-tools` on PATH, and:
+# Needs `aws` and `packages/distro/repo-tools` on PATH, and:
 #
 # - `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`: an R2 token that can read and
 #   write the bucket;
 # - `R2_ACCOUNT_ID`, `DOMICILE_R2_BUCKET`: override Domicile's Cloudflare
 #   account and the `domicile-packages` bucket;
-# - `DOMICILE_SIGNING_KEY`: for `distro/repo.sh`.
+# - `DOMICILE_SIGNING_KEY`: for `packages/distro/repo.sh`.
 set -euo pipefail
 
 [ "$#" -eq 2 ] || {
@@ -39,7 +39,7 @@ sync() { # from, to, flags...
 
 mkdir -p "$REPO"
 sync "$BUCKET" "$REPO" --only-show-errors
-"$ROOT/distro/repo.sh" "$PACKAGES" "$REPO"
+"$ROOT/packages/distro/repo.sh" "$PACKAGES" "$REPO"
 
 if [ "${DOMICILE_RELEASE_DRY_RUN:-}" = 1 ]; then
   echo "dry run: the upload would be"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Tests that `release-aur.sh` gives `distro/aur.sh` the repositories' address:
+# Tests that `release-aur.sh` gives `packages/distro/aur.sh` the repositories' address:
 # `DOMICILE_REPO_URL`, else https://packages.domicile-desktop.com.
 #
-# A stand-in `distro/aur.sh` records its arguments; a local repository stands
+# A stand-in `packages/distro/aur.sh` records its arguments; a local repository stands
 # in for the AUR.
 set -u
 
@@ -24,13 +24,13 @@ expect() {
   fi
 }
 
-mkdir -p "$WORK/checkout/.github/scripts" "$WORK/checkout/distro"
+mkdir -p "$WORK/checkout/.github/scripts" "$WORK/checkout/packages/distro"
 cp "$RELEASE_AUR" "$WORK/checkout/.github/scripts/"
-cat >"$WORK/checkout/distro/aur.sh" <<'STAND_IN'
+cat >"$WORK/checkout/packages/distro/aur.sh" <<'STAND_IN'
 #!/usr/bin/env bash
 echo "aur.sh $2" >>"$LOG"
 STAND_IN
-chmod +x "$WORK/checkout/distro/aur.sh"
+chmod +x "$WORK/checkout/packages/distro/aur.sh"
 git init -q --bare "$WORK/aur.git"
 touch "$WORK/domicile.pkg.tar.zst"
 

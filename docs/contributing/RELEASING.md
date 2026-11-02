@@ -23,7 +23,7 @@ Each package has its own version, set by changesets
    engine.
 
 `domicile` is the distribution packages' version. A change to the Rust
-crates, the engine or `distro/` names it in its changeset.
+crates, the engine or `packages/distro/` names it in its changeset.
 
 ## Cutting a release
 
@@ -37,8 +37,8 @@ Run **Publish packages** (`publish-packages.yml`) with `release` checked:
    its distribution (`distro-packages.yml`).
 3. Publishes to npm under `latest`.
 4. Adds the packages to the signed apt, rpm and pacman repositories on R2
-   (`release-repos.sh`, `distro/repo.sh`).
-5. Commits `domicile-bin` to the AUR (`release-aur.sh`, `distro/aur.sh`).
+   (`release-repos.sh`, `packages/distro/repo.sh`).
+5. Commits `domicile-bin` to the AUR (`release-aur.sh`, `packages/distro/aur.sh`).
 6. Tags `<package>@<version>` for each new version and `release-<time>`, then
    moves `release` (`release-tag.sh`).
 

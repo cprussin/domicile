@@ -46,7 +46,7 @@ jobs:
             experimental-features = nix-command flakes
             system-features = nixos-test benchmark big-parallel kvm
 
-      # The assertions are `distro-checks`' `test:nix`, so they can also be run
+      # The assertions are `distro`' `test:nix`, so they can also be run
       # from a checkout. Bun is here only to run turbo; a nix build has its own
       # node_modules.
       - uses: oven-sh/setup-bun@v2
