@@ -1,5 +1,216 @@
 # @domicile-desktop/manganese-window-management
 
+## 1.1.0
+
+### Minor Changes
+
+- aa215a9: Every tiled window is in a tab group, so a new window always opens as a tab. Splitting is a move: Meta+B / Meta+V move the window out of its group to the right / below, Meta+E splits a group's tabs into groups side by side, and Meta+W on a selected split merges its groups. Meta+Shift+arrow moves a window alone in its group into the next group as a tab.
+- e60eb1f: Dropping a window or tab on the middle of another window puts it in that window's tab group, after it, instead of swapping the two. Dropping on any edge of a window in a tab group of one puts the window beside it, rather than into its strip for some edges.
+- 2d2289b: Leave closed inboxes' windows out of the screenshot, share and record pickers. `PortalDialogs` takes `closedBrowsers`, the browser windows a shell keeps running but shows as closed; `closedBrowsersOf` lists a manganese desktop's.
+- a113605: Inboxes open as app windows instead of a page in the notifications drawer. Messages is one window that keeps running in the background: closing it hides it. Each Gmail account has one window, reused by its inbox row, its bar counter and its new-mail notifications. `Inbox.Page` is replaced by `Inbox.Window`, and an inbox's `launcherName` adds a launcher entry that opens its window.
+- 44d0983: Switch keyboard layouts at runtime. `input.keyboard.keymaps` lists named keymaps; the first is the one the desktop starts on. The `keymap next` and `keymap <name>` commands switch every keyboard and show a toast, and the new `Keymap` bar item, in the default bar left of the theme toggle and on the lock screen, shows and switches it. The item's list and the toast show xkb's name for each layout. A switch lasts until the desktop restarts. The shell option `keymap.hideDefault` hides the item on the first keymap, and the Settings app's Keyboard page edits the list.
+  
+  The component library adds `ChoiceRow` (`RadioRow`, `CheckboxRow` and `ChoiceList`), the screenshot picker's rows as a component, and `ChoiceToast` takes a `detail` line.
+- c15ba93: Shells and manganese packages take the typed `Domicile` instead of the raw host. `PortalDialogs` takes `domicile` (no more `host`/`desktopOf`), `usePortalWallpaper` and manganese-host's helpers take `Domicile` slices, and the SDK's `bindKeys`, `fireGlobalShortcuts`, `watchShellOptions` and `casting` take namespaces. Adds `portals.fireShortcut`.
+- f8b1742: New manganese command, for a key or `domicile send-shell`: `night-light` toggles the night light, as the brightness popover's switch does.
+- e97b6b2: New manganese commands, for a key or `domicile send-shell`: `virtual-monitor add [<width>x<height>]` adds a monitor with no connector, and `virtual-monitor remove` removes the newest one added.
+- 0abccd9: New manganese commands, for a key or `domicile send-shell`: `notifications` toggles the notification drawer, `notifications clear` clears it, and `idle-inhibitor` toggles keeping the screens on.
+- 4096040: Pressing a title bar or tab inside a selected group selects just that window. A title bar's float and fullscreen buttons act on their own window, never the selected group, and a tab of a floating group tiles alone. `Stage` takes `onBarPress`, and `WindowAction.WindowBarPressed` is new.
+- 570e7bb: Tabs, title bars and the browser's address bar share one look. Titles are 13px with 16px icons. The open tab, the focused title bar and the browser toolbar are one surface (white in light mode) on a darker tab strip, which resting title bars match. A tab shows its float and maximize buttons only under the pointer, and a hidden tab its close button, so titles get the room. The address field is a 13px, tinted, edgeless field until clicked; the padlock is gray; zoom controls show only while a page is zoomed. `Autocomplete` takes `filled`.
+- d862eaa: Browser windows show a brief popover over the page when the zoom changes or a download finishes, including app windows and fullscreen pages.
+
+### Patch Changes
+
+- a62f35a: Bar item text (battery, keyboard layout, Gmail, mode, tray letters) is 13px, like the clock. New `fontSizes.ui` token (13px), the desktop's one text size.
+- 59b3d65: Center a tab's close button on the tab, level with its title.
+- f15f43a: The clipboard history is wider and shows more of each copy: up to four lines of text with its line breaks, and a larger image preview beside its size. What is on your clipboard gets its own group above what was copied before. The compositor previews 480 characters and makes thumbnails up to 256 px. `RowTile` drops its `picture` prop.
+- bb92965: Windows moving into a new split or between tiling and floating no longer stretch their contents. The window's box eases into place and crops the contents, which stay at their real size.
+- 1062efc: A workspace switch slides normally onto a browser window whose page has a dialog, file picker or find bar open.
+- e455955: `domicile open <file|folder|url>` opens anything: a web link in a browser window, anything else with its type's default from `mimeapps.list`, supertypes counted (a `text/plain` default opens Markdown and source code). `domicile open --app <url|module>` opens a site or app module as an app. Domicile's `xdg-open` and the launcher's Enter run it, so apps, terminals and the launcher agree. `open-url`, `open-app` and `run-app` are gone: use `open` and `open --app`.
+- 7c948b4: A tab dragged along its strip slides into each new slot instead of jumping there.
+- f3cb310: Dragging a window from a drop zone onto a tab strip fades the zone out and the insertion line in, instead of stretching one into the other.
+- 56e1c22: File picker polish:
+  
+  - New folder button, and a Hidden files toggle (Ctrl+H).
+  - The listing updates when the folder changes.
+  - The save name box no longer walks a `/`.
+  - No key help in the sidebar; full-size sidebar buttons.
+  - Portal labels drop GTK's `_` access key marks ("_Save" shows as "Save").
+  - `System.createDir` (`create_dir`) makes a directory. `FileRequest.list` is replaced by `FileRequest.folders` (`systemFolders` in `@domicile-desktop/component-library/folders`).
+- e0bf6c2: Keep keyboard focus and stacking on a floating window while it is dragged toward another screen, until its center crosses.
+- 7646678: Dragging a floating window to another screen keeps it selected, even while the pointer is still on the screen it left.
+- 920763e: A float that trades places with another moves as one: its hidden tabs and nested groups' tabs, strips and wells move with its open tab.
+- 98d378e: A page's window opened at a size, such as a Slack huddle, opens floating at that size instead of stretched into a tile.
+- 83f9f2d: A floating window dragged over the edge of its monitor stays over the next monitor's floating windows: floats on the monitor with the keyboard stack over every other monitor's.
+- 64b22f3: Focus follows the pointer while Meta is held.
+- a390b06: A selected tab group keeps its selection tint while fullscreen.
+- c9c75a8: A tab group's fullscreen button leaves the selection on the open tab instead of moving it to the group.
+- 8bc5b85: Dragging or resizing a window repaints far less: each part of a held window gets its own layer, and the scratchpad's `--lift` is set only while it slides, not on every pointer move.
+- 6730912: A browser window hidden behind a tab can be screenshotted, previewed and shared: the engine lists it as `isCaptured` while a capture runs, and manganese keeps it laid out under the shown tab. The screenshot and share pickers keep their size when a pick shows a preview. A shared screen's cursor reaches consumers that read it as metadata, such as Chrome.
+- 7a29c8f: Icons in the bar, quick settings and level notices move when their state changes or they are pointed at: the bell swings, Wi-Fi arcs fill out, Bluetooth dots slide out, speaker waves pulse, a slash draws across what is off, the dark mode sun turns to a moon, and more. New `Animated*Icon` components and `_controlHover` / `_controlActive` conditions in the component library. The notifications bar item no longer exports a Panda preset.
+- 9b8a4f0: Keep split sizes when `move <direction>` takes a window out of one group and on into the next.
+- 452a746: The focused window's ring shows in light mode: a solid accent ring with a pale outer band replaces the faint glow.
+- 1ad2756: Volume, microphone and brightness keys show the new level in a notice on the focused screen.
+- 93f015d: A page can ask for window management, local fonts, idle detection and automatic downloads. The shell asks the user, and Settings and the site panel show each.
+- e781b22: Moving a window into or out of a group nested in a tab moves only that window: the outer tab strip no longer flies out of or into the group's well, and the group's tab eases to its new slot instead of jumping.
+- 6b2a242: Nested tab groups animate and light properly: a tab switch or new window in a nested group no longer zooms its strip in from the outer group's, switching away from a nested group no longer shrinks its windows away, and a group selected inside a tab is lit around its own windows.
+- 9a0cf19: A divider marks off a tab group's new-tab button from a hidden last tab, as between two hidden tabs.
+- 1fcf33a: The notification drawer opens as a panel under the bell, like quick settings, instead of sliding in from the screen's edge. Its sections have clearer headings, inbox rows are tighter, and each notification sits on its own tile. "Clear all" is in a quieter footer. An inbox's page, such as Messages, widens the panel and has a back button.
+  
+  `NotificationsDrawer` (from `notifications-context`) now holds a popover `handle` that every bell opens, in place of `open(screen)`. `NotificationDrawer` takes `handle`, `onOpen(screen)` and `onClose()` in place of `onOpenChange`.
+- c4b7781: Keep a tab broken out of its group opaque while it grows into a title bar.
+- 3146073: Each package asks for the bun and Node its workspace does: `engines` is `bun >=1.4.2`, `node >=24`.
+- d95ffb2: Fix a zoom right after a finished download's notice faded showing that notice again instead of the zoom level.
+- 48ab992: A browser window's file picker keeps the keyboard when the waiting page takes focus, so typing a name works after saving from the PDF viewer.
+- 3bb9bd5: A download's file picker starts in the download folder (`XDG_DOWNLOAD_DIR`). The file chooser event has `currentFolder`.
+- d80e2f5: Popups stay inside their window. `PopupBoundary` keeps every tooltip, popover, menu and list inside it within its box; `Popover` and `Tooltip` take `spansWindows` to leave it. Each window and tab keeps its popups inside its frame, so a tab's tooltip no longer covers the windows beside it. `test-support/popup-layout` fakes the layout a popup is placed by.
+- 2fe5852: Everything that took `system(domicile)` takes `desktop(domicile)`, or the namespace it calls.
+  
+  - SDK: `keyboard.keymaps` and `keyboard.selectKeymap`. `watchMenu`, `readIconTheme`, `watchIconTheme` and `previewFile` take `{ dbus }` or `{ files }`. `MenuSystem`, `IconThemeSystem` and `PreviewSystem` are `MenuDesktop`, `IconThemeDesktop` and `PreviewDesktop`.
+  - system-apps: functions take `AppsDesktop` (`./apps-desktop`). `./fake-system`'s `fakeSystem` is `./fake-desktop`'s `fakeDesktop`.
+  - component-library: `AppChooser`'s `system` prop is `domicile`; `PortalDialogs`' `systemOf` is `desktopOf`, and its `host` is a whole `DomicileHost`; `systemFolders` is `desktopFolders`, over `domicile.files`; `usePictureUrl` and `useApps` take `domicile.files` and `AppsDesktop`.
+- 50f2549: `search-clipboard` (Meta+Shift+Space) opens a private window when the active window is private.
+- 45c846a: The Meta+A selection tint covers a tab group's open tab too.
+- 0bbe0f9: An accent tint covers the container Meta+A selects, tabs and windows included. It replaces the accent line along a selected group's tabs.
+- acfe355: A tab sent to another workspace shrinks and fades away with its window, as a sent window does, rather than closing up as if closed. A tab group sent away leaves as one.
+- 25b9bd3: Draw the Sound panel's device pickers as soft rows that match the panel.
+  
+  - `component-library`: `Select` takes `surface`: `field` (the default), `filled` (a soft row sized like a panel's `ListRow`, with an up-and-down caret) or `quiet`. `surface="quiet"` replaces the `quiet` prop. Inside a panel over the wallpaper, its list is dark in either theme, as the panel is.
+  - `manganese-bar-module-volume`: the speaker, microphone, app and sound card pickers are `filled`.
+  - `manganese-window-management`: site permission pickers use `surface="quiet"`.
+- 6a34b99: Pressing or dragging the empty end of a tiled tab strip no longer selects the whole group. It focuses the open tab and keeps any selection already around it; the drag still moves the whole group.
+- da8b0a7: Dropping a dragged tab group no longer selects the whole group. The group's open tab is focused, and the group stays selected only if it was selected before the drag.
+- 48d5b1a: A tab moved out of its group grows into its title bar from the whole tab strip, so the desktop no longer shows through beside it.
+- 559480f: Show the grabbing pointer only once a dragged window moves, so a click on a tab or title bar shows none.
+- f45bf2b: Dragging a window over any part of a tab strip adds it as a tab beside the nearest tab, shown as a line between the tabs. The drop overlay is drawn over open tabs.
+- 46f285a: Keep a tab group's focus glow steady while its tabs are reordered, instead of flashing.
+- b741b92: The title of the window being worked in keeps its heavier look without shifting sideways when focus moves: a stroke under the letters replaces the medium weight. Adds the `borderWidths.fauxMedium` token.
+- eb6b52a: Dragging a browser window's edge no longer holds the whole desktop to the page's pace. While a `<webview>` has the `resizing` attribute, as an `<app>` already could, the page's latest frame stretches to each new box at once instead of the desktop waiting for the page to draw at it. Manganese sets it on every browser window during a resize.
+- 63728a9: Window and browser icons move too. Tabs and title bars: Close snips, New tab reaches out, Float's windows lift apart and gather into Tile's squares, Maximize's corners push out and travel into Restore's, and a group's new layout builds in. Browser toolbar: Back and Forward dart, Reload winds and spins into Stop, zoom's minus and plus draw in and reach out, the lock snaps shut on a secure page, site settings' knobs slide, and each new download drops into its tray. New `AnimatedCloseIcon`, `AnimatedPlusIcon`, `AnimatedMinusIcon`, `AnimatedFloatIcon`, `AnimatedMaximizeIcon`, `AnimatedLayoutIcon`, `AnimatedCaretIcon`, `AnimatedReloadIcon`, `AnimatedLockIcon`, `AnimatedSlidersIcon` and `AnimatedDownloadIcon`, and a `direction` for icon parts.
+- Updated dependencies [bafd922]
+- Updated dependencies [fe90bca]
+- Updated dependencies [77fd631]
+- Updated dependencies [9e60e1e]
+- Updated dependencies [6bbc80b]
+- Updated dependencies [a62f35a]
+- Updated dependencies [923e65b]
+- Updated dependencies [44eb13c]
+- Updated dependencies [3980a9a]
+- Updated dependencies [c7a232d]
+- Updated dependencies [a2def76]
+- Updated dependencies [d3a65c5]
+- Updated dependencies [eca2588]
+- Updated dependencies [f15f43a]
+- Updated dependencies [7c8d9e2]
+- Updated dependencies [9d0934e]
+- Updated dependencies [a9a62e8]
+- Updated dependencies [fa78a81]
+- Updated dependencies [509f948]
+- Updated dependencies [a2ee8ea]
+- Updated dependencies [22844b3]
+- Updated dependencies [c80cd2a]
+- Updated dependencies [40f5af3]
+- Updated dependencies [ab2d2f0]
+- Updated dependencies [17064a7]
+- Updated dependencies [a88ce23]
+- Updated dependencies [0e8c788]
+- Updated dependencies [a1569c6]
+- Updated dependencies [6fecbbd]
+- Updated dependencies [258d9aa]
+- Updated dependencies [d9f5353]
+- Updated dependencies [fb9e591]
+- Updated dependencies [14e6071]
+- Updated dependencies [56e1c22]
+- Updated dependencies [98d378e]
+- Updated dependencies [e42226f]
+- Updated dependencies [506b12f]
+- Updated dependencies [00e5da2]
+- Updated dependencies [75b9403]
+- Updated dependencies [3f7e261]
+- Updated dependencies [b49fa3a]
+- Updated dependencies [35b8470]
+- Updated dependencies [6730912]
+- Updated dependencies [2a87739]
+- Updated dependencies [2d2289b]
+- Updated dependencies [7a29c8f]
+- Updated dependencies [4967b5d]
+- Updated dependencies [be59aae]
+- Updated dependencies [9d4a876]
+- Updated dependencies [44d0983]
+- Updated dependencies [7ac9e00]
+- Updated dependencies [e612f06]
+- Updated dependencies [6825067]
+- Updated dependencies [cd02e0e]
+- Updated dependencies [840418d]
+- Updated dependencies [7aa450b]
+- Updated dependencies [57b5b1f]
+- Updated dependencies [b2c6fd5]
+- Updated dependencies [a472a59]
+- Updated dependencies [93f015d]
+- Updated dependencies [b85d9bb]
+- Updated dependencies [fccc784]
+- Updated dependencies [e1205bb]
+- Updated dependencies [670713c]
+- Updated dependencies [cd52ce3]
+- Updated dependencies [e7cbd52]
+- Updated dependencies [8bc5b85]
+- Updated dependencies [4ee2c21]
+- Updated dependencies [3146073]
+- Updated dependencies [bbf849b]
+- Updated dependencies [e83ec4a]
+- Updated dependencies [7a786a4]
+- Updated dependencies [4759ab2]
+- Updated dependencies [3bb9bd5]
+- Updated dependencies [0f4582e]
+- Updated dependencies [d80e2f5]
+- Updated dependencies [c15ba93]
+- Updated dependencies [2fe5852]
+- Updated dependencies [52a1d65]
+- Updated dependencies [3e5b976]
+- Updated dependencies [d138939]
+- Updated dependencies [4064278]
+- Updated dependencies [f4a973d]
+- Updated dependencies [341debf]
+- Updated dependencies [ae7874c]
+- Updated dependencies [599d60f]
+- Updated dependencies [75799a0]
+- Updated dependencies [2430e48]
+- Updated dependencies [9fd298a]
+- Updated dependencies [c4fe915]
+- Updated dependencies [b1041f8]
+- Updated dependencies [20a1fc5]
+- Updated dependencies [065ff4b]
+- Updated dependencies [1e2aeca]
+- Updated dependencies [b39d80e]
+- Updated dependencies [21b82af]
+- Updated dependencies [427c184]
+- Updated dependencies [ee63a45]
+- Updated dependencies [66bfb0d]
+- Updated dependencies [5a6a4fc]
+- Updated dependencies [25b9bd3]
+- Updated dependencies [113dabe]
+- Updated dependencies [0bd0d2a]
+- Updated dependencies [d9f5353]
+- Updated dependencies [1971d87]
+- Updated dependencies [b741b92]
+- Updated dependencies [570e7bb]
+- Updated dependencies [2edc3c1]
+- Updated dependencies [b241f68]
+- Updated dependencies [5d2376e]
+- Updated dependencies [6c3db42]
+- Updated dependencies [9c89f16]
+- Updated dependencies [ca86667]
+- Updated dependencies [ee1cc17]
+- Updated dependencies [eb6b52a]
+- Updated dependencies [63728a9]
+  - @domicile-desktop/component-library@2.0.0
+  - @domicile-desktop/sdk@1.1.0
+  - @domicile-desktop/manganese-bar@1.1.0
+  - @domicile-desktop/manganese-host@2.0.0
+  - @domicile-desktop/system-apps@1.1.0
+  - @domicile-desktop/manganese-page-requests@1.1.0
+  - @domicile-desktop/manganese-address@1.0.1
+
 ## 1.0.0
 
 ### Major Changes
