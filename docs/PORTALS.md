@@ -30,6 +30,10 @@ export const Shell = mount(Desktop);
 - `useDomicile()` reads the desktop from the `DomicileProvider` that `mount`
   puts around `Desktop`. Outside it, it throws.
 - It shows one dialog at a time, oldest first, over the app that asked.
+- Pass `holdKeyboard` to take the keyboard off your windows while a dialog is
+  up. It is called when one appears; call the function it returns when the
+  last goes. Without it, the app that asked keeps the keyboard and gets every
+  key a dialog does not take, such as typing into a file chooser.
 - It refuses every request kind it has no dialog for. The app gets response
   `2` and stops waiting.
 - What each request becomes depends on the shell:

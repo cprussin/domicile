@@ -1378,6 +1378,48 @@ describe("Shell", () => {
       ]);
     });
 
+    it("takes the keyboard off the window while it is up, and gives it back", async () => {
+      // Or the window gets every key typed into a file chooser's box.
+      renderShell();
+      clientAppears("one");
+      domicile.set({ focusedWindow: "one" });
+      domicile.calls.length = 0;
+      const requests = (items: readonly object[]) => {
+        domicile.dispatch("portalrequests", {
+          data: JSON.stringify({
+            capturing: [],
+            items,
+            type: "portal_requests",
+          }),
+        });
+      };
+
+      requests([
+        {
+          app_id: "org.example.App",
+          body: {
+            body: "",
+            destructive: false,
+            subtitle: "",
+            title: "Use the camera?",
+          },
+          id: 1,
+          kind: "access",
+        },
+      ]);
+      await screen.findByRole("button", { name: "Allow" });
+
+      expect(domicile.calls).toContainEqual(["focusChrome"]);
+
+      domicile.set({ focusedWindow: null });
+      domicile.calls.length = 0;
+      requests([]);
+
+      await waitFor(() => {
+        expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+      });
+    });
+
     describe("a screenshot", () => {
       /** Asks to pick from a 1:1 frame of the one screen, with two windows. */
       const asked = () => {

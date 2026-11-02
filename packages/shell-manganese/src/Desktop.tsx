@@ -346,7 +346,8 @@ export const Desktop = ({
   useLayoutEffect(() => {
     applyFont(shellOptions.font);
   }, [shellOptions.font]);
-  // How many bar items' panels hold the keyboard; see `useKeepsKeyboard`.
+  // How many bar items' panels, and applications' dialogs, hold the keyboard;
+  // see `useKeepsKeyboard`.
   const [heldPanels, setHeldPanels] = useState(0);
   const holdKeyboard = useCallback(() => {
     setHeldPanels((held) => held + 1);
@@ -617,8 +618,8 @@ export const Desktop = ({
             lock.locked
           }
           // While a desktop panel is open the page keeps the keyboard; see
-          // `AppWindow`. Extension popups, a portal's sign-in page and the
-          // lock screen count.
+          // `AppWindow`. Extension popups, a portal's sign-in page,
+          // applications' dialogs and the lock screen count.
           clientIcons={clientIcons}
           domicile={domicile}
           draggingId={windows.draggingId}
@@ -725,6 +726,7 @@ export const Desktop = ({
       <PortalDialogs
         closedBrowsers={closedBrowsers}
         domicile={domicile}
+        holdKeyboard={holdKeyboard}
         omitScreenCasts={showsSharing(bar)}
         screen={windows.focused}
         screenOf={screenOf}

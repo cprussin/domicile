@@ -106,6 +106,12 @@ type Props = {
   screenOf?: ((appId: string) => string | undefined) | undefined;
   /** The shell's own chords, which a global shortcuts review flags. */
   shellChords?: readonly string[] | undefined;
+  /**
+   * Takes the keyboard off the windows while a dialog is up, until the
+   * returned function is called. Without it, the window that had the keyboard
+   * keeps it, and the engine sends it every key a dialog does not take.
+   */
+  holdKeyboard?: (() => () => void) | undefined;
 };
 
 /**
@@ -123,6 +129,7 @@ export const PortalDialogs = memo(
   ({
     closedBrowsers = NONE,
     domicile,
+    holdKeyboard,
     omitScreenCasts = false,
     screen,
     screenOf,
@@ -158,6 +165,17 @@ export const PortalDialogs = memo(
       }
     }, [portals, requests]);
 
+    const dialogs = stacked(
+      requests.filter(
+        (request) => claims.get(request.id)?.kind !== CastClaimKind.Answered,
+      ),
+    );
+    const asking = dialogs.length > 0;
+    useEffect(
+      () => (asking ? holdKeyboard?.() : undefined),
+      [asking, holdKeyboard],
+    );
+
     const recordings = sessions.filter(isRecording);
     return (
       <>
@@ -192,12 +210,7 @@ export const PortalDialogs = memo(
             }}
           />
         ))}
-        {stacked(
-          requests.filter(
-            (request) =>
-              claims.get(request.id)?.kind !== CastClaimKind.Answered,
-          ),
-        ).map((shown) => (
+        {dialogs.map((shown) => (
           <Dialog
             answer={(answer) => {
               portals.answer(shown.id, answer);

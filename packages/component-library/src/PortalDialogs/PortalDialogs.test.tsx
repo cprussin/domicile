@@ -852,6 +852,31 @@ describe("PortalDialogs", () => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       });
     });
+
+    it("holds the keyboard while one is up, and lets it go after", async () => {
+      // The window that asked would otherwise be sent every key typed.
+      const holds: string[] = [];
+      const holdKeyboard = () => {
+        holds.push("held");
+        return () => {
+          holds.push("released");
+        };
+      };
+      const host = new FakeHost();
+      render(
+        <PortalDialogs domicile={host.domicile} holdKeyboard={holdKeyboard} />,
+      );
+      expect(holds).toEqual([]);
+
+      host.push([access(1)]);
+      await screen.findByRole("dialog");
+      expect(holds).toEqual(["held"]);
+
+      host.push([]);
+      await waitFor(() => {
+        expect(holds).toEqual(["held", "released"]);
+      });
+    });
   });
 
   describe("file chooser", () => {
