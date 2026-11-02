@@ -96,7 +96,9 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   extension asks to come forward (`domicile-focus-request`) is treated the
   same, as is one whose page asks to stay as it closes (a `beforeunload`
   dialog). The compositor drops requests made before the keyboard last moved, so a
-  window cannot take focus back after the user moved on.
+  window cannot take focus back after the user moved on. Manganese ignores a
+  window asking for the keyboard it already has, so a client asking as the
+  keyboard enters it cannot take it back from a window opened since.
 
 ### Pointer warping
 

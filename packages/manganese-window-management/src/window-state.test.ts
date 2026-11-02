@@ -1319,6 +1319,20 @@ describe("what the compositor says about the keyboard", () => {
     expect(activeIdOf(state)).toBe(APP("editor"));
   });
 
+  it("keeps a window opened after the launcher when the old one asks for the keyboard it has", () => {
+    // A client may ask for focus when the keyboard enters it, so the launcher
+    // handing the keyboard back makes kitty ask. The compositor forwards it,
+    // since kitty has the keyboard, and the editor can open first.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.FocusChanged("kitty"),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.FocusRequested(APP("kitty")),
+    );
+
+    expect(activeIdOf(state)).toBe(APP("editor"));
+  });
+
   it("says nothing twice", () => {
     // The host reports focus to a newly connected chrome, which usually matches
     // the existing state.

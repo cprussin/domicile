@@ -1211,14 +1211,7 @@ const reduceAction = (
       }
     }
     case WindowActionKind.FocusRequested: {
-      // A change is counted as a key press, so the pointer follows: it is
-      // elsewhere, and focus follows the pointer. A window that already has
-      // the keyboard, such as one just launched, keeps the pointer's rule for
-      // new windows.
-      const reached = reachWindow(showBackground(state, action.id), action.id);
-      return reached === state
-        ? state
-        : { ...reached, pressed: state.pressed + 1 };
+      return grantFocus(state, action.id);
     }
     case WindowActionKind.FocusStepped: {
       return stepFocus(state, action.direction);
@@ -1696,6 +1689,19 @@ const closeWindow = (state: WindowState, id: string): WindowState => ({
     holds(workspace, id) ? closed(workspace, id) : workspace,
   ),
 });
+
+// Grants window `id`'s request for the keyboard, showing it if hidden.
+//
+// - A window asking for the keyboard it has asks for nothing. A client may
+//   ask whenever the keyboard enters it, so heeding that would take the
+//   keyboard back from a window opened since, before its grant lands.
+// - A change is counted as a key press, so the pointer follows: it is
+//   elsewhere, and focus follows the pointer.
+const grantFocus = (state: WindowState, id: string): WindowState => {
+  const reached =
+    id === state.focusedId ? state : reachWindow(showBackground(state, id), id);
+  return reached === state ? state : { ...reached, pressed: state.pressed + 1 };
+};
 
 // Follows compositor focus to its window and that window's workspace, so the
 // user can see where they are typing, and ends the replay (see
