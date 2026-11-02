@@ -33,7 +33,7 @@ monitors and more. Every setting is also a line in a
 
 Linux apps that speak Wayland run here: GTK, Qt, SDL and Electron apps are
 started in Wayland mode. There is no Xwayland, so apps that only speak X11
-don't run ([Known gaps](/KNOWN-GAPS.md)).
+don't run ([Known gaps](/docs/KNOWN-GAPS.md)).
 
 Websites can be apps too: they open in their own window without an address
 bar, and show in the launcher. See [Web apps](BROWSER.md#web-apps).
