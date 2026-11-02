@@ -92,11 +92,19 @@ type Props = {
  * `useSettling`).
  *
  * A window moved into or out of a nested group draws a strip at another depth
- * next. That is a new strip, which takes over from the one at its depth.
+ * next, and a window joining another group draws that group's strip. Each is
+ * a new strip, which takes over from the one there before.
  */
 export const TabStrip = (props: Props) => (
-  <PlacedStrip key={props.group.wells} {...props} />
+  <PlacedStrip key={placeKeyOf(props.group)} {...props} />
 );
+
+/**
+ * Tells apart the strips a window draws: one per depth and set of windows, so
+ * a strip moved with its group keeps its element.
+ */
+const placeKeyOf = ({ wells, windows }: StripGroup): string =>
+  `${wells.toString()}:${windows.toSorted().join()}`;
 
 /** The strip {@link TabStrip} draws at one depth. */
 const PlacedStrip = ({
@@ -134,7 +142,7 @@ const PlacedStrip = ({
     origin,
     rect: box,
     settler,
-    shared: group.windows.map((window) => stripKeyOf(group, window)),
+    shared: sharedKeysOf(group),
     still: dragging || isMoving(playing),
   });
   return (
@@ -197,6 +205,17 @@ const PlacedStrip = ({
  */
 const stripMotion = (motion: WindowMotion): WindowMotion =>
   motion === "opening-tab" ? "resting" : barMotion(motion);
+
+/**
+ * The keys a strip shares with the windows in it, its own window's last: a
+ * strip its window just joined takes over from that group's strip, not from
+ * the one its window left.
+ */
+const sharedKeysOf = (group: StripGroup): readonly string[] =>
+  [
+    ...group.windows.filter((window) => window !== group.node.id),
+    group.node.id,
+  ].map((window) => stripKeyOf(group, window));
 
 /**
  * The key a strip shares with every window in it, so the strip drawn by a

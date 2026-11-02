@@ -253,6 +253,53 @@ describe("TabStrip", () => {
       expect(played).toStrictEqual([{ scaleX: 1, scaleY: 1, x: 0, y: 0 }]);
     });
 
+    // The joining window opens and draws the group's strip next. Easing from
+    // its old strip's box would leave the group without a strip meanwhile.
+    it.each([
+      ["after", ["a", "b", "c"]],
+      ["before", ["c", "a", "b"]],
+    ])(
+      "takes over from the strip of a group its window joins %s its tabs",
+      (_, windows) => {
+        const { played, settler } = recordedSettles();
+        const { rerender } = render(
+          <SettleHandoffs>
+            <TabStrip
+              {...stripProps}
+              group={{
+                node: { id: "a", up: 1 },
+                wells: 0,
+                windows: ["a", "b"],
+              }}
+              key="a"
+              settler={settler}
+            />
+            <TabStrip
+              {...stripProps}
+              box={{ ...BOX, y: 700 }}
+              frame={{ ...FRAME, y: 700 }}
+              group={{ node: { id: "c", up: 1 }, wells: 0, windows: ["c"] }}
+              key="c"
+              settler={settler}
+            />
+          </SettleHandoffs>,
+        );
+
+        rerender(
+          <SettleHandoffs>
+            <TabStrip
+              {...stripProps}
+              group={{ node: { id: "c", up: 1 }, wells: 0, windows }}
+              key="c"
+              settler={settler}
+            />
+          </SettleHandoffs>,
+        );
+
+        expect(played).toStrictEqual([{ scaleX: 1, scaleY: 1, x: 0, y: 0 }]);
+      },
+    );
+
     // A dragged float's strip would trail the pointer.
     it("follows its group exactly while the group is dragged", () => {
       const { played, settler } = recordedSettles();
