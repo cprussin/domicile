@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests that a config field `domicile-config` stops parsing, at any depth, is
-# listed in `removedSettings` in `distro/nix/home-manager.nix`, or has an
+# listed in `removedSettings` in `packages/distro/nix/home-manager.nix`, or has an
 # ancestor that is.
 #
 # Every config struct is `deny_unknown_fields`, so dropping a field makes every
@@ -20,7 +20,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MODULE="$ROOT/distro/nix/home-manager.nix"
+MODULE="$ROOT/packages/distro/nix/home-manager.nix"
 SRC=packages/domicile-config/src
 cd "$ROOT"
 

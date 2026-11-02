@@ -1,7 +1,7 @@
 # domicile
 
 The version of `domicile`, the distribution package for Debian, Ubuntu,
-Fedora, openSUSE and Arch. `distro/` builds it.
+Fedora, openSUSE and Arch. `packages/distro/` builds it.
 
 - Lists the workspace packages the distribution package bundles as
   dependencies, so a release of any of them bumps it.

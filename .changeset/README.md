@@ -7,7 +7,7 @@ Each package has its own version, managed by
   `bun changeset`. CI fails a pull request that changes a workspace package
   without one. A change that releases nothing adds `bun changeset --empty`.
 - `domicile` is the distribution package. Name it for a change to the
-  compositor, the host, the engine or `distro/`. See
+  compositor, the host, the engine or `packages/distro/`. See
   [`packages/domicile`](/packages/domicile/README.md).
 - Bumping a package bumps every package that depends on it.
 - On main, `changesets.yml` keeps a "Version packages" pull request open.
