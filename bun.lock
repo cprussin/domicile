@@ -91,6 +91,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/check-runner": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
@@ -1011,6 +1012,13 @@
         "react-dom": "catalog:",
       },
     },
+    "packages/rust-checks": {
+      "name": "@domicile-desktop/rust-checks",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@domicile-desktop/check-runner": "workspace:*",
+      },
+    },
     "packages/shell-manganese": {
       "name": "@domicile-desktop/manganese",
       "version": "1.0.0",
@@ -1155,6 +1163,13 @@
         "@types/react-dom": "catalog:",
         "postcss": "catalog:",
         "typescript": "catalog:",
+      },
+    },
+    "packages/spelling": {
+      "name": "@domicile-desktop/spelling",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@domicile-desktop/check-runner": "workspace:*",
       },
     },
     "packages/system-apps": {
@@ -1526,6 +1541,8 @@
 
     "@domicile-desktop/react": ["@domicile-desktop/react@workspace:packages/react"],
 
+    "@domicile-desktop/rust-checks": ["@domicile-desktop/rust-checks@workspace:packages/rust-checks"],
+
     "@domicile-desktop/sdk": ["@domicile-desktop/sdk@workspace:packages/chrome-sdk"],
 
     "@domicile-desktop/shell-simple": ["@domicile-desktop/shell-simple@workspace:packages/shell-simple"],
@@ -1533,6 +1550,8 @@
     "@domicile-desktop/shell-splash": ["@domicile-desktop/shell-splash@workspace:packages/shell-splash"],
 
     "@domicile-desktop/site": ["@domicile-desktop/site@workspace:packages/site"],
+
+    "@domicile-desktop/spelling": ["@domicile-desktop/spelling@workspace:packages/spelling"],
 
     "@domicile-desktop/system-apps": ["@domicile-desktop/system-apps@workspace:packages/system-apps"],
 

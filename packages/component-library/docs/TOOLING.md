@@ -35,8 +35,8 @@ recipes. Turbo runs it before `build`, `test:types` and `test:unit`.
 
 Lint and type checks must pass.
 
-- `./scripts/check.sh`: all checks, from the repo root.
-- `./scripts/check.sh typescript`: `biome check .` and `bun run turbo test`.
+- `bun run check`: all checks, from the repo root.
+- `bun run turbo test`: lint, types, unit and shell checks.
 - `bun run turbo test --filter @domicile-desktop/component-library`: this
   package's type check and unit tests.
 

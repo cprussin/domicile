@@ -10,6 +10,7 @@
       "passThroughEnv": ["*"]
     },
     "test:shell": {
+      "env": ["DOMICILE_PR_BASE_SHA"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/bun.lock",
@@ -19,8 +20,7 @@
         "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/packages/*/package.json",
         "$TURBO_ROOT$/packages/check-runner/**",
-        "$TURBO_ROOT$/packages/domicile-config/src/**",
-        "$TURBO_ROOT$/scripts/**"
+        "$TURBO_ROOT$/packages/domicile-config/src/**"
       ]
     }
   }

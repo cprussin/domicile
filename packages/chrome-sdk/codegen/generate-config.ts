@@ -4,8 +4,8 @@
 //   bun run generate                                       # in packages/chrome-sdk
 //   bun codegen/generate-config.ts <schema path> <ts path>  # somewhere else
 //
-// Needs `cargo`. `scripts/test-config-types-match-the-schema.sh` checks both
-// files are current.
+// Needs `cargo`. `tests/test-config-types-match-the-schema.sh` checks both files
+// are current.
 
 import { writeFileSync } from "node:fs";
 import path from "node:path";

@@ -5,9 +5,6 @@ import { join } from "node:path";
 
 import { bailFaults } from "./verdicts";
 
-/** Where the e2e scripts live, from this file. */
-const SCRIPTS = join(import.meta.dir, "..", "..", "..", "scripts");
-
 /** The sourced helper the scripts bail through. */
 const HARNESS = join(import.meta.dir, "..", "lib", "harness.sh");
 
@@ -40,14 +37,15 @@ const verdict = (pid: string): { status: number; out: string } => {
 const PACKAGES = join(import.meta.dir, "..", "..");
 
 /**
- * Every script in `scripts/` and in each package's `tests/`, as
+ * Every script in each package's `tests/`, as
  * `[name, contents]`.
  *
  * Includes `test-*.sh`, since any script can drive a compositor. Does not
  * recurse, which leaves out `lib/harness.sh` itself.
  */
 const shellScripts = (): [string, string][] =>
-  [SCRIPTS, ...readdirSync(PACKAGES).map((pkg) => join(PACKAGES, pkg, "tests"))]
+  readdirSync(PACKAGES)
+    .map((pkg) => join(PACKAGES, pkg, "tests"))
     .filter((dir) => existsSync(dir))
     .flatMap((dir) =>
       readdirSync(dir)

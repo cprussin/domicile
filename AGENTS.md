@@ -33,8 +33,8 @@ reason is mechanical rather than aesthetic: you read this tree before you write
 in it, so whichever spelling is in it is the spelling that comes back out, and
 a tree holding both teaches both.
 
-`scripts/test-american-english.sh` is what says so, and it runs in the `shell`
-group of `./scripts/check.sh`. The one exemption is a spelling that is somebody
+`packages/spelling/tests/test-american-english.sh` is what says so, and it runs
+in `turbo test`. The one exemption is a spelling that is somebody
 else's API — `nix-store --realise` is Nix's flag, not a word.
 
 ## Change the engine when the engine is the right place
@@ -221,18 +221,15 @@ How to use, configure and debug Domicile. No authority level.
 ## Checking your work
 
 ```sh
-./scripts/check.sh                 # everything
-./scripts/check.sh rust            # or one group: shell, rust, typescript, e2e, nix, distro
+bun run check                                  # everything
+bun run turbo run test:rust                    # or one task: test, test:rust, test:e2e, test:nix, test:distro
 ```
 
 That is the whole answer, and using it is not optional politeness — it is how
 you find the things the unit tests cannot. It runs `fmt`, `clippy`, `cargo
 test`, `biome`, `turbo test` (each package's unit tests, types and
-`tests/*.sh`), `turbo test:e2e`, `turbo test:nix`, `turbo test:distro` and the
-repo-wide `scripts/test-*.sh`, and it arranges what they need rather than
-assuming it: a fresh worktree has no `node_modules`, and a display picked by
-number collides with the corpse a previous run left behind. Each of those has
-cost a session an hour and produced failures that looked like findings.
+`tests/*.sh`), `turbo test:e2e`, `turbo test:nix` and `turbo test:distro`, and
+it installs `node_modules` when a fresh worktree has none.
 
 **Read a `skipped` line as loudly as a failure.** A skip means a check did not
 run, which on a machine without a GPU is a fact rather than a verdict — but it is never evidence that the thing works. A script that cannot

@@ -148,7 +148,7 @@ Checks:
 
 - `packages/distro-checks/tests/test-the-home-manager-module-agrees.sh` compares option names to
   the Rust structs, without Nix.
-- `scripts/test-a-dropped-config-field-is-removed-here.sh` fails when a
+- `packages/distro-checks/tests/test-a-dropped-config-field-is-removed-here.sh` fails when a
   config field at any depth is gone since the base commit and
   `removedSettings` lists neither it nor an ancestor.
 - `nix flake check` evaluates the module, reads back the file it writes,

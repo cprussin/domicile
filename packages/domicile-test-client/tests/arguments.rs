@@ -1,7 +1,7 @@
 //! Command-line parsing for the test client.
 //!
-//! The window itself is tested against a compositor by the checks in
-//! `scripts/`.
+//! The window itself is tested against a compositor by the e2e checks in
+//! `packages/e2e-harness/tests/`.
 
 use std::ffi::OsString;
 

@@ -38,9 +38,9 @@ nix develop .#full -c bun run turbo test:e2e \
 
 - Unit tests cover the pure parts. `test:e2e` covers socket behavior against
   a live compositor. It needs cargo, the Wayland client tools and PipeWire, so
-  it is not part of `test`. `e2e.yml` runs it through `scripts/check.sh e2e`.
+  it is not part of `test`. `e2e.yml` runs it.
 - `test:e2e` is never cached: it builds and runs binaries outside turbo's
   view.
-- `verdicts.test.ts` reads `scripts/` and every package's `tests/` from disk
+- `verdicts.test.ts` reads every package's `tests/` from disk
   and runs `bash` against `lib/harness.sh`. It runs in `test:unit`. The root
   `turbo.json` lists those as inputs so it re-runs when they change.

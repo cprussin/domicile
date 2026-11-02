@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks the latency guard's measurement has a timeout.
 #
-# `check.sh` does not time the latency guard, because its wait for a quiet
+# `run-checks.sh` does not time the latency guard, because its wait for a quiet
 # machine is meant to be long. The timer starts once the render node is taken
 # and covers the guard and its control, so a hung measurement cannot hold a
 # `crux` runner and the render node.

@@ -3,7 +3,7 @@
 # prints it. npm's `next` dist-tag, the distribution packages and the flake
 # ship manifests stamped by this; the tree's hold the versions changesets sets.
 #
-#   scripts/stamp-version.sh <rev> <package.json>...
+#   distro/stamp-version.sh <rev> <package.json>...
 #
 # - <rev>: a full commit hash, or a flake's `dirtyRev` (`<hash>-dirty`), which
 #   gives a `-dirty` version.

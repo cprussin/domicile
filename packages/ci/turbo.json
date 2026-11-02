@@ -12,7 +12,7 @@
         "$TURBO_ROOT$/packages/*/package.json",
         "$TURBO_ROOT$/packages/check-runner/**",
         "$TURBO_ROOT$/packages/domicile-engine/**",
-        "$TURBO_ROOT$/scripts/**"
+        "$TURBO_ROOT$/distro/stamp-version.sh"
       ],
       "passThroughEnv": [
         "DOMICILE_CHECK_LOG_DIR",

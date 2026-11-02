@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PUBLISH="$ROOT/.github/scripts/engine-release-publish.sh"
 [ -f "$PUBLISH" ] || { echo "no $PUBLISH" >&2; exit 1; }
 
-# `check.sh` reads the skip reason from a `SKIP:` line on stdout. Printed any
+# `check-runner` reads the skip reason from a `SKIP:` line on stdout. Printed any
 # other way, `DOMICILE_CHECK_STRICT=1` reports an empty `FAILED ()`.
 command -v jq >/dev/null 2>&1 || {
   echo "SKIP: no jq, which both the publisher and the fake GitHub here parse with"

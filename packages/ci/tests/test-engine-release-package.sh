@@ -20,7 +20,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PACKAGE="$ROOT/.github/scripts/engine-release-package.sh"
 [ -x "$PACKAGE" ] || { echo "no $PACKAGE" >&2; exit 1; }
 
-# `check.sh` reads the skip reason from a `SKIP:` line on stdout.
+# `check-runner` reads the skip reason from a `SKIP:` line on stdout.
 for tool in cc objcopy readelf; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "SKIP: no $tool, which the fake build's ELF needs"

@@ -56,11 +56,4 @@ jobs:
             printf '%-16s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
-      # `shell` holds the harness's own tests. It needs no graphics stack, and
-      # no other job runs `check.sh`.
-      #
-      # The pull request's base is what the dropped-config-field check compares
-      # against. It is empty on main.
-      - run: ./scripts/check.sh shell e2e
-        env:
-          DOMICILE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      - run: bun run turbo run test:e2e

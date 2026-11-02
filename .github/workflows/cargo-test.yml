@@ -1,7 +1,7 @@
 name: Cargo test
 
 # The cargo workspace's required checks (`fmt`, `clippy -D warnings`, `test`;
-# see /docs/guidelines/RUST.md), as `./scripts/check.sh rust` runs them.
+# see /docs/guidelines/RUST.md): `rust-checks`' `test:rust`.
 on:
   pull_request:
   push:
@@ -19,8 +19,8 @@ env:
   DOMICILE_CHECK_STRICT: "1"
 
 jobs:
-  # One job over `--workspace`, so CI runs the same checks as
-  # `check.sh rust`. That needs the compositor's libraries for every crate.
+  # One job over `--workspace`, so CI runs the same checks as `test:rust`
+  # does locally. That needs the compositor's libraries for every crate.
   workspace:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -41,5 +41,6 @@ jobs:
       - name: Install the libraries the compositor links and loads
         run: .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev libegl1 libegl-mesa0 libgles2 libgl1-mesa-dri libgbm1 wl-clipboard grim dbus-daemon libpipewire-0.3-dev pipewire libclang-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 
-      # This group needs no node_modules, so bun is not set up.
-      - run: ./scripts/check.sh rust
+      # Bun is here only to run turbo.
+      - uses: oven-sh/setup-bun@v2
+      - run: bun run turbo run test:rust

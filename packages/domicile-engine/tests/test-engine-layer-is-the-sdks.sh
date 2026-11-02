@@ -8,7 +8,7 @@
 # `bun run generate` in `packages/chrome-sdk`, which is an engine change.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SDK="$ROOT/packages/chrome-sdk"
 CHECKED_IN="$ROOT/packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/domicile_layer.js"
 [ -f "$CHECKED_IN" ] || { echo "no $CHECKED_IN" >&2; exit 1; }

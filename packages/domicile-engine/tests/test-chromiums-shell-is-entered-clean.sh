@@ -34,7 +34,7 @@ mkdir -p "$TREE/out/Domicile" "$TREE/tools/nix"
 
 # Stubs for the two nix commands the check runs. `nix-shell` records its
 # environment and fails; the check's sentinel turns that into a failure, which
-# `scripts/test-a-check-that-cannot-run-says-so.sh` covers.
+# `test-an-engine-check-that-cannot-run-says-so.sh` covers.
 BIN="$WORK/bin"
 mkdir -p "$BIN"
 RECORD="$WORK/handed-to-chromiums-shell"

@@ -252,7 +252,8 @@
 
   # Settings the compositor no longer reads, by dotted path, and where each
   # went. `distro/nix/removed-settings.nix` makes them hidden options that
-  # fail an assertion when set. `scripts/test-a-dropped-config-field-is-removed-here.sh`
+  # fail an assertion when set.
+  # `packages/distro-checks/tests/test-a-dropped-config-field-is-removed-here.sh`
   # fails when a field leaves `domicile-config` and neither it nor an ancestor
   # is listed here.
   removedSettings = {
