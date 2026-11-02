@@ -1,5 +1,4 @@
 import { Avatar } from "@domicile-desktop/component-library/Avatar";
-import { Button } from "@domicile-desktop/component-library/Button";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import {
   DEFAULT_NOTIFICATION_ACTION,
@@ -12,7 +11,7 @@ import type { ReactNode } from "react";
 import { css, cva } from "../styled-system/css";
 import { grid, hstack } from "../styled-system/patterns";
 import { ago } from "./ago";
-import { NotificationReply } from "./NotificationReply";
+import { NotificationActions } from "./NotificationActions";
 
 /** `roomy` for a toast on its own; `compact` for one of a list. */
 export type Density = "roomy" | "compact";
@@ -38,8 +37,8 @@ type Props = {
 };
 
 /**
- * One notification: sender, time, summary, body, actions, a reply field if it
- * offers one, and a close button.
+ * One notification: sender, time, summary, body, a strip of its actions and
+ * reply, and a close button.
  * Shared by toasts and the drawer, which each draw their own surface.
  *
  * If the notification has a default action, a press anywhere on the card takes
@@ -131,29 +130,16 @@ export const NotificationCard = ({
             {body ?? notification.body}
           </span>
         )}
-        {buttons.length > 0 && (
-          <div className={actionsStyles}>
-            {buttons.map(({ key, label }) => (
-              <Button
-                key={key}
-                onClick={(event) => {
-                  // Stop the press from also reaching the card.
-                  event.stopPropagation();
-                  onAction(key);
-                }}
-                rounded
-                size="xs"
-                variant="outline"
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        )}
-        {reply !== undefined && (
-          <NotificationReply label={reply.label} onReply={onReply} />
-        )}
       </div>
+      {(buttons.length > 0 || reply !== undefined) && (
+        <NotificationActions
+          buttons={buttons}
+          density={density}
+          onAction={onAction}
+          onReply={onReply}
+          replyLabel={reply?.label}
+        />
+      )}
       <button
         aria-label={closeLabel}
         className={closeStyles}
@@ -279,12 +265,6 @@ const bodyStyles = cva({
       },
     },
   },
-});
-
-const actionsStyles = hstack({
-  flexWrap: "wrap",
-  gap: 1.5,
-  marginBlockStart: 2,
 });
 
 const closeStyles = css({

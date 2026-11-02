@@ -326,8 +326,9 @@ button, and their controls in one panel, each labeled in words.
   under its bar, and fan out on hover.
 - Clicking a toast runs its action. The close button or a right swipe
   dismisses it.
-- A notification that offers a reply has a reply field, in its toast and in
-  the drawer.
+- A notification's actions sit in a strip along its foot, in its toast and in
+  the drawer. If it offers a reply, Reply comes first and opens a reply field
+  in place of the strip. Sending, Escape or leaving the field empty closes it.
 - Critical toasts stay up and have a red ring.
 - No toasts show while locked.
 - The bell shows the count since it was last opened. It opens a panel under

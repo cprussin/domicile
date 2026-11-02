@@ -121,30 +121,78 @@ describe("NotificationCard", () => {
       expect(pressed).toEqual(["mute"]);
     });
 
-    it("replies from its reply field, which is no button", () => {
-      const pressed: string[] = [];
-      card(
-        {
-          actions: [
-            { key: "inline-reply", label: "Reply" },
-            { key: "mute", label: "Mute" },
-          ],
-          clickable: true,
-        },
-        pressed,
-      );
+    describe("replying", () => {
+      /** A card offering a reply and Mute, with its presses in `pressed`. */
+      const replyCard = (pressed: string[] = []) =>
+        card(
+          {
+            actions: [
+              { key: "mute", label: "Mute" },
+              { key: "inline-reply", label: "Reply" },
+            ],
+            clickable: true,
+          },
+          pressed,
+        );
 
-      expect(
-        screen.queryByRole("button", { name: "Reply" }),
-      ).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-      fireEvent.change(screen.getByRole("textbox", { name: "Reply" }), {
-        target: { value: "On my way" },
+      it("opens its reply field from Reply, focused, without pressing the card", () => {
+        const pressed: string[] = [];
+        replyCard(pressed);
+        const reply = screen.getByRole("button", { name: "Reply" });
+
+        expect(reply).toHaveAttribute("aria-expanded", "false");
+        fireEvent.click(reply);
+
+        expect(reply).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByRole("textbox", { name: "Reply" })).toHaveFocus();
+        expect(pressed).toEqual([]);
       });
-      fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-      expect(pressed).toEqual(["replied On my way"]);
-      expect(screen.getByRole("textbox", { name: "Reply" })).toHaveValue("");
+      it("sends what is typed, then closes the field and returns to Reply", () => {
+        const pressed: string[] = [];
+        replyCard(pressed);
+        const reply = screen.getByRole("button", { name: "Reply" });
+        fireEvent.click(reply);
+
+        expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+        fireEvent.change(screen.getByRole("textbox", { name: "Reply" }), {
+          target: { value: "On my way" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+        expect(pressed).toEqual(["replied On my way"]);
+        expect(screen.getByRole("textbox", { name: "Reply" })).toHaveValue("");
+        expect(reply).toHaveAttribute("aria-expanded", "false");
+        expect(reply).toHaveFocus();
+      });
+
+      it("closes the field on Escape and returns to Reply", () => {
+        replyCard();
+        const reply = screen.getByRole("button", { name: "Reply" });
+        fireEvent.click(reply);
+
+        fireEvent.keyDown(screen.getByRole("textbox", { name: "Reply" }), {
+          key: "Escape",
+        });
+
+        expect(reply).toHaveAttribute("aria-expanded", "false");
+        expect(reply).toHaveFocus();
+      });
+
+      it("closes an empty field when focus leaves it, and keeps a draft open", () => {
+        replyCard();
+        const reply = screen.getByRole("button", { name: "Reply" });
+        const field = screen.getByRole("textbox", { name: "Reply" });
+        fireEvent.click(reply);
+
+        fireEvent.change(field, { target: { value: "Draft" } });
+        fireEvent.blur(field);
+        expect(reply).toHaveAttribute("aria-expanded", "true");
+
+        fireEvent.change(field, { target: { value: "" } });
+        fireEvent.blur(field);
+        expect(reply).toHaveAttribute("aria-expanded", "false");
+      });
     });
 
     it("closes, and only closes", () => {

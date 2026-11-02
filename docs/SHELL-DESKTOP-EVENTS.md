@@ -173,7 +173,8 @@ domicile.notifications.dismiss([id]);          // clear; the app is told
 - The shell decides how long a toast stays up. A notification stays in the
   list until cleared.
 - An action with key `"inline-reply"` (`INLINE_REPLY_NOTIFICATION_ACTION`) is
-  a reply field, not a button. Its `label` labels the field.
+  a reply, not a plain action: pressing it never sends the key. Its `label`
+  labels the reply.
 - Design: [NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md).
   Manganese's: [`notifications/`](/packages/manganese-notifications/src/).
 

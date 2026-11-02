@@ -7,7 +7,8 @@ you are using.
 
 - Hover to spread them out. Click one to act on it; swipe right or press its
   close button to dismiss it.
-- Some have a reply field, such as a chat message's.
+- Some have buttons along the bottom, such as **Mark as read**. A chat
+  message's has **Reply**, which opens a field to type your reply.
 - Urgent ones have a red ring and stay until you dismiss them.
 - **The bell** at the right of the bar counts what came in since you last
   looked. Click it for every notification you haven't cleared, and
