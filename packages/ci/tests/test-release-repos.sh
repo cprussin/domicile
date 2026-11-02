@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Tests `release-repos.sh`, which brings the published repositories down from
-# R2, adds a release with `distro/repo.sh` and puts them back: the packages
+# R2, adds a release with `packages/distro/repo.sh` and puts them back: the packages
 # before the indexes that name them, and deletions last.
 #
-# Stand-ins for `aws` and `distro/repo.sh` record what they are asked to do.
+# Stand-ins for `aws` and `packages/distro/repo.sh` record what they are asked to do.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -24,10 +24,10 @@ expect() {
   fi
 }
 
-# A checkout holding the script and a stand-in `distro/repo.sh`.
-mkdir -p "$WORK/checkout/.github/scripts" "$WORK/checkout/distro" "$WORK/bin" "$WORK/packages"
+# A checkout holding the script and a stand-in `packages/distro/repo.sh`.
+mkdir -p "$WORK/checkout/.github/scripts" "$WORK/checkout/packages/distro" "$WORK/bin" "$WORK/packages"
 cp "$RELEASE_REPOS" "$WORK/checkout/.github/scripts/"
-cat >"$WORK/checkout/distro/repo.sh" <<'STAND_IN'
+cat >"$WORK/checkout/packages/distro/repo.sh" <<'STAND_IN'
 #!/usr/bin/env bash
 echo "repo.sh $* key=${DOMICILE_SIGNING_KEY:0:4}" >>"$LOG"
 STAND_IN
@@ -35,7 +35,7 @@ cat >"$WORK/bin/aws" <<'STAND_IN'
 #!/usr/bin/env bash
 echo "aws $* id=$AWS_ACCESS_KEY_ID region=$AWS_DEFAULT_REGION" >>"$LOG"
 STAND_IN
-chmod +x "$WORK/checkout/distro/repo.sh" "$WORK/bin/aws"
+chmod +x "$WORK/checkout/packages/distro/repo.sh" "$WORK/bin/aws"
 
 run() { # environment...
   : >"$WORK/log"

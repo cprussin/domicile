@@ -17,7 +17,7 @@
 
       # The bun `package.json` asks for, ahead of nixpkgs'. The x86_64 build is
       # nixpkgs' choice of upstream zip. Drop this once nixpkgs ships it.
-      # `packages/distro-checks/tests/nix-the-flake-ships-the-bun-package-json-asks-for.sh` checks
+      # `packages/distro/tests/nix-the-flake-ships-the-bun-package-json-asks-for.sh` checks
       # the version.
       bunOverlay = final: prev: {
         bun = prev.bun.overrideAttrs (finalAttrs: old: {
@@ -341,11 +341,11 @@
       };
 
       # A launcher entry, `domicile-<id>.desktop`, for something Domicile
-      # does: `distro/nix/launcher/domicile-<id>.desktop` filled in, as
-      # `distro/stage.sh` does. The icon is `<icon>` and the launcher's
+      # does: `packages/distro/share/launcher/domicile-<id>.desktop` filled in, as
+      # `packages/distro/stage.sh` does. The icon is `<icon>` and the launcher's
       # preview `<preview>`, both SVGs.
       launcherFile = { id, icon, preview }: ''
-        substitute ${./distro/nix/launcher + "/domicile-${id}.desktop"} \
+        substitute ${./packages/distro/share/launcher + "/domicile-${id}.desktop"} \
           "$out/share/applications/domicile-${id}.desktop" \
           --subst-var-by bin "$out/bin" \
           --subst-var-by icon ${icon} \
@@ -355,7 +355,7 @@
       # The built workspace a shell is built against: the builder's
       # `--domicile`, from which it resolves manganese and React. Laid out like
       # this repository, because that is the layout the builder reads. Holds
-      # only what the builder and manganese ship, as `distro/stage.sh` does.
+      # only what the builder and manganese ship, as `packages/distro/stage.sh` does.
       shellWorkspace = pkgs.stdenv.mkDerivation {
         pname = "domicile-shell-workspace";
         version = "0.0.0";
@@ -372,7 +372,7 @@
           runHook preInstall
           cp -a ${shellModules} "$out"
           chmod -R u+w "$out"
-          bash ${./distro/shell-workspace.sh} files ${pkgs.bun}/bin/bun "$PWD" "$out"
+          bash ${./packages/distro/shell-workspace.sh} files ${pkgs.bun}/bin/bun "$PWD" "$out"
           bash scripts/stamp-version.sh ${self.rev or self.dirtyRev} \
             "$out"/packages/*/package.json
           runHook postInstall
@@ -416,7 +416,7 @@
       # stay a symlink because nothing resolves its path.
       domicilePackage = pkgs.runCommand "domicile"
         {
-          # The login session, `distro/nix/domicile-session.desktop`. NixOS's
+          # The login session, `packages/distro/share/domicile-session.desktop`. NixOS's
           # `sessionPackages` requires `providedSessions`.
           passthru.providedSessions = [ "domicile" ];
           meta = {
@@ -444,7 +444,7 @@
         # reason.
         cp ${domicileBinaries}/bin/domicile-miracast "$out/bin/domicile-miracast"
         mkdir -p "$out/share/dbus-1/services"
-        substitute ${./distro/nix/net.domicile.Miracast.service} \
+        substitute ${./packages/distro/share/net.domicile.Miracast.service} \
           "$out/share/dbus-1/services/net.domicile.Miracast.service" \
           --subst-var-by bin "$out/bin"
         # Records the screen for the compositor, which finds it beside
@@ -452,10 +452,10 @@
         cp ${domicileBinaries}/bin/domicile-recorder "$out/bin/domicile-recorder"
         # The web link handler and the file making it the default.
         mkdir -p "$out/share/applications"
-        substitute ${./distro/nix/domicile-open-url.desktop} \
+        substitute ${./packages/distro/share/domicile-open-url.desktop} \
           "$out/share/applications/domicile-open-url.desktop" \
           --subst-var-by bin "$out/bin"
-        cp ${./distro/nix/domicile-mimeapps.list} \
+        cp ${./packages/distro/share/domicile-mimeapps.list} \
           "$out/share/applications/domicile-mimeapps.list"
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
@@ -480,48 +480,48 @@
         }}
         ${launcherFile {
           id = "screenshot";
-          icon = ./distro/nix/launcher/screenshot.svg;
-          preview = ./distro/nix/launcher/screenshot-preview.svg;
+          icon = ./packages/distro/share/launcher/screenshot.svg;
+          preview = ./packages/distro/share/launcher/screenshot-preview.svg;
         }}
         ${launcherFile {
           id = "screen-record";
-          icon = ./distro/nix/launcher/screen-record.svg;
-          preview = ./distro/nix/launcher/screen-record-preview.svg;
+          icon = ./packages/distro/share/launcher/screen-record.svg;
+          preview = ./packages/distro/share/launcher/screen-record-preview.svg;
         }}
         ${launcherFile {
           id = "shutdown";
-          icon = ./distro/nix/launcher/shutdown.svg;
-          preview = ./distro/nix/launcher/shutdown-preview.svg;
+          icon = ./packages/distro/share/launcher/shutdown.svg;
+          preview = ./packages/distro/share/launcher/shutdown-preview.svg;
         }}
         ${launcherFile {
           id = "reboot";
-          icon = ./distro/nix/launcher/reboot.svg;
-          preview = ./distro/nix/launcher/reboot-preview.svg;
+          icon = ./packages/distro/share/launcher/reboot.svg;
+          preview = ./packages/distro/share/launcher/reboot-preview.svg;
         }}
         ${launcherFile {
           id = "logout";
-          icon = ./distro/nix/launcher/logout.svg;
-          preview = ./distro/nix/launcher/logout-preview.svg;
+          icon = ./packages/distro/share/launcher/logout.svg;
+          preview = ./packages/distro/share/launcher/logout-preview.svg;
         }}
         # Tells `xdg-desktop-portal` which interfaces Domicile implements. The
         # compositor owns the D-Bus name and sets the matching
         # `XDG_CURRENT_DESKTOP` on clients.
         mkdir -p "$out/share/xdg-desktop-portal/portals"
-        cp ${./distro/nix/domicile.portal} \
+        cp ${./packages/distro/share/domicile.portal} \
           "$out/share/xdg-desktop-portal/portals/domicile.portal"
         # Routes portal calls (xdg-desktop-portal >= 1.17): Domicile for
         # everything but `Secret`, which goes to the keyring.
-        cp ${./distro/nix/domicile-portals.conf} \
+        cp ${./packages/distro/share/domicile-portals.conf} \
           "$out/share/xdg-desktop-portal/domicile-portals.conf"
         # The user target the login session starts. It binds
         # `graphical-session.target`, which the portal requires.
         mkdir -p "$out/lib/systemd/user"
-        cp ${./distro/nix/domicile-session.target} \
+        cp ${./packages/distro/share/domicile-session.target} \
           "$out/lib/systemd/user/domicile-session.target"
-        cp ${./distro/nix/domicile-session-shutdown.target} \
+        cp ${./packages/distro/share/domicile-session-shutdown.target} \
           "$out/lib/systemd/user/domicile-session-shutdown.target"
         mkdir -p "$out/share/wayland-sessions"
-        substitute ${./distro/nix/domicile-session.desktop} \
+        substitute ${./packages/distro/share/domicile-session.desktop} \
           "$out/share/wayland-sessions/domicile.desktop" \
           --subst-var-by bin "$out/bin"
       '';
@@ -711,11 +711,11 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-2um4boMh7WLV29RXEqrmr2jvIgdgOo5odgrMNJuXGxQ=";
+        outputHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       };
 
       # The production modules `shellWorkspace` ships, from
-      # `distro/shell-workspace.sh modules`. A fixed-output derivation like
+      # `packages/distro/shell-workspace.sh modules`. A fixed-output derivation like
       # `nodeModules`, and its `outputHash` goes stale with the same changes.
       shellModules = pkgs.stdenv.mkDerivation {
         pname = "domicile-shell-modules";
@@ -727,7 +727,7 @@
         installPhase = ''
           runHook preInstall
           export HOME="$TMPDIR"
-          bash ${./distro/shell-workspace.sh} modules ${pkgs.bun}/bin/bun "$PWD" "$out"
+          bash ${./packages/distro/shell-workspace.sh} modules ${pkgs.bun}/bin/bun "$PWD" "$out"
           rm -rf "$out/node_modules/.cache"
           # As in `nodeModules`.
           find "$out/node_modules/.bun" -mindepth 3 -maxdepth 3 \
@@ -737,7 +737,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-Jgw3kael/hLcGw/gOuN8GEyMB5K71XyLVf20bbLNbKo=";
+        outputHash = "sha256-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=";
       };
 
 
@@ -797,7 +797,7 @@
       # The login session and the lock screen's PAM service are machine
       # settings, so they live in `nixosModules`.
       homeManagerModules = rec {
-        domicile = import ./distro/nix/home-manager.nix {
+        domicile = import ./packages/distro/nix/home-manager.nix {
           domicilePackages = self.packages.${system};
           bun2nix = bun2nix.packages.${system}.default;
         };
@@ -808,7 +808,7 @@
 
       # NixOS module for the machine-level settings.
       nixosModules = rec {
-        domicile = import ./distro/nix/nixos.nix {
+        domicile = import ./packages/distro/nix/nixos.nix {
           domicilePackages = self.packages.${system};
         };
         default = domicile;
@@ -834,7 +834,7 @@
 
       # `nix flake check` evaluates the two modules, which nothing else does.
       #
-      # `packages/distro-checks/tests/test-the-home-manager-module-agrees.sh` checks option names
+      # `packages/distro/tests/test-the-home-manager-module-agrees.sh` checks option names
       # against the Rust schema without nix. These checks cover types,
       # defaults and the generated config JSON.
       #
@@ -962,7 +962,7 @@
               ];
               specialArgs = { inherit pkgs; };
             };
-            # The module with `distro/nix/test-ts-config`, a TS config that
+            # The module with `packages/distro/nix/test-ts-config`, a TS config that
             # imports a package from npm, as its config directory.
             fromDirectory = directory: pkgs.lib.evalModules {
               modules = [
@@ -978,10 +978,10 @@
               ];
               specialArgs = { inherit pkgs; };
             };
-            fromTs = (fromDirectory ./distro/nix/test-ts-config).config;
+            fromTs = (fromDirectory ./packages/distro/nix/test-ts-config).config;
             # A directory with no `domicile.{ts,tsx,js,mjs}` fails evaluation.
             withoutModule = builtins.tryEval
-              (fromDirectory ./distro/nix/launcher).config.programs.domicile.shell;
+              (fromDirectory ./packages/distro/share/launcher).config.programs.domicile.shell;
 
             appEntry = withApp.config.xdg.desktopEntries.Music;
             # Built as home-manager builds it, so `desktop-file-validate` runs.
@@ -1150,13 +1150,13 @@
             touch "$out"
           '';
 
-        # `distro/nix/removed-settings.nix` on its own, with paths the real
+        # `packages/distro/nix/removed-settings.nix` on its own, with paths the real
         # module does not list: one at the top, one in a section, one in a
         # list's elements.
         removed-settings =
           let
             lib = pkgs.lib;
-            removed = import ./distro/nix/removed-settings.nix { inherit lib; } {
+            removed = import ./packages/distro/nix/removed-settings.nix { inherit lib; } {
               gone = "top note";
               "section.gone" = "section note";
               "items[].gone" = "item note";

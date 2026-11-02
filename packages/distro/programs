@@ -1,0 +1,12 @@
+# The programs `flake.nix` installs in `bin/`, which `packages/distro/binaries.sh` builds
+# and `packages/distro/stage.sh` installs. `packages/distro/tests/test-distro-stage.sh` checks the two
+# lists match.
+domicile
+domicile-compositor
+domicile-open-url
+domicile-xdg-open
+domicile-history
+domicile-settings
+domicile-app-host
+domicile-miracast
+domicile-recorder

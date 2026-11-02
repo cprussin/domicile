@@ -1,0 +1,20 @@
+{
+  "description": "How Domicile is packaged for distributions and Nix, and the tests of it.",
+  "devDependencies": {
+    "@domicile-desktop/check-runner": "workspace:*"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/distro",
+  "private": true,
+  "scripts": {
+    "test:distro": "check-runner tests/distro-*.sh",
+    "test:nix": "check-runner tests/nix-*.sh",
+    "test:shell": "check-runner tests/test-*.sh"
+  },
+  "type": "module",
+  "version": "0.0.1"
+}

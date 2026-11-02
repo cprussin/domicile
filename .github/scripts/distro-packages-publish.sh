@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish the distribution packages `distro/build.sh` made as GitHub releases.
+# Publish the distribution packages `packages/distro/build.sh` made as GitHub releases.
 #
 #   GH_TOKEN=... .github/scripts/distro-packages-publish.sh <packages>
 #

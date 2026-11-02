@@ -1,0 +1,15 @@
+# The Arch package's optional dependencies, which `packages/distro/arch-optdepends.sh`
+# adds: what the other formats in `packages/distro/nfpm.yaml` recommend, except GTK
+# and Mesa's drivers, which Arch's required `mesa` holds.
+upower: the battery readout
+rtkit: smooth drawing while the machine is busy, without the domicile group
+hwdata: monitor makers' names
+libpulse: pactl, for the volume readout
+curl: bookmark icons and the captive portal check
+xdg-desktop-portal: portals for apps
+gsettings-desktop-schemas: the engine's GSettings schemas, without which it logs errors
+networkmanager: Miracast casts to TVs over Wi-Fi Direct
+avahi: Miracast casts to TVs on the LAN
+gst-plugins-bad: Miracast casts, and screen recordings encoded on the GPU
+gst-plugins-ugly: Miracast casts without a hardware H.264 encoder
+gst-libav: sound in Miracast casts

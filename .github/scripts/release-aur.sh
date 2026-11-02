@@ -3,14 +3,14 @@
 #
 #   AUR_SSH_KEY=<private key> .github/scripts/release-aur.sh <package>
 #
-# Commits `distro/aur.sh`'s files to the AUR's git repository and pushes. A
+# Commits `packages/distro/aur.sh`'s files to the AUR's git repository and pushes. A
 # package the AUR already has commits nothing. `DOMICILE_RELEASE_DRY_RUN=1`
 # shows the change and pushes nothing. `DOMICILE_AUR_REMOTE` replaces the
 # AUR's repository.
 #
 # - <package>: the Arch package as published, whose checksum the PKGBUILD
 #   names.
-# - `DOMICILE_REPO_URL`: where `distro/repo.sh`'s repositories are served, if
+# - `DOMICILE_REPO_URL`: where `packages/distro/repo.sh`'s repositories are served, if
 #   not https://packages.domicile-desktop.com.
 set -euo pipefail
 
@@ -41,7 +41,7 @@ if [ -n "${AUR_SSH_KEY:-}" ]; then
 fi
 
 git clone -q "$REMOTE" "$WORK/aur"
-"$ROOT/distro/aur.sh" "$PACKAGE" "$URL" "$WORK/aur"
+"$ROOT/packages/distro/aur.sh" "$PACKAGE" "$URL" "$WORK/aur"
 git -C "$WORK/aur" add -A
 if git -C "$WORK/aur" diff --cached --quiet; then
   echo "the AUR has this domicile-bin already"
@@ -54,7 +54,7 @@ if [ "${DOMICILE_RELEASE_DRY_RUN:-}" = 1 ]; then
   git -C "$WORK/aur" diff --cached --stat
   exit 0
 fi
-# The maintainer `distro/aur.sh` names, as a CI runner has no git identity.
+# The maintainer `packages/distro/aur.sh` names, as a CI runner has no git identity.
 git -C "$WORK/aur" -c user.name="Connor Prussin" -c user.email=connor@prussin.net \
   commit -qm "domicile-bin $version"
 git -C "$WORK/aur" push -q origin HEAD:master

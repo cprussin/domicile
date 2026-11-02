@@ -1,7 +1,7 @@
 name: Distro packages
 
-# Build the Debian, RPM and Arch packages (`distro/build.sh`) and their signed
-# repositories (`distro/repo.sh`), install each from its repository in its
+# Build the Debian, RPM and Arch packages (`packages/distro/build.sh`) and their signed
+# repositories (`packages/distro/repo.sh`), install each from its repository in its
 # distribution's container (`./scripts/check.sh distro`), and publish them
 # as a release when stable.yml calls this for a commit it promoted.
 #
@@ -10,13 +10,13 @@ name: Distro packages
 on:
   pull_request:
     paths:
-      - distro/**
+      - packages/distro/**
       - flake.nix
       - flake.lock
       - packages/domicile-engine/engine-*.nix
       - scripts/check.sh
       - packages/check-runner/**
-      - packages/distro-checks/**
+      - packages/distro/**
       - .github/scripts/distro-packages-publish.sh
       - .github/workflows/distro-packages.yml
   workflow_call:
@@ -84,7 +84,7 @@ jobs:
           ref: ${{ inputs.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: distro/binaries.sh binaries
+      - run: packages/distro/binaries.sh binaries
       - uses: actions/upload-artifact@v7
         with:
           name: binaries
@@ -106,7 +106,7 @@ jobs:
         with:
           name: binaries
           path: binaries/
-      - run: distro/build.sh binaries distro-out
+      - run: packages/distro/build.sh binaries distro-out
         env:
           DOMICILE_RELEASE: ${{ inputs.release && '1' || '' }}
           DOMICILE_PRERELEASE: ${{ inputs.prerelease && '1' || '' }}
@@ -114,9 +114,9 @@ jobs:
       # Releases sign with the real key.
       - name: Make the signed repositories
         run: |
-          mapfile -t tools < <(sed -n 's/^\([a-z]\)/nixpkgs#\1/p' distro/repo-tools)
+          mapfile -t tools < <(sed -n 's/^\([a-z]\)/nixpkgs#\1/p' packages/distro/repo-tools)
           nix shell --inputs-from . "${tools[@]}" --command sh -c \
-            'DOMICILE_SIGNING_KEY="$(distro/repo-test-key.sh)" distro/repo.sh distro-out distro-repo'
+            'DOMICILE_SIGNING_KEY="$(packages/distro/repo-test-key.sh)" packages/distro/repo.sh distro-out distro-repo'
       - uses: actions/upload-artifact@v7
         with:
           name: repo
