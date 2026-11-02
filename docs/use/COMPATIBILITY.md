@@ -32,15 +32,11 @@ packaging. Steps: [Install](INSTALL.md).
 |---|---|
 | NVIDIA, proprietary driver (GTX 970) | Checked by CI on every engine build, with no monitor attached. The docs' screenshots and videos are taken on it |
 | AMD (Radeon 890M, Framework 13) | In daily use on a console login, with monitors through a dock |
-| Intel | Expected to work. Not checked |
+| Intel | Tested by hand |
 | No GPU | Runs: nested on llvmpipe, and on a console login the desktop draws on the CPU ([how](../architecture/A-DESKTOP-ON-A-TTY.md#software-output)) |
 
 Gaps that can show on a first run:
 
-- **Apps that draw in software are untested on AMD and Intel hardware
-  drivers.** Their frames are copied into a GPU buffer; that copy is checked
-  on NVIDIA and llvmpipe
-  ([detail](../architecture/WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)).
 - **What reaches a lit screen is unmeasured.** Every automated check reads the
   frame back before it is shown.
 

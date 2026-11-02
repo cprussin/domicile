@@ -302,7 +302,7 @@ GBM buffer and submits that (`uploads.rs`, `shm_upload.rs`).
   finds its pixels on the page. That covers the GBM allocation and the
   browser's import: shm frames have no other path, and without a GBM device the
   window stays blank (`ShmRefused`). The copy is also tested on llvmpipe.
-  - Untested on Mesa (AMD, Intel).
+  - On Mesa (AMD, Intel) it is tested by hand, in daily use.
 - The pixels pass through a texture kept on the surface. While it holds the
   previous commit in the same format, only the client's damage is uploaded.
   Smithay keeps a cached texture's format, so a new format at the same size
