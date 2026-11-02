@@ -6,7 +6,7 @@
 # would cost a full rebuild. Refusals must happen before `gn` runs.
 #
 # Skips (exit 77) on crux, where `engine-depot-tools.sh` prefers the
-# bootstrapped /build/depot_tools over this test's fakes. check.sh reads the
+# bootstrapped /build/depot_tools over this test's fakes. check-runner reads the
 # reason from the first `SKIP: ` line.
 if [ -x /build/depot_tools/autoninja ] &&
   [ -f /build/depot_tools/python3_bin_reldir.txt ]; then

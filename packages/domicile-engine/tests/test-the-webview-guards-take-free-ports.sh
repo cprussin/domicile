@@ -148,7 +148,7 @@ EOF
 printf '#!/bin/sh\nexit 1\n' >"$ENGINE/out/Domicile/domicile_color_probe"
 chmod +x "$ENGINE/out/Domicile/chrome" "$ENGINE/out/Domicile/domicile_color_probe"
 
-# Every guard at once, as `check.sh` runs them, each in its own directory.
+# Every guard at once, as `run-checks.sh` runs them, each in its own directory.
 PIDS=()
 for guard in "$GUARDS"/guard-webview-*.sh; do
   name="$(basename "$guard" .sh)"

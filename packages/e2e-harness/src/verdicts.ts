@@ -1,4 +1,4 @@
-// Checks that every script in `scripts/` bails through the shared helpers in
+// Checks that every package's `tests/*.sh` bails through the shared helpers in
 // `packages/e2e-harness/lib/harness.sh`.
 //
 // `exit 99` means the script's own machinery failed. If the compositor died,
@@ -24,8 +24,9 @@
 //     a run where a bail did nothing.
 //
 // The test also runs the real `harness.sh`, since a text scan cannot tell
-// whether the bail re-checks the compositor. `turbo.json` lists `scripts/**`
-// as an input to `test:unit` so that script changes re-run it.
+// whether the bail re-checks the compositor. `turbo.json` lists
+// `packages/*/tests/*.sh` as an input to `test:unit` so that script changes
+// re-run it.
 
 /**
  * The helpers that re-check the compositor before ending the script.

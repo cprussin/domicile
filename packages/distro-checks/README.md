@@ -15,8 +15,8 @@ DOMICILE_DISTRO_REPO=$PWD/distro-repo \
 | Task | Checks | Needs | Run by |
 |---|---|---|---|
 | `test:shell` | `tests/test-*.sh`: the packaging scripts, against stand-ins | bun | `turbo test` |
-| `test:nix` | `tests/nix-*.sh`: the flake's packages, shells, checks and VM tests | nix | `check.sh nix`, `nix-build.yml` |
-| `test:distro` | `tests/distro-*.sh`: each package installed in its distribution's container | docker and `distro/build.sh`'s output | `check.sh distro`, `distro-packages.yml` |
+| `test:nix` | `tests/nix-*.sh`: the flake's packages, shells, checks and VM tests | nix | `bun run check`, `nix-build.yml` |
+| `test:distro` | `tests/distro-*.sh`: each package installed in its distribution's container | docker and `distro/build.sh`'s output | `bun run check`, `distro-packages.yml` |
 
 - `test:nix` and `test:distro` are never cached: they build outside turbo's
   view.

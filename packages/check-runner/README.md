@@ -36,7 +36,7 @@ A run that checked nothing fails.
 | Path | What it is |
 |---|---|
 | `bin/check-runner.sh` | Runs its arguments one at a time. |
-| `src/report.sh` | The verdicts and tally, sourced by runners that order their own checks (`scripts/check.sh`). |
+| `src/report.sh` | The verdicts and tally, sourced by runners that order their own checks (the engine's `run-checks.sh`). |
 | `src/skips.ts` | Scans every check's `exit 77` for a `SKIP:` line, covering skips a run never reaches. |
 
 ## Test

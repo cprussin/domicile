@@ -150,8 +150,8 @@ crate — without confirming with the developer that this is the intent.
 
 ## Required code checks
 
-`./scripts/check.sh` runs everything — both languages, the shell scripts and
-the e2e suites — and arranges what each needs. It is what AGENTS.md points at
+`bun run check` runs everything — both languages, the shell checks and the
+e2e suites. It is what AGENTS.md points at
 and what to run before a PR. The rest of this section is the TypeScript half on
 its own, for when that is all you have changed.
 
@@ -164,7 +164,7 @@ run means they actually build. If code is failing, first try
 
 **Run it from the repo root.** The root `package.json`'s `turbo` script
 installs if it has to and then shells `node_modules/.bin/turbo`, which is what
-`scripts/check.sh` runs; from inside a package directory the same words select
+`bun run check` runs; from inside a package directory the same words select
 that package alone. Either way, verify the output shows the root-level tasks
 (`//#test:lint` and `//#test:dependencies`) and not only the per-package ones.
 The root-level `biome check` (run by `//#test:lint`) enforces formatting,
@@ -172,10 +172,10 @@ import ordering, and lint rules across the entire monorepo — always verify it
 passes before considering tests complete.
 
 Checks that need more than bun are tasks outside `test`, never cached:
-`test:engine` (a built Chromium tree, on `crux`), `test:e2e` (cargo and the
-Wayland tools), `test:nix` and `test:distro`. `check.sh` runs each in its group.
-Repo-wide checks with no package of their own stay in `scripts/test-*.sh`, the
-`shell` group.
+`test:engine` (a built Chromium tree, on `crux`), `test:rust` (cargo),
+`test:e2e` (cargo and the Wayland tools), `test:nix` and `test:distro`.
+`bun run check` runs all but `test:engine`. Every check lives in the package it
+checks; there is no top-level `scripts/`.
 
 A package's own tasks are reached the same way:
 `bun run turbo test --filter @domicile-desktop/sdk`. Note that

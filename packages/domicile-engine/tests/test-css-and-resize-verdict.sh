@@ -181,7 +181,7 @@ expect "all three runs failing names all three" \
   "step 4 failed: the CSS run, a cell is marked FAIL. the backdrop-filter run, a cell is marked FAIL. the resize run, a cell is marked FAIL." \
   "$(summary 1 "$CELL" 1 "$CELL" 1 "$CELL")"
 
-# A pass prints one line per run, because `check.sh` shows only a passing
+# A pass prints one line per run, because `check-runner` shows only a passing
 # check's `PASS:` lines.
 said_on_a_pass() { # the summary's stdout, with every run passing
   (

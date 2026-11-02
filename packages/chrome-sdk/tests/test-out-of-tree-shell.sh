@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Build a shell that is not in this repo, against the SDK as it is published.
 #
-#   nix develop .#full -c ./scripts/test-out-of-tree-shell.sh
+#   bun run turbo test:shell --filter=@domicile-desktop/sdk
+#
+# Through turbo, whose `build` of the SDK this packs: building here would
+# rewrite `dist/` under the other packages' running checks.
 #
 # Inside the workspace, `@domicile-desktop/sdk` resolves to TypeScript source
 # and packages share one `node_modules`, so a shell in `packages/` builds even
@@ -18,7 +21,7 @@
 # The example keeps `skipLibCheck` off so the SDK's emitted declarations are
 # type-checked.
 set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 EXAMPLE="$ROOT/examples/minimal-shell"
 
 command -v bun >/dev/null 2>&1 || { echo "SKIP: no bun"; exit 77; }
@@ -29,11 +32,9 @@ trap 'if [ -n "${DOMICILE_KEEP_WORK:-}" ]; then echo "kept: $WORK" >&2; else rm 
 # `bun pm pack` resolves `catalog:` into real ranges, so only the tarball
 # shows whether the published manifest installs.
 echo "== packing the SDK =="
-( cd "$ROOT" && bun install --frozen-lockfile >/dev/null 2>&1 ) || {
-  echo "SKIP: dependencies would not install"; exit 77; }
 # The SDK is a shell's only dependency on Domicile.
-( cd "$ROOT/packages/chrome-sdk" && bun run build >/dev/null 2>&1 ) || {
-  echo "FAIL: @domicile-desktop/sdk would not build"; exit 1; }
+[ -f "$ROOT/packages/chrome-sdk/dist/app.js" ] || {
+  echo "FAIL: @domicile-desktop/sdk is not built; run this through turbo"; exit 1; }
 ( cd "$ROOT/packages/chrome-sdk" && bun pm pack --destination "$WORK" >/dev/null 2>&1 ) || {
   echo "FAIL: @domicile-desktop/sdk would not pack"; exit 1; }
 

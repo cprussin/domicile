@@ -7,7 +7,7 @@
 # - `bun pm pack`: bun rewrites `workspace:*` and `catalog:` to real ranges.
 # - `npm publish`: npm supports trusted publishing (GitHub's OIDC token, no
 #   secret) and provenance.
-# - The alpha version is `scripts/stamp-version.sh`'s.
+# - The alpha version is `distro/stamp-version.sh`'s.
 #
 # DOMICILE_PUBLISH_DRY_RUN=<dir> packs into <dir> and publishes nothing, for
 # packages/ci/tests/test-publish-packages.sh.
@@ -45,7 +45,7 @@ if [ "${DOMICILE_RELEASE:-}" = 1 ]; then
   VERSION="each package's own version"
 else
   TAG=next
-  VERSION="$(scripts/stamp-version.sh "$(git rev-parse HEAD)" "${MANIFESTS[@]}")"
+  VERSION="$(distro/stamp-version.sh "$(git rev-parse HEAD)" "${MANIFESTS[@]}")"
   bun install --ignore-scripts
 fi
 

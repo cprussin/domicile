@@ -8,7 +8,7 @@
 # `packages/chrome-sdk`.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SDK="$ROOT/packages/chrome-sdk"
 for f in "$SDK/config.schema.json" "$SDK/src/config.ts"; do
   [ -f "$f" ] || { echo "no $f" >&2; exit 1; }

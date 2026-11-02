@@ -86,7 +86,7 @@ install -m 755 "$ROOT/distro/builder" "$LIBEXEC/builder"
 "$ROOT/distro/shell-workspace.sh" files "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
 # A release ships the versions changesets gave the packages.
 if [ "${DOMICILE_RELEASE:-}" != 1 ]; then
-  "$ROOT/scripts/stamp-version.sh" "$REV" "$LIBEXEC"/workspace/packages/*/package.json >/dev/null
+  "$ROOT/distro/stamp-version.sh" "$REV" "$LIBEXEC"/workspace/packages/*/package.json >/dev/null
 fi
 
 for shell in "${SHELLS[@]}"; do

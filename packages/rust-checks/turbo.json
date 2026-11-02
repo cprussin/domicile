@@ -1,0 +1,12 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:rust": {
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "test:shell": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/check-runner/**"]
+    }
+  }
+}

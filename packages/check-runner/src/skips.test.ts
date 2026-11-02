@@ -8,13 +8,12 @@ import { skipFaults } from "./skips";
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
 /**
- * Every check, as `[path, contents]`: `scripts/*.sh` and each package's
- * `tests/*.sh`.
+ * Every check, as `[path, contents]`: each package's `tests/*.sh`.
  *
  * Does not recurse, which leaves out the sourced `packages/e2e-harness/lib/harness.sh`.
  */
 const shellScripts = (): [string, string][] =>
-  ["scripts", ...packageTests()].flatMap((directory) =>
+  packageTests().flatMap((directory) =>
     readdirSync(join(ROOT, directory))
       .filter((name) => name.endsWith(".sh"))
       .map((name): [string, string] => [

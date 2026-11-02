@@ -12,15 +12,15 @@ cargo test                   # Rust unit tests
 bun run turbo test           # TypeScript: lint, types, unit tests
 
 nix develop .#full           # adds wayland, mesa, weston, kitty
-./scripts/check.sh           # all checks; run before every push
-./scripts/check.sh e2e       # one group: shell, rust, typescript, e2e, nix, distro
+bun run check                # all checks; run before every push
+bun run turbo run test:e2e   # one task: test, test:rust, test:e2e, test:nix, test:distro
 ```
 
 - Each package's `tests/*.sh` runs in its turbo `test:shell`, or `test:e2e`
-  for `e2e-harness`. `check.sh shell` runs every `scripts/test-*.sh`. A new
-  script in either place runs automatically.
-- `packages/e2e-harness/bin/smoke-compositor.sh` is not in `check.sh`. Run it
-  by hand.
+  for `e2e-harness`. A new script there runs automatically. There is no
+  top-level `scripts/`: a check belongs to the package it checks.
+- `packages/e2e-harness/bin/smoke-compositor.sh` is not in `bun run check`. Run
+  it by hand.
 - No test needs a display.
 - The flake has no app for running checks; use a checkout.
 - For what a green run does not cover, see `AGENTS.md`,
@@ -63,6 +63,6 @@ previous shell.
   `git -c commit.gpgsign=false …`.
 - **`cargo test` may fail to link outside `nix develop .#full`.**
   `domicile-compositor` links libxkbcommon. The error is
-  `unable to find library -lxkbcommon`. Without the library, `check.sh` skips
+  `unable to find library -lxkbcommon`. Without the library, `test:rust` skips
   `cargo test` and says why. Use `nix develop .#full`, or install
   `libxkbcommon-dev` (as `cargo-test.yml` does).

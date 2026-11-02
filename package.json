@@ -54,6 +54,7 @@
   "private": true,
   "scripts": {
     "build:install-modules": "[ $CI$CLAUDE_CODE_REMOTE ] && true || bun install",
+    "check": "bun run turbo run test test:rust test:e2e test:nix test:distro --continue",
     "fix:lint": "biome check --max-diagnostics=none --write",
     "test:dependencies": "bun outdated -r",
     "test:lint": "biome check --max-diagnostics=none",

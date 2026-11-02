@@ -1186,7 +1186,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // run without it.
     //
     // Without `--engine-socket` no client window can be shown. That is valid
-    // (the `scripts/` checks drive the chrome, input and displays without a
+    // (the e2e checks drive the chrome, input and displays without a
     // Chromium build), but it is logged.
     let engine = match arguments.engine_socket.as_deref() {
         Some(socket) => {
