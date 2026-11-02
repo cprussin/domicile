@@ -19,10 +19,12 @@ type Shown = {
  * showing; a closed one never comes back by itself.
  *
  * Shows the downloads each time `completed`, the count of finished downloads,
- * goes up.
+ * goes up while `inView`: the window is focused and no tab covers it. Closes
+ * when the window goes out of view, so it never sits over another window.
  */
 export const usePagePopup = (
   completed: number,
+  inView: boolean,
 ): Shown & {
   /** Closes the popup shown for `cue`, unless another has replaced it. */
   close: (cue: number) => void;
@@ -30,13 +32,20 @@ export const usePagePopup = (
 } => {
   const [shown, setShown] = useState<Shown>({ cue: 0, kind: undefined });
   const [lastCompleted, setLastCompleted] = useState(completed);
+  const [wasInView, setWasInView] = useState(inView);
 
   // Adjusts state during render rather than in an effect, so the popup shows
   // in the same render as the download.
   if (completed !== lastCompleted) {
     setLastCompleted(completed);
-    if (completed > lastCompleted) {
+    if (completed > lastCompleted && inView) {
       setShown({ cue: shown.cue + 1, kind: PagePopupKind.Downloads });
+    }
+  }
+  if (inView !== wasInView) {
+    setWasInView(inView);
+    if (!inView) {
+      setShown({ cue: shown.cue + 1, kind: undefined });
     }
   }
 

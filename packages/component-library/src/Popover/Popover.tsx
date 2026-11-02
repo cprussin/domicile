@@ -57,6 +57,11 @@ type Props = ExtendProps<
      */
     keepMounted?: boolean | undefined;
     /**
+     * Called as the pointer comes onto the panel, padding included, and
+     * leaves it, such as to keep one that closes by itself up while used.
+     */
+    onHoverChange?: ((hovered: boolean) => void) | undefined;
+    /**
      * Opened by the app rather than the user, such as to say a download
      * finished: opening it by setting `open` leaves focus where it is. A
      * press on the trigger still focuses it.
@@ -107,6 +112,7 @@ const PopoverComponent = ({
   children,
   flush = false,
   keepMounted = false,
+  onHoverChange,
   onOpenChange,
   quiet = false,
   side = "bottom",
@@ -189,6 +195,12 @@ const PopoverComponent = ({
                   return popupRef.current;
                 }
               }
+            }}
+            onPointerEnter={() => {
+              onHoverChange?.(true);
+            }}
+            onPointerLeave={() => {
+              onHoverChange?.(false);
             }}
             ref={setPopupRef}
           >

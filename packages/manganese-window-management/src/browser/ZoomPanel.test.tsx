@@ -52,19 +52,31 @@ describe(ZoomPanel, () => {
         zoom={5}
       />,
     );
-    expect(screen.getByRole("button", { name: "Zoom in" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Zoom in" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "Zoom out" })).toBeEnabled();
   });
 
-  it("grays out Reset at 100%", () => {
+  // A popup closes when focus falls out of it, and a browser drops focus off
+  // a button the moment it gets the `disabled` attribute. Reset grays itself
+  // out as it is pressed, so it must gray out without losing focus.
+  it.each([
+    ["Reset", 1],
+    ["Zoom in", 5],
+    ["Zoom out", 0.25],
+  ])("keeps %s focusable while grayed out", (name, zoom) => {
     render(
       <ZoomPanel
         onZoomIn={IGNORE}
         onZoomOut={IGNORE}
         onZoomReset={IGNORE}
-        zoom={1}
+        zoom={zoom}
       />,
     );
-    expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+    const button = screen.getByRole("button", { name });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).not.toHaveAttribute("disabled");
   });
 });

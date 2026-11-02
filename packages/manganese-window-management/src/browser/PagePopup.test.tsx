@@ -51,14 +51,15 @@ describe(PagePopup, () => {
     expect(closed).toStrictEqual([2]);
   });
 
+  // Its padding counts: the pointer crosses it on the way to a control.
   it("stays while the pointer is on it, and waits again once it leaves", () => {
     jest.useFakeTimers();
     const closed: number[] = [];
     render(popup(1, closed));
-    fireEvent.pointerEnter(screen.getByText("Body"));
+    fireEvent.pointerEnter(screen.getByRole("dialog"));
     wait(10_000);
     expect(closed).toStrictEqual([]);
-    fireEvent.pointerLeave(screen.getByText("Body"));
+    fireEvent.pointerLeave(screen.getByRole("dialog"));
     wait(2000);
     expect(closed).toStrictEqual([1]);
   });

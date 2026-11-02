@@ -55,6 +55,7 @@ export const PagePopup = ({
     <Popover
       align="end"
       anchor={anchor}
+      onHoverChange={setHeld}
       onOpenChange={(next) => {
         if (!next) {
           onClose(cue);
@@ -63,16 +64,7 @@ export const PagePopup = ({
       open={open}
       quiet
     >
-      <div
-        onPointerEnter={() => {
-          setHeld(true);
-        }}
-        onPointerLeave={() => {
-          setHeld(false);
-        }}
-      >
-        {children}
-      </div>
+      {children}
     </Popover>
   );
 };

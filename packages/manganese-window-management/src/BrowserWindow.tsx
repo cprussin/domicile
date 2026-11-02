@@ -267,13 +267,14 @@ export const BrowserWindow = ({
   const loading = useLoading(view);
   const loadProgress = useLoadProgress(view);
   const downloads = useDownloads(view);
-  // The popup over the page: its zoom, or its finished downloads.
+  // The popup over the page: its zoom, or its finished downloads. Only while
+  // the page is in front, so it never sits over another window.
   const {
     close: closePopup,
     cue: popupCue,
     kind: popupKind,
     show: showPopup,
-  } = usePagePopup(downloads.completed);
+  } = usePagePopup(downloads.completed, holdsKeyboard && !covered);
   // What the popups hang from: the address bar's controls, or the page's
   // corner in a window without one.
   const [zoomAnchor, setZoomAnchor] = useState<HTMLElement | null>(null);

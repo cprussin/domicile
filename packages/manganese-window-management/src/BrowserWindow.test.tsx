@@ -1985,31 +1985,37 @@ describe("BrowserWindow", () => {
   });
 
   describe("a browser's keys", () => {
-    const renderWindow = () =>
-      render(
-        <BrowserWindow
-          behindPanel={false}
-          clickThrough={false}
-          covered={false}
-          depth={0}
-          domicile={silentDomicile}
-          dragging={false}
-          focused
-          frame={FRAME}
-          fullscreen={false}
-          motion="resting"
-          onDescription={noDescription}
-          onFocusRequest={() => undefined}
-          onIcon={noIcon}
-          onMotionEnded={nothingEnded}
-          onPageFullscreen={noFullscreen}
-          onReach={() => undefined}
-          rect={ON_SCREEN}
-          resizing={false}
-          url="https://example.com"
-          window="1"
-        />,
-      );
+    const keysWindow = ({
+      covered = false,
+      focused = true,
+    }: {
+      covered?: boolean;
+      focused?: boolean;
+    }) => (
+      <BrowserWindow
+        behindPanel={false}
+        clickThrough={false}
+        covered={covered}
+        depth={0}
+        domicile={silentDomicile}
+        dragging={false}
+        focused={focused}
+        frame={FRAME}
+        fullscreen={false}
+        motion="resting"
+        onDescription={noDescription}
+        onFocusRequest={() => undefined}
+        onIcon={noIcon}
+        onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        resizing={false}
+        url="https://example.com"
+        window="1"
+      />
+    );
+    const renderWindow = () => render(keysWindow({}));
 
     /** Records the history controls' calls. */
     const driven = (element: HTMLWebViewElement): string[] => {
@@ -2101,6 +2107,25 @@ describe("BrowserWindow", () => {
       guestPresses(view(container), { ctrlKey: true, key: "+" });
 
       expect(await screen.findByRole("dialog")).toHaveTextContent("110%");
+    });
+
+    // Another window opening over it, or a tab over it, left its popup over
+    // that window.
+    it.each([
+      ["another window takes the focus", { focused: false }],
+      ["another tab covers it", { covered: true }],
+    ])("hides what it zoomed to once %s", async (_, outOfView) => {
+      const { container, rerender } = renderWindow();
+      zoomable(view(container), 1);
+      hovers(view(container), "");
+      guestPresses(view(container), { ctrlKey: true, key: "+" });
+      await screen.findByRole("dialog");
+
+      rerender(keysWindow(outOfView));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
     });
   });
 

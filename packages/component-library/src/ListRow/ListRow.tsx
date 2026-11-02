@@ -25,6 +25,7 @@ type Common = {
   /**
    * Shows `end` only while the pointer is on the row or focus is in it, for a
    * list of rows whose buttons would otherwise crowd it, such as downloads.
+   * The label runs into its room while it hides.
    */
   endOnHover?: boolean | undefined;
   /** 16px, before the label. */
@@ -249,10 +250,12 @@ const detailStyles = css({
   whiteSpace: "nowrap",
 });
 
-// Kept in the layout while hidden, so the label does not reflow on hover.
+// Hidden out of the layout, so the label takes its room until the pointer
+// comes. Hidden as for a screen reader rather than not displayed, so Tab still
+// reaches its buttons and shows them.
 const endStyles = flex({
   "[data-end-on-hover]:not(:hover, :focus-within) &": {
-    visibility: "hidden",
+    srOnly: true,
   },
   align: "center",
   color: "textSoft",

@@ -376,6 +376,25 @@ describe(Popover, () => {
       });
     });
 
+    // Its padding counts, so a pointer on its way to a control holds it too.
+    it("says when the pointer comes onto it and leaves, padding included", async () => {
+      const hovers: boolean[] = [];
+      render(
+        <Popover
+          onHoverChange={(hovered) => {
+            hovers.push(hovered);
+          }}
+          open
+        >
+          Body
+        </Popover>,
+      );
+      const panel = screen.getByRole("dialog");
+      await userEvent.hover(panel);
+      await userEvent.unhover(panel);
+      expect(hovers).toStrictEqual([true, false]);
+    });
+
     it("closes when focus moves to something outside it", async () => {
       render(
         <>

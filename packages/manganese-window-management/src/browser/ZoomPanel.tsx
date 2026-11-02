@@ -22,6 +22,10 @@ type Props = {
 /**
  * A page's zoom, as Chrome's zoom bubble shows it: the level between − and +,
  * and Reset, in one row.
+ *
+ * Its buttons gray out without the `disabled` attribute: the browser drops
+ * focus off a button as it gets one, and the popup this sits in closes when
+ * focus falls out of it. Reset grays out the moment it is pressed.
  */
 export const ZoomPanel = ({
   onZoomIn,
@@ -36,6 +40,7 @@ export const ZoomPanel = ({
     <span className={stepperStyles}>
       <Button
         disabled={isFullyZoomedOut(zoom)}
+        focusableWhenDisabled
         label="Zoom out"
         onClick={onZoomOut}
         rounded
@@ -47,6 +52,7 @@ export const ZoomPanel = ({
       <output className={levelStyles}>{zoomPercent(zoom)}</output>
       <Button
         disabled={isFullyZoomedIn(zoom)}
+        focusableWhenDisabled
         label="Zoom in"
         onClick={onZoomIn}
         rounded
@@ -58,6 +64,7 @@ export const ZoomPanel = ({
     </span>
     <Button
       disabled={isUnzoomed(zoom)}
+      focusableWhenDisabled
       onClick={onZoomReset}
       rounded
       size="sm"
