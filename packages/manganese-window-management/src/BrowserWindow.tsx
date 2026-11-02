@@ -271,10 +271,6 @@ export const BrowserWindow = ({
     open: zoomShown,
     show: showPopup,
   } = useZoomPopup(holdsKeyboard && !covered);
-  // What the popup hangs from: the address bar's zoom control, or the page's
-  // corner in a window without one.
-  const [zoomAnchor, setZoomAnchor] = useState<HTMLElement | null>(null);
-  const [cornerAnchor, setCornerAnchor] = useState<HTMLElement | null>(null);
   const zoom = useZoom(view);
   // A fullscreen page, such as a video, fills the window without its bar.
   const pageFullscreen = usePageFullscreen(view, fullscreen, onPageFullscreen);
@@ -549,7 +545,7 @@ export const BrowserWindow = ({
     withView(command);
   };
 
-  // The zoom popup hangs from its control when it shows.
+  // A popup, an app or a fullscreen page has no address bar.
   const hasAddressBar = popupWindow === undefined && !isApp && !pageFullscreen;
 
   // Reports focus entering this window as a user reach.
@@ -667,7 +663,6 @@ export const BrowserWindow = ({
             onStop={drive((loaded) => {
               loaded.stop();
             })}
-            onZoomAnchor={setZoomAnchor}
             onZoomIn={() => {
               run(BrowserCommand.ZoomIn);
             }}
@@ -701,11 +696,10 @@ export const BrowserWindow = ({
             window={window}
           />
           <LinkTarget view={view} />
-          <span aria-hidden className={cornerStyles} ref={setCornerAnchor} />
           <PagePopup
-            anchor={hasAddressBar ? zoomAnchor : cornerAnchor}
             closesAfter={ZOOM_POPUP_MS}
             cue={popupCue}
+            label="Zoom"
             onClose={closePopup}
             open={zoomShown}
           >
@@ -825,14 +819,6 @@ const contentsStyles = flex({
 // How long the zoom popup stays up: briefly, as in Chrome, since the page
 // shows the zoom.
 const ZOOM_POPUP_MS = 2000;
-
-// The page's top trailing corner, for the zoom popup to hang from without an
-// address bar.
-const cornerStyles = css({
-  insetBlockStart: 0,
-  insetInlineEnd: 2,
-  position: "absolute",
-});
 
 const pageStyles = flex({
   direction: "column",

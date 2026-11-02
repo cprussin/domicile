@@ -20,7 +20,6 @@ const BAR = {
   onReload: () => undefined,
   onSetSitePermission: () => undefined,
   onStop: () => undefined,
-  onZoomAnchor: () => undefined,
   onZoomIn: () => undefined,
   onZoomOut: () => undefined,
   onZoomReset: () => undefined,
@@ -324,21 +323,6 @@ describe("AddressBar", () => {
       render(<AddressBar {...BAR} holdZoom zoom={1} />);
 
       expect(screen.getByRole("group", { name: "Zoom" })).toBeInTheDocument();
-    });
-
-    it("hands over its controls for the zoom popup to hang from", () => {
-      const anchors: (HTMLElement | null)[] = [];
-      render(
-        <AddressBar
-          {...BAR}
-          onZoomAnchor={(anchor) => {
-            anchors.push(anchor);
-          }}
-          zoom={1.25}
-        />,
-      );
-
-      expect(anchors.at(-1)).toBe(screen.getByRole("group", { name: "Zoom" }));
     });
 
     it("grays out zooming past either end", () => {

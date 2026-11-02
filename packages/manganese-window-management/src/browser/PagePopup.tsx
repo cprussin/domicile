@@ -1,18 +1,19 @@
-import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
+import { css } from "../../styled-system/css";
+
 type Props = {
-  /** What it hangs from: a control in the address bar, or the page's corner. */
-  anchor: HTMLElement | null;
   children: ReactNode;
   /** How long it stays up, in milliseconds, unless the pointer is on it. */
   closesAfter: number;
   /** Counts what it showed; each new one waits `closesAfter` again. */
   cue: number;
+  /** Names it for a screen reader, such as "Zoom". */
+  label: string;
   /**
-   * Asks to close what it showed for `cue`, after its time or on an outside
-   * press or Escape. Ignore a cue that has since moved on.
+   * Asks to close what it showed for `cue`, after its time or on Escape.
+   * Ignore a cue that has since moved on.
    */
   onClose: (cue: number) => void;
   open: boolean;
@@ -20,15 +21,18 @@ type Props = {
 
 /**
  * A popup over a browser window's page saying what just changed, such as its
- * zoom, as Chrome's bubbles do. Opens without taking
- * the keyboard from the page and closes by itself, but not while the pointer
+ * zoom, as Chrome's bubbles do. Closes by itself, but not while the pointer
  * is on it.
+ *
+ * Drawn in the page's own box, at its top trailing corner, over the
+ * `<webview>` and nothing else: never over the desktop or another window.
+ * Leaves the keyboard in the page until one of its controls is pressed.
  */
 export const PagePopup = ({
-  anchor,
   children,
   closesAfter,
   cue,
+  label,
   onClose,
   open,
 }: Props) => {
@@ -51,20 +55,40 @@ export const PagePopup = ({
     }
   }, [closesAfter, cue, held, onClose, open]);
 
-  return (
-    <Popover
-      align="end"
-      anchor={anchor}
-      onHoverChange={setHeld}
-      onOpenChange={(next) => {
-        if (!next) {
+  return open ? (
+    <div
+      aria-label={label}
+      className={popupStyles}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
           onClose(cue);
         }
       }}
-      open={open}
-      quiet
+      onPointerEnter={() => {
+        setHeld(true);
+      }}
+      onPointerLeave={() => {
+        setHeld(false);
+      }}
+      role="dialog"
     >
       {children}
-    </Popover>
-  );
+    </div>
+  ) : undefined;
 };
+
+// A popover's card, at the page's top trailing corner, under the address
+// bar's zoom control.
+const popupStyles = css({
+  backgroundColor: "card",
+  border: "1px solid {colors.border}",
+  borderRadius: "lg",
+  boxShadow: "lifted",
+  color: "foreground",
+  insetBlockStart: 2,
+  insetInlineEnd: 2,
+  maxInlineSize: "calc(100% - {spacing.4})",
+  paddingBlock: 3,
+  paddingInline: 3.5,
+  position: "absolute",
+});

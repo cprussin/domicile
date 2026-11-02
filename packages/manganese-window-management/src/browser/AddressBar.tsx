@@ -71,8 +71,6 @@ type Props = {
     setting: WebViewPermissionSetting,
   ) => void;
   onStop: () => void;
-  /** Takes the zoom controls, for the zoom popup to hang from. */
-  onZoomAnchor: (anchor: HTMLElement | null) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
@@ -110,7 +108,6 @@ export const AddressBar = ({
   onReload,
   onSetSitePermission,
   onStop,
-  onZoomAnchor,
   onZoomIn,
   onZoomOut,
   onZoomReset,
@@ -216,15 +213,10 @@ export const AddressBar = ({
         value={typed}
       />
       {/* At the inline end, as in Chrome, and only while the page is
-          zoomed or the zoom popup hangs from it. Styled as a capsule beside
+          zoomed or the zoom popup shows. Styled as a capsule beside
           the address field. */}
       {(!isUnzoomed(zoom) || holdZoom) && (
-        <div
-          aria-label="Zoom"
-          className={zoomStyles}
-          ref={onZoomAnchor}
-          role="group"
-        >
+        <div aria-label="Zoom" className={zoomStyles} role="group">
           <Button
             disabled={isFullyZoomedOut(zoom)}
             label="Zoom out"

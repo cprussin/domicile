@@ -6,9 +6,9 @@ import { PagePopup } from "./PagePopup";
 /** A popup shown for `cue`, recording the cues it asks to close. */
 const popup = (cue: number, closed: number[]) => (
   <PagePopup
-    anchor={null}
     closesAfter={2000}
     cue={cue}
+    label="Zoom"
     onClose={(shown) => {
       closed.push(shown);
     }}
@@ -75,5 +75,21 @@ describe(PagePopup, () => {
     );
     await screen.findByText("Body");
     expect(screen.getByRole("textbox", { name: "Page" })).toHaveFocus();
+  });
+
+  // A portal drew it over the desktop, so it flashed over the next window
+  // as windows switched. It belongs over its own page only.
+  it("draws in the page it is over, not over the desktop", () => {
+    render(<div data-testid="page">{popup(1, [])}</div>);
+    expect(screen.getByTestId("page")).toContainElement(
+      screen.getByRole("dialog", { name: "Zoom" }),
+    );
+  });
+
+  it("asks to close on Escape", () => {
+    const closed: number[] = [];
+    render(popup(1, closed));
+    fireEvent.keyDown(screen.getByText("Body"), { key: "Escape" });
+    expect(closed).toStrictEqual([1]);
   });
 });
