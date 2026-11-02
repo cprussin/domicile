@@ -57,6 +57,7 @@ import {
   clickThroughStyles,
   edgeStyles,
   heldStyles,
+  keptAt,
   movingStyles,
   originOf,
   placedAt,
@@ -238,8 +239,11 @@ export const BrowserWindow = ({
   // into a new box. A ref because only effects read it.
   const element = useRef<HTMLElement>(null);
   const lowered = useLowered(depth);
+  // The box the window eases from, while it settles.
+  const [settlingFrom, setSettlingFrom] = useState<Rect | undefined>(undefined);
   useSettling({
     element: element,
+    onSettling: setSettlingFrom,
     origin:
       rect === undefined || frame === undefined
         ? undefined
@@ -634,7 +638,12 @@ export const BrowserWindow = ({
         Kept at its own size while the window eases into a new box, which
         clips it, so the page is cropped rather than stretched.
       */}
-      <div className={contentsStyles} {...{ [UPRIGHT]: "" }}>
+      <div
+        className={contentsStyles}
+        // Inline because the size is a runtime value Panda cannot extract.
+        style={rect === undefined ? undefined : keptAt(settlingFrom, rect)}
+        {...{ [UPRIGHT]: "" }}
+      >
         {hasAddressBar && (
           <AddressBar
             address={address}
@@ -690,7 +699,9 @@ export const BrowserWindow = ({
           <webview
             className={viewStyles}
             ref={setView}
-            resizing={resizing ? "" : undefined}
+            // Also while the window settles, so the engine neither holds the
+            // shell for the page nor stretches its old frame.
+            resizing={resizing || settlingFrom !== undefined ? "" : undefined}
             // React sets attributes before insertion, when the engine reads it.
             // See `window`.
             window={window}

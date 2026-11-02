@@ -44,6 +44,29 @@ export const placedAt = (rect: Rect, depth: number): CSSProperties => ({
 });
 
 /**
+ * Inline style keeping a window's contents as big as the box it is drawn at
+ * while it settles from `from` into `rect`, on each side where `from` is
+ * bigger. A shrinking box crops its contents rather than showing a gap
+ * inside them; they take their new size when the settle ends.
+ */
+export const keptAt = (from: Rect | undefined, rect: Rect): CSSProperties =>
+  from === undefined
+    ? {}
+    : {
+        ...grownBy("blockSize", from.height - rect.height),
+        ...grownBy("inlineSize", from.width - rect.width),
+      };
+
+/** `property` grown past the full size by `extra` pixels, if any. */
+const grownBy = (
+  property: "blockSize" | "inlineSize",
+  extra: number,
+): CSSProperties =>
+  extra > 0
+    ? { [property]: `calc(100% + ${Math.round(extra).toString()}px)` }
+    : {};
+
+/**
  * Inline style placing part of a window at `rect` inside the element that
  * holds it, such as a strip's end inside the strip. See {@link within}.
  */

@@ -25,6 +25,7 @@ import {
   clickThroughStyles,
   edgeStyles,
   heldStyles,
+  keptAt,
   movingStyles,
   originOf,
   placedAt,
@@ -168,8 +169,11 @@ export const AppWindow = ({
   // its layout effect reads it.
   const box = useRef<HTMLDivElement>(null);
   const lowered = useLowered(depth);
+  // The box the window eases from, while it settles.
+  const [settlingFrom, setSettlingFrom] = useState<Rect | undefined>(undefined);
   useSettling({
     element: box,
+    onSettling: setSettlingFrom,
     origin:
       rect === undefined || frame === undefined
         ? undefined
@@ -328,10 +332,15 @@ export const AppWindow = ({
         className={appStyles}
         frame={String(syncedFrame)}
         ref={setElement}
-        resizing={resizing ? "" : undefined}
-        // Inline because the cursor is a runtime value that Panda cannot
-        // extract at build time.
-        style={{ cursor }}
+        // Also while the box settles, so the engine neither holds the page
+        // for the client nor stretches its old frame.
+        resizing={resizing || settlingFrom !== undefined ? "" : undefined}
+        // Inline because the cursor and size are runtime values that Panda
+        // cannot extract at build time.
+        style={{
+          cursor,
+          ...(rect === undefined ? {} : keptAt(settlingFrom, rect)),
+        }}
         {...{ [UPRIGHT]: "" }}
       />
     </div>

@@ -2625,6 +2625,41 @@ describe("BrowserWindow", () => {
       ).toBe("0 0");
     });
 
+    // As an app window keeps its client; see `AppWindow.test.tsx`.
+    it("keeps the page at its old size until a shrinking box settles", () => {
+      const { ends, settler } = recordedSettles();
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} settler={settler} />,
+      );
+
+      rerender(
+        <BrowserWindow
+          {...windowProps}
+          rect={{ ...ON_SCREEN, height: 900, width: 600 }}
+          resizing={false}
+          settler={settler}
+        />,
+      );
+      const shown = () => {
+        const contents = view(container).closest<HTMLElement>("[data-upright]");
+        const { blockSize, inlineSize } = contents?.style ?? {};
+        return {
+          resizing: view(container).hasAttribute("resizing"),
+          size: [blockSize, inlineSize],
+        };
+      };
+      const settling = shown();
+      act(() => {
+        ends[0]?.();
+      });
+
+      expect(settling).toStrictEqual({
+        resizing: true,
+        size: ["", "calc(100% + 600px)"],
+      });
+      expect(shown()).toStrictEqual({ resizing: false, size: ["", ""] });
+    });
+
     it("follows the pointer exactly while it is being dragged", () => {
       // Easing would make the window trail the pointer.
       const { played, settler } = recordedSettles();

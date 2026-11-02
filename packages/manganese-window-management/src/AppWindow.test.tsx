@@ -5,7 +5,7 @@ import {
 } from "@domicile-desktop/sdk/app-element";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
-import { fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { css } from "../styled-system/css";
 import { token } from "../styled-system/tokens";
@@ -94,6 +94,16 @@ const portal = (container: HTMLElement): Element => {
   } else {
     return element;
   }
+};
+
+/** Whether the `<app>` is resizing, and the size it is kept at. */
+const shownAt = (container: HTMLElement) => {
+  const app = portal(container);
+  const { blockSize, inlineSize } = (app as HTMLElement).style;
+  return {
+    resizing: app.hasAttribute("resizing"),
+    size: [blockSize, inlineSize],
+  };
 };
 
 /** The box around the `<app>` that places, eases and clips it. */
@@ -335,6 +345,86 @@ describe("AppWindow", () => {
       expect(
         globalThis.getComputedStyle(portal(container)).transformOrigin,
       ).toBe("0 0");
+    });
+
+    // A shrinking box is drawn bigger than the client's new size at first, so
+    // the client keeps its old size, cropped, and no gap opens inside the box.
+    // `resizing` has the engine show each frame at its own size without
+    // holding the page, so the ease starts at once and nothing stretches.
+    it("keeps the client at its old size until a shrinking box settles", () => {
+      const { ends, settler } = recordedSettles();
+      const { container, rerender } = render(
+        <AppWindow {...windowProps} focused={false} settler={settler} />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          rect={{ ...ON_SCREEN, height: 700, width: 600 }}
+          settler={settler}
+        />,
+      );
+      const settling = shownAt(container);
+      act(() => {
+        ends[0]?.();
+      });
+
+      expect(settling).toStrictEqual({
+        resizing: true,
+        size: ["calc(100% + 100px)", "calc(100% + 600px)"],
+      });
+      expect(shownAt(container)).toStrictEqual({
+        resizing: false,
+        size: ["", ""],
+      });
+    });
+
+    it("stops resizing once the box's ease has played", async () => {
+      const { container, rerender } = render(
+        <AppWindow {...windowProps} focused={false} />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          rect={{ ...ON_SCREEN, width: 600 }}
+        />,
+      );
+      const { resizing } = shownAt(container);
+      for (const animation of windowBox(container).getAnimations()) {
+        animation.finish();
+      }
+
+      expect(resizing).toBe(true);
+      await waitFor(() => {
+        expect(shownAt(container)).toStrictEqual({
+          resizing: false,
+          size: ["", ""],
+        });
+      });
+    });
+
+    it("gives a growing box's client its new size at once", () => {
+      const { settler } = recordedSettles();
+      const { container, rerender } = render(
+        <AppWindow {...windowProps} focused={false} settler={settler} />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          rect={{ ...ON_SCREEN, height: 900, width: 1500 }}
+          settler={settler}
+        />,
+      );
+
+      expect(shownAt(container)).toStrictEqual({
+        resizing: true,
+        size: ["", ""],
+      });
     });
 
     // Each `z-index` change restacks the client's surface, so the depth never

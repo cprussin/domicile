@@ -14,11 +14,13 @@ export type Settler = {
   /**
    * Stops the element's settle, then eases it from `offset` to its box,
    * keeping each `upright` part at its own size. Only stops for `undefined`.
+   * Calls `onEnded` when the settle runs to its end, not when it is stopped.
    */
   play: (
     element: Element,
     offset: Offset | undefined,
     upright: readonly Element[],
+    onEnded: () => void,
   ) => void;
 };
 
@@ -40,6 +42,11 @@ type Unknown<T> = { [K in keyof T]: T[K] | undefined };
 
 type Options = {
   element: RefObject<Element | null>;
+  /**
+   * Called with the box the element is drawn at when a settle starts, and
+   * with `undefined` when it ends or stops.
+   */
+  onSettling?: ((from: Rect | undefined) => void) | undefined;
   /**
    * The element's `transform-origin`, from its box's corner. `undefined`, like
    * `rect`, when the element is off screen.
@@ -91,6 +98,7 @@ type Options = {
  */
 export const useSettling = ({
   element,
+  onSettling = IGNORED,
   origin,
   rect,
   row,
@@ -119,23 +127,28 @@ export const useSettling = ({
       if (was === undefined) {
         const from = takenOver(handoffs, taken);
         if (from !== undefined && !still) {
-          settler.play(
+          settle(
+            settler,
             shown,
+            now,
             offsetFrom(from, now.rect, now.origin),
-            uprightIn(shown),
+            onSettling,
           );
         }
       } else if (!sameBox(was.rect, now.rect)) {
-        settler.play(
+        settle(
+          settler,
           shown,
+          now,
           still ? undefined : offsetTo(shown, leftRow(was, now), now, settler),
-          uprightIn(shown),
+          onSettling,
         );
       }
     }
   }, [
     element,
     handoffs,
+    onSettling,
     height,
     originX,
     originY,
@@ -171,6 +184,27 @@ export const useSettling = ({
 };
 
 const NO_KEYS: readonly string[] = [];
+
+const IGNORED = () => undefined;
+
+/**
+ * Plays the element's settle from `offset` to its box `now`, or stops it for
+ * `undefined`, and tells `onSettling` the box it starts from.
+ */
+const settle = (
+  settler: Settler,
+  element: Element,
+  now: Placed,
+  offset: Offset | undefined,
+  onSettling: (from: Rect | undefined) => void,
+): void => {
+  onSettling(
+    offset === undefined ? undefined : drawnAt(now.rect, now.origin, offset),
+  );
+  settler.play(element, offset, uprightIn(element), () => {
+    onSettling(undefined);
+  });
+};
 
 /** The parts of `element` kept upright; see {@link UPRIGHT}. */
 const uprightIn = (element: Element): readonly Element[] => [
@@ -280,7 +314,7 @@ const WEB_ANIMATIONS: Settler = {
       ? NONE
       : partway(settle.from, progress);
   },
-  play: (element, offset, upright) => {
+  play: (element, offset, upright, onEnded) => {
     const was = settles.get(element);
     was?.animation.cancel();
     for (const part of was?.upright ?? []) {
@@ -302,6 +336,14 @@ const WEB_ANIMATIONS: Settler = {
         offset: at,
         scale: `${scaleX.toString()} ${scaleY.toString()}`,
       }));
+      animation.finished.then(
+        () => {
+          onEnded();
+        },
+        () => {
+          // Stopped: the next settle took over, and tells its own end.
+        },
+      );
       settles.set(element, {
         animation,
         from: offset,

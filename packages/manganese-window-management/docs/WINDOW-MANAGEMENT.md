@@ -350,9 +350,16 @@ Rules:
   `durations.fastest` under reduced motion.
 - The box clips what it holds, which keeps its own size about the box's top
   left corner (`UPRIGHT`): the `<app>`, or a browser window's address bar and
-  page. The client has drawn at its new size by the first frame, so scaling it
-  would stretch its pixels; the box crops it instead, as the engine does under
-  `resizing`.
+  page. Scaling it would stretch the client's pixels; the box crops it
+  instead.
+- While the box settles, the contents keep their old size on each side where
+  the box shrinks (`keptAt`), and take the new size when the settle ends. A
+  shrinking box is drawn bigger than the new size at first, so a client
+  already at that size would leave a gap between itself and the box's edge.
+- The `<app>` or `<webview>` carries `resizing` while its box settles. The
+  engine then shows the client's latest frame at its own size instead of
+  holding the page for the client to draw: a held page starts the ease
+  frames late, and the first frame shown is already well along it.
 - Every other part of a window eases the same way: title bars, tabs, strips,
   glows, shadows and the drop indicator. One mechanism on one timing, on the
   compositor's thread, keeps the parts together: each edge moves linearly in

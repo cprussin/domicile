@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { render, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { useRef } from "react";
 import { recordedSettles } from "./recorded-settles";
 import type { Rect } from "./rect";
@@ -26,15 +26,16 @@ const settling = (
   first: Props,
   current?: Offset,
   element = { current: document.createElement("div") },
+  onSettling?: (from: Rect | undefined) => void,
 ) => {
-  const { kept, played, settler } = recordedSettles(current);
+  const { ends, kept, played, settler } = recordedSettles(current);
   const { rerender } = renderHook(
     ({ origin, rect, still }: Props) => {
-      useSettling({ element, origin, rect, settler, still });
+      useSettling({ element, onSettling, origin, rect, settler, still });
     },
     { initialProps: first },
   );
-  return { kept, played, rerender };
+  return { ends, kept, played, rerender };
 };
 
 describe("useSettling", () => {
@@ -90,6 +91,27 @@ describe("useSettling", () => {
     rerender({ origin: CORNER, rect: NOW, still: false });
 
     expect(kept).toStrictEqual([[title]]);
+  });
+
+  // A window keeps its contents as big as the box drawn, and has the engine
+  // show their frames without waiting, until the settle ends.
+  it("says which box it eases from, until the settle ends", () => {
+    const told: (Rect | undefined)[] = [];
+    const { ends, rerender } = settling(
+      { origin: CORNER, rect: WAS, still: false },
+      undefined,
+      undefined,
+      (from) => {
+        told.push(from);
+      },
+    );
+
+    rerender({ origin: CORNER, rect: NOW, still: false });
+    act(() => {
+      ends[0]?.();
+    });
+
+    expect(told).toStrictEqual([WAS, undefined]);
   });
 
   // A box that follows the pointer would trail it.
