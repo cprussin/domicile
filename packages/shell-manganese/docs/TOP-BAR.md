@@ -31,6 +31,11 @@ package's default export path:
 | `Cast` | `@domicile-desktop/manganese-bar-module-cast` |
 | `Downloads` | `@domicile-desktop/manganese-bar-module-downloads` |
 
+Every item, yours included, eases its width and fades as it shows, hides or
+changes size, so its neighbors slide aside. An item hides by rendering
+nothing. The bar wraps each item in a `FluidItem`
+(`@domicile-desktop/component-library/FluidItem`) to do this.
+
 Items no default bar has:
 
 | Item | Package |
@@ -158,6 +163,7 @@ button, and their controls in one panel, each labeled in words.
   - the speaker, dimmed while muted;
   - the battery, as the battery item draws it.
 - An icon for hardware the machine lacks is left out, as each item hides.
+- Each icon eases in and out, and the button eases to fit them.
 - Scroll over the button to step the volume by 5%. Middle-click to mute or
   unmute it.
 - **The panel**, a `Drilldown` in a popover:

@@ -2,6 +2,7 @@ import { AnimatedGearIcon } from "@domicile-desktop/component-library/AnimatedGe
 import { Button } from "@domicile-desktop/component-library/Button";
 import type { DrilldownDetail } from "@domicile-desktop/component-library/Drilldown";
 import { Drilldown } from "@domicile-desktop/component-library/Drilldown";
+import { FluidItem } from "@domicile-desktop/component-library/FluidItem";
 import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
@@ -18,8 +19,11 @@ type WithDetails = ComponentType<{ onMore?: (() => void) | undefined }>;
 
 /** What quick settings is made of, injectable so tests can draw their own. */
 export type QuickSettingsParts = {
-  /** The icons in the button. */
-  Indicators: ComponentType;
+  /**
+   * The icons in the button, in order. Each hides by rendering nothing, and
+   * eases in and out.
+   */
+  Indicators: readonly ComponentType[];
   /** The button's wheel and middle click. */
   useGestures: () => {
     onAuxClick: (event: MouseEvent) => void;
@@ -74,7 +78,6 @@ export const QuickSettings = ({
       : () => {
           setDetails(shown);
         };
-  const { Indicators } = parts;
   return (
     <Popover
       align="end"
@@ -95,7 +98,12 @@ export const QuickSettings = ({
           type="button"
           {...parts.useGestures()}
         >
-          <Indicators />
+          {parts.Indicators.map((Indicator, index) => (
+            // The list is fixed, so its order is its identity.
+            <FluidItem gap="narrow" key={index}>
+              <Indicator />
+            </FluidItem>
+          ))}
         </button>
       }
       wide
@@ -169,7 +177,8 @@ const detailOf = (
   }
 };
 
-// The other bar items' hover circle, stretched around several icons.
+// The other bar items' hover circle, stretched around several icons. Each icon
+// holds half the gap on either side, so the padding is short by as much.
 const triggerStyles = hstack({
   _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   backgroundColor: "transparent",
@@ -179,8 +188,8 @@ const triggerStyles = hstack({
   color: "inherit",
   cursor: "pointer",
   flexShrink: 0,
-  gap: 1.5,
-  paddingInline: 1.5,
+  gap: 0,
+  paddingInline: 0.75,
   transition: "background-color {durations.fast} {easings.default}",
 });
 

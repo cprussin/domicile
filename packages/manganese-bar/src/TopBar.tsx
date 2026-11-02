@@ -1,3 +1,6 @@
+import type { Gap } from "@domicile-desktop/component-library/FluidItem";
+import { FluidItem } from "@domicile-desktop/component-library/FluidItem";
+import type { ReactNode } from "react";
 import { Children, memo } from "react";
 
 import { css } from "../styled-system/css";
@@ -27,13 +30,16 @@ export const TOP_BAR = 32;
  * The center column is centered on the screen regardless of the outer columns,
  * so the clock does not shift as items change.
  *
+ * Each item eases its width as what it shows comes, changes and goes, so the
+ * others slide aside rather than jump. An item hides by rendering nothing.
+ *
  * Memoized, so an item redraws only when the context it reads changes.
  */
 export const TopBar = memo(({ layout }: { layout: BarLayout }) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
-    <div className={startStyles}>{Children.toArray(layout.left)}</div>
-    <div className={centerStyles}>{Children.toArray(layout.center)}</div>
-    <div className={endStyles}>{Children.toArray(layout.right)}</div>
+    <div className={startStyles}>{fluid(layout.left, "wide")}</div>
+    <div className={centerStyles}>{fluid(layout.center, "none")}</div>
+    <div className={endStyles}>{fluid(layout.right, "wide")}</div>
   </header>
 ));
 
@@ -81,9 +87,15 @@ const barStyles = grid({
   textShadow: "textOverPhoto",
 });
 
-const startStyles = hstack({ gap: 4 });
+// Each item holds half the gap on either side, so the column pulls its ends
+// in by as much.
+const startStyles = hstack({ gap: 0, marginInline: -2 });
 
 const centerStyles = css({ justifySelf: "center" });
 
 // Most items are 28px buttons around a 15px icon, so icons sit 29px apart.
-const endStyles = hstack({ gap: 4, justify: "flex-end" });
+const endStyles = hstack({ gap: 0, justify: "flex-end", marginInline: -2 });
+
+/** `items`, each in a `FluidItem`, keeping their keys. */
+const fluid = (items: readonly ReactNode[], gap: Gap) =>
+  Children.map(items, (item) => <FluidItem gap={gap}>{item}</FluidItem>);

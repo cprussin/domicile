@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 
 import { css } from "../styled-system/css";
 import { TopBar } from "./TopBar";
@@ -27,12 +27,35 @@ describe("TopBar", () => {
 
   it("spaces the right column's items evenly, wider than the buttons' insets", () => {
     // Most items are 28px buttons around a 15px icon, so the space seen
-    // between icons is the gap plus two 6.5px insets.
-    const { container } = render(<TopBar layout={EMPTY} />);
+    // between icons is the gap plus two 6.5px insets. Each item carries half
+    // the gap on each side, so it closes with the item; the column pulls its
+    // ends in by as much.
+    const { container } = render(
+      <TopBar layout={{ ...EMPTY, right: [<span key="c">c</span>] }} />,
+    );
 
-    expect(
-      container.querySelector("header")?.lastElementChild?.className,
-    ).toContain(css({ gap: 4 }));
+    const column = container.querySelector("header")?.lastElementChild;
+    expect(column?.className).toContain(css({ marginInline: -2 }));
+    expect(column?.firstElementChild?.firstElementChild?.className).toContain(
+      css({ paddingInline: 2 }),
+    );
+  });
+
+  it("eases an item out when it stops showing anything", async () => {
+    const Sharing = ({ shown }: { shown: boolean }) =>
+      shown ? <button type="button">Sharing screen</button> : null;
+    const bar = (shown: boolean) => (
+      <TopBar
+        layout={{ ...EMPTY, right: [<Sharing key="s" shown={shown} />] }}
+      />
+    );
+    const { rerender } = render(bar(true));
+
+    rerender(bar(false));
+    await act(() => Promise.resolve());
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByRole("banner")).toHaveTextContent("Sharing screen");
   });
 
   it("draws its text white, with a shadow to keep it off the wallpaper", () => {

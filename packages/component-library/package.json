@@ -76,6 +76,7 @@
     "./EmptyState": "./src/EmptyState/EmptyState.tsx",
     "./Field": "./src/Field/Field.tsx",
     "./FilePicker": "./src/FilePicker/FilePicker.tsx",
+    "./FluidItem": "./src/FluidItem/FluidItem.tsx",
     "./file-request": "./src/FilePicker/file-request.ts",
     "./folders": "./src/FilePicker/folders.ts",
     "./font": "./src/fonts/font.ts",

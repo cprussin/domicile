@@ -3,8 +3,15 @@ import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
 import { QuickToggle } from "@domicile-desktop/component-library/QuickToggle";
 import { BarContext } from "@domicile-desktop/manganese-bar/bar-context";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 
 import type { QuickSettingsParts } from "./QuickSettings";
 import { QuickSettings } from "./QuickSettings";
@@ -29,6 +36,7 @@ const toggle = (label: string) => () => (
 /** Parts that draw their names, and count the wheel. */
 const testParts = () => {
   const wheeled: string[] = [];
+  const stopCharging = { now: () => undefined as unknown };
   const settings = { opened: 0 };
   const parts: QuickSettingsParts = {
     BatteryStatus: () => <span>Battery 78%</span>,
@@ -36,7 +44,16 @@ const testParts = () => {
     BluetoothTile: tile("Bluetooth"),
     BrightnessRow: () => <span>Brightness slider</span>,
     DarkModeTile: toggle("Dark mode"),
-    Indicators: () => <span aria-label="Volume 50%" role="img" />,
+    Indicators: [
+      () => <span aria-label="Volume 50%" role="img" />,
+      () => {
+        const [charging, setCharging] = useState(true);
+        stopCharging.now = () => {
+          setCharging(false);
+        };
+        return charging && <span aria-label="Charging" role="img" />;
+      },
+    ],
     KeepAwakeTile: toggle("Keep awake"),
     NetworkDetails: () => <p>Wi-Fi networks</p>,
     NetworkTile: tile("Wi-Fi"),
@@ -59,7 +76,7 @@ const testParts = () => {
       settings.opened += 1;
     },
   };
-  return { parts, settings, wheeled };
+  return { parts, settings, stopCharging, wheeled };
 };
 
 /** Records whether the panel holds the keyboard. */
@@ -77,7 +94,7 @@ const keyboard = () => {
 };
 
 const shown = (locked: boolean) => {
-  const { parts, settings, wheeled } = testParts();
+  const { parts, settings, stopCharging, wheeled } = testParts();
   const keys = keyboard();
   render(
     <PanelKeyboardContext value={keys.hold}>
@@ -86,7 +103,7 @@ const shown = (locked: boolean) => {
       </BarContext>
     </PanelKeyboardContext>,
   );
-  return { keys, settings, wheeled };
+  return { keys, settings, stopCharging, wheeled };
 };
 
 describe(QuickSettings, () => {
@@ -99,6 +116,23 @@ describe(QuickSettings, () => {
     fireEvent(button, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
 
     expect(wheeled).toEqual(["wheel", "middle"]);
+  });
+
+  it("eases an indicator out of the button when it has nothing to say", async () => {
+    const { stopCharging } = shown(false);
+    expect(screen.getByRole("img", { name: "Charging" })).toBeVisible();
+
+    act(() => {
+      stopCharging.now();
+    });
+    await act(() => Promise.resolve());
+
+    // Still drawn while it closes, but no longer there to anyone.
+    expect(
+      screen.queryByRole("img", { name: "Charging" }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector('[aria-label="Charging"]')).not.toBeNull();
+    expect(screen.getByRole("img", { name: "Volume 50%" })).toBeVisible();
   });
 
   it("opens every tile, the sliders and the battery, holding the keyboard", async () => {

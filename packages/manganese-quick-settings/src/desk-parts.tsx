@@ -36,17 +36,15 @@ export const DESK_PARTS: QuickSettingsParts = {
   BluetoothTile: BluetoothCard,
   BrightnessRow: BrightnessLevel,
   DarkModeTile,
-  Indicators: () => {
-    const { locked } = useBar();
-    return (
-      <>
-        {!locked && <NetworkIndicator />}
-        <BluetoothIndicator />
-        <SoundIndicator />
-        <BatteryIndicator />
-      </>
-    );
-  },
+  Indicators: [
+    () => {
+      const { locked } = useBar();
+      return !locked && <NetworkIndicator />;
+    },
+    BluetoothIndicator,
+    SoundIndicator,
+    BatteryIndicator,
+  ],
   KeepAwakeTile: KeepAwake,
   NetworkDetails,
   NetworkTile: NetworkCard,
