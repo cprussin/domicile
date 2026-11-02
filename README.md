@@ -4,7 +4,7 @@
 
 Arrange native apps and websites with React, JavaScript and CSS. Use packages from npm. Change your desktop without closing your windows.
 
-**[See it in action](https://www.domicile-desktop.com/) · [Install](https://www.domicile-desktop.com/docs/install) · [Build your desktop](https://www.domicile-desktop.com/docs/shells/quickstart) · [Community](https://matrix.to/#/%23domicile:prussin.net)**
+**[See it in action](https://www.domicile-desktop.com/) · [Install](https://www.domicile-desktop.com/docs/install) · [Build your desktop](https://www.domicile-desktop.com/docs/shells/quickstart) · [Community](https://matrix.to/#/%23domicile:domicile-desktop.com)**
 
 ## Your desktop is a web page
 

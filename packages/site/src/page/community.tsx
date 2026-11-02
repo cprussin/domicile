@@ -1,11 +1,12 @@
 import { css } from "../../styled-system/css";
+import { ALIAS } from "../matrix/room";
 import { REPO } from "./repo";
 
 /**
  * The Matrix room, through matrix.to, which opens it in whatever Matrix
  * client the visitor uses, or offers one.
  */
-export const MATRIX = "https://matrix.to/#/#domicile:prussin.net";
+export const MATRIX = `https://matrix.to/#/${ALIAS}`;
 
 // Paths from Simple Icons (https://simpleicons.org), CC0.
 const PATHS = {

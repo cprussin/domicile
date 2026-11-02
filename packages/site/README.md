@@ -19,6 +19,9 @@ bun run build:next
   `media.domicile-desktop.com` under each file's hash (`src/media/mediaUrl.ts`),
   so deployments don't carry them. A slot whose capture does not exist yet says
   what it will show. See [docs/media/README.md](/docs/media/README.md).
+- **Matrix alias:** the site answers federation's lookup for
+  `#domicile:domicile-desktop.com` (`src/matrix/`), so the alias needs no
+  homeserver. The room lives on prussin.net.
 - **Docs pages** render the repository's markdown at build time
   (`src/docs/`). `src/docs/pages.ts` lists which files the site renders,
   under which routes and sidebar sections. A link to one of them goes to its
