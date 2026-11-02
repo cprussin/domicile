@@ -21,6 +21,7 @@ import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
+import { nothingOpens } from "@domicile-desktop/system-apps/opens";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BinaryIcon } from "@phosphor-icons/react/dist/ssr/Binary";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
@@ -34,6 +35,7 @@ import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
 import type { ReactNode, RefObject } from "react";
 import {
@@ -110,6 +112,11 @@ type Props = {
   onLaunch: (launch: Launch) => void;
   open: boolean;
   /**
+   * Whether an app opens the file at `path`, relative to home, asked before
+   * opening one, so the launcher can say when none does instead.
+   */
+  opens: (path: string) => Promise<boolean>;
+  /**
    * Results for the empty query, fetched before opening so they render with
    * the panel. See `useOpeningApps`.
    */
@@ -153,6 +160,7 @@ export const Launcher = memo(
     onLaunch,
     open,
     opening,
+    opens,
     preview,
     screen,
     search,
@@ -193,6 +201,7 @@ export const Launcher = memo(
         glances={glances}
         onLaunch={onLaunch}
         opening={opening}
+        opens={opens}
         preview={preview}
         search={search}
         searchApps={searchApps}
@@ -205,6 +214,7 @@ type QueryProps = {
   fromPrivate: boolean;
   glances: ReadonlyMap<string, AppGlance>;
   onLaunch: (launch: Launch) => void;
+  opens: (path: string) => Promise<boolean>;
   opening: FoundApps;
   preview: Preview;
   search: Search;
@@ -222,6 +232,7 @@ const Query = ({
   glances,
   onLaunch,
   opening,
+  opens,
   preview,
   search,
   searchApps,
@@ -258,12 +269,30 @@ const Query = ({
     setLearned(learnedIcons());
   }, []);
 
+  // The file the user tried to open that no app opens, which its row says.
+  const [unopenable, setUnopenable] = useState<string | undefined>(undefined);
+
   // A tag fills in the box; any other row launches, asking what to open a
-  // file with if `openWith`.
+  // file with if `openWith`. A file no app opens stays, saying so.
   const choose = (choice: Choice, openWith: boolean) => {
     if (choice.kind === ChoiceKind.Tag) {
       setQuery(choice.line);
       setStepped(0);
+    } else if (choice.kind === ChoiceKind.File && !openWith) {
+      const { path } = choice.row;
+      opens(path).then(
+        (opened) => {
+          if (opened) {
+            onLaunch(launchOf(choice));
+          } else {
+            setUnopenable(path);
+          }
+        },
+        (error: unknown) => {
+          // biome-ignore lint/suspicious/noConsole: surfacing a background failure
+          console.error(`Failed to tell what opens ${path}`, error);
+        },
+      );
     } else {
       onLaunch(openWith ? openWithOf(choice) : launchOf(choice));
     }
@@ -348,7 +377,12 @@ const Query = ({
             onHighlight={setStepped}
           >
             {(choice) => (
-              <ChoiceRow choice={choice} learned={learned} query={query} />
+              <ChoiceRow
+                choice={choice}
+                learned={learned}
+                query={query}
+                unopenable={unopenable}
+              />
             )}
           </ResultList>
           {/*
@@ -431,10 +465,13 @@ const ChoiceRow = ({
   choice,
   learned,
   query,
+  unopenable,
 }: {
   choice: Choice;
   learned: LearnedIcons;
   query: string;
+  /** The file no app opens, if the user tried one. */
+  unopenable: string | undefined;
 }) => {
   switch (choice.kind) {
     case ChoiceKind.App: {
@@ -464,7 +501,13 @@ const ChoiceRow = ({
       );
     }
     case ChoiceKind.File: {
-      return <FileChoice query={query} row={choice.row} />;
+      return (
+        <FileChoice
+          query={query}
+          row={choice.row}
+          unopenable={unopenable === choice.row.path}
+        />
+      );
     }
     case ChoiceKind.Site: {
       return (
@@ -538,7 +581,16 @@ const InPrivate = ({ isPrivate }: { isPrivate: boolean }) =>
   );
 
 /** A path's row: the directory it is in, over its name. */
-const FileChoice = ({ query, row }: { query: string; row: FileRow }) => (
+const FileChoice = ({
+  query,
+  row,
+  unopenable,
+}: {
+  query: string;
+  row: FileRow;
+  /** No app opens it, which the row says under its name. */
+  unopenable: boolean;
+}) => (
   <>
     <RowTile icon={row.isDirectory ? FolderIcon : FileIcon} />
     <span className={rowTextStyles}>
@@ -550,6 +602,12 @@ const FileChoice = ({ query, row }: { query: string; row: FileRow }) => (
       <span className={rowNameStyles}>
         <Marked query={query} text={row.name} />
       </span>
+      {unopenable && (
+        <span className={rowWarningStyles}>
+          <WarningCircleIcon aria-hidden size={12} />
+          {nothingOpens(row.name)}
+        </span>
+      )}
     </span>
   </>
 );
@@ -1200,6 +1258,15 @@ const rowDirectoryStyles = css({
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+});
+
+// Under the name, in the warning color, as a panel's warning note.
+const rowWarningStyles = css({
+  alignItems: "center",
+  color: "warning",
+  display: "inline-flex",
+  fontSize: "xs",
+  gap: 1,
 });
 
 // Tabular figures, so the count doesn't shift as it changes.

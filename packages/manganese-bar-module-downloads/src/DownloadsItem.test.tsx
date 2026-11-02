@@ -1,10 +1,11 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, jest } from "bun:test";
 import type { Download } from "@domicile-desktop/sdk/desktop/downloads";
 import { DownloadState } from "@domicile-desktop/sdk/desktop/downloads";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { DownloadsItem } from "./DownloadsItem";
+import { DownloadsItem, OpenResult } from "./DownloadsItem";
+import { DONE_MS, FULL_MS } from "./useFinish";
 
 const download = (fields: Partial<Download> & { id: string }): Download => ({
   page: "https://mail.google.com/mail/u/0/",
@@ -29,27 +30,44 @@ const BROKEN = download({ id: "broken.iso", state: DownloadState.Failed });
 type Calls = {
   onCancel: (id: string) => void;
   onClear: () => void;
-  onOpen: (path: string) => void;
+  onOpen: (path: string) => Promise<OpenResult>;
   onRemove: (id: string) => void;
   onShowInFolder: (path: string) => void;
 };
 
 const IGNORE = () => undefined;
 
+const OPENED = () => Promise.resolve(OpenResult.Opened);
+
+const itemOf = (
+  downloads: readonly Download[] | undefined,
+  calls: Partial<Calls>,
+  popsUp: boolean,
+) => (
+  <DownloadsItem
+    downloads={downloads}
+    onCancel={calls.onCancel ?? IGNORE}
+    onClear={calls.onClear ?? IGNORE}
+    onOpen={calls.onOpen ?? OPENED}
+    onRemove={calls.onRemove ?? IGNORE}
+    onShowInFolder={calls.onShowInFolder ?? IGNORE}
+    popsUp={popsUp}
+  />
+);
+
 const item = (
   downloads: readonly Download[] | undefined,
   calls: Partial<Calls> = {},
-) =>
-  render(
-    <DownloadsItem
-      downloads={downloads}
-      onCancel={calls.onCancel ?? IGNORE}
-      onClear={calls.onClear ?? IGNORE}
-      onOpen={calls.onOpen ?? IGNORE}
-      onRemove={calls.onRemove ?? IGNORE}
-      onShowInFolder={calls.onShowInFolder ?? IGNORE}
-    />,
-  );
+  popsUp = false,
+) => {
+  const rendered = render(itemOf(downloads, calls, popsUp));
+  return {
+    /** The desk's downloads are now `next`. */
+    now: (next: readonly Download[] | undefined) => {
+      rendered.rerender(itemOf(next, calls, popsUp));
+    },
+  };
+};
 
 const open = async (name = "Downloads") => {
   await userEvent.click(screen.getByRole("button", { name }));
@@ -137,7 +155,12 @@ describe("DownloadsItem", () => {
 
     it("opens a finished file", async () => {
       const opened = new Promise((resolve) => {
-        item([INVOICE], { onOpen: resolve });
+        item([INVOICE], {
+          onOpen: (path) => {
+            resolve(path);
+            return Promise.resolve(OpenResult.Opened);
+          },
+        });
       });
       await open();
       await userEvent.click(
@@ -188,6 +211,102 @@ describe("DownloadsItem", () => {
       expect(
         screen.queryByRole("button", { name: "Clear all" }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("opening by itself", () => {
+    it("opens when a download starts, on the screen it pops up on", async () => {
+      const { now } = item([INVOICE], {}, true);
+      now([INVOICE, PHOTOS]);
+
+      expect(
+        await screen.findByRole("heading", { name: "Downloads" }),
+      ).toBeInTheDocument();
+      expect(row("photos.zip").getByText("4.2 of 18 MB")).toBeInTheDocument();
+    });
+
+    it("stays shut on another screen", () => {
+      const { now } = item([INVOICE], {}, false);
+      now([INVOICE, PHOTOS]);
+
+      expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+    });
+
+    it("stays shut for the downloads already there", () => {
+      const { now } = item(undefined, {}, true);
+      now([PHOTOS]);
+
+      expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+    });
+
+    it("stays shut when a download only finishes", () => {
+      const { now } = item([PHOTOS], {}, true);
+      now([
+        { ...PHOTOS, receivedBytes: 18_000_000, state: DownloadState.Complete },
+      ]);
+
+      expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+    });
+  });
+
+  describe("rows leaving", () => {
+    it("keeps a removed row while it slides out", async () => {
+      const { now } = item([INVOICE, BROKEN]);
+      await open();
+      now([INVOICE]);
+
+      expect(document.querySelector("li[data-leaving]")).toHaveTextContent(
+        "broken.iso",
+      );
+    });
+  });
+
+  describe("a file nothing opens", () => {
+    it("says no app can open it", async () => {
+      item([INVOICE], { onOpen: () => Promise.resolve(OpenResult.NoApp) });
+      await open();
+      await userEvent.click(
+        row("invoice.pdf").getByRole("button", { name: "Open" }),
+      );
+
+      expect(
+        await screen.findByText("No app on this computer can open .pdf files."),
+      ).toBeVisible();
+    });
+
+    it("says so of a file with no extension", async () => {
+      const notes = download({ id: "NOTES" });
+      item([notes], { onOpen: () => Promise.resolve(OpenResult.NoApp) });
+      await open();
+      await userEvent.click(row("NOTES").getByRole("button", { name: "Open" }));
+
+      expect(
+        await screen.findByText("No app on this computer can open this file."),
+      ).toBeVisible();
+    });
+  });
+
+  describe("finishing", () => {
+    it("fills, says done, then rests", () => {
+      jest.useFakeTimers();
+      const { now } = item([PHOTOS]);
+      now([
+        { ...PHOTOS, receivedBytes: 18_000_000, state: DownloadState.Complete },
+      ]);
+      expect(screen.getByRole("button")).toHaveTextContent("100%");
+
+      act(() => {
+        jest.advanceTimersByTime(FULL_MS);
+      });
+      expect(
+        screen.getByRole("button", { name: "Downloads finished" }),
+      ).toHaveTextContent("Done");
+
+      act(() => {
+        jest.advanceTimersByTime(DONE_MS);
+      });
+      expect(screen.getByRole("button", { name: "Downloads" })).toBeVisible();
+      jest.useRealTimers();
     });
   });
 });

@@ -131,6 +131,10 @@ const holding = (path: string): FilePreview => {
   }
 };
 
+/** Whether an app opens `path`: every file but a `.kra` one. */
+const opensFile = (path: string): Promise<boolean> =>
+  Promise.resolve(!path.endsWith(".kra"));
+
 /**
  * Render the open panel over those files, recording launches.
  *
@@ -162,6 +166,7 @@ const launcher = (
       }}
       open
       opening={{ apps, bookmarks }}
+      opens={opensFile}
       preview={previewing}
       screen={SCREEN}
       search={searching(files, indexing)}
@@ -212,6 +217,7 @@ describe("Launcher", () => {
         onLaunch={() => undefined}
         open={false}
         opening={{ apps: [], bookmarks: [] }}
+        opens={opensFile}
         preview={previewing}
         screen={SCREEN}
         search={searching(FILES, false)}
@@ -229,6 +235,7 @@ describe("Launcher", () => {
       onDismiss: () => undefined,
       onLaunch: () => undefined,
       opening: { apps: [], bookmarks: [] },
+      opens: opensFile,
       preview: previewing,
       screen: SCREEN,
       search: searching(FILES, false),
@@ -258,6 +265,7 @@ describe("Launcher", () => {
       onDismiss: () => undefined,
       onLaunch: () => undefined,
       opening: { apps: [], bookmarks: [] },
+      opens: opensFile,
       preview: previewing,
       screen: SCREEN,
       search: searching(FILES, false),
@@ -392,6 +400,7 @@ describe("Launcher", () => {
         onLaunch={() => undefined}
         open
         opening={{ apps: [EDITOR], bookmarks: [MAIL] }}
+        opens={opensFile}
         preview={previewing}
         screen={SCREEN}
         search={() => new Promise(() => undefined)}
@@ -774,6 +783,31 @@ describe("Launcher", () => {
     await panel.rows();
 
     expect(fireEvent.keyDown(panel.box(), { key: "Enter" })).toBe(false);
+  });
+
+  it("says when no app opens the file, and launches nothing", async () => {
+    using panel = launcher([...FILES, "Art/drawing.kra"]);
+
+    await panel.user.type(panel.box(), "drawing");
+    await panel.rows();
+    await panel.user.keyboard("{Enter}");
+
+    expect(
+      await screen.findByText("No app on this computer can open .kra files."),
+    ).toBeVisible();
+    expect(panel.launched).toStrictEqual([]);
+  });
+
+  it("still asks what to open a file no app opens with, on Shift+Enter", async () => {
+    using panel = launcher([...FILES, "Art/drawing.kra"]);
+
+    await panel.user.type(panel.box(), "drawing");
+    await panel.rows();
+    await panel.user.keyboard("{Shift>}{Enter}{/Shift}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.OpenedWith("Art/drawing.kra"),
+    ]);
   });
 
   it("asks what to open the row with on Shift+Enter", async () => {

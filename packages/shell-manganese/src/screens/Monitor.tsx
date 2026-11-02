@@ -9,6 +9,8 @@ type Props = {
   bar: BarLayout;
   /** Which monitor this is. */
   name: string;
+  /** Whether it has the keyboard, so its bar's panels may open by themselves. */
+  focused: boolean;
 };
 
 /**
@@ -19,8 +21,11 @@ type Props = {
  *
  * Memoized, so a change no bar shows redraws none of them.
  */
-export const Monitor = memo(({ bar, name }: Props) => {
-  const onBar = useMemo(() => ({ locked: false, screen: name }), [name]);
+export const Monitor = memo(({ bar, focused, name }: Props) => {
+  const onBar = useMemo(
+    () => ({ locked: false, popsUp: focused, screen: name }),
+    [focused, name],
+  );
   return (
     <Screen name={name}>
       <BarContext value={onBar}>

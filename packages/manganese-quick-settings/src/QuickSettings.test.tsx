@@ -81,7 +81,7 @@ const shown = (locked: boolean) => {
   const keys = keyboard();
   render(
     <PanelKeyboardContext value={keys.hold}>
-      <BarContext value={{ locked, screen: "eDP-1" }}>
+      <BarContext value={{ locked, popsUp: false, screen: "eDP-1" }}>
         <QuickSettings parts={parts} />
       </BarContext>
     </PanelKeyboardContext>,

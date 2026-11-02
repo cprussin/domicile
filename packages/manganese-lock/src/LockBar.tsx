@@ -11,7 +11,7 @@ type Props = {
 
 /** The lock screen's bar on monitor `screen`. See docs/LOCK.md. */
 export const LockBar = ({ layout, screen }: Props) => (
-  <BarContext value={{ locked: true, screen }}>
+  <BarContext value={{ locked: true, popsUp: false, screen }}>
     <TopBar layout={layout} />
   </BarContext>
 );

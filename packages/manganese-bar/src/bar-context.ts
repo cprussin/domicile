@@ -7,6 +7,12 @@ import { createContext } from "react";
 export type Bar = {
   /** Whether the desktop is locked, so items offer only what it allows. */
   locked: boolean;
+  /**
+   * Whether an item may open its panel by itself, such as when a download
+   * starts: on the screen with the keyboard, so it opens once, and never on
+   * the lock screen.
+   */
+  popsUp: boolean;
   /** The monitor this bar is on, where its panels open. */
   screen: string;
 };

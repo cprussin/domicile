@@ -17,7 +17,7 @@ export const Shell = runManganese({
 });
 ```
 
-It takes no props. It reads `useDomicile()`. See
+It takes no props. It reads `useDomicile()` and `useBar()`. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md) and "Downloads" in
 [SHELL-BROWSER-WINDOWS.md](../../docs/SHELL-BROWSER-WINDOWS.md).
 

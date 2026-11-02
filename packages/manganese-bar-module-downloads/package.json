@@ -1,8 +1,10 @@
 {
   "dependencies": {
     "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-bar": "workspace:*",
     "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
+    "@domicile-desktop/system-apps": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@phosphor-icons/react": "catalog:",
     "react": "catalog:"

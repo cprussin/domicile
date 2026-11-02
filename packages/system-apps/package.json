@@ -31,7 +31,8 @@
     "./installed": "./src/installed.ts",
     "./mime-apps": "./src/mime-apps.ts",
     "./omit": "./src/omit.ts",
-    "./openers": "./src/openers.ts"
+    "./openers": "./src/openers.ts",
+    "./opens": "./src/opens.ts"
   },
   "files": [
     "src/**",

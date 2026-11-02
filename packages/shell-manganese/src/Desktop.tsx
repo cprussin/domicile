@@ -91,6 +91,7 @@ import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import { DEFAULT_NOTIFICATION_ACTION } from "@domicile-desktop/sdk/notification";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
+import { opens } from "@domicile-desktop/system-apps/opens";
 import { deskSound } from "@domicile-desktop/system-audio/react";
 import {
   deskBacklight,
@@ -203,6 +204,14 @@ export const Desktop = ({
   // The launcher's pick, held until it has closed and the screen shows it
   // gone, so nothing it opens sees it. A screenshot app would shoot it.
   const [picked, setPicked] = useState<Launch | undefined>();
+  // Whether an app opens a file, asked before the launcher opens one.
+  const opensFile = useCallback(
+    async (path: string) =>
+      (await opens(domicile, path)).unwrapOrElse((error) => {
+        throw new Error(`Cannot tell what opens ${path}`, { cause: error });
+      }),
+    [domicile],
+  );
   // File previews, read through the desktop's files.
   const preview = useCallback(
     (path: string) => previewFile(domicile, path),
@@ -592,7 +601,12 @@ export const Desktop = ({
         workspace.
       */}
       {screens.map(({ geometry: { name } }) => (
-        <Monitor bar={bar} key={name} name={name} />
+        <Monitor
+          bar={bar}
+          focused={name === windows.focused}
+          key={name}
+          name={name}
+        />
       ))}
       {/*
         Every window, once for the desk and after every bar, so a window wins a
@@ -634,6 +648,7 @@ export const Desktop = ({
         onLaunch={launched}
         open={windows.launcherOpen}
         opening={opening}
+        opens={opensFile}
         preview={preview}
         screen={windows.focused}
         search={search}

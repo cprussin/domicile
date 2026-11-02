@@ -1,12 +1,17 @@
+import { AnimatedCheckIcon } from "@domicile-desktop/component-library/AnimatedCheckIcon";
 import { AnimatedCloseIcon } from "@domicile-desktop/component-library/AnimatedCloseIcon";
 import { AnimatedDownloadIcon } from "@domicile-desktop/component-library/AnimatedDownloadIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
+import type { Row } from "@domicile-desktop/component-library/leaving-rows";
 import { Panel, PanelAction } from "@domicile-desktop/component-library/Panel";
+import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { useLeavingRows } from "@domicile-desktop/component-library/useLeavingRows";
 import type { Download } from "@domicile-desktop/sdk/desktop/downloads";
 import { DownloadState } from "@domicile-desktop/sdk/desktop/downloads";
+import { nothingOpens } from "@domicile-desktop/system-apps/opens";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
@@ -18,11 +23,20 @@ import { FileZipIcon } from "@phosphor-icons/react/dist/ssr/FileZip";
 import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import type { CSSProperties } from "react";
+import { useMemo, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { downloadProgress, timeLeft } from "./download-progress";
 import { FileKind, fileKind } from "./file-kind";
+import { ItemPhase, useFinish } from "./useFinish";
 import { useSecondsLeft } from "./useSecondsLeft";
+
+/** What opening a file came to. */
+export enum OpenResult {
+  Opened,
+  /** No installed app opens files of its kind, so nothing ran. */
+  NoApp,
+}
 
 type Props = {
   /**
@@ -34,31 +48,70 @@ type Props = {
   onCancel: (id: string) => void;
   /** Forgets every download not in progress. */
   onClear: () => void;
-  /** Opens the file at `path`. */
-  onOpen: (path: string) => void;
+  /** Opens the file at `path`, unless no app opens it. */
+  onOpen: (path: string) => Promise<OpenResult>;
   /** Forgets the download `id`. */
   onRemove: (id: string) => void;
   /** Opens the folder the file at `path` is in. */
   onShowInFolder: (path: string) => void;
+  /** Whether its panel opens by itself as a download starts. See `Bar`. */
+  popsUp: boolean;
 };
+
+type Actions = Omit<Props, "downloads" | "popsUp">;
 
 /**
  * The Downloads item on the bar, shown while the desk has downloads from any
- * window. It says how far the ones in progress have come, and its panel lists
- * every download, newest first, with what to do with each.
+ * window. It says how far the ones in progress have come, then, as the last
+ * finishes, that it is done. Its panel lists every download, newest first,
+ * with what to do with each.
+ *
+ * Its panel opens by itself as a download starts, as Chromium's download
+ * bubble does, without taking the keyboard, and stays until dismissed. A row
+ * removed while it shows slides out, as a cleared notification does.
  */
-export const DownloadsItem = ({ downloads, ...actions }: Props) => {
-  if (downloads === undefined || downloads.length === 0) {
+export const DownloadsItem = ({ downloads, popsUp, ...actions }: Props) => {
+  const [open, setOpen] = useState(false);
+  const [known, setKnown] = useState<ReadonlySet<string> | undefined>(
+    undefined,
+  );
+  // Worked out while rendering, so the panel opens with the new row.
+  if (downloads !== undefined) {
+    const fresh = downloads.filter(({ id }) => known?.has(id) !== true);
+    if (known === undefined || fresh.length > 0) {
+      setKnown(new Set(downloads.map(({ id }) => id)));
+      if (
+        known !== undefined &&
+        popsUp &&
+        fresh.some(({ state }) => state === DownloadState.InProgress)
+      ) {
+        setOpen(true);
+      }
+    }
+  }
+  const newestFirst = useMemo(
+    () => downloads?.toReversed() ?? NONE,
+    [downloads],
+  );
+  const { onLeft, rows } = useLeavingRows(newestFirst, idOf, open);
+  const phase = useFinish(downloads);
+  if (rows.length === 0) {
+    if (open) {
+      setOpen(false);
+    }
     return undefined;
   }
-  const running = downloads.filter(
+  const running = newestFirst.filter(
     ({ state }) => state === DownloadState.InProgress,
   );
-  const percent = percentOf(running);
-  const label = labelOf(running.length, percent);
+  const percent = phase === ItemPhase.Full ? 100 : percentOf(running);
+  const label = labelOf(phase, running.length, percent);
   return (
     <Popover
       align="center"
+      onOpenChange={setOpen}
+      open={open}
+      quiet
       side="bottom"
       tone="overPhoto"
       tooltip={label}
@@ -67,31 +120,116 @@ export const DownloadsItem = ({ downloads, ...actions }: Props) => {
           aria-label={label}
           className={triggerStyles}
           data-size-unknown={
-            running.length > 0 && percent === undefined ? "" : undefined
+            phase === ItemPhase.Running && percent === undefined
+              ? ""
+              : undefined
           }
           type="button"
         >
-          <AnimatedDownloadIcon cue={downloads.length} size={15} />
-          {percent === undefined ? undefined : `${percent}%`}
+          <span aria-hidden className={stackStyles}>
+            <span
+              className={iconStyles}
+              data-shown={phase === ItemPhase.Done ? undefined : ""}
+            >
+              <AnimatedDownloadIcon cue={downloads?.length} size={15} />
+            </span>
+            <span
+              className={checkStyles}
+              data-shown={phase === ItemPhase.Done ? "" : undefined}
+            >
+              {phase === ItemPhase.Done && <AnimatedCheckIcon size={15} />}
+            </span>
+          </span>
+          <Status percent={percent} phase={phase} />
         </button>
       }
       wide
     >
-      <DownloadsPanel downloads={downloads} {...actions} />
+      <DownloadsPanel
+        downloads={downloads ?? NONE}
+        onLeft={onLeft}
+        rows={rows}
+        {...actions}
+      />
     </Popover>
   );
 };
 
-/** Every download, newest first. */
+const NONE: readonly Download[] = [];
+
+const idOf = ({ id }: Download): string => id;
+
+/**
+ * The words beside the icon: the percent, then "Done". It opens and closes
+ * its width rather than jumping, and keeps the last percent while it closes,
+ * so nothing blinks.
+ */
+const Status = ({
+  percent,
+  phase,
+}: {
+  percent: number | undefined;
+  phase: ItemPhase;
+}) => {
+  const [shown, setShown] = useState(percent);
+  if (percent !== undefined && percent !== shown) {
+    setShown(percent);
+  }
+  const done = phase === ItemPhase.Done;
+  const open =
+    done ||
+    ((phase === ItemPhase.Running || phase === ItemPhase.Full) &&
+      percent !== undefined);
+  return (
+    <span
+      aria-hidden
+      className={statusStyles}
+      data-open={open ? "" : undefined}
+    >
+      <span className={statusTextStyles}>
+        <span className={wordStyles} data-shown={done ? undefined : ""}>
+          {shown === undefined ? undefined : `${shown}%`}
+        </span>
+        <span className={doneStyles} data-shown={done ? "" : undefined}>
+          Done
+        </span>
+      </span>
+    </span>
+  );
+};
+
+/** Every download, newest first, removed ones sliding out. */
 const DownloadsPanel = ({
   downloads,
   onCancel,
   onClear,
+  onLeft,
   onOpen,
   onRemove,
   onShowInFolder,
-}: Omit<Props, "downloads"> & { downloads: readonly Download[] }) => {
+  rows,
+}: Actions & {
+  downloads: readonly Download[];
+  onLeft: (id: string) => void;
+  rows: readonly Row<Download>[];
+}) => {
   const secondsLeft = useSecondsLeft(downloads);
+  // The downloads whose file no app opens, since the user tried.
+  const [unopenable, setUnopenable] = useState<ReadonlySet<string>>(new Set());
+  const open = (download: Download) => {
+    setUnopenable((was) => without(was, download.id));
+    onOpen(download.path).then(
+      (result) => {
+        if (result === OpenResult.NoApp) {
+          setUnopenable((was) => new Set([...was, download.id]));
+        }
+      },
+      (error: unknown) => {
+        // biome-ignore lint/suspicious/noConsole: surfacing a background failure
+        console.error(`Failed to open ${download.path}`, error);
+      },
+    );
+  };
   return (
     <Panel title="Downloads" width="standard">
       {downloads.some(({ state }) => state !== DownloadState.InProgress) && (
@@ -108,7 +246,7 @@ const DownloadsPanel = ({
         </PanelAction>
       )}
       <List>
-        {downloads.toReversed().map((download) => {
+        {rows.map(({ arriving, item: download, leaving }) => {
           const name = fileName(download.path);
           return (
             <ListRow
@@ -130,7 +268,7 @@ const DownloadsPanel = ({
                         <IconButton
                           label="Open"
                           onClick={() => {
-                            onOpen(download.path);
+                            open(download);
                           }}
                         >
                           <ArrowSquareOutIcon aria-hidden size={14} />
@@ -166,10 +304,20 @@ const DownloadsPanel = ({
               }
               key={download.id}
               label={name}
+              motion={{
+                arriving,
+                leaving,
+                onLeft: () => {
+                  onLeft(download.id);
+                },
+              }}
               surface="filled"
             >
               {download.state === DownloadState.InProgress && (
                 <ProgressBar download={download} name={name} />
+              )}
+              {unopenable.has(download.id) && (
+                <PanelNote tone="warning">{nothingOpens(name)}</PanelNote>
               )}
             </ListRow>
           );
@@ -178,6 +326,10 @@ const DownloadsPanel = ({
     </Panel>
   );
 };
+
+/** `set` without `key`. */
+const without = <T,>(set: ReadonlySet<T>, key: T): ReadonlySet<T> =>
+  set.has(key) ? new Set([...set].filter((kept) => kept !== key)) : set;
 
 /** How far `download` has come, pulsing while its size is unknown. */
 const ProgressBar = ({
@@ -222,8 +374,14 @@ const percentOf = (running: readonly Download[]): number | undefined => {
 };
 
 /** The item's name and tooltip. */
-const labelOf = (running: number, percent: number | undefined): string => {
-  if (running === 0) {
+const labelOf = (
+  phase: ItemPhase,
+  running: number,
+  percent: number | undefined,
+): string => {
+  if (phase === ItemPhase.Full || phase === ItemPhase.Done) {
+    return "Downloads finished";
+  } else if (running === 0) {
     return "Downloads";
   }
   const files = `Downloading ${running} ${running === 1 ? "file" : "files"}`;
@@ -303,7 +461,7 @@ const filledTo = (
 // percent. Fixed-width digits so the bar does not shift as it climbs.
 const triggerStyles = css({
   _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-  "&[data-size-unknown] svg": {
+  "&[data-size-unknown] [data-shown] svg": {
     animation: "pulse {durations.pulse} {easings.in-out} infinite",
   },
   alignItems: "center",
@@ -317,12 +475,79 @@ const triggerStyles = css({
   flexShrink: 0,
   fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
-  gap: 1,
   justifyContent: "center",
   minInlineSize: 7,
   paddingBlock: 0,
   paddingInline: 1.5,
   transition: "background-color {durations.fast} {easings.default}",
+});
+
+// The download arrow and the check, one over the other, so one gives way to
+// the other in place.
+const stackStyles = css({
+  "& > *": { gridArea: "1 / 1" },
+  display: "grid",
+  placeItems: "center",
+});
+
+// The arrow sinks away as the check comes, and drops back in after.
+const iconStyles = css({
+  "&:not([data-shown])": {
+    opacity: 0,
+    transform: "translateY({spacing.1})",
+  },
+  display: "inline-flex",
+  opacity: 1,
+  transform: "translateY(0)",
+  transition:
+    "opacity {durations.normal} {easings.default}, transform {durations.normal} {easings.out}",
+});
+
+const checkStyles = css({
+  "&:not([data-shown])": { opacity: 0 },
+  color: "success",
+  display: "inline-flex",
+  opacity: 1,
+  transition: "opacity {durations.normal} {easings.default}",
+});
+
+// Opens to the words' width and closes to nothing: a one-column grid whose
+// column grows, since a width of `auto` cannot be animated.
+const statusStyles = css({
+  "&[data-open]": { gridTemplateColumns: "1fr" },
+  display: "grid",
+  gridTemplateColumns: "0fr",
+  transition: "grid-template-columns {durations.normal} {easings.in-out}",
+});
+
+// The percent and "Done", one over the other, so they cross-fade. The gap
+// from the icon is inside, so it closes with them.
+const statusTextStyles = css({
+  "& > *": { gridArea: "1 / 1" },
+  display: "grid",
+  minInlineSize: 0,
+  overflow: "hidden",
+  paddingInlineStart: 1,
+  whiteSpace: "nowrap",
+});
+
+const wordStyles = css({
+  "&:not([data-shown])": { opacity: 0 },
+  opacity: 1,
+  transition: "opacity {durations.normal} {easings.default}",
+});
+
+const doneStyles = css({
+  "&:not([data-shown])": {
+    opacity: 0,
+    transform: "translateX(calc(-1 * {spacing.1}))",
+  },
+  color: "success",
+  fontWeight: "semibold",
+  opacity: 1,
+  transform: "translateX(0)",
+  transition:
+    "opacity {durations.normal} {easings.default}, transform {durations.normal} {easings.out}",
 });
 
 // A thin track filled as far as the download has come. Grows from the left:

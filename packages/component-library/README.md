@@ -36,6 +36,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Input` | Text input with prefix icon, clear button and invalid state. |
 | `Kbd` | Keyboard key cap. |
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
+| `LeavingRow` | List item that slides in as it arrives and out as it leaves, then closes its height. `useLeavingRows` keeps removed items until they have left; `ListRow`'s `motion` uses it. |
 | `ListRow` | Row of a panel's `List`: icon, label over a detail, and something at the end. One button, or a `filled` tile holding its own buttons. `disclosure` folds what goes under it behind a toggle. |
 | `Loading` | What a panel waits for: a spinner over its words, what it searches for with rings spreading from it, or a spinner alone at a row's end. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |

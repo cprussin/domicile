@@ -4099,6 +4099,9 @@ describe("the launcher", () => {
     await homeHolds("Notes/today.org");
 
     await userEvent.setup().click(screen.getByRole("option"));
+    // First asks `domicile open --which`, then opens it once the panel has
+    // gone.
+    await act(() => answerOpening(domicile.fake));
     await launched();
     await act(() => answerOpening(domicile.fake));
 

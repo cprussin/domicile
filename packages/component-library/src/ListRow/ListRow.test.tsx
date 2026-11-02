@@ -106,4 +106,42 @@ describe(ListRow, () => {
       );
     });
   });
+
+  describe("motion", () => {
+    it("is still its list's item, with its label, when it can move", () => {
+      render(
+        <List>
+          <ListRow
+            label="invoice.pdf"
+            motion={{
+              arriving: true,
+              leaving: undefined,
+              onLeft: () => undefined,
+            }}
+            surface="filled"
+          />
+        </List>,
+      );
+      const row = screen.getByRole("listitem");
+      expect(row).toHaveTextContent("invoice.pdf");
+      expect(row).toHaveAttribute("data-arriving");
+      expect(row).toHaveAttribute("data-surface", "filled");
+    });
+
+    it("leaves out of reach", () => {
+      render(
+        <List>
+          <ListRow
+            end={<button type="button">Open</button>}
+            label="invoice.pdf"
+            motion={{ arriving: false, leaving: 0, onLeft: () => undefined }}
+          />
+        </List>,
+      );
+      expect(document.querySelector("li[data-leaving]")).toHaveTextContent(
+        "invoice.pdf",
+      );
+      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    });
+  });
 });

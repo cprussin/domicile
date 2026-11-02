@@ -5,6 +5,8 @@ import { Children, useId, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
+import type { RowMotion } from "../LeavingRows/LeavingRow";
+import { LeavingRow } from "../LeavingRows/LeavingRow";
 import "../stylesheet";
 
 export const SURFACES = ["plain", "filled"] as const;
@@ -31,6 +33,11 @@ type Common = {
   /** 16px, before the label. */
   icon?: ReactNode | undefined;
   label: ReactNode;
+  /**
+   * Slides it in as it arrives and out as it leaves, for a list whose rows
+   * come and go, such as downloads. See `useLeavingRows`.
+   */
+  motion?: RowMotion | undefined;
   /**
    * `plain` rows sit on the panel and light under the pointer, as a list of
    * choices; `filled` rows are each a tile, as devices with their own
@@ -69,6 +76,7 @@ export const ListRow = ({
   endOnHover = false,
   icon,
   label,
+  motion,
   name,
   onPress,
   surface = "plain",
@@ -117,13 +125,8 @@ export const ListRow = ({
       )}
     </>
   );
-  return (
-    <li
-      className={itemStyles({ surface })}
-      data-end-on-hover={endOnHover ? "" : undefined}
-      data-icon={icon === undefined ? undefined : ""}
-      data-surface={surface}
-    >
+  const body = (
+    <>
       {onPress === undefined ? (
         <div className={rowStyles({ pressable: false })}>{face}</div>
       ) : (
@@ -142,7 +145,27 @@ export const ListRow = ({
           {children}
         </div>
       )}
+    </>
+  );
+  return motion === undefined ? (
+    <li
+      className={itemStyles({ surface })}
+      data-end-on-hover={endOnHover ? "" : undefined}
+      data-icon={icon === undefined ? undefined : ""}
+      data-surface={surface}
+    >
+      {body}
     </li>
+  ) : (
+    <LeavingRow motion={motion} surface={surface}>
+      <div
+        className={itemStyles({ surface: "plain" })}
+        data-end-on-hover={endOnHover ? "" : undefined}
+        data-icon={icon === undefined ? undefined : ""}
+      >
+        {body}
+      </div>
+    </LeavingRow>
   );
 };
 

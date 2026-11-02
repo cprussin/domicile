@@ -1,12 +1,16 @@
 // A desktop for tests that answers the system calls opening a file makes on a
 // `FakeDomicileHost`, as the compositor would: a home of `/home/me` with no
-// applications, MIME globs or `mimeapps.list`.
+// applications, MIME globs or `mimeapps.list`, whose `domicile open` opens
+// every file with `xdg-open`.
 
 import type { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { z } from "zod";
 
 /** What `env -0` prints. */
 const ENVIRONMENT = "HOME=/home/me\0";
+
+/** What `domicile open --which` prints. */
+const OPENER = "xdg-open.desktop\n";
 
 /**
  * Answers the opening's system calls `fake` has made past the first
@@ -47,7 +51,7 @@ const answerOne = (
       say({ reply: { kind: "started" }, type: "system_reply" });
       say({
         event: {
-          data: btoa(ENVIRONMENT),
+          data: btoa(asked.argv[0] === "env" ? ENVIRONMENT : OPENER),
           kind: "output",
           stream: "stdout",
         },
@@ -82,7 +86,17 @@ const answerOne = (
 
 const requestSchema = z.discriminatedUnion("call", [
   z.looseObject({
-    argv: z.tuple([z.literal("env"), z.literal("-0")]),
+    argv: z.union([
+      z.tuple([z.literal("env"), z.literal("-0")]),
+      // `opens` asking `domicile open --which`.
+      z.tuple([
+        z.literal("sh"),
+        z.literal("-c"),
+        z.string(),
+        z.literal("domicile-opens"),
+        z.string(),
+      ]),
+    ]),
     call: z.literal("spawn"),
   }),
   z.looseObject({ call: z.literal("stat"), path: z.string() }),

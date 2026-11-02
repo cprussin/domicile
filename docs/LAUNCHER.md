@@ -64,7 +64,9 @@ X-Domicile-Preview=/path/to/agenda-preview.svg
 Enter opens a file with its type's default application, else its
 supertype's: a `text/plain` default also opens Markdown, source code and
 other text. It is `domicile open`, which a terminal and `xdg-open` in apps
-run too. Set one in
+run too. When no application opens it (`domicile open --which` names none),
+the launcher stays open and the file's row says so; Shift+Enter still asks
+what to open it with. Set one in
 `~/.config/domicile-mimeapps.list` to apply only in Domicile, or in
 `~/.config/mimeapps.list`:
 

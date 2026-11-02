@@ -43,7 +43,9 @@ const onBars = (
 
 const Bar = ({ children, screen }: { children: ReactNode; screen: string }) => (
   <div data-screen={screen}>
-    <BarContext value={{ locked: false, screen }}>{children}</BarContext>
+    <BarContext value={{ locked: false, popsUp: false, screen }}>
+      {children}
+    </BarContext>
   </div>
 );
 

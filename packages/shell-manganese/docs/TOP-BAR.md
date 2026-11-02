@@ -57,7 +57,9 @@ export const Shell = runManganese({
 Each item reads what it shows from context:
 
 - `useBar()` (`@domicile-desktop/manganese-bar/bar-context`): the bar's
-  `screen` and whether the desktop is `locked`.
+  `screen`, whether the desktop is `locked`, and whether an item may open its
+  panel by itself there (`popsUp`: the screen with the keyboard, never the
+  lock screen).
 - `useDomicile()` (`@domicile-desktop/react/domicile-provider`): the
   desktop. Readouts are watched once per desktop
   ([Host readouts](HOST-READOUTS.md#one-watch-per-desk)).
@@ -423,12 +425,19 @@ export const Shell = runManganese({
 
 - Shown while there are downloads, from any browser or app window. A download
   icon, with how far the ones in progress have come ("23%"); the icon pulses
-  while a size is unknown.
-- Click lists every download, newest first: the file name, how far it has come
-  and the time left, or the site it came from once it finished or failed.
-  **Cancel** stops one in progress; **Open**, **Show in folder** and
+  while a size is unknown. As the last one finishes it shows 100%, then a
+  check and "Done" for two seconds, then just the icon; its width eases
+  between them.
+- Its panel opens by itself as a download starts, on the screen with the
+  keyboard, as Chromium's download bubble does. It leaves the keyboard where
+  it was and stays until dismissed: a press elsewhere, Escape or the item.
+- The panel lists every download, newest first: the file name, how far it has
+  come and the time left, or the site it came from once it finished or
+  failed. **Cancel** stops one in progress; **Open**, **Show in folder** and
   **Remove from list** show on hover for one that finished. **Clear all**
-  forgets every one not in progress; the files stay.
+  forgets every one not in progress; the files stay. A row removed slides
+  out as a cleared notification does (`LeavingRow`).
+- **Open** on a file no application opens says so under its row instead.
 - The engine keeps the list, so a download outlives its window. See
   [SHELL-BROWSER-WINDOWS.md](../../../docs/SHELL-BROWSER-WINDOWS.md#downloads).
 
