@@ -63,6 +63,9 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing = "0.1"
+# Waits in the ScreenCast portal (see `src/portals/screencast.rs`). Adds no
+# crates: zbus already runs on it.
+async-io = "2.6"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Serves EIS, the emulated input the RemoteDesktop and InputCapture portals
 # hand out (see `src/eis.rs`). Its calloop sources run on the Wayland loop.

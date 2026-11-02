@@ -398,6 +398,7 @@ dependencies = [
 name = "domicile-compositor"
 version = "0.0.0"
 dependencies = [
+ "async-io",
  "domicile-config",
  "domicile-host",
  "domicile-launch",

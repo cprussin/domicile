@@ -381,11 +381,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   that connection answering a picker for monitors alone. Slack asks for
   screens, then for windows, then for both when the user clicks its own
   Share, each in a new session, and shares what the first picker gave it
-  through its restore token.
-- **A window picked for an ask for monitors alone answers the app's next ask
-  for windows.** The ask for monitors is canceled. Slack crashes when its
-  ask for screens gets a window, and shares a window from its ask for
-  windows.
+  through its restore token. A `Start` canceled because the picker was up
+  answers half a second after the pick's `Start`: Electron frees both of its
+  capturers when either fails, and a pick answered after that crashed Slack.
 - **A region is dragged on the desk shot or selected on screen.** As in the
   screenshot picker, the user drags over the picker's desk preview, and the
   area is turned into the desktop's logical pixels, grown to whole ones.

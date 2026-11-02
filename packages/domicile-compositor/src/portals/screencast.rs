@@ -11,9 +11,7 @@
 //!   closes, and so is one that asks for windows soon after that connection
 //!   answered a picker for screens. Electron apps (Slack) ask for screens,
 //!   then for windows, then for both when the user clicks their own Share,
-//!   each in a new session; only the first needs the picker. A window picked
-//!   for an ask for screens alone cancels it and answers the ask for windows
-//!   instead: Slack crashes on a window from its ask for screens.
+//!   each in a new session; only the first needs the picker.
 //! - The capture is listed for the shell's sharing indicator until it ends.
 //!   Closing the session, the shell's stop, or every stream ending ends it.
 //!
@@ -67,6 +65,13 @@ const WINDOW_TYPES: u32 = MONITOR | WINDOW;
 /// clicks its own Share.
 const SAME_SHARE: Duration = Duration::from_secs(60);
 
+/// How long a cast started while its app's picker was up waits, after the
+/// pick's cast answered, to be canceled. Electron (Slack) lists screens and
+/// windows in two sessions at once and frees both capturers when either
+/// fails; a pick answered after that lands on a freed capturer and crashes
+/// it. Its answer goes first.
+const AFTER_THE_PICK: Duration = Duration::from_millis(500);
+
 /// `AvailableSourceTypes`: every type.
 const SOURCE_TYPES: u32 = MONITOR | WINDOW | VIRTUAL;
 
@@ -88,7 +93,6 @@ pub struct ScreenCast {
     picks: Picks,
     asking: Asking,
     answered: Answered,
-    held: Held,
 }
 
 /// The `Start`s waiting on each connection's open picker, by the sender part
@@ -99,10 +103,6 @@ type Asking = Arc<Mutex<HashMap<String, Vec<Replier<()>>>>>;
 /// When each connection last answered a picker that asked for monitors alone,
 /// by the sender part of its session handles. See [`same_share`].
 type Answered = Arc<Mutex<HashMap<String, Instant>>>;
-
-/// The window each connection picked for an ask for monitors alone, kept for
-/// its ask for windows, by the sender part of its session handles.
-type Held = Arc<Mutex<HashMap<String, Vec<CastPick>>>>;
 
 /// What each running stream's node shows, for [`CastPicks`].
 type Picks = Arc<Mutex<HashMap<u32, Pick>>>;
@@ -169,7 +169,6 @@ impl ScreenCast {
             picks: Arc::default(),
             asking: Arc::default(),
             answered: Arc::default(),
-            held: Arc::default(),
         }
     }
 
@@ -308,6 +307,10 @@ impl ScreenCast {
             .unwrap()
             .get(&sender(&session_handle))
             .copied();
+        // Up until this `Start` answers, so a cast joined to its pick is
+        // canceled after the pick's answer, not before (see
+        // `AFTER_THE_PICK`).
+        let mut picker_up = None;
         let picked = match self.recalled(&selected, &open, &monitors) {
             Some(picked) => picked,
             None if same_share(
@@ -317,37 +320,26 @@ impl ScreenCast {
                 Instant::now(),
             ) =>
             {
-                let held = self.held.lock().unwrap().remove(&sender(&session_handle));
-                match held {
-                    Some(sources) => match chosen(&sources, &open, &selected) {
-                        Some(picked) => picked,
-                        None => {
-                            warn!(?sources, "a window picked for an ask for screens is gone");
-                            return (2, HashMap::new());
-                        }
-                    },
-                    None => {
-                        debug!(
-                            types = selected.types,
-                            "an ask for windows soon after a picked screen is canceled"
-                        );
-                        return (1, HashMap::new());
-                    }
-                }
+                debug!(
+                    types = selected.types,
+                    "an ask for windows soon after a picked screen is canceled"
+                );
+                return (1, HashMap::new());
             }
             None => match self.join(&session_handle) {
                 // The user picks once, for this connection's other session.
                 Some(closed) => {
                     closed.await;
+                    async_io::Timer::after(AFTER_THE_PICK).await;
                     debug!("a cast started while its app's picker was up is canceled");
                     return (1, HashMap::new());
                 }
                 None => {
-                    let _picker = Picker {
+                    picker_up = Some(Picker {
                         asking: Arc::clone(&self.asking),
                         answered: (selected.types == MONITOR).then(|| Arc::clone(&self.answered)),
                         sender: sender(&session_handle),
-                    };
+                    });
                     let kind = dialog(&selected, &open, preview(&self.shoot).await);
                     match ask(
                         &self.queue,
@@ -361,19 +353,6 @@ impl ScreenCast {
                     {
                         PortalAnswer::ScreenCast { sources } => {
                             match chosen(&sources, &open, &selected) {
-                                Some(picked)
-                                    if selected.types == MONITOR
-                                        && picked.iter().any(|candidate| {
-                                            source_type(&candidate.source) == WINDOW
-                                        }) =>
-                                {
-                                    debug!("a window picked for an ask for screens waits for the ask for windows");
-                                    self.held
-                                        .lock()
-                                        .unwrap()
-                                        .insert(sender(&session_handle), sources);
-                                    return (1, HashMap::new());
-                                }
                                 Some(picked) => picked,
                                 None => {
                                     warn!(?sources, "the shell picked sources that cannot be cast");
@@ -445,6 +424,7 @@ impl ScreenCast {
                 owned(Value::from((VENDOR, RESTORE_VERSION, Value::from(token)))),
             );
         }
+        drop(picker_up);
         (0, results)
     }
 
@@ -1954,6 +1934,12 @@ mod tests {
         let (response, results) = first.join().expect("Start returned");
         assert_eq!(response, 0);
         assert_eq!(read::<u32>(&streams(&results)[0], "source_type"), 1);
+        // Electron frees both capturers when either fails, so a pick answered
+        // after the cancel would land on a freed one.
+        assert!(
+            !second.is_finished(),
+            "the cancel waits for the pick's answer"
+        );
         assert_eq!(second.join().expect("Start returned").0, 1);
         assert!(
             served
@@ -1993,35 +1979,6 @@ mod tests {
             );
             assert_eq!(later.join().expect("Start returned").0, 1, "types {types}");
         }
-        assert!(
-            served
-                .published
-                .try_iter()
-                .all(|(items, _)| items.is_empty()),
-            "no second picker"
-        );
-    }
-
-    /// Slack crashes when its ask for screens gets a window. A window picked
-    /// there goes to its ask for windows, which follows, instead.
-    #[test]
-    fn a_window_picked_for_an_ask_for_screens_goes_to_the_ask_for_windows() {
-        const LATER: &str = "/org/freedesktop/portal/desktop/session/1_7/later";
-        let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(1u32))]);
-
-        assert_eq!(pick_notes(&served).0, 1, "the ask for screens is canceled");
-
-        select_on(&served.client, LATER, vec![("types", Value::from(2u32))]);
-        let (response, results) = start_on(
-            &served.client,
-            LATER,
-            "/org/freedesktop/portal/desktop/request/1_7/e",
-        )
-        .join()
-        .expect("Start returned");
-        assert_eq!(response, 0);
-        assert_eq!(read::<u32>(&streams(&results)[0], "source_type"), 2);
         assert!(
             served
                 .published
