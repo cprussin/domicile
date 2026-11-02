@@ -9,7 +9,7 @@ import { Inbox } from "./inbox";
 import { forgetToken, storedToken } from "./stored-token";
 
 /** How many of the newest unread conversations a reading names. */
-const LATEST = 3;
+const LATEST = 8;
 
 type Held = { token: string; expiresAt: number };
 

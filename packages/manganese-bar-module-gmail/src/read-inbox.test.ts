@@ -107,31 +107,27 @@ describe("inboxReader", () => {
   });
 
   describe("newest unread", () => {
-    it("names the newest message of each of the three newest unread conversations", async () => {
+    it("names the newest message of each of the eight newest unread conversations", async () => {
+      // m10 and m9 are one conversation; m1 is the ninth.
+      const ids = ["m10", "m9", "m8", "m7", "m6", "m5", "m4", "m3", "m2", "m1"];
+      const newest = ["m10", "m8", "m7", "m6", "m5", "m4", "m3", "m2"];
       const { domicile } = answering({
-        [HEADERS("m5")]: [headers("m5")],
-        [HEADERS("m3")]: [headers("m3")],
-        [HEADERS("m2")]: [headers("m2")],
-        [INBOX]: [counted(4, 9)],
+        ...Object.fromEntries(newest.map((id) => [HEADERS(id), [headers(id)]])),
+        [INBOX]: [counted(9, 20)],
         [TOKEN]: [ACCESS],
         [UNREAD]: [
           json(200, {
-            messages: [
-              { id: "m5", threadId: "a" },
-              { id: "m4", threadId: "a" },
-              { id: "m3", threadId: "b" },
-              { id: "m2", threadId: "c" },
-              { id: "m1", threadId: "d" },
-            ],
+            messages: ids.map((id) => ({
+              id,
+              threadId: id === "m9" ? "t-m10" : `t-${id}`,
+            })),
           }),
         ],
       });
 
       expect(
         await inboxReader(domicile, CLIENT, EMAIL, ignored, signedIn())(),
-      ).toStrictEqual(
-        Inbox.Counted(9, 4, [mail("m5"), mail("m3"), mail("m2")]),
-      );
+      ).toStrictEqual(Inbox.Counted(20, 9, newest.map(mail)));
     });
 
     it("asks for each message's sender and subject once", async () => {

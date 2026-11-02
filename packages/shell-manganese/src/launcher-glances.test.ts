@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { GlanceTone } from "@domicile-desktop/manganese-launcher/app-glance";
 import {
   Inbox,
   InboxReading,
@@ -57,22 +58,41 @@ describe(launcherGlancesOf, () => {
         {
           account: "me@example.com",
           items: [{ at: "3h", text: "Dinner?", title: "Alex" }],
-          status: "3 unread",
+          status: { text: "3 unread", tone: GlanceTone.Waiting },
         },
       ],
-      ["web-app:chat", { account: undefined, items: [], status: "2 unread" }],
+      [
+        "web-app:chat",
+        {
+          account: undefined,
+          items: [],
+          status: { text: "2 unread", tone: GlanceTone.Waiting },
+        },
+      ],
     ]);
   });
 
   it.each([
-    [InboxReading.Counted(4, 0), "Nothing unread"],
-    [InboxReading.Unread(0), "Nothing unread"],
-    [InboxReading.SignedOut(), "Not signed in"],
-    [InboxReading.Failed("offline"), "Couldn't check for new messages"],
+    [
+      InboxReading.Counted(4, 0),
+      { text: "No unread messages", tone: GlanceTone.Clear },
+    ],
+    [
+      InboxReading.Unread(0),
+      { text: "No unread messages", tone: GlanceTone.Clear },
+    ],
+    [
+      InboxReading.SignedOut(),
+      { text: "Not signed in", tone: GlanceTone.Note },
+    ],
+    [
+      InboxReading.Failed("offline"),
+      { text: "Couldn't check for new messages", tone: GlanceTone.Note },
+    ],
     [undefined, undefined],
   ])("tells a reading of %p as %p", (reading, status) => {
     expect(
       launcherGlancesOf([MAIL], [reading], 0).get("web-app:mail")?.status,
-    ).toBe(status);
+    ).toStrictEqual(status);
   });
 });

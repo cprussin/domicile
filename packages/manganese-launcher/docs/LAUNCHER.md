@@ -77,7 +77,7 @@ settles, and keeps the last preview until then.
   nothing.
 - **Bookmark**: the page, signed in, so its icon can be learned.
 - **Inbox**: its account and unread count, and the sender, subject and age of
-  the newest message in each of its three newest unread conversations, from
+  the newest message in each of its eight newest unread conversations, from
   the shell's `glances`. Gmail reads them with the API; Messages gives only a
   count.
 - **Application**: the image named by `X-Domicile-Preview`, or else its

@@ -1,4 +1,8 @@
-import type { AppGlance } from "@domicile-desktop/manganese-launcher/app-glance";
+import type {
+  AppGlance,
+  GlanceStatus,
+} from "@domicile-desktop/manganese-launcher/app-glance";
+import { GlanceTone } from "@domicile-desktop/manganese-launcher/app-glance";
 import { webAppId } from "@domicile-desktop/manganese-launcher/app-search";
 import { ago } from "@domicile-desktop/manganese-notifications/ago";
 import type {
@@ -59,19 +63,24 @@ const launcherAppIdOf = (inbox: Inbox): string | undefined => {
 };
 
 /** `reading` in a few words; `undefined` before the first. */
-const statusOf = (reading: InboxReading | undefined): string | undefined => {
+const statusOf = (
+  reading: InboxReading | undefined,
+): GlanceStatus | undefined => {
   switch (reading?.kind) {
     case InboxReadingKind.Counted:
     case InboxReadingKind.Unread: {
       return reading.unread === 0
-        ? "Nothing unread"
-        : `${reading.unread.toString()} unread`;
+        ? { text: "No unread messages", tone: GlanceTone.Clear }
+        : {
+            text: `${reading.unread.toString()} unread`,
+            tone: GlanceTone.Waiting,
+          };
     }
     case InboxReadingKind.SignedOut: {
-      return "Not signed in";
+      return { text: "Not signed in", tone: GlanceTone.Note };
     }
     case InboxReadingKind.Failed: {
-      return "Couldn't check for new messages";
+      return { text: "Couldn't check for new messages", tone: GlanceTone.Note };
     }
     case undefined: {
       return undefined;

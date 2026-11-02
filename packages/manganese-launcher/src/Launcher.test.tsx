@@ -27,6 +27,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AppGlance } from "./app-glance";
+import { GlanceTone } from "./app-glance";
 import type { Bookmark, DesktopEntry } from "./found-apps";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
@@ -1203,7 +1204,7 @@ describe("Launcher", () => {
         using panel = glanced({
           account: "me@example.com",
           items: [{ at: "3h", text: "Dinner Friday?", title: "Alex Chen" }],
-          status: "3 unread",
+          status: { text: "3 unread", tone: GlanceTone.Waiting },
         });
 
         await panel.user.type(panel.box(), "paint");
@@ -1222,7 +1223,7 @@ describe("Launcher", () => {
         using panel = glanced({
           account: undefined,
           items: [],
-          status: "2 unread",
+          status: { text: "2 unread", tone: GlanceTone.Waiting },
         });
 
         await panel.user.type(panel.box(), "paint");
