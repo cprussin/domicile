@@ -7,6 +7,8 @@ export default defineConfig({
     // In-page links glide to their section, unless motion is turned down.
     // `:root`, not `html`: the preset has an `html` rule this would replace.
     ":root": { _motionSafe: { scrollBehavior: "smooth" } },
+    // ...and stop below a sticky header, not under it.
+    ":root:has([data-sticky-header])": { scrollPaddingBlockStart: { md: 16 } },
     "html, body": {
       backgroundColor: "background",
       color: "foreground",

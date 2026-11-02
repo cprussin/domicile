@@ -38,6 +38,7 @@ const DomicilePage = () => (
         { href: "/docs/reference/react", label: "API reference" },
         { href: "/manganese", label: "Manganese" },
       ]}
+      sticky
     />
     <main>
       <Hero />

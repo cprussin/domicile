@@ -38,6 +38,7 @@ const ManganesePage = () => (
         { href: "#keys", label: "Keys" },
         { href: "#docs", label: "Docs" },
       ]}
+      sticky
     />
     <main>
       <Hero />
