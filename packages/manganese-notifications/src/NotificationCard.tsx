@@ -7,6 +7,7 @@ import {
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { ReactNode } from "react";
+import { useRef } from "react";
 
 import { css, cva } from "../styled-system/css";
 import { grid, hstack } from "../styled-system/patterns";
@@ -59,6 +60,9 @@ export const NotificationCard = ({
   onReply,
   summary,
 }: Props) => {
+  // Whether the pointer's last press began on a button or field in the card.
+  // Its click lands on the card if the pointer slips off before letting go.
+  const pressOnControl = useRef(false);
   const pressed = () => {
     onAction(DEFAULT_NOTIFICATION_ACTION);
   };
@@ -77,7 +81,18 @@ export const NotificationCard = ({
       data-density={density}
       data-notification=""
       data-urgency={notification.urgency}
-      onClick={notification.clickable ? pressed : undefined}
+      onClick={
+        notification.clickable
+          ? () => {
+              if (!pressOnControl.current) {
+                pressed();
+              }
+            }
+          : undefined
+      }
+      onPointerDown={(event) => {
+        pressOnControl.current = startsOnControl(event.target);
+      }}
     >
       {notification.icon === undefined ? (
         <Avatar
@@ -155,6 +170,11 @@ export const NotificationCard = ({
     </div>
   );
 };
+
+/** Whether a press on `target` began on a control rather than the card. */
+const startsOnControl = (target: EventTarget): boolean =>
+  target instanceof Element &&
+  target.closest("button, a, input, textarea") !== null;
 
 // The text column, so the summary and body align under the sender, not the
 // image.

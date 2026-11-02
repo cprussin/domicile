@@ -195,6 +195,18 @@ describe("NotificationCard", () => {
       });
     });
 
+    // The pointer can slip off the close button before it lets go. The click
+    // then lands on the card, which must not open the notification.
+    it("does not open from a press that started on a button", () => {
+      const pressed: string[] = [];
+      card({ clickable: true, summary: "New message" }, pressed);
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Clear" }));
+      fireEvent.click(screen.getByText("Firefox"));
+
+      expect(pressed).toEqual([]);
+    });
+
     it("closes, and only closes", () => {
       const pressed: string[] = [];
       card({ clickable: true }, pressed);
