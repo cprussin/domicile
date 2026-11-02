@@ -264,7 +264,7 @@ Configure it with `files.omit` and manganese's `applications` option:
   ([LOCK.md](LOCK.md#reloading)).
 
 Reference: [idle](SHELL-CONFIG.md#idle), [lock](SHELL-CONFIG.md#lock). Design:
-[IDLE.md](IDLE.md), [LOCK.md](LOCK.md). Known gaps: [KNOWN-GAPS.md](/KNOWN-GAPS.md).
+[IDLE.md](IDLE.md), [LOCK.md](LOCK.md). Known gaps: [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md).
 
 ## Thread priorities
 

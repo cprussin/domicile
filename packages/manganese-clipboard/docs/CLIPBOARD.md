@@ -56,4 +56,4 @@ so the copy outlives the client that copied it.
   (`ui/ozone/platform/drm/domicile/drm_clipboard.h` in the fork), so browser
   windows and clients share one clipboard, text and images.
 - In a nested run, the browser uses the host session's clipboard instead.
-  [KNOWN-GAPS.md](/KNOWN-GAPS.md#clipboard) tracks this gap.
+  [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md#clipboard) tracks this gap.

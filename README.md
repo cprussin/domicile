@@ -36,7 +36,7 @@ Want to rotate Kitty 17 degrees because the user has sinned? Unfortunately, use 
 Domicile embeds Wayland surfaces directly into Chromium's layer tree. No screenshots, canvas copies, or other cowardice.
 
 [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) ·
-[known gaps](KNOWN-GAPS.md) ·
+[known gaps](docs/KNOWN-GAPS.md) ·
 [contributing](docs/contributing/README.md) ·
 [running a desktop](docs/RUNNING-A-DESKTOP.md)
 

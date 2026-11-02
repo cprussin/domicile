@@ -174,7 +174,7 @@ the text once, offered under every text type, and an image under its own type
 with, stay in the browser.
 
 The primary selection works too (`zwp_primary_selection_device_manager_v1`).
-A nested run still uses the host's clipboard; [KNOWN-GAPS.md](/KNOWN-GAPS.md#clipboard) tracks it.
+A nested run still uses the host's clipboard; [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md#clipboard) tracks it.
 
 ## The window has to be the size of the CRTC
 
