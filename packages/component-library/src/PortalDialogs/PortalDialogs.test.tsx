@@ -2393,6 +2393,17 @@ describe("screen recording", () => {
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
   });
 
+  it("says whether it is recording or paused", () => {
+    const host = new FakeHost();
+    render(<PortalDialogs domicile={host.domicile} />);
+    host.push([], [recording(7, { running_since_ms: 95_000 })]);
+    const toolbar = screen.getByRole("toolbar", { name: "Screen recording" });
+    expect(toolbar).toHaveTextContent(/^Recording/);
+
+    host.push([], [recording(7)]);
+    expect(toolbar).toHaveTextContent(/^Paused/);
+  });
+
   it("leaves its toolbar out of captures of the desk", async () => {
     const hidden: Element[] = [];
     (globalThis as { RestrictionTarget?: unknown }).RestrictionTarget = {

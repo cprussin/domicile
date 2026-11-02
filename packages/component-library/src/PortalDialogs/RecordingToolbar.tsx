@@ -64,25 +64,32 @@ export const RecordingToolbar = ({
       >
         <span
           aria-hidden
-          className={css(dotStyles, paused && pausedDotStyles)}
+          className={css(dotStyles, paused ? pausedDotStyles : liveDotStyles)}
         />
-        <span aria-label={paused ? "Paused at" : "Recorded"} role="timer">
+        <span className={stateStyles}>{paused ? "Paused" : "Recording"}</span>
+        <span
+          aria-label={paused ? "Paused at" : "Recorded"}
+          className={timerStyles}
+          role="timer"
+        >
           {clock(elapsed)}
         </span>
         <Button
-          label={paused ? "Resume" : "Pause"}
+          beforeIcon={
+            paused ? <PlayIcon weight="fill" /> : <PauseIcon weight="fill" />
+          }
           onClick={paused ? resume : pause}
           rounded
-          size="sm"
-          variant="ghost"
+          size="lg"
+          variant="primary"
         >
-          {paused ? <PlayIcon weight="fill" /> : <PauseIcon weight="fill" />}
+          {paused ? "Resume" : "Pause"}
         </Button>
         <Button
           beforeIcon={<StopIcon weight="fill" />}
           onClick={stop}
           rounded
-          size="sm"
+          size="lg"
           variant="danger"
         >
           Stop
@@ -91,7 +98,7 @@ export const RecordingToolbar = ({
           label="Discard"
           onClick={discard}
           rounded
-          size="sm"
+          size="lg"
           variant="ghost"
         >
           <TrashIcon />
@@ -155,15 +162,15 @@ const toolbarStyles = hstack({
   borderRadius: "full",
   boxShadow: "{shadows.lifted}",
   color: "foreground",
-  fontSize: "sm",
+  fontSize: "lg",
   fontVariantNumeric: "tabular-nums",
-  gap: 2,
-  insetBlockEnd: 6,
+  gap: 3,
+  insetBlockEnd: 10,
   insetInlineStart: "50%",
   isolation: "isolate",
-  paddingBlock: 1,
+  paddingBlock: 2,
   paddingInline: 2,
-  paddingInlineStart: 4,
+  paddingInlineStart: 5,
   pointerEvents: "auto",
   position: "absolute",
   transform: "translateX(-50%)",
@@ -171,10 +178,28 @@ const toolbarStyles = hstack({
 
 const dotStyles = css.raw({
   backgroundColor: "danger",
-  blockSize: 2.5,
+  blockSize: 3.5,
   borderRadius: "full",
   flexShrink: 0,
-  inlineSize: 2.5,
+  inlineSize: 3.5,
+  position: "relative",
+});
+
+// A ring spreads out from the dot while it records, like `Loading`'s radar.
+const liveDotStyles = css.raw({
+  _after: {
+    animation: "ping {durations.ping} {easings.out} infinite",
+    border: "{spacing.0.5} solid {colors.danger}",
+    borderRadius: "full",
+    content: '""',
+    inset: 0,
+    opacity: 0,
+    position: "absolute",
+  },
 });
 
 const pausedDotStyles = css.raw({ backgroundColor: "muted" });
+
+const stateStyles = css({ fontWeight: "semibold" });
+
+const timerStyles = css({ color: "textSoft", minInlineSize: "5ch" });
