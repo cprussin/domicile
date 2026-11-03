@@ -62,6 +62,27 @@ describe(KeptAwake, () => {
     expect(list).toHaveTextContent("Zoom");
   });
 
+  it("draws each app's icon, and a window for one without", async () => {
+    render(
+      <KeptAwake
+        holders={["Slack", "mpv"]}
+        icons={new Map([["Slack", "data:image/png;base64,c2xhY2s="]])}
+        inhibitor={unanswered()}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Kept awake by 2 apps" }),
+    );
+
+    const list = await screen.findByRole("list", {
+      name: "Keeping your screens on",
+    });
+    expect([...list.querySelectorAll("img")].map((icon) => icon.src)).toEqual([
+      "data:image/png;base64,c2xhY2s=",
+    ]);
+  });
+
   it("names the website a browser window keeps the screens on for", async () => {
     render(
       <KeptAwake

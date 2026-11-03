@@ -130,8 +130,9 @@ export type System = {
     Result<Listening<number | undefined>, SystemError>
   >;
   /**
-   * Hear what holds the desktop awake: the windows and applications whose
-   * idle inhibitors keep the screens from blanking. The shell's own hold
+   * Hear what holds the desktop awake: the app ids of the windows and
+   * applications whose idle inhibitors keep the screens from blanking, to name
+   * with `useApps`. The shell's own hold
    * through the portal is `"domicile"`. Heard at once, then on each change.
    * Allowed while the desktop is locked. See docs/IDLE.md.
    */

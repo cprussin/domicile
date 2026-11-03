@@ -24,7 +24,6 @@ use tracing::debug;
 use crate::client_requests::ClientRequest;
 use crate::held_frames::HeldFrames;
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
-use crate::portals::SHELL;
 use crate::screen_saver::{self, Change, Hold, BROWSER};
 use crate::{CalloopData, DomicileCompositor};
 
@@ -371,16 +370,15 @@ impl DomicileCompositor {
     /// Tell the shells what holds the desktop awake, and log it when that
     /// changes. See `domicile_host::idle_holds`.
     ///
-    /// Each holder is named by its application's desktop entry, as a person
-    /// knows it (see `domicile_host::app_names`): a Wayland inhibitor by its
-    /// window's app id, the portal's and screen saver's by the application
-    /// holding each. A shell page's own portal hold stays
-    /// [`SHELL`], and a browser window's page's [`BROWSER`], for the shell to
-    /// tell apart.
+    /// Each holder is its application's id, for the shell to name and draw
+    /// by its desktop entry: a Wayland inhibitor's window's app id, the
+    /// portal's and screen saver's application holding each. A shell page's
+    /// own portal hold is `domicile`, and a browser window's page's
+    /// [`BROWSER`].
     pub fn tell_the_shells_what_holds_the_desktop_awake(&mut self) {
         let on_the_desktop = self.surfaces_on_the_desktop();
         // Without a timeout there is nothing to hold off.
-        let held: Vec<String> = match &self.idle {
+        let holders: Vec<String> = match &self.idle {
             Some(idle) => idle
                 .holding(&on_the_desktop)
                 .map(|surface| window_name(&self.toplevels, surface))
@@ -388,16 +386,6 @@ impl DomicileCompositor {
                 .collect(),
             None => Vec::new(),
         };
-        let holders: Vec<String> = held
-            .iter()
-            .map(|holder| {
-                if holder == SHELL || holder == BROWSER {
-                    holder.clone()
-                } else {
-                    self.app_names.name(holder)
-                }
-            })
-            .collect();
         if self.hub.idle_holds.hold(holders.clone()) {
             debug!(?holders, "what holds this desktop awake changed");
         }

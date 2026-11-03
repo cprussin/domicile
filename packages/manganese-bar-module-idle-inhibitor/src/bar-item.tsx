@@ -1,9 +1,8 @@
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
-import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 
-import { deskIdleHolds } from "./desk-idle-holds";
 import { deskIdleInhibitor } from "./desk-idle-inhibitor";
 import { IdleInhibitorToggle } from "./IdleInhibitorToggle";
+import { useNamedHolders } from "./named-holders";
 
 /**
  * A toggle that keeps the screens from blanking while it is on, and names
@@ -11,9 +10,10 @@ import { IdleInhibitorToggle } from "./IdleInhibitorToggle";
  */
 export const IdleInhibitor = () => {
   const domicile = useDomicile();
+  const { holders } = useNamedHolders(domicile);
   return (
     <IdleInhibitorToggle
-      holders={useSharedWatch(deskIdleHolds(domicile))}
+      holders={holders}
       inhibitor={deskIdleInhibitor(domicile)}
     />
   );

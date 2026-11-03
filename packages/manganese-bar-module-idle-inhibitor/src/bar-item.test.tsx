@@ -33,7 +33,7 @@ describe("IdleInhibitor", () => {
     }
   });
 
-  it("names what else holds the desk awake, but not its own hold", async () => {
+  it("names what else holds the desk awake by app, but not its own hold", async () => {
     const fake = new FakeDomicileHost();
     render(
       <DomicileProvider domicile={fake.domicile}>
@@ -55,7 +55,7 @@ describe("IdleInhibitor", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Screens kept on by slack — click to keep them on too",
+        name: "Screens kept on by Slack — click to keep them on too",
       }),
     ).toBeVisible();
   });

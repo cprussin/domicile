@@ -5,6 +5,7 @@ import { Panel } from "@domicile-desktop/component-library/Panel";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
+import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 
 import { css } from "../styled-system/css";
@@ -22,6 +23,8 @@ type Props = {
    * `BROWSER` for a browser window's page.
    */
   holders?: readonly string[] | undefined;
+  /** The apps' icons, by name; an app without one is drawn as a window. */
+  icons?: ReadonlyMap<string, string> | undefined;
   /** The browser windows' pages keeping the screens on. */
   pages?: readonly WakeLockedPage[] | undefined;
 };
@@ -31,7 +34,12 @@ type Props = {
  * hover. Its panel lists each app and website, and your own hold with a button
  * to turn it off.
  */
-export const KeptAwake = ({ inhibitor, holders = [], pages = [] }: Props) => {
+export const KeptAwake = ({
+  inhibitor,
+  holders = [],
+  icons = new Map(),
+  pages = [],
+}: Props) => {
   const at = useSyncExternalStore(inhibitor.subscribe, inhibitor.current);
   const held = at === Inhibiting.On || at === Inhibiting.Taking;
   const { apps, sites } = keepingAwake(holders, pages);
@@ -51,17 +59,20 @@ export const KeptAwake = ({ inhibitor, holders = [], pages = [] }: Props) => {
       <Panel title="Keeping your screens on" width="standard">
         <List label="Keeping your screens on">
           {apps.map((app) => (
-            <ListRow icon={<AppWindowIcon size={16} />} key={app} label={app} />
+            <ListRow
+              icon={
+                <Icon
+                  fallback={<AppWindowIcon size={16} />}
+                  src={icons.get(app)}
+                />
+              }
+              key={app}
+              label={app}
+            />
           ))}
           {sites.map(({ icon, site }) => (
             <ListRow
-              icon={
-                icon === undefined ? (
-                  <GlobeIcon size={16} />
-                ) : (
-                  <img alt="" className={siteIconStyles} src={icon} />
-                )
-              }
+              icon={<Icon fallback={<GlobeIcon size={16} />} src={icon} />}
               key={site}
               label={site}
             />
@@ -90,6 +101,20 @@ export const KeptAwake = ({ inhibitor, holders = [], pages = [] }: Props) => {
   ) : undefined;
 };
 
+/** An app's or website's own icon, else `fallback`. */
+const Icon = ({
+  fallback,
+  src,
+}: {
+  fallback: ReactNode;
+  src: string | undefined;
+}) =>
+  src === undefined ? (
+    fallback
+  ) : (
+    <img alt="" className={iconStyles} src={src} />
+  );
+
 /** The eye's name: the one app or website by name, several counted. */
 const labelOf = (
   apps: readonly string[],
@@ -112,8 +137,8 @@ const labelOf = (
   }
 };
 
-// A site's icon at the size of the rows' other icons.
-const siteIconStyles = css({
+// An app's or site's icon at the size of the rows' other icons.
+const iconStyles = css({
   blockSize: 4,
   inlineSize: 4,
   objectFit: "contain",

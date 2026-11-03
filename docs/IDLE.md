@@ -127,11 +127,10 @@ handle to let go. Manganese's idle inhibitor bar item does this.
 
 ### What holds the desktop awake
 
-- **`SystemRequest::IdleHolds` streams the holders**, as names. Each
+- **`SystemRequest::IdleHolds` streams the holders**, as app ids. Each
   `SystemEvent::IdleHolds` carries the full list, at once and on each change.
-  - **Every holder is named as a person knows it**, `Claude` and not
-    `com.anthropic.Claude`: by its desktop entry, through
-    `domicile_host::app_names`.
+  - **The shell names and draws each holder** by its desktop entry, through
+    `useApps` (see [APP_NAMES.md](guidelines/APP_NAMES.md)).
   - A Wayland inhibitor is found by its window's app id, and listed only while
     it holds.
   - A portal inhibitor is found by its app id, or, for an unsandboxed

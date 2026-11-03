@@ -2106,9 +2106,9 @@ pub enum SystemEvent {
         keymaps: Vec<ListedKeymap>,
         active: String,
     },
-    /// What holds the desktop awake, one name per idle inhibitor: the
+    /// What holds the desktop awake, one app id per idle inhibitor: the
     /// window's app id for a Wayland inhibitor, the application for a portal
-    /// one. Empty when nothing does.
+    /// one, for the shell to name. Empty when nothing does.
     IdleHolds { holders: Vec<String> },
     /// A D-Bus signal a match named, its body written as
     /// [`SystemReply::Returned`]'s is.

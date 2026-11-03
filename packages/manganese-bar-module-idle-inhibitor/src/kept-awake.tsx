@@ -1,9 +1,8 @@
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
-import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 
-import { deskIdleHolds } from "./desk-idle-holds";
 import { deskIdleInhibitor } from "./desk-idle-inhibitor";
 import { KeptAwake as Pill } from "./KeptAwake";
+import { useNamedHolders } from "./named-holders";
 import { useWakeLockedPages } from "./wake-locked-pages";
 
 /**
@@ -12,9 +11,11 @@ import { useWakeLockedPages } from "./wake-locked-pages";
  */
 export const KeptAwake = () => {
   const domicile = useDomicile();
+  const { holders, icons } = useNamedHolders(domicile);
   return (
     <Pill
-      holders={useSharedWatch(deskIdleHolds(domicile))}
+      holders={holders}
+      icons={icons}
       inhibitor={deskIdleInhibitor(domicile)}
       pages={useWakeLockedPages()}
     />

@@ -83,7 +83,6 @@ use dynamic_launcher::DynamicLauncher;
 use email::{Email, Open};
 use file_chooser::FileChooser;
 use global_shortcuts::{GlobalShortcuts, Shortcuts};
-pub use inhibit::SHELL;
 use inhibit::{Inhibit, Inhibitors};
 use input_capture::{InputCapture, Inputs, Zones};
 use lockdown::Lockdown;
