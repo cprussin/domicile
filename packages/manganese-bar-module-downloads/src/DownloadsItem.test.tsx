@@ -4,6 +4,7 @@ import { DownloadState } from "@domicile-desktop/sdk/desktop/downloads";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../styled-system/css";
 import { DownloadsItem, OpenResult } from "./DownloadsItem";
 import { DONE_MS, FULL_MS } from "./useFinish";
 
@@ -103,6 +104,21 @@ describe("DownloadsItem", () => {
       ).toHaveTextContent("11%");
     });
 
+    it("keeps no room for the percent while it shows none", () => {
+      // The column the words open into closes to nothing, so the space
+      // between them and the icon must close with them.
+      item([INVOICE]);
+      const words = screen
+        .getByRole("button")
+        .querySelectorAll("span span span");
+
+      expect(
+        [...words].map((word) =>
+          word.className.includes(css({ paddingInlineStart: 1 })),
+        ),
+      ).toEqual([true, true]);
+    });
+
     it("claims no amount while a size is unknown", () => {
       item([{ ...PHOTOS, totalBytes: 0 }]);
       expect(
@@ -112,6 +128,15 @@ describe("DownloadsItem", () => {
   });
 
   describe("the panel", () => {
+    it("hangs from the item's end, which stays put as the item resizes", async () => {
+      item([PHOTOS]);
+      await open("Downloading 1 file, 23%");
+
+      expect(
+        screen.getByRole("dialog").closest("[data-align]"),
+      ).toHaveAttribute("data-align", "end");
+    });
+
     it("lists each download, the newest first", async () => {
       item([INVOICE, PHOTOS, BROKEN]);
       await open("Downloading 1 file, 23%");

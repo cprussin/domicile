@@ -1,4 +1,7 @@
-import type { Gap } from "@domicile-desktop/component-library/FluidItem";
+import type {
+  Anchor,
+  Gap,
+} from "@domicile-desktop/component-library/FluidItem";
 import { FluidItem } from "@domicile-desktop/component-library/FluidItem";
 import type { ReactNode } from "react";
 import { Children, memo } from "react";
@@ -32,14 +35,16 @@ export const TOP_BAR = 32;
  *
  * Each item eases its width as what it shows comes, changes and goes, so the
  * others slide aside rather than jump. An item hides by rendering nothing.
+ * Items on the right grow leftward, so their right edges, and any panel
+ * hung from them, stay put.
  *
  * Memoized, so an item redraws only when the context it reads changes.
  */
 export const TopBar = memo(({ layout }: { layout: BarLayout }) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
-    <div className={startStyles}>{fluid(layout.left, "wide")}</div>
-    <div className={centerStyles}>{fluid(layout.center, "none")}</div>
-    <div className={endStyles}>{fluid(layout.right, "wide")}</div>
+    <div className={startStyles}>{fluid(layout.left, "wide", "start")}</div>
+    <div className={centerStyles}>{fluid(layout.center, "none", "start")}</div>
+    <div className={endStyles}>{fluid(layout.right, "wide", "end")}</div>
   </header>
 ));
 
@@ -97,5 +102,9 @@ const centerStyles = css({ justifySelf: "center" });
 const endStyles = hstack({ gap: 0, justify: "flex-end", marginInline: -2 });
 
 /** `items`, each in a `FluidItem`, keeping their keys. */
-const fluid = (items: readonly ReactNode[], gap: Gap) =>
-  Children.map(items, (item) => <FluidItem gap={gap}>{item}</FluidItem>);
+const fluid = (items: readonly ReactNode[], gap: Gap, anchor: Anchor) =>
+  Children.map(items, (item) => (
+    <FluidItem anchor={anchor} gap={gap}>
+      {item}
+    </FluidItem>
+  ));

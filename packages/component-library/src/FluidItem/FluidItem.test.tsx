@@ -75,6 +75,19 @@ describe(FluidItem, () => {
     );
   });
 
+  it("keeps its content's end edge still when anchored at the end", () => {
+    const { observe } = fakeWidths(40);
+    const { container } = render(
+      <FluidItem anchor="end" observeWidth={observe}>
+        <button type="button">Downloads</button>
+      </FluidItem>,
+    );
+
+    expect(slotOf(container).className).toContain(
+      css({ justifyContent: "flex-end" }),
+    );
+  });
+
   it("follows its content's width as it changes", () => {
     const widths = fakeWidths(40);
     const { container } = render(<Item observe={widths.observe} shown />);

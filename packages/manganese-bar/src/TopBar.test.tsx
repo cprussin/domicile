@@ -41,6 +41,18 @@ describe("TopBar", () => {
     );
   });
 
+  it("grows the right column's items leftward, so their right edges stay put", () => {
+    // A panel hung from an item's end then stays put as the item resizes.
+    const { container } = render(
+      <TopBar layout={{ ...EMPTY, right: [<span key="c">c</span>] }} />,
+    );
+
+    const column = container.querySelector("header")?.lastElementChild;
+    expect(column?.firstElementChild?.className).toContain(
+      css({ justifyContent: "flex-end" }),
+    );
+  });
+
   it("eases an item out when it stops showing anything", async () => {
     const Sharing = ({ shown }: { shown: boolean }) =>
       shown ? <button type="button">Sharing screen</button> : null;

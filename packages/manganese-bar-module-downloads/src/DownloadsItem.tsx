@@ -108,7 +108,9 @@ export const DownloadsItem = ({ downloads, popsUp, ...actions }: Props) => {
   const label = labelOf(phase, running.length, percent);
   return (
     <Popover
-      align="center"
+      // Its end stays put as the item grows and shrinks, being on the bar's
+      // right; its center does not.
+      align="end"
       onOpenChange={setOpen}
       open={open}
       quiet
@@ -520,20 +522,21 @@ const statusStyles = css({
   transition: "grid-template-columns {durations.normal} {easings.in-out}",
 });
 
-// The percent and "Done", one over the other, so they cross-fade. The gap
-// from the icon is inside, so it closes with them.
+// The percent and "Done", one over the other, so they cross-fade.
 const statusTextStyles = css({
   "& > *": { gridArea: "1 / 1" },
   display: "grid",
   minInlineSize: 0,
   overflow: "hidden",
-  paddingInlineStart: 1,
   whiteSpace: "nowrap",
 });
 
+// The gap from the icon is on the words, which the closed column clips away.
+// On the column itself it would hold the column open.
 const wordStyles = css({
   "&:not([data-shown])": { opacity: 0 },
   opacity: 1,
+  paddingInlineStart: 1,
   transition: "opacity {durations.normal} {easings.default}",
 });
 
@@ -545,6 +548,7 @@ const doneStyles = css({
   color: "success",
   fontWeight: "semibold",
   opacity: 1,
+  paddingInlineStart: 1,
   transform: "translateX(0)",
   transition:
     "opacity {durations.normal} {easings.default}, transform {durations.normal} {easings.out}",

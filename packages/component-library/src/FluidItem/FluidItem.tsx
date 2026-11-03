@@ -14,6 +14,11 @@ export type ObserveWidth = (
 ) => () => void;
 
 type Props = {
+  /**
+   * The edge its content keeps while it opens, closes and resizes: `end`
+   * grows it toward the start, as for items packed against a row's end.
+   */
+  anchor?: Anchor | undefined;
   /** What it shows. Nothing, such as `null` or `false`, closes it. */
   children: ReactNode;
   /**
@@ -26,6 +31,9 @@ type Props = {
   /** Injectable for tests; defaults to a `ResizeObserver`. */
   observeWidth?: ObserveWidth | undefined;
 };
+
+/** The edges a `FluidItem` can keep still. */
+export type Anchor = "start" | "end";
 
 /** The gaps a row of `FluidItem`s can have. */
 export type Gap = "none" | "narrow" | "wide";
@@ -40,6 +48,7 @@ export type Gap = "none" | "narrow" | "wide";
  * returns nothing to hide is enough.
  */
 export const FluidItem = ({
+  anchor = "start",
   children,
   gap = "none",
   observeWidth = resizeObserverWidth,
@@ -99,7 +108,7 @@ export const FluidItem = ({
 
   return (
     <span
-      className={slotStyles}
+      className={slotStyles({ anchor })}
       onTransitionEnd={(event) => {
         // It has faded out, so what left can go.
         if (
@@ -125,15 +134,23 @@ export const FluidItem = ({
 // The width eases to the measured one. Before the first measurement it is
 // `auto`, which does not animate, so what shows from the start does not open.
 // Clipped across only, so nothing above or below is cut.
-const slotStyles = css({
-  "&:not([data-shown])": { opacity: 0 },
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: "var(--fluid-width, auto)",
-  opacity: 1,
-  overflowX: "clip",
-  transition:
-    "inline-size {durations.normal} {easings.in-out}, opacity {durations.normal} {easings.default}",
+const slotStyles = cva({
+  base: {
+    "&:not([data-shown])": { opacity: 0 },
+    display: "inline-flex",
+    flexShrink: 0,
+    inlineSize: "var(--fluid-width, auto)",
+    opacity: 1,
+    overflowX: "clip",
+    transition:
+      "inline-size {durations.normal} {easings.in-out}, opacity {durations.normal} {easings.default}",
+  },
+  variants: {
+    anchor: {
+      end: { justifyContent: "flex-end" },
+      start: {},
+    },
+  },
 });
 
 // Its own width, so it can be measured whatever the slot is eased to. The gap
