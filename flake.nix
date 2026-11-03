@@ -195,7 +195,10 @@
         # Chromium `dlopen`s `libEGL.so.1` at run time, which
         # `autoPatchelfHook` cannot see. Without it on the path the GPU process
         # exits and the window stays white. It also `dlopen`s
-        # `libpipewire-0.3.so.0` for a page's screen capture.
+        # `libpipewire-0.3.so.0` for a page's screen capture, and
+        # `libpulse.so.0` for sound. Without libpulse the audio service falls
+        # back to ALSA, which cannot open a cast's sound node by name, so a
+        # page's `getDisplayMedia()` of a window or monitor with audio fails.
         #
         # A wrapper, not an rpath: chrome re-execs itself for its zygote and
         # renderers, and only environment variables reach those children.
@@ -215,6 +218,7 @@
                 pkgs.libgbm
                 pkgs.libGL
                 pkgs.pipewire
+                pkgs.libpulseaudio
               ]
             }" \
             --prefix XDG_DATA_DIRS : "${
@@ -242,6 +246,12 @@
           # time.
           grep -q LD_LIBRARY_PATH "$out/chrome" || {
             echo "the engine's chrome is not wrapped, so it carries no GL path" >&2
+            exit 1
+          }
+          # Check the wrapper carries libpulse, which the audio service needs
+          # to open a cast's sound node.
+          grep -q libpulseaudio "$out/chrome" || {
+            echo "the engine's chrome carries no libpulse, so it plays and captures sound through ALSA" >&2
             exit 1
           }
           # Check the wrapper adds compiled GSettings schemas.
