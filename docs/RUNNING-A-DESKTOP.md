@@ -13,14 +13,14 @@ domicile @domicile-desktop/shell-simple   # floating windows only
 With Nix, run either without installing:
 
 ```sh
-nix run github:cprussin/domicile/stable#manganese
-nix run github:cprussin/domicile/stable#simple
+nix run github:cprussin/domicile/release#manganese
+nix run github:cprussin/domicile/release#simple
 ```
 
-- `stable` is the newest `main` built with the production engine (PGO, ThinLTO,
-  no DCHECKs). After an engine change, `main` uses a slower checked build until
-  the nightly build is pinned. `stable` waits for that pin. With Nix, drop
-  `/stable` to run `main`.
+- `release` is the newest release. `/stable` runs the newest `main` built
+  with the production engine (PGO, ThinLTO, no DCHECKs); drop the branch to
+  run `main`, which uses a slower checked engine after an engine change until
+  the nightly build is pinned.
 - With Nix, each desktop is its own app. Install one with
   `nix profile install`.
 - In a Wayland session the desktop opens in a window. On a console login it
@@ -482,7 +482,7 @@ Upgrade a `stable` package by downloading and installing it again.
 
 ### Nix on another distribution
 
-`nix profile install github:cprussin/domicile/stable#domicile` installs
+`nix profile install github:cprussin/domicile/release#domicile` installs
 Domicile without the machine's half. Add it by hand, from this repository:
 
 - **Session:** `packages/distro/share/domicile-session.desktop` as

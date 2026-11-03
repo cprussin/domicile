@@ -34,7 +34,7 @@ shell, see [`@domicile-desktop/manganese`](../shell-manganese/README.md).
 domicile @domicile-desktop/shell-simple
 ```
 
-With Nix, `nix run github:cprussin/domicile/stable#simple` runs it without
+With Nix, `nix run github:cprussin/domicile/release#simple` runs it without
 installing. Either runs the engine and compositor in a window on your display.
 
 ## Launch an app into it

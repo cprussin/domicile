@@ -55,7 +55,7 @@ It opens in a window. Close it and you’re back.
 Or try it with [Nix](https://nixos.org/download):
 
 ```sh
-nix run github:cprussin/domicile/stable#manganese
+nix run github:cprussin/domicile/release#manganese
 ```
 
 **Nix trial:** locking requires a system password-checking service that this command doesn’t install. Until you [configure it](https://www.domicile-desktop.com/docs/manganese/install#try-it-first), don’t lock the trial or suspend the machine. If it locks, close its window.

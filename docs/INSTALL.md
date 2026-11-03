@@ -123,7 +123,7 @@ With [Nix](https://nixos.org/download), run manganese in a window on your
 current desktop, with nothing installed:
 
 ```sh
-nix run github:cprussin/domicile/stable#manganese
+nix run github:cprussin/domicile/release#manganese
 ```
 
 `nix run` installs nothing on the system, so the password check the lock

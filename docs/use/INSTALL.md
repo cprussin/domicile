@@ -112,7 +112,7 @@ With [Nix](https://nixos.org/download), run manganese in a window on your
 current desktop, with nothing installed:
 
 ```sh
-nix run github:cprussin/domicile/stable#manganese
+nix run github:cprussin/domicile/release#manganese
 ```
 
 From a console login, the same command takes the whole screen.

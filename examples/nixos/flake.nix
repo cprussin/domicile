@@ -5,7 +5,7 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    domicile.url = "github:cprussin/domicile/stable";
+    domicile.url = "github:cprussin/domicile/release";
   };
 
   outputs = { nixpkgs, home-manager, domicile, ... }: {

@@ -89,7 +89,7 @@ packages.
 
 - `bun run turbo build:vite --filter @domicile-desktop/manganese` builds the
   chrome to `.vite/renderer/main_window/`.
-- `nix run 'github:cprussin/domicile/stable#manganese'` runs it.
+- `nix run 'github:cprussin/domicile/release#manganese'` runs it.
   `packages/dev-shell/bin/dev-shell.sh manganese` does the same from a checkout.
 - `bun run --filter @domicile-desktop/manganese start:dev` runs it on the
   pinned engine and a compositor built from the checkout, and rebuilds on

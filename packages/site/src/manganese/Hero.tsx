@@ -20,7 +20,7 @@ export const Hero = () => (
     tag={{ href: "/", label: "The reference shell for Domicile →" }}
     title="Sway, with more <div>s."
   >
-    <CopyCommand command="nix run github:cprussin/domicile/stable#manganese" />
+    <CopyCommand command="nix run github:cprussin/domicile/release#manganese" />
     <span className={noteStyles}>
       With Nix, try it in a window first. Packages for Debian, Ubuntu, Fedora,
       openSUSE and Arch are{" "}
