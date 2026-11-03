@@ -17,8 +17,8 @@ import type { WindowState } from "./window-state";
 const IN_FLIGHT = 4;
 
 /**
- * How far, in page pixels, a pointer event can be from a spot and still be at
- * it.
+ * How far, in page pixels, a pointer event can be from a warp target and still
+ * be its landing.
  *
  * At a fractional scale the engine floors a warp into device pixels, then
  * floors the landing back into DIPs, so it arrives up to 1.5 page pixels off
@@ -49,10 +49,11 @@ export type Pointer = {
    * Whether a pointer event at `at` means the user moved the pointer there.
    *
    * Decided by position, not a flag: a crossing fires `pointerover` before
-   * `pointermove`, so a flag cleared on move would swallow it. An event within
-   * `NEAR` of the last seen position or of a pending warp target is a window
-   * arriving under the pointer. Anything farther is the user and clears pending warps. Fails
-   * open while the pointer position is unknown.
+   * `pointermove`, so a flag cleared on move would swallow it. An event at
+   * exactly the last seen position, or within `NEAR` of a pending warp target,
+   * is a window arriving under the pointer. Anything else is the user and
+   * clears pending warps. Exact, because a slow crossing arrives a pixel or
+   * less from the last move. Fails open while the pointer position is unknown.
    *
    * A target sent twice with another in between is ambiguous if the engine
    * coalesced the middle warp. This keeps the earlier entry, so a crossing that
@@ -102,7 +103,7 @@ export const usePointerWarp = ({
   // Records an arrival at `to` and returns whether the user moved the pointer
   // there. See {@link Pointer.pointing}.
   const arrivedAt = useCallback((to: Spot): boolean => {
-    const asked = sent.current.findIndex((spot) => same(spot, to));
+    const asked = sent.current.findIndex((spot) => near(spot, to));
     const seen = pointer.current;
     if (asked !== -1) {
       // A warp landed. The engine runs warps in order, so earlier ones are
@@ -110,7 +111,7 @@ export const usePointerWarp = ({
       pointer.current = to;
       sent.current = sent.current.slice(asked + 1);
       return false;
-    } else if (seen !== undefined && same(seen, to)) {
+    } else if (seen !== undefined && seen[0] === to[0] && seen[1] === to[1]) {
       // A window moved under the still pointer. Pending warps stay pending.
       return false;
     } else {
@@ -174,8 +175,8 @@ export const usePointerWarp = ({
   return useMemo(() => ({ pointing: arrivedAt }), [arrivedAt]);
 };
 
-/** Whether two places on the page are the same place, give or take rounding. */
-const same = (one: Spot, other: Spot): boolean =>
+/** Whether a pointer event at `other` is a landing of a warp to `one`. */
+const near = (one: Spot, other: Spot): boolean =>
   Math.abs(one[0] - other[0]) < NEAR && Math.abs(one[1] - other[1]) < NEAR;
 
 /** Whether `other` is the box `one` is, or `false` for no box at all. */

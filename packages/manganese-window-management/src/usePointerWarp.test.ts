@@ -295,11 +295,14 @@ describe("usePointerWarp", () => {
     expect(result.current.pointing([598.5, 351.5])).toBe(false);
   });
 
-  it("still reads two pixels from the pointer as the hand", () => {
+  it("reads a slow crossing, under a pixel past the last move, as pointing", () => {
+    // A crossing fires `pointerover` before its `pointermove`, so a slow hand
+    // arrives one device pixel from the last move: 0.83 page pixels at scale
+    // 1.2.
     const { result } = warping(desktopOf(LEFT, BOTH));
-    pointerAt(200, 300);
+    pointerAt(399.17, 300);
 
-    expect(result.current.pointing([202, 300])).toBe(true);
+    expect(result.current.pointing([400, 300])).toBe(true);
   });
 
   it("answers for a pointer it has never seen at all", () => {
