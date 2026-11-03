@@ -34,7 +34,8 @@ A photograph behind the whole desktop, changing every minute. Source:
   - brightness that suits its theme: mostly dark with few bright areas for
     dark, mostly bright with no large dark areas for light, and the top band
     (under the bar) matching;
-  - a look by eye, dropping charts, diagrams, text, people and near-duplicates.
+  - a look by eye at the whole frame, dropping charts, diagrams, text,
+    captions, borders, people, near-duplicates, and soft or grainy photos.
 - **Offline**: each theme has one photo in the repo
   (`src/fallback-*.jpg`) under its rotation. It fades in only once a
   remote photo fails or 3s pass without the remote photos loading, so it does

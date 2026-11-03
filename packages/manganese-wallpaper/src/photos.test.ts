@@ -19,7 +19,7 @@ describe("DEFAULT_WALLPAPERS", () => {
 
   it("is hundreds of photographs for each theme, so a day rarely repeats one", () => {
     for (const theme of THEMES) {
-      expect(DEFAULT_WALLPAPERS[theme].length).toBeGreaterThanOrEqual(200);
+      expect(DEFAULT_WALLPAPERS[theme].length).toBeGreaterThanOrEqual(100);
     }
   });
 
