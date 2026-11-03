@@ -112,7 +112,7 @@ const rootStyles = cva({
     size: {
       "2xs": circle.raw({ fontSize: "xs", size: 6 }),
       xs: circle.raw({ fontSize: "sm", size: 8 }),
-      sm: circle.raw({ fontSize: "lg", size: 12 }),
+      sm: circle.raw({ fontSize: "md", size: 10 }),
       md: circle.raw({ fontSize: "2xl", size: 16 }),
       lg: circle.raw({ fontSize: "3xl", size: 20 }),
       xl: circle.raw({ fontSize: "4xl", size: 24 }),

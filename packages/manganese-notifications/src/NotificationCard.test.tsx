@@ -72,6 +72,16 @@ describe("NotificationCard", () => {
       );
     });
 
+    it("runs its body under its picture, across the whole card", () => {
+      const { container } = card({ body: "Ada: lunch?" });
+
+      expect(
+        screen
+          .getByText("Ada: lunch?")
+          .parentElement?.isSameNode(container.firstElementChild),
+      ).toBe(true);
+    });
+
     it("says a critical one is", () => {
       card({ summary: "Battery low", urgency: "critical" });
 

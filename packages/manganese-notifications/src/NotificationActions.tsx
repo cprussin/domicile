@@ -72,7 +72,7 @@ export const NotificationActions = ({
                 show(true, fieldRef);
               }}
               ref={replyRef}
-              size="md"
+              size="sm"
               variant="ghost"
             >
               {replyLabel}
@@ -87,7 +87,7 @@ export const NotificationActions = ({
                 onClick={() => {
                   onAction(key);
                 }}
-                size="md"
+                size="sm"
                 variant="ghost"
               >
                 {label}
@@ -174,15 +174,13 @@ const stripStyles = cva({
     density: {
       compact: {
         marginBlockEnd: -2,
-        marginBlockStart: 2,
-        marginInlineEnd: -8,
-        marginInlineStart: -2.5,
+        marginBlockStart: 0.5,
+        marginInline: -2.5,
       },
       roomy: {
         marginBlockEnd: -3.5,
-        marginBlockStart: 3,
-        marginInlineEnd: -9,
-        marginInlineStart: -3.5,
+        marginBlockStart: 1.5,
+        marginInline: -3.5,
       },
     },
   },
@@ -208,6 +206,7 @@ const buttonsStyles = css({
       color: "foreground",
       outline: "none",
     },
+    blockSize: 9,
     borderRadius: 0,
     flex: 1,
     minInlineSize: 0,

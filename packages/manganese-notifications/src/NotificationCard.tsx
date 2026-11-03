@@ -97,7 +97,7 @@ export const NotificationCard = ({
       {notification.icon === undefined ? (
         <Avatar
           name={notification.appName || notification.summary}
-          size={density === "compact" ? "2xs" : "xs"}
+          size={density === "compact" ? "xs" : "sm"}
         />
       ) : (
         <img
@@ -140,12 +140,12 @@ export const NotificationCard = ({
             {summary ?? notification.summary}
           </span>
         )}
-        {notification.body !== "" && (
-          <span className={bodyStyles({ density })}>
-            {body ?? notification.body}
-          </span>
-        )}
       </div>
+      {notification.body !== "" && (
+        <span className={bodyStyles({ density })}>
+          {body ?? notification.body}
+        </span>
+      )}
       {(buttons.length > 0 || reply !== undefined) && (
         <NotificationActions
           buttons={buttons}
@@ -176,11 +176,11 @@ const startsOnControl = (target: EventTarget): boolean =>
   target instanceof Element &&
   target.closest("button, a, input, textarea") !== null;
 
-// The text column, so the summary and body align under the sender, not the
-// image.
+// The picture beside the sender and summary, centered on them. The body and the
+// action strip run under both, across the card.
 const cardStyles = cva({
   base: grid.raw({
-    alignItems: "start",
+    alignItems: "center",
     gridTemplateColumns: "auto minmax(0, 1fr)",
     position: "relative",
     textAlign: "start",
@@ -195,14 +195,12 @@ const cardStyles = cva({
       compact: {
         columnGap: 2.5,
         paddingBlock: 2,
-        paddingInlineEnd: 8,
-        paddingInlineStart: 2.5,
+        paddingInline: 2.5,
       },
       roomy: {
         columnGap: 3,
         paddingBlock: 3.5,
-        paddingInlineEnd: 9,
-        paddingInlineStart: 3.5,
+        paddingInline: 3.5,
       },
     },
   },
@@ -214,8 +212,8 @@ const pictureStyles = cva({
   base: { borderRadius: "lg", flexShrink: 0, objectFit: "cover" },
   variants: {
     density: {
-      compact: { blockSize: 6, inlineSize: 6 },
-      roomy: { blockSize: 8, inlineSize: 8 },
+      compact: { blockSize: 8, inlineSize: 8 },
+      roomy: { blockSize: 10, inlineSize: 10 },
     },
   },
 });
@@ -237,8 +235,9 @@ const senderStyles = cva({
   }),
   variants: {
     density: {
-      compact: { color: "textFaint" },
-      roomy: { color: "muted" },
+      // Clears the close button, which sits over this line's end.
+      compact: { color: "textFaint", paddingInlineEnd: 6 },
+      roomy: { color: "muted", paddingInlineEnd: 5 },
     },
   },
 });
@@ -273,7 +272,11 @@ const summaryStyles = cva({
 
 // `pre-line` keeps the line breaks senders put in the body.
 const bodyStyles = cva({
-  base: { overflowWrap: "anywhere", whiteSpace: "pre-line" },
+  base: {
+    gridColumn: "1 / -1",
+    overflowWrap: "anywhere",
+    whiteSpace: "pre-line",
+  },
   variants: {
     density: {
       compact: { color: "textSoft", lineClamp: 2, textStyle: "panelDetail" },
