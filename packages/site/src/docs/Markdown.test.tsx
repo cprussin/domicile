@@ -25,7 +25,7 @@ describe("Markdown", () => {
     );
     expect(html).toContain('href="/docs/manganese/idle#clocks"');
     expect(html).toContain(
-      'href="https://github.com/cprussin/domicile/blob/stable/src/"',
+      'href="https://github.com/cprussin/domicile/blob/release/src/"',
     );
   });
 

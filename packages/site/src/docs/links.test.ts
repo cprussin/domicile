@@ -10,7 +10,7 @@ const PAGES = [
 describe("resolveHref", () => {
   test("a page beside it becomes its route", () => {
     expect(resolveHref("IDLE.md", "docs/LOCK.md", PAGES)).toBe(
-      "https://github.com/cprussin/domicile/blob/stable/docs/IDLE.md",
+      "https://github.com/cprussin/domicile/blob/release/docs/IDLE.md",
     );
     expect(resolveHref("LOCK.md#verifiers", "docs/IDLE.md", PAGES)).toBe(
       "/docs/manganese/lock#verifiers",
@@ -31,7 +31,7 @@ describe("resolveHref", () => {
 
   test("a file the docs don't render links to GitHub", () => {
     expect(resolveHref("src/", "packages/wm/docs/KEYS.md", PAGES)).toBe(
-      "https://github.com/cprussin/domicile/blob/stable/packages/wm/docs/src/",
+      "https://github.com/cprussin/domicile/blob/release/packages/wm/docs/src/",
     );
   });
 

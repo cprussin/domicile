@@ -4,7 +4,7 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "stable": true
+      "release": true
     }
   },
   "ignoreCommand": "bash vercel-ignore.sh",
