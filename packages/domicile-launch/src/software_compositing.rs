@@ -18,6 +18,8 @@
 //!   simpledrm, vkms, hyperv_drm and bochs have no render node. virtio-gpu
 //!   always has one, and has 3D only with the host's virgl feature, which its
 //!   virtio device lists (on PCI, the render node's device's `virtio<N>`).
+//!   vmwgfx (VMware, VirtualBox's VMSVGA) always has one too, and says
+//!   whether it has 3D only when asked ([`vmwgfx_has_3d`]).
 
 use std::path::{Path, PathBuf};
 
@@ -29,6 +31,25 @@ const VIRTIO_GPU: &str = "virtio_gpu";
 
 /// `VIRTIO_GPU_F_VIRGL`, the feature bit for 3D.
 const VIRGL: usize = 0;
+
+/// VMware's SVGA driver, as `device/driver` names it. VirtualBox's VMSVGA
+/// adapter uses it too.
+const VMWGFX: &str = "vmwgfx";
+
+/// `DRM_IOCTL_VMW_GET_PARAM`: `DRM_IOWR(DRM_COMMAND_BASE + 0, struct
+/// drm_vmw_getparam_arg)`, from `vmwgfx_drm.h`.
+const VMW_GET_PARAM: libc::Ioctl = 0xc010_6440;
+
+/// `DRM_VMW_PARAM_3D`.
+const VMW_PARAM_3D: u32 = 2;
+
+/// `struct drm_vmw_getparam_arg`.
+#[repr(C)]
+struct VmwGetParam {
+    value: u64,
+    param: u32,
+    pad64: u32,
+}
 
 /// Why the launcher could not decide.
 #[derive(Debug, thiserror::Error)]
@@ -48,6 +69,14 @@ pub enum Undecided {
          it imports no dmabufs. Unset it"
     )]
     HeadlessOnTheGpu,
+    #[error(
+        "cannot ask vmwgfx render node {node} whether it has 3D: {source}. \
+         {VARIABLE}=yes or no decides without it"
+    )]
+    Vmwgfx {
+        node: String,
+        source: std::io::Error,
+    },
 }
 
 /// Whether the CPU composites on `platform`, the engine's ozone platform.
@@ -57,9 +86,10 @@ pub fn on_the_cpu(
     platform: &str,
     overridden: Option<&str>,
     sys_class_drm: &Path,
+    vmwgfx_has_3d: impl Fn(&str) -> std::io::Result<bool>,
 ) -> Result<bool, Undecided> {
     match platform {
-        "drm" => composites_on_the_cpu(overridden, sys_class_drm),
+        "drm" => composites_on_the_cpu(overridden, sys_class_drm, vmwgfx_has_3d),
         "headless" => match overridden.filter(|value| !value.is_empty()) {
             None | Some("yes") => Ok(true),
             Some("no") => Err(Undecided::HeadlessOnTheGpu),
@@ -71,39 +101,61 @@ pub fn on_the_cpu(
 
 /// Whether the CPU composites, from `overridden` (the variable's value) or
 /// the render nodes under `sys_class_drm` (`/sys/class/drm`).
+/// `vmwgfx_has_3d` asks a vmwgfx render node, by name, whether it has 3D:
+/// [`vmwgfx_has_3d`] in production.
 ///
 /// An empty variable counts as unset.
 pub fn composites_on_the_cpu(
     overridden: Option<&str>,
     sys_class_drm: &Path,
+    vmwgfx_has_3d: impl Fn(&str) -> std::io::Result<bool>,
 ) -> Result<bool, Undecided> {
     match overridden.filter(|value| !value.is_empty()) {
         Some("yes") => Ok(true),
         Some("no") => Ok(false),
         Some(value) => Err(Undecided::BadOverride(value.to_owned())),
-        None => render_node_with_3d(sys_class_drm).map(|has_3d| !has_3d),
+        None => render_node_with_3d(sys_class_drm, vmwgfx_has_3d).map(|has_3d| !has_3d),
     }
 }
 
 /// Whether any render node under `sys_class_drm` has 3D.
-fn render_node_with_3d(sys_class_drm: &Path) -> Result<bool, Undecided> {
+fn render_node_with_3d(
+    sys_class_drm: &Path,
+    vmwgfx_has_3d: impl Fn(&str) -> std::io::Result<bool>,
+) -> Result<bool, Undecided> {
     let unlisted = |source| Undecided::Sysfs {
         path: sys_class_drm.display().to_string(),
         source,
     };
     for entry in std::fs::read_dir(sys_class_drm).map_err(unlisted)? {
         let entry = entry.map_err(unlisted)?;
-        if entry.file_name().to_string_lossy().starts_with("renderD")
-            && has_3d(&entry.path().join("device"))
-        {
+        let node = entry.file_name().to_string_lossy().into_owned();
+        if node.starts_with("renderD") && has_3d(&node, &entry.path(), &vmwgfx_has_3d)? {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-/// Whether the device behind a render node has 3D.
-fn has_3d(device: &Path) -> bool {
+/// Whether the render node `node`, at `path` in sysfs, has 3D.
+fn has_3d(
+    node: &str,
+    path: &Path,
+    vmwgfx_has_3d: impl Fn(&str) -> std::io::Result<bool>,
+) -> Result<bool, Undecided> {
+    let device = path.join("device");
+    if driver(&device).as_deref() == Some(VMWGFX) {
+        return vmwgfx_has_3d(node).map_err(|source| Undecided::Vmwgfx {
+            node: node.to_owned(),
+            source,
+        });
+    }
+    Ok(virtio_has_3d(&device))
+}
+
+/// Whether a device has 3D, as far as virtio-gpu's features say: any other
+/// device has.
+fn virtio_has_3d(device: &Path) -> bool {
     let Some(virtio) = virtio_gpu(device) else {
         return true;
     };
@@ -135,4 +187,30 @@ fn virtio_gpu(device: &Path) -> Option<PathBuf> {
 fn driver(device: &Path) -> Option<String> {
     let driver = std::fs::read_link(device.join("driver")).ok()?;
     Some(driver.file_name()?.to_string_lossy().into_owned())
+}
+
+/// Whether the vmwgfx render node `node` (as `/dev/dri` names it) has 3D.
+///
+/// vmwgfx has a render node with or without 3D, and only the driver knows
+/// which. Mesa asks it the same way.
+pub fn vmwgfx_has_3d(node: &str) -> std::io::Result<bool> {
+    let device = std::fs::File::open(Path::new("/dev/dri").join(node))?;
+    let mut asked = VmwGetParam {
+        value: 0,
+        param: VMW_PARAM_3D,
+        pad64: 0,
+    };
+    // SAFETY: `asked` is the `drm_vmw_getparam_arg` this request reads and
+    // writes, and lives for the call.
+    let answered = unsafe {
+        libc::ioctl(
+            std::os::fd::AsRawFd::as_raw_fd(&device),
+            VMW_GET_PARAM,
+            &raw mut asked,
+        )
+    };
+    match answered {
+        0 => Ok(asked.value != 0),
+        _ => Err(std::io::Error::last_os_error()),
+    }
 }

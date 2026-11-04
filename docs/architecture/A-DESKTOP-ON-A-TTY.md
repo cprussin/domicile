@@ -203,15 +203,16 @@ A nested run still uses the host's clipboard; [KNOWN-GAPS.md](/docs/KNOWN-GAPS.m
 
 ## Software output
 
-A card with no 3D (2D virtio-gpu, Hyper-V, simpledrm, vkms) gives the GPU
-process no GL. The desktop is composited on the CPU instead.
+A card with no 3D (2D virtio-gpu, vmwgfx with 3D off, Hyper-V, simpledrm,
+vkms) gives the GPU process no GL. The desktop is composited on the CPU instead.
 
 - **Who decides:** `domicile-launch` (`software_compositing.rs`), once per run.
   A headless desktop always composites on the CPU
   ([A-HEADLESS-DESKTOP.md](A-HEADLESS-DESKTOP.md)); a nested one never does.
   On drm, the CPU composites when no render node has 3D: simpledrm, vkms,
-  hyperv_drm and bochs have no render node, and virtio-gpu has 3D only with the
-  `VIRTIO_GPU_F_VIRGL` feature bit (`device/features`, first character).
+  hyperv_drm and bochs have no render node, virtio-gpu has 3D only with the
+  `VIRTIO_GPU_F_VIRGL` feature bit (`device/features`, first character), and
+  vmwgfx (VMware, VirtualBox's VMSVGA) only when `DRM_VMW_PARAM_3D` says so.
   `DOMICILE_SOFTWARE_COMPOSITING=yes` or `no` decides instead.
 - **Engine:** gets `--disable-gpu`, so viz composites in software.
   `GbmSurfaceFactory::CreateCanvasForWidget` returns a `DrmCanvas`

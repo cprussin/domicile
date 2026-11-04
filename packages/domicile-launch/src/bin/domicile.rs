@@ -766,6 +766,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         &platform,
         env(software_compositing::VARIABLE).as_deref(),
         Path::new("/sys/class/drm"),
+        software_compositing::vmwgfx_has_3d,
     )
     .map_err(|why| why.to_string())?;
     if on_the_cpu {
