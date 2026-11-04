@@ -54,8 +54,20 @@ const listStyles = hstack({ gap: 0.5 });
 
 const workspaceStyles = cva({
   base: {
-    // Skips `aria-current`, so the chip keeps its fill under the pointer.
-    _hoverEnabled: { backgroundColor: "fillOverPhoto", color: "onPhoto" },
+    // The hover square, a layer of its own so it can fade while the chip
+    // itself moves at once.
+    _before: {
+      backgroundColor: "fillOverPhoto",
+      borderRadius: "inherit",
+      content: '""',
+      inset: 0,
+      opacity: 0,
+      position: "absolute",
+      transition: "opacity {durations.fast} {easings.out}",
+      zIndex: -1,
+    },
+    // Skips `aria-current`, so the chip shows no square under the pointer.
+    _hoverEnabled: { _before: { opacity: 1 }, color: "onPhoto" },
     backgroundColor: "transparent",
     blockSize: 6,
     borderRadius: "lg",
@@ -69,22 +81,23 @@ const workspaceStyles = cva({
     // Tabular figures keep every number the same width.
     fontVariantNumeric: "tabular-nums",
     fontWeight: "medium",
+    // Keeps the hover square behind the number but over the bar.
+    isolation: "isolate",
     // Only matters where `text-box` trim is unsupported.
     lineHeight: "tight",
     minInlineSize: 6,
     paddingBlock: 0,
     paddingInline: 2,
+    position: "relative",
     // Pressed feedback that is not just color.
     scale: { _active: 0.92, base: 1 },
     textAlign: "center",
     // Center vertically. Trimming the line box to cap height and baseline
     // leaves only the glyph, so the digit sits centered rather than high.
     textBox: "trim-both cap alphabetic",
-    transition: `
-      background-color {durations.fast} {easings.out},
-      color {durations.fast} {easings.out},
-      scale {durations.faster} {easings.out}
-    `,
+    // The chip and its colors move at once, as in sway's bar. A fade leaves
+    // both chips half lit mid-switch, which reads as the old one flashing.
+    transition: "scale {durations.faster} {easings.out}",
   },
   variants: {
     shown: {
