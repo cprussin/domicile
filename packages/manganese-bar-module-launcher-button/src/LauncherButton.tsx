@@ -26,8 +26,7 @@ export const LauncherButton = ({ onOpen }: Props) => (
   />
 );
 
-// Styled like the bell button. The negative margin cancels the bar's start
-// column `gap: 4`, so the tray sits right after the button.
+// Styled like the bell button.
 const buttonStyles = css({
   _hover: { backgroundColor: "fillOverPhoto" },
   alignItems: "center",
@@ -40,7 +39,6 @@ const buttonStyles = css({
   flexShrink: 0,
   inlineSize: 7,
   justifyContent: "center",
-  marginInlineEnd: -4,
   padding: 0,
   transition: "background-color {durations.fast} {easings.default}",
 });
