@@ -12,12 +12,14 @@ import { Sharing } from "@domicile-desktop/manganese-bar-module-sharing";
 import { Tray } from "@domicile-desktop/manganese-bar-module-tray";
 import { WorkspaceSwitcher } from "@domicile-desktop/manganese-bar-module-workspace-switcher";
 import { QuickSettings } from "@domicile-desktop/manganese-quick-settings";
+import { Fragment } from "react";
 
 /**
  * Manganese's default bar.
  *
- * The launcher button is first, next to the tray. The sharing indicator leads
- * the right column, so it is seen, then the keep awake eye, casting to TVs
+ * The launcher button is first, with the tray right after it: they share one
+ * item, as the bar puts its item gap around each item. The sharing indicator
+ * leads the right column, so it is seen, then the keep awake eye, casting to TVs
  * and downloads. The keymap, which shows only on a keyboard with several, is next, then
  * quick settings. The bell is last because the drawer it opens slides out from
  * that edge.
@@ -25,8 +27,10 @@ import { QuickSettings } from "@domicile-desktop/manganese-quick-settings";
 export const DEFAULT_BAR: BarLayout = {
   center: [<Clock key="clock" />],
   left: [
-    <LauncherButton key="launcher" />,
-    <Tray key="tray" />,
+    <Fragment key="launcher">
+      <LauncherButton />
+      <Tray />
+    </Fragment>,
     <WorkspaceSwitcher key="workspaces" />,
   ],
   right: [
