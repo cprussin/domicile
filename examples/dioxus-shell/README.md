@@ -31,11 +31,10 @@ cp shell.js dist/
 domicile ./dist/shell.js
 ```
 
-Or with Nix, from anywhere:
+Or run it with Nix, from anywhere. Inside a desktop, it opens nested:
 
 ```sh
-nix build github:cprussin/domicile#dioxus-shell-example
-domicile ./result/shell.js
+nix run github:cprussin/domicile#dioxus-shell-example
 ```
 
 ## Notes

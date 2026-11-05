@@ -813,6 +813,23 @@
         meta.description = "The quickstart shell in Rust with Dioxus, compiled to WebAssembly";
       };
 
+      # Domicile running examples/dioxus-shell, for `nix run`. Inside a
+      # desktop it opens nested.
+      dioxusShellDesktop = pkgs.runCommand "dioxus-shell-example"
+        {
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          meta = {
+            inherit (dioxusShellExample.meta) description;
+            license = pkgs.lib.licenses.mit;
+            mainProgram = "dioxus-shell-example";
+            platforms = [ system ];
+          };
+        } ''
+        makeWrapper ${domicilePackage}/bin/domicile "$out/bin/dioxus-shell-example" \
+          --add-flags ${dioxusShellExample}/shell.js \
+          --suffix PATH : ${pkgs.lib.makeBinPath [ pkgs.kitty ]}
+      '';
+
       # The desktops as `nix run` apps.
       domicileApps = pkgs.lib.mapAttrs
         (name: package: {
@@ -858,8 +875,8 @@
         engine = domicileEngine;
         # The shell builder on its own, for `DOMICILE_BUILDER`.
         builder = domicileBuilder;
-        # examples/dioxus-shell, a shell written in Rust.
-        dioxus-shell-example = dioxusShellExample;
+        # Domicile running examples/dioxus-shell, a shell written in Rust.
+        dioxus-shell-example = dioxusShellDesktop;
       };
 
       # The nixpkgs this flake builds with, so scripts take tools such as
