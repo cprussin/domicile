@@ -48,6 +48,12 @@ const QUESTIONS: readonly {
   },
   {
     answer:
+      "No. A shell can be Rust, or any language that compiles to WebAssembly. The Dioxus example is the quickstart shell in Rust, with a 3-line JavaScript file that loads it.",
+    link: { href: "/docs/shells/writing#in-rust", label: "Shells in Rust" },
+    question: "Do I have to write my shell in JavaScript?",
+  },
+  {
+    answer:
       "A reload or `domicile load-shell` keeps every window running and starts only the shell's page over. If the engine crashes, it restarts: your apps keep running with their state, but browser windows close. If the compositor crashes, browser windows stay, but apps lose their connection. Most exit, and the ones your shell launched start again fresh, without unsaved work.",
     link: {
       href: repoFile(

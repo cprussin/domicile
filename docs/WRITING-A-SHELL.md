@@ -211,6 +211,29 @@ export const Shell: ShellModule = mount(Taskbar);
 
 See [the package's README](/packages/react/README.md).
 
+## In Rust
+
+A shell can be Rust, or any language that compiles to WebAssembly.
+[`examples/dioxus-shell`](/examples/dioxus-shell) is the quickstart shell in
+[Dioxus](https://dioxuslabs.com):
+
+- Export `Shell` with `#[wasm_bindgen(js_name = Shell)]`. It takes the root
+  element and the desktop.
+- Bind the parts of `domicile` you use with `wasm-bindgen`. The types to copy
+  are in `@domicile-desktop/sdk`.
+- Build with `cargo` and `wasm-bindgen --target web`. `domicile` bundles
+  JavaScript only, so it doesn't run cargo for you.
+- A 3-line `shell.js` loads the wasm and re-exports `Shell`, since Domicile
+  calls `Shell` as soon as the module loads:
+
+  ```js
+  import init from "./pkg/dioxus_shell.js";
+  await init();
+  export { Shell } from "./pkg/dioxus_shell.js";
+  ```
+
+- Run it with `domicile ./dist/shell.js`.
+
 ## The SDK
 
 `@domicile-desktop/sdk`, on npm, provides:
