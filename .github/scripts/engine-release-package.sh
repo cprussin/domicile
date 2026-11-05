@@ -123,14 +123,14 @@ OBJCOPY="$CHROMIUM/third_party/llvm-build/Release+Asserts/bin/llvm-objcopy"
   exit 1
 }
 for file in "$STAGE/$NAME"/*; do
-  if [ "$(head -c 4 "$file")" = $'\x7fELF' ]; then
+  if [ -f "$file" ] && [ "$(od -An -tx1 -N4 "$file")" = ' 7f 45 4c 46' ]; then
     "$OBJCOPY" --strip-all "$file"
   fi
 done
 
 # Record provenance inside the tarball.
 cat > "$STAGE/$NAME/PROVENANCE" <<PROV
-domicile engine, built on crux
+domicile engine, packaged on $(uname -n)
 series identity: $IDENTITY
 domicile commit: $(git rev-parse HEAD)
 chromium pin:    $PIN

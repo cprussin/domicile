@@ -64,6 +64,7 @@ fake_build() { # args.gn contents, or empty for none
               locales/en-US.pak locales/en-US.pak.info; do
     : >"$BUILD/$file"
   done
+  printf '\0\1\2\3' >"$BUILD/icudtl.dat"
   cp "$WORK/elf" "$BUILD/chrome"
   cp "$WORK/elf" "$BUILD/libdomicile_engine.so"
   local llvm="$CHROMIUM/third_party/llvm-build/Release+Asserts/bin"
@@ -84,7 +85,7 @@ package() { # extra env assignments...
   local stage="$WORK/stage" tarball
   rm -rf "$stage"
   if ( cd "$ROOT" && env "$@" PATH="$BIN:$PATH" GITHUB_OUTPUT= \
-         "$PACKAGE" "$CHROMIUM" "$OUT" "$stage" ) >"$WORK/said" 2>&1; then
+         "$PACKAGE" "$CHROMIUM" "$OUT" "$stage" ) >"$WORK/said" 2>"$WORK/errors"; then
     tarball="$(ls "$stage"/*.tar.zst)"
     PATH="$BIN:$PATH" tar --zstd -xOf "$tarball" --wildcards '*/PROVENANCE' |
       sed -n 's/^build: *//p'
@@ -140,6 +141,10 @@ symbols() { # file
 fake_build "$(gn_args true false)"
 package DOMICILE_ENGINE_BUILD=official >/dev/null
 unpack
+expect "packaging emits no diagnostics" "" "$(cat "$WORK/errors")"
+expect "provenance names the packaging host" \
+  "domicile engine, packaged on $(uname -n)" \
+  "$(head -n 1 "$WORK/unpacked/PROVENANCE")"
 expect "the locales' paks ship" yes \
   "$([ -f "$WORK/unpacked/locales/en-US.pak" ] && echo yes || echo no)"
 expect "the locales' .pak.info stay behind" no \
