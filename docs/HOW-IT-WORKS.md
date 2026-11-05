@@ -83,6 +83,9 @@ Detail: [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md),
 - **React:** [`@domicile-desktop/react`](/packages/react/README.md) gives
   hooks for windows, focus and the rest. Any other framework that renders to
   the DOM works too: the shell is a web page.
+- **Rust, or anything that compiles to WebAssembly:** a 3-line `shell.js`
+  loads the module. See [In Rust](WRITING-A-SHELL.md#in-rust) and
+  [`examples/dioxus-shell`](/examples/dioxus-shell).
 - **npm:** `domicile ./shell.tsx` transpiles and bundles the file, and
   installs what it imports from npm.
 - **Manganese's pieces:** its bar, launcher, notifications and the rest are
