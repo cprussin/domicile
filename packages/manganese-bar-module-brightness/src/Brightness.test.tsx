@@ -133,7 +133,9 @@ describe("Brightness", () => {
     const backlight = heldBacklight();
     const slider = await opened(backlight);
 
-    slider.focus();
+    act(() => {
+      slider.focus();
+    });
     await userEvent.keyboard("{ArrowRight}");
 
     expect(backlight.asked).toEqual([0.43]);

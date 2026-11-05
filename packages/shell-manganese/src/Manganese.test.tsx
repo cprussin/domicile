@@ -35,20 +35,26 @@ const applications = applicationsConfigSchema.parse(undefined);
 const floating = floatingRulesSchema.parse(undefined);
 
 /** Manganese on `fake`, in strict mode as `mount` draws it. */
-const renderManganese = (
+const renderManganese = async (
   fake: FakeDomicileHost,
   options: Partial<ComponentProps<typeof Manganese>> = {},
 ) =>
-  render(
-    <FakeDomicile fake={fake}>
-      <Manganese applications={applications} floating={floating} {...options} />
-    </FakeDomicile>,
-    { reactStrictMode: true },
+  await act(async () =>
+    render(
+      <FakeDomicile fake={fake}>
+        <Manganese
+          applications={applications}
+          floating={floating}
+          {...options}
+        />
+      </FakeDomicile>,
+      { reactStrictMode: true },
+    ),
   );
 
 describe("Manganese", () => {
   it("draws the bar it is given", async () => {
-    renderManganese(onADesk(), {
+    await renderManganese(onADesk(), {
       bar: { center: [], left: [<span key="mail">mail 3/12</span>], right: [] },
     });
 
@@ -56,9 +62,9 @@ describe("Manganese", () => {
   });
 
   // Custom keybindings replace the defaults.
-  it("binds the keys it is given rather than its own", () => {
+  it("binds the keys it is given rather than its own", async () => {
     const fake = onADesk();
-    renderManganese(fake, {
+    await renderManganese(fake, {
       keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
     });
 
@@ -72,9 +78,9 @@ describe("Manganese", () => {
   });
 
   // The config's look, which the settings portal also serves windows.
-  it("follows the config's contrast and motion", () => {
+  it("follows the config's contrast and motion", async () => {
     const fake = onADesk();
-    renderManganese(fake);
+    await renderManganese(fake);
 
     act(() => {
       fake.set({ highContrast: true, reducedMotion: true });

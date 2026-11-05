@@ -63,20 +63,24 @@ const Bell = ({ handle }: { handle: DrawerProps["handle"] }) => (
 );
 
 /** The drawer, open under the bell on `left` unless `more` says otherwise. */
-const drawer = (
+const drawer = async (
   items: DrawerProps["items"],
   asked: Asked = [],
   more: Partial<DrawerProps> = {},
 ) => {
   const handle = more.handle ?? createHandle();
-  const view = render(element(items, asked, { ...more, handle }));
+  const view = await act(async () =>
+    render(element(items, asked, { ...more, handle })),
+  );
   return {
     /** Draws it again with `items`, as when some are cleared. */
-    update: (
+    update: async (
       next: DrawerProps["items"],
       changed: Partial<DrawerProps> = {},
     ) => {
-      view.rerender(element(next, asked, { ...more, ...changed, handle }));
+      await act(() => {
+        view.rerender(element(next, asked, { ...more, ...changed, handle }));
+      });
     },
   };
 };
@@ -135,17 +139,17 @@ const finishLeaving = () => {
 };
 
 describe("NotificationDrawer", () => {
-  it("opens under the bell pressed, and says on which screen", () => {
+  it("opens under the bell pressed, and says on which screen", async () => {
     const asked: Asked = [];
-    drawer([], asked, { open: false, screen: undefined });
+    await drawer([], asked, { open: false, screen: undefined });
 
     fireEvent.click(screen.getByRole("button", { name: "Bell" }));
 
     expect(asked).toEqual([["open", "left"]]);
   });
 
-  it("lists every notification, in the order it is handed them", () => {
-    drawer([
+  it("lists every notification, in the order it is handed them", async () => {
+    await drawer([
       notification({ id: 2, summary: "Newer" }),
       notification({ id: 1, summary: "Older" }),
     ]);
@@ -157,9 +161,9 @@ describe("NotificationDrawer", () => {
     ]);
   });
 
-  it("clears one, or every one", () => {
+  it("clears one, or every one", async () => {
     const asked: Asked = [];
-    drawer(
+    await drawer(
       [
         notification({ id: 2, summary: "Newer" }),
         notification({ id: 1, summary: "Older" }),
@@ -178,9 +182,9 @@ describe("NotificationDrawer", () => {
     ]);
   });
 
-  it("takes a notification's action, and closes for the window it raises", () => {
+  it("takes a notification's action, and closes for the window it raises", async () => {
     const asked: Asked = [];
-    drawer(
+    await drawer(
       [notification({ actions: [{ key: "reply", label: "Reply" }], id: 7 })],
       asked,
     );
@@ -190,9 +194,9 @@ describe("NotificationDrawer", () => {
     expect(asked).toEqual([["action", 7, "reply"], ["close"]]);
   });
 
-  it("replies to a notification", () => {
+  it("replies to a notification", async () => {
     const asked: Asked = [];
-    drawer(
+    await drawer(
       [
         notification({
           actions: [{ key: "inline-reply", label: "Reply" }],
@@ -210,8 +214,8 @@ describe("NotificationDrawer", () => {
     expect(asked).toEqual([["reply", 7, "On my way"]]);
   });
 
-  it("says there is nothing, and offers nothing to clear", () => {
-    drawer([]);
+  it("says there is nothing, and offers nothing to clear", async () => {
+    await drawer([]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "You're all caught up",
@@ -225,11 +229,11 @@ describe("NotificationDrawer", () => {
     const asked: Asked = [];
     const toggle = () => screen.getByRole("switch", { name: "Do not disturb" });
 
-    drawer([], asked);
+    await drawer([], asked);
     expect(toggle()).not.toBeChecked();
     await userEvent.click(toggle());
     cleanup();
-    drawer([], asked, { doNotDisturb: true });
+    await drawer([], asked, { doNotDisturb: true });
     expect(toggle()).toBeChecked();
     await userEvent.click(toggle());
 
@@ -239,8 +243,8 @@ describe("NotificationDrawer", () => {
     ]);
   });
 
-  it("lists the inboxes above the notifications", () => {
-    drawer([notification({ id: 1, summary: "Older" })], [], {
+  it("lists the inboxes above the notifications", async () => {
+    await drawer([notification({ id: 1, summary: "Older" })], [], {
       inboxes: inboxes(),
     });
 
@@ -254,9 +258,9 @@ describe("NotificationDrawer", () => {
     expect(recent).toHaveTextContent("Older");
   });
 
-  it("opens a pressed inbox", () => {
+  it("opens a pressed inbox", async () => {
     const asked: Asked = [];
-    drawer([], [], { inboxes: inboxes(asked) });
+    await drawer([], [], { inboxes: inboxes(asked) });
 
     fireEvent.click(screen.getByRole("button", { name: /^Work/v }));
 
@@ -264,13 +268,15 @@ describe("NotificationDrawer", () => {
   });
 
   it("slides in only a notification that arrives while it is open", async () => {
-    const view = drawer([notification({ id: 1, summary: "Older" })], [], {
+    const view = await drawer([notification({ id: 1, summary: "Older" })], [], {
       open: false,
     });
 
-    view.update([notification({ id: 1, summary: "Older" })], { open: true });
+    await view.update([notification({ id: 1, summary: "Older" })], {
+      open: true,
+    });
     expect(document.querySelectorAll("li[data-arriving]")).toHaveLength(0);
-    view.update(
+    await view.update(
       [
         notification({ id: 2, summary: "Newer" }),
         notification({ id: 1, summary: "Older" }),
@@ -283,8 +289,6 @@ describe("NotificationDrawer", () => {
         (row) => row.textContent,
       ),
     ).toEqual([expect.stringContaining("Newer")]);
-    // Lets the popover finish placing itself.
-    await act(async () => undefined);
   });
 
   describe("clearing", () => {
@@ -293,13 +297,13 @@ describe("NotificationDrawer", () => {
       new URL("../styled-system/styles.css", import.meta.url),
     );
 
-    it("slides a cleared notification out, clipped, before the rest close up", () => {
-      const view = drawer([
+    it("slides a cleared notification out, clipped, before the rest close up", async () => {
+      const view = await drawer([
         notification({ id: 2, summary: "Newer" }),
         notification({ id: 1, summary: "Older" }),
       ]);
 
-      view.update([notification({ id: 1, summary: "Older" })]);
+      await view.update([notification({ id: 1, summary: "Older" })]);
 
       expect(leaving().map((row) => row.textContent)).toEqual([
         expect.stringContaining("Newer"),
@@ -314,13 +318,13 @@ describe("NotificationDrawer", () => {
       expect(screen.queryByText("Newer")).not.toBeInTheDocument();
     });
 
-    it("staggers the notifications cleared together, top to bottom", () => {
-      const view = drawer([
+    it("staggers the notifications cleared together, top to bottom", async () => {
+      const view = await drawer([
         notification({ id: 2, summary: "Newer" }),
         notification({ id: 1, summary: "Older" }),
       ]);
 
-      view.update([]);
+      await view.update([]);
 
       expect(
         leaving().map((row) =>
@@ -329,10 +333,10 @@ describe("NotificationDrawer", () => {
       ).toEqual(["0", "1"]);
     });
 
-    it("says it is caught up once the last has slid out", () => {
-      const view = drawer([notification({ id: 1 })]);
+    it("says it is caught up once the last has slid out", async () => {
+      const view = await drawer([notification({ id: 1 })]);
 
-      view.update([]);
+      await view.update([]);
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
       finishLeaving();
 
@@ -341,29 +345,29 @@ describe("NotificationDrawer", () => {
       );
     });
 
-    it("holds the caught-up note's height as the last leave, not shrinking first", () => {
-      const view = drawer([
+    it("holds the caught-up note's height as the last leave, not shrinking first", async () => {
+      const view = await drawer([
         notification({ id: 2, summary: "Newer" }),
         notification({ id: 1, summary: "Older" }),
       ]);
       const list = screen.getByRole("list");
 
-      view.update([notification({ id: 1, summary: "Older" })]);
+      await view.update([notification({ id: 1, summary: "Older" })]);
       expect(globalThis.getComputedStyle(list).minBlockSize).toBe("0rem");
-      view.update([]);
+      await view.update([]);
 
       // `EmptyState`'s height, spacing 40.
       expect(globalThis.getComputedStyle(list).minBlockSize).toBe("10rem");
     });
 
-    it("drops a notification cleared while it is closed at once", () => {
-      const view = drawer(
+    it("drops a notification cleared while it is closed at once", async () => {
+      const view = await drawer(
         [notification({ id: 2, summary: "Newer" }), notification({ id: 1 })],
         [],
         { inboxes: inboxes(), open: false },
       );
 
-      view.update([notification({ id: 1 })]);
+      await view.update([notification({ id: 1 })]);
 
       expect(leaving()).toEqual([]);
       expect(screen.queryByText("Newer")).not.toBeInTheDocument();

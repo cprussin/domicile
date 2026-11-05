@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -271,9 +272,12 @@ describe(App, () => {
       }
       await finishLeaving();
       await screen.findAllByText("Couldn't update your history");
-      await new Promise((resolve) => {
-        setTimeout(resolve, 50);
-      });
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 50);
+          }),
+      );
       expect(screen.getAllByText("Couldn't update your history")).toHaveLength(
         1,
       );

@@ -1,7 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo } from "react";
+import { flushSync } from "react-dom";
 
 import { Button } from "../Button/Button";
 import { Input } from "../Input/Input";
@@ -331,17 +332,24 @@ describe(ModalDialog, () => {
           <Input aria-label="Query" />
         </ModalDialog>,
       );
-      await user.type(screen.getByRole("textbox"), "old");
-      rerender(
-        <ModalDialog open={false} title="Find">
-          <Input aria-label="Query" />
-        </ModalDialog>,
-      );
-      rerender(
-        <ModalDialog open title="Find">
-          <Input aria-label="Query" />
-        </ModalDialog>,
-      );
+      await act(async () => {
+        await user.type(screen.getByRole("textbox"), "old");
+        // Commit closing before reopening while portal effects stay inside act.
+        flushSync(() => {
+          rerender(
+            <ModalDialog open={false} title="Find">
+              <Input aria-label="Query" />
+            </ModalDialog>,
+          );
+        });
+        flushSync(() => {
+          rerender(
+            <ModalDialog open title="Find">
+              <Input aria-label="Query" />
+            </ModalDialog>,
+          );
+        });
+      });
       expect(screen.getByRole("textbox")).toHaveValue("");
     });
   });

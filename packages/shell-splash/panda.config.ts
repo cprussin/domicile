@@ -30,6 +30,8 @@ export default defineConfig({
     "../../packages/component-library/src/**/*.{ts,tsx}",
   ],
   jsxFramework: "react",
+  // Component props such as content are data; styles use Panda functions.
+  jsxStyleProps: "none",
   outdir: "styled-system",
   preflight: true,
   presets: [domicilePreset],

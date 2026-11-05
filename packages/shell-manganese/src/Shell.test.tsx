@@ -272,7 +272,7 @@ let domicile: Desk;
  * The desktop is described before the first render by default, as after a
  * completed handshake. Pass `undefined` to test the gap.
  */
-const renderingShell = (
+const renderingShell = async (
   desktop: readonly DomicileDisplay[] | undefined,
   bar?: BarLayout,
   keybindings: ShellKeybindings = MANGANESE_KEYS,
@@ -286,17 +286,19 @@ const renderingShell = (
   const client = domicile.domicile;
   // A standalone theme, so these tests do not depend on the host theme
   // protocol; `host-theme.test.ts` covers that.
-  const rendered = render(
-    <DomicileProvider domicile={client}>
-      <Shell
-        applications={NO_APPLICATIONS}
-        bar={bar}
-        inboxes={inboxes}
-        keybindings={keybindings}
-        theme={standaloneThemeSource()}
-      />
-    </DomicileProvider>,
-    { reactStrictMode: strict },
+  const rendered = await act(async () =>
+    render(
+      <DomicileProvider domicile={client}>
+        <Shell
+          applications={NO_APPLICATIONS}
+          bar={bar}
+          inboxes={inboxes}
+          keybindings={keybindings}
+          theme={standaloneThemeSource()}
+        />
+      </DomicileProvider>,
+      { reactStrictMode: strict },
+    ),
   );
   return rendered;
 };
@@ -818,10 +820,10 @@ beforeEach(() => {
 
 describe("Shell", () => {
   describe("across the displays", () => {
-    it("gives every display a bar, and every window one element on the desk", () => {
+    it("gives every display a bar, and every window one element on the desk", async () => {
       // Each monitor gets its own bar. Windows are drawn once for the desk, so
       // a window keeps its element when it changes screens.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
       clientAppears("term");
 
       for (const name of ["left", "right"]) {
@@ -833,10 +835,10 @@ describe("Shell", () => {
       expect(container.querySelectorAll(APP_TAG_NAME)).toHaveLength(1);
     });
 
-    it("shows a different workspace on each of them", () => {
+    it("shows a different workspace on each of them", async () => {
       // Two screens on one workspace would embed a window twice, and the
       // second embedding takes the first's pixels. Each screen gets its own.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
 
       const marked = (name: string) =>
         screenNamed(container, name)?.querySelector("[aria-current]")
@@ -846,32 +848,32 @@ describe("Shell", () => {
       expect(marked("right")).toBe("2");
     });
 
-    it("says so when the host describes a desktop with no screens", () => {
-      renderShell([]);
+    it("says so when the host describes a desktop with no screens", async () => {
+      await renderShell([]);
 
       expect(
         screen.getByRole("heading", { name: "No screens" }),
       ).toBeInTheDocument();
     });
 
-    it("says nothing of the kind before the host has described anything", () => {
-      renderUndescribedShell();
+    it("says nothing of the kind before the host has described anything", async () => {
+      await renderUndescribedShell();
 
       expect(
         screen.queryByRole("heading", { name: "No screens" }),
       ).not.toBeInTheDocument();
     });
 
-    it("renders nothing until the desktop is described", () => {
-      const { container } = renderUndescribedShell();
+    it("renders nothing until the desktop is described", async () => {
+      const { container } = await renderUndescribedShell();
 
       expect(container.querySelector("main")).toBeNull();
     });
 
-    it("mounts the chrome once, over the windows already open", () => {
+    it("mounts the chrome once, over the windows already open", async () => {
       // A reloaded chrome can learn of open clients before the handshake.
       // Rebuilding it after would blank every portal and reload every page.
-      const { container } = renderUndescribedShell();
+      const { container } = await renderUndescribedShell();
       clientAppears("term", "Terminal");
 
       domicile.describes([LEFT]);
@@ -879,8 +881,8 @@ describe("Shell", () => {
       expect(appBox(container, "term")).not.toHaveAttribute("hidden");
     });
 
-    it("follows the desktop when it changes", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+    it("follows the desktop when it changes", async () => {
+      const { container } = await renderShell([LEFT, RIGHT]);
 
       const stage = container.querySelector("main");
       domicile.describes([RIGHT]);
@@ -893,8 +895,8 @@ describe("Shell", () => {
   });
 
   describe("the wallpaper", () => {
-    it("hangs behind every screen rather than inside one", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+    it("hangs behind every screen rather than inside one", async () => {
+      const { container } = await renderShell([LEFT, RIGHT]);
 
       expect(
         container.querySelector("[data-screen] [data-wallpaper]"),
@@ -904,17 +906,17 @@ describe("Shell", () => {
       ).toBeInTheDocument();
     });
 
-    it("is up before the host has described a desktop", () => {
-      const { container } = renderUndescribedShell();
+    it("is up before the host has described a desktop", async () => {
+      const { container } = await renderUndescribedShell();
 
       expect(container.querySelector("[data-wallpaper]")).toBeInTheDocument();
     });
   });
 
   describe("the top bar", () => {
-    it("lays out the items it is given, in the columns it is given them in", () => {
+    it("lays out the items it is given, in the columns it is given them in", async () => {
       // A custom item beside some of manganese's, the rest left out.
-      const { container } = renderingShell([LEFT], {
+      const { container } = await renderingShell([LEFT], {
         center: [<span key="mail">mail 3/12</span>],
         left: [
           <LauncherButton key="launcher" />,
@@ -933,8 +935,8 @@ describe("Shell", () => {
       ).toBeNull();
     });
 
-    it("tells the time as the shell's clock options say", () => {
-      const { container } = renderShell();
+    it("tells the time as the shell's clock options say", async () => {
+      const { container } = await renderShell();
 
       act(() => {
         domicile.fake.set({
@@ -947,8 +949,8 @@ describe("Shell", () => {
       );
     });
 
-    it("draws text in the shell's font option", () => {
-      renderShell();
+    it("draws text in the shell's font option", async () => {
+      await renderShell();
 
       act(() => {
         domicile.fake.set({ shellOptions: '{"font":"DejaVu Sans"}' });
@@ -960,8 +962,8 @@ describe("Shell", () => {
       document.documentElement.style.removeProperty("--desktop-font");
     });
 
-    it("lays out every item of manganese's when it is given none", () => {
-      renderShell();
+    it("lays out every item of manganese's when it is given none", async () => {
+      await renderShell();
 
       expect(
         screen.getByRole("button", { name: "Launcher" }),
@@ -981,7 +983,7 @@ describe("Shell", () => {
         drawn.bar += 1;
         return <span>{useBar().screen}</span>;
       };
-      renderingShell([LEFT], {
+      await renderingShell([LEFT], {
         center: [],
         left: [<ReadsUnread key="unread" />, <ReadsBar key="bar" />],
         right: [],
@@ -1001,25 +1003,25 @@ describe("Shell", () => {
       expect(drawn.bar).toBe(before.bar);
     });
 
-    it("draws no focus ring on anything in it", () => {
-      const { container } = renderShell();
+    it("draws no focus ring on anything in it", async () => {
+      const { container } = await renderShell();
 
       expect(container.querySelector("header")?.className).toContain(
         css({ "& *": { outline: "none" } }),
       );
     });
 
-    it("reads the date and the time down to the second", () => {
-      renderShell();
+    it("reads the date and the time down to the second", async () => {
+      await renderShell();
 
       expect(
         screen.getByText(/^\w+ \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
       ).toBeInTheDocument();
     });
 
-    it("shows the workspace on screen and the ones with windows on them", () => {
+    it("shows the workspace on screen and the ones with windows on them", async () => {
       // As in sway's bar, an empty workspace that is not shown is omitted.
-      renderShell();
+      await renderShell();
       clientAppears("term");
       press("parenright");
 
@@ -1033,8 +1035,8 @@ describe("Shell", () => {
       ).toEqual(["1", "2"]);
     });
 
-    it("marks the workspace on screen", () => {
-      renderShell();
+    it("marks the workspace on screen", async () => {
+      await renderShell();
       clientAppears("term");
       press("parenright");
 
@@ -1046,7 +1048,7 @@ describe("Shell", () => {
 
     it("switches workspace when one is picked", async () => {
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       press("parenright");
 
@@ -1056,10 +1058,12 @@ describe("Shell", () => {
     });
 
     it("shows the brightness /sys says in quick settings", async () => {
-      renderShell();
+      await renderShell();
 
       await act(() => answerSystemCalls(domicile.fake, THINKPAD_BACKLIGHT));
-      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Quick settings" }),
+      );
 
       expect(screen.getByRole("slider", { name: "Brightness" })).toHaveValue(
         "60",
@@ -1067,7 +1071,7 @@ describe("Shell", () => {
     });
 
     it("reads the volume from the sound server", async () => {
-      renderShell();
+      await renderShell();
 
       await waitFor(() => {
         expect(
@@ -1088,7 +1092,7 @@ describe("Shell", () => {
     it("asks the system once for every bar and the lock screen", async () => {
       // One `pactl subscribe`, `udevadm monitor` and D-Bus match for the
       // desk, not one per bar and one more for the lock screen.
-      renderCountedShell([LEFT, RIGHT]);
+      await renderCountedShell([LEFT, RIGHT]);
       await act(() => new Promise((settled) => setTimeout(settled, 0)));
 
       const requests = domicile.calls.flatMap(([method, , request]) =>
@@ -1099,16 +1103,16 @@ describe("Shell", () => {
       expect(requests).toEqual([...new Set(requests)]);
     });
 
-    it("draws no meter until UPower answers", () => {
+    it("draws no meter until UPower answers", async () => {
       // A desktop PC gets no battery reading; the bar must not show `100%`.
-      renderShell();
+      await renderShell();
 
       expect(screen.queryByRole("meter")).toBeNull();
     });
 
-    it("opens the launcher from the button left of the tray", () => {
+    it("opens the launcher from the button left of the tray", async () => {
       // `mod+Space` also opens it; the button is for pointer users.
-      renderShell();
+      await renderShell();
 
       fireEvent.click(screen.getByRole("button", { name: "Launcher" }));
 
@@ -1119,19 +1123,21 @@ describe("Shell", () => {
       ).toBeVisible();
     });
 
-    it("has no button for the terminal: that is a key", () => {
-      renderShell();
+    it("has no button for the terminal: that is a key", async () => {
+      await renderShell();
 
       expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
       expect(screen.queryByRole("button", { name: "New window" })).toBeNull();
     });
 
-    it("carries the dark mode tile in quick settings", () => {
+    it("carries the dark mode tile in quick settings", async () => {
       // No key does this. Two states and no `system`, since this bar is the
       // system.
-      renderShell();
+      await renderShell();
 
-      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Quick settings" }),
+      );
 
       expect(screen.getByRole("button", { name: "Dark mode" })).toHaveAttribute(
         "aria-pressed",
@@ -1142,20 +1148,24 @@ describe("Shell", () => {
   });
 
   describe("the idle inhibitor", () => {
-    it("is held from `idle-inhibitor`, as from the keep awake tile", () => {
-      renderShell();
+    it("is held from `idle-inhibitor`, as from the keep awake tile", async () => {
+      await renderShell();
 
       press("i");
-      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Quick settings" }),
+      );
 
       expect(screen.getByRole("button", { name: "Keep awake" })).toBeDisabled();
     });
   });
 
   describe("the night light", () => {
-    it("is toggled from `night-light`, as from its tile", () => {
-      renderShell();
-      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
+    it("is toggled from `night-light`, as from its tile", async () => {
+      await renderShell();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Quick settings" }),
+      );
       const pressed = () =>
         screen
           .getByRole("button", { name: "Night light" })
@@ -1170,7 +1180,7 @@ describe("Shell", () => {
 
   describe("virtual monitors", () => {
     it("are added by `virtual-monitor add` and removed by `virtual-monitor remove`", async () => {
-      renderShell();
+      await renderShell();
       press("m");
       const [, id] =
         domicile.calls.find(
@@ -1203,7 +1213,7 @@ describe("Shell", () => {
 
   describe("the lock screen", () => {
     it("says why the compositor refused a passphrase, and how long to wait", async () => {
-      renderShell();
+      await renderShell();
       act(() => {
         domicile.fake.set({ locked: true });
       });
@@ -1242,9 +1252,9 @@ describe("Shell", () => {
   });
 
   describe("the clipboard", () => {
-    it("shows what has been copied, the newest apart", () => {
+    it("shows what has been copied, the newest apart", async () => {
       // The compositor pushes the history; the panel does not ask for it.
-      renderShell();
+      await renderShell();
       copied([
         { id: 3, image: false, preview: "the newest", thumbnail: "" },
         { id: 2, image: false, preview: "the middle", thumbnail: "" },
@@ -1261,8 +1271,8 @@ describe("Shell", () => {
       ).toStrictEqual(["the middle", "the oldest"]);
     });
 
-    it("opens on the screen the keyboard is on", () => {
-      renderShell([LEFT, RIGHT]);
+    it("opens on the screen the keyboard is on", async () => {
+      await renderShell([LEFT, RIGHT]);
       clientAppears("one");
       press("l");
 
@@ -1271,10 +1281,10 @@ describe("Shell", () => {
       expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
     });
 
-    it("puts the row that was picked back on the clipboard", () => {
+    it("puts the row that was picked back on the clipboard", async () => {
       // By id, never by text: the page may only choose among entries already
       // on the seat's clipboard.
-      renderShell();
+      await renderShell();
       copied([
         { id: 8, image: false, preview: "the newest", thumbnail: "" },
         { id: 7, image: false, preview: "ssh-rsa AAAA", thumbnail: "" },
@@ -1291,7 +1301,7 @@ describe("Shell", () => {
 
   describe("the system tray", () => {
     it("is on the bar, and a click activates the icon", async () => {
-      renderShell();
+      await renderShell();
       domicile.set({
         tray: [
           {
@@ -1314,8 +1324,8 @@ describe("Shell", () => {
       ]);
     });
 
-    it("is left of the extensions, which are left of the workspaces", () => {
-      renderShell();
+    it("is left of the extensions, which are left of the workspaces", async () => {
+      await renderShell();
       domicile.set({
         tray: [
           {
@@ -1346,7 +1356,7 @@ describe("Shell", () => {
 
   describe("an application's dialog", () => {
     it("is asked over the desktop, and answered", async () => {
-      renderShell();
+      await renderShell();
       domicile.dispatch("portalrequests", {
         data: JSON.stringify({
           capturing: [],
@@ -1380,7 +1390,7 @@ describe("Shell", () => {
 
     it("takes the keyboard off the window while it is up, and gives it back", async () => {
       // Or the window gets every key typed into a file chooser's box.
-      renderShell();
+      await renderShell();
       clientAppears("one");
       domicile.set({ focusedWindow: "one" });
       domicile.calls.length = 0;
@@ -1455,7 +1465,7 @@ describe("Shell", () => {
       };
 
       it("saves a browser window from its page alone", async () => {
-        renderShell();
+        await renderShell();
         domicile.engineOpens("https://example.com");
         asked();
 
@@ -1474,7 +1484,7 @@ describe("Shell", () => {
       });
 
       it("saves a hidden tab from its own frame", async () => {
-        renderShell();
+        await renderShell();
         clientAppears("one");
         clientAppears("two");
         press("w");
@@ -1494,7 +1504,7 @@ describe("Shell", () => {
     });
 
     it("flags a global shortcut that takes one of the shell's chords", async () => {
-      renderShell();
+      await renderShell();
       domicile.dispatch("portalrequests", {
         data: JSON.stringify({
           items: [
@@ -1522,7 +1532,7 @@ describe("Shell", () => {
 
   describe("the notifications", () => {
     it("toasts what arrives, and the bell counts it", async () => {
-      renderShell();
+      await renderShell();
       domicile.set({ notifications: [] });
 
       domicile.set({ notifications: [arrived(7, "New message")] });
@@ -1536,7 +1546,7 @@ describe("Shell", () => {
     });
 
     it("lists them in the drawer the bell opens, and clears them all", async () => {
-      renderShell();
+      await renderShell();
       domicile.set({
         notifications: [arrived(1, "Older"), arrived(2, "Newer")],
       });
@@ -1552,7 +1562,7 @@ describe("Shell", () => {
     });
 
     it("opens the drawer from `notifications`, under the bell on the screen with the keyboard", async () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
       clientAppears("one");
       press("l");
 
@@ -1566,7 +1576,7 @@ describe("Shell", () => {
     });
 
     it("closes the drawer on a second `notifications`", async () => {
-      renderShell();
+      await renderShell();
       press("n");
       await screen.findByRole("dialog");
 
@@ -1577,8 +1587,8 @@ describe("Shell", () => {
       });
     });
 
-    it("clears them all from `notifications clear`", () => {
-      renderShell();
+    it("clears them all from `notifications clear`", async () => {
+      await renderShell();
       domicile.set({
         notifications: [arrived(1, "Older"), arrived(2, "Newer")],
       });
@@ -1589,7 +1599,7 @@ describe("Shell", () => {
     });
 
     it("opens the drawer under the bell pressed", async () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
 
       await userEvent.click(bellOn(container, "left"));
 
@@ -1605,7 +1615,7 @@ describe("Shell", () => {
     });
 
     it("adds the inboxes' unread conversations to the bell", async () => {
-      renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
+      await renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
 
       expect(
         await screen.findByRole("button", { name: "Notifications, 2 unread" }),
@@ -1613,7 +1623,7 @@ describe("Shell", () => {
     });
 
     it("leaves the inboxes' own notifications out of the bell, which counts their conversations already", async () => {
-      renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
+      await renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
       domicile.set({ notifications: [] });
 
       domicile.set({
@@ -1630,7 +1640,7 @@ describe("Shell", () => {
     });
 
     it("opens an inbox's app window, and closes the notifications", async () => {
-      renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
+      await renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
       await userEvent.click(
         screen.getByRole("button", { name: "Notifications, 2 unread" }),
       );
@@ -1650,8 +1660,8 @@ describe("Shell", () => {
       });
     });
 
-    it("is the far end of the bar", () => {
-      renderShell();
+    it("is the far end of the bar", async () => {
+      await renderShell();
 
       const battery = screen.getByRole("button", { name: "Quick settings" });
       const bell = screen.getByRole("button", { name: "Notifications" });
@@ -1679,7 +1689,7 @@ describe("Shell", () => {
           </button>
         );
       };
-      renderingShell([LEFT], {
+      await renderingShell([LEFT], {
         center: [],
         left: [<Panel key="panel" />],
         right: [],
@@ -1702,7 +1712,7 @@ describe("Shell", () => {
 
   describe("the extension tray", () => {
     it("is on the bar, and a click on one with no popup activates it", async () => {
-      renderShell();
+      await renderShell();
       extensionsInstalled();
 
       await userEvent.click(screen.getByRole("button", { name: "Clicked" }));
@@ -1713,7 +1723,7 @@ describe("Shell", () => {
     it("takes the keyboard off the window while a popup is up, and gives it back", async () => {
       // A popup is a page to type into, as with the launcher; see
       // `AppWindow`.
-      renderShell();
+      await renderShell();
       extensionsInstalled();
       clientAppears("one");
       domicile.set({ focusedWindow: "one" });
@@ -1732,7 +1742,7 @@ describe("Shell", () => {
 
     it("forgets a popup whose action was disabled while it was open", async () => {
       // Re-enabling the action is not a click, so the popup stays closed.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       extensionsInstalled();
       await userEvent.click(screen.getByRole("button", { name: "Popped" }));
       await waitFor(() => {
@@ -1750,8 +1760,8 @@ describe("Shell", () => {
   });
 
   describe("the windows", () => {
-    it("tiles a client's window over the workspace, inset by the gap, half of it under the top bar", () => {
-      const { container } = renderShell();
+    it("tiles a client's window over the workspace, inset by the gap, half of it under the top bar", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
 
       expect(boxOf(appBox(container, "term"))).toEqual({
@@ -1762,8 +1772,8 @@ describe("Shell", () => {
       });
     });
 
-    it("gives every window a title bar with what it is called on it", () => {
-      const { container } = renderShell();
+    it("gives every window a title bar with what it is called on it", async () => {
+      const { container } = await renderShell();
       clientAppears("term", "Terminal");
 
       const bar = barFor(container, "app:term");
@@ -1774,10 +1784,10 @@ describe("Shell", () => {
       });
     });
 
-    it("draws a client's menu over its window, and takes it down when it goes", () => {
+    it("draws a client's menu over its window, and takes it down when it goes", async () => {
       // The workspace starts under the top bar, and a lone window's contents
       // start under its title bar.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       const window = boxOf(appBox(container, "term"));
 
@@ -1807,8 +1817,8 @@ describe("Shell", () => {
       expect(appElement(container, "term")).toBeDefined();
     });
 
-    it("renames the bar when the client renames its window", () => {
-      const { container } = renderShell();
+    it("renames the bar when the client renames its window", async () => {
+      const { container } = await renderShell();
       clientAppears("term", "Terminal");
 
       domicile.change("term", { title: "vim ~/notes" });
@@ -1816,10 +1826,10 @@ describe("Shell", () => {
       expect(barFor(container, "app:term")).toHaveTextContent("vim ~/notes");
     });
 
-    it("splits the workspace between two windows, with the config's gap", () => {
+    it("splits the workspace between two windows, with the config's gap", async () => {
       // `gaps.inner = 20` between and around them: 1860 of the 1920 is shared
       // out.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -1834,10 +1844,10 @@ describe("Shell", () => {
       });
     });
 
-    it("moves a tab along its strip when dragged onto another tab", () => {
+    it("moves a tab along its strip when dragged onto another tab", async () => {
       // Tabs are 240px wide from the gap; the drop lands past the last tab's
       // middle, on its far side.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       for (const id of ["one", "two", "three"]) {
         clientAppears(id);
       }
@@ -1876,8 +1886,8 @@ describe("Shell", () => {
       };
 
       /** Tiled "one"; floating "two" and `rest` as its tabs, clear of it. */
-      const layered = (...rest: readonly string[]) => {
-        const rendered = renderShell();
+      const layered = async (...rest: readonly string[]) => {
+        const rendered = await renderShell();
         clientAppears("one");
         clientAppears("two");
         press("Tab", true);
@@ -1896,8 +1906,8 @@ describe("Shell", () => {
         return container;
       };
 
-      it("pulls a tab out of a floating group into a tiled one", () => {
-        const container = layered("three");
+      it("pulls a tab out of a floating group into a tiled one", async () => {
+        const container = await layered("three");
 
         dragTab(container, "app:three", "app:one");
 
@@ -1909,8 +1919,8 @@ describe("Shell", () => {
         expect(windowsOnScreen(container)).toEqual(["two", "three"]);
       });
 
-      it("drags a tiled tab into a floating group", () => {
-        const container = layered();
+      it("drags a tiled tab into a floating group", async () => {
+        const container = await layered();
 
         dragTab(container, "app:one", "app:two");
 
@@ -1920,8 +1930,8 @@ describe("Shell", () => {
         ).toBeGreaterThan(400);
       });
 
-      it("lets go of a lone float beside a tab it is dragged onto", () => {
-        const container = layered();
+      it("lets go of a lone float beside a tab it is dragged onto", async () => {
+        const container = await layered();
 
         dragTab(container, "app:two", "app:one");
 
@@ -1930,8 +1940,8 @@ describe("Shell", () => {
       });
     });
 
-    it("breaks a tab out of its group into a split when dragged over the group", () => {
-      const { container } = renderShell();
+    it("breaks a tab out of its group into a split when dragged over the group", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -1948,10 +1958,10 @@ describe("Shell", () => {
       });
     });
 
-    it("shows a grabbing pointer over the whole desk once a tab moves", () => {
+    it("shows a grabbing pointer over the whole desk once a tab moves", async () => {
       // The pointer leaves the bar for the gaps, the wallpaper and the top
       // bar, which each have their own cursor.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("w");
@@ -1977,8 +1987,8 @@ describe("Shell", () => {
       expect(() => grabbingSheet(container)).toThrow();
     });
 
-    it("drags a whole tab group by its strip's empty end onto another screen", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+    it("drags a whole tab group by its strip's empty end onto another screen", async () => {
+      const { container } = await renderShell([LEFT, RIGHT]);
       clientAppears("one");
       clientAppears("two");
 
@@ -2002,7 +2012,7 @@ describe("Shell", () => {
       // `closeApp` is a request: the client may show a dialog and stay, so the
       // window goes only when the host reports it closed.
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
 
       await user.click(screen.getByRole("button", { name: "Close" }));
@@ -2014,7 +2024,7 @@ describe("Shell", () => {
     it("fills the screen from the button on the window's own bar", async () => {
       // The pointer equivalent of `mod+f`.
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
 
       await user.click(screen.getByRole("button", { name: "Maximize" }));
@@ -2036,7 +2046,7 @@ describe("Shell", () => {
     it("floats and tiles the window from the button on its own bar", async () => {
       // The pointer equivalent of `floating toggle`.
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
 
       await user.click(screen.getByRole("button", { name: "Float" }));
@@ -2048,7 +2058,7 @@ describe("Shell", () => {
 
     it("fills the screen with a whole tab group from its strip's button", async () => {
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2071,8 +2081,8 @@ describe("Shell", () => {
 
     // One box under the whole strip, so no seam shows between tabs. The tabs
     // come after it at its depth, so they lie on it.
-    it("draws one strip under all of a group's tabs", () => {
-      const { container } = renderShell();
+    it("draws one strip under all of a group's tabs", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       const strips = container.querySelectorAll("[data-strip]");
@@ -2092,7 +2102,7 @@ describe("Shell", () => {
 
     it("floats and tiles a whole tab group from its strip's button", async () => {
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2107,7 +2117,7 @@ describe("Shell", () => {
     it("drops a floating group's shadows while it fills the screen", async () => {
       // They would spill onto the next display.
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2120,7 +2130,7 @@ describe("Shell", () => {
     it("opens the launcher from the new-tab button at a strip's end", async () => {
       // The pointer equivalent of `mod+space` from inside the strip.
       const user = userEvent.setup();
-      renderShell();
+      await renderShell();
       clientAppears("term");
 
       await user.click(screen.getByRole("button", { name: "New tab" }));
@@ -2132,8 +2142,8 @@ describe("Shell", () => {
       ).toBeVisible();
     });
 
-    it("takes the window away when the client goes", () => {
-      const { container } = renderShell();
+    it("takes the window away when the client goes", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
 
       domicile.close("term");
@@ -2144,8 +2154,8 @@ describe("Shell", () => {
 
     // A closed window is gone from the state at once, so the page draws its
     // exit from a snapshot; see `closing.ts`.
-    it("plays a closed window out at the box it had, showing the window itself", () => {
-      const { container } = renderShell();
+    it("plays a closed window out at the box it had, showing the window itself", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       const was = boxOf(appBox(container, "term"));
 
@@ -2161,8 +2171,8 @@ describe("Shell", () => {
 
     // Closing the visible tab collapses it along the strip and fades its
     // contents, rather than shrinking the whole window over the next tab.
-    it("closes a closed tab up along the strip it was in", () => {
-      const { container } = renderShell();
+    it("closes a closed tab up along the strip it was in", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       clientAppears("editor");
 
@@ -2183,8 +2193,8 @@ describe("Shell", () => {
 
     // The shown tab's contents tuck under the strip at the same `z-index`, so
     // only document order keeps them off a hidden tab's bottom edge.
-    it("draws every tab over the contents of the tab that is shown", () => {
-      const { container } = renderShell();
+    it("draws every tab over the contents of the tab that is shown", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       clientAppears("editor");
 
@@ -2197,8 +2207,8 @@ describe("Shell", () => {
 
     // Closing moves the keyboard elsewhere, so the closing bar keeps its
     // focused look from the snapshot.
-    it("keeps its bar saying the keyboard was in it while it goes", () => {
-      const { container } = renderShell();
+    it("keeps its bar saying the keyboard was in it while it goes", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       clientAppears("editor");
 
@@ -2212,8 +2222,8 @@ describe("Shell", () => {
 
     // The neighbor grows into its space while it shrinks. At equal `z-index`
     // document order would put the neighbor on top too early.
-    it("draws a closing window over the one taking its space", () => {
-      const { container } = renderShell();
+    it("draws a closing window over the one taking its space", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -2225,8 +2235,8 @@ describe("Shell", () => {
       );
     });
 
-    it("takes it off the page once it has finished leaving", () => {
-      const { container } = renderShell();
+    it("takes it off the page once it has finished leaving", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       domicile.close("term");
 
@@ -2238,8 +2248,8 @@ describe("Shell", () => {
 
     // A page draws only while laid out, so a screenshot or screen cast of a
     // hidden tab would never get a frame.
-    it("lays out a hidden tab while the engine captures its page", () => {
-      const { container } = renderShell();
+    it("lays out a hidden tab while the engine captures its page", async () => {
+      const { container } = await renderShell();
       domicile.engineOpens("https://example.com");
       clientAppears("two");
       press("w");
@@ -2254,9 +2264,9 @@ describe("Shell", () => {
       expect(browser()).toHaveAttribute("hidden");
     });
 
-    it("keeps a window that is on another workspace mounted and hidden", () => {
+    it("keeps a window that is on another workspace mounted and hidden", async () => {
       // Hidden, not unmounted: remounting blanks a portal and reloads a page.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
 
       press("parenright");
@@ -2268,8 +2278,8 @@ describe("Shell", () => {
 
     // Workspaces form a row: the arriving one slides in from its side and the
     // leaving one slides out the other way.
-    it("slides one workspace off as the next one slides in", () => {
-      const { container } = renderShell();
+    it("slides one workspace off as the next one slides in", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("braceright");
       clientAppears("editor");
@@ -2281,8 +2291,8 @@ describe("Shell", () => {
     });
 
     // The glow moves with its windows.
-    it("brings the glow on with the workspace", () => {
-      const { container } = renderShell();
+    it("brings the glow on with the workspace", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       clientAppears("shell");
       press("e");
@@ -2297,8 +2307,8 @@ describe("Shell", () => {
     });
 
     // Each workspace slides by its own screen's width, read from the window.
-    it("slides a workspace the width of its screen", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+    it("slides a workspace the width of its screen", async () => {
+      const { container } = await renderShell([LEFT, RIGHT]);
 
       pointerAt(2000, 500);
       clientAppears("term");
@@ -2312,8 +2322,8 @@ describe("Shell", () => {
 
     // The page spans every monitor, so a window sliding off its screen would
     // show on the next one. Each of its parts is clipped by its wrapper.
-    it("keeps every part of a sliding workspace on its screen", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+    it("keeps every part of a sliding workspace on its screen", async () => {
+      const { container } = await renderShell([LEFT, RIGHT]);
       pointerAt(2000, 500);
       clientAppears("term");
       motionsPlayOut(container);
@@ -2330,8 +2340,8 @@ describe("Shell", () => {
     });
 
     // A float can hang over the next screen while it is dragged across.
-    it("lets windows at rest draw across screens", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+    it("lets windows at rest draw across screens", async () => {
+      const { container } = await renderShell([LEFT, RIGHT]);
       pointerAt(2000, 500);
       clientAppears("term");
       motionsPlayOut(container);
@@ -2339,8 +2349,8 @@ describe("Shell", () => {
       expect(appBox(container, "term").parentElement?.style.clip).toBe("");
     });
 
-    it("and the other way when the switch goes the other way", () => {
-      const { container } = renderShell();
+    it("and the other way when the switch goes the other way", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
 
       press("braceright");
@@ -2350,8 +2360,8 @@ describe("Shell", () => {
 
     // A window revealed by a workspace switch is not new, so it gets no
     // opening animation.
-    it("does not play a window in when a workspace switch reveals it", () => {
-      const { container } = renderShell();
+    it("does not play a window in when a workspace switch reveals it", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("braceright");
       motionsPlayOut(container);
@@ -2365,7 +2375,7 @@ describe("Shell", () => {
     // `target="_blank"`, end to end: the engine opens and lists a browser
     // window at the address, and the desktop draws it with an address bar.
     it("draws a second browser window when the engine opens one", async () => {
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2384,7 +2394,7 @@ describe("Shell", () => {
     // The launcher asks the engine to open the window. The engine owns the
     // page, so a shell loaded over this one draws the same window.
     it("asks the engine for the browser window the launcher opens", async () => {
-      renderShell();
+      await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2399,7 +2409,7 @@ describe("Shell", () => {
     });
 
     it("opens a private browser window from the launcher's private row", async () => {
-      renderShell();
+      await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2412,8 +2422,8 @@ describe("Shell", () => {
       ]);
     });
 
-    it("says a private browser window is private", () => {
-      renderShell();
+    it("says a private browser window is private", async () => {
+      await renderShell();
 
       domicile.engineOpens("https://example.com/", { isPrivate: true });
 
@@ -2421,8 +2431,8 @@ describe("Shell", () => {
     });
 
     // `domicile open --app`, as Settings and History open.
-    it("draws an app window without an address bar", () => {
-      const { container } = renderShell();
+    it("draws an app window without an address bar", async () => {
+      const { container } = await renderShell();
 
       domicile.engineOpens("chrome-extension://settings/settings.html", {
         isApp: true,
@@ -2437,7 +2447,7 @@ describe("Shell", () => {
     // Bitwarden's "Unlock", end to end: `chrome.windows.create` opens a browser
     // window as that window's tab, and the desktop draws it.
     it("opens the window an extension asks for, as that window", async () => {
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2455,7 +2465,7 @@ describe("Shell", () => {
     });
 
     it("marks a browser window's title bar with its page's icon", async () => {
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2481,7 +2491,7 @@ describe("Shell", () => {
     });
 
     it("shows a browser tab's whole title and its page's description on hover", async () => {
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       const user = userEvent.setup();
       await user.type(screen.getByRole("combobox"), "example.com{Enter}");
@@ -2511,7 +2521,7 @@ describe("Shell", () => {
     // A video's fullscreen button: the page fills its window, and the window
     // fills the screen until the page leaves fullscreen.
     it("fills the screen with a browser window while its page is fullscreen", async () => {
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2548,7 +2558,7 @@ describe("Shell", () => {
     // `window.close()` or `chrome.tabs.remove`: the engine closes the window,
     // and the desktop stops drawing it.
     it("takes away a browser window the engine closes", async () => {
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2563,8 +2573,8 @@ describe("Shell", () => {
   });
 
   describe("which window has the keyboard", () => {
-    it("marks the focused window's bar and leaves the others resting", () => {
-      const { container } = renderShell();
+    it("marks the focused window's bar and leaves the others resting", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2572,8 +2582,8 @@ describe("Shell", () => {
       expect(barFor(container, "app:one").dataset.focus).toBe("resting");
     });
 
-    it("moves the mark with the focus", () => {
-      const { container } = renderShell();
+    it("moves the mark with the focus", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2583,9 +2593,9 @@ describe("Shell", () => {
       expect(barFor(container, "app:two").dataset.focus).toBe("resting");
     });
 
-    it("moves the keyboard to a window whose bar the pointer crosses into", () => {
+    it("moves the keyboard to a window whose bar the pointer crosses into", async () => {
       // The bar is part of the window, so crossing onto it moves focus.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -2599,7 +2609,7 @@ describe("Shell", () => {
     it("moves the keyboard to a browser window whose page the pointer crosses into", async () => {
       // The same rule for a guest page: the shell sees the pointer enter its
       // element.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2623,7 +2633,7 @@ describe("Shell", () => {
 
     // The page still gets keys while locked, for the passphrase.
     it("keeps the keyboard out of a browser window's page while locked", async () => {
-      const { container } = renderShell();
+      const { container } = await renderShell();
       press("space");
       await userEvent
         .setup()
@@ -2642,9 +2652,9 @@ describe("Shell", () => {
       expect(container.querySelector("webview")).not.toHaveFocus();
     });
 
-    it("lights the window being worked in, and rings no window's edge", () => {
+    it("lights the window being worked in, and rings no window's edge", async () => {
       // Checked by declarations because Panda hashes class names.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -2659,8 +2669,8 @@ describe("Shell", () => {
     });
 
     // A glow at opacity 0 would stay on the page, drawing nothing.
-    it("takes the glow focus left off the page once it has faded", () => {
-      const { container } = renderShell();
+    it("takes the glow focus left off the page once it has faded", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       const left = container.querySelector("[data-focus-box][data-leaving]");
@@ -2679,16 +2689,16 @@ describe("Shell", () => {
       expect(container.querySelector("[data-leaving]")).toBeNull();
     });
 
-    it("lights a window the desk shows alone", () => {
-      const { container } = renderShell();
+    it("lights a window the desk shows alone", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
 
       expect(lit(container)).toEqual(["app:one"]);
     });
 
-    it("lights only the screen being worked in", () => {
+    it("lights only the screen being worked in", async () => {
       // Each screen shows one window, but the commands target only one.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
       clientAppears("one");
       clientAppears("two");
       press("parenright", true);
@@ -2698,15 +2708,15 @@ describe("Shell", () => {
   });
 
   describe("the keys, as the sway config binds them", () => {
-    it("claims every chord it answers from the compositor", () => {
+    it("claims every chord it answers from the compositor", async () => {
       // So presses reach the shell while a `<webview>` has the keyboard.
-      renderShell();
+      await renderShell();
 
       expect(domicile.calls).toContainEqual(["grabShortcut", "Meta+Return"]);
     });
 
-    it("binds sway's keys when it is given none", () => {
-      renderingShell([LEFT], undefined, {
+    it("binds sway's keys when it is given none", async () => {
+      await renderingShell([LEFT], undefined, {
         keybindings: DEFAULT_KEYBINDINGS,
       });
       clientAppears("term");
@@ -2716,8 +2726,8 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["closeApp", "term"]);
     });
 
-    it("runs what `exec` names on the chord the config names", () => {
-      renderShell();
+    it("runs what `exec` names on the chord the config names", async () => {
+      await renderShell();
 
       press("Return");
 
@@ -2725,7 +2735,7 @@ describe("Shell", () => {
     });
 
     it("switches the keymap with `keymap`, and says which it switched to", async () => {
-      renderShell();
+      await renderShell();
       /** Answer the system call `call` as the compositor would. */
       const answer = (call: object, ...lines: object[]) => {
         const [, id] =
@@ -2780,8 +2790,8 @@ describe("Shell", () => {
       );
     });
 
-    it("moves the focus with the direction keys", () => {
-      const { container } = renderShell();
+    it("moves the focus with the direction keys", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2795,8 +2805,8 @@ describe("Shell", () => {
     });
 
     // On the compositor's thread, as their windows' contents move.
-    it("slides tabs moved along their strip over to their new places", () => {
-      const { container } = renderShell();
+    it("slides tabs moved along their strip over to their new places", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       motionsPlayOut(container);
@@ -2807,8 +2817,8 @@ describe("Shell", () => {
       expect(barFor(container, "app:one").getAnimations()).toHaveLength(1);
     });
 
-    it("slides a dragged tab into the slot it moves to along its strip", () => {
-      const { container } = renderShell();
+    it("slides a dragged tab into the slot it moves to along its strip", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       motionsPlayOut(container);
@@ -2824,9 +2834,9 @@ describe("Shell", () => {
       expect(barFor(container, "app:one").getAnimations()).toHaveLength(1);
     });
 
-    it("moves a window through the tiling with Shift held", () => {
+    it("moves a window through the tiling with Shift held", async () => {
       // A group of two beside a lone window: `focus parent` selects the group.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       clientAppears("three");
@@ -2840,10 +2850,10 @@ describe("Shell", () => {
       expect(boxOf(appBox(container, "two"))).toMatchObject({ x: "970px" });
     });
 
-    it("splits a window out of its group, and back in as a tab", () => {
+    it("splits a window out of its group, and back in as a tab", async () => {
       // `mod+v` moves the window out below its group. Alone in its own group,
       // moving it back joins the group as a tab instead of swapping.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2859,8 +2869,8 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 
-    it("lays the container out in tabs, which are the windows' own bars", () => {
-      const { container } = renderShell();
+    it("lays the container out in tabs, which are the windows' own bars", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -2876,10 +2886,10 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 
-    it("lights the whole group `focus parent` selects, and back", () => {
+    it("lights the whole group `focus parent` selects, and back", async () => {
       // `mod+a` targets the container around the focus, and this highlight is
       // the only indication of which container.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -2903,10 +2913,10 @@ describe("Shell", () => {
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
     });
 
-    it("tints a selected tab group, leaving its tabs' states", () => {
+    it("tints a selected tab group, leaving its tabs' states", async () => {
       // The tabs keep showing which one is open and has the keyboard. A
       // sibling window keeps the tabs from filling the screen.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -2926,9 +2936,9 @@ describe("Shell", () => {
       expect(barFor(container, "app:three").dataset.focus).toBe("focused");
     });
 
-    it("tints the open tab, which stands over the rest of its strip", () => {
+    it("tints the open tab, which stands over the rest of its strip", async () => {
       // A sibling window keeps the tabs from filling the screen.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -2949,9 +2959,9 @@ describe("Shell", () => {
       );
     });
 
-    it("offers to tile a floating group from the tab that stands for it", () => {
+    it("offers to tile a floating group from the tab that stands for it", async () => {
       // A tabbed container holding a row, floated whole.
-      renderShell();
+      await renderShell();
       clientAppears("one");
       clientAppears("two");
       clientAppears("three");
@@ -2967,9 +2977,9 @@ describe("Shell", () => {
       expect(screen.queryAllByRole("button", { name: "Float" })).toEqual([]);
     });
 
-    it("runs the window's top edge along the strip, under all but the open tab", () => {
+    it("runs the window's top edge along the strip, under all but the open tab", async () => {
       // A sibling window keeps the tabs from filling the screen.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -2988,10 +2998,10 @@ describe("Shell", () => {
       );
     });
 
-    it("grows the glow in with the window that opened", () => {
+    it("grows the glow in with the window that opened", async () => {
       // A full-size glow around a growing window would stick out past it.
       // It opens beside the selected split, in a box of its own.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("b");
@@ -3004,11 +3014,11 @@ describe("Shell", () => {
       );
     });
 
-    it("keeps the group when the layout slides a window under the pointer", () => {
+    it("keeps the group when the layout slides a window under the pointer", async () => {
       // Moving a group slides windows under a still pointer, and each fires
       // `pointerover` at the pointer's spot. Following those would hand focus,
       // and the selection, to whichever window passed by.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("v");
@@ -3022,11 +3032,11 @@ describe("Shell", () => {
       expect(pointedAtGroup(container)).toBe(true);
     });
 
-    it("knows its own warp, at a place that is not a whole pixel", () => {
+    it("knows its own warp, at a place that is not a whole pixel", async () => {
       // Thirds of the workspace are not whole pixels, and the engine rounds
       // the warp (`base::ClampRound`). The page must still recognize its own
       // warp, or it treats the window under the cursor as a user's choice.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       clientAppears("three");
@@ -3050,11 +3060,11 @@ describe("Shell", () => {
       expect(pointedAtGroup(container)).toBe(true);
     });
 
-    it("and hands it over to a pointer that really crossed into one", () => {
+    it("and hands it over to a pointer that really crossed into one", async () => {
       // A crossing at a point the pointer was not at is the user choosing a
       // window, and choosing one outside the group leaves it. The browser fires
       // `pointerover` before the move, so the desktop must act on it alone.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -3070,8 +3080,8 @@ describe("Shell", () => {
       expect(pointedAtGroup(container)).toBe(false);
     });
 
-    it("fills the screen with the window being worked in", () => {
-      const { container } = renderShell();
+    it("fills the screen with the window being worked in", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
 
       press("f");
@@ -3083,8 +3093,8 @@ describe("Shell", () => {
       });
     });
 
-    it("squares the corners of the window filling the screen", () => {
-      const { container } = renderShell();
+    it("squares the corners of the window filling the screen", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
 
       press("f");
@@ -3097,8 +3107,8 @@ describe("Shell", () => {
       );
     });
 
-    it("spreads a global fullscreen across every screen", () => {
-      const { container } = renderShell([LEFT, RIGHT]);
+    it("spreads a global fullscreen across every screen", async () => {
+      const { container } = await renderShell([LEFT, RIGHT]);
       clientAppears("term");
 
       press("f", true);
@@ -3108,8 +3118,8 @@ describe("Shell", () => {
       });
     });
 
-    it("sends a window to another workspace and stays put", () => {
-      const { container } = renderShell();
+    it("sends a window to another workspace and stays put", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -3125,9 +3135,9 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 
-    it("goes back to the last workspace when the same key is pressed", () => {
+    it("goes back to the last workspace when the same key is pressed", async () => {
       // `workspaceAutoBackAndForth = true`.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
 
       press("parenright");
@@ -3136,8 +3146,8 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["term"]);
     });
 
-    it("closes the window being worked in", () => {
-      renderShell();
+    it("closes the window being worked in", async () => {
+      await renderShell();
       clientAppears("term");
 
       press("q", true);
@@ -3147,8 +3157,8 @@ describe("Shell", () => {
   });
 
   describe("floating windows", () => {
-    it("opens a dialog at the size it drew, with a title bar", () => {
-      const { container } = renderShell();
+    it("opens a dialog at the size it drew, with a title bar", async () => {
+      const { container } = await renderShell();
       domicile.appear("pin", { dialog: true, height: 300, width: 400 });
 
       expect(boxOf(appBox(container, "pin"))).toMatchObject({
@@ -3158,8 +3168,8 @@ describe("Shell", () => {
       expect(barFor(container, "app:pin")).toBeDefined();
     });
 
-    it("opens a dialog that draws its own frame with no title bar", () => {
-      const { container } = renderShell();
+    it("opens a dialog that draws its own frame with no title bar", async () => {
+      const { container } = await renderShell();
       domicile.appear("huddle", {
         clientFrame: true,
         dialog: true,
@@ -3174,8 +3184,8 @@ describe("Shell", () => {
       expect(() => barFor(container, "app:huddle")).toThrow("no title bar");
     });
 
-    it("takes a window out of the tiling and puts it back", () => {
-      const { container } = renderShell();
+    it("takes a window out of the tiling and puts it back", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
 
       press("Tab", true);
@@ -3191,10 +3201,10 @@ describe("Shell", () => {
       });
     });
 
-    it("floats a window no smaller than its client will draw", () => {
+    it("floats a window no smaller than its client will draw", async () => {
       // Wider than the default float width of 1280 and shorter than its 770,
       // so both limits apply.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("vault");
       domicile.change("vault", {
         maxHeight: 350,
@@ -3211,9 +3221,9 @@ describe("Shell", () => {
       });
     });
 
-    it("keeps a window's bar across floating it and back", () => {
+    it("keeps a window's bar across floating it and back", async () => {
       // The window eases to its new box; a new bar would jump there instead.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       const tiled = barFor(container, "app:term");
 
@@ -3224,8 +3234,8 @@ describe("Shell", () => {
       expect(barFor(container, "app:term")).toBe(tiled);
     });
 
-    it("swaps the keyboard between the floating window and the tiling", () => {
-      renderShell();
+    it("swaps the keyboard between the floating window and the tiling", async () => {
+      await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -3236,10 +3246,10 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
     });
 
-    it("puts a sheet over a float to catch a drag while the modifier is held", () => {
+    it("puts a sheet over a float to catch a drag while the modifier is held", async () => {
       // The client owns the pointer over its surface, so the shell needs a
       // sheet on top to receive the drag.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
 
@@ -3251,10 +3261,10 @@ describe("Shell", () => {
       expect(grabSheets(container)).toHaveLength(1);
     });
 
-    it("takes the sheet down when Meta comes up", () => {
+    it("takes the sheet down when Meta comes up", async () => {
       // Chromium on Wayland reports Meta's release with `metaKey` still set,
       // so the flag alone would leave the modifier stuck.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
 
@@ -3267,8 +3277,8 @@ describe("Shell", () => {
       expect(grabSheets(container)).toHaveLength(0);
     });
 
-    it("moves a floating window by its title bar, with no modifier held", () => {
-      const { container } = renderShell();
+    it("moves a floating window by its title bar, with no modifier held", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
       const bar = barFor(container, "app:term");
@@ -3283,8 +3293,8 @@ describe("Shell", () => {
       ).toBe(was + 40);
     });
 
-    it("keeps the resize cursor while Meta+Shift resizes a float", () => {
-      const { container } = renderShell();
+    it("keeps the resize cursor while Meta+Shift resizes a float", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
       pageHolds({ meta: true, shift: true });
@@ -3299,8 +3309,8 @@ describe("Shell", () => {
       expect(() => grabbingSheet(container)).toThrow();
     });
 
-    it("resizes a floating window by its edge, with no modifier held", () => {
-      const { container } = renderShell();
+    it("resizes a floating window by its edge, with no modifier held", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
       pageHolds({});
@@ -3318,9 +3328,9 @@ describe("Shell", () => {
       );
     });
 
-    it("marks a window resizing while its edge is dragged", () => {
+    it("marks a window resizing while its edge is dragged", async () => {
       // The engine then stops holding the desktop's frame for the client.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
       pageHolds({});
@@ -3338,8 +3348,8 @@ describe("Shell", () => {
       );
     });
 
-    it("does not mark a window resizing while it is moved", () => {
-      const { container } = renderShell();
+    it("does not mark a window resizing while it is moved", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
 
@@ -3354,9 +3364,9 @@ describe("Shell", () => {
       );
     });
 
-    it("resizes a float's window with the pointer rather than easing after it", () => {
+    it("resizes a float's window with the pointer rather than easing after it", async () => {
       // An eased window would trail the pointer; see `useSettling`.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
       pageHolds({});
@@ -3379,9 +3389,9 @@ describe("Shell", () => {
       }
     });
 
-    it("keeps a float's glow on it while it is dragged rather than easing after it", () => {
+    it("keeps a float's glow on it while it is dragged rather than easing after it", async () => {
       // A transitioning glow would trail the window during a drag.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("shell");
       clientAppears("term");
       press("Tab", true);
@@ -3394,8 +3404,8 @@ describe("Shell", () => {
     });
 
     // A tab easing after its group would trail the pointer.
-    it("carries every tab of a dragged floating group with it at once", () => {
-      const { container } = renderShell();
+    it("carries every tab of a dragged floating group with it at once", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       press("Tab", true);
       clientAppears("two");
@@ -3425,10 +3435,10 @@ describe("Shell", () => {
       }
     });
 
-    it("drags a floating window onto the next screen and keeps hold of it", () => {
+    it("drags a floating window onto the next screen and keeps hold of it", async () => {
       // The screen under the float's center takes it, and the drag continues
       // after its bar leaves the pressed screen.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
       clientAppears("term");
       press("Tab", true);
       const was = Number.parseFloat(
@@ -3454,10 +3464,10 @@ describe("Shell", () => {
       ).toBe(was + LEFT.width + 10);
     });
 
-    it("keeps a dragged float focused and on top while only the pointer is on the next screen", () => {
+    it("keeps a dragged float focused and on top while only the pointer is on the next screen", async () => {
       // The sheet that shows the grab cursor is under the pointer, not the
       // window, so it must not read as the bare desk.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
       pointerAt(2000, 500);
       clientAppears("other");
       press("Tab", true);
@@ -3483,7 +3493,7 @@ describe("Shell", () => {
 
     it("drags a browser window onto the next screen without loading its page again", async () => {
       // One `<webview>` throughout; a new one would reload the page.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
       press("space");
       await userEvent
         .setup()
@@ -3506,9 +3516,9 @@ describe("Shell", () => {
       expect(container.querySelector("webview")).toBe(view);
     });
 
-    it("draws a float over the edge between two screens once, whole", () => {
+    it("draws a float over the edge between two screens once, whole", async () => {
       // One page spans the desk, so a float across two screens is one element.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
       clientAppears("term");
       press("Tab", true);
       const was = Number.parseFloat(
@@ -3532,7 +3542,7 @@ describe("Shell", () => {
 
     it("draws a fullscreen float's bar at the top of the screen", async () => {
       const user = userEvent.setup();
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
 
@@ -3545,8 +3555,8 @@ describe("Shell", () => {
       });
     });
 
-    it("keys a floating window around the desktop instead of retiling it", () => {
-      const { container } = renderShell();
+    it("keys a floating window around the desktop instead of retiling it", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
       const was = Number.parseFloat(
@@ -3560,8 +3570,8 @@ describe("Shell", () => {
       ).toBeGreaterThan(was);
     });
 
-    it("casts a shadow under a floating window and not under a tiled one", () => {
-      const { container } = renderShell();
+    it("casts a shadow under a floating window and not under a tiled one", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       expect(shadows(container)).toHaveLength(0);
 
@@ -3591,8 +3601,8 @@ describe("Shell", () => {
       expect(shadows(container)).toHaveLength(0);
     });
 
-    it("rounds its shadow at all four corners, as the frame is", () => {
-      const { container } = renderShell();
+    it("rounds its shadow at all four corners, as the frame is", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
 
@@ -3601,9 +3611,9 @@ describe("Shell", () => {
       );
     });
 
-    it("casts no shadow from a float that fills the screen", () => {
+    it("casts no shadow from a float that fills the screen", async () => {
       // Its shadow would spill onto the next display.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       press("Tab", true);
 
@@ -3612,8 +3622,8 @@ describe("Shell", () => {
       expect(shadows(container)).toHaveLength(0);
     });
 
-    it("stacks each float over the one behind it", () => {
-      const { container } = renderShell();
+    it("stacks each float over the one behind it", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("Tab", true);
@@ -3624,10 +3634,10 @@ describe("Shell", () => {
         Number(appBox(container, "two").style.zIndex),
       );
     });
-    it("shuffles a float pressed on over the one covering it", () => {
+    it("shuffles a float pressed on over the one covering it", async () => {
       // The two move apart, swap depths, and return, every part of each
       // window included.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("Tab", true);
@@ -3684,9 +3694,9 @@ describe("Shell", () => {
       ).not.toContain("");
     });
 
-    it("starts the glow's shuffle over with its window's", () => {
+    it("starts the glow's shuffle over with its window's", async () => {
       // Each press restarts the animation, for the glow as well as windows.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("Tab", true);
@@ -3710,8 +3720,8 @@ describe("Shell", () => {
   });
 
   describe("the scratchpad", () => {
-    it("takes a window off the desktop and brings it back floating", () => {
-      const { container } = renderShell();
+    it("takes a window off the desktop and brings it back floating", async () => {
+      const { container } = await renderShell();
       clientAppears("term");
 
       press("minus", true);
@@ -3731,8 +3741,8 @@ describe("Shell", () => {
       expect(Number(appBox(container, "term").style.zIndex)).toBeGreaterThan(0);
     });
     // It hangs from the top edge, so its top corners are square.
-    it("hangs a window it shows from the top edge of the screen", () => {
-      const { container } = renderShell();
+    it("hangs a window it shows from the top edge of the screen", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("minus", true);
@@ -3745,8 +3755,8 @@ describe("Shell", () => {
       );
     });
 
-    it("dims the screen under a window it shows, which a press there hides", () => {
-      const { container } = renderShell();
+    it("dims the screen under a window it shows, which a press there hides", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("minus", true);
@@ -3780,8 +3790,8 @@ describe("Shell", () => {
       expect(container.querySelector("[data-scratchpad-backdrop]")).toBeNull();
     });
 
-    it("keeps the focus ring on the window under a scratchpad window", () => {
-      const { container } = renderShell();
+    it("keeps the focus ring on the window under a scratchpad window", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("minus", true);
@@ -3794,12 +3804,12 @@ describe("Shell", () => {
   });
 
   describe("focus follows the cursor", () => {
-    it("takes the pointer to a window that has just opened", () => {
+    it("takes the pointer to a window that has just opened", async () => {
       // The window took focus without a key press. The pointer is still over
       // the previous window, and the next pointer event would take focus
       // back.
       // It opens beside the selected split, in a box of its own.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("b");
@@ -3819,11 +3829,11 @@ describe("Shell", () => {
       });
     });
 
-    it("takes the pointer with it when a key moves the focus", () => {
+    it("takes the pointer with it when a key moves the focus", async () => {
       // sway's `mouse_warping`: otherwise the next pointer event over the old
       // window would take focus back. The pointer goes to the center of the
       // window's contents, below its title bar.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -3841,10 +3851,10 @@ describe("Shell", () => {
       });
     });
 
-    it("takes the pointer to the middle of an empty screen a key moved to", () => {
+    it("takes the pointer to the middle of an empty screen a key moved to", async () => {
       // sway's `focus right` onto an empty output. Otherwise the pointer on
       // the old screen would take focus back.
-      renderShell([LEFT, RIGHT]);
+      await renderShell([LEFT, RIGHT]);
       clientAppears("one");
       domicile.calls.length = 0;
 
@@ -3853,8 +3863,8 @@ describe("Shell", () => {
       expect(warpedTo()).toStrictEqual([2560, 512]);
     });
 
-    it("gives the keyboard to the window the pointer moves into", () => {
-      const { container } = renderShell();
+    it("gives the keyboard to the window the pointer moves into", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("e");
@@ -3884,8 +3894,8 @@ describe("Shell", () => {
       };
 
       // A tiled window and a float, so no tiled border counts as a sheet.
-      const renderHeld = (): HTMLElement => {
-        const { container } = renderShell();
+      const renderHeld = async (): Promise<HTMLElement> => {
+        const { container } = await renderShell();
         clientAppears("one");
         clientAppears("two");
         press("Tab", true);
@@ -3893,8 +3903,8 @@ describe("Shell", () => {
         return container;
       };
 
-      it("gives the keyboard to the tiled window the pointer moves into", () => {
-        const container = renderHeld();
+      it("gives the keyboard to the tiled window the pointer moves into", async () => {
+        const container = await renderHeld();
         domicile.calls.length = 0;
 
         crossInto(sheetOver(container, "app:one"), 300, 300);
@@ -3902,8 +3912,8 @@ describe("Shell", () => {
         expect(domicile.calls).toContainEqual(["focusApp", "one"]);
       });
 
-      it("gives the keyboard to the floating window the pointer moves into", () => {
-        const container = renderHeld();
+      it("gives the keyboard to the floating window the pointer moves into", async () => {
+        const container = await renderHeld();
         crossInto(sheetOver(container, "app:one"), 300, 300);
         domicile.calls.length = 0;
 
@@ -3913,10 +3923,10 @@ describe("Shell", () => {
       });
     });
 
-    it("leaves the keyboard where it is when the pointer lands on the chrome", () => {
+    it("leaves the keyboard where it is when the pointer lands on the chrome", async () => {
       // The bar, wallpaper and float decorations are not windows; taking focus
       // for them would make the desktop untypeable.
-      const { container } = renderShell();
+      const { container } = await renderShell();
       clientAppears("term");
       domicile.calls.length = 0;
 
@@ -3929,8 +3939,8 @@ describe("Shell", () => {
       expect(domicile.calls).toEqual([]);
     });
 
-    it("grants a client that asks for the keyboard over xdg-activation", () => {
-      renderShell();
+    it("grants a client that asks for the keyboard over xdg-activation", async () => {
+      await renderShell();
       clientAppears("one");
       clientAppears("two");
       press("parenright");
@@ -3946,10 +3956,10 @@ describe("Shell", () => {
       );
     });
 
-    it("moves the keyboard to the screen the pointer moves onto", () => {
+    it("moves the keyboard to the screen the pointer moves onto", async () => {
       // As in sway, even an empty screen takes focus, so the next window opens
       // where the pointer is.
-      const { container } = renderShell([LEFT, RIGHT]);
+      const { container } = await renderShell([LEFT, RIGHT]);
 
       pointerAt(2000, 500);
       clientAppears("term");
@@ -3962,8 +3972,8 @@ describe("Shell", () => {
       ).toBeGreaterThanOrEqual(RIGHT.x);
     });
 
-    it("follows the seat when the compositor moves the keyboard itself", () => {
-      const { container } = renderShell();
+    it("follows the seat when the compositor moves the keyboard itself", async () => {
+      const { container } = await renderShell();
       clientAppears("one");
       clientAppears("two");
 
@@ -4006,14 +4016,14 @@ describe("the launcher", () => {
   const homeHolds = (...files: readonly string[]): Promise<void> =>
     domicile.holds(files);
 
-  it("is not on screen until the key that opens it", () => {
-    renderShell();
+  it("is not on screen until the key that opens it", async () => {
+    await renderShell();
 
     expect(launcherBox()).toBeNull();
   });
 
-  it("opens on the screen the keyboard is on", () => {
-    renderShell([LEFT, RIGHT]);
+  it("opens on the screen the keyboard is on", async () => {
+    await renderShell([LEFT, RIGHT]);
     clientAppears("one");
     press("l");
 
@@ -4025,7 +4035,7 @@ describe("the launcher", () => {
   it("stays on the empty screen it was opened on", async () => {
     // Opening it gives the page the keyboard, so the engine refocuses the last
     // guest, here the browser window on the other screen, as if clicked.
-    const { container } = renderShell([LEFT, RIGHT]);
+    const { container } = await renderShell([LEFT, RIGHT]);
     press("space");
     await typeIntoLauncher("example.com{Enter}");
     await launched();
@@ -4047,9 +4057,9 @@ describe("the launcher", () => {
     expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
   });
 
-  it("opens on mod+space and asks the host what matches its empty box", () => {
+  it("opens on mod+space and asks the host what matches its empty box", async () => {
     // Searched on each open, not at startup, so the results are current.
-    renderShell();
+    await renderShell();
 
     press("space");
 
@@ -4057,11 +4067,11 @@ describe("the launcher", () => {
     expect(domicile.calls).toContainEqual(["searchFiles", ""]);
   });
 
-  it("reads the installed applications before it is opened", () => {
+  it("reads the installed applications before it is opened", async () => {
     // Unlike files, read before opening so late results do not push rows
     // down. See `launcher/useOpeningApps.ts`. A read starts by asking the
     // desktop's environment where applications are installed.
-    renderCountedShell();
+    await renderCountedShell();
     const reads = () =>
       domicile.calls.filter(
         ([call, , request]) =>
@@ -4078,7 +4088,7 @@ describe("the launcher", () => {
   });
 
   it("shows the files the host answered with", async () => {
-    const { unmount } = renderShell();
+    const { unmount } = await renderShell();
     press("space");
 
     await homeHolds("Notes/today.org", "todo.txt");
@@ -4096,7 +4106,7 @@ describe("the launcher", () => {
   it("opens a file nothing claims with xdg-open and puts the panel away", async () => {
     // The spawned shell resolves `$HOME`; the page cannot. See
     // `launcher/open-command.ts`.
-    renderShell();
+    await renderShell();
     press("space");
     await homeHolds("Notes/today.org");
 
@@ -4121,7 +4131,7 @@ describe("the launcher", () => {
   });
 
   it("opens a typed URL in a browser window on the desktop", async () => {
-    renderShell();
+    await renderShell();
     press("space");
     await homeHolds("todo.txt");
 
@@ -4133,7 +4143,7 @@ describe("the launcher", () => {
   });
 
   it("opens what was picked only once it has closed, so a screenshot leaves it out", async () => {
-    renderShell();
+    await renderShell();
     press("space");
     await homeHolds("todo.txt");
     const closing = Promise.withResolvers<unknown>();
@@ -4160,7 +4170,7 @@ describe("the launcher", () => {
   });
 
   it("searches for a query that is neither a file nor a URL", async () => {
-    renderShell();
+    await renderShell();
     press("space");
 
     await typeIntoLauncher("!wiki mesa{Enter}");
@@ -4172,10 +4182,10 @@ describe("the launcher", () => {
     ]);
   });
 
-  it("takes the keyboard off the window it is opened over", () => {
+  it("takes the keyboard off the window it is opened over", async () => {
     // The page draws the panel but the compositor routes keys. Without this,
     // the focused client would keep receiving the typed text.
-    renderShell();
+    await renderShell();
     clientAppears("one");
     domicile.set({ focusedWindow: "one" });
     domicile.calls.length = 0;
@@ -4185,10 +4195,10 @@ describe("the launcher", () => {
     expect(domicile.calls).toContainEqual(["focusChrome"]);
   });
 
-  it("hands the keyboard back to the window when it is put away", () => {
+  it("hands the keyboard back to the window when it is put away", async () => {
     // Focus returns as soon as the panel closes, without waiting for the
     // pointer.
-    renderShell();
+    await renderShell();
     clientAppears("one");
     domicile.set({ focusedWindow: "one" });
     press("space");
@@ -4204,7 +4214,7 @@ describe("the launcher", () => {
   it("keeps the box focused over a browser window", async () => {
     // A guest page keeps pulling focus back to itself, so the panel must
     // hold it explicitly.
-    const { container } = renderShell();
+    const { container } = await renderShell();
     press("space");
     await typeIntoLauncher("example.com{Enter}");
     await launched();
@@ -4218,7 +4228,7 @@ describe("the launcher", () => {
   it("leaves nothing over the desktop once a launch puts it away", async () => {
     // The panel closes as the new window arrives. A leftover backdrop would
     // capture every click.
-    const { baseElement } = renderShell([LEFT]);
+    const { baseElement } = await renderShell([LEFT]);
     press("space");
 
     await typeIntoLauncher("example.com{Enter}");
@@ -4229,9 +4239,9 @@ describe("the launcher", () => {
     });
   });
 
-  it("keeps the panel up while it closes", () => {
+  it("keeps the panel up while it closes", async () => {
     // It stays drawn until the dialog's close animation finishes.
-    renderShell();
+    await renderShell();
     press("space");
 
     press("space");
@@ -4243,7 +4253,7 @@ describe("the launcher", () => {
     // While the panel is up the engine may give focus back to the last guest,
     // here the hidden tab's browser. Dismissing must keep the visible tab
     // selected.
-    const { container } = renderShell();
+    const { container } = await renderShell();
     press("space");
     await typeIntoLauncher("example.com{Enter}");
     await launched();

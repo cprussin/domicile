@@ -85,42 +85,36 @@ describe(ClearDataDialog, () => {
 
   it("reports when the data is cleared", async () => {
     const user = userEvent.setup();
-    await new Promise<void>((resolve) => {
-      render(
-        <ClearDataDialog
-          now={() => NOW}
-          onCleared={resolve}
-          onFailed={() => undefined}
-          onOpenChange={() => undefined}
-          open
-          removeBrowsingData={() => Promise.resolve()}
-        />,
-      );
-      screen
-        .findByRole("button", { name: "Clear data" })
-        .then((button) => user.click(button))
-        .catch(() => undefined);
-    });
+    const { promise: cleared, resolve } = Promise.withResolvers<void>();
+    render(
+      <ClearDataDialog
+        now={() => NOW}
+        onCleared={resolve}
+        onFailed={() => undefined}
+        onOpenChange={() => undefined}
+        open
+        removeBrowsingData={() => Promise.resolve()}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Clear data" }));
+    await cleared;
   });
 
   it("reports why clearing failed", async () => {
     const user = userEvent.setup();
-    const error = await new Promise((resolve) => {
-      render(
-        <ClearDataDialog
-          now={() => NOW}
-          onCleared={() => undefined}
-          onFailed={resolve}
-          onOpenChange={() => undefined}
-          open
-          removeBrowsingData={() => Promise.reject(new Error("busy"))}
-        />,
-      );
-      screen
-        .findByRole("button", { name: "Clear data" })
-        .then((button) => user.click(button))
-        .catch(() => undefined);
-    });
+    const { promise: failed, resolve } = Promise.withResolvers<unknown>();
+    render(
+      <ClearDataDialog
+        now={() => NOW}
+        onCleared={() => undefined}
+        onFailed={resolve}
+        onOpenChange={() => undefined}
+        open
+        removeBrowsingData={() => Promise.reject(new Error("busy"))}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Clear data" }));
+    const error = await failed;
     expect(error).toEqual(new Error("busy"));
   });
 });

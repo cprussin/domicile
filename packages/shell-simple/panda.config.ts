@@ -9,6 +9,8 @@ export default defineConfig({
   hash: true,
   include: ["../../packages/component-library/src/**/*.{ts,tsx}"],
   jsxFramework: "react",
+  // Component props such as content are data; styles use Panda functions.
+  jsxStyleProps: "none",
   outdir: "styled-system",
   // `src/shell.css` resets what this desktop draws.
   preflight: false,
