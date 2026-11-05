@@ -3,50 +3,40 @@ import { flex, grid } from "../../styled-system/patterns";
 import { repoFile } from "../page/repo";
 import { Section } from "../page/Section";
 
-type Stage = {
-  /** What draws or arranges at this stage. */
+type Window = {
   title: string;
+  /** What the window shows. */
   body: string;
-  /** `engine` marks the stage the browser engine runs. */
+  /** `engine` marks the window a browser engine draws. */
   tone?: "engine" | undefined;
 };
 
-type Diagram = {
-  title: string;
-  /** What feeds the first stage, side by side. */
-  sources: readonly string[];
-  stages: readonly Stage[];
+/** A typical desktop: the browser is one window among others. */
+const WINDOWS: readonly Window[] = [
+  {
+    body: "Websites, drawn by the browser's own engine and compositor",
+    title: "Browser",
+    tone: "engine",
+  },
+  { body: "A native app, in its own window", title: "Terminal" },
+  { body: "A native app, in its own window", title: "Files" },
+];
+
+type Element = {
+  /** The element's tag, as in the shell's HTML. */
+  tag: string;
+  label: string;
+  /** A CSS transform, to show that CSS reaches it. */
+  transform?: string | undefined;
 };
 
-const CONVENTIONAL: Diagram = {
-  sources: ["Websites, in a browser", "Native apps"],
-  stages: [
-    {
-      body: "The browser renders and composites its pages into one window, with its own engine. Each native app draws its own window.",
-      title: "Each app draws a window",
-      tone: "engine",
-    },
-    {
-      body: "Arranges every window, the browser's included, and composites them.",
-      title: "The desktop compositor",
-    },
-    { body: "", title: "The screen" },
-  ],
-  title: "A typical desktop",
-};
-
-const DOMICILE: Diagram = {
-  sources: ["Websites: <webview>", "Native apps: <app>", "Your desktop: HTML"],
-  stages: [
-    {
-      body: "Apps still draw their own windows, and Domicile's Wayland server hands them to the engine. The engine lays out the page, the websites and the windows with CSS, and composites them in one frame.",
-      title: "One page, in Chromium",
-      tone: "engine",
-    },
-    { body: "", title: "The screen" },
-  ],
-  title: "Domicile",
-};
+/** Domicile: websites, native apps and the desktop's own interface are
+ * elements of one page. */
+const ELEMENTS: readonly Element[] = [
+  { label: "A website", tag: "<webview>" },
+  { label: "Terminal", tag: "<app>", transform: "rotate(-3deg)" },
+  { label: "Files", tag: "<app>" },
+];
 
 /** Why unify: the two arrangements, side by side. */
 export const Why = () => (
@@ -56,8 +46,62 @@ export const Why = () => (
     title="You're already running a browser."
   >
     <div className={diagramsStyles}>
-      <Flow diagram={CONVENTIONAL} />
-      <Flow diagram={DOMICILE} />
+      <figure className={panelStyles}>
+        <figcaption className={captionStyles}>
+          <span className={panelTitleStyles}>A typical desktop</span>
+          <span className={panelBodyStyles}>The web lives in one window.</span>
+        </figcaption>
+        <div className={screenStyles({ tone: "plain" })}>
+          <span className={screenLabelStyles({ tone: "plain" })}>
+            The desktop compositor
+          </span>
+          <ul className={windowsStyles}>
+            {WINDOWS.map((window) => (
+              <li
+                className={windowStyles({ tone: window.tone ?? "plain" })}
+                key={window.title}
+              >
+                <span className={titleBarStyles}>
+                  <span aria-hidden="true" className={dotsStyles}>
+                    ● ● ●
+                  </span>
+                  {window.title}
+                </span>
+                <span className={windowBodyStyles}>{window.body}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </figure>
+      <figure className={panelStyles}>
+        <figcaption className={captionStyles}>
+          <span className={panelTitleStyles}>Domicile</span>
+          <span className={panelBodyStyles}>The web is the desktop.</span>
+        </figcaption>
+        <div className={screenStyles({ tone: "engine" })}>
+          <span className={screenLabelStyles({ tone: "engine" })}>
+            One page, in Chromium
+          </span>
+          <div className={elementStyles}>
+            <span className={tagStyles}>{"<nav>"}</span>
+            <span className={elementBodyStyles}>
+              Your desktop&apos;s bar, in HTML
+            </span>
+          </div>
+          <ul className={windowsStyles}>
+            {ELEMENTS.map((element) => (
+              <li
+                className={elementStyles}
+                key={element.label}
+                style={{ transform: element.transform }}
+              >
+                <span className={tagStyles}>{element.tag}</span>
+                <span className={elementBodyStyles}>{element.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </figure>
     </div>
     <ul className={notesStyles}>
       <li>
@@ -81,100 +125,126 @@ export const Why = () => (
   </Section>
 );
 
-/** One arrangement: its sources over its stages, top to bottom. */
-const Flow = ({ diagram }: { diagram: Diagram }) => (
-  <figure className={flowStyles}>
-    <figcaption className={flowTitleStyles}>{diagram.title}</figcaption>
-    <ul className={sourcesStyles}>
-      {diagram.sources.map((source) => (
-        <li className={sourceStyles} key={source}>
-          {source}
-        </li>
-      ))}
-    </ul>
-    <ol className={stagesStyles}>
-      {diagram.stages.map((stage) => (
-        <li className={stageWrapStyles} key={stage.title}>
-          <span aria-hidden="true" className={arrowStyles}>
-            ↓
-          </span>
-          <div className={stageStyles({ tone: stage.tone ?? "plain" })}>
-            <span className={stageTitleStyles}>{stage.title}</span>
-            {stage.body === "" ? undefined : (
-              <span className={stageBodyStyles}>{stage.body}</span>
-            )}
-          </div>
-        </li>
-      ))}
-    </ol>
-  </figure>
-);
-
 const diagramsStyles = grid({
   gap: 5,
   gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))",
 });
 
-const flowStyles = flex({
+const panelStyles = flex({
   backgroundColor: "card",
   border: "1px solid {colors.border}",
   borderRadius: "2xl",
   direction: "column",
-  gap: 3,
+  gap: 5,
   padding: { base: 5, md: 7 },
 });
 
-const flowTitleStyles = css({
+const captionStyles = flex({ direction: "column", gap: 1 });
+
+const panelTitleStyles = css({
   fontFamily: "display",
   fontSize: "xl",
   fontWeight: "bold",
 });
 
-const sourcesStyles = flex({ gap: 2, listStyle: "none", wrap: "wrap" });
+const panelBodyStyles = css({ color: "muted" });
 
-const sourceStyles = css({
-  border: "1px dashed {colors.border}",
-  borderRadius: "lg",
-  flex: "1 1 8rem",
-  fontFamily: "mono",
-  fontSize: "sm",
-  paddingBlock: 2,
-  paddingInline: 3,
-  textAlign: "center",
-});
+const engineBackground =
+  "color-mix(in oklab, {colors.accent} 14%, {colors.card})";
+const engineBorder =
+  "1px solid color-mix(in oklab, {colors.accent} 45%, {colors.border})";
 
-const stagesStyles = flex({ direction: "column", gap: 0, listStyle: "none" });
-
-const stageWrapStyles = flex({ align: "center", direction: "column" });
-
-const arrowStyles = css({ color: "muted", fontSize: "lg", lineHeight: "1.6" });
-
-const stageStyles = cva({
+// The screen: what composites everything inside it.
+const screenStyles = cva({
   base: {
-    borderRadius: "lg",
+    borderRadius: "xl",
     display: "flex",
+    flex: 1,
     flexDirection: "column",
-    gap: 1,
-    inlineSize: "100%",
-    paddingBlock: 3,
-    paddingInline: 4,
+    gap: 3,
+    padding: 4,
   },
   variants: {
     tone: {
-      engine: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.accent} 14%, {colors.card})",
-        border:
-          "1px solid color-mix(in oklab, {colors.accent} 45%, {colors.border})",
-      },
+      engine: { backgroundColor: engineBackground, border: engineBorder },
+      plain: { border: "1px dashed {colors.border}" },
+    },
+  },
+});
+
+const screenLabelStyles = cva({
+  base: { fontSize: "sm", fontWeight: "semibold" },
+  variants: {
+    tone: { engine: { color: "accent" }, plain: { color: "muted" } },
+  },
+});
+
+const windowsStyles = grid({
+  flex: 1,
+  gap: 3,
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  listStyle: "none",
+});
+
+// A window, with its own frame.
+const windowStyles = cva({
+  base: {
+    backgroundColor: "background",
+    borderRadius: "lg",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  variants: {
+    tone: {
+      engine: { backgroundColor: engineBackground, border: engineBorder },
       plain: { border: "1px solid {colors.border}" },
     },
   },
 });
 
-const stageTitleStyles = css({ fontWeight: "semibold" });
+const titleBarStyles = flex({
+  align: "center",
+  borderBlockEnd: "1px solid {colors.border}",
+  fontSize: "xs",
+  fontWeight: "semibold",
+  gap: 2,
+  paddingBlock: 1.5,
+  paddingInline: 2,
+});
 
-const stageBodyStyles = css({ color: "muted", fontSize: "sm" });
+const dotsStyles = css({
+  color: "muted",
+  flexShrink: 0,
+  fontSize: "2xs",
+  letterSpacing: "-0.1em",
+  whiteSpace: "nowrap",
+});
+
+const windowBodyStyles = css({
+  color: "muted",
+  fontSize: "xs",
+  padding: 2,
+});
+
+// An element, outlined as a browser's inspector highlights one.
+const elementStyles = flex({
+  backgroundColor: "background",
+  border: "1px dashed color-mix(in oklab, {colors.accent} 70%, transparent)",
+  borderRadius: "md",
+  direction: "column",
+  gap: 1,
+  padding: 2,
+});
+
+const tagStyles = css({
+  color: "accent",
+  fontFamily: "mono",
+  fontSize: "xs",
+  fontWeight: "semibold",
+});
+
+const elementBodyStyles = css({ color: "muted", fontSize: "xs" });
 
 const notesStyles = flex({
   color: "muted",
