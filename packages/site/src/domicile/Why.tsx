@@ -1,4 +1,3 @@
-import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { StackIcon } from "@phosphor-icons/react/dist/ssr/Stack";
@@ -24,22 +23,33 @@ type Source = {
   code?: string | undefined;
 };
 
+/** One input and the stages it passes through on its own. */
+type Lane = { source: Source; stages?: readonly Stage[] | undefined };
+
 type Diagram = {
   title: string;
-  /** What feeds the first stage, side by side. */
-  sources: readonly Source[];
+  /** What feeds the first shared stage, side by side. */
+  lanes: readonly Lane[];
+  /** The stages every lane passes through, top to bottom. */
   stages: readonly Stage[];
 };
 
 const CONVENTIONAL: Diagram = {
-  sources: [{ label: "Websites, in a browser" }, { label: "Native apps" }],
-  stages: [
+  lanes: [
     {
-      body: "The browser renders and composites its pages into one window, with its own engine. Each native app draws its own window.",
-      icon: <AppWindowIcon />,
-      title: "Each app draws a window",
-      tone: "engine",
+      source: { label: "Websites" },
+      stages: [
+        {
+          body: "Renders and composites its pages into one window, with its own engine.",
+          icon: <BrowsersIcon />,
+          title: "The browser",
+          tone: "engine",
+        },
+      ],
     },
+    { source: { label: "Native apps" } },
+  ],
+  stages: [
     {
       body: "Arranges every window, the browser's included, and composites them.",
       icon: <StackIcon />,
@@ -51,10 +61,10 @@ const CONVENTIONAL: Diagram = {
 };
 
 const DOMICILE: Diagram = {
-  sources: [
-    { code: "<webview>", label: "Websites" },
-    { code: "<app>", label: "Native apps" },
-    { code: "HTML", label: "Your desktop" },
+  lanes: [
+    { source: { code: "<webview>", label: "Websites" } },
+    { source: { code: "<app>", label: "Native apps" } },
+    { source: { code: "HTML", label: "Your desktop" } },
   ],
   stages: [
     {
@@ -101,45 +111,64 @@ export const Why = () => (
   </Section>
 );
 
-/** One arrangement: its sources over its stages, top to bottom. The last
- * stage, the screen, sits at the bottom, so both diagrams end level. */
+/** One arrangement, top to bottom: its lanes side by side, each ending in an
+ * arrow, then the stages they share. The lanes' arrows stretch, so every lane
+ * ends level, and the last stage, the screen, sits at the bottom, so both
+ * diagrams end level. */
 const Flow = ({ diagram }: { diagram: Diagram }) => (
   <figure className={flowStyles}>
     <figcaption className={flowTitleStyles}>{diagram.title}</figcaption>
-    <ul className={sourcesStyles}>
-      {diagram.sources.map((source) => (
-        <li className={sourceStyles} key={source.label}>
-          <span>{source.label}</span>
-          {source.code === undefined ? undefined : (
-            <code className={sourceCodeStyles}>{source.code}</code>
-          )}
-        </li>
-      ))}
-    </ul>
-    <ol className={stagesStyles}>
-      {diagram.stages.map((stage, index) => (
-        <li
-          className={stageWrapStyles({
-            last: index === diagram.stages.length - 1,
-          })}
-          key={stage.title}
-        >
-          <span aria-hidden="true" className={connectorStyles} />
-          <div className={stageStyles({ tone: stage.tone ?? "plain" })}>
-            <span aria-hidden="true" className={stageIconStyles}>
-              {stage.icon}
-            </span>
-            <div className={stageTextStyles}>
-              <span className={stageTitleStyles}>{stage.title}</span>
-              {stage.body === "" ? undefined : (
-                <span className={stageBodyStyles}>{stage.body}</span>
+    <div className={pathStyles}>
+      <ul className={lanesStyles}>
+        {diagram.lanes.map((lane) => (
+          <li className={laneStyles} key={lane.source.label}>
+            <span className={sourceStyles}>
+              <span>{lane.source.label}</span>
+              {lane.source.code === undefined ? undefined : (
+                <code className={sourceCodeStyles}>{lane.source.code}</code>
               )}
-            </div>
-          </div>
-        </li>
-      ))}
-    </ol>
+            </span>
+            {(lane.stages ?? []).map((stage) => (
+              <span className={laneStageStyles} key={stage.title}>
+                <Connector />
+                <StageBox stage={stage} />
+              </span>
+            ))}
+            <Connector />
+          </li>
+        ))}
+      </ul>
+      <ol className={stagesStyles}>
+        {diagram.stages.map((stage, index) => (
+          <li
+            className={stageWrapStyles({
+              last: index === diagram.stages.length - 1,
+            })}
+            key={stage.title}
+          >
+            {index === 0 ? undefined : <Connector />}
+            <StageBox stage={stage} />
+          </li>
+        ))}
+      </ol>
+    </div>
   </figure>
+);
+
+const Connector = () => <span aria-hidden="true" className={connectorStyles} />;
+
+const StageBox = ({ stage }: { stage: Stage }) => (
+  <div className={stageStyles({ tone: stage.tone ?? "plain" })}>
+    <span aria-hidden="true" className={stageIconStyles}>
+      {stage.icon}
+    </span>
+    <div className={stageTextStyles}>
+      <span className={stageTitleStyles}>{stage.title}</span>
+      {stage.body === "" ? undefined : (
+        <span className={stageBodyStyles}>{stage.body}</span>
+      )}
+    </div>
+  </div>
 );
 
 const diagramsStyles = grid({
@@ -162,12 +191,19 @@ const flowTitleStyles = css({
   fontWeight: "bold",
 });
 
-const sourcesStyles = grid({
+// The lanes' arrows run straight into the stage below them.
+const pathStyles = flex({ direction: "column", flex: 1 });
+
+const lanesStyles = grid({
   gap: 2,
   gridAutoColumns: "minmax(0, 1fr)",
   gridAutoFlow: "column",
   listStyle: "none",
 });
+
+const laneStyles = flex({ direction: "column" });
+
+const laneStageStyles = flex({ direction: "column" });
 
 const sourceStyles = flex({
   align: "center",
