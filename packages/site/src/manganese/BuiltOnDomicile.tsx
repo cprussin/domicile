@@ -1,28 +1,25 @@
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Accent } from "../page/Accent";
-import { Eyebrow } from "../page/Eyebrow";
 import { LinkButton } from "../page/LinkButton";
 import { Section } from "../page/Section";
 
-/** Points manganese's users at Domicile, in Domicile's color. */
+/** Manganese as one desktop on Domicile, in Domicile's color. */
 export const BuiltOnDomicile = () => (
   <Section>
     <Accent product="domicile">
       <div className={bandStyles}>
         <div className={textStyles}>
-          <Eyebrow>Built on Domicile</Eyebrow>
-          <h2 className={titleStyles}>
-            Every pixel is a web page you can change.
-          </h2>
+          <h2 className={titleStyles}>One desktop of many.</h2>
           <p className={bodyStyles}>
-            Manganese is HTML and CSS running on Domicile, and every part of it
-            is a package. Write your own bar item, swap out the launcher, or
-            build a whole new desktop.
+            Manganese is HTML and CSS running on Domicile, on the same public
+            API any desktop gets. Its bar, launcher, notifications and lock
+            screen are npm packages: reuse them, replace them, or build a
+            desktop that looks nothing like this one.
           </p>
         </div>
-        <LinkButton href="/" size="lg">
-          Build on Domicile →
+        <LinkButton href="/#possible" size="lg">
+          See what else is possible →
         </LinkButton>
       </div>
     </Accent>

@@ -14,3 +14,16 @@ How to work on Domicile itself. To write a shell or an app on it, see
 - [guidelines/](../guidelines/): code, tests, styling and writing.
 - [architecture/](../architecture/): design docs. Start with
   [ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+
+## Built with AI
+
+Domicile is developed with extensive help from Claude, Anthropic's AI model.
+
+- **Claude** writes most of the code, tests and docs, debugs, and builds the
+  development tooling. Its commits carry a `Co-Authored-By: Claude` trailer.
+- **The maintainer** sets the architecture and direction, makes the technical
+  decisions, and uses the desktop every day.
+- **Review:** changes are checked by the test suite, CI and daily use, not by
+  line-by-line human review.
+- [AGENTS.md](/AGENTS.md) holds the rules every change follows, whoever writes
+  it.

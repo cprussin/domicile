@@ -1,17 +1,20 @@
 import { css } from "../../styled-system/css";
 import { Apps } from "../domicile/Apps";
 import { Batteries } from "../domicile/Batteries";
+import { Build } from "../domicile/Build";
 import { DomicileMark } from "../domicile/DomicileMark";
 import { DOCS } from "../domicile/docs";
+import { Explore } from "../domicile/Explore";
 import { Faq } from "../domicile/Faq";
 import { Hero } from "../domicile/Hero";
-import { HeroMedia } from "../domicile/HeroMedia";
+import { HeroDemo } from "../domicile/HeroDemo";
 import { Make } from "../domicile/Make";
 import { Npm } from "../domicile/Npm";
+import { Possible } from "../domicile/Possible";
 import { Quickstart } from "../domicile/Quickstart";
 import { ReferenceShell } from "../domicile/ReferenceShell";
-import { Showcase } from "../domicile/Showcase";
 import { Swap } from "../domicile/Swap";
+import { Why } from "../domicile/Why";
 import { Accent } from "../page/Accent";
 import { LinkColumns } from "../page/LinkColumns";
 import { repoFile } from "../page/repo";
@@ -22,35 +25,38 @@ import { shared } from "../page/shared";
 
 export const metadata = shared({
   description:
-    "Domicile is a Wayland compositor whose shell is a web page. Write your desktop in one file of React or CSS, or start from manganese.",
+    "An experimental Linux desktop where Chromium is the Wayland compositor. Websites are windows, windows are elements, and the desktop is a web page you build with HTML, CSS and JavaScript.",
   path: "/",
-  title: "Domicile: build your Linux desktop with web technologies",
+  title: "Domicile: the web ate your desktop",
 });
 
-/** domicile-desktop.com: Domicile, for shell authors. */
+/** domicile-desktop.com: Domicile, and building on it. */
 const DomicilePage = () => (
   <Accent product="domicile">
     <SiteHeader
       action={{ href: "#quickstart", label: "Quickstart" }}
       brand={<DomicileMark />}
       links={[
+        { href: "/docs/how-it-works", label: "How it works" },
         { href: "#docs", label: "Docs" },
-        { href: "/docs/reference/react", label: "API reference" },
         { href: "/manganese", label: "Manganese" },
       ]}
       sticky
     />
     <main>
       <Hero />
-      <HeroMedia />
+      <HeroDemo />
+      <Why />
+      <Possible />
+      <Build />
       <Make />
       <Swap />
+      <Npm />
       <ReferenceShell />
-      <Showcase />
       <Batteries />
       <Quickstart />
-      <Npm />
       <Apps />
+      <Explore />
       <Faq />
       <Section id="docs" title="Docs">
         <LinkColumns columns={DOCS} />
@@ -58,6 +64,7 @@ const DomicilePage = () => (
     </main>
     <SiteFooter
       links={[
+        { href: "#faq", label: "Built with AI" },
         { href: "/manganese", label: "Manganese" },
         { href: repoFile("LICENSE"), label: "MIT license" },
       ]}

@@ -1,0 +1,8 @@
+{
+  "action": { "default_popup": "popup.html", "default_title": "Switch site" },
+  "description": "Lists every open website and switches to the one you pick.",
+  "manifest_version": 3,
+  "name": "Site switcher",
+  "permissions": ["tabs"],
+  "version": "1.0.0"
+}

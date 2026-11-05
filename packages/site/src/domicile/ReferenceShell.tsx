@@ -1,6 +1,7 @@
 import { css } from "../../styled-system/css";
 import { flex, grid } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
+import { Media } from "../media/Media";
 import { Accent } from "../page/Accent";
 import { LinkButton } from "../page/LinkButton";
 import { Section } from "../page/Section";
@@ -26,24 +27,28 @@ const STEPS: readonly { title: string; body: string }[] = [
     title: "Change a piece",
   },
   {
-    body: "Take the pieces you like into a shell of your own, or start fresh.",
+    body: "Take the pieces you like into a desktop of your own, or start fresh.",
     title: "Make your own",
   },
 ];
 
-/** Points shell authors at manganese, in manganese's color. */
+/** Manganese, as the evidence that Domicile makes a daily desktop. */
 export const ReferenceShell = () => (
   <Section id="manganese">
     <Accent product="manganese">
       <div className={bandStyles}>
-        <h2 className={titleStyles}>
-          Don't start from zero. Start from manganese.
-        </h2>
+        <h2 className={titleStyles}>Meet manganese.</h2>
         <p className={bodyStyles}>
-          Domicile is the compositor. A shell draws everything else. Manganese
-          is a complete tiling shell built on Domicile: you don't have to build
-          anything to use it, and every part of it is a package.
+          A Sway-inspired tiling desktop built on Domicile, and the one its
+          maintainer uses every day: tiling and workspaces, a bar, a launcher,
+          notifications, a lock screen and settings. It's also just one desktop.
+          It uses the same public API yours would, and every piece of it is an
+          npm package you can reuse or replace.
         </p>
+        <Media
+          alt="Manganese opening Blender and a website from the launcher, tiling them, opening Settings, then showing a notification"
+          name="manganese-hero"
+        />
         <ol className={stepsStyles}>
           {STEPS.map((step, at) => (
             <li className={stepStyles} key={step.title}>
@@ -56,9 +61,9 @@ export const ReferenceShell = () => (
         </ol>
         <CodeBlock code={SHELL} language="tsx" />
         <div className={actionsStyles}>
-          <LinkButton href="/manganese">Meet manganese</LinkButton>
+          <LinkButton href="/manganese">Try manganese</LinkButton>
           <LinkButton href="/docs/shells/from-manganese" variant="outline">
-            Composing its packages
+            Reuse its pieces
           </LinkButton>
         </div>
       </div>

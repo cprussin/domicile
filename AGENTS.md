@@ -194,6 +194,7 @@ How to use, configure and debug Domicile. No authority level.
 
 | Doc | Covers |
 |---|---|
+| [/docs/HOW-IT-WORKS.md](/docs/HOW-IT-WORKS.md) | The site's conceptual entry point: why the browser engine is the compositor, `<app>`, `<webview>`, extensions, building a desktop, measured and unmeasured performance. |
 | [/docs/contributing/RELEASING.md](/docs/contributing/RELEASING.md) | Branches, per-package versions, cutting a release, its secrets. |
 | [/docs/media/README.md](/docs/media/README.md) | Docs screenshots and videos: scenes, their helpers, retaking them on `crux`. |
 | [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | Running a desktop nested or on a tty, the pinned engine, launching clients, and the home-manager module. |

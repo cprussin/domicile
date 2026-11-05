@@ -1,10 +1,17 @@
 # Domicile
 
-**Build your Linux desktop with web technologies. Wayland windows are DOM elements. Chromium *is* the compositor. May God have mercy on our souls.**
+**The web ate your desktop. Websites are windows, windows are DOM elements, and Chromium *is* the compositor. May God have mercy on our souls.**
 
-Arrange native apps and websites with React, JavaScript and CSS. Use packages from npm. Change your desktop without closing your windows.
+Domicile is an experimental Linux desktop where a modified Chromium is the Wayland compositor. Native apps, websites and the desktop's own interface are elements on one web page, laid out with CSS and composited together.
 
-**[See it in action](https://www.domicile-desktop.com/) · [Install](https://www.domicile-desktop.com/docs/install) · [Build your desktop](https://www.domicile-desktop.com/docs/shells/quickstart) · [Community](https://matrix.to/#/%23domicile:domicile-desktop.com)**
+**[See it in action](https://www.domicile-desktop.com/) · [How it works](https://www.domicile-desktop.com/docs/how-it-works) · [Install](https://www.domicile-desktop.com/docs/install) · [Build your desktop](https://www.domicile-desktop.com/docs/shells/quickstart) · [Community](https://matrix.to/#/%23domicile:domicile-desktop.com)**
+
+## What becomes possible
+
+- **Websites are windows.** A site opens in a window of its own and tiles, floats and moves between workspaces like any app.
+- **Native windows are DOM elements.** Float a terminal in a paragraph, blend a heading over a video player, animate a window across the screen.
+- **Extensions see the whole desktop.** To a Chrome extension, every website on the desktop is a tab, on any workspace.
+- **Browser features are desktop features.** Share a native window into a web video call, cast to a TV, and get notifications from sites and apps in one list.
 
 ## Your desktop is a web page
 
@@ -92,7 +99,11 @@ The built-in browser supports Manifest V3 Chrome extensions, with [some differen
 
 Domicile combines a Rust Wayland compositor with a patched Chromium. Your desktop code controls the layout and can access files and programs. Websites remain ordinary websites.
 
-[Architecture](docs/architecture/ARCHITECTURE.md) · [Chromium patches](docs/architecture/ENGINE-FORK.md) · [Contributing](docs/contributing/README.md) · [Report a bug](https://github.com/cprussin/domicile/issues)
+[How it works](docs/HOW-IT-WORKS.md) · [Architecture](docs/architecture/ARCHITECTURE.md) · [Chromium patches](docs/architecture/ENGINE-FORK.md) · [Contributing](docs/contributing/README.md) · [Report a bug](https://github.com/cprussin/domicile/issues)
+
+## Built with AI
+
+Domicile is developed with extensive help from Claude, Anthropic's AI model. Claude wrote most of the code, tests and docs, and does much of the debugging and development tooling. The architecture, direction and technical decisions come from the project's human maintainer. Changes are checked by the test suite and by daily use, not by line-by-line human review. The source and its full history are public. [More on how it's built](docs/contributing/README.md#built-with-ai).
 
 ## License
 

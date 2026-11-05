@@ -1,7 +1,7 @@
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Backticked } from "../page/Backticked";
-import { repoFile } from "../page/repo";
+import { REPO, repoFile } from "../page/repo";
 import { Section } from "../page/Section";
 import { engineChromium } from "./chromium";
 
@@ -13,6 +13,27 @@ const QUESTIONS: readonly {
   answer: string;
   link: { href: string; label: string };
 }[] = [
+  {
+    answer:
+      "Not necessarily, and that isn't the goal. An app still draws its own window; the engine imports it and composites it in the same frame as the page. On the build machine, a keystroke reaches a composited frame in about 1.7 display frames. Nothing yet measures a lit monitor.",
+    link: {
+      href: repoFile("docs/architecture/ENGINE-FORK-MEASUREMENTS.md"),
+      label: "Measurements",
+    },
+    question: "Is it faster than my current desktop?",
+  },
+  {
+    answer:
+      "No. An Electron app bundles its own Chromium and runs as an ordinary Wayland app, as it would on any desktop.",
+    link: { href: "/docs/manganese/compatibility", label: "What it runs on" },
+    question: "Do Electron apps share the desktop's Chromium?",
+  },
+  {
+    answer:
+      "Yes, with extensive help from Claude, Anthropic's AI model. Claude wrote most of the code, tests and docs. The architecture, direction and technical decisions come from the project's human maintainer. Changes are checked by the test suite and by daily use, not by line-by-line human review. The source and its full history are public.",
+    link: { href: REPO, label: "Source" },
+    question: "Was Domicile built with AI?",
+  },
   {
     answer:
       "No. Only your shell and app modules get `domicile`. A page in a browser window is an ordinary website.",

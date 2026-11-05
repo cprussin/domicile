@@ -69,4 +69,8 @@ Real desktop apps, run as `domicile` runs them (Wayland only, in the scene's own
 | `configure-settings.png` | `configure-settings` | The Settings app's Shell page, with the clock set to 12-hour. |
 | `quickstart.png`, `quickstart.webm`, `quickstart.mp4` | `quickstart` | The Domicile page's quickstart: nvim and the example shell, nvim beside a film, then a wider gap from an edit and `domicile load-shell`. Captions name each step. |
 | `live-swap.png`, `live-swap.webm`, `live-swap.mp4` | `live-swap` | The Domicile page's live swap: SuperTuxKart beside asciiquarium in a terminal, then `domicile load-shell` stacks them. Both keep going. |
+| `possible-css.png`, `possible-css.webm`, `possible-css.mp4` | `possible-css` | The Domicile hero: SuperTuxKart, Big Buck Bunny, a terminal aquarium and Wikipedia in a grid, restyled by one CSS rule after another. The shell shows each rule at its foot. |
+| `possible-websites.png`, `possible-websites.webm`, `possible-websites.mp4` | `possible-websites` | Manganese: Wikipedia opened from the launcher beside LibreOffice, split, sent to workspace 2, followed and floated. Captions name each key. |
+| `possible-blend.png`, `possible-blend.webm`, `possible-blend.mp4` | `possible-blend` | A desktop laid out as an article: text wraps around a terminal, Wikipedia as a figure, Big Buck Bunny under a blended heading, all scrolling together. |
+| `possible-extensions.png`, `possible-extensions.webm`, `possible-extensions.mp4` | `possible-extensions` | Manganese with `examples/site-switcher-extension`: its popup lists the websites on three workspaces, then a click switches to Wikipedia's. |
 | `shell-quickstart.png` | `shell-quickstart` | The shell quickstart's example shell: nvim editing it, beside a film. |

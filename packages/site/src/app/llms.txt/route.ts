@@ -9,7 +9,7 @@ const SITE = "https://domicile-desktop.com";
 
 const SUMMARY = `# Domicile
 
-> Domicile is a Wayland compositor whose desktop is a web page. A shell is a module that exports \`Shell\`; Domicile calls it with the page's root element and the desktop. Each window is an \`<app app-id>\` element: put it where the window goes and style it with CSS.
+> Domicile is an experimental Linux desktop where Chromium is the Wayland compositor, and the desktop is a web page. A shell is a module that exports \`Shell\`; Domicile calls it with the page's root element and the desktop. Each window is an \`<app app-id>\` element: put it where the window goes and style it with CSS.
 
 A shell in React and Tailwind, \`shell.tsx\`:
 

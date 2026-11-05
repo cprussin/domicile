@@ -20,7 +20,7 @@ import { shared } from "../../page/shared";
 
 export const metadata = shared({
   description:
-    "A tiling Wayland desktop that feels like Sway, where websites are windows too. Customize it in React and CSS.",
+    "A complete tiling Wayland desktop that feels like Sway, where websites are windows too. Built on Domicile, and customizable in React and CSS.",
   path: "/manganese",
   title: "Manganese: a tiling Wayland desktop",
 });
@@ -63,7 +63,7 @@ const ManganesePage = () => (
     </main>
     <SiteFooter links={[{ href: repoFile("LICENSE"), label: "MIT license" }]}>
       <span>
-        Manganese is the reference shell for <a href="/">Domicile</a>.
+        Manganese is one desktop built on <a href="/">Domicile</a>.
       </span>
     </SiteFooter>
   </Accent>

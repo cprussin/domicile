@@ -59,7 +59,7 @@ app {
  * stylesheet side by side, each wide enough for its longest line.
  */
 export const HeroMedia = () => (
-  <section className={sectionStyles}>
+  <div className={layoutStyles}>
     <Media
       alt="SuperTuxKart racing on the left; GitHub over Big Buck Bunny on the right, each window a page element"
       name="hero"
@@ -83,18 +83,10 @@ export const HeroMedia = () => (
         <CodeBlock code={STYLES} frame="bare" language="css" />
       </div>
     </div>
-  </section>
+  </div>
 );
 
-const sectionStyles = flex({
-  direction: "column",
-  gap: 5,
-  marginInline: "auto",
-  maxInlineSize: "6xl",
-  paddingBlockEnd: 6,
-  paddingBlockStart: 4,
-  paddingInline: 6,
-});
+const layoutStyles = flex({ direction: "column", gap: 5 });
 
 // Side by side once the shell's longest line fits beside the stylesheet.
 const codeStyles = grid({

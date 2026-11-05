@@ -5,7 +5,7 @@ import { Section } from "../page/Section";
 export const Make = () => (
   <Section
     id="make"
-    lede="Start from a window model, then change anything. It's a web page, so the whole world of React and CSS is yours: Tailwind, shadcn/ui, Framer Motion, three.js, anything on npm. When you like it, run it for real."
+    lede="Try it here. Start from a window model, then change anything: it's a web page, so Tailwind, shadcn/ui, Framer Motion and three.js all work. When you like it, run it for real."
     title="Make your own desktop."
   >
     <Builder />

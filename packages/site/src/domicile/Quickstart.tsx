@@ -59,7 +59,7 @@ const steps = (file: string, example: string): readonly Step[] => [
       <>
         Move {file} to ~/.config/domicile/, name it in
         ~/.config/domicile/domicile.json, then log out and pick Domicile. No
-        account, no AI, and all of Domicile is MIT licensed.{" "}
+        account and no AI service, and all of Domicile is MIT licensed.{" "}
         <a className={linkStyles} href="/docs/shells/quickstart">
           The whole guide
         </a>
