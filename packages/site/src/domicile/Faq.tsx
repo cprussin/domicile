@@ -15,10 +15,10 @@ const QUESTIONS: readonly {
 }[] = [
   {
     answer:
-      "Not necessarily, and that isn't the goal. An app still draws its own window; the engine imports it and composites it in the same frame as the page. On the build machine, a keystroke reaches a composited frame in about 1.7 display frames. Nothing yet measures a lit monitor.",
+      "The goal is for Domicile to feel no slower than any other Wayland compositor, not to be the fastest or lightest one. Running Chromium has a natural overhead, but in most ways it's the same overhead as running Chromium inside another compositor.",
     link: {
       href: repoFile("docs/architecture/ENGINE-FORK-MEASUREMENTS.md"),
-      label: "Measurements",
+      label: "See the measurements",
     },
     question: "Is it faster than my current desktop?",
   },
