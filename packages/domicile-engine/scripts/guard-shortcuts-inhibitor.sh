@@ -119,12 +119,14 @@ REQUEST_ON_THE_WIRE='\.inhibit_shortcuts\('
 # The engine's log with libwayland's colors stripped. See `normalized`.
 CAPTURE="$(mktemp)"
 
-# Kill everything this starts before returning. The keyboard (`wtype` behind
-# `nix shell`) and the browser both fork, so the `&` pids are not the live ones
-# and leftovers would disturb later timed checks. Everything carries
-# `lib-compositor-cleanup.sh`'s marker; `kill_compositors` kills everything
-# with it, not only compositors.
+# Chrome can erase its environment marker while rewriting its process title.
+# Retain its child pid as well as sweeping marked keyboard and browser children.
+ENGINE_PID=""
 cleanup() {
+  if [ -n "$ENGINE_PID" ] && jobs -pr | grep -qx "$ENGINE_PID"; then
+    kill -TERM "$ENGINE_PID"
+    wait "$ENGINE_PID"
+  fi
   kill_compositors "$(compositor_owner)"
   wait
   rm -f "$CAPTURE"
@@ -225,6 +227,7 @@ env "$(compositor_env)" WAYLAND_DEBUG=1 "$CHROMIUM/$OUT/chrome" \
   --window-size="$WIDTH,$HEIGHT" \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
+ENGINE_PID=$!
 
 # 3. Wait for the window, where the request is made. Not fatal; the verdict
 #    reports it.

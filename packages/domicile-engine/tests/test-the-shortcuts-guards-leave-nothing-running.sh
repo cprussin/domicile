@@ -2,11 +2,9 @@
 # Tests that neither shortcuts-inhibitor guard returns while anything it
 # started is still running.
 #
-# Each guard starts two background processes whose `$!` is not the process
-# that lives: `wtype` behind a `nix shell` wrapper, holding the seat for five
-# minutes, and a browser with a zygote, GPU process and renderers. Signaling
-# only those pids leaves the rest running into later checks, including the
-# timing one.
+# The keyboard wrapper and browser spawn children. Owner markers find those
+# children; the browser can erase its own marker while rewriting its title.
+# Cleanup must also stop the direct browser child.
 #
 # Both are started here through the guard's own lines, taken from the real
 # script, with stand-ins of the same shape. The guard's cleanup runs on EXIT,
@@ -41,6 +39,7 @@ leaves_nothing() { # guard script name, the first line of what its cleanup reads
     exit 1
   ENGINE="$(piece "engine start" '/^if \[ "\$NEGATIVE" = "1" \]; then$/,/>"\$ENGINE_LOG" 2>&1 &$/')" ||
     exit 1
+  ENGINE_PID_LINE="$(awk '/>"\$ENGINE_LOG" 2>&1 &$/ { getline; if ($0 == "ENGINE_PID=$!") print }' "$GUARD")"
 
   WORK="$(mktemp -d)"
   export XDG_RUNTIME_DIR="$WORK/runtime"
@@ -71,10 +70,16 @@ sleep 300 &
 echo "$$ $first $!" >>"$PIDS"
 wait
 CHROME
-  # Or a browser that crashed and orphaned its children, as seen on crux.
+  # Or a browser that exits and orphans its children, as seen on crux.
   # Walking the browser's process tree no longer finds them.
-  if [ "${4:-}" = "crashes" ]; then
-    sed -i 's/^wait$/ulimit -c 0; kill -SEGV $$/' "$CHROMIUM/$OUT/chrome"
+  if [ "${4:-}" = "exits" ]; then
+    sed -i 's/^wait$/exit 42/' "$CHROMIUM/$OUT/chrome"
+  elif [ "${4:-}" = "forgets its marker" ]; then
+    cat >"$CHROMIUM/$OUT/chrome" <<'CHROME'
+#!/bin/sh
+exec env -u DOMICILE_NESTED_COMPOSITOR_OWNER -u XDG_RUNTIME_DIR \
+  sh -c 'echo "$$" >>"$PIDS"; exec sleep 300'
+CHROME
   fi
   chmod +x "$CHROMIUM/$OUT/chrome"
 
@@ -92,6 +97,7 @@ CHROME
     SWAYMSG=(sh -c 'echo "$*" >>"$SWAYMSG_SAID"' swaymsg)
     eval "$KEYBOARD" >/dev/null
     eval "$ENGINE" >/dev/null
+    eval "$ENGINE_PID_LINE"
     deadline=$((SECONDS + PATIENCE))
     until recorded; do
       if [ "$SECONDS" -ge "$deadline" ]; then
@@ -160,6 +166,10 @@ FAILED=0
   FAILED=$((FAILED + 1))
 ( leaves_nothing guard-shortcuts-inhibitor-chord.sh 'BOUND=0' binds ) ||
   FAILED=$((FAILED + 1))
-( leaves_nothing guard-shortcuts-inhibitor-chord.sh 'BOUND=0' binds crashes ) ||
+( leaves_nothing guard-shortcuts-inhibitor-chord.sh 'BOUND=0' binds exits ) ||
+  FAILED=$((FAILED + 1))
+( leaves_nothing guard-shortcuts-inhibitor.sh 'CAPTURE="\$\(mktemp\)"' "" 'forgets its marker' ) ||
+  FAILED=$((FAILED + 1))
+( leaves_nothing guard-shortcuts-inhibitor-chord.sh 'BOUND=0' binds 'forgets its marker' ) ||
   FAILED=$((FAILED + 1))
 [ "$FAILED" -eq 0 ]

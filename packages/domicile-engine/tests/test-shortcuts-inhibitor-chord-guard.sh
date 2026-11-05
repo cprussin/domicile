@@ -328,7 +328,6 @@ echo
 echo "whether the engine is still running"
 ended() { # a command standing in for the engine
   bash -c 'set -u
-    ulimit -c 0
     '"$ENGINE_WATCH"'
     ENGINE_EXIT=""
     ENGINE_FOUND_DEAD=""
@@ -340,9 +339,9 @@ ended() { # a command standing in for the engine
     kill "$ENGINE_PID" 2>/dev/null
     printf "%s|%s" "$ENGINE_EXIT" "$ENGINE_FOUND_DEAD"' 2>/dev/null
 }
-expect "an engine killed by SIGSEGV crashed, where it was first found dead" \
-  "crashed, killed by signal 11 (SEGV)|before the plain key" \
-  "$(ended "sh -c 'kill -SEGV \$\$'")"
+expect "an engine killed by SIGTERM reports the signal and where it was found dead" \
+  "crashed, killed by signal 15 (TERM)|before the plain key" \
+  "$(ended "sh -c 'kill -TERM \$\$'")"
 expect "an engine that exited says its status" \
   "exited with status 3|before the plain key" "$(ended "sh -c 'exit 3'")"
 expect "a running engine has not ended" "|" "$(ended "sleep 60")"

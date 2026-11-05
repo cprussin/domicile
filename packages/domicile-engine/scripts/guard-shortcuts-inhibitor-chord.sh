@@ -102,17 +102,21 @@ ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-shortcuts-inhibitor-chord$WHICH-engine.l
 KEYBOARD_LOG="${KEYBOARD_LOG:-/tmp/domicile-shortcuts-inhibitor-chord$WHICH-keyboard.log}"
 HOST_LOG="${HOST_LOG:-/tmp/domicile-shortcuts-inhibitor-chord$WHICH-host.log}"
 
-# Kill everything this starts before returning. The keyboard (`wtype` behind
-# `nix shell`) and the browser both fork, so the `&` pids are not the live ones;
-# both carry `lib-compositor-cleanup.sh`'s marker instead.
+# Chrome can erase its environment marker while rewriting its process title.
+# Retain its child pid as well as sweeping marked keyboard and browser children.
 #
 # Also remove the binding: in a person's own session it would otherwise
 # capture a Mod4 chord.
 # `packages/domicile-engine/tests/test-the-shortcuts-guards-leave-nothing-running.sh` checks both.
 BOUND=0
+ENGINE_PID=""
 cleanup() {
   if [ "$BOUND" = "1" ]; then
     "${SWAYMSG[@]}" -- unbindsym "$CHORD" >/dev/null
+  fi
+  if [ -n "$ENGINE_PID" ] && jobs -pr | grep -qx "$ENGINE_PID"; then
+    kill -TERM "$ENGINE_PID"
+    wait "$ENGINE_PID"
   fi
   kill_compositors "$(compositor_owner)"
   wait
