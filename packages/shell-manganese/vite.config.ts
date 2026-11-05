@@ -1,7 +1,7 @@
 import { shellBuild } from "@domicile-desktop/component-library/vite-shell";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { options } from "./src/options";
+import { options } from "./src/options.ts";
 
 // Builds the shell as a module. Domicile writes the document and serves this
 // directory, so there is no `index.html` and the CSS ships in the bundle. See
