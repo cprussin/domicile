@@ -21,6 +21,16 @@ use serde::{Deserialize, Serialize};
 /// in `wire/host-messages.jsonl`.
 pub const PROTOCOL_VERSION: u32 = 1;
 
+/// The physical source of a scroll, matching `wl_pointer.axis_source`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PointerAxisSource {
+    Wheel,
+    Finger,
+    Continuous,
+    WheelTilt,
+}
+
 /// A passphrase typed at the lock screen.
 ///
 /// A newtype so that its [`Debug`] never prints the secret: a `debug!` of a
@@ -164,14 +174,18 @@ pub enum ChromeMessage {
         pressed: bool,
     },
     /// Scroll over an app. `dx`/`dy` are the continuous distance in
-    /// surface-logical units; `v120_x`/`v120_y` are the same scroll as
-    /// `wl_pointer`'s high-resolution discrete steps, 120 per wheel detent.
+    /// surface-logical units. Wheel events carry 120ths of a detent;
+    /// finger and continuous events carry no discrete steps. Each axis can
+    /// stop independently while the other continues.
     PointerAxis {
         app_id: String,
         dx: f64,
         dy: f64,
         v120_x: i32,
         v120_y: i32,
+        source: PointerAxisSource,
+        stop_x: bool,
+        stop_y: bool,
     },
     /// Key event destined for the focused app. `keycode` is a Linux evdev code.
     Key {

@@ -4,7 +4,8 @@
 # packages/domicile-engine/tests/test-a-fast-scroll-goes-further.sh and
 # packages/domicile-engine/tests/test-a-mouse-goes-through-libinput.sh; and the `AbsoluteMouse*`
 # suites of patch 0123; `TypingGuardTest`, see
-# packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh), one Wayland suite,
+# packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh), the native
+# input lifecycle suites, `WaylandPointerTest` and
 # `WaylandKeyboardWithoutKeymapTest` (see
 # packages/domicile-engine/tests/test-modifiers-wait-for-a-keymap.sh), and three
 # headless suites, `HeadlessDeskTest`, `HeadlessDeskInputTest` and
@@ -42,7 +43,8 @@ SUITES=(
   DrmSleepTest:2
   DrmFullscreenTest:4
   DrmInputDevicesTest:27
-  DrmInputControllerTest:2
+  DrmInputOpensTest:17
+  DrmInputControllerTest:6
   DrmCursorFactoryTest:4
   DrmCursorFactoryThemeTest:4
   DrmClipboardTest:12
@@ -54,11 +56,17 @@ SUITES=(
   DrmCanvasTest:7
   DrmNoGbmModesetTest:1
   GbmPixmapScanoutTest:3
-  ScrollAcceleratorTest:7
-  TypingGuardTest:8
+  ScrollAcceleratorTest:13
+  LibInputKeyboardPathTest:2
+  InputDeviceOpenCancellationTest:3
+  ActiveScrollAxesTest:3
+  EventDeviceInfoTest:31
+  InputSettingsTest:6
+  TypingGuardTest:15
   WheelTicksTest:3
   AbsoluteMouseDeviceTest:2
   AbsoluteMouseConverterTest:7
+  WaylandPointerTest:19
   WaylandKeyboardWithoutKeymapTest:1
   HeadlessDeskTest:6
   HeadlessDeskInputTest:10

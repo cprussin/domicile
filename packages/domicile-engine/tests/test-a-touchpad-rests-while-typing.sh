@@ -46,12 +46,15 @@ check 'converter->SetTypingGuard(&typing_guard_);' \
 check 'typing_guard_->OnKey(key, down, timestamp);' \
   "a keyboard reports its keys" \
   "no patch calls OnKey from EventConverterEvdevImpl::OnKeyChange"
-check 'typing_guard_->DropsMotion(Timestamp(evt))' \
+check 'typing_guard_->DropsMotion(Timestamp(evt), input_device_.id)' \
   "the libinput converter drops motion and scrolls while typing" \
   "no patch calls DropsMotion in the libinput converter"
-check 'typing_guard_->DropsButton(button, down, Timestamp(evt))' \
+check 'typing_guard_->DropsButton(button, down, Timestamp(evt), typing_applies_,' \
   "the libinput converter drops taps and clicks while typing" \
   "no patch calls DropsButton in the libinput converter"
+check 'typing_guard_->RemoveDevice(input_device_.id);' \
+  "a detached pad releases its typing-guard button state" \
+  "no patch clears the detached pad's TypingGuard state"
 check 'input_device_settings_.domicile_disable_while_typing);' \
   "the setting reaches the guard" \
   "no patch passes domicile_disable_while_typing to TypingGuard::SetEnabled"

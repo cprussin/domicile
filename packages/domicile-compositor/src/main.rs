@@ -1188,6 +1188,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let engine = match arguments.engine_socket.as_deref() {
         Some(socket) => {
             let session = EngineSession::load(socket)?;
+            session.configure_input(&config.input);
             thread_priority::raise_the_engine_thread();
             Some(session)
         }

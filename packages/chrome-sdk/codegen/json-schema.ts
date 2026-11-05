@@ -63,6 +63,7 @@ const OPEN_AND_NAMED = {
 /** Keywords that constrain a value without changing its TypeScript type. */
 const constraints = {
   default: z.unknown().optional(),
+  exclusiveMinimum: z.number().optional(),
   format: z.string().optional(),
   maxItems: z.number().optional(),
   maximum: z.number().optional(),
@@ -95,6 +96,7 @@ const withoutConstraints = <
 >({
   additionalProperties,
   default: _default,
+  exclusiveMinimum: _exclusiveMinimum,
   format: _format,
   maxItems: _maxItems,
   maximum: _maximum,

@@ -13,6 +13,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/json/json_reader.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -537,6 +538,29 @@ TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
   EXPECT_EQ(Heard(), R"({"type":"desk_cursor"})");
 
   ui::DeskCursorImageSource::Get().ResetForTesting();
+}
+
+TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  for (const auto& [source, name] :
+       {std::pair(mojom::PointerAxisSource::kWheel, "wheel"),
+        std::pair(mojom::PointerAxisSource::kFinger, "finger"),
+        std::pair(mojom::PointerAxisSource::kContinuous, "continuous"),
+        std::pair(mojom::PointerAxisSource::kWheelTilt, "wheel_tilt")}) {
+    control_->PointerAxis("app", 0, 4.5, 0, 0, source, true, false);
+    control_.FlushForTesting();
+    const auto frame =
+        base::JSONReader::ReadDict(Heard(), base::JSON_PARSE_RFC);
+    ASSERT_TRUE(frame);
+    ASSERT_TRUE(frame->FindString("source"));
+    EXPECT_EQ(*frame->FindString("source"), name);
+    EXPECT_EQ(frame->FindBool("stop_x"), true);
+    EXPECT_EQ(frame->FindBool("stop_y"), false);
+    EXPECT_EQ(frame->FindDouble("dy"), 4.5);
+    EXPECT_EQ(frame->FindInt("v120_y"), 0);
+  }
 }
 
 }  // namespace

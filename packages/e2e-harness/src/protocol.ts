@@ -18,6 +18,19 @@ import { z } from "zod";
 /** The protocol version this build speaks. Must match the Rust constant. */
 export const PROTOCOL_VERSION = 1;
 
+/** A scroll frame sent by the engine, including independent axis stops. */
+export const pointerAxisSchema = z.object({
+  app_id: z.string(),
+  dx: z.number(),
+  dy: z.number(),
+  source: z.enum(["wheel", "finger", "continuous", "wheel_tilt"]),
+  stop_x: z.boolean(),
+  stop_y: z.boolean(),
+  type: z.literal("pointer_axis"),
+  v120_x: z.number().int(),
+  v120_y: z.number().int(),
+});
+
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
 /**

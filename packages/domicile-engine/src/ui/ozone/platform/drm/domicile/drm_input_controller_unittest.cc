@@ -8,8 +8,6 @@
 // (`scripts/engine-drm-unit-tests.sh`). On DRM, every console switch removes
 // and re-adds every input device (see `drm_input_devices.h`).
 
-#include "ui/events/ozone/evdev/input_controller_evdev.h"
-
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -24,6 +22,8 @@
 #include "base/threading/thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_modifiers.h"
+#include "ui/events/ozone/evdev/domicile/input_settings.h"
+#include "ui/events/ozone/evdev/input_controller_evdev.h"
 #include "ui/events/ozone/evdev/input_device_factory_evdev.h"
 #include "ui/events/ozone/evdev/input_device_factory_evdev_proxy.h"
 #include "ui/events/ozone/evdev/keyboard_evdev.h"
@@ -100,9 +100,66 @@ TEST_F(DrmInputControllerTest, DisableWhileTypingIsOnUntilTurnedOff) {
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(controller_.IsDomicileDisableWhileTypingEnabled());
-  EXPECT_FALSE(controller_.GetInputDeviceSettings()
-                   .domicile_disable_while_typing);
+  EXPECT_FALSE(
+      controller_.GetInputDeviceSettings().domicile_disable_while_typing);
   EXPECT_TRUE(factory_runner_->HasPendingTask());
+}
+
+TEST_F(DrmInputControllerTest, InputSettingsKeepDeviceClassesIndependent) {
+  DomicileInputSettings wanted;
+  wanted.touchpad.natural_scroll = true;
+  wanted.mouse.accel_profile = DomicileAccelProfile::kFlat;
+  controller_.SetDomicileInputConfig(wanted);
+  const auto& settings = controller_.GetInputDeviceSettings().domicile_input;
+  EXPECT_TRUE(settings.touchpad.natural_scroll);
+  EXPECT_EQ(settings.touchpad.accel_profile, DomicileAccelProfile::kAdaptive);
+  EXPECT_FALSE(settings.mouse.natural_scroll);
+  EXPECT_EQ(settings.mouse.accel_profile, DomicileAccelProfile::kFlat);
+}
+
+TEST_F(DrmInputControllerTest,
+       InputSettingsSurviveDeviceRemovalAndReattachment) {
+  controller_.SetInputDeviceFactory(&factory_);
+  DomicileInputSettings wanted;
+  wanted.touchpad.click_method = DomicileClickMethod::kClickfinger;
+  wanted.touchpad.speed = -0.25;
+  wanted.mouse.speed = 0.5;
+  controller_.SetDomicileInputConfig(wanted);
+  for (const int id : {7, 8}) {
+    controller_.OnInputDeviceRemoved(id);
+    task_environment_.RunUntilIdle();
+    const auto& settings = controller_.GetInputDeviceSettings().domicile_input;
+    EXPECT_EQ(settings.touchpad.click_method,
+              DomicileClickMethod::kClickfinger);
+    EXPECT_EQ(settings.touchpad.speed, -0.25);
+    EXPECT_EQ(settings.mouse.speed, 0.5);
+  }
+}
+
+TEST_F(DrmInputControllerTest,
+       TheRuntimeToggleCanEnableAConfiguredDisabledGuard) {
+  DomicileInputSettings wanted;
+  wanted.touchpad.disable_while_typing = DomicileTypingPolicy::kDisabled;
+  controller_.SetDomicileInputConfig(wanted);
+  EXPECT_FALSE(controller_.IsDomicileDisableWhileTypingEnabled());
+  controller_.SetDomicileDisableWhileTyping(true);
+  EXPECT_TRUE(controller_.IsDomicileDisableWhileTypingEnabled());
+  EXPECT_TRUE(DomicileTypingDeviceEligible(
+      controller_.GetInputDeviceSettings()
+          .domicile_input.touchpad.disable_while_typing,
+      false));
+}
+
+TEST_F(DrmInputControllerTest, InputReloadRestoresDefaultsAndTypingOverride) {
+  DomicileInputSettings wanted;
+  wanted.touchpad.natural_scroll = true;
+  controller_.SetDomicileInputConfig(wanted);
+  controller_.SetDomicileDisableWhileTyping(false);
+  controller_.SetDomicileInputConfig(DomicileInputSettings());
+  const auto settings = controller_.GetInputDeviceSettings();
+  EXPECT_FALSE(settings.domicile_input.touchpad.natural_scroll);
+  EXPECT_TRUE(settings.domicile_disable_while_typing);
+  EXPECT_EQ(settings.domicile_input_generation, 2u);
 }
 
 }  // namespace

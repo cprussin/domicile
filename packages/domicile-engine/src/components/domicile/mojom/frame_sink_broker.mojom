@@ -356,6 +356,9 @@ interface FrameSinkBroker {
   // `OnDisplaysChanged`, since the targets are display ids.
   ConfigurePointers(array<PointerTarget> targets);
 
+  // Replaces touchpad and mouse configuration. Nested platforms use the host.
+  ConfigureInput(string config);
+
   // Sets the virtual displays, replacing the last list. Each joins the next
   // `OnDisplaysChanged` like a connector, and is laid out by
   // `ConfigureDisplays` like one, but lights no CRTC.

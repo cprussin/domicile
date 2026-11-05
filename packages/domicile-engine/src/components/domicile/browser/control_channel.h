@@ -165,7 +165,10 @@ class ControlChannel : public mojom::ControlChannel {
                    double dx,
                    double dy,
                    int32_t v120_x,
-                   int32_t v120_y) override;
+                   int32_t v120_y,
+                   mojom::PointerAxisSource source,
+                   bool stop_x,
+                   bool stop_y) override;
 
  private:
   // THE SOCKET IS EXPECTED TO BE MISSING AT FIRST, AND THAT IS THE LAUNCH

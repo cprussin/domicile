@@ -142,6 +142,14 @@ class DrmTakenDevices {
   // `TakeDevice` sent after this need not wait for the answer.
   bool GiveBack(DeviceNumber number);
 
+  // Drops canceled state without discarding pending release echoes.
+  void Forget(DeviceNumber number);
+
+  // Releases an obsolete claim and tracks its delayed "gone" echo.
+  void ReleaseCanceled(DeviceNumber number,
+                       const base::FilePath& path,
+                       ReleaseAnswer answered);
+
   // Releases every device. A refusal is logged; nothing else can be done
   // with it at shutdown.
   void Release();
@@ -172,10 +180,15 @@ class DrmTakenDevices {
   // which is what `OpenInputDevice` gets.
   std::map<base::FilePath, base::ScopedFD> resumed_;
 
-  // Handles logind's answer to a `GiveBack`. A refused release sends no
+  void ReleaseClaim(DeviceNumber number,
+                    const base::FilePath& path,
+                    ReleaseAnswer answered);
+
+  // Handles logind's answer to a release. A refused release sends no
   // "gone", so the echo it was expected to send is struck off.
   void OnGivenBack(DeviceNumber number,
                    const base::FilePath& path,
+                   ReleaseAnswer answered,
                    bool agreed);
 
   // `ReleaseDevice` calls whose "gone" echo has not arrived yet. A count, not

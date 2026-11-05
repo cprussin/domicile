@@ -2644,6 +2644,26 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     open_a_sliding_menu(client, handle);
                 }
             }
+            wl_pointer::Event::Axis { time, axis, value } => {
+                crate::say!(pointer.id(), "axis({}, {}, {})", time, number(axis), value);
+            }
+            wl_pointer::Event::AxisSource { axis_source } => {
+                crate::say!(pointer.id(), "axis_source({})", number(axis_source));
+            }
+            wl_pointer::Event::AxisStop { time, axis } => {
+                crate::say!(pointer.id(), "axis_stop({}, {})", time, number(axis));
+            }
+            wl_pointer::Event::AxisDiscrete { axis, discrete } => {
+                crate::say!(
+                    pointer.id(),
+                    "axis_discrete({}, {})",
+                    number(axis),
+                    discrete
+                );
+            }
+            wl_pointer::Event::Frame => {
+                crate::say!(pointer.id(), "frame()");
+            }
             _ => {}
         }
     }

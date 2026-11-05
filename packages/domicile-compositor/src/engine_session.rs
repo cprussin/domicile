@@ -340,6 +340,11 @@ impl EngineSession {
         self.engine.configure_virtual_displays(displays);
     }
 
+    /// Applies the desktop's touchpad and relative mouse settings.
+    pub fn configure_input(&self, input: &domicile_config::InputConfig) {
+        self.engine.configure_input(input);
+    }
+
     /// Tells the browser which display each tablet or touchscreen covers.
     ///
     /// See [`crate::engine::Engine::configure_pointers`].

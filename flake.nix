@@ -909,6 +909,18 @@
                     xkb_variant = "dvp";
                     xkb_options = [ "caps:escape" ];
                   };
+                  input.touchpad = {
+                    natural_scroll = true;
+                    click_method = "clickfinger";
+                    scroll_method = "two_finger";
+                    scroll_acceleration = false;
+                    disable_while_typing = "libinput";
+                  };
+                  input.mouse = {
+                    accel_profile = "flat";
+                    speed = -0.25;
+                    scroll_factor = 1.5;
+                  };
                   output = {
                     max_scale = 2;
                     displays = [{
@@ -1028,6 +1040,13 @@
             }
             expect '.input.keyboard.xkb_variant == "dvp"'
             expect '.input.keyboard.xkb_options == ["caps:escape"]'
+            expect '.input.touchpad | .natural_scroll == true and .click_method == "clickfinger"'
+            expect '.input.touchpad | .scroll_method == "two_finger" and .scroll_acceleration == false'
+            expect '.input.touchpad | .disable_while_typing == "libinput" and .typing_pause_ms == 200 and .typing_repeat_pause_ms == 500'
+            expect '.input.touchpad | .tap == true and .tap_drag == true and .drag_lock == false'
+            expect '.input.touchpad | .tap_button_map == "lrm" and .typing_repeat_pause_ms == 500'
+            expect '.input.mouse | .accel_profile == "flat" and .speed == -0.25 and .scroll_factor == 1.5'
+            expect '.input.mouse | .natural_scroll == false and .middle_emulation == false'
             expect '.output.max_scale == 2'
             expect '.output.profiles[0].name == "desk"'
             expect '.output.profiles[0].displays[0] | .display == "drm-1" and .enabled == false'

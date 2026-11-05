@@ -1,0 +1,931 @@
+From c527269eb08fc7505036116115e3ca2a44142913 Mon Sep 17 00:00:00 2001
+From: mecattaf <thomas@mecattaf.dev>
+Date: Thu, 5 Nov 2026 22:08:49 +0100
+Subject: [PATCH] domicile: preserve native scroll distances, sources and stops
+
+---
+ .../web_coalesced_input_event_mojom_traits.cc | 27 ++++++-
+ .../common/input/web_mouse_wheel_event.cc     |  9 +++
+ .../common/input/web_mouse_wheel_event.h      |  8 ++
+ .../public/mojom/input/input_handler.mojom    |  6 ++
+ .../core/input/mouse_wheel_event_manager.cc   |  8 ++
+ ui/events/BUILD.gn                            |  1 +
+ ui/events/blink/web_input_event.cc            | 32 +++++++-
+ ui/events/ozone/evdev/BUILD.gn                |  1 +
+ .../evdev/device_event_dispatcher_evdev.cc    |  4 +
+ .../evdev/device_event_dispatcher_evdev.h     | 12 ++-
+ ui/events/ozone/evdev/event_factory_evdev.cc  |  5 ++
+ .../ozone/evdev/libinput_event_converter.cc   | 80 ++++++++++++++-----
+ ui/events/types/BUILD.gn                      |  1 +
+ .../wayland/host/wayland_event_source.cc      | 54 +++++++++++++
+ .../wayland/host/wayland_event_source.h       |  7 ++
+ .../platform/wayland/host/wayland_pointer.cc  |  5 +-
+ .../platform/wayland/host/wayland_pointer.h   |  3 +
+ .../wayland/host/wayland_pointer_unittest.cc  | 74 ++++++++++++-----
+ 18 files changed, 290 insertions(+), 47 deletions(-)
+
+diff --git a/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc b/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
+index 8527714..7389432 100644
+--- a/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
++++ b/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <memory>
+ 
+ #include "base/strings/string_util.h"
+@@ -358,6 +359,25 @@ bool StructTraits<blink::mojom::EventDataView,
+             static_cast<blink::WebMouseWheelEvent*>(mouse_event);
+         blink::mojom::WheelDataPtr& wheel_data =
+             pointer_data->mouse_data->wheel_data;
++        if (wheel_data->native_scroll_source >
++            static_cast<uint8_t>(ui::NativeScrollSource::kWheelTilt)) {
++          return false;
++        }
++        wheel_event->native_scroll_source = static_cast<ui::NativeScrollSource>(
++            wheel_data->native_scroll_source);
++        wheel_event->axis_stop_x = wheel_data->axis_stop_x;
++        wheel_event->axis_stop_y = wheel_data->axis_stop_y;
++        if (wheel_data->has_native_axis_distance &&
++            (!std::isfinite(wheel_data->native_axis_distance_x) ||
++             !std::isfinite(wheel_data->native_axis_distance_y))) {
++          return false;
++        }
++        wheel_event->has_native_axis_distance =
++            wheel_data->has_native_axis_distance;
++        wheel_event->native_axis_distance_x =
++            wheel_data->native_axis_distance_x;
++        wheel_event->native_axis_distance_y =
++            wheel_data->native_axis_distance_y;
+         wheel_event->delta_x = wheel_data->delta_x;
+         wheel_event->delta_y = wheel_data->delta_y;
+         wheel_event->wheel_ticks_x = wheel_data->wheel_ticks_x;
+@@ -439,7 +459,12 @@ StructTraits<blink::mojom::EventDataView,
+     const blink::WebMouseWheelEvent* wheel_event =
+         static_cast<const blink::WebMouseWheelEvent*>(mouse_event);
+     wheel_data = blink::mojom::WheelData::New(
+-        wheel_event->delta_x, wheel_event->delta_y, wheel_event->wheel_ticks_x,
++        static_cast<uint8_t>(wheel_event->native_scroll_source),
++        wheel_event->axis_stop_x, wheel_event->axis_stop_y,
++        wheel_event->has_native_axis_distance,
++        wheel_event->native_axis_distance_x,
++        wheel_event->native_axis_distance_y, wheel_event->delta_x,
++        wheel_event->delta_y, wheel_event->wheel_ticks_x,
+         wheel_event->wheel_ticks_y, wheel_event->acceleration_ratio_x,
+         wheel_event->acceleration_ratio_y, wheel_event->phase,
+         wheel_event->momentum_phase, wheel_event->dispatch_type,
+diff --git a/third_party/blink/common/input/web_mouse_wheel_event.cc b/third_party/blink/common/input/web_mouse_wheel_event.cc
+index 9c5ab49..3dcb76c 100644
+--- a/third_party/blink/common/input/web_mouse_wheel_event.cc
++++ b/third_party/blink/common/input/web_mouse_wheel_event.cc
+@@ -34,6 +34,11 @@ bool WebMouseWheelEvent::CanCoalesce(const WebInputEvent& event) const {
+ 
+   return GetModifiers() == mouse_wheel_event.GetModifiers() &&
+          delta_units == mouse_wheel_event.delta_units &&
++         native_scroll_source == mouse_wheel_event.native_scroll_source &&
++         has_native_axis_distance ==
++             mouse_wheel_event.has_native_axis_distance &&
++         !axis_stop_x && !axis_stop_y && !mouse_wheel_event.axis_stop_x &&
++         !mouse_wheel_event.axis_stop_y &&
+          HaveConsistentPhase(mouse_wheel_event);
+ }
+ 
+@@ -67,6 +72,8 @@ void WebMouseWheelEvent::Coalesce(const WebInputEvent& event) {
+       GetUnacceleratedDelta(delta_y, acceleration_ratio_y) +
+       GetUnacceleratedDelta(mouse_wheel_event.delta_y,
+                             mouse_wheel_event.acceleration_ratio_y);
++  const double old_native_axis_distance_x = native_axis_distance_x;
++  const double old_native_axis_distance_y = native_axis_distance_y;
+   float old_deltaX = delta_x;
+   float old_deltaY = delta_y;
+   float old_wheelTicksX = wheel_ticks_x;
+@@ -76,6 +83,8 @@ void WebMouseWheelEvent::Coalesce(const WebInputEvent& event) {
+   WebMouseWheelEvent::Phase old_phase = phase;
+   WebInputEvent::DispatchType old_dispatch_type = dispatch_type;
+   *this = mouse_wheel_event;
++  native_axis_distance_x += old_native_axis_distance_x;
++  native_axis_distance_y += old_native_axis_distance_y;
+   delta_x += old_deltaX;
+   delta_y += old_deltaY;
+   wheel_ticks_x += old_wheelTicksX;
+diff --git a/third_party/blink/public/common/input/web_mouse_wheel_event.h b/third_party/blink/public/common/input/web_mouse_wheel_event.h
+index 5174190..7de4407 100644
+--- a/third_party/blink/public/common/input/web_mouse_wheel_event.h
++++ b/third_party/blink/public/common/input/web_mouse_wheel_event.h
+@@ -6,6 +6,7 @@
+ #define THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_MOUSE_WHEEL_EVENT_H_
+ 
+ #include "third_party/blink/public/common/input/web_mouse_event.h"
++#include "ui/events/types/native_scroll_source.h"
+ #include "ui/events/types/scroll_types.h"
+ 
+ namespace blink {
+@@ -59,6 +60,13 @@ class BLINK_COMMON_EXPORT WebMouseWheelEvent : public WebMouseEvent {
+   float wheel_ticks_x = 0.0f;
+   float wheel_ticks_y = 0.0f;
+ 
++  ui::NativeScrollSource native_scroll_source = ui::NativeScrollSource::kWheel;
++  bool axis_stop_x = false;
++  bool axis_stop_y = false;
++  bool has_native_axis_distance = false;
++  double native_axis_distance_x = 0;
++  double native_axis_distance_y = 0;
++
+   float acceleration_ratio_x = 1.0f;
+   float acceleration_ratio_y = 1.0f;
+ 
+diff --git a/third_party/blink/public/mojom/input/input_handler.mojom b/third_party/blink/public/mojom/input/input_handler.mojom
+index 1ff8321..1ca5f0a 100644
+--- a/third_party/blink/public/mojom/input/input_handler.mojom
++++ b/third_party/blink/public/mojom/input/input_handler.mojom
+@@ -73,6 +73,12 @@ struct PointerData {
+ };
+ 
+ struct WheelData {
++  uint8 native_scroll_source;
++  bool axis_stop_x;
++  bool axis_stop_y;
++  bool has_native_axis_distance;
++  double native_axis_distance_x;
++  double native_axis_distance_y;
+   float delta_x;
+   float delta_y;
+   float wheel_ticks_x;
+diff --git a/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc b/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc
+index 3c3ddfd..ea0aa44 100644
+--- a/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc
++++ b/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc
+@@ -12,6 +12,7 @@
+ #include "third_party/blink/renderer/core/events/wheel_event.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame_view.h"
++#include "third_party/blink/renderer/core/html/domicile/html_app_element.h"
+ #include "third_party/blink/renderer/core/input/event_handler.h"
+ #include "third_party/blink/renderer/core/input/event_handling_util.h"
+ #include "third_party/blink/renderer/core/layout/hit_test_request.h"
+@@ -53,6 +54,13 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
+ 
+   if ((event.phase & kWheelEventPhaseEndedEventMask) ||
+       (event.momentum_phase & kWheelEventPhaseEndedEventMask)) {
++    // Native clients need axis termination; browser content keeps its existing
++    // phase-end handling without a DOM wheel event.
++    if ((event.axis_stop_x || event.axis_stop_y) &&
++        IsA<HTMLAppElement>(wheel_target_.Get())) {
++      wheel_target_->DispatchEvent(*WheelEvent::Create(
++          event, *wheel_target_->GetDocument().domWindow()));
++    }
+     UpdateWheelTarget(/*wheel_target=*/nullptr);
+     return WebInputEventResult::kNotHandled;
+   }
+diff --git a/ui/events/BUILD.gn b/ui/events/BUILD.gn
+index a643410..e362fad 100644
+--- a/ui/events/BUILD.gn
++++ b/ui/events/BUILD.gn
+@@ -269,6 +269,7 @@ component("events") {
+   ]
+ 
+   sources = [
++    "domicile/scroll_metadata.h",
+     "event.cc",
+     "event_dispatcher.cc",
+     "event_handler.cc",
+diff --git a/ui/events/blink/web_input_event.cc b/ui/events/blink/web_input_event.cc
+index b79e356..f3046ce 100644
+--- a/ui/events/blink/web_input_event.cc
++++ b/ui/events/blink/web_input_event.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "ui/events/blink/web_input_event.h"
++#include "ui/events/domicile/scroll_metadata.h"
+ 
+ #include <utility>
+ 
+@@ -285,6 +286,16 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(const MouseWheelEvent& event) {
+   const gfx::PointF screen_point = GetScreenLocationFromEvent(event);
+   webkit_event.SetPositionInScreen(screen_point.x(), screen_point.y());
+ 
++  const NativeScrollMetadata metadata =
++      GetScrollMetadata(event, NativeScrollSource::kWheel);
++  webkit_event.native_scroll_source = metadata.source;
++  webkit_event.axis_stop_x = metadata.stop_x;
++  webkit_event.axis_stop_y = metadata.stop_y;
++  if (metadata.axis_distance) {
++    webkit_event.has_native_axis_distance = true;
++    webkit_event.native_axis_distance_x = (*metadata.axis_distance)[0];
++    webkit_event.native_axis_distance_y = (*metadata.axis_distance)[1];
++  }
+   return webkit_event;
+ }
+ 
+@@ -309,6 +320,23 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(const ScrollEvent& event) {
+   const gfx::PointF screen_point = GetScreenLocationFromEvent(event);
+   webkit_event.SetPositionInScreen(screen_point.x(), screen_point.y());
+ 
++  const NativeScrollMetadata metadata =
++      GetScrollMetadata(event, NativeScrollSource::kFinger);
++  webkit_event.native_scroll_source = metadata.source;
++  webkit_event.axis_stop_x = metadata.stop_x;
++  webkit_event.axis_stop_y = metadata.stop_y;
++  if (metadata.axis_distance) {
++    webkit_event.has_native_axis_distance = true;
++    webkit_event.native_axis_distance_x = (*metadata.axis_distance)[0];
++    webkit_event.native_axis_distance_y = (*metadata.axis_distance)[1];
++  }
++  // Ozone reconstructs UI events without their ScrollEventPhase. Keep a native
++  // zero stop out of browser content's DOM wheel dispatch.
++  if ((metadata.stop_x || metadata.stop_y) && metadata.axis_distance &&
++      (*metadata.axis_distance)[0] == 0 && (*metadata.axis_distance)[1] == 0 &&
++      webkit_event.delta_x == 0 && webkit_event.delta_y == 0) {
++    webkit_event.phase = blink::WebMouseWheelEvent::kPhaseEnded;
++  }
+   return webkit_event;
+ }
+ 
+@@ -474,9 +502,9 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEventFromUiEvent(
+   }
+ 
+   webkit_event.wheel_ticks_x =
+-      webkit_event.delta_x / MouseWheelEvent::kWheelDelta;
++      static_cast<float>(event.tick_120ths().x()) / 120;
+   webkit_event.wheel_ticks_y =
+-      webkit_event.delta_y / MouseWheelEvent::kWheelDelta;
++      static_cast<float>(event.tick_120ths().y()) / 120;
+   webkit_event.tilt_x = event.pointer_details().tilt_x;
+   webkit_event.tilt_y = event.pointer_details().tilt_y;
+   webkit_event.force = event.pointer_details().force;
+diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
+index 6946a14..f17af24 100644
+--- a/ui/events/ozone/evdev/BUILD.gn
++++ b/ui/events/ozone/evdev/BUILD.gn
+@@ -56,6 +56,7 @@ component("evdev") {
+     "domicile/input_settings.h",
+     "domicile/scroll_accelerator.cc",
+     "domicile/scroll_accelerator.h",
++    "domicile/scroll_factor.h",
+     "domicile/typing_guard.cc",
+     "domicile/typing_guard.h",
+     "domicile/wheel_ticks.cc",
+diff --git a/ui/events/ozone/evdev/device_event_dispatcher_evdev.cc b/ui/events/ozone/evdev/device_event_dispatcher_evdev.cc
+index a3fbd80..ece71e1 100644
+--- a/ui/events/ozone/evdev/device_event_dispatcher_evdev.cc
++++ b/ui/events/ozone/evdev/device_event_dispatcher_evdev.cc
+@@ -94,6 +94,8 @@ MouseWheelEventParams::MouseWheelEventParams(int device_id,
+ MouseWheelEventParams::MouseWheelEventParams(
+     const MouseWheelEventParams& other) = default;
+ 
++MouseWheelEventParams::MouseWheelEventParams() = default;
++
+ MouseWheelEventParams::~MouseWheelEventParams() {
+ }
+ 
+@@ -131,6 +133,8 @@ ScrollEventParams::ScrollEventParams(int device_id,
+ 
+ ScrollEventParams::ScrollEventParams(const ScrollEventParams& other) = default;
+ 
++ScrollEventParams::ScrollEventParams() = default;
++
+ ScrollEventParams::~ScrollEventParams() {
+ }
+ 
+diff --git a/ui/events/ozone/evdev/device_event_dispatcher_evdev.h b/ui/events/ozone/evdev/device_event_dispatcher_evdev.h
+index f49f9b6..9236885 100644
+--- a/ui/events/ozone/evdev/device_event_dispatcher_evdev.h
++++ b/ui/events/ozone/evdev/device_event_dispatcher_evdev.h
+@@ -5,6 +5,7 @@
+ #ifndef UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_EVDEV_H_
+ #define UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_EVDEV_H_
+ 
++#include <array>
+ #include <optional>
+ #include <vector>
+ 
+@@ -16,6 +17,7 @@
+ #include "ui/events/event.h"
+ #include "ui/events/ozone/gamepad/gamepad_event.h"
+ #include "ui/events/types/event_type.h"
++#include "ui/events/types/native_scroll_source.h"
+ #include "ui/gfx/geometry/point_f.h"
+ #include "ui/gfx/geometry/vector2d.h"
+ #include "ui/gfx/geometry/vector2d_f.h"
+@@ -109,13 +111,15 @@ struct COMPONENT_EXPORT(EVDEV) MouseWheelEventParams {
+                         const gfx::Vector2d& delta,
+                         base::TimeTicks timestamp);
+   MouseWheelEventParams(const MouseWheelEventParams& other);
+-  MouseWheelEventParams() {}
++  MouseWheelEventParams();
+   ~MouseWheelEventParams();
+ 
+   int device_id;
+   gfx::PointF location;
+   gfx::Vector2d delta;
+   gfx::Vector2d tick_120ths;
++  NativeScrollSource native_scroll_source = NativeScrollSource::kWheel;
++  std::optional<std::array<double, 2>> native_axis_distance;
+   base::TimeTicks timestamp;
+ };
+ 
+@@ -145,7 +149,7 @@ struct COMPONENT_EXPORT(EVDEV) ScrollEventParams {
+                     int finger_count,
+                     const base::TimeTicks timestamp);
+   ScrollEventParams(const ScrollEventParams& other);
+-  ScrollEventParams() {}
++  ScrollEventParams();
+   ~ScrollEventParams();
+ 
+   int device_id;
+@@ -154,6 +158,10 @@ struct COMPONENT_EXPORT(EVDEV) ScrollEventParams {
+   const gfx::Vector2dF delta;
+   const gfx::Vector2dF ordinal_delta;
+   int finger_count;
++  NativeScrollSource native_scroll_source = NativeScrollSource::kFinger;
++  bool axis_stop_x = false;
++  bool axis_stop_y = false;
++  std::optional<std::array<double, 2>> native_axis_distance;
+   const base::TimeTicks timestamp;
+ };
+ 
+diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
+index 193323e..3393743 100644
+--- a/ui/events/ozone/evdev/event_factory_evdev.cc
++++ b/ui/events/ozone/evdev/event_factory_evdev.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "ui/events/ozone/evdev/event_factory_evdev.h"
++#include "ui/events/domicile/scroll_metadata.h"
+ 
+ #include <utility>
+ 
+@@ -373,6 +374,8 @@ void EventFactoryEvdev::DispatchMouseWheelEvent(
+   event.set_location_f(params.location);
+   event.set_root_location_f(params.location);
+   event.set_source_device_id(params.device_id);
++  SetScrollMetadata(event, params.native_scroll_source, false, false,
++                    params.native_axis_distance);
+   DispatchUiEvent(&event);
+ }
+ 
+@@ -400,6 +403,8 @@ void EventFactoryEvdev::DispatchScrollEvent(const ScrollEventParams& params) {
+   event.set_location_f(params.location);
+   event.set_root_location_f(params.location);
+   event.set_source_device_id(params.device_id);
++  SetScrollMetadata(event, params.native_scroll_source, params.axis_stop_x,
++                    params.axis_stop_y, params.native_axis_distance);
+   DispatchUiEvent(&event);
+ }
+ 
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
+index 821dcca..52a6c8e 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.cc
++++ b/ui/events/ozone/evdev/libinput_event_converter.cc
+@@ -7,6 +7,7 @@
+ #include <errno.h>
+ #include <fcntl.h>
+ 
++#include <array>
+ #include <memory>
+ #include <ostream>
+ #include <string>
+@@ -15,11 +16,13 @@
+ #include "base/compiler_specific.h"
+ #include "base/logging.h"
+ #include "base/notreached.h"
++#include "base/numerics/safe_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/stringprintf.h"
+ #include "ui/events/ozone/evdev/cursor_delegate_evdev.h"
+ #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
+ #include "ui/events/ozone/evdev/domicile/scroll_accelerator.h"
++#include "ui/events/ozone/evdev/domicile/scroll_factor.h"
+ #include "ui/events/ozone/evdev/domicile/wheel_ticks.h"
+ #include "ui/events/ozone/evdev/event_device_info.h"
+ #include "ui/events/ozone/evdev/input_device_settings_evdev.h"
+@@ -257,9 +260,8 @@ void LibInputEventConverter::LibInputDevice::LogConfigStatus(
+                  << key << " is not supported (requested " << value << ")";
+       break;
+     case LIBINPUT_CONFIG_STATUS_INVALID:
+-      LOG(ERROR) << "libinput " << libinput_device_get_name(device_)
++      LOG(FATAL) << "libinput " << libinput_device_get_name(device_)
+                  << ": invalid " << key << " = " << value;
+-      break;
+   }
+ }
+ 
+@@ -453,7 +455,11 @@ LibInputEventConverter::LibInputEventConverter(
+       context_(std::move(ctx)),
+       device_(context_.AddDevice(id, path)) {}
+ 
+-LibInputEventConverter::~LibInputEventConverter() {}
++LibInputEventConverter::~LibInputEventConverter() {
++  if (typing_guard_) {
++    typing_guard_->RemoveDevice(input_device_.id);
++  }
++}
+ 
+ void LibInputEventConverter::ApplyDeviceSettings(
+     const InputDeviceSettingsEvdev& settings) {
+@@ -587,35 +593,51 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+   // `MouseWheelEvent`, the way every other platform delivers one. Dispatched
+   // as a scroll it would move a page by libinput's degrees -- 15 pixels a
+   // click -- and fling like a pad.
+-  if (libinput_event_pointer_get_axis_source(event) ==
+-      LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
++  const auto source = libinput_event_pointer_get_axis_source(event);
++  if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL ||
++      source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL_TILT) {
+     HandleWheel(evt);
+     return;
+   }
+ 
+-  if (typing_guard_ && typing_applies_ &&
+-      typing_guard_->DropsMotion(Timestamp(evt), input_device_.id)) {
+-    return;
+-  }
+-
+   const auto h = GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL);
+   const auto v = GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL);
++  const bool stop_x = libinput_event_pointer_has_axis(
++                          event, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL) &&
++                      h == 0;
++  const bool stop_y = libinput_event_pointer_has_axis(
++                          event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL) &&
++                      v == 0;
++  const bool drop_motion =
++      typing_guard_ && typing_applies_ &&
++      typing_guard_->DropsMotion(Timestamp(evt), input_device_.id);
++  if (drop_motion && !stop_x && !stop_y) {
++    return;
++  }
+   // Two fingers on the pad go through the accelerator, which also carries
+   // the fraction this used to truncate away. Anything else -- a wheel, a
+   // trackpoint's scroll button -- is dispatched as libinput reports it.
+-  const gfx::Vector2d delta =
+-      libinput_event_pointer_get_axis_source(event) ==
+-              LIBINPUT_POINTER_AXIS_SOURCE_FINGER
+-          ? scroll_accelerator_.Scroll(
+-                gfx::Vector2dF(static_cast<float>(h), static_cast<float>(v)),
+-                Timestamp(evt))
+-          : gfx::Vector2d(h, v);
++  const gfx::Vector2dF raw_delta =
++      drop_motion ? gfx::Vector2dF() : gfx::Vector2dF(h, v);
++  scroll_accelerator_.Stop(stop_x, stop_y);
++  const gfx::Vector2dF delta =
++      source == LIBINPUT_POINTER_AXIS_SOURCE_FINGER && !raw_delta.IsZero()
++          ? scroll_accelerator_.Scroll(raw_delta, Timestamp(evt))
++          : gfx::Vector2dF(ScaleScrollAxis(raw_delta.x(), scroll_factor_),
++                           ScaleScrollAxis(raw_delta.y(), scroll_factor_));
+ 
+   DVLOG(3) << "Pointer axis h:" << h << ", v:" << v;
+ 
+-  dispatcher_->DispatchScrollEvent({input_device_.id, EventType::kScroll,
+-                                    cursor_->GetLocation(), delta, delta, 2,
+-                                    Timestamp(evt)});
++  ScrollEventParams params(input_device_.id, EventType::kScroll,
++                           cursor_->GetLocation(), delta, delta, 2,
++                           Timestamp(evt));
++  params.native_scroll_source = source == LIBINPUT_POINTER_AXIS_SOURCE_FINGER
++                                    ? NativeScrollSource::kFinger
++                                    : NativeScrollSource::kContinuous;
++  params.axis_stop_x = stop_x;
++  params.axis_stop_y = stop_y;
++  params.native_axis_distance = std::array<double, 2>{delta.x(), delta.y()};
++  dispatcher_->DispatchScrollEvent(params);
+ }
+ 
+ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+@@ -626,8 +648,22 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+ 
+   DVLOG(3) << "Wheel: " << ticks.ToString();
+ 
+-  dispatcher_->DispatchMouseWheelEvent(
+-      {input_device_.id, cursor_->GetLocation(), ticks, ticks, Timestamp(evt)});
++  const gfx::Vector2d delta(base::ClampRound<int>(ticks.x() * scroll_factor_),
++                            base::ClampRound<int>(ticks.y() * scroll_factor_));
++  MouseWheelEventParams params(input_device_.id, cursor_->GetLocation(), delta,
++                               delta, Timestamp(evt));
++  params.native_scroll_source = libinput_event_pointer_get_axis_source(event) ==
++                                        LIBINPUT_POINTER_AXIS_SOURCE_WHEEL_TILT
++                                    ? NativeScrollSource::kWheelTilt
++                                    : NativeScrollSource::kWheel;
++  params.native_axis_distance = std::array<double, 2>{
++      ScaleScrollAxis(
++          GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL),
++          scroll_factor_),
++      ScaleScrollAxis(
++          GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL),
++          scroll_factor_)};
++  dispatcher_->DispatchMouseWheelEvent(params);
+ }
+ 
+ base::TimeTicks LibInputEventConverter::Timestamp(const LibInputEvent& evt) {
+diff --git a/ui/events/types/BUILD.gn b/ui/events/types/BUILD.gn
+index 0061c74..bada315 100644
+--- a/ui/events/types/BUILD.gn
++++ b/ui/events/types/BUILD.gn
+@@ -5,6 +5,7 @@
+ source_set("headers") {
+   sources = [
+     "event_type.h",
++    "native_scroll_source.h",
+     "scroll_input_type.h",
+     "scroll_types.h",
+   ]
+diff --git a/ui/ozone/platform/wayland/host/wayland_event_source.cc b/ui/ozone/platform/wayland/host/wayland_event_source.cc
+index f7f75de..7d9ce3b 100644
+--- a/ui/ozone/platform/wayland/host/wayland_event_source.cc
++++ b/ui/ozone/platform/wayland/host/wayland_event_source.cc
+@@ -20,6 +20,7 @@
+ #include "base/trace_event/trace_event.h"
+ #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+ #include "ui/events/base_event_utils.h"
++#include "ui/events/domicile/scroll_metadata.h"
+ #include "ui/events/event_utils.h"
+ #include "ui/events/keycodes/dom/dom_code.h"
+ #include "ui/events/keycodes/dom/dom_key.h"
+@@ -483,6 +484,20 @@ void WaylandEventSource::OnPointerMotionEvent(
+   }
+ }
+ 
++void WaylandEventSource::OnPointerAxisDistanceEvent(uint32_t axis,
++                                                    double distance,
++                                                    base::TimeTicks timestamp) {
++  EnsurePointerScrollData(timestamp);
++  if (!pointer_scroll_data_->native_axis_distance) {
++    pointer_scroll_data_->native_axis_distance = std::array<double, 2>{0, 0};
++  }
++  if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
++    (*pointer_scroll_data_->native_axis_distance)[0] += distance;
++  } else if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
++    (*pointer_scroll_data_->native_axis_distance)[1] += distance;
++  }
++}
++
+ void WaylandEventSource::OnPointerAxisEvent(
+     const gfx::Vector2dF& offset,
+     std::optional<base::TimeTicks> timestamp,
+@@ -598,8 +613,20 @@ void WaylandEventSource::OnPointerAxisStopEvent(uint32_t axis,
+   EnsurePointerScrollData(timestamp);
+   if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+     pointer_scroll_data_->dy = 0;
++    pointer_scroll_data_->axis_stop_y = true;
++    if (pointer_scroll_data_->native_axis_distance) {
++      (*pointer_scroll_data_->native_axis_distance)[1] = 0;
++    }
+   } else if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
+     pointer_scroll_data_->dx = 0;
++    pointer_scroll_data_->axis_stop_x = true;
++    if (pointer_scroll_data_->native_axis_distance) {
++      (*pointer_scroll_data_->native_axis_distance)[0] = 0;
++    }
++  }
++  if (!pointer_scroll_data_->native_axis_distance &&
++      pointer_scroll_data_->dx == 0 && pointer_scroll_data_->dy == 0) {
++    pointer_scroll_data_->native_axis_distance = std::array<double, 2>{0, 0};
+   }
+   pointer_scroll_data_->is_axis_stop = true;
+ }
+@@ -1192,6 +1219,23 @@ void WaylandEventSource::ProcessPointerScrollData() {
+   base::TimeTicks& timestamp = *pointer_scroll_data_->timestamp;
+ 
+   int flags = pointer_flags_ | keyboard_modifiers_;
++  const NativeScrollSource source =
++      pointer_scroll_data_->axis_source == WL_POINTER_AXIS_SOURCE_CONTINUOUS
++          ? NativeScrollSource::kContinuous
++          : NativeScrollSource::kFinger;
++  if (pointer_scroll_data_->dx == 0 && pointer_scroll_data_->dy == 0 &&
++      pointer_scroll_data_->is_axis_stop) {
++    // A native client owns its kinetic scrolling. Keep the axis stops alongside
++    // the browser's separate fling event.
++    ScrollEvent stopped(EventType::kScroll, pointer_location_,
++                        pointer_location_, timestamp, flags, 0, 0, 0, 0,
++                        kGestureScrollFingerCount);
++    SetScrollMetadata(stopped, source, pointer_scroll_data_->axis_stop_x,
++                      pointer_scroll_data_->axis_stop_y,
++                      pointer_scroll_data_->native_axis_distance);
++    pointer_frames_.push_back(
++        std::make_unique<FrameData>(stopped, base::NullCallback()));
++  }
+   // Dispatch Fling event if pointer.axis_stop is notified and the recent
+   // pointer.axis events meets the criteria to start fling scroll.
+   if (pointer_scroll_data_->dx == 0 && pointer_scroll_data_->dy == 0 &&
+@@ -1228,6 +1272,13 @@ void WaylandEventSource::ProcessPointerScrollData() {
+       MouseWheelEvent event(
+           gfx::ToRoundedVector2d(gfx::Vector2dF(dx, dy)),
+           pointer_location_, pointer_location_, timestamp, flags, 0);
++      SetScrollMetadata(event,
++                        *pointer_scroll_data_->axis_source ==
++                                WL_POINTER_AXIS_SOURCE_WHEEL_TILT
++                            ? NativeScrollSource::kWheelTilt
++                            : NativeScrollSource::kWheel,
++                        false, false,
++                        pointer_scroll_data_->native_axis_distance);
+       pointer_frames_.push_back(
+           std::make_unique<FrameData>(event, base::NullCallback()));
+     } else if (*pointer_scroll_data_->axis_source ==
+@@ -1256,6 +1307,9 @@ void WaylandEventSource::ProcessPointerScrollData() {
+                         pointer_location_, timestamp, flags, dx, dy,
+                         dx, dy,
+                         kGestureScrollFingerCount);
++      SetScrollMetadata(event, source, pointer_scroll_data_->axis_stop_x,
++                        pointer_scroll_data_->axis_stop_y,
++                        pointer_scroll_data_->native_axis_distance);
+       pointer_frames_.push_back(
+           std::make_unique<FrameData>(event, base::NullCallback()));
+     }
+diff --git a/ui/ozone/platform/wayland/host/wayland_event_source.h b/ui/ozone/platform/wayland/host/wayland_event_source.h
+index d85cbf2..76eba10 100644
+--- a/ui/ozone/platform/wayland/host/wayland_event_source.h
++++ b/ui/ozone/platform/wayland/host/wayland_event_source.h
+@@ -5,6 +5,7 @@
+ #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_EVENT_SOURCE_H_
+ #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_EVENT_SOURCE_H_
+ 
++#include <array>
+ #include <deque>
+ #include <memory>
+ #include <optional>
+@@ -124,6 +125,9 @@ class WaylandEventSource : public PlatformEventSource,
+                             base::TimeTicks timestamp,
+                             wl::EventDispatchPolicy dispatch_policy,
+                             bool is_synthesized) override;
++  void OnPointerAxisDistanceEvent(uint32_t axis,
++                                  double distance,
++                                  base::TimeTicks timestamp) override;
+   void OnPointerAxisEvent(const gfx::Vector2dF& offset,
+                           std::optional<base::TimeTicks> timestamp,
+                           bool is_high_resolution) override;
+@@ -207,10 +211,13 @@ class WaylandEventSource : public PlatformEventSource,
+     PointerScrollData& operator=(PointerScrollData&&);
+ 
+     std::optional<uint32_t> axis_source;
++    std::optional<std::array<double, 2>> native_axis_distance;
+     float dx = 0.0f;
+     float dy = 0.0f;
+     base::TimeDelta dt;
+     bool is_axis_stop = false;
++    bool axis_stop_x = false;
++    bool axis_stop_y = false;
+     bool is_high_resolution = false;
+     std::optional<base::TimeTicks> timestamp;
+ 
+diff --git a/ui/ozone/platform/wayland/host/wayland_pointer.cc b/ui/ozone/platform/wayland/host/wayland_pointer.cc
+index 06a9ae1..df39ab5 100644
+--- a/ui/ozone/platform/wayland/host/wayland_pointer.cc
++++ b/ui/ozone/platform/wayland/host/wayland_pointer.cc
+@@ -182,6 +182,9 @@ void WaylandPointer::OnAxis(void* data,
+                             uint32_t axis,
+                             wl_fixed_t value) {
+   double delta = -wl_fixed_to_double(value);
++  const auto timestamp = wl::EventMillisecondsToTimeTicks(time);
++  auto* self = static_cast<WaylandPointer*>(data);
++  self->delegate_->OnPointerAxisDistanceEvent(axis, delta, timestamp);
+   if (!IsWaylandUnscaledTouchpadScrollingEnabled()) {
+     // Wayland compositors send axis events with values in the surface
+     // coordinate
+@@ -192,8 +195,6 @@ void WaylandPointer::OnAxis(void* data,
+     constexpr double kAxisValueScale = 10.0;
+     delta = delta / kAxisValueScale * MouseWheelEvent::kWheelDelta;
+   }
+-  const auto timestamp = wl::EventMillisecondsToTimeTicks(time);
+-  auto* self = static_cast<WaylandPointer*>(data);
+   self->OnAxisImpl(delta, axis, timestamp, /*is_high_resolution=*/false);
+ }
+ 
+diff --git a/ui/ozone/platform/wayland/host/wayland_pointer.h b/ui/ozone/platform/wayland/host/wayland_pointer.h
+index 7b1b001..7f56639 100644
+--- a/ui/ozone/platform/wayland/host/wayland_pointer.h
++++ b/ui/ozone/platform/wayland/host/wayland_pointer.h
+@@ -133,6 +133,9 @@ class WaylandPointer::Delegate {
+                                     base::TimeTicks timestamp,
+                                     wl::EventDispatchPolicy dispatch_policy,
+                                     bool is_synthesized) = 0;
++  virtual void OnPointerAxisDistanceEvent(uint32_t axis,
++                                          double distance,
++                                          base::TimeTicks timestamp) = 0;
+   virtual void OnPointerAxisEvent(const gfx::Vector2dF& offset,
+                                   std::optional<base::TimeTicks> timestamp,
+                                   bool is_high_resolution) = 0;
+diff --git a/ui/ozone/platform/wayland/host/wayland_pointer_unittest.cc b/ui/ozone/platform/wayland/host/wayland_pointer_unittest.cc
+index 383221a..8349dbf 100644
+--- a/ui/ozone/platform/wayland/host/wayland_pointer_unittest.cc
++++ b/ui/ozone/platform/wayland/host/wayland_pointer_unittest.cc
+@@ -18,6 +18,7 @@
+ #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+ #include "ui/base/cursor/platform_cursor.h"
+ #include "ui/events/devices/device_data_manager.h"
++#include "ui/events/domicile/scroll_metadata.h"
+ #include "ui/events/event.h"
+ #include "ui/ozone/common/bitmap_cursor_factory.h"
+ #include "ui/ozone/common/features.h"
+@@ -157,6 +158,21 @@ ACTION_P(CloneEvent, ptr) {
+   *ptr = arg0->Clone();
+ }
+ 
++ACTION(CheckNativeAxisStop) {
++  ASSERT_TRUE(arg0->IsScrollEvent());
++  const auto* event = arg0->AsScrollEvent();
++  EXPECT_EQ(event->type(), EventType::kScroll);
++  EXPECT_EQ(event->x_offset(), 0);
++  EXPECT_EQ(event->y_offset(), 0);
++  const auto metadata = GetScrollMetadata(*event, NativeScrollSource::kWheel);
++  EXPECT_EQ(metadata.source, NativeScrollSource::kFinger);
++  EXPECT_TRUE(metadata.stop_x);
++  EXPECT_TRUE(metadata.stop_y);
++  ASSERT_TRUE(metadata.axis_distance);
++  EXPECT_EQ((*metadata.axis_distance)[0], 0);
++  EXPECT_EQ((*metadata.axis_distance)[1], 0);
++}
++
+ TEST_F(WaylandPointerTest, Enter) {
+   std::unique_ptr<Event> event;
+   EXPECT_CALL(delegate_, DispatchEvent(_)).WillOnce(CloneEvent(&event));
+@@ -275,8 +291,7 @@ TEST_F(WaylandPointerTest, MotionDragged) {
+   EXPECT_EQ(gfx::PointF(400, 500), mouse_event->root_location_f());
+ }
+ 
+-// Verifies whether the platform event source handles all types of axis sources.
+-// The actual behaviour of each axis source is not tested here.
++// Native sources and distances survive browser scroll normalization.
+ TEST_F(WaylandPointerTest, AxisSourceTypes) {
+   SendEnter();
+ 
+@@ -295,8 +310,14 @@ TEST_F(WaylandPointerTest, AxisSourceTypes) {
+          {WL_POINTER_AXIS_SOURCE_WHEEL, WL_POINTER_AXIS_SOURCE_FINGER,
+           WL_POINTER_AXIS_SOURCE_CONTINUOUS,
+           WL_POINTER_AXIS_SOURCE_WHEEL_TILT}) {
+-      SendAxisEvents(pointer, server->GetNextTime(), source,
+-                     WL_POINTER_AXIS_VERTICAL_SCROLL, rand() % 20);
++      wl_pointer_send_axis_source(pointer, source);
++      wl_pointer_send_axis(pointer, server->GetNextTime(),
++                           WL_POINTER_AXIS_HORIZONTAL_SCROLL,
++                           wl_fixed_from_double(7.5));
++      wl_pointer_send_axis(pointer, server->GetNextTime(),
++                           WL_POINTER_AXIS_VERTICAL_SCROLL,
++                           wl_fixed_from_double(-11.25));
++      wl_pointer_send_frame(pointer);
+     }
+   });
+ 
+@@ -308,6 +329,17 @@ TEST_F(WaylandPointerTest, AxisSourceTypes) {
+   ASSERT_TRUE(event3->IsScrollEvent());
+   ASSERT_TRUE(event4);
+   ASSERT_TRUE(event4->IsMouseWheelEvent());
++  for (const auto& [event, source] :
++       {std::pair(event1.get(), NativeScrollSource::kWheel),
++        std::pair(event2.get(), NativeScrollSource::kFinger),
++        std::pair(event3.get(), NativeScrollSource::kContinuous),
++        std::pair(event4.get(), NativeScrollSource::kWheelTilt)}) {
++    const auto metadata = GetScrollMetadata(*event, NativeScrollSource::kWheel);
++    EXPECT_EQ(metadata.source, source);
++    ASSERT_TRUE(metadata.axis_distance);
++    EXPECT_EQ((*metadata.axis_distance)[0], -7.5);
++    EXPECT_EQ((*metadata.axis_distance)[1], 11.25);
++  }
+ }
+ 
+ TEST_F(WaylandPointerTest, Axis) {
+@@ -615,9 +647,10 @@ TEST_F(WaylandPointerTest, FlingVertical) {
+ 
+   std::unique_ptr<Event> event1, event2, event3;
+   EXPECT_CALL(delegate_, DispatchEvent(_))
+-      .Times(3)
++      .Times(4)
+       .WillOnce(CloneEvent(&event1))
+       .WillOnce(CloneEvent(&event2))
++      .WillOnce(CheckNativeAxisStop())
+       .WillOnce(CloneEvent(&event3));
+ 
+   // Send two axis events.
+@@ -644,7 +677,7 @@ TEST_F(WaylandPointerTest, FlingVertical) {
+   ASSERT_TRUE(event2);
+   ASSERT_TRUE(event2->IsScrollEvent());
+ 
+-  // The third dispatched event should be FLING_START.
++  // The native stop precedes the FLING_START event.
+   ASSERT_TRUE(event3);
+   ASSERT_TRUE(event3->IsScrollEvent());
+   auto* scroll_event = event3->AsScrollEvent();
+@@ -666,9 +699,10 @@ TEST_F(WaylandPointerTest, FlingHorizontal) {
+ 
+   std::unique_ptr<Event> event1, event2, event3;
+   EXPECT_CALL(delegate_, DispatchEvent(_))
+-      .Times(3)
++      .Times(4)
+       .WillOnce(CloneEvent(&event1))
+       .WillOnce(CloneEvent(&event2))
++      .WillOnce(CheckNativeAxisStop())
+       .WillOnce(CloneEvent(&event3));
+ 
+   // Send two axis events.
+@@ -695,7 +729,7 @@ TEST_F(WaylandPointerTest, FlingHorizontal) {
+   ASSERT_TRUE(event2);
+   ASSERT_TRUE(event2->IsScrollEvent());
+ 
+-  // The third dispatched event should be FLING_START.
++  // The native stop precedes the FLING_START event.
+   ASSERT_TRUE(event3);
+   ASSERT_TRUE(event3->IsScrollEvent());
+   auto* scroll_event = event3->AsScrollEvent();
+@@ -715,9 +749,10 @@ TEST_F(WaylandPointerTest, FlingCancel) {
+   SendRightButtonPress();
+   std::unique_ptr<Event> event1, event2, event3, event4, event5;
+   EXPECT_CALL(delegate_, DispatchEvent(_))
+-      .Times(5)
++      .Times(6)
+       .WillOnce(CloneEvent(&event1))
+       .WillOnce(CloneEvent(&event2))
++      .WillOnce(CheckNativeAxisStop())
+       .WillOnce(CloneEvent(&event3))
+       .WillOnce(CloneEvent(&event4))
+       .WillOnce(CloneEvent(&event5));
+@@ -760,7 +795,7 @@ TEST_F(WaylandPointerTest, FlingCancel) {
+   ASSERT_TRUE(event2->IsScrollEvent());
+   EXPECT_EQ(EventType::kScroll, event2->type());
+ 
+-  // The 3rd event will be fling start with vertical velocity.
++  // The fling start follows the native stop with vertical velocity.
+   ASSERT_TRUE(event3);
+   ASSERT_TRUE(event3->IsScrollEvent());
+   auto* fling_start_event = event3->AsScrollEvent();
+@@ -770,7 +805,7 @@ TEST_F(WaylandPointerTest, FlingCancel) {
+   EXPECT_EQ(0.0f, fling_start_event->x_offset_ordinal());
+   EXPECT_GT(0.0f, fling_start_event->y_offset_ordinal());
+ 
+-  // The 4th event should be FLING_CANCEL.
++  // The next event should be FLING_CANCEL.
+   ASSERT_TRUE(event4);
+   ASSERT_TRUE(event4->IsScrollEvent());
+   auto* fling_cancel_event = event4->AsScrollEvent();
+@@ -781,7 +816,7 @@ TEST_F(WaylandPointerTest, FlingCancel) {
+   EXPECT_EQ(0.0f, fling_cancel_event->x_offset_ordinal());
+   EXPECT_EQ(0.0f, fling_cancel_event->y_offset_ordinal());
+ 
+-  // The 5th event will be yet another axis event.
++  // Another axis event follows the fling cancellation.
+   ASSERT_TRUE(event5);
+   ASSERT_TRUE(event5);
+   EXPECT_EQ(EventType::kScroll, event5->type());
+@@ -794,9 +829,10 @@ TEST_F(WaylandPointerTest, FlingDiagonal) {
+ 
+   std::unique_ptr<Event> event1, event2, event3;
+   EXPECT_CALL(delegate_, DispatchEvent(_))
+-      .Times(3)
++      .Times(4)
+       .WillOnce(CloneEvent(&event1))
+       .WillOnce(CloneEvent(&event2))
++      .WillOnce(CheckNativeAxisStop())
+       .WillOnce(CloneEvent(&event3));
+ 
+   // Send two axis events that notify scrolls both in vertical and horizontal.
+@@ -822,7 +858,7 @@ TEST_F(WaylandPointerTest, FlingDiagonal) {
+   ASSERT_TRUE(event2);
+   ASSERT_TRUE(event2->IsScrollEvent());
+ 
+-  // The third dispatched event should be FLING_START.
++  // The native stop precedes the FLING_START event.
+   ASSERT_TRUE(event3);
+   ASSERT_TRUE(event3->IsScrollEvent());
+   auto* scroll_event = event3->AsScrollEvent();
+@@ -850,13 +886,14 @@ TEST_F(WaylandPointerTest, FlingVelocityWithoutLeadingAxis) {
+ 
+   std::unique_ptr<Event> event;
+   EXPECT_CALL(delegate_, DispatchEvent(_))
+-      .Times(1)
++      .Times(2)
++      .WillOnce(CheckNativeAxisStop())
+       .WillOnce(CloneEvent(&event));
+ 
+   // Send axis_stop event without leading axis event.
+   SendAxisStopEvents();
+ 
+-  // We expect only a FLING_START event.
++  // The native stop precedes a FLING_START event.
+   ASSERT_TRUE(event);
+   ASSERT_TRUE(event->IsScrollEvent());
+   auto* scroll_event = event->AsScrollEvent();
+@@ -872,7 +909,7 @@ TEST_F(WaylandPointerTest, FlingVelocityWithoutLeadingAxis) {
+ TEST_F(WaylandPointerTest, FrameTargetUseAfterFreeOnSyncWindowClose) {
+   SendEnter(50, 50);
+ 
+-  // Frame 1: axis_stop -> FlingStart is queued and drained (1 event). This
++  // Frame 1: axis_stop -> native stop and FlingStart are drained. This
+   // sets is_fling_active_=true so the next finger-scroll frame will queue 2
+   // events (FlingCancel + Scroll).
+   SendAxisStopEvents();
+@@ -911,8 +948,9 @@ TEST_F(WaylandPointerTest, FlingVelocityWithSingleLeadingAxis) {
+ 
+   std::unique_ptr<Event> event1, event2;
+   EXPECT_CALL(delegate_, DispatchEvent(_))
+-      .Times(2)
++      .Times(3)
+       .WillOnce(CloneEvent(&event1))
++      .WillOnce(CheckNativeAxisStop())
+       .WillOnce(CloneEvent(&event2));
+ 
+   // Send a single axis event.
+-- 
+2.55.0
+

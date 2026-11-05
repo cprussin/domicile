@@ -215,11 +215,7 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
     return false;
   }
 
-  // Expect logind's "gone" echo for this release. See `Pause`.
-  released_[number] += 1;
-  release_.Run(number, base::BindOnce(&DrmTakenDevices::OnGivenBack,
-                                      weak_factory_.GetWeakPtr(), number,
-                                      taken->second.path));
+  ReleaseClaim(number, taken->second.path, ReleaseAnswer());
 
   // Forget it even if the release fails, so shutdown doesn't release it
   // twice. Keep `names_` for a `ResumeDevice` before the re-take.
@@ -227,6 +223,22 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
   VLOG(2) << "domicile: gave back input device " << number.major << ":"
           << number.minor << "; holding " << devices_.size();
   return true;
+}
+
+void DrmTakenDevices::Forget(DeviceNumber number) {
+  const auto named = names_.find(number);
+  if (named != names_.end()) {
+    resumed_.erase(named->second.path);
+    names_.erase(named);
+  }
+  devices_.erase(number);
+}
+
+void DrmTakenDevices::ReleaseCanceled(DeviceNumber number,
+                                      const base::FilePath& path,
+                                      ReleaseAnswer answered) {
+  Forget(number);
+  ReleaseClaim(number, path, std::move(answered));
 }
 
 void DrmTakenDevices::Release() {
@@ -254,26 +266,34 @@ void DrmTakenDevices::Release() {
   released_.clear();
 }
 
+void DrmTakenDevices::ReleaseClaim(DeviceNumber number,
+                                   const base::FilePath& path,
+                                   ReleaseAnswer answered) {
+  // A signal sent before the reply may reach the evdev sequence after it.
+  released_[number] += 1;
+  release_.Run(number, base::BindOnce(&DrmTakenDevices::OnGivenBack,
+                                      weak_factory_.GetWeakPtr(), number, path,
+                                      std::move(answered)));
+}
+
 void DrmTakenDevices::OnGivenBack(DeviceNumber number,
                                   const base::FilePath& path,
+                                  ReleaseAnswer answered,
                                   bool agreed) {
-  if (agreed) {
-    return;
+  if (!agreed) {
+    LOG(ERROR) << "logind refused to take back " << path.value() << " ("
+               << number.major << ":" << number.minor
+               << "), so it cannot be taken again and this device stays dead";
+    const auto echo = released_.find(number);
+    if (echo != released_.end()) {
+      echo->second -= 1;
+      if (echo->second == 0) {
+        released_.erase(echo);
+      }
+    }
   }
-
-  LOG(ERROR) << "logind refused to take back " << path.value() << " ("
-             << number.major << ":" << number.minor
-             << "), so it cannot be taken again and this device stays dead";
-
-  const auto echo = released_.find(number);
-  if (echo == released_.end()) {
-    // Nothing to strike off: `Release` cleared the count, or an unplug's
-    // "gone" used it.
-    return;
-  }
-  echo->second -= 1;
-  if (echo->second == 0) {
-    released_.erase(echo);
+  if (answered) {
+    std::move(answered).Run(agreed);
   }
 }
 

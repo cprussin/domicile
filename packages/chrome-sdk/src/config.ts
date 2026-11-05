@@ -35,8 +35,17 @@ export type Config = {
   theme?: ThemeConfig;
 };
 
+/** How movement speed affects pointer acceleration. */
+export type AccelProfile = "adaptive" | "flat";
+
 /** An sRGB color, written `"#rrggbb"`. */
 export type AccentColor = string;
+
+/** Buttons assigned to one-, two- and three-finger taps. */
+export type ButtonMap = "lrm" | "lmr";
+
+/** How a touchpad's physical button chooses a mouse button. */
+export type ClickMethod = "default" | "clickfinger" | "button_areas";
 
 /** How strongly clients set text and edges apart from their background. */
 export type Contrast = "normal" | "high";
@@ -46,6 +55,13 @@ export type Contrast = "normal" | "high";
  * for each.
  */
 export type CursorThemeName = string | PerModeCursorThemes;
+
+/** How typing suppression selects touchpads and handles contacts. */
+export type DisableWhileTyping =
+  | "enabled"
+  | "disabled"
+  | "internal"
+  | "libinput";
 
 /**
  * One display, described in the config rather than discovered.
@@ -208,6 +224,7 @@ export type IdleConfig = {
 /** Input-device settings. */
 export type InputConfig = {
   keyboard?: KeyboardConfig;
+  mouse?: MouseConfig;
   /**
    * Tablets and touchscreens, each bound to the display it covers.
    *
@@ -215,6 +232,7 @@ export type InputConfig = {
    * display. See `docs/DISPLAYS.md#tablets-and-touchscreens`.
    */
   pointers?: PointerConfig[];
+  touchpad?: TouchpadConfig;
 };
 
 /**
@@ -295,6 +313,19 @@ export type LockdownConfig = {
   disable_sound_output?: boolean;
 };
 
+/** Settings applied to every relative mouse on a tty. */
+export type MouseConfig = {
+  accel_profile?: AccelProfile;
+  /** Emulate a middle click by pressing left and right together. */
+  middle_emulation?: boolean;
+  /** Reverse the mouse wheel's scrolling direction. */
+  natural_scroll?: boolean;
+  /** Multiplier applied once to both scrolling axes; must be positive. */
+  scroll_factor?: number;
+  /** Pointer acceleration speed, from -1 to 1. */
+  speed?: number;
+};
+
 /** Output settings. */
 export type OutputConfig = {
   /**
@@ -353,6 +384,9 @@ export type Profile = {
    */
   name: string;
 };
+
+/** How a touchpad generates scrolling. */
+export type ScrollMethod = "default" | "two_finger" | "edge" | "on_button_down";
 
 /**
  * The commands a desk starts with.
@@ -422,6 +456,51 @@ export type ThemeConfig = {
  * portal; see the compositor's `portals::settings`.
  */
 export type ThemeMode = "dark" | "light";
+
+/** Settings applied to every touchpad on a tty, including newly attached ones. */
+export type TouchpadConfig = {
+  accel_profile?: AccelProfile;
+  /**
+   * Physical click behavior; `default` uses the device's libinput default.
+   * Clickfinger uses left, right and middle for one, two and three fingers.
+   */
+  click_method?: ClickMethod;
+  /**
+   * Typing suppression policy; `libinput` preserves native keyboard pairing and contacts.
+   * Custom `internal` excludes external pads; `enabled` includes every touchpad.
+   */
+  disable_while_typing?: DisableWhileTyping;
+  /** Keep a tap drag held when the fingers lift briefly. */
+  drag_lock?: boolean;
+  /** Emulate a middle click by pressing left and right together. */
+  middle_emulation?: boolean;
+  /** Move content in the direction the fingers move. */
+  natural_scroll?: boolean;
+  /** Increase scroll distance with gesture speed, up to four times. */
+  scroll_acceleration?: boolean;
+  /** Multiplier applied once to both scrolling axes; must be positive. */
+  scroll_factor?: number;
+  /** Scrolling gesture; `default` uses the device's libinput default. */
+  scroll_method?: ScrollMethod;
+  /** Pointer acceleration speed, from -1 to 1. */
+  speed?: number;
+  /** Tap to click. */
+  tap?: boolean;
+  /** Buttons for one-, two- and three-finger taps. */
+  tap_button_map?: ButtonMap;
+  /** Drag by tapping, then holding a second tap. */
+  tap_drag?: boolean;
+  /**
+   * Custom pause after one typing key; zero means no pause.
+   * Native `libinput` mode requires the default 200 and uses its own timers.
+   */
+  typing_pause_ms?: number;
+  /**
+   * Custom pause during continued typing; zero means no pause.
+   * Native `libinput` mode requires the default 500 and uses its own timers.
+   */
+  typing_repeat_pause_ms?: number;
+};
 
 /**
  * Which way up a monitor is, named for the matching `wl_output.transform`.

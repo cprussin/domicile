@@ -1135,6 +1135,12 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
+  void ConfigureInput(std::string config) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::ConfigureInputOnThread,
+                                  base::Unretained(this), std::move(config)));
+  }
+
   // Copies the records before posting, as ConfigureDisplays does.
   void ConfigureVirtualDisplays(const DomicileVirtualDisplay* displays,
                                 uint32_t count) {
@@ -1380,6 +1386,12 @@ struct DomicileEngine {
       std::vector<domicile::mojom::PointerTargetPtr> wanted) {
     if (broker_) {
       broker_->ConfigurePointers(std::move(wanted));
+    }
+  }
+
+  void ConfigureInputOnThread(const std::string& config) {
+    if (broker_) {
+      broker_->ConfigureInput(config);
     }
   }
 
@@ -1975,6 +1987,13 @@ void domicile_pointers_configure(DomicileEngine* engine,
   // count binds no device.
   if (engine && (targets || count == 0)) {
     engine->ConfigurePointers(targets, count);
+  }
+}
+
+void domicile_input_configure(DomicileEngine* engine, const char* config) {
+  CHECK(config) << "domicile: input configuration is null";
+  if (engine) {
+    engine->ConfigureInput(config);
   }
 }
 

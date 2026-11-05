@@ -111,7 +111,10 @@ class MODULES_EXPORT DomicileHost final
                       double dx,
                       double dy,
                       int32_t v120_x,
-                      int32_t v120_y) override;
+                      int32_t v120_y,
+                      ui::NativeScrollSource source,
+                      bool stop_x,
+                      bool stop_y) override;
 
   // Run a command on the machine running the desktop.
   //

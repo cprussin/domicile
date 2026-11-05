@@ -14,12 +14,17 @@
 
 mod desktop;
 mod files;
+mod input_devices;
 mod pointers;
 mod profile;
 mod startup;
 
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
+pub use input_devices::{
+    AccelProfile, ButtonMap, ClickMethod, DisableWhileTyping, MouseConfig, ScrollMethod,
+    TouchpadConfig,
+};
 pub use pointers::{PointerConfig, PointerTarget};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
 pub use startup::StartupConfig;
@@ -225,6 +230,8 @@ impl Keymap {
 #[serde(default, deny_unknown_fields)]
 pub struct InputConfig {
     pub keyboard: KeyboardConfig,
+    pub touchpad: TouchpadConfig,
+    pub mouse: MouseConfig,
     /// Tablets and touchscreens, each bound to the display it covers.
     ///
     /// Read on a tty only, on every hotplug. An unbound one covers no
@@ -241,6 +248,8 @@ impl InputConfig {
 
     fn validate(&self) -> Result<(), ConfigError> {
         self.keyboard.validate()?;
+        self.touchpad.validate()?;
+        self.mouse.validate()?;
         pointers::validate(&self.pointers)
     }
 }

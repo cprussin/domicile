@@ -71,6 +71,11 @@ impl DomicileCompositor {
         if restated.shell_config {
             self.rebind_the_keys();
         }
+        if restated.input_devices {
+            if let Some(session) = &self.engine {
+                session.configure_input(&self.config.current().input);
+            }
+        }
         if restated.pointers {
             self.bind_the_pointers();
         }

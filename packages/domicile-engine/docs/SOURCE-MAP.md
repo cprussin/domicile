@@ -41,6 +41,24 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | `components/domicile/engine/engine_capture_probe.cc` | captures the browser's window through the C ABI and reads the frames back |
 | `components/domicile/engine/engine_dmabuf_smoke.cc` | the same for a real dmabuf: allocate, import, submit twice, see the release |
 
+- `domicile_input_configure` sends the compositor's touchpad and mouse JSON
+  through `FrameSinkBroker::ConfigureInput` to Ozone. The DRM platform parses
+  it with `ui/events/ozone/evdev/domicile/input_settings.{h,cc}` and applies it
+  through `InputControllerEvdev`. Device attachment and logind reopen use the
+  retained settings. Nested platforms use their host compositor's settings.
+- `ui/events/ozone/evdev/domicile/libinput_seat.{h,cc}` owns one libinput
+  context and its event watch. Restricted opens duplicate only descriptors
+  authorized by the input opener. Keyboards and pointer devices share native
+  keyboard pairing and timer wakeups.
+- `ui/events/ozone/evdev/domicile/libinput_keyboard_event_converter.{h,cc}`
+  feeds libinput keycodes through Chromium's evdev key state, allow/block
+  filters and release handling. Its retained descriptor serves LED writes
+  and ioctls; libinput alone reads input events. Pointer converters inherit
+  this route for devices that also expose a keyboard.
+- `ui/ozone/platform/drm/domicile/drm_input_opens.{h,cc}` serializes logind
+  claims by device number. Canceled replies close and release their claim
+  before a replacement starts; cancellation also prevents retries and resumes.
+
 ## Spike code
 
 Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.

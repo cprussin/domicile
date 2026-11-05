@@ -250,6 +250,10 @@ void SetPointerTargets(std::vector<domicile::mojom::PointerTargetPtr> targets) {
       std::move(wanted));
 }
 
+void SetInputConfig(const std::string& config) {
+  ui::OzonePlatform::GetInstance()->SetDomicileInputConfig(config);
+}
+
 // Sets the producer's virtual displays. Lives here for SetDisplayLayout's
 // reason; every platform but DRM and a headless desk ignores it.
 void SetVirtualDisplays(
@@ -343,7 +347,8 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
                 base::BindRepeating(&GetSoftwareSharedImageInterface),
                 base::BindRepeating(&SetVirtualDisplays),
                 base::BindRepeating(&SetWhitePoint),
-                base::BindRepeating(&InjectInput)),
+                base::BindRepeating(&InjectInput),
+                base::BindRepeating(&SetInputConfig)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

@@ -1348,6 +1348,20 @@ impl Engine {
         unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
     }
 
+    /// Applies touchpad and relative mouse settings, replacing the previous ones.
+    pub fn configure_input(&self, input: &domicile_config::InputConfig) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, *const c_char)> = self
+            .symbol(b"domicile_input_configure\0", "domicile_input_configure")
+            .expect("the library was checked at load");
+        let settings = serde_json::json!({
+            "touchpad": input.touchpad,
+            "mouse": input.mouse,
+        });
+        let settings = CString::new(settings.to_string()).expect("JSON escapes NUL bytes");
+        // SAFETY: the handle is live and the engine copies the JSON before returning.
+        unsafe { f(self.handle, settings.as_ptr()) };
+    }
+
     /// Tells the browser which display each tablet or touchscreen covers.
     ///
     /// The list replaces the last one. A device it does not name covers no
@@ -1654,6 +1668,12 @@ fn join(
         path,
         b"domicile_engine_connect\0",
         "domicile_engine_connect",
+    )?;
+    let _: Symbol<unsafe extern "C" fn(*mut Handle, *const c_char)> = symbol(
+        library,
+        path,
+        b"domicile_input_configure\0",
+        "domicile_input_configure",
     )?;
     // SAFETY: the signature matches domicile_engine.h, the string is
     // nul-terminated, and `events` outlives the handle because the same

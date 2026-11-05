@@ -134,7 +134,10 @@ Details: [TTY-SESSION.md](../TTY-SESSION.md).
 - logind's ACLs cover the card but not keyboards or mice, so a plain `open()`
   of `/dev/input/event*` fails.
 - It uses Chromium's `dbus::Bus`, already in the engine. No libseat.
-- Touchpad and mouse go through libinput (patches `0027`, `0059`).
+- Keyboards, touchpads and relative pointers share a libinput seat, so
+  libinput can pair internal keyboards with touchpads for typing suppression.
+  The seat reads only descriptors authorized by logind. Keyboard events feed
+  Chromium's existing key filtering, repeat and layout path.
 - The chrome forwards `ClientRequest::Key` (an evdev code); the compositor
   injects it with `inject_key`.
 - The compositor sends its compiled keymap with the handshake (`keymap`), and

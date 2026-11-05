@@ -13,6 +13,19 @@ autoninja -C out/Domicile domicile_unittests ozone_unittests
 
 - `scripts/unit-tests.sh` and `scripts/drm-unit-tests.sh` hold the
   `--gtest_filter` lists and a minimum test count for each.
+- `InputSettingsTest`, `DrmInputControllerTest`, `TypingGuardTest` and
+  `ScrollAcceleratorTest` cover input parsing, retained settings, typing policy
+  and scroll scaling. `FrameSinkBrokerTest` covers the input configuration
+  message crossing Mojo.
+- `LibInputKeyboardPathTest` feeds native keycodes through evdev filtering,
+  duplicate suppression and release handling. `test-libinput-devices-share-a-seat.sh`
+  guards the shared seat and descriptor cancellation route. Real keyboard
+  pairing, physical clicks during typing and suppressed contact lifetimes
+  require the DRM input checks in a disposable VM or on hardware.
+- `DrmInputOpensTest` uses deferred logind replies and real descriptors to
+  cover per-device serialization, canceled claims, queued replacements,
+  release failures, delayed release echoes, native retries and stale resume
+  names.
 - A filter that matches nothing exits 0, so the minimum count is what catches a
   missing suite. Add a new suite to the filter and raise the count.
 

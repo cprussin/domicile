@@ -4,7 +4,11 @@
 #include "ui/events/ozone/evdev/domicile/scroll_accelerator.h"
 
 #include <algorithm>
+#include <limits>
 #include <optional>
+
+#include "ui/events/ozone/evdev/domicile/scroll_factor.h"
+#include "ui/gfx/geometry/vector2d.h"
 
 namespace ui {
 
@@ -40,23 +44,57 @@ float Gain(const gfx::Vector2dF& delta,
 
 }  // namespace
 
-gfx::Vector2d ScrollAccelerator::Scroll(const gfx::Vector2dF& delta,
-                                        base::TimeTicks time) {
+void ScrollAccelerator::Configure(bool acceleration, double factor) {
+  if (acceleration_ != acceleration || factor_ != factor) {
+    acceleration_ = acceleration;
+    factor_ = factor;
+    Stop(true, true);
+  }
+}
+
+gfx::Vector2dF ScrollAccelerator::Scroll(const gfx::Vector2dF& delta,
+                                         base::TimeTicks time) {
   if (delta.IsZero()) {
-    last_.reset();
-    remainder_ = gfx::Vector2dF();
-    return gfx::Vector2d();
+    Stop(true, true);
+    return gfx::Vector2dF();
   }
 
-  remainder_ += gfx::ScaleVector2d(delta, Gain(delta, last_, time));
+  active_x_ = active_x_ || delta.x() != 0;
+  active_y_ = active_y_ || delta.y() != 0;
+  if (!acceleration_) {
+    return gfx::Vector2dF(ScaleScrollAxis(delta.x(), factor_),
+                          ScaleScrollAxis(delta.y(), factor_));
+  }
+  const double gain = Gain(delta, last_, time);
+  // Keep whole-pixel acceleration and saturate before the integer conversion,
+  // including when a finite user factor overflows multiplication.
+  const double x =
+      std::clamp(remainder_x_ + delta.x() * gain * factor_,
+                 static_cast<double>(std::numeric_limits<int>::min()),
+                 static_cast<double>(std::numeric_limits<int>::max()));
+  const double y =
+      std::clamp(remainder_y_ + delta.y() * gain * factor_,
+                 static_cast<double>(std::numeric_limits<int>::min()),
+                 static_cast<double>(std::numeric_limits<int>::max()));
   last_ = time;
+  const gfx::Vector2d whole(static_cast<int>(x), static_cast<int>(y));
+  remainder_x_ = x - whole.x();
+  remainder_y_ = y - whole.y();
+  return gfx::Vector2dF(whole);
+}
 
-  // Truncate toward zero; the fraction carries to the next event.
-  const gfx::Vector2d whole(static_cast<int>(remainder_.x()),
-                            static_cast<int>(remainder_.y()));
-  remainder_ -= gfx::Vector2dF(static_cast<float>(whole.x()),
-                               static_cast<float>(whole.y()));
-  return whole;
+void ScrollAccelerator::Stop(bool horizontal, bool vertical) {
+  if (horizontal) {
+    remainder_x_ = 0;
+    active_x_ = false;
+  }
+  if (vertical) {
+    remainder_y_ = 0;
+    active_y_ = false;
+  }
+  if (!active_x_ && !active_y_) {
+    last_.reset();
+  }
 }
 
 }  // namespace ui

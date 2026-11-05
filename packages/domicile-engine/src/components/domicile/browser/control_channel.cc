@@ -658,12 +658,31 @@ void ControlChannel::PointerAxis(const std::string& app_id,
                                  double dx,
                                  double dy,
                                  int32_t v120_x,
-                                 int32_t v120_y) {
+                                 int32_t v120_y,
+                                 mojom::PointerAxisSource source,
+                                 bool stop_x,
+                                 bool stop_y) {
   base::DictValue message = ForApp("pointer_axis", app_id);
   message.Set("dx", dx);
   message.Set("dy", dy);
   message.Set("v120_x", v120_x);
   message.Set("v120_y", v120_y);
+  switch (source) {
+    case mojom::PointerAxisSource::kWheel:
+      message.Set("source", "wheel");
+      break;
+    case mojom::PointerAxisSource::kFinger:
+      message.Set("source", "finger");
+      break;
+    case mojom::PointerAxisSource::kWheelTilt:
+      message.Set("source", "wheel_tilt");
+      break;
+    case mojom::PointerAxisSource::kContinuous:
+      message.Set("source", "continuous");
+      break;
+  }
+  message.Set("stop_x", stop_x);
+  message.Set("stop_y", stop_y);
   SendMessage(std::move(message));
 }
 

@@ -75,6 +75,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // Delivers emulated input to the desk. Injected for the same reason. Empty
   // when the engine reads no input of its own; the input is then dropped.
   using InputInjector = base::RepeatingCallback<void(const mojom::DeskInput&)>;
+  using InputConfigSetter = base::RepeatingCallback<void(const std::string&)>;
   // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
   // Injected for the same reason. Empty when the embedder runs inside another
   // session; the contents are then dropped.
@@ -115,7 +116,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
           SharedImageInterfaceGetter(),
       VirtualDisplaysSetter set_virtual_displays = VirtualDisplaysSetter(),
       WhitePointSetter set_white_point = WhitePointSetter(),
-      InputInjector inject_input = InputInjector());
+      InputInjector inject_input = InputInjector(),
+      InputConfigSetter set_input_config = InputConfigSetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -213,6 +215,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       std::vector<mojom::DisplayLayoutPtr> layout) override;
   void ConfigurePointers(
       std::vector<mojom::PointerTargetPtr> targets) override;
+  void ConfigureInput(const std::string& config) override;
   void ConfigureVirtualDisplays(
       std::vector<mojom::VirtualDisplayPtr> displays) override;
   void SetWhitePoint(float red, float green, float blue) override;
@@ -301,6 +304,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const WhitePointSetter set_white_point_;
   // See InputInjector.
   const InputInjector inject_input_;
+  const InputConfigSetter set_input_config_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
   base::RepeatingClosure producer_gone_;

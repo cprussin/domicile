@@ -5,6 +5,7 @@ module domicile.mojom;
 
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
+enum PointerAxisSource { kWheel, kFinger, kContinuous, kWheelTilt };
 
 // The shell's control channel to the compositor, as a renderer-to-browser
 // interface rather than a socket the page opens.
@@ -431,7 +432,8 @@ interface ControlChannel {
   PointerMotion(string app_id, double x, double y, bool moved);
   PointerLeave(string app_id);
   PointerButton(string app_id, uint32 button, bool pressed);
-  PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y);
+  PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y,
+              PointerAxisSource source, bool stop_x, bool stop_y);
 };
 
 // Compositor -> browser -> page. One method, not a callback on Spawn: these

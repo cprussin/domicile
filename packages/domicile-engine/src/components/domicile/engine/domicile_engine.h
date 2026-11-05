@@ -625,6 +625,12 @@ DOMICILE_ENGINE_EXPORT void domicile_pointers_configure(
     const DomicilePointerTarget* targets,
     uint32_t count);
 
+// Replaces touchpad and mouse settings with a JSON object containing their
+// configuration sections. The string is borrowed for the call. Ignored when
+// nested, where the host compositor configures input devices.
+DOMICILE_ENGINE_EXPORT void domicile_input_configure(DomicileEngine* engine,
+                                                     const char* config);
+
 // Sets the virtual displays, replacing the last list.
 //
 // Each joins the next `displays` callback as a display on connector

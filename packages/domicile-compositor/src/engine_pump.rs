@@ -418,6 +418,10 @@ impl DomicileCompositor {
         );
         match &rejoined.dialed {
             Ok(()) => {
+                self.engine
+                    .as_ref()
+                    .expect("the engine was rejoined")
+                    .configure_input(&self.config.current().input);
                 thread_priority::raise_the_engine_thread();
                 self.watch_the_engines_fd();
                 // The new engine numbers its boxes afresh, and shows none of

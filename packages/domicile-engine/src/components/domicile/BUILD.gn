@@ -1091,6 +1091,7 @@ source_set("unit_tests") {
     "common/forwarded_keys_unittest.cc",
     "common/held_chords_unittest.cc",
     "common/locale_fallback_unittest.cc",
+    "common/scroll_metadata_unittest.cc",
     "common/synced_frame_unittest.cc",
     "common/theme_unittest.cc",
     "spike/window_diff_unittest.cc",
@@ -1199,7 +1200,9 @@ source_set("unit_tests") {
     # DomKey it decodes to, the KeyboardCode beside them, and the xkbcommon
     # declarations `xkb_keyboard_layout_engine.h` includes through
     # `scoped_xkb.h`. //ui/events/ozone/layout:unittests names the same set.
+    "//third_party/blink/public/common",
     "//ui/events",
+    "//ui/events/blink",
     "//ui/events:dom_keycode_converter",
     "//ui/events:event_constants",
     "//ui/events/keycodes:xkb",

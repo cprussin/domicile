@@ -16,6 +16,7 @@ describe("parseRootSchema", () => {
         ...ROOT,
         properties: {
           size: {
+            exclusiveMinimum: 0,
             format: "uint16",
             maximum: 65_535,
             minimum: 0,

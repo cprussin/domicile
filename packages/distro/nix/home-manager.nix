@@ -701,6 +701,112 @@ in {
             };
           };
 
+          input.touchpad = {
+            tap = lib.mkOption {
+              description = "Tap to click.";
+              type = lib.types.bool;
+              default = true;
+            };
+            tap_button_map = lib.mkOption {
+              description = "Buttons for one-, two- and three-finger taps.";
+              type = lib.types.enum ["lrm" "lmr"];
+              default = "lrm";
+            };
+            tap_drag = lib.mkOption {
+              description = "Drag by tapping, then holding a second tap.";
+              type = lib.types.bool;
+              default = true;
+            };
+            drag_lock = lib.mkOption {
+              description = "Keep a tap drag held when the fingers lift briefly.";
+              type = lib.types.bool;
+              default = false;
+            };
+            natural_scroll = lib.mkOption {
+              description = "Move content in the direction the fingers move.";
+              type = lib.types.bool;
+              default = false;
+            };
+            accel_profile = lib.mkOption {
+              description = "How movement speed affects pointer acceleration.";
+              type = lib.types.enum ["adaptive" "flat"];
+              default = "adaptive";
+            };
+            speed = lib.mkOption {
+              description = "Pointer acceleration speed, from -1 to 1.";
+              type = lib.types.addCheck lib.types.number (value: value >= -1 && value <= 1);
+              default = 0;
+            };
+            click_method = lib.mkOption {
+              description = "Physical click behavior; `default` uses the device's libinput default, and clickfinger maps one, two and three fingers to left, right and middle.";
+              type = lib.types.enum ["default" "clickfinger" "button_areas"];
+              default = "default";
+            };
+            middle_emulation = lib.mkOption {
+              description = "Emulate a middle click by pressing left and right together.";
+              type = lib.types.bool;
+              default = false;
+            };
+            scroll_method = lib.mkOption {
+              description = "Scrolling gesture; `default` uses the device's libinput default.";
+              type = lib.types.enum ["default" "two_finger" "edge" "on_button_down"];
+              default = "default";
+            };
+            scroll_factor = lib.mkOption {
+              description = "Multiplier applied once to both scrolling axes.";
+              type = lib.types.numbers.positive;
+              default = 1;
+            };
+            scroll_acceleration = lib.mkOption {
+              description = "Increase scroll distance with gesture speed, up to four times.";
+              type = lib.types.bool;
+              default = true;
+            };
+            disable_while_typing = lib.mkOption {
+              description = "Typing suppression policy; `libinput` uses native keyboard pairing and contacts, while custom `internal` excludes external pads.";
+              type = lib.types.enum ["enabled" "disabled" "internal" "libinput"];
+              default = "enabled";
+            };
+            typing_pause_ms = lib.mkOption {
+              description = "Custom pause after one typing key in milliseconds; zero means no pause, and `libinput` mode requires 200.";
+              type = lib.types.ints.between 0 2147483647;
+              default = 200;
+            };
+            typing_repeat_pause_ms = lib.mkOption {
+              description = "Custom pause during continued typing in milliseconds; zero means no pause, and `libinput` mode requires 500.";
+              type = lib.types.ints.between 0 2147483647;
+              default = 500;
+            };
+          };
+
+          input.mouse = {
+            accel_profile = lib.mkOption {
+              description = "How movement speed affects pointer acceleration.";
+              type = lib.types.enum ["adaptive" "flat"];
+              default = "adaptive";
+            };
+            speed = lib.mkOption {
+              description = "Pointer acceleration speed, from -1 to 1.";
+              type = lib.types.addCheck lib.types.number (value: value >= -1 && value <= 1);
+              default = 0;
+            };
+            natural_scroll = lib.mkOption {
+              description = "Reverse the mouse wheel's scrolling direction.";
+              type = lib.types.bool;
+              default = false;
+            };
+            middle_emulation = lib.mkOption {
+              description = "Emulate a middle click by pressing left and right together.";
+              type = lib.types.bool;
+              default = false;
+            };
+            scroll_factor = lib.mkOption {
+              description = "Multiplier applied once to both scrolling axes.";
+              type = lib.types.numbers.positive;
+              default = 1;
+            };
+          };
+
           input.pointers = lib.mkOption {
             description = ''
               Tablets and touchscreens on a tty, each bound to the monitor it

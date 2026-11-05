@@ -20,8 +20,9 @@ MODULE="$ROOT/packages/distro/nix/home-manager.nix"
 LIB="$ROOT/packages/domicile-config/src/lib.rs"
 PROFILE="$ROOT/packages/domicile-config/src/profile.rs"
 POINTERS="$ROOT/packages/domicile-config/src/pointers.rs"
+INPUT_DEVICES="$ROOT/packages/domicile-config/src/input_devices.rs"
 
-for f in "$MODULE" "$LIB" "$PROFILE" "$POINTERS"; do
+for f in "$MODULE" "$LIB" "$PROFILE" "$POINTERS" "$INPUT_DEVICES"; do
   [ -f "$f" ] || { echo "no $f" >&2; exit 1; }
 done
 
@@ -100,21 +101,23 @@ compare() { # what, rust file, rust struct, nix open pattern, nix indent
 # `input.keyboard` and `output` are plain attrsets, so their options are one
 # level in. The submodules in the `let` hold theirs in an
 # `options = {`, one level deeper.
-compare "extensions" "$LIB" ExtensionsConfig '^          extensions = \{$' '            '
-compare "idle" "$LIB" IdleConfig '^          idle = \{$' '            '
-compare "lock" "$LIB" LockConfig '^          lock = \{$' '            '
-compare "lockdown" "$LIB" LockdownConfig '^          lockdown = \{$' '            '
-compare "input.keyboard" "$LIB" KeyboardConfig '^          input\.keyboard = \{$' '            '
-compare "input.keyboard.keymaps[]" "$LIB" Keymap '^  keymap = lib\.types\.submodule \{$' '      '
-compare "input.pointers[]" "$POINTERS" PointerConfig '^  pointer = lib\.types\.submodule \{$' '      '
-compare "output" "$LIB" OutputConfig '^          output = \{$' '            '
-compare "output.displays[]" "$LIB" DisplayConfig '^  display = lib\.types\.submodule \{$' '      '
-compare "output.profiles[]" "$PROFILE" Profile '^  profile = lib\.types\.submodule \{$' '      '
-compare "output.profiles[].displays[]" "$PROFILE" DisplayPlacement '^  placement = lib\.types\.submodule \{$' '      '
+compare "extensions" "$LIB" ExtensionsConfig '^          extensions = [{]$' '            '
+compare "idle" "$LIB" IdleConfig '^          idle = [{]$' '            '
+compare "lock" "$LIB" LockConfig '^          lock = [{]$' '            '
+compare "lockdown" "$LIB" LockdownConfig '^          lockdown = [{]$' '            '
+compare "input.keyboard" "$LIB" KeyboardConfig '^          input[.]keyboard = [{]$' '            '
+compare "input.keyboard.keymaps[]" "$LIB" Keymap '^  keymap = lib[.]types[.]submodule [{]$' '      '
+compare "input.touchpad" "$INPUT_DEVICES" TouchpadConfig '^          input[.]touchpad = [{]$' '            '
+compare "input.mouse" "$INPUT_DEVICES" MouseConfig '^          input[.]mouse = [{]$' '            '
+compare "input.pointers[]" "$POINTERS" PointerConfig '^  pointer = lib[.]types[.]submodule [{]$' '      '
+compare "output" "$LIB" OutputConfig '^          output = [{]$' '            '
+compare "output.displays[]" "$LIB" DisplayConfig '^  display = lib[.]types[.]submodule [{]$' '      '
+compare "output.profiles[]" "$PROFILE" Profile '^  profile = lib[.]types[.]submodule [{]$' '      '
+compare "output.profiles[].displays[]" "$PROFILE" DisplayPlacement '^  placement = lib[.]types[.]submodule [{]$' '      '
 
 # The schema has no `compositor` section. A module that declares one would
 # write a section `Config` rejects, failing every desk at startup.
-if grep -q '^          compositor\.' "$MODULE"; then
+if grep -q '^          compositor[.]' "$MODULE"; then
   printf '  FAIL  compositor: the module declares a section the schema dropped\n'
   FAILED=$((FAILED + 1))
 else

@@ -1005,9 +1005,28 @@ void DomicileHost::AppPointerAxis(const String& app_id,
                                   double dx,
                                   double dy,
                                   int32_t v120_x,
-                                  int32_t v120_y) {
+                                  int32_t v120_y,
+                                  ui::NativeScrollSource source,
+                                  bool stop_x,
+                                  bool stop_y) {
   if (EnsureBound()) {
-    channel_->PointerAxis(app_id, dx, dy, v120_x, v120_y);
+    domicile::mojom::blink::PointerAxisSource wire_source;
+    switch (source) {
+      case ui::NativeScrollSource::kWheel:
+        wire_source = domicile::mojom::blink::PointerAxisSource::kWheel;
+        break;
+      case ui::NativeScrollSource::kFinger:
+        wire_source = domicile::mojom::blink::PointerAxisSource::kFinger;
+        break;
+      case ui::NativeScrollSource::kWheelTilt:
+        wire_source = domicile::mojom::blink::PointerAxisSource::kWheelTilt;
+        break;
+      case ui::NativeScrollSource::kContinuous:
+        wire_source = domicile::mojom::blink::PointerAxisSource::kContinuous;
+        break;
+    }
+    channel_->PointerAxis(app_id, dx, dy, v120_x, v120_y, wire_source, stop_x,
+                          stop_y);
   }
 }
 

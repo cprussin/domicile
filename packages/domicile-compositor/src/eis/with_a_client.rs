@@ -189,6 +189,9 @@ fn emulated_input_becomes_what_the_lock_refuses() {
             dy: 15.0,
             v120_x: 0,
             v120_y: 120,
+            source: domicile_protocol::PointerAxisSource::Wheel,
+            stop_x: false,
+            stop_y: false,
         },
         ClientRequest::PointerMotion {
             app_id: "1".into(),
@@ -420,6 +423,18 @@ fn a_capture_takes_the_input_that_crosses_a_barrier_until_released() {
     assert_eq!(served.heard(&got), Got::Emulating(1));
     assert_eq!(served.heard(&got), Got::Motion(-9.0, -10.0));
     assert_eq!(served.heard(&got), Got::Key(30, true));
+
+    assert!(served.diverted(ClientRequest::PointerAxis {
+        dx: 0.0,
+        dy: 2.5,
+        v120_x: 0,
+        v120_y: 0,
+        source: domicile_protocol::PointerAxisSource::Finger,
+        stop_x: true,
+        stop_y: false,
+    }));
+    assert_eq!(served.heard(&got), Got::Scroll(0.0, 2.5));
+    assert_eq!(served.heard(&got), Got::ScrollStop(true, false));
 
     capture.release();
     assert!(!served.diverted(ClientRequest::Key {

@@ -219,6 +219,8 @@ pub enum Got {
     /// Its devices started emulating, under this sequence.
     Emulating(u32),
     Motion(f32, f32),
+    Scroll(f32, f32),
+    ScrollStop(bool, bool),
     Key(u32, bool),
 }
 
@@ -250,6 +252,8 @@ pub fn a_receiver(socket: OwnedFd) -> Receiver<Got> {
                     Some(Got::Emulating(started.sequence))
                 }
                 EiEvent::PointerMotion(motion) => Some(Got::Motion(motion.dx, motion.dy)),
+                EiEvent::ScrollDelta(scroll) => Some(Got::Scroll(scroll.dx, scroll.dy)),
+                EiEvent::ScrollStop(stop) => Some(Got::ScrollStop(stop.x, stop.y)),
                 EiEvent::KeyboardKey(key) => Some(Got::Key(
                     key.key,
                     key.state == ei::keyboard::KeyState::Press,

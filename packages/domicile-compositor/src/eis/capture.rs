@@ -106,6 +106,9 @@ impl Capture {
                     dy,
                     v120_x,
                     v120_y,
+                    stop_x,
+                    stop_y,
+                    ..
                 },
             ) => {
                 send(devices, Kind::Pointer, connection, |device| {
@@ -114,6 +117,9 @@ impl Capture {
                             scroll.scroll_discrete(*v120_x, *v120_y);
                         } else {
                             scroll.scroll(*dx as f32, *dy as f32);
+                        }
+                        if *stop_x || *stop_y {
+                            scroll.scroll_stop(u32::from(*stop_x), u32::from(*stop_y), 0);
                         }
                     }
                 });

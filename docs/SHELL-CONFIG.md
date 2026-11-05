@@ -1,7 +1,7 @@
 # The config file
 
 One JSON file (or a module that builds it) describes a desktop: displays,
-keyboard, idle, lock, lockdown, theme and extensions. The compositor reads it at startup
+input devices, idle, lock, lockdown, theme and extensions. The compositor reads it at startup
 and reloads it on every change. The schema is the `domicile-config` crate's.
 
 For what a shell does with these settings, see
@@ -131,6 +131,7 @@ An edit applies to the running desktop, and windows stay open:
 | Section | Effect of an edit |
 |---|---|
 | `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)). The desktop stays on the active keymap if `keymaps` still names it, else goes to the first |
+| `input.touchpad`, `input.mouse` | Settings applied to attached devices and retained for later attachments |
 | `input.pointers` | Tablets, touchscreens and absolute mice rebound |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
@@ -208,6 +209,72 @@ To switch between layouts, list them in `keymaps` instead:
   switches with
   `keyboard.selectKeymap()` ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). Both
   work while locked.
+
+## Touchpads and mice
+
+`input.touchpad` and `input.mouse` configure devices on a tty. The mouse section
+covers relative mice and pointing sticks. A nested desktop uses its host
+compositor's settings. Each section applies to every device of
+that kind, including Bluetooth reconnections and devices reopened after a
+console switch. Edits apply without an engine restart; removing a setting
+restores its default.
+
+```json
+{
+  "input": {
+    "touchpad": {
+      "natural_scroll": true,
+      "click_method": "clickfinger",
+      "scroll_method": "two_finger",
+      "scroll_acceleration": false,
+      "disable_while_typing": "libinput"
+    },
+    "mouse": { "accel_profile": "flat" }
+  }
+}
+```
+
+| Key | Values | Default |
+|---|---|---|
+| `touchpad.tap` | Tap to click | `true` |
+| `touchpad.tap_button_map` | `"lrm"`, `"lmr"`: buttons for one-, two- and three-finger taps | `"lrm"` |
+| `touchpad.tap_drag` | Tap, then hold a second tap to drag | `true` |
+| `touchpad.drag_lock` | Hold a tap drag across a brief finger lift | `false` |
+| `touchpad.natural_scroll`, `mouse.natural_scroll` | Reverse scroll direction | `false` |
+| `touchpad.accel_profile`, `mouse.accel_profile` | `"adaptive"`, `"flat"` | `"adaptive"` |
+| `touchpad.speed`, `mouse.speed` | Pointer acceleration speed, from `-1` to `1` | `0` |
+| `touchpad.click_method` | `"default"`, `"clickfinger"`, `"button_areas"` | `"default"` |
+| `touchpad.middle_emulation`, `mouse.middle_emulation` | Left and right together produce a middle click | `false` |
+| `touchpad.scroll_method` | `"default"`, `"two_finger"`, `"edge"`, `"on_button_down"` | `"default"` |
+| `touchpad.scroll_factor`, `mouse.scroll_factor` | Positive scroll-distance multiplier, applied once to both axes | `1` |
+| `touchpad.scroll_acceleration` | Increase scroll distance with gesture speed, up to four times | `true` |
+| `touchpad.disable_while_typing` | `"enabled"`, `"disabled"`, `"internal"`, `"libinput"` | `"enabled"` |
+| `touchpad.typing_pause_ms` | Pause after one typing key, from `0` to `2147483647` milliseconds | `200` |
+| `touchpad.typing_repeat_pause_ms` | Pause during continued typing, in the same range | `500` |
+
+- `default` selects libinput's default for each device. Clickfinger assigns
+  left, right and middle to one-, two- and three-finger physical clicks.
+- A device applies the settings it supports. Unsupported capabilities are
+  reported in the engine log.
+- `scroll_acceleration: false` with `scroll_factor: 1` preserves libinput's
+  scrolling distance, as in Sway. The multiplier is independent of pointer
+  speed and acceleration.
+- `disable_while_typing: "libinput"` uses libinput's native keyboard pairing,
+  contact tracking and physical button handling, as in Sway. It applies to
+  touchpads with native typing suppression; external pads such as a Magic
+  Trackpad normally remain available. The two pause fields must keep their
+  defaults, `200` and `500`, because libinput owns its timers.
+- The custom `enabled` and `internal` modes use configurable pauses. `enabled`
+  covers every touchpad; `internal` excludes external pads. Any keyboard can
+  trigger them. Each pause can be zero. Another typing key within 200 ms or
+  during an active pause uses `typing_repeat_pause_ms`.
+- Changing touchpad or mouse settings clears custom pauses and typing history.
+  Native libinput contact state survives reload; a suppressed contact can stay
+  suppressed until it lifts. See
+  [Disable while typing](RUNNING-A-DESKTOP.md#disable-while-typing) for typing
+  shortcuts and held drags in the custom modes.
+- `domicile disable-while-typing` overrides the enabled state until a touchpad
+  or mouse settings edit, or an engine restart, restores the config.
 
 ## Tablets and touchscreens
 

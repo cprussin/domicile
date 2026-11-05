@@ -22,6 +22,19 @@ fn host_round_trip(msg: &HostMessage) {
 }
 
 #[test]
+fn scroll_source_and_axis_stops_survive_the_wire() {
+    for source in ["wheel", "finger", "continuous", "wheel_tilt"] {
+        let wire = serde_json::json!({
+            "type": "pointer_axis", "app_id": "term", "dx": 0.0, "dy": 4.5,
+            "v120_x": 0, "v120_y": 0, "source": source,
+            "stop_x": true, "stop_y": false,
+        });
+        let message: ChromeMessage = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(message).unwrap(), wire);
+    }
+}
+
+#[test]
 fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
@@ -85,6 +98,9 @@ fn chrome_messages_round_trip() {
         dy: -15.0,
         v120_x: 0,
         v120_y: -120,
+        source: domicile_protocol::PointerAxisSource::Wheel,
+        stop_x: false,
+        stop_y: false,
     });
     chrome_round_trip(&ChromeMessage::Key {
         app_id: "term".into(),

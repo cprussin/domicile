@@ -53,7 +53,8 @@ FrameSinkBroker::FrameSinkBroker(
     SharedImageInterfaceGetter get_software_shared_image_interface,
     VirtualDisplaysSetter set_virtual_displays,
     WhitePointSetter set_white_point,
-    InputInjector inject_input)
+    InputInjector inject_input,
+    InputConfigSetter set_input_config)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -67,7 +68,8 @@ FrameSinkBroker::FrameSinkBroker(
       set_pointer_targets_(std::move(set_pointer_targets)),
       set_virtual_displays_(std::move(set_virtual_displays)),
       set_white_point_(std::move(set_white_point)),
-      inject_input_(std::move(inject_input)) {
+      inject_input_(std::move(inject_input)),
+      set_input_config_(std::move(set_input_config)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -261,6 +263,12 @@ void FrameSinkBroker::ConfigurePointers(
     return;
   }
   set_pointer_targets_.Run(std::move(targets));
+}
+
+void FrameSinkBroker::ConfigureInput(const std::string& config) {
+  if (set_input_config_) {
+    set_input_config_.Run(config);
+  }
 }
 
 void FrameSinkBroker::ConfigureVirtualDisplays(

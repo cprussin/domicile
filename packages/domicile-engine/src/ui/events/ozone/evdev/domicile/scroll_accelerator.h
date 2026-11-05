@@ -8,7 +8,6 @@
 
 #include "base/component_export.h"
 #include "base/time/time.h"
-#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
 namespace ui {
@@ -23,14 +22,20 @@ namespace ui {
 // flick's speed never carries into the next.
 class COMPONENT_EXPORT(EVDEV) ScrollAccelerator {
  public:
-  // Returns the whole units to dispatch for libinput's `delta`, in Chromium's
-  // sign. Carries the fraction to the next event, because a slow finger moves
-  // less than a unit per event.
-  gfx::Vector2d Scroll(const gfx::Vector2dF& delta, base::TimeTicks time);
+  void Configure(bool acceleration, double factor);
+  // Linear scrolling preserves subpixel distance. Accelerated scrolling carries
+  // fractional units to the next event, preserving its whole-pixel behavior.
+  gfx::Vector2dF Scroll(const gfx::Vector2dF& delta, base::TimeTicks time);
+  void Stop(bool horizontal, bool vertical);
 
  private:
+  bool acceleration_ = true;
+  double factor_ = 1;
   std::optional<base::TimeTicks> last_;
-  gfx::Vector2dF remainder_;
+  double remainder_x_ = 0;
+  double remainder_y_ = 0;
+  bool active_x_ = false;
+  bool active_y_ = false;
 };
 
 }  // namespace ui

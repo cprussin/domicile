@@ -9,6 +9,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/numerics/safe_conversions.h"
 #include "cc/layers/deadline_policy.h"
 #include "components/domicile/common/synced_frame.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -74,7 +75,7 @@ double Rescale(double delta, double target, double per_detent) {
 // JavaScript's Math.round, which halves upward, rather than std::lround,
 // which halves away from zero: the value a scroll of -2.5 steps was sent as.
 int32_t RoundHalfUp(double value) {
-  return static_cast<int32_t>(std::floor(value + 0.5));
+  return base::ClampFloor<int32_t>(value + 0.5);
 }
 
 }  // namespace
@@ -379,12 +380,23 @@ void HTMLAppElement::ForwardInput(AppInputClient& client,
   if (type == event_type_names::kWheel) {
     if (const auto* wheel = DynamicTo<WheelEvent>(event)) {
       const double per_detent = PerDetent(wheel->deltaMode());
+      const auto& native = wheel->NativeEvent();
+      const bool is_wheel =
+          native.native_scroll_source == ui::NativeScrollSource::kWheel ||
+          native.native_scroll_source == ui::NativeScrollSource::kWheelTilt;
       client.AppPointerAxis(
-          app_id, Rescale(wheel->deltaX(), kPixelsPerDetent, per_detent),
-          Rescale(wheel->deltaY(), kPixelsPerDetent, per_detent),
-          RoundHalfUp(Rescale(wheel->deltaX(), kValue120PerDetent, per_detent)),
-          RoundHalfUp(
-              Rescale(wheel->deltaY(), kValue120PerDetent, per_detent)));
+          app_id,
+          native.has_native_axis_distance
+              ? -native.native_axis_distance_x
+              : Rescale(wheel->deltaX(), kPixelsPerDetent, per_detent),
+          native.has_native_axis_distance
+              ? -native.native_axis_distance_y
+              : Rescale(wheel->deltaY(), kPixelsPerDetent, per_detent),
+          is_wheel ? RoundHalfUp(-native.wheel_ticks_x * kValue120PerDetent)
+                   : 0,
+          is_wheel ? RoundHalfUp(-native.wheel_ticks_y * kValue120PerDetent)
+                   : 0,
+          native.native_scroll_source, native.axis_stop_x, native.axis_stop_y);
     }
     return;
   }

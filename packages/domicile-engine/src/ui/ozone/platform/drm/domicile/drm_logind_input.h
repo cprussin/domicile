@@ -14,6 +14,7 @@
 #include "ui/events/ozone/evdev/input_device_opener.h"
 #include "ui/events/ozone/evdev/input_device_opener_evdev.h"
 #include "ui/ozone/platform/drm/domicile/drm_input_devices.h"
+#include "ui/ozone/platform/drm/domicile/drm_input_opens.h"
 #include "ui/ozone/platform/drm/domicile/drm_logind_session.h"
 
 namespace ui {
@@ -56,28 +57,6 @@ class DrmLogindInput : public InputDeviceOpenerEvdev,
   void OpenDeviceFd(const OpenInputDeviceParams& params,
                     OpenedDeviceFd opened) override;
 
-  // Gives the device back if held and asks logind for it. `attempt` counts
-  // the takes answered revoked while the session said it was active.
-  void Take(DeviceNumber number,
-            int id,
-            const base::FilePath& path,
-            int attempt,
-            OpenedDeviceFd opened);
-  void OnTaken(DeviceNumber number,
-               int id,
-               const base::FilePath& path,
-               int attempt,
-               OpenedDeviceFd opened,
-               std::optional<TakenDevice> taken);
-  // Handles a take answered revoked, once logind says whether the session is
-  // active.
-  void OnTakenRevoked(DeviceNumber number,
-                      int id,
-                      const base::FilePath& path,
-                      int attempt,
-                      OpenedDeviceFd opened,
-                      bool active);
-
   void OnSessionActive(bool active);
 
   // Runs the factory's reopen callback. An indirection because `devices_` is
@@ -89,6 +68,7 @@ class DrmLogindInput : public InputDeviceOpenerEvdev,
   const raw_ptr<DrmLogindSession> session_;
 
   DrmTakenDevices devices_;
+  DrmInputOpens opens_;
 
   base::WeakPtrFactory<DrmLogindInput> weak_factory_{this};
 };

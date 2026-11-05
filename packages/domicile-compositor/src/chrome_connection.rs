@@ -444,6 +444,9 @@ fn read_chrome_messages(
                 dy,
                 v120_x,
                 v120_y,
+                source,
+                stop_x,
+                stop_y,
                 ..
             }) => {
                 hub.send_request(ClientRequest::PointerAxis {
@@ -451,6 +454,9 @@ fn read_chrome_messages(
                     dy,
                     v120_x,
                     v120_y,
+                    source,
+                    stop_x,
+                    stop_y,
                 });
                 Vec::new()
             }

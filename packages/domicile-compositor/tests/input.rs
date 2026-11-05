@@ -159,6 +159,142 @@ fn a_key_and_a_click_the_chrome_forwarded_reach_the_client() {
     }
 }
 
+/// Finger scrolling keeps its source, independent axis stops and frame order.
+#[test]
+fn a_finger_scroll_reaches_the_client_without_wheel_steps() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+
+    for (dx, dy, stop_x, stop_y) in [
+        (2.5, 4.5, false, false),
+        (0.0, 1.5, true, false),
+        (0.0, 0.0, false, true),
+    ] {
+        let message = serde_json::from_value(serde_json::json!({
+            "type": "pointer_axis", "app_id": app, "source": "finger",
+            "dx": dx, "dy": dy, "v120_x": 0, "v120_y": 0,
+            "stop_x": stop_x, "stop_y": stop_y,
+        }))
+        .unwrap();
+        chrome
+            .say(&message)
+            .expect("the chrome socket takes a scroll");
+    }
+    chrome
+        .say(&ChromeMessage::Key {
+            app_id: app,
+            keycode: EVDEV_KEY_C,
+            pressed: true,
+        })
+        .unwrap();
+    assert!(client.wait_for_trace(&format!(", {EVDEV_KEY_C}, 1)"), 1));
+    let trace = client.trace();
+    let scrolls: Vec<_> = trace
+        .lines()
+        .filter_map(|line| {
+            let (_, event) = line.split_once('.')?;
+            (event.starts_with("axis") || event == "frame()").then_some(event)
+        })
+        .collect();
+    assert!(trace.contains("axis_source(1)"), "{trace}");
+    assert!(!trace.contains("axis_discrete("), "{trace}");
+    assert!(
+        scrolls
+            .windows(3)
+            .any(|events| events[0].starts_with("axis_stop(")
+                && events[0].ends_with(", 1)")
+                && events[1].starts_with("axis(")
+                && events[2] == "frame()"),
+        "{trace}"
+    );
+    assert!(
+        scrolls
+            .windows(2)
+            .any(|events| events[0].starts_with("axis_stop(")
+                && events[0].ends_with(", 0)")
+                && events[1] == "frame()"),
+        "{trace}"
+    );
+}
+
+#[test]
+fn continuous_scrolling_and_wheel_detents_keep_distinct_sources() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+    for (source, dy, v120_y) in [("continuous", 7.5, 0), ("wheel", 15.0, 120)] {
+        let message = serde_json::from_value(serde_json::json!({
+            "type": "pointer_axis", "app_id": app, "source": source,
+            "dx": 0.0, "dy": dy, "v120_x": 0, "v120_y": v120_y,
+            "stop_x": false, "stop_y": false,
+        }))
+        .unwrap();
+        chrome.say(&message).unwrap();
+    }
+    chrome
+        .say(&ChromeMessage::Key {
+            app_id: app,
+            keycode: EVDEV_KEY_C,
+            pressed: true,
+        })
+        .unwrap();
+    assert!(client.wait_for_trace(&format!(", {EVDEV_KEY_C}, 1)"), 1));
+    let trace = client.trace();
+    let sources: Vec<_> = trace
+        .lines()
+        .filter_map(|line| line.split_once(".axis_source(").map(|(_, source)| source))
+        .collect();
+    assert_eq!(sources, ["2)", "0)"], "{trace}");
+    assert_eq!(trace.matches("axis_discrete(0, 1)").count(), 1, "{trace}");
+    assert_eq!(trace.matches("axis_discrete(").count(), 1, "{trace}");
+    assert!(
+        trace
+            .lines()
+            .any(|line| line.contains(".axis(") && line.ends_with(", 0, 7.5)")),
+        "{trace}"
+    );
+}
+
+/// Wheel tilt keeps its source for modern clients and follows the protocol's
+/// wheel fallback for clients below version 6.
+#[test]
+fn wheel_tilt_keeps_its_source_and_detents() {
+    for (arguments, expected_source) in [(&[][..], "0)"), (&["--wl-seat-v7"][..], "3)")] {
+        let compositor = Compositor::started_with(ONE_DISPLAY);
+        let mut chrome = compositor.chrome();
+        let mut client = compositor.client_with("wheel tilt", arguments);
+        let app = appeared(&mut chrome);
+        drive(&mut chrome, &app);
+        let message = serde_json::from_value(serde_json::json!({
+            "type": "pointer_axis", "app_id": app, "source": "wheel_tilt",
+            "dx": 15.0, "dy": 0.0, "v120_x": 120, "v120_y": 0,
+            "stop_x": false, "stop_y": false,
+        }))
+        .unwrap();
+        chrome.say(&message).unwrap();
+        chrome
+            .say(&ChromeMessage::Key {
+                app_id: app,
+                keycode: EVDEV_KEY_C,
+                pressed: true,
+            })
+            .unwrap();
+        assert!(client.wait_for_trace(&format!(", {EVDEV_KEY_C}, 1)"), 1));
+        let trace = client.trace();
+        let sources: Vec<_> = trace
+            .lines()
+            .filter_map(|line| line.split_once(".axis_source(").map(|(_, source)| source))
+            .collect();
+        assert_eq!(sources, [expected_source], "{trace}");
+        assert!(trace.contains("axis_discrete(1, 1)"), "{trace}");
+        assert!(
+            trace
+                .lines()
+                .any(|line| line.contains(".axis(") && line.ends_with(", 1, 15)")),
+            "{trace}"
+        );
+    }
+}
+
 /// A release for a key the seat never saw pressed is not forwarded.
 ///
 /// The page forwards every release, including keys pressed while it had focus.

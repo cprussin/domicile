@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/platform/graphics/external_surface_embedder.h"
 #include "third_party/blink/renderer/platform/graphics/surface_layer_bridge.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
+#include "ui/events/types/native_scroll_source.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -63,7 +64,10 @@ class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
                               double dx,
                               double dy,
                               int32_t v120_x,
-                              int32_t v120_y) = 0;
+                              int32_t v120_y,
+                              ui::NativeScrollSource source,
+                              bool stop_x,
+                              bool stop_y) = 0;
 
   void Trace(Visitor*) const override;
 };

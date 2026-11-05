@@ -139,9 +139,8 @@ moves focus right in manganese, like Meta+l.
 
 ## Disable while typing
 
-On a tty, a touchpad ignores motion, scrolling, taps and clicks while a
-keyboard types, so a palm does not move the pointer. Turn it off for games that
-use the keyboard and the touchpad together:
+On a tty, typing suppression pauses a touchpad while a keyboard types. Turn
+it off for games that use the keyboard and the touchpad together:
 
 ```sh
 domicile disable-while-typing off     # or on, or toggle
@@ -149,14 +148,28 @@ domicile disable-while-typing         # prints on or off
 ```
 
 - Each prints the setting after it.
-- On by default, and back on when the engine restarts.
-- A key rests the touchpad for 200 ms, and typing for 500 ms, as in libinput.
-- Modifiers, F-keys, media and navigation keys rest nothing, nor do keys
-  pressed with Ctrl, Alt or Super held. Shift+letter is typing.
-- Motion while a touchpad button is held is a drag and always passes.
-- Any keyboard counts, built in or not.
-- A nested desktop refuses it: the host compositor reads the touchpad. Use its
-  setting.
+- On by default. The [touchpad config](SHELL-CONFIG.md#touchpads-and-mice) selects
+  native libinput behavior or a custom pause. A touchpad or mouse settings
+  edit, or an engine restart, restores the configured enabled state.
+- `disable_while_typing: "libinput"` preserves libinput's paired keyboards,
+  contact lifetime and physical button behavior, as in Sway. Touchpads without
+  native typing suppression, normally including external Magic Trackpads,
+  stay available. Libinput owns its timers, so `typing_pause_ms` and
+  `typing_repeat_pause_ms` must keep the defaults `200` and `500` in this mode.
+- Custom `enabled` (the default) and `internal` modes pause motion, scrolling,
+  taps and new clicks. `enabled` covers all touchpads; `internal` covers
+  built-in pads. Any keyboard counts. A key pauses them for 200 ms, and
+  continued typing for 500 ms. Both durations are configurable, including
+  zero. Continued typing means another typing key within 200 ms or during an
+  active pause.
+- In custom modes, modifiers, F-keys, media and navigation keys rest nothing,
+  nor do keys pressed with Ctrl, Alt or Super held. Shift+letter is typing.
+  Motion while a touchpad button is held is a drag and always passes.
+- Settings edits clear custom pauses and typing history. In native mode,
+  libinput retains contact state; a suppressed contact can remain suppressed
+  until the fingers lift.
+- A nested desktop refuses the command: the host compositor reads the
+  touchpad. Use its setting.
 
 ## Theme
 
@@ -197,6 +210,15 @@ bindsym --inhibited Mod4+Shift+q kill
   the desktop's own window. Use another modifier in sway, such as
   `floating_modifier Mod1 normal`, to drag windows inside the desktop.
 - On a console login there is no host, so none of this applies.
+
+## Pointer settings on a tty
+
+Set `input.touchpad` and `input.mouse` in the
+[config](SHELL-CONFIG.md#touchpads-and-mice) for tap and click behavior, natural
+scrolling, pointer acceleration, scrolling speed and the typing pause.
+Settings apply on reload, device attachment, Bluetooth reconnection and a
+return from another console. A nested desktop uses its host compositor's
+settings; headless and EIS input do not pass through libinput.
 
 ## Engine flags
 

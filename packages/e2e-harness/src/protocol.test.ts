@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { PROTOCOL_VERSION, parseHostMessage } from "./protocol";
+import {
+  PROTOCOL_VERSION,
+  parseHostMessage,
+  pointerAxisSchema,
+} from "./protocol";
 
 describe("parseHostMessage", () => {
   it("decodes a welcome frame", () => {
@@ -508,5 +512,32 @@ describe("parseHostMessage", () => {
         }),
       ),
     ).toThrow();
+  });
+});
+
+describe("pointerAxisSchema", () => {
+  it("parses sources and independent axis stops without changing distances", () => {
+    for (const source of [
+      "wheel",
+      "finger",
+      "continuous",
+      "wheel_tilt",
+    ] as const) {
+      const wire = {
+        app_id: "term",
+        dx: 0,
+        dy: 4.5,
+        source,
+        stop_x: true,
+        stop_y: false,
+        type: "pointer_axis" as const,
+        v120_x: 0,
+        v120_y: 0,
+      };
+      expect(pointerAxisSchema.parse(wire)).toEqual(wire);
+      expect(() =>
+        pointerAxisSchema.parse({ ...wire, source: "mouse" }),
+      ).toThrow();
+    }
   });
 });

@@ -37,6 +37,25 @@ else
     "no patch calls scroll_accelerator_.Scroll, so HandlePointerAxis dispatches libinput's deltas as they come"
 fi
 
+if python3 - "$PATCHES" <<'CHECK'
+from pathlib import Path
+import re
+import sys
+added = "\n".join(line[1:] for patch in sorted(Path(sys.argv[1]).glob("*.patch"))
+                  for line in patch.read_text().splitlines()
+                  if line.startswith("+") and not line.startswith("+++"))
+keeps_other_axis = re.search(
+    r"source == LIBINPUT_POINTER_AXIS_SOURCE_FINGER\s*&&\s*"
+    r"!raw_delta\.IsZero\(\)\s*\?\s*scroll_accelerator_\.Scroll\(", added)
+sys.exit(0 if keeps_other_axis else 1)
+CHECK
+then
+  ok "a zero-only axis stop preserves the other axis's fraction"
+else
+  fail "a zero-only axis stop preserves the other axis's fraction" \
+    "calling Scroll with a zero delta resets both axes after an independent stop"
+fi
+
 if in_patches '"domicile/scroll_accelerator.cc"'; then
   ok "the accelerator is in the evdev component"
 else

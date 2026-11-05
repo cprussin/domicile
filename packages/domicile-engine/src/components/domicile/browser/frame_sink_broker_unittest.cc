@@ -435,6 +435,8 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordWhitePoint,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordInput,
+                            base::Unretained(this)),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordInputConfig,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
@@ -486,6 +488,10 @@ class FrameSinkBrokerTest : public testing::Test {
   }
 
   // Fake for the ozone platform that owns the CRTCs' gamma ramps.
+  void RecordInputConfig(const std::string& config) {
+    input_configs_.push_back(config);
+  }
+
   void RecordInput(const mojom::DeskInput& input) {
     inputs_.push_back(input.Clone());
   }
@@ -522,6 +528,7 @@ class FrameSinkBrokerTest : public testing::Test {
   // Every white point the producer sent, in order.
   std::vector<std::vector<float>> white_points_;
   std::vector<mojom::DeskInputPtr> inputs_;
+  std::vector<std::string> input_configs_;
 
   // Every clipboard the producer sent, in order.
   std::vector<std::pair<mojom::Clipboard, FrameSinkBroker::ClipboardContents>>
@@ -1224,6 +1231,17 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichDisplayEachTabletCovers) {
   ASSERT_EQ(pointers_[0].size(), 1u);
   EXPECT_EQ(pointers_[0][0]->device, "usb-0000:00:04.0-1/input0");
   EXPECT_EQ(pointers_[0][0]->display_id, 7);
+}
+
+TEST_F(FrameSinkBrokerTest,
+       InputSettingsCrossMojoWithoutChangingTheConfiguration) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  const std::string config = R"({"touchpad":{"click_method":"clickfinger"}})";
+  remote->ConfigureInput(config);
+  remote->ConfigureInput("{}");
+  RunUntilIdle();
+  EXPECT_EQ(input_configs_, (std::vector<std::string>{config, "{}"}));
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSetsTheWhitePoint) {

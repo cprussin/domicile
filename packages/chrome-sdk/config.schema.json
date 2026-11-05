@@ -1,8 +1,23 @@
 {
   "$defs": {
+    "AccelProfile": {
+      "description": "How movement speed affects pointer acceleration.",
+      "enum": ["adaptive", "flat"],
+      "type": "string"
+    },
     "AccentColor": {
       "description": "An sRGB color, written `\"#rrggbb\"`.",
       "pattern": "^#[0-9a-fA-F]{6}$",
+      "type": "string"
+    },
+    "ButtonMap": {
+      "description": "Buttons assigned to one-, two- and three-finger taps.",
+      "enum": ["lrm", "lmr"],
+      "type": "string"
+    },
+    "ClickMethod": {
+      "description": "How a touchpad's physical button chooses a mouse button.",
+      "enum": ["default", "clickfinger", "button_areas"],
       "type": "string"
     },
     "Contrast": {
@@ -22,6 +37,11 @@
         }
       ],
       "description": "An XCursor theme's directory name, such as `Adwaita`, for both modes or\nfor each."
+    },
+    "DisableWhileTyping": {
+      "description": "How typing suppression selects touchpads and handles contacts.",
+      "enum": ["enabled", "disabled", "internal", "libinput"],
+      "type": "string"
     },
     "DisplayConfig": {
       "additionalProperties": false,
@@ -215,12 +235,42 @@
         "keyboard": {
           "$ref": "#/$defs/KeyboardConfig"
         },
+        "mouse": {
+          "$ref": "#/$defs/MouseConfig",
+          "default": {
+            "accel_profile": "adaptive",
+            "middle_emulation": false,
+            "natural_scroll": false,
+            "scroll_factor": 1.0,
+            "speed": 0.0
+          }
+        },
         "pointers": {
           "description": "Tablets and touchscreens, each bound to the display it covers.\n\nRead on a tty only, on every hotplug. An unbound one covers no\ndisplay. See `docs/DISPLAYS.md#tablets-and-touchscreens`.",
           "items": {
             "$ref": "#/$defs/PointerConfig"
           },
           "type": "array"
+        },
+        "touchpad": {
+          "$ref": "#/$defs/TouchpadConfig",
+          "default": {
+            "accel_profile": "adaptive",
+            "click_method": "default",
+            "disable_while_typing": "enabled",
+            "drag_lock": false,
+            "middle_emulation": false,
+            "natural_scroll": false,
+            "scroll_acceleration": true,
+            "scroll_factor": 1.0,
+            "scroll_method": "default",
+            "speed": 0.0,
+            "tap": true,
+            "tap_button_map": "lrm",
+            "tap_drag": true,
+            "typing_pause_ms": 200,
+            "typing_repeat_pause_ms": 500
+          }
         }
       },
       "type": "object"
@@ -344,6 +394,41 @@
       },
       "type": "object"
     },
+    "MouseConfig": {
+      "additionalProperties": false,
+      "description": "Settings applied to every relative mouse on a tty.",
+      "properties": {
+        "accel_profile": {
+          "$ref": "#/$defs/AccelProfile",
+          "default": "adaptive"
+        },
+        "middle_emulation": {
+          "default": false,
+          "description": "Emulate a middle click by pressing left and right together.",
+          "type": "boolean"
+        },
+        "natural_scroll": {
+          "default": false,
+          "description": "Reverse the mouse wheel's scrolling direction.",
+          "type": "boolean"
+        },
+        "scroll_factor": {
+          "default": 1.0,
+          "description": "Multiplier applied once to both scrolling axes; must be positive.",
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        "speed": {
+          "default": 0.0,
+          "description": "Pointer acceleration speed, from -1 to 1.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "OutputConfig": {
       "additionalProperties": false,
       "description": "Output settings.",
@@ -420,6 +505,11 @@
       },
       "required": ["name", "displays"],
       "type": "object"
+    },
+    "ScrollMethod": {
+      "description": "How a touchpad generates scrolling.",
+      "enum": ["default", "two_finger", "edge", "on_button_down"],
+      "type": "string"
     },
     "StartupConfig": {
       "additionalProperties": false,
@@ -524,6 +614,97 @@
           "type": "string"
         }
       ]
+    },
+    "TouchpadConfig": {
+      "additionalProperties": false,
+      "description": "Settings applied to every touchpad on a tty, including newly attached ones.",
+      "properties": {
+        "accel_profile": {
+          "$ref": "#/$defs/AccelProfile",
+          "default": "adaptive"
+        },
+        "click_method": {
+          "$ref": "#/$defs/ClickMethod",
+          "default": "default",
+          "description": "Physical click behavior; `default` uses the device's libinput default.\nClickfinger uses left, right and middle for one, two and three fingers."
+        },
+        "disable_while_typing": {
+          "$ref": "#/$defs/DisableWhileTyping",
+          "default": "enabled",
+          "description": "Typing suppression policy; `libinput` preserves native keyboard pairing and contacts.\nCustom `internal` excludes external pads; `enabled` includes every touchpad."
+        },
+        "drag_lock": {
+          "default": false,
+          "description": "Keep a tap drag held when the fingers lift briefly.",
+          "type": "boolean"
+        },
+        "middle_emulation": {
+          "default": false,
+          "description": "Emulate a middle click by pressing left and right together.",
+          "type": "boolean"
+        },
+        "natural_scroll": {
+          "default": false,
+          "description": "Move content in the direction the fingers move.",
+          "type": "boolean"
+        },
+        "scroll_acceleration": {
+          "default": true,
+          "description": "Increase scroll distance with gesture speed, up to four times.",
+          "type": "boolean"
+        },
+        "scroll_factor": {
+          "default": 1.0,
+          "description": "Multiplier applied once to both scrolling axes; must be positive.",
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        "scroll_method": {
+          "$ref": "#/$defs/ScrollMethod",
+          "default": "default",
+          "description": "Scrolling gesture; `default` uses the device's libinput default."
+        },
+        "speed": {
+          "default": 0.0,
+          "description": "Pointer acceleration speed, from -1 to 1.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "type": "number"
+        },
+        "tap": {
+          "default": true,
+          "description": "Tap to click.",
+          "type": "boolean"
+        },
+        "tap_button_map": {
+          "$ref": "#/$defs/ButtonMap",
+          "default": "lrm",
+          "description": "Buttons for one-, two- and three-finger taps."
+        },
+        "tap_drag": {
+          "default": true,
+          "description": "Drag by tapping, then holding a second tap.",
+          "type": "boolean"
+        },
+        "typing_pause_ms": {
+          "default": 200,
+          "description": "Custom pause after one typing key; zero means no pause.\nNative `libinput` mode requires the default 200 and uses its own timers.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "typing_repeat_pause_ms": {
+          "default": 500,
+          "description": "Custom pause during continued typing; zero means no pause.\nNative `libinput` mode requires the default 500 and uses its own timers.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "Transform": {
       "description": "Which way up a monitor is, named for the matching `wl_output.transform`.\n\nRotations only; nothing needs flips.",

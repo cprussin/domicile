@@ -132,12 +132,18 @@ impl Input {
                 dy,
                 v120_x: 0,
                 v120_y: 0,
+                source: domicile_protocol::PointerAxisSource::Continuous,
+                stop_x: false,
+                stop_y: false,
             }],
             Emulated::ScrollDiscrete { v120_x, v120_y } => vec![ClientRequest::PointerAxis {
                 dx: f64::from(v120_x) / V120_PER_DETENT * DETENT,
                 dy: f64::from(v120_y) / V120_PER_DETENT * DETENT,
                 v120_x,
                 v120_y,
+                source: domicile_protocol::PointerAxisSource::Wheel,
+                stop_x: false,
+                stop_y: false,
             }],
             Emulated::Key { keycode, pressed } => {
                 if pressed {
@@ -495,7 +501,10 @@ mod tests {
                 dx: 0.0,
                 dy: 7.5,
                 v120_x: 0,
-                v120_y: 0
+                v120_y: 0,
+                source: domicile_protocol::PointerAxisSource::Continuous,
+                stop_x: false,
+                stop_y: false,
             }]
         );
     }
@@ -515,7 +524,10 @@ mod tests {
                 dx: 0.0,
                 dy: -30.0,
                 v120_x: 0,
-                v120_y: -240
+                v120_y: -240,
+                source: domicile_protocol::PointerAxisSource::Wheel,
+                stop_x: false,
+                stop_y: false,
             }]
         );
     }

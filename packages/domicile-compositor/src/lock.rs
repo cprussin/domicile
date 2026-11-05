@@ -830,6 +830,9 @@ mod tests {
                     dy: 1.0,
                     v120_x: 0,
                     v120_y: 120,
+                    source: domicile_protocol::PointerAxisSource::Wheel,
+                    stop_x: false,
+                    stop_y: false,
                 },
             ),
         ] {

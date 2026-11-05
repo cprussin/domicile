@@ -11,6 +11,7 @@
 //! | field | on a reload |
 //! |---|---|
 //! | `input.keyboard.*` | every keymap recompiled; the active one, or the first if the config dropped it, sent to the seat and chrome (`take_up_the_keymaps`) |
+//! | `input.touchpad`, `input.mouse` | sent to the engine (`configure_input`) |
 //! | `input.pointers` | sent to the engine, resolved against the monitors it last reported (`bind_the_pointers`) |
 //! | `output.max_scale` | applied to the running desktop (`cap_the_scale_at`) |
 //! | `output.displays` | applied (`Screens::reloaded_into`, `adopt_the_desktop`) |
@@ -86,6 +87,8 @@ pub struct Restatement {
     pub shell_config: bool,
     /// Whether to tell the engine again which display each tablet covers.
     pub pointers: bool,
+    /// Whether to reapply touchpad and mouse settings.
+    pub input_devices: bool,
 }
 
 impl Restatement {
@@ -113,6 +116,8 @@ impl Restatement {
             shell_config: was.input.keyboard != now.input.keyboard
                 || was.shell_options != now.shell_options,
             pointers: was.input.pointers != now.input.pointers,
+            input_devices: was.input.touchpad != now.input.touchpad
+                || was.input.mouse != now.input.mouse,
         }
     }
 }
@@ -288,6 +293,29 @@ mod tests {
     fn pointers_that_moved_are_restated() {
         let was = parsed(A_DVORAK_DESK);
         assert!(Restatement::between(&was, &parsed(A_DESK_WITH_A_TABLET)).pointers);
+    }
+
+    #[test]
+    fn touchpad_and_mouse_changes_are_restated_and_removal_resets_them() {
+        let defaults = parsed("{}");
+        for written in [
+            r#"{"input":{"touchpad":{"natural_scroll":true}}}"#,
+            r#"{"input":{"mouse":{"accel_profile":"flat"}}}"#,
+        ] {
+            let changed = parsed(written);
+            assert_ne!(
+                Restatement::between(&defaults, &changed),
+                Restatement::default()
+            );
+            assert_ne!(
+                Restatement::between(&changed, &defaults),
+                Restatement::default()
+            );
+            assert_eq!(
+                Restatement::between(&changed, &parsed(written)),
+                Restatement::default()
+            );
+        }
     }
 
     #[test]

@@ -15,7 +15,8 @@ use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_host::white_point::WhitePoint;
 use domicile_protocol::{
-    KeymapChoice, Passphrase, PortalAnswer, Scale, Theme, TrayAction, WindowState,
+    KeymapChoice, Passphrase, PointerAxisSource, PortalAnswer, Scale, Theme, TrayAction,
+    WindowState,
 };
 
 use crate::activation;
@@ -79,6 +80,9 @@ pub enum ClientRequest {
         dy: f64,
         v120_x: i32,
         v120_y: i32,
+        source: PointerAxisSource,
+        stop_x: bool,
+        stop_y: bool,
     },
     Key {
         keycode: u32,
@@ -310,16 +314,35 @@ impl DomicileCompositor {
                 dy,
                 v120_x,
                 v120_y,
+                source,
+                stop_x,
+                stop_y,
             } => {
                 let pointer = self.seat.get_pointer().unwrap();
-                let mut frame = AxisFrame::new(self.now_ms()).source(AxisSource::Wheel);
+                let axis_source = match source {
+                    PointerAxisSource::Wheel => AxisSource::Wheel,
+                    PointerAxisSource::Finger => AxisSource::Finger,
+                    PointerAxisSource::Continuous => AxisSource::Continuous,
+                    PointerAxisSource::WheelTilt => AxisSource::WheelTilt,
+                };
+                let mut frame = AxisFrame::new(self.now_ms()).source(axis_source);
                 if dx != 0.0 {
-                    frame = frame
-                        .value(Axis::Horizontal, dx)
-                        .v120(Axis::Horizontal, v120_x);
+                    frame = frame.value(Axis::Horizontal, dx);
                 }
                 if dy != 0.0 {
-                    frame = frame.value(Axis::Vertical, dy).v120(Axis::Vertical, v120_y);
+                    frame = frame.value(Axis::Vertical, dy);
+                }
+                if v120_x != 0 {
+                    frame = frame.v120(Axis::Horizontal, v120_x);
+                }
+                if v120_y != 0 {
+                    frame = frame.v120(Axis::Vertical, v120_y);
+                }
+                if stop_x {
+                    frame = frame.stop(Axis::Horizontal);
+                }
+                if stop_y {
+                    frame = frame.stop(Axis::Vertical);
                 }
                 pointer.axis(self, frame);
                 pointer.frame(self);
