@@ -6,7 +6,12 @@ import { CastMode, casting } from "@domicile-desktop/sdk/cast";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { SHELL_APP_ID } from "@domicile-desktop/sdk/portal";
 import type { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
-import type { SystemError, VirtualMonitor } from "@domicile-desktop/sdk/system";
+import type {
+  Listened,
+  SystemError,
+  VirtualMonitor,
+  Watch,
+} from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type {
   FakeDesktop,
@@ -16,6 +21,7 @@ import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -32,6 +38,13 @@ import type { DialogDesktop, PortalDialogsDesktop } from "./PortalDialogs";
 import { PortalDialogs } from "./PortalDialogs";
 import { ShownWindow } from "./shown-windows";
 
+const directoryWatches: Promise<Result<"stopped", SystemError>>[] = [];
+
+afterEach(async () => {
+  cleanup();
+  await Promise.all(directoryWatches.splice(0));
+});
+
 /** `fake` with captures that never draw, for dialogs that preview nothing. */
 const dialogDesktop = (fake: FakeDesktop): DialogDesktop => ({
   ...fake,
@@ -41,6 +54,7 @@ const dialogDesktop = (fake: FakeDesktop): DialogDesktop => ({
         /* never drawn */
       }),
   },
+  files: { ...fake.files, watch: directoryWatch },
 });
 
 /**
@@ -3182,3 +3196,25 @@ const TWO_SCREENS = {
   ],
   onDisplays: () => () => undefined,
 } satisfies DisplaySource;
+
+/** A directory watch stays open until the dialog releases it. */
+const directoryWatch = (): Promise<Result<Watch, SystemError>> => {
+  const stopped = Promise.withResolvers<Result<"stopped", SystemError>>();
+  let controller: ReadableStreamDefaultController<Listened<string>>;
+  const items = new ReadableStream<Listened<string>>({
+    start: (opened) => {
+      controller = opened;
+    },
+  });
+  directoryWatches.push(stopped.promise);
+  return Promise.resolve(
+    Ok({
+      ended: stopped.promise,
+      items,
+      stop: () => {
+        controller.close();
+        stopped.resolve(Ok("stopped"));
+      },
+    }),
+  );
+};
