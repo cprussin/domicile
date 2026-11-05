@@ -159,7 +159,7 @@
     },
     "packages/domicile": {
       "name": "domicile",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "dependencies": {
         "@domicile-desktop/app-history": "workspace:*",
         "@domicile-desktop/app-settings": "workspace:*",
