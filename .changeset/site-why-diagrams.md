@@ -2,4 +2,4 @@
 "@domicile-desktop/site": patch
 ---
 
-Redraw the "You're already running a browser" diagrams: a typical desktop's windows beside Domicile's elements on one page.
+Polish the "You're already running a browser" diagrams, reword the speed FAQ, and drop "Anthropic's AI model" from the AI disclosure.

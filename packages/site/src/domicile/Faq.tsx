@@ -30,7 +30,7 @@ const QUESTIONS: readonly {
   },
   {
     answer:
-      "Yes, with extensive help from Claude, Anthropic's AI model. Claude wrote most of the code, tests and docs. The architecture, direction and technical decisions come from the project's human maintainer. Changes are checked by the test suite and by daily use, not by line-by-line human review. The source and its full history are public.",
+      "Yes, with extensive help from Claude, which wrote most of the code, tests and docs. The architecture, direction and technical decisions come from the project's human maintainer. Changes are checked by the test suite and by daily use, not by line-by-line human review. The source and its full history are public.",
     link: { href: REPO, label: "Source" },
     question: "Was Domicile built with AI?",
   },

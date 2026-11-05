@@ -17,7 +17,7 @@ How to work on Domicile itself. To write a shell or an app on it, see
 
 ## Built with AI
 
-Domicile is developed with extensive help from Claude, Anthropic's AI model.
+Domicile is developed with extensive help from Claude.
 
 - **Claude** writes most of the code, tests and docs, debugs, and builds the
   development tooling. Its commits carry a `Co-Authored-By: Claude` trailer.

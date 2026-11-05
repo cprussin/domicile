@@ -103,7 +103,7 @@ Domicile combines a Rust Wayland compositor with a patched Chromium. Your deskto
 
 ## Built with AI
 
-Domicile is developed with extensive help from Claude, Anthropic's AI model. Claude wrote most of the code, tests and docs, and does much of the debugging and development tooling. The architecture, direction and technical decisions come from the project's human maintainer. Changes are checked by the test suite and by daily use, not by line-by-line human review. The source and its full history are public. [More on how it's built](docs/contributing/README.md#built-with-ai).
+Domicile is developed with extensive help from Claude, which wrote most of the code, tests and docs, and does much of the debugging and development tooling. The architecture, direction and technical decisions come from the project's human maintainer. Changes are checked by the test suite and by daily use, not by line-by-line human review. The source and its full history are public. [More on how it's built](docs/contributing/README.md#built-with-ai).
 
 ## License
 
