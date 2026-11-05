@@ -32,6 +32,7 @@ in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 # Domicile-owned files live in `src/`, not in a patch.
 for f in drm_input_devices.h drm_input_devices.cc drm_input_devices_unittest.cc \
          drm_input_controller_unittest.cc \
+         drm_input_opens.h drm_input_opens.cc \
          drm_logind_input.h drm_logind_input.cc \
          drm_logind_session.h drm_logind_session.cc; do
   if [ -f "$DOMICILE/$f" ]; then
@@ -42,7 +43,7 @@ for f in drm_input_devices.h drm_input_devices.cc drm_input_devices_unittest.cc 
 done
 
 sources="$(cat "$DOMICILE"/drm_logind_input.cc "$DOMICILE"/drm_logind_session.cc \
-  "$DOMICILE"/drm_input_devices.cc 2>/dev/null || true)"
+  "$DOMICILE"/drm_input_devices.cc "$DOMICILE"/drm_input_opens.cc 2>/dev/null || true)"
 in_sources() { case "$sources" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 
 # logind's descriptor-passing calls. logind refuses `TakeDevice` before
@@ -105,27 +106,27 @@ fi
 # another.
 opener_body="$(awk '/^void DrmLogindInput::OpenDeviceFd/,/^}/' \
   "$DOMICILE/drm_logind_input.cc" 2>/dev/null || true)"
-resumed_at="$(printf '%s\n' "$opener_body" | grep -n 'Resumed(' | head -1 | cut -d: -f1)"
-take_at="$(printf '%s\n' "$opener_body" | grep -n 'Take(\*number' | head -1 | cut -d: -f1)"
-if [ -n "$resumed_at" ] && [ -n "$take_at" ] && [ "$resumed_at" -lt "$take_at" ]; then
+begin_body="$(awk '/^void DrmInputOpens::Begin\(/,/^}/' \
+  "$DOMICILE/drm_input_opens.cc" 2>/dev/null || true)"
+resumed_at="$(printf '%s\n' "$begin_body" | grep -n 'devices_->Resumed(' | head -1 | cut -d: -f1)"
+take_at="$(printf '%s\n' "$begin_body" | grep -n 'take_\.Run(' | head -1 | cut -d: -f1)"
+if [[ "$opener_body" = *'opens_.Open(*number, params.id, params.path, params.is_current,'* ]] &&
+  [ -n "$resumed_at" ] && [ -n "$take_at" ] && [ "$resumed_at" -lt "$take_at" ]; then
   ok "a reopen consumes the resumed descriptor instead of taking the device again"
 else
   fail "a reopen consumes the resumed descriptor instead of taking the device again" \
-    "OpenDeviceFd does not consult the resumed descriptor before calling TakeDevice"
+    "OpenDeviceFd must pass its current request to DrmInputOpens, whose Begin consumes Resumed before TakeDevice"
 fi
 
 # On a seat with VTs, logind sends a "force" pause with descriptors already
 # revoked and no `ResumeDevice` after it. The only way back is `ReleaseDevice`
 # then `TakeDevice`; logind refuses `TakeDevice` for a device still held.
-take_body="$(awk '/^void DrmLogindInput::Take\(/,/^}/' \
-  "$DOMICILE/drm_logind_input.cc" 2>/dev/null || true)"
-giveback_at="$(printf '%s\n' "$take_body" | grep -n 'GiveBack(' | head -1 | cut -d: -f1)"
-ask_at="$(printf '%s\n' "$take_body" | grep -n 'TakeDevice(' | head -1 | cut -d: -f1)"
-if [ -n "$giveback_at" ] && [ -n "$ask_at" ] && [ "$giveback_at" -lt "$ask_at" ]; then
+giveback_at="$(printf '%s\n' "$begin_body" | grep -n 'devices_->GiveBack(' | head -1 | cut -d: -f1)"
+if [ -n "$giveback_at" ] && [ -n "$take_at" ] && [ "$giveback_at" -lt "$take_at" ]; then
   ok "a device held from before is given back before it is taken again"
 else
   fail "a device held from before is given back before it is taken again" \
-    "DrmLogindInput::Take calls TakeDevice without releasing first; logind refuses it"
+    "DrmInputOpens::Begin must give back the held device before running TakeDevice"
 fi
 
 # The evdev thread reads every open device. Waiting on logind there stops all
@@ -238,7 +239,11 @@ fi
 # console. `Reclaim` runs only on a `PropertiesChanged` for `Active`, which an
 # already-active session never sends. So check the session's state instead of
 # waiting for a change.
-if [ "$(grep -c 'ReadActive(' "$DOMICILE/drm_logind_input.cc" 2>/dev/null)" -ge 2 ]; then
+on_taken_body="$(awk '/^void DrmInputOpens::OnTaken\(/,/^}/' \
+  "$DOMICILE/drm_input_opens.cc" 2>/dev/null || true)"
+if grep -q '&DrmLogindSession::ReadActive' "$DOMICILE/drm_logind_input.cc" &&
+  [[ "$on_taken_body" = *'read_active_.Run('* ]] &&
+  [[ "$on_taken_body" = *'&DrmInputOpens::OnSessionActive'* ]]; then
   ok "an inactive take asks the session rather than waiting for an edge"
 else
   fail "an inactive take asks the session rather than waiting for an edge" \
