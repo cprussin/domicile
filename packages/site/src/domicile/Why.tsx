@@ -43,7 +43,6 @@ const CONVENTIONAL: Diagram = {
           body: "Renders and composites its pages into one window, with its own engine.",
           icon: <BrowsersIcon />,
           title: "The browser",
-          tone: "engine",
         },
       ],
     },
