@@ -74,9 +74,9 @@ for arg in "$@"; do
   esac
 done
 : >"$broker"
-# `exec -a "$0"` keeps this path in the command line, so `pkill -f` in
-# `cleanup` can find it.
-exec -a "$0" sleep 60
+# Keep this path on bash for cleanup; a multicall sleep uses its program name.
+# Forward cleanup's signal to the child that holds stdout and stderr.
+exec -a "$0" bash -c 'sleep 60 & trap "kill $!" TERM; wait'
 ENGINE
 chmod +x "$WORK/engine/chrome"
 
@@ -92,7 +92,7 @@ done
 printf '%s' "${DOMICILE_SOCK-}" >"$session.sock-it-was-given"
 : >"$session"
 # Keeps its name across the exec, as the engine does; see `cleanup`.
-exec -a "$0" sleep 60
+exec -a "$0" bash -c 'sleep 60 & trap "kill $!" TERM; wait'
 COMPOSITOR
 chmod +x "$WORK/domicile-compositor"
 
