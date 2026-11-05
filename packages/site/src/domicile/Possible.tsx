@@ -107,7 +107,7 @@ const FEATURES: readonly { icon: ReactNode; title: string; body: string }[] = [
 export const Possible = () => (
   <Section
     id="possible"
-    lede="When websites, native windows and the desktop's interface share one page, the line between a website and an app stops mattering. Each can be arranged, styled and combined like anything else on the web."
+    lede="Once the web is out of its window, websites, native apps and the desktop's interface share one page, and the line between a website and an app stops mattering."
     title="What becomes possible."
   >
     <div className={rowsStyles}>

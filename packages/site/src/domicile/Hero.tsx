@@ -15,9 +15,19 @@ export const Hero = () => (
         </LinkButton>
       </>
     }
-    lede="Websites are windows. Windows are HTML elements. The whole desktop is one web page, drawn by a modified Chromium that is also the Wayland compositor, so apps and sites tile, layer, animate and mix like anything else on the web."
-    tag={{ href: "#why", label: "An experimental Linux desktop" }}
-    title="The web ate your desktop."
+    lede={
+      <>
+        Domicile brings Chromium and Wayland together, making websites and
+        native applications part of the same desktop. Webviews become
+        first-class windows, native apps become DOM elements, and browser
+        extensions become desktop features.
+        <span className={experimentStyles}>
+          An experiment in what becomes possible when the boundaries disappear.
+        </span>
+      </>
+    }
+    tag={{ href: "#why", label: "A Linux desktop on Chromium" }}
+    title="The web doesn't have to live in a window."
   >
     {/* A window needs a Wayland session: there is no X11 backend. */}
     <p className={trialStyles}>
@@ -28,6 +38,12 @@ export const Hero = () => (
     </p>
   </PageHero>
 );
+
+const experimentStyles = css({
+  color: "foreground",
+  display: "block",
+  marginBlockStart: 3,
+});
 
 // Pulled toward the buttons it qualifies, past the hero's gap.
 const trialStyles = css({

@@ -25,9 +25,9 @@ import { shared } from "../page/shared";
 
 export const metadata = shared({
   description:
-    "An experimental Linux desktop where Chromium is the Wayland compositor. Websites are windows, windows are elements, and the desktop is a web page you build with HTML, CSS and JavaScript.",
+    "Domicile brings Chromium and Wayland together, making websites and native applications part of the same desktop. Webviews become first-class windows, native apps become DOM elements, and browser extensions become desktop features.",
   path: "/",
-  title: "Domicile: the web ate your desktop",
+  title: "Domicile: the web doesn't have to live in a window",
 });
 
 /** domicile-desktop.com: Domicile, and building on it. */
