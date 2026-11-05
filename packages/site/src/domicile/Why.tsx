@@ -69,7 +69,7 @@ const DOMICILE: Diagram = {
     {
       body: "Apps still draw their own windows, and Domicile's Wayland server hands them to the engine. The engine lays out the page, the websites and the windows with CSS, and composites them in one frame.",
       icon: <BrowsersIcon />,
-      title: "One page, in Chromium",
+      title: "Domicile",
       tone: "engine",
     },
     { body: "", icon: <MonitorIcon />, title: "The screen" },
@@ -112,8 +112,7 @@ export const Why = () => (
 
 /** One arrangement, top to bottom: its lanes side by side, each ending in an
  * arrow, then the stages they share. The lanes' arrows stretch, so every lane
- * ends level, and the last stage, the screen, sits at the bottom, so both
- * diagrams end level. */
+ * ends level. */
 const Flow = ({ diagram }: { diagram: Diagram }) => (
   <figure className={flowStyles}>
     <figcaption className={flowTitleStyles}>{diagram.title}</figcaption>
@@ -139,12 +138,7 @@ const Flow = ({ diagram }: { diagram: Diagram }) => (
       </ul>
       <ol className={stagesStyles}>
         {diagram.stages.map((stage, index) => (
-          <li
-            className={stageWrapStyles({
-              last: index === diagram.stages.length - 1,
-            })}
-            key={stage.title}
-          >
+          <li className={stageWrapStyles} key={stage.title}>
             {index === 0 ? undefined : <Connector />}
             <StageBox stage={stage} />
           </li>
@@ -171,6 +165,7 @@ const StageBox = ({ stage }: { stage: Stage }) => (
 );
 
 const diagramsStyles = grid({
+  alignItems: "start",
   gap: 5,
   gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))",
 });
@@ -191,7 +186,7 @@ const flowTitleStyles = css({
 });
 
 // The lanes' arrows run straight into the stage below them.
-const pathStyles = flex({ direction: "column", flex: 1 });
+const pathStyles = flex({ direction: "column" });
 
 const lanesStyles = grid({
   gap: 2,
@@ -225,17 +220,9 @@ const sourceCodeStyles = css({
   fontSize: "xs",
 });
 
-const stagesStyles = flex({
-  direction: "column",
-  flex: 1,
-  listStyle: "none",
-});
+const stagesStyles = flex({ direction: "column", listStyle: "none" });
 
-// The screen's connector stretches, so the screen sits at the bottom.
-const stageWrapStyles = cva({
-  base: { display: "flex", flexDirection: "column" },
-  variants: { last: { false: {}, true: { flex: 1 } } },
-});
+const stageWrapStyles = flex({ direction: "column" });
 
 // A line down to the stage, ending in an arrowhead.
 const connectorStyles = css({
