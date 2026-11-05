@@ -1,5 +1,6 @@
 import "./globals.css";
 
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
   title: { default: "Domicile", template: "%s · Domicile" },
 };
 
-/** Every page: the fonts, on the preset's dark theme. */
+/** Every page: the fonts, on the preset's dark theme, with Vercel Web Analytics. */
 const RootLayout = ({ children }: { children: ReactNode }) => (
   <html
     className={cx(
@@ -34,7 +35,10 @@ const RootLayout = ({ children }: { children: ReactNode }) => (
     data-scroll-behavior="smooth"
     lang="en"
   >
-    <body>{children}</body>
+    <body>
+      {children}
+      <Analytics />
+    </body>
   </html>
 );
 

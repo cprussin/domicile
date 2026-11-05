@@ -6,6 +6,7 @@
     "@domicile-desktop/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "@tailwindcss/browser": "catalog:",
+    "@vercel/analytics": "catalog:",
     "lowlight": "catalog:",
     "mdast-util-from-markdown": "catalog:",
     "mdast-util-gfm": "catalog:",
