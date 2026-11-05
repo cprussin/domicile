@@ -10,6 +10,7 @@ import {
   sentAway,
   withClosing,
 } from "./closing";
+import { crossed } from "./crossing";
 import type { PlacedTab, Placement } from "./placement";
 import { contentsOf } from "./placement";
 import type { Restack } from "./restacking";
@@ -25,6 +26,11 @@ import { switchedTo } from "./workspace-switch";
 
 /** A window to draw: its placement and motion. */
 export type DrawnWindow = {
+  /**
+   * Whether it just moved to another tab group, so it eases there over the
+   * strips it passes. See `crossing.ts`.
+   */
+  crossing: boolean;
   /**
    * Whether the window has keyboard focus.
    *
@@ -126,6 +132,11 @@ type Late = { id: string; placed: number; shown: number };
 /** Animations still playing. */
 type Playing = {
   closing: readonly ClosingOn[];
+  /**
+   * The windows the last change moved to another group. Only a box change
+   * starts a settle, and every box change replaces this.
+   */
+  crossing: ReadonlySet<string>;
   /** Windows still sliding down from the scratchpad. */
   dropping: readonly (Slid & { id: string })[];
   /** Windows still playing their opening animation. */
@@ -147,6 +158,7 @@ type Playing = {
 
 const NOTHING_PLAYING: Playing = {
   closing: [],
+  crossing: new Set(),
   dropping: [],
   opening: [],
   restacking: [],
@@ -298,6 +310,7 @@ const advanced = (
         })),
       ),
     ],
+    crossing: crossed(before, shown),
     // Drop windows no longer shown: they never report the slide finished.
     dropping: [
       ...playing.dropping.filter(({ id }) => shownIds.has(id)),
@@ -650,6 +663,7 @@ const drawnWindow = (
   const placed = index.placed.get(window.id);
   if (closing !== undefined) {
     return {
+      crossing: false,
       focused: closing.focused,
       // A tab closes within its strip instead of shrinking with its window, and
       // a shown tab fades to the tab replacing it.
@@ -666,6 +680,7 @@ const drawnWindow = (
     return sending === undefined
       ? leavingWindow(index, window)
       : {
+          crossing: false,
           focused: sending.focused,
           motion: sending.motion,
           placement: sending.placement,
@@ -678,6 +693,7 @@ const drawnWindow = (
   } else {
     const motion = arriving(playing, placed.screen, placed.placement);
     return {
+      crossing: playing.crossing.has(window.id),
       focused: shown[placed.screen]?.activeId === window.id,
       motion,
       placement: placed.placement,
@@ -753,6 +769,7 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
   const leaving = index.leaving.get(window.id);
   if (leaving === undefined) {
     return {
+      crossing: false,
       focused: false,
       motion: "resting",
       placement: undefined,
@@ -764,6 +781,7 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
     };
   } else {
     return {
+      crossing: false,
       focused: leaving.left.activeId === window.id,
       motion: departureFor(leaving.left.towards),
       placement: leaving.placement,

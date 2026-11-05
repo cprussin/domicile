@@ -33,6 +33,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { BrowserWindow } from "./BrowserWindow";
+import { CROSSING } from "./placement";
 import { recordedSettles } from "./recorded-settles";
 
 /** A desktop whose system calls these tests never answer. */
@@ -2647,6 +2648,26 @@ describe("BrowserWindow", () => {
         "inline-size",
       );
       expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: 600, y: 0 }]);
+    });
+
+    // Tiled strips share its depth and come later in the page.
+    it("eases into another group over the strips it passes", () => {
+      const { held, settler } = recordedSettles();
+      const { rerender } = render(
+        <BrowserWindow {...windowProps} settler={settler} />,
+      );
+
+      rerender(
+        <BrowserWindow
+          {...windowProps}
+          crossing
+          rect={{ ...ON_SCREEN, width: 600 }}
+          resizing={false}
+          settler={settler}
+        />,
+      );
+
+      expect(held).toStrictEqual([CROSSING]);
     });
 
     // The page draws at its new size before the window gets there, so

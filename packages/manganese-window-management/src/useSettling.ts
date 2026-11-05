@@ -13,13 +13,15 @@ export type Settler = {
   offset: (element: Element) => Offset;
   /**
    * Stops the element's settle, then eases it from `offset` to its box,
-   * keeping each `upright` part at its own size. Only stops for `undefined`.
-   * Calls `onEnded` when the settle runs to its end, not when it is stopped.
+   * keeping each `upright` part at its own size and the element at depth
+   * `over`, if any. Only stops for `undefined`. Calls `onEnded` when the
+   * settle runs to its end, not when it is stopped.
    */
   play: (
     element: Element,
     offset: Offset | undefined,
     upright: readonly Element[],
+    over: number | undefined,
     onEnded: () => void,
   ) => void;
 };
@@ -52,6 +54,12 @@ type Options = {
    * `rect`, when the element is off screen.
    */
   origin: Point | undefined;
+  /**
+   * The depth the element holds while it eases into a new box, over the parts
+   * it passes, such as a window moving to another group over the strips on
+   * its way. `undefined` keeps its own.
+   */
+  over?: number | undefined;
   /** The element's box, or `undefined` when it is off screen. */
   rect: Rect | undefined;
   /**
@@ -100,6 +108,7 @@ export const useSettling = ({
   element,
   onSettling = IGNORED,
   origin,
+  over,
   rect,
   row,
   settler = WEB_ANIMATIONS,
@@ -132,6 +141,7 @@ export const useSettling = ({
             shown,
             now,
             offsetFrom(from, now.rect, now.origin),
+            over,
             onSettling,
           );
         }
@@ -141,6 +151,7 @@ export const useSettling = ({
           shown,
           now,
           still ? undefined : offsetTo(shown, leftRow(was, now), now, settler),
+          over,
           onSettling,
         );
       }
@@ -152,6 +163,7 @@ export const useSettling = ({
     height,
     originX,
     originY,
+    over,
     rowHeight,
     rowWidth,
     rowX,
@@ -188,20 +200,22 @@ const NO_KEYS: readonly string[] = [];
 const IGNORED = () => undefined;
 
 /**
- * Plays the element's settle from `offset` to its box `now`, or stops it for
- * `undefined`, and tells `onSettling` the box it starts from.
+ * Plays the element's settle from `offset` to its box `now`, at depth `over`
+ * if any, or stops it for `undefined`, and tells `onSettling` the box it
+ * starts from.
  */
 const settle = (
   settler: Settler,
   element: Element,
   now: Placed,
   offset: Offset | undefined,
+  over: number | undefined,
   onSettling: (from: Rect | undefined) => void,
 ): void => {
   onSettling(
     offset === undefined ? undefined : drawnAt(now.rect, now.origin, offset),
   );
-  settler.play(element, offset, uprightIn(element), () => {
+  settler.play(element, offset, uprightIn(element), over, () => {
     onSettling(undefined);
   });
 };
@@ -289,12 +303,17 @@ const sameBox = (one: Rect, other: Rect): boolean =>
 const NONE: Offset = { scaleX: 1, scaleY: 1, x: 0, y: 0 };
 
 /**
- * Each element's settle, the offset it started from, and its upright parts'
- * animations.
+ * Each element's settle, the offset it started from, and the animations of
+ * its upright parts and of the depth it holds.
  */
 const settles = new WeakMap<
   Element,
-  { animation: Animation; from: Offset; upright: readonly Animation[] }
+  {
+    animation: Animation;
+    from: Offset;
+    held: Animation | undefined;
+    upright: readonly Animation[];
+  }
 >();
 
 /**
@@ -314,9 +333,10 @@ const WEB_ANIMATIONS: Settler = {
       ? NONE
       : partway(settle.from, progress);
   },
-  play: (element, offset, upright, onEnded) => {
+  play: (element, offset, upright, over, onEnded) => {
     const was = settles.get(element);
     was?.animation.cancel();
+    was?.held?.cancel();
     for (const part of was?.upright ?? []) {
       part.cancel();
     }
@@ -347,6 +367,15 @@ const WEB_ANIMATIONS: Settler = {
       settles.set(element, {
         animation,
         from: offset,
+        // A second animation, so the compositor thread still runs the move:
+        // it cannot run `z-index`.
+        held:
+          over === undefined
+            ? undefined
+            : settled(element, timing, [
+                { zIndex: over.toString() },
+                { zIndex: over.toString() },
+              ]),
         upright: upright.map((part) => settled(part, timing, steps)),
       });
     }

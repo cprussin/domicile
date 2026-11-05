@@ -9,7 +9,7 @@ import {
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
-import { raised } from "./placement";
+import { CROSSING, raised } from "./placement";
 import { recordedSettles } from "./recorded-settles";
 import { SettleHandoffs } from "./SettleHandoffs";
 import { TitleBar } from "./TitleBar";
@@ -310,6 +310,27 @@ describe("TitleBar", () => {
       );
 
       expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: -250, y: 0 }]);
+    });
+
+    // Over its window's contents, which hold `CROSSING` as they go.
+    it("eases its open tab into another group over the strips it passes", () => {
+      const { held, settler } = recordedSettles();
+      const strip = { ...MIDDLE_TAB, open: true };
+      const { rerender } = render(
+        <TitleBar {...barProps} settler={settler} strip={strip} />,
+      );
+
+      rerender(
+        <TitleBar
+          {...barProps}
+          crossing
+          rect={{ ...ON_SCREEN, width: 500, x: 500 }}
+          settler={settler}
+          strip={strip}
+        />,
+      );
+
+      expect(held).toStrictEqual([raised(CROSSING)]);
     });
 
     it("goes there at once while it plays a motion", () => {

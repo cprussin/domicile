@@ -344,6 +344,7 @@ export const Stage = memo(
           })}
           {motions.drawn.map(
             ({
+              crossing,
               focused,
               motion,
               placement,
@@ -365,6 +366,7 @@ export const Stage = memo(
                     (desk.floats.has(window.id) ||
                       desk.targeted.has(window.id)))
                 }
+                crossing={crossing}
                 domicile={domicile}
                 dragging={stretching || held.has(window.id)}
                 floating={desk.floats.has(window.id)}
@@ -470,6 +472,7 @@ export const Stage = memo(
         */}
           {motions.drawn.map(
             ({
+              crossing,
               focused,
               motion,
               placement,
@@ -480,6 +483,7 @@ export const Stage = memo(
             }) =>
               placement === undefined || placement.bare ? undefined : (
                 <WindowBar
+                  crossing={crossing}
                   description={descriptionOf(window)}
                   dragging={stretching || held.has(window.id)}
                   float={desk.floats.get(window.id)}
@@ -798,6 +802,8 @@ const deskOf = (screens: readonly StageScreen[]): Desk => {
 type WindowContentsProps = {
   behindPanel: boolean;
   clickThrough: boolean;
+  /** See `DrawnWindow.crossing`. */
+  crossing: boolean;
   domicile: Domicile;
   dragging: boolean;
   floating: boolean;
@@ -832,6 +838,7 @@ const WindowContents = memo(
   ({
     behindPanel,
     clickThrough,
+    crossing,
     domicile,
     dragging,
     floating,
@@ -895,6 +902,7 @@ const WindowContents = memo(
             appId={window.appId}
             behindPanel={behindPanel}
             clickThrough={clickThrough}
+            crossing={crossing}
             cursor={window.cursor}
             depth={contents?.depth ?? 0}
             domicile={domicile}
@@ -916,6 +924,7 @@ const WindowContents = memo(
             behindPanel={behindPanel}
             clickThrough={clickThrough}
             covered={placement?.behind !== undefined}
+            crossing={crossing}
             depth={contents?.depth ?? 0}
             domicile={domicile}
             dragging={dragging}
@@ -945,6 +954,8 @@ const WindowContents = memo(
 );
 
 type WindowBarProps = {
+  /** See `DrawnWindow.crossing`. */
+  crossing: boolean;
   description: string | undefined;
   dragging: boolean;
   float: Float | undefined;
@@ -978,6 +989,7 @@ type WindowBarProps = {
 /** One window's title bar, memoized as {@link WindowContents} is. */
 const WindowBar = memo(
   ({
+    crossing,
     description,
     dragging,
     float,
@@ -1052,6 +1064,7 @@ const WindowBar = memo(
         screen={screenBox}
       >
         <WindowTitleBar
+          crossing={crossing}
           depth={placement.depth}
           description={description}
           dragging={dragging}

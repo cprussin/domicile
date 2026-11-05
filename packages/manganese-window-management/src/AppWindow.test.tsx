@@ -10,6 +10,7 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { css } from "../styled-system/css";
 import { token } from "../styled-system/tokens";
 import { AppWindow } from "./AppWindow";
+import { CROSSING } from "./placement";
 import { recordedSettles } from "./recorded-settles";
 
 // Records `focusApp` calls. Pointer mapping is the engine's, checked by
@@ -318,6 +319,26 @@ describe("AppWindow", () => {
         globalThis.getComputedStyle(windowBox(container)).transition,
       ).not.toContain("inline-size");
       expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: 600, y: 0 }]);
+    });
+
+    // Tiled strips share its depth and come later in the page.
+    it("eases into another group over the strips it passes", () => {
+      const { held, settler } = recordedSettles();
+      const { rerender } = render(
+        <AppWindow {...windowProps} focused={false} settler={settler} />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          crossing
+          focused={false}
+          rect={{ ...ON_SCREEN, width: 600 }}
+          settler={settler}
+        />,
+      );
+
+      expect(held).toStrictEqual([CROSSING]);
     });
 
     // The client draws at its new size before the box gets there, so scaling

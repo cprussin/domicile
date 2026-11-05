@@ -76,6 +76,12 @@ const motionOf = (
 ): WindowMotion | undefined =>
   result.current.drawn.find((drawn) => drawn.window.id === id)?.motion;
 
+const crossingOf = (
+  result: { current: ReturnType<typeof useWindowMotion> },
+  id: string,
+): boolean | undefined =>
+  result.current.drawn.find((drawn) => drawn.window.id === id)?.crossing;
+
 describe("useWindowMotion", () => {
   describe("a window that has opened", () => {
     it("grows in", () => {
@@ -890,6 +896,60 @@ describe("useWindowMotion", () => {
 
       expect(motionOf(result, TERMINAL.id)).toBe("revealing");
       expect(motionOf(result, EDITOR.id)).toBe("concealing");
+    });
+  });
+
+  describe("a window moved to another group", () => {
+    /** TERMINAL alone in its group, or moved into EDITOR's. */
+    const grouped = (moved: boolean): Shown => {
+      const groupOf = (id: string) => (moved ? [EDITOR.id, TERMINAL.id] : [id]);
+      // The window moved in is shown over the group's.
+      const hidden = (id: string) => moved && id === EDITOR.id;
+      const inGroup = (id: string): Placement => ({
+        ...placementOf(id),
+        strip: {
+          area: placementOf(id).frame,
+          at: groupOf(id).indexOf(id),
+          box: placementOf(id).bar,
+          divided: false,
+          end: undefined,
+          endDivided: false,
+          group: { node: { id, up: 1 }, wells: 0, windows: groupOf(id) },
+          nested: false,
+          open: !hidden(id),
+          tabs: groupOf(id).length,
+        },
+        surface: hidden(id) ? undefined : placementOf(id).surface,
+        tabbed: Layout.Tabbed,
+      });
+      return {
+        ...desktop("1", [TERMINAL, EDITOR]),
+        placements: [inGroup(TERMINAL.id), inGroup(EDITOR.id)],
+      };
+    };
+
+    it("crosses to it", () => {
+      const { rerender, result } = showing(grouped(false));
+
+      act(() => {
+        rerender(grouped(true));
+      });
+
+      expect(crossingOf(result, TERMINAL.id)).toBe(true);
+    });
+
+    // A later change to the desk moves the window within its group.
+    it("is done crossing once the desk changes again", () => {
+      const { rerender, result } = showing(grouped(false));
+      act(() => {
+        rerender(grouped(true));
+      });
+
+      act(() => {
+        rerender({ ...grouped(true), activeId: EDITOR.id });
+      });
+
+      expect(crossingOf(result, TERMINAL.id)).toBe(false);
     });
   });
 

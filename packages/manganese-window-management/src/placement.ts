@@ -109,10 +109,17 @@ const COVERED = -2;
 export const TILED = 0;
 
 /**
- * The lowest floating `z-index`, above every tiled window and its open tabs.
- * Floats are two apart, leaving each one's {@link raised} depth free.
+ * The depth of a tiled window moving to another group, while it eases there:
+ * over every tiled window, strip and open tab it passes, under every float.
+ * See `crossing.ts`.
  */
-const FLOATING = 2;
+export const CROSSING = 2;
+
+/**
+ * The lowest floating `z-index`, above a {@link CROSSING} window and its open
+ * tab. Floats are two apart, leaving each one's {@link raised} depth free.
+ */
+const FLOATING = 4;
 
 /**
  * The depth a group's well is drawn at, under the windows at `depth`. A tiled

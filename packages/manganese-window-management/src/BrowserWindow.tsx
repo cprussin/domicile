@@ -36,6 +36,7 @@ import { useSitePermissions } from "./browser/useSitePermissions";
 import { useZoomPopup } from "./browser/useZoomPopup";
 import { ZoomPanel } from "./browser/ZoomPanel";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
+import { CROSSING } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { useHistoryAvailability } from "./useHistoryAvailability";
@@ -88,6 +89,11 @@ type Props = {
    * clicked, so its guest taking focus is not a user reach (see `onReach`).
    */
   covered: boolean;
+  /**
+   * Whether it just moved to another tab group, so it eases there over the
+   * strips it passes. See `crossing.ts`.
+   */
+  crossing?: boolean | undefined;
   /** The window's `z-index`, which the SDK reports to the host. */
   depth: number;
   /**
@@ -202,6 +208,7 @@ export const BrowserWindow = ({
   behindPanel,
   clickThrough,
   covered,
+  crossing = false,
   depth,
   domicile,
   dragging,
@@ -248,6 +255,7 @@ export const BrowserWindow = ({
       rect === undefined || frame === undefined
         ? undefined
         : originOf(frame, rect),
+    over: crossing ? CROSSING : undefined,
     rect,
     settler,
     still: dragging || isMoving(motion),

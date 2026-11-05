@@ -13,7 +13,7 @@ import { useRef, useState } from "react";
 import { css, cva, cx } from "../styled-system/css";
 import { hstack, vstack } from "../styled-system/patterns";
 import { grabCursorStyles } from "./grab-cursor-styles";
-import { raised } from "./placement";
+import { CROSSING, raised } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
@@ -58,6 +58,11 @@ const GROUP_NAMES: Record<Layout, string> = {
 };
 
 type Props = {
+  /**
+   * Whether its window just moved to another tab group, so it eases there
+   * over the strips it passes. See `crossing.ts`.
+   */
+  crossing?: boolean | undefined;
   /** The stacking depth of the window it names. */
   depth: number;
   /**
@@ -154,6 +159,7 @@ type Props = {
  * together.
  */
 export const TitleBar = ({
+  crossing = false,
   depth,
   description,
   dragging,
@@ -187,11 +193,15 @@ export const TitleBar = ({
   // it ease along. Anything else turns about its whole window's middle.
   const origin = alongStrip(motion) ? STRIP_START : originOf(frame, rect);
   // Over the rest of the strip, which slides under it when tabs swap.
-  const shownDepth = strip?.open === true ? raised(depth) : depth;
+  const shownAt = (windowDepth: number) =>
+    strip?.open === true ? raised(windowDepth) : windowDepth;
+  const shownDepth = shownAt(depth);
   const lowered = useLowered(shownDepth);
   useSettling({
     element,
     origin,
+    // Over its window's contents.
+    over: crossing ? shownAt(CROSSING) : undefined,
     rect,
     // A tab leaving its strip grows from the whole strip, over its contents,
     // so no part of the strip's row is left clear. A stack's bars already

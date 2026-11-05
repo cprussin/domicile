@@ -19,6 +19,8 @@ import type { WindowMotion } from "./window-motion";
 const PRIMARY_BUTTON = 0;
 
 type Props = {
+  /** Whether the window just moved to another group. See {@link TitleBar}. */
+  crossing?: boolean | undefined;
   /** The stacking depth of the window it names. */
   depth: number;
   /** The page's description. See {@link TitleBar}. */
@@ -81,6 +83,7 @@ type Props = {
  * click closes the window. A fullscreen window's bar does not drag.
  */
 export const WindowTitleBar = ({
+  crossing,
   depth,
   description,
   dragging,
@@ -137,6 +140,7 @@ export const WindowTitleBar = ({
   });
   return (
     <TitleBar
+      crossing={crossing}
       depth={depth}
       description={description}
       dragging={dragging}

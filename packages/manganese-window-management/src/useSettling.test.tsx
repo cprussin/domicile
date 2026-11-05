@@ -14,6 +14,7 @@ const CORNER = { x: 0, y: 0 };
 
 type Props = {
   origin: Point | undefined;
+  over?: number | undefined;
   rect: Rect | undefined;
   still: boolean;
 };
@@ -28,14 +29,14 @@ const settling = (
   element = { current: document.createElement("div") },
   onSettling?: (from: Rect | undefined) => void,
 ) => {
-  const { ends, kept, played, settler } = recordedSettles(current);
+  const { ends, held, kept, played, settler } = recordedSettles(current);
   const { rerender } = renderHook(
-    ({ origin, rect, still }: Props) => {
-      useSettling({ element, onSettling, origin, rect, settler, still });
+    ({ origin, over, rect, still }: Props) => {
+      useSettling({ element, onSettling, origin, over, rect, settler, still });
     },
     { initialProps: first },
   );
-  return { ends, kept, played, rerender };
+  return { ends, held, kept, played, rerender };
 };
 
 describe("useSettling", () => {
@@ -61,6 +62,31 @@ describe("useSettling", () => {
     rerender({ origin: CORNER, rect: NOW, still: false });
 
     expect(played).toStrictEqual([{ scaleX: 0.5, scaleY: 0.5, x: 100, y: 20 }]);
+  });
+
+  // A window moving to another group passes over the strips on its way.
+  it("holds the depth it is given while it eases", () => {
+    const { held, rerender } = settling({
+      origin: CORNER,
+      rect: WAS,
+      still: false,
+    });
+
+    rerender({ origin: CORNER, over: 2, rect: NOW, still: false });
+
+    expect(held).toStrictEqual([2]);
+  });
+
+  it("keeps its own depth while it eases unless given one", () => {
+    const { held, rerender } = settling({
+      origin: CORNER,
+      rect: WAS,
+      still: false,
+    });
+
+    rerender({ origin: CORNER, rect: NOW, still: false });
+
+    expect(held).toStrictEqual([undefined]);
   });
 
   // A box that changes during a settle eases on from where it is drawn, not

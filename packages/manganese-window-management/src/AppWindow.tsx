@@ -12,6 +12,7 @@ import { WindowState } from "@domicile-desktop/sdk/window-state";
 import { useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
+import { CROSSING } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { useLowered } from "./useLowered";
@@ -75,6 +76,11 @@ type Props = {
    * The cursor the client requested. `undefined` uses the page's cursor.
    */
   cursor: CursorShape | undefined;
+  /**
+   * Whether it just moved to another tab group, so it eases there over the
+   * strips it passes. See `crossing.ts`.
+   */
+  crossing?: boolean | undefined;
   /** The window's `z-index`, which the SDK reports to the host. */
   depth: number;
   /** Used to request keyboard focus. */
@@ -145,6 +151,7 @@ export const AppWindow = ({
   behindPanel,
   clickThrough,
   cursor,
+  crossing = false,
   depth,
   domicile,
   dragging,
@@ -178,6 +185,7 @@ export const AppWindow = ({
       rect === undefined || frame === undefined
         ? undefined
         : originOf(frame, rect),
+    over: crossing ? CROSSING : undefined,
     rect,
     settler,
     still: dragging || isMoving(motion),
