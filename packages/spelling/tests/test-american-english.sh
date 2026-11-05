@@ -69,11 +69,40 @@ FILES="$(git ls-files \
   exit 77
 }
 
-# `grep -I` skips binary files missed by the extension filter. Exempt lines
-# are filtered after matching so the exemption stays in one place.
-HITS="$(printf '%s\n' "$FILES" \
-  | xargs grep -InEi -- "$BRITISH" 2>/dev/null \
-  | grep -vE -- "$EXEMPT" || true)"
+# Patch preimages are an upstream byte contract, like an external API.
+# Check added lines and metadata; preserve context and removed lines verbatim.
+PATCHES="$(printf '%s\n' "$FILES" | grep '\.patch$' || true)"
+CONTENTS="$(printf '%s\n' "$FILES" | grep -v '\.patch$' || true)"
+RAW_HITS="$({
+  if [ -n "$CONTENTS" ]; then
+    printf '%s\n' "$CONTENTS" | xargs grep -HInEi -- "$BRITISH" 2>/dev/null || true
+  fi
+  if [ -n "$PATCHES" ]; then
+    while IFS= read -r patch; do
+      PATCH_TEXT="$(awk -v file="$patch" '
+        /^@@ / {
+          split($2, old, ","); split($3, added, ",")
+          before = old[2] == "" ? 1 : old[2]
+          after = added[2] == "" ? 1 : added[2]
+          print file ":" FNR ":" $0
+          next
+        }
+        before > 0 || after > 0 {
+          prefix = substr($0, 1, 1)
+          if (prefix == " " || prefix == "-") {
+            before--
+            if (prefix == " ") { after-- }
+            next
+          }
+          if (prefix == "+") { after-- }
+        }
+        { print file ":" FNR ":" $0 }
+      ' "$patch")" || exit "$?"
+      printf '%s\n' "$PATCH_TEXT" | grep -Ei -- "$BRITISH" || true
+    done <<<"$PATCHES"
+  fi
+})" || exit "$?"
+HITS="$(printf '%s\n' "$RAW_HITS" | grep -vE -- "$EXEMPT" || true)"
 
 # Filenames too, not only contents.
 NAMES="$(printf '%s\n' "$FILES" | grep -Ei -- "$BRITISH" || true)"

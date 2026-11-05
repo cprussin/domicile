@@ -9,3 +9,5 @@ bun run turbo test:shell --filter=@domicile-desktop/spelling
 
 - Its `test:shell` runs in `turbo test`.
 - Never cached: it reads every tracked file.
+- Patches check added lines and metadata. Hunk preimages retain upstream's
+  required bytes, as an external API contract does.
