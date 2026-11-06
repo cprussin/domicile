@@ -199,6 +199,9 @@
         # `libpulse.so.0` for sound. Without libpulse the audio service falls
         # back to ALSA, which cannot open a cast's sound node by name, so a
         # page's `getDisplayMedia()` of a window or monitor with audio fails.
+        # And it `dlopen`s `libvulkan.so.1` by name for
+        # `--enable-features=Vulkan` and WebGPU. nixpkgs' loader finds NixOS
+        # drivers in `/run/opengl-driver/share`; the engine's own does not.
         #
         # A wrapper, not an rpath: chrome re-execs itself for its zygote and
         # renderers, and only environment variables reach those children.
@@ -219,6 +222,7 @@
                 pkgs.libGL
                 pkgs.pipewire
                 pkgs.libpulseaudio
+                pkgs.vulkan-loader
               ]
             }" \
             --prefix XDG_DATA_DIRS : "${
@@ -252,6 +256,12 @@
           # to open a cast's sound node.
           grep -q libpulseaudio "$out/chrome" || {
             echo "the engine's chrome carries no libpulse, so it plays and captures sound through ALSA" >&2
+            exit 1
+          }
+          # Check the wrapper carries a Vulkan loader, which Chromium
+          # `dlopen`s by name for `--enable-features=Vulkan` and WebGPU.
+          grep -q vulkan-loader "$out/chrome" || {
+            echo "the engine's chrome carries no Vulkan loader, so Vulkan and WebGPU get no adapter" >&2
             exit 1
           }
           # Check the wrapper adds compiled GSettings schemas.
