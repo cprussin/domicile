@@ -5,12 +5,14 @@ import { desktopFolders } from "@domicile-desktop/component-library/folders";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { ExternalAppAsk } from "@domicile-desktop/manganese-page-requests/ExternalAppAsk";
 import { PageDialog } from "@domicile-desktop/manganese-page-requests/PageDialog";
+import { PromptAsk } from "@domicile-desktop/manganese-page-requests/PromptAsk";
 import { SignInAsk } from "@domicile-desktop/manganese-page-requests/SignInAsk";
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
 import { useDialogRequest } from "@domicile-desktop/manganese-page-requests/useDialogRequest";
 import { useExternalAppRequest } from "@domicile-desktop/manganese-page-requests/useExternalAppRequest";
 import { useLinkOpener } from "@domicile-desktop/manganese-page-requests/useLinkOpener";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
+import { usePromptRequest } from "@domicile-desktop/manganese-page-requests/usePromptRequest";
 import { useSignInRequest } from "@domicile-desktop/manganese-page-requests/useSignInRequest";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import {
@@ -334,8 +336,12 @@ export const BrowserWindow = ({
   // focus. The engine draws no dialog.
   const signIn = useSignInRequest(view);
   const [signInBox, setSignInBox] = useState<HTMLElement | null>(null);
+  // File access, a certificate, Bluetooth pairing or an extension's
+  // permissions, and the element to focus. The engine draws no dialog.
+  const prompt = usePromptRequest(view);
+  const [promptBox, setPromptBox] = useState<HTMLElement | null>(null);
   // What the page waits on, which takes the keyboard while it is open.
-  const waiting = pickerBox ?? dialogBox ?? signInBox ?? appAskBox;
+  const waiting = pickerBox ?? dialogBox ?? signInBox ?? promptBox ?? appAskBox;
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
@@ -803,6 +809,19 @@ export const BrowserWindow = ({
           )}
           {dialogRequest === undefined &&
             signIn === undefined &&
+            prompt !== undefined && (
+              <PromptAsk
+                // A new answer per prompt, so each starts unanswered.
+                key={[prompt.kind, prompt.subject, ...prompt.details].join(
+                  "\n",
+                )}
+                ref={setPromptBox}
+                request={prompt}
+              />
+            )}
+          {dialogRequest === undefined &&
+            signIn === undefined &&
+            prompt === undefined &&
             externalApp !== undefined &&
             linkOpener !== undefined && (
               <ExternalAppAsk

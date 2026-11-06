@@ -483,6 +483,63 @@ export const WEBVIEW_SIGN_IN_EVENT = "domicile-sign-in";
  */
 export const WEBVIEW_SIGN_IN_WITHDRAWN_EVENT = "domicile-sign-in-withdrawn";
 
+/**
+ * Fired when the page, or an extension shown in the element, needs the user
+ * to answer a question the browser would otherwise ask with a dialog of its
+ * own: letting a site view or edit a file, picking a certificate to sign in
+ * with, pairing a Bluetooth device, or granting an extension permissions. See
+ * {@link WEBVIEW_PROMPT_KINDS}. The request waits until it is answered.
+ * Bubbles.
+ *
+ * The browser draws no dialog. Call `preventDefault()` to handle it, then
+ * answer with {@link DomicilePromptEvent.accept} or
+ * {@link DomicilePromptEvent.dismiss}. If no listener calls
+ * `preventDefault()`, it is answered no.
+ */
+export const WEBVIEW_PROMPT_EVENT = "domicile-prompt";
+
+/**
+ * Fired when the browser drops the unanswered {@link WEBVIEW_PROMPT_EVENT},
+ * for example because the page navigated, or a newer one replaces it.
+ * Answering it afterward throws. Carries no payload. Bubbles.
+ */
+export const WEBVIEW_PROMPT_WITHDRAWN_EVENT = "domicile-prompt-withdrawn";
+
+/**
+ * What a {@link WEBVIEW_PROMPT_EVENT} asks, as {@link DomicilePromptEvent.kind}:
+ *
+ * - `file-view`, `file-edit`: let the site view or edit the file or folder
+ *   named `subject` (full path in `details[0]`).
+ * - `file-restricted`: the site picked a folder that holds system files.
+ *   Accepting picks another; dismissing gives up.
+ * - `file-dangerous`: save `subject` anyway, though it may be harmful.
+ * - `client-certificate`: pick one of `details` (each `"name\nissuer"`) to
+ *   sign in to the site with; pass its index to `accept`. Dismissing continues
+ *   without one.
+ * - `bluetooth-pin`: the device `subject` needs a PIN; pass it as `accept`'s
+ *   text.
+ * - `bluetooth-confirm`: pair with the device `subject`; `pin`, when set, must
+ *   match the one the device shows.
+ * - `extension-install`, `extension-permissions`, `extension-re-enable`: add,
+ *   grant more permissions to, or turn back on the extension `subject`, with
+ *   the permissions in `details`.
+ */
+export const WEBVIEW_PROMPT_KINDS = [
+  "file-view",
+  "file-edit",
+  "file-restricted",
+  "file-dangerous",
+  "client-certificate",
+  "bluetooth-pin",
+  "bluetooth-confirm",
+  "extension-permissions",
+  "extension-install",
+  "extension-re-enable",
+] as const;
+
+/** One of {@link WEBVIEW_PROMPT_KINDS}. */
+export type WebViewPromptKind = (typeof WEBVIEW_PROMPT_KINDS)[number];
+
 /** The dialogs a page can open, as {@link DomicileDialogEvent.dialogType}. */
 export const WEBVIEW_DIALOG_TYPES = [
   "alert",
@@ -938,6 +995,34 @@ declare global {
   }
 
   /**
+   * The {@link WEBVIEW_PROMPT_EVENT} event. The engine defines it in
+   * `domicile_prompt_event.idl`.
+   */
+  interface DomicilePromptEvent extends Event {
+    /** What is asked: one of {@link WEBVIEW_PROMPT_KINDS}. */
+    readonly kind: WebViewPromptKind;
+    /** The site that asked, such as `https://vscode.dev`, or `""`. */
+    readonly origin: string;
+    /** A file's, device's or extension's name; `""` for the others. */
+    readonly subject: string;
+    /**
+     * A file's full path, the certificates to pick from, or an extension's
+     * permissions.
+     */
+    readonly details: readonly string[];
+    /** The PIN a Bluetooth device shows, or `""`. */
+    readonly pin: string;
+    /**
+     * Answer yes, with the picked entry of `details` and the typed text where
+     * the kind reads them. Answering twice, or after
+     * {@link WEBVIEW_PROMPT_WITHDRAWN_EVENT}, throws an `InvalidStateError`.
+     */
+    accept(choice?: number, text?: string): void;
+    /** Answer no. */
+    dismiss(): void;
+  }
+
+  /**
    * The {@link WEBVIEW_WILL_NAVIGATE_EVENT} event. The engine defines it in
    * `domicile_will_navigate_event.idl`.
    */
@@ -960,6 +1045,7 @@ declare global {
     "domicile-device-request": DomicileDeviceRequestEvent;
     "domicile-dialog": DomicileDialogEvent;
     "domicile-external-app": DomicileExternalAppEvent;
+    "domicile-prompt": DomicilePromptEvent;
     "domicile-sign-in": DomicileSignInEvent;
     "domicile-will-navigate": DomicileWillNavigateEvent;
   }

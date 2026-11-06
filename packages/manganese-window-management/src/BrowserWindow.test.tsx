@@ -17,6 +17,7 @@ import {
   WEBVIEW_PAGE_CHANGE_EVENT,
   WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
+  WEBVIEW_PROMPT_EVENT,
   WEBVIEW_SIGN_IN_EVENT,
   WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT,
   WEBVIEW_TARGET_URL_CHANGE_EVENT,
@@ -2157,6 +2158,66 @@ describe("BrowserWindow", () => {
       );
 
       expect(answers).toStrictEqual(["sign in admin hunter2"]);
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+  });
+
+  // The engine draws no file access, certificate, pairing or extension dialog.
+  describe("a prompt its page needs answered", () => {
+    it("asks it over the page", async () => {
+      const answers: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          isApp
+          motion="resting"
+          onDescription={noDescription}
+          onFocusRequest={() => undefined}
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          resizing={false}
+          url="https://vscode.dev"
+          window="1"
+        />,
+      );
+      fireEvent(
+        view(container),
+        Object.assign(new Event(WEBVIEW_PROMPT_EVENT, { cancelable: true }), {
+          accept: (choice = 0, text = "") => {
+            answers.push(`accept ${choice} ${text}`);
+          },
+          details: ["/home/ada/notes.md"],
+          dismiss: () => undefined,
+          kind: "file-edit",
+          origin: "https://vscode.dev",
+          pin: "",
+          subject: "notes.md",
+        }),
+      );
+
+      const allow = within(
+        await screen.findByRole("alertdialog", {
+          name: "Let vscode.dev edit notes.md?",
+        }),
+      ).getByRole("button", { name: "Allow" });
+      // The page waits on it, so a focused window gives it the keyboard.
+      await waitFor(() => {
+        expect(allow).toHaveFocus();
+      });
+      await userEvent.click(allow);
+
+      expect(answers).toStrictEqual(["accept 0 "]);
       expect(screen.queryByRole("alertdialog")).toBeNull();
     });
   });

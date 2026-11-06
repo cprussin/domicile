@@ -885,3 +885,59 @@ frame.addEventListener(WEBVIEW_SIGN_IN_EVENT, (event) => {
 - A sign-in also answers other requests for the same realm.
 
 Manganese asks over the page (`manganese-page-requests/SignInAsk.tsx`).
+
+## Other prompts
+
+Questions Chrome would ask with dialogs of its own fire `domicile-prompt`:
+letting a site view or edit a file or folder, picking a certificate to sign
+in with, pairing a Bluetooth device, and adding an extension or granting it
+permissions.
+
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_PROMPT_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const asked = (event) => {
+    event.preventDefault(); // claim it
+    ask(event.kind, event.origin, event.subject, event.details).then(
+      ({ choice, text }) => event.accept(choice, text),
+      () => event.dismiss(),
+    );
+  };
+  frame?.addEventListener(WEBVIEW_PROMPT_EVENT, asked);
+  return () => frame?.removeEventListener(WEBVIEW_PROMPT_EVENT, asked);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { WEBVIEW_PROMPT_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_PROMPT_EVENT, (event) => {
+  event.preventDefault(); // claim it
+  ask(event.kind, event.origin, event.subject, event.details).then(
+    ({ choice, text }) => event.accept(choice, text),
+    () => event.dismiss(),
+  );
+});
+```
+
+<!-- /tabs -->
+
+- **`preventDefault()`:** claims it. Unclaimed, it is answered no.
+- **`kind`:** what is asked; `WEBVIEW_PROMPT_KINDS` lists them and what each
+  reads. **`origin`:** the site that asked. **`subject`:** the file's,
+  device's or extension's name. **`details`:** a file's full path, the
+  certificates (`"name\nissuer"`), or an extension's permissions. **`pin`:**
+  the PIN a Bluetooth device shows.
+- **`accept(choice, text)`:** yes. `choice` is the picked certificate;
+  `text` the typed Bluetooth PIN. **`dismiss()`:** no. For a certificate, no
+  continues without one.
+- **One at a time.** A newer one replaces the open one, which is answered no
+  and fires `domicile-prompt-withdrawn`, as does one the browser drops.
+
+Manganese asks over the page (`manganese-page-requests/PromptAsk.tsx`).
