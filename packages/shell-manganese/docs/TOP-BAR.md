@@ -376,6 +376,9 @@ export const Shell = runManganese({
   Opening the drawer clears only the notifications' part. The inbox's own
   notifications (its `notifiesAs` sender) stay out of the count, so new mail
   counts once.
+- Notifications from an inbox's `replaces` sender are cleared as they arrive,
+  unshown. `gmailInbox` replaces `mail.google.com`, whose page notifies the
+  same mail while its window is open.
 - A press closes the drawer and opens the inbox in an app window of its own,
   or brings that window up: one window per inbox.
 - **The launcher** lists each inbox that opens a window, by its

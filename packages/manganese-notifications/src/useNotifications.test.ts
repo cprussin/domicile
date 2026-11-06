@@ -43,11 +43,14 @@ const toasts = () => {
   return { added, closed, manager };
 };
 
-const mounted = (uncounted: readonly string[] = []) => {
+const mounted = (
+  uncounted: readonly string[] = [],
+  replaced: readonly string[] = [],
+) => {
   const host = client();
   const shown = toasts();
   const { result, unmount } = renderHook(() =>
-    useNotifications(host.domicile, shown.manager, uncounted),
+    useNotifications(host.domicile, shown.manager, uncounted, replaced),
   );
   return { host, result, shown, unmount };
 };
@@ -152,6 +155,23 @@ describe("useNotifications", () => {
       host.says([]);
 
       expect(shown.closed).toEqual(["7"]);
+    });
+  });
+
+  describe("a replaced sender's", () => {
+    it("is cleared as it arrives, without a toast", () => {
+      const { host, result, shown } = mounted([], ["mail.google.com"]);
+      host.says([]);
+
+      host.says([
+        notification({ appName: "mail.google.com", id: 7, time: 1 }),
+        notification({ appName: "Work", id: 8, time: 2 }),
+      ]);
+
+      expect(host.asked).toEqual([["dismissNotifications", [7]]]);
+      expect(shown.added).toEqual([expect.objectContaining({ id: "8" })]);
+      expect(result.current.items.map(({ id }) => id)).toEqual([8]);
+      expect(result.current.unread).toBe(1);
     });
   });
 

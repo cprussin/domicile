@@ -28,6 +28,10 @@ describe(gmailInbox, () => {
     expect(inbox().notifiesAs).toBe("Work");
   });
 
+  it("replaces the notifications Gmail's page sends", () => {
+    expect(inbox().replaces).toBe("mail.google.com");
+  });
+
   it("reads signed out before the account signs in", async () => {
     const watch = inbox().read(new FakeDomicileHost().domicile);
 

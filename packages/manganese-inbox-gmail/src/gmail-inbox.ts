@@ -1,4 +1,5 @@
 import {
+  GMAIL_ORIGIN,
   gmailAppId,
   inboxAddress,
 } from "@domicile-desktop/manganese-bar-module-gmail/addresses";
@@ -61,6 +62,8 @@ export const gmailInbox = ({
     read: perDesktop((domicile) =>
       asReadings(deskInbox(domicile)(email, client, nickname).inbox),
     ),
+    // Gmail's page notifies the same mail while its window is open.
+    replaces: new URL(GMAIL_ORIGIN).host,
   });
 
 /** `watch`'s readings, as the drawer reads them. */

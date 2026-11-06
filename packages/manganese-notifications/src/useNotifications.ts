@@ -57,6 +57,12 @@ export const useNotifications = (
   toasts: ToastManager,
   /** The senders `unread` leaves out, by `appName`, such as the inboxes'. */
   uncounted: readonly string[],
+  /**
+   * The senders, by `appName`, whose notifications are cleared as they
+   * arrive, unshown, because another sends the same news: a site whose inbox
+   * notifies its mail.
+   */
+  replaced: readonly string[],
 ): NotificationCenter => {
   const [desk, setDesk] = useState<Desk>({
     items: [],
@@ -70,7 +76,14 @@ export const useNotifications = (
   const quiet = useRef(doNotDisturb);
 
   useEffect(() => {
-    const heard = (items: readonly Notification[]) => {
+    const heard = (sent: readonly Notification[]) => {
+      const duplicates = sent
+        .filter(({ appName }) => replaced.includes(appName))
+        .map(({ id }) => id);
+      if (duplicates.length > 0) {
+        domicile.notifications.dismiss(duplicates);
+      }
+      const items = sent.filter(({ id }) => !duplicates.includes(id));
       for (const arrived of arrivals(told.current, items).filter(
         ({ urgency }) => !quiet.current || urgency === "critical",
       )) {
@@ -100,7 +113,7 @@ export const useNotifications = (
       () => notifications.list,
       heard,
     );
-  }, [domicile, toasts]);
+  }, [domicile, replaced, toasts]);
 
   const read = useCallback(() => {
     setDesk((previous) => ({ ...previous, readUpTo: latest(previous.items) }));

@@ -88,6 +88,12 @@ type Named = {
    * holds the inbox's unread conversations.
    */
   notifiesAs: string;
+  /**
+   * A sender whose notifications tell of the same conversations, such as the
+   * inbox's site when the inbox notifies under another name. Those are
+   * cleared as they arrive, so each conversation notifies once.
+   */
+  replaces?: string;
 };
 
 /**

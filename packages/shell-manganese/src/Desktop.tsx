@@ -251,7 +251,17 @@ export const Desktop = ({
     () => inboxes.map(({ notifiesAs }) => notifiesAs),
     [inboxes],
   );
-  const notifications = useNotifications(domicile, toasts, inboxSenders);
+  // Sites that notify what their inbox notifies already notify nothing.
+  const replacedSenders = useMemo(
+    () => inboxes.flatMap(({ replaces }) => replaces ?? []),
+    [inboxes],
+  );
+  const notifications = useNotifications(
+    domicile,
+    toasts,
+    inboxSenders,
+    replacedSenders,
+  );
   const { dismiss: dismissNotifications, read } = notifications;
   // What `notifications clear` dismisses, as the drawer's "Clear all" does.
   const notificationIds = useMemo(
