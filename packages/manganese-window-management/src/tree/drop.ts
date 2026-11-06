@@ -7,7 +7,7 @@
 
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
-import type { LayoutNode } from "./node";
+import type { Container, LayoutNode } from "./node";
 import {
   axisOf,
   Layout,
@@ -95,7 +95,8 @@ const landed = (tiling: Tiling, node: LayoutNode, selected: boolean): Tiling =>
  * middle when `edge` is `undefined`.
  *
  * Removes it first, like a keyed `move`, so the tree collapses as after a
- * close before the target is located.
+ * close before the target is located. A tab moved beside another tab of its
+ * strip only moves along it, so a strip of two keeps a nested group in it.
  */
 const movedOnto = (
   root: LayoutNode,
@@ -103,12 +104,57 @@ const movedOnto = (
   target: NodeRef,
   edge: Direction | undefined,
 ): LayoutNode => {
-  const rest = withoutAt(root, from);
-  if (rest === undefined) {
-    // Unreachable: the target is still in the tree.
-    throw new Error(`layout tree: dropping on ${target.id} left nothing`);
+  const to = pathToRef(root, target);
+  const around = from.slice(0, -1);
+  const parent = nodeAt(root, around);
+  const fromAt = from.at(-1);
+  const toAt = to.at(-1);
+  if (
+    edge !== undefined &&
+    fromAt !== undefined &&
+    toAt !== undefined &&
+    parent.kind === NodeKind.Container &&
+    showsOneChild(parent.layout) &&
+    axisOf(parent.layout) === axisOfDirection(edge) &&
+    to.length === from.length &&
+    around.every((step, at) => to[at] === step)
+  ) {
+    return replacedAt(root, around, () =>
+      movedAlong(parent, fromAt, toAt, isForward(edge)),
+    );
   } else {
-    return placed(rest, pathToRef(rest, target), nodeAt(root, from), edge);
+    const rest = withoutAt(root, from);
+    if (rest === undefined) {
+      // Unreachable: the target is still in the tree.
+      throw new Error(`layout tree: dropping on ${target.id} left nothing`);
+    } else {
+      return placed(rest, pathToRef(rest, target), nodeAt(root, from), edge);
+    }
+  }
+};
+
+/**
+ * The tab container with its child at `from` moved before or, when `forward`,
+ * after its child at `to`.
+ */
+const movedAlong = (
+  container: Container,
+  from: number,
+  to: number,
+  forward: boolean,
+): Container => {
+  const { children } = container;
+  const moving = children[from];
+  const target = children[to];
+  if (moving === undefined || target === undefined) {
+    throw new Error("layout tree: a tab moved along a strip is not in it");
+  } else {
+    const rest = children.filter((_, at) => at !== from);
+    return withChildAt(
+      { ...container, children: rest },
+      rest.indexOf(target) + (forward ? 1 : 0),
+      moving,
+    );
   }
 };
 
@@ -159,7 +205,8 @@ const joined = (root: LayoutNode, at: Path, moving: LayoutNode): LayoutNode => {
 /**
  * Puts `moving` on the `edge` side of the node at `at`: in its parent if the
  * parent runs along that axis, else in a new split with the node (also when
- * there is no parent). A tab group of one becomes that split.
+ * there is no parent). A tab group of one becomes that split, unless it is a
+ * tab itself.
  */
 const placedBeside = (
   root: LayoutNode,
@@ -169,7 +216,9 @@ const placedBeside = (
 ): LayoutNode => {
   const target = nodeAt(root, at);
   const [only, ...others] =
-    target.kind === NodeKind.Container && showsOneChild(target.layout)
+    target.kind === NodeKind.Container &&
+    showsOneChild(target.layout) &&
+    !isTab(root, at)
       ? target.children
       : [];
   if (only !== undefined && others.length === 0) {
@@ -184,6 +233,12 @@ const placedBeside = (
   } else {
     return besideNode(root, at, moving, edge);
   }
+};
+
+/** Whether the node at `at` is a tab of a tabbed or stacking container. */
+const isTab = (root: LayoutNode, at: Path): boolean => {
+  const parent = at.length === 0 ? undefined : nodeAt(root, at.slice(0, -1));
+  return parent?.kind === NodeKind.Container && showsOneChild(parent.layout);
 };
 
 /** {@link placedBeside} for any node but a tab group of one. */

@@ -39,6 +39,20 @@ describe("bordersOf", () => {
     ]);
   });
 
+  // A window in a group nested in a tab sits under the outer strip, whose tabs
+  // a border must not cover.
+  it("reaches no further than half the gap between tiled windows", () => {
+    const above = { frame: { height: 400, width: 1000, x: 0, y: 0 }, id: "a" };
+    const nested = {
+      frame: { height: 300, width: 980, x: 10, y: 470 },
+      id: "b",
+    };
+    expect(bordersOf([above, nested]).map(({ rect }) => rect)).toEqual([
+      { height: 14, width: 1000, x: 0, y: 396 },
+      { height: 14, width: 980, x: 10, y: 460 },
+    ]);
+  });
+
   it("has none for a window alone", () => {
     expect(
       bordersOf([{ frame: { height: 400, width: 500, x: 0, y: 0 }, id: "a" }]),

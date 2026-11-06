@@ -15,6 +15,7 @@ import { floatBordersOf } from "./floating/float-borders";
 import { castsFloatShadow, floatCovers } from "./floating/float-covers";
 import { ScratchpadBackdrop } from "./floating/ScratchpadBackdrop";
 import { GrabbingSheet } from "./GrabbingSheet";
+import { GroupTitleBar } from "./GroupTitleBar";
 import { GroupWell } from "./GroupWell";
 import type { Modifiers } from "./keyboard/useModifiers";
 import type {
@@ -35,12 +36,12 @@ import { SettleHandoffs } from "./SettleHandoffs";
 import type { StageScreen } from "./screens/stage-screens";
 import { useShared } from "./screens/useShared";
 import { TabStrip } from "./TabStrip";
-import { TitleBar } from "./TitleBar";
 import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
+import { tabTargetsOf } from "./tiled/tab-targets";
 import { titleFocus } from "./title-focus";
 import type { StripPlace } from "./tree/frames";
 import { tabKeyOf } from "./tree/frames";
@@ -695,14 +696,20 @@ export const Stage = memo(
                 key={tabKeyOf(tab)}
                 motion={motion}
                 on={screenNamed(desk, screen)}
+                onAim={setAim}
                 onClose={onGroupClose}
+                onDrop={onDrop}
+                onDropOn={onGroupDropOn}
                 onFloat={onFloat}
                 onFullscreen={onFullscreen}
+                onGrab={groupGrabbed}
                 onPlayedOut={onPlayedOut}
+                onPull={pull}
                 onSelect={onSelect}
                 restack={restack}
                 screen={screen}
                 tab={tab}
+                targets={targets}
                 title={tabbed.title}
               />
             );
@@ -1115,15 +1122,23 @@ type ContainerTabProps = {
   icon: string | undefined;
   motion: WindowMotion;
   on: StageScreen | undefined;
+  onAim: (aim: Aim | undefined) => void;
   /** Closes the tab's group, every window in it. */
   onClose: (group: NodeRef) => void;
+  onDrop: () => void;
+  /** The tab's group dropped where it was aimed. */
+  onDropOn: (group: NodeRef, aim: Aim) => void;
   onFloat: (id: string) => void;
   onFullscreen: (id: string) => void;
+  /** The tab's group taken hold of. */
+  onGrab: (group: NodeRef) => void;
   onPlayedOut: WindowMotions["onPlayedOut"];
+  onPull: () => void;
   onSelect: (id: string) => void;
   restack: Restack | undefined;
   screen: string;
   tab: PlacedTab;
+  targets: DropTargets;
   /** The title of the window the tab is named after. */
   title: string;
 };
@@ -1139,20 +1154,35 @@ const ContainerTab = memo(
     icon,
     motion,
     on,
+    onAim,
     onClose,
+    onDrop,
+    onDropOn,
     onFloat,
     onFullscreen,
+    onGrab,
     onPlayedOut,
+    onPull,
     onSelect,
     restack,
     screen,
     tab,
+    targets,
     title,
   }: ContainerTabProps) => {
     const { id, node } = tab;
     const closed = useCallback(() => {
       onClose(node);
     }, [node, onClose]);
+    const droppedOn = useCallback(
+      (aim: Aim) => {
+        onDropOn(node, aim);
+      },
+      [node, onDropOn],
+    );
+    const grabbed = useCallback(() => {
+      onGrab(node);
+    }, [node, onGrab]);
     const floated = useCallback(() => {
       onFloat(id);
     }, [id, onFloat]);
@@ -1167,7 +1197,7 @@ const ContainerTab = memo(
     }, [id, onSelect]);
     return (
       <Sliding frame={undefined} motion={motion} on={on} rewound={0}>
-        <TitleBar
+        <GroupTitleBar
           depth={tab.depth}
           description={description}
           dragging={dragging}
@@ -1186,16 +1216,23 @@ const ContainerTab = memo(
           group={{ layout: tab.group, windows: tab.windows }}
           icon={icon}
           motion={motion}
+          node={node}
+          onAim={onAim}
           onClose={closed}
+          onDrop={onDrop}
+          onDropOn={droppedOn}
           onFloat={floated}
           onFullscreen={filled}
+          onGrab={grabbed}
           onMiddleClick={closed}
           onMotionEnded={ended}
-          onPointerDown={pressed}
+          onPress={pressed}
+          onPull={onPull}
           rect={tab.rect}
           restack={restack}
           strip={tab.strip}
           tabbed={tab.tabbed}
+          targets={targets}
           title={title}
           window={id}
         />
@@ -1419,23 +1456,13 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
     .map(({ frame, id }) => ({ frame, id }));
 
 /**
- * Every window's tab, tiled or floating, hidden ones too, which a window can
- * be dropped beside. Excludes fullscreen screens, whose windows are hidden.
+ * Every tab, tiled or floating, hidden ones too, which a window or group can be
+ * dropped beside. Excludes fullscreen screens, whose windows are hidden.
  */
 const tabTargets = (screens: readonly StageScreen[]): readonly TabTarget[] =>
-  shownPlacements(screens).flatMap(({ bar, depth, id, strip, tabbed }) =>
-    strip !== undefined && tabbed !== undefined
-      ? [{ at: strip.at, depth, id, rect: bar, strip: strip.box, tabbed }]
-      : [],
-  );
-
-/** The placements of screens with nothing fullscreen. */
-const shownPlacements = (
-  screens: readonly StageScreen[],
-): readonly Placement[] =>
   screens
     .filter(({ fullscreen }) => fullscreen === undefined)
-    .flatMap(({ screenful }) => screenful.placements);
+    .flatMap(({ screenful }) => tabTargetsOf(screenful));
 
 /**
  * The screens with no tiled window to drop on, which a dropped window fills.

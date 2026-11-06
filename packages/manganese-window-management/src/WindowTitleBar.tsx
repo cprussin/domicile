@@ -111,10 +111,11 @@ export const WindowTitleBar = ({
   title,
   window,
 }: Props) => {
+  const alone = { node: { id: window, up: 0 }, windows: [window] };
   // Both hooks run for every bar, since hooks cannot be conditional.
   const floatDrag = useFloatDrag({
     aimer: {
-      at: (x, y) => tabAimAt(targets, [window], x, y),
+      at: (x, y) => tabAimAt(targets, alone, x, y),
       onAim,
       onDropOn,
     },
@@ -127,7 +128,7 @@ export const WindowTitleBar = ({
     resizes: false,
   });
   const tileDrag = useTileDrag({
-    dragged: [window],
+    dragged: alone,
     frame,
     onAim,
     onDrop,

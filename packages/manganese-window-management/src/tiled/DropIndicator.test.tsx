@@ -54,7 +54,7 @@ describe("DropIndicator", () => {
       rerender(
         <SettleHandoffs>
           <DropIndicator
-            aim={Aim.Tab("a", Direction.Left, LINE, 0)}
+            aim={Aim.Tab({ id: "a", up: 0 }, Direction.Left, LINE, 0)}
             settler={settler}
           />
         </SettleHandoffs>,
@@ -73,7 +73,7 @@ describe("DropIndicator", () => {
       const { container, rerender } = render(
         <SettleHandoffs>
           <DropIndicator
-            aim={Aim.Tab("a", Direction.Left, LINE, 0)}
+            aim={Aim.Tab({ id: "a", up: 0 }, Direction.Left, LINE, 0)}
             settler={settler}
           />
         </SettleHandoffs>,
@@ -110,7 +110,9 @@ describe("DropIndicator", () => {
 
     it("is drawn over the open tab of the strip it aims at", () => {
       const { container } = render(
-        <DropIndicator aim={Aim.Tab("a", Direction.Left, LINE, 4)} />,
+        <DropIndicator
+          aim={Aim.Tab({ id: "a", up: 0 }, Direction.Left, LINE, 4)}
+        />,
       );
 
       expect(part(container, "line")?.style.zIndex).toBe("5");

@@ -65,7 +65,7 @@ export const StripEnd = ({
     resizes: false,
   });
   const tileDrag = useTileDrag({
-    dragged: group.windows,
+    dragged: group,
     frame: rect,
     onAim,
     onDrop,

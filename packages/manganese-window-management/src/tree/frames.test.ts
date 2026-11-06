@@ -4,7 +4,7 @@ import { WELL_MARGIN } from "../gaps";
 import { SURFACE_TUCK, TITLE_BAR } from "../rect";
 import { areaOf, focusBoxOf, framesOf, tabKeyOf } from "./frames";
 import { Layout, LayoutNode } from "./node";
-import { NOTHING_TILED } from "./tiling";
+import { NOTHING_TILED, withFocusOn } from "./tiling";
 
 const AREA = { height: 1000, width: 1000, x: 0, y: 0 };
 
@@ -515,6 +515,20 @@ describe("framesOf", () => {
 
     expect(tiled.tabs.map(({ id }) => id)).toEqual(["a", "a"]);
     expect(new Set(tiled.tabs.map((tab) => tabKeyOf(tab))).size).toBe(2);
+  });
+
+  // A drag started on the tab outlives the press that focuses its group.
+  it("keeps a tab's key when focus moves into its group", () => {
+    const root = LayoutNode.Container(Layout.Tabbed, [
+      LayoutNode.Window("a"),
+      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
+    ]);
+    const keyFocusing = (id: string) =>
+      framesOf(withFocusOn({ depth: 1, root }, id), AREA, 0).tabs.map((tab) =>
+        tabKeyOf(tab),
+      );
+
+    expect(keyFocusing("b")).toEqual(keyFocusing("a"));
   });
 
   it("lays a container out in its well, inset from the well's edges", () => {

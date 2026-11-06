@@ -133,6 +133,57 @@ describe("droppedOn", () => {
       });
     });
 
+    it("takes a window dropped beside a nested group of one into its strip", () => {
+      const nested = {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Window("a"),
+          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
+          LayoutNode.Window("c"),
+        ]),
+      };
+
+      expect(
+        droppedOn(
+          nested,
+          { id: "a", up: 0 },
+          { id: "b", up: 1 },
+          Direction.Right,
+        ).root,
+      ).toMatchObject({
+        children: [
+          { children: [{ id: "b" }], layout: Layout.Tabbed },
+          { id: "a" },
+          { id: "c" },
+        ],
+        layout: Layout.Tabbed,
+      });
+    });
+
+    it("moves a tab past a nested group in a strip of two, keeping the group", () => {
+      const pair = {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Window("a"),
+          LayoutNode.Container(Layout.Tabbed, [
+            LayoutNode.Window("b"),
+            LayoutNode.Window("c"),
+          ]),
+        ]),
+      };
+
+      expect(
+        droppedOn(pair, { id: "a", up: 0 }, { id: "b", up: 1 }, Direction.Right)
+          .root,
+      ).toMatchObject({
+        children: [
+          { children: [{ id: "b" }, { id: "c" }], layout: Layout.Tabbed },
+          { id: "a" },
+        ],
+        layout: Layout.Tabbed,
+      });
+    });
+
     it("splits with a window dropped on its edge, which leaves it", () => {
       expect(
         droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 1 }, Direction.Right)

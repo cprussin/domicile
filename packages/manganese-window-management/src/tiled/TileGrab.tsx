@@ -42,7 +42,7 @@ export const TileGrab = ({
   ...handlers
 }: Props) => {
   const { drag, ...events } = useTileDrag({
-    dragged: [id],
+    dragged: { node: { id, up: 0 }, windows: [id] },
     frame,
     resizes,
     ...handlers,

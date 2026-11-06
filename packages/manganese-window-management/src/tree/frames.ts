@@ -137,10 +137,10 @@ export type Tab = {
 /**
  * The key a container's tab is drawn under. A shown group's own shown group
  * can be named after the same window, so the depth of its strip tells the two
- * apart.
+ * apart. Counted in wells, which focus moving into the group leaves alone.
  */
 export const tabKeyOf = ({ id, strip }: Tab): string =>
-  `${id}-${strip.group.node.up.toString()}`;
+  `${id}-${strip.group.wells.toString()}`;
 
 /** The frames and tabs a workspace's tiling puts on screen. */
 export type Tiled = {

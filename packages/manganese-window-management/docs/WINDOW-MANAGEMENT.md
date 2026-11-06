@@ -262,6 +262,9 @@ such as a Slack huddle.
   only if it was selected before the drag.
 - **Dragging a tab along its strip** moves it at once into the slot nearest
   the pointer, with no overlay.
+- **A nested group's tab** drags and drops like a window's tab, carrying the
+  whole group (`GroupTitleBar.tsx`). Other tabs move past it and drop beside
+  it; a group of one stays a group.
 - The pointer shows `grabbing` anywhere on the desktop while a window moves
   (`GrabbingSheet.tsx`).
 - A move aims only once the pointer is 8px from the press, so clicking a tab

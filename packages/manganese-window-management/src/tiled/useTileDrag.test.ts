@@ -51,7 +51,7 @@ const dragging = (resizes = false) => {
   };
   const { result } = renderHook(() =>
     useTileDrag({
-      dragged: [DRAGGED.id],
+      dragged: { node: { id: DRAGGED.id, up: 0 }, windows: [DRAGGED.id] },
       frame: DRAGGED.frame,
       resizes,
       targets: { floats: [], screens: [], tabs: [], windows: [DRAGGED, OTHER] },
@@ -200,10 +200,11 @@ describe("useTileDrag", () => {
     const tabAt = (id: string, at: number) => ({
       at,
       depth: 0,
-      id,
+      node: { id, up: 0 },
       rect: { height: 30, width: 200, x: 200 * at, y: 0 },
       strip: STRIP,
       tabbed: Layout.Tabbed as const,
+      windows: [id],
     });
     const targetsOf = (tabs: readonly string[]) => ({
       floats: [],
@@ -218,7 +219,7 @@ describe("useTileDrag", () => {
       const { rerender, result } = renderHook(
         ({ targets }) =>
           useTileDrag({
-            dragged: ["a"],
+            dragged: { node: { id: "a", up: 0 }, windows: ["a"] },
             frame: DRAGGED.frame,
             onAim,
             onDrop: () => undefined,
@@ -243,7 +244,7 @@ describe("useTileDrag", () => {
         moveTo(300, 10);
       });
       expect(onDropOn.mock.calls).toEqual([
-        [Aim.Strip("b", Direction.Right, tabAt("b", 1).rect)],
+        [Aim.Strip({ id: "b", up: 0 }, Direction.Right, tabAt("b", 1).rect)],
       ]);
       act(() => {
         release();
@@ -262,7 +263,7 @@ describe("useTileDrag", () => {
         moveTo(100, 10);
       });
       expect(onDropOn).toHaveBeenLastCalledWith(
-        Aim.Strip("b", Direction.Left, tabAt("b", 0).rect),
+        Aim.Strip({ id: "b", up: 0 }, Direction.Left, tabAt("b", 0).rect),
       );
     });
   });

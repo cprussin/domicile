@@ -4,7 +4,7 @@ import { useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { Direction } from "../direction";
 import type { Rect } from "../rect";
 import { sameRect } from "../rect";
-import type { Aim, Corner, DropTargets } from "./aim";
+import type { Aim, Corner, Dragged, DropTargets } from "./aim";
 import { AimKind, aimAt, cornerOf } from "./aim";
 
 /** A drag in progress, fixed when it started. See `useFloatDrag`. */
@@ -13,8 +13,8 @@ type Drag = {
   aim: Aim | undefined;
   /** The edges a resize drags. */
   corner: Corner | undefined;
-  /** The windows it moves. See `aimAt`. */
-  dragged: readonly string[];
+  /** What it moves. See `aimAt`. */
+  dragged: Dragged;
   /** The pointer at the last move; the next delta is measured from it. */
   last: { x: number; y: number };
   onAim: (aim: Aim | undefined) => void;
@@ -53,8 +53,8 @@ export type TileDrag = {
 };
 
 type Options = {
-  /** The windows it moves: one, or every window in a group. */
-  dragged: readonly string[];
+  /** What it moves: a window, or a group. */
+  dragged: Dragged;
   /** The window's box; the pointer's quarter picks the resize corner. */
   frame: Rect;
   /** Reports where a drop would land, for drawing. */

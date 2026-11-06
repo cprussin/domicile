@@ -2,6 +2,7 @@
 // side shared with another window, covering the border and the gap.
 
 import { Direction } from "../direction";
+import { INNER_GAP } from "../gaps";
 import type { Rect } from "../rect";
 import type { Target } from "./aim";
 
@@ -29,7 +30,8 @@ export type Border = {
  * The borders of the tiled windows on screen.
  *
  * Only sides facing another window get one. Each reaches halfway across the
- * gap, so the whole gap is grabbable.
+ * gap, so the whole gap is grabbable, but no further than half of
+ * {@link INNER_GAP}: a wider gap holds a nested group's strip and well.
  */
 export const bordersOf = (targets: readonly Target[]): readonly Border[] =>
   targets.flatMap(({ frame, id }) =>
@@ -39,7 +41,13 @@ export const bordersOf = (targets: readonly Target[]): readonly Border[] =>
         .flatMap((other) => gapTo(frame, other.frame, edge));
       return gaps.length === 0
         ? []
-        : [{ edge, id, rect: stripOf(frame, edge, Math.min(...gaps) / 2) }];
+        : [
+            {
+              edge,
+              id,
+              rect: stripOf(frame, edge, Math.min(...gaps, INNER_GAP) / 2),
+            },
+          ];
     }),
   );
 

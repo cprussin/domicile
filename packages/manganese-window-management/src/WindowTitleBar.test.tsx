@@ -223,10 +223,11 @@ describe("WindowTitleBar", () => {
     const TILED_TAB = {
       at: 0,
       depth: 0,
-      id: "t",
+      node: { id: "t", up: 0 },
       rect: { height: 30, width: 200, x: 700, y: 0 },
       strip: { height: 30, width: 600, x: 700, y: 0 },
       tabbed: Layout.Tabbed as const,
+      windows: ["t"],
     };
 
     const dragged = (float: ReturnType<typeof floatOf>) => {
@@ -263,7 +264,7 @@ describe("WindowTitleBar", () => {
       expect(onMove).not.toHaveBeenCalled();
       expect(onDropOn).toHaveBeenCalledWith(
         Aim.Tab(
-          "t",
+          TILED_TAB.node,
           Direction.Left,
           { ...TILED_TAB.rect, width: 4, x: 698 },
           0,
@@ -277,7 +278,7 @@ describe("WindowTitleBar", () => {
       expect(onMove).toHaveBeenCalledWith(710, 0);
       expect(onDropOn).toHaveBeenCalledWith(
         Aim.Tab(
-          "t",
+          TILED_TAB.node,
           Direction.Left,
           { ...TILED_TAB.rect, width: 4, x: 698 },
           0,

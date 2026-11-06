@@ -6,6 +6,7 @@ import type { Rect } from "../rect";
 import { sameRect } from "../rect";
 import type { TabLayout } from "../tree/frames";
 import { Layout } from "../tree/node";
+import type { NodeRef } from "../tree/path";
 
 /** A tiled window on screen that a dragged one can be dropped on. */
 export type Target = {
@@ -21,20 +22,29 @@ export type EmptyScreen = {
 };
 
 /**
- * A tiled or floating window's tab, hidden or open, which a dragged one goes
- * beside.
+ * A tiled or floating window's or nested group's tab, hidden or open, which a
+ * dragged one goes beside.
  */
 export type TabTarget = {
   /** Its index in its strip. */
   at: number;
   /** Its window's depth, so the front of two overlapping strips wins. */
   depth: number;
-  id: string;
+  /** The node it stands for: a window, or a group nested in the strip's. */
+  node: NodeRef;
   rect: Rect;
   /** Its strip's box, which tabs in one strip share. */
   strip: Rect;
   /** The layout of the container whose tab this is. */
   tabbed: TabLayout;
+  /** The windows in its node. */
+  windows: readonly string[];
+};
+
+/** What a drag carries: a window or a group, and every window in it. */
+export type Dragged = {
+  node: NodeRef;
+  windows: readonly string[];
 };
 
 /** A float's box, which hides every target behind it. */
@@ -66,11 +76,11 @@ export enum AimKind {
  * drawing.
  */
 export const Aim = {
-  /** Goes on the `edge` of the tab group window `id` is in. */
-  Group: (id: string, edge: Direction, rect: Rect) => ({
+  /** Goes on the `edge` of the tab group `node`. */
+  Group: (node: NodeRef, edge: Direction, rect: Rect) => ({
     edge,
-    id,
     kind: AimKind.Group as const,
+    node,
     rect,
   }),
   /** Fills the empty screen `name`. */
@@ -80,24 +90,24 @@ export const Aim = {
     rect,
   }),
   /**
-   * Moves along its own strip into tab `id`'s slot, `rect`, on its `edge`
-   * side. Moves at once, with no drop indicator.
+   * Moves along its own strip into the slot of `node`'s tab, `rect`, on its
+   * `edge` side. Moves at once, with no drop indicator.
    */
-  Strip: (id: string, edge: Direction, rect: Rect) => ({
+  Strip: (node: NodeRef, edge: Direction, rect: Rect) => ({
     edge,
-    id,
     kind: AimKind.Strip as const,
+    node,
     rect,
   }),
   /**
-   * Goes in tab `id`'s strip, on its `edge` side. `rect` is the line between
-   * the two tabs it goes between, and `depth` the depth of the strip.
+   * Goes in the strip of `node`'s tab, on its `edge` side. `rect` is the line
+   * between the two tabs it goes between, and `depth` the depth of the strip.
    */
-  Tab: (id: string, edge: Direction, rect: Rect, depth: number) => ({
+  Tab: (node: NodeRef, edge: Direction, rect: Rect, depth: number) => ({
     depth,
     edge,
-    id,
     kind: AimKind.Tab as const,
+    node,
     rect,
   }),
   /**
@@ -106,8 +116,8 @@ export const Aim = {
    */
   Window: (id: string, edge: Direction | undefined, rect: Rect) => ({
     edge,
-    id,
     kind: AimKind.Window as const,
+    node: { id, up: 0 },
     rect,
   }),
 };
@@ -130,9 +140,8 @@ const EDGE_ZONE = 0.3;
 const TAB_LINE = 4;
 
 /**
- * What dropping the `dragged` windows at `x`, `y` would do, or `undefined` over
- * one of them or over nothing to drop them on. `dragged` is one window, or
- * every window in a dragged group.
+ * What dropping `dragged` at `x`, `y` would do, or `undefined` over one of its
+ * windows or over nothing to drop it on.
  *
  * A window goes before or after the tab under the pointer, by which half of it
  * the pointer is in, or beside the nearest tab anywhere else on its strip. A
@@ -142,11 +151,11 @@ const TAB_LINE = 4;
  */
 export const aimAt = (
   { floats, screens, tabs, windows }: DropTargets,
-  dragged: readonly string[],
+  dragged: Dragged,
   x: number,
   y: number,
 ): Aim | undefined => {
-  const cover = coverAt(floats, dragged, x, y);
+  const cover = coverAt(floats, dragged.windows, x, y);
   const shown = tabs.filter(
     ({ depth }) => cover === undefined || depth >= cover,
   );
@@ -158,14 +167,9 @@ export const aimAt = (
       ? windows.find(({ frame }) => contains(frame, x, y))
       : undefined;
   if (tab !== undefined) {
-    return dragged.includes(tab.id)
+    return holdsAny(tab, dragged.windows)
       ? undefined
-      : aimAtTab(
-          tab,
-          tabs.find(({ id }) => dragged.includes(id)),
-          x,
-          y,
-        );
+      : aimAtTab(tab, tabOf(tabs, dragged), x, y);
   } else if (cover !== undefined) {
     return undefined;
   } else if (target === undefined) {
@@ -173,17 +177,28 @@ export const aimAt = (
     return screen === undefined
       ? undefined
       : Aim.Screen(screen.name, screen.area);
-  } else if (dragged.includes(target.id)) {
+  } else if (dragged.windows.includes(target.id)) {
     return aimOutOfGroup(tabs, dragged, target.frame, x, y);
   } else {
     return aimAtWindow(
       target,
-      tabs.some(({ id }) => id === target.id),
+      tabs.some(({ node }) => node.up === 0 && node.id === target.id),
       x,
       y,
     );
   }
 };
+
+/** Whether any of `windows` is in `tab`'s node. */
+const holdsAny = (tab: TabTarget, windows: readonly string[]): boolean =>
+  tab.windows.some((id) => windows.includes(id));
+
+/** The tab of the dragged node, if it has one. */
+const tabOf = (
+  tabs: readonly TabTarget[],
+  { node }: Dragged,
+): TabTarget | undefined =>
+  tabs.find((tab) => tab.node.id === node.id && tab.node.up === node.up);
 
 /** The front one of `tabs`, by depth. */
 const frontOf = (tabs: readonly TabTarget[]): TabTarget | undefined =>
@@ -236,7 +251,7 @@ const distanceAlong = (
  */
 export const tabAimAt = (
   targets: DropTargets,
-  dragged: readonly string[],
+  dragged: Dragged,
   x: number,
   y: number,
 ): Aim | undefined =>
@@ -287,7 +302,7 @@ const aimAtWindow = (
     return Aim.Window(id, edge, frame);
   } else {
     return tabbed
-      ? Aim.Group(id, edge, halfOf(frame, edge))
+      ? Aim.Group({ id, up: 1 }, edge, halfOf(frame, edge))
       : Aim.Window(id, edge, halfOf(frame, edge));
   }
 };
@@ -301,24 +316,26 @@ const aimAtWindow = (
  */
 const aimOutOfGroup = (
   tabs: readonly TabTarget[],
-  dragged: readonly string[],
+  dragged: Dragged,
   frame: Rect,
   x: number,
   y: number,
 ): Aim | undefined => {
-  const tab = tabs.find(({ id }) => dragged.includes(id));
+  const tab = tabOf(tabs, dragged);
   const other =
     tab === undefined
       ? undefined
       : tabs.find(
-          ({ id, strip }) =>
-            !dragged.includes(id) && sameRect(strip, tab.strip),
+          (next) =>
+            !holdsAny(next, dragged.windows) && sameRect(next.strip, tab.strip),
         );
   if (other === undefined) {
     return undefined;
   } else {
     const edge = edgeNearest(frame, x, y);
-    return Aim.Group(other.id, edge, halfOf(frame, edge));
+    // The group the other tab is in, around the node it stands for.
+    const group = { id: other.node.id, up: other.node.up + 1 };
+    return Aim.Group(group, edge, halfOf(frame, edge));
   }
 };
 
@@ -329,12 +346,12 @@ const aimAtTab = (
   x: number,
   y: number,
 ): Aim => {
-  const { depth, id, rect, tabbed } = tab;
+  const { depth, node, rect, tabbed } = tab;
   if (dragged !== undefined && sameRect(dragged.strip, tab.strip)) {
-    return Aim.Strip(id, alongStrip(tabbed, tab.at > dragged.at), rect);
+    return Aim.Strip(node, alongStrip(tabbed, tab.at > dragged.at), rect);
   } else {
     const edge = tabEdgeNear(rect, tabbed, x, y);
-    return Aim.Tab(id, edge, lineAt(rect, edge), depth);
+    return Aim.Tab(node, edge, lineAt(rect, edge), depth);
   }
 };
 
