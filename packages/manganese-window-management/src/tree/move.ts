@@ -118,18 +118,14 @@ const enteredWith = (
   const forward = isForward(direction);
   if (root === undefined) {
     return groupedForWorkspace(node);
-  } else if (
-    root.kind === NodeKind.Window ||
-    (isGroup(root) && isGroup(node))
-  ) {
-    // A tab group arriving at a tab group goes beside it, not in it.
+  } else if (root.kind === NodeKind.Window) {
     return Node.Container(
       splitFor(axisOfDirection(direction)),
       forward ? [node, root] : [root, node],
       forward ? 0 : 1,
     );
   } else {
-    const { at, into, path } = entryInto(root, direction, node);
+    const { at, into, path } = entryInto(root, direction);
     return replacedAt(root, path, () => withChildAt(into, at, node));
   }
 };
@@ -171,7 +167,7 @@ const holds = ({ path }: Ancestor, moving: Path): boolean =>
   path.length === moving.length - 1;
 
 // Swaps with a window neighbor, or enters a container neighbor. A tab group
-// swaps with a neighboring tab group.
+// enters a neighboring tab group as one of its tabs, as a window would.
 const reordered = (
   root: LayoutNode,
   ancestor: Ancestor,
@@ -183,19 +179,12 @@ const reordered = (
   const moving = container.children[index];
   if (neighbor === undefined || moving === undefined) {
     return undefined;
-  } else if (
-    neighbor.kind === NodeKind.Container &&
-    !(isGroup(moving) && isGroup(neighbor))
-  ) {
+  } else if (neighbor.kind === NodeKind.Container) {
     return joined(root, ancestor, to, neighbor, moving, direction);
   } else {
     return traded(root, ancestor, to, neighbor, moving);
   }
 };
-
-// A tab group swaps with a tab group rather than nesting in it.
-const isGroup = (node: LayoutNode): boolean =>
-  node.kind === NodeKind.Container && showsOneChild(node.layout);
 
 /**
  * Moves the node into the neighboring container, at the spot
@@ -214,7 +203,7 @@ const joined = (
   moving: LayoutNode,
   direction: Direction,
 ): LayoutNode => {
-  const { at, into, path: inside } = entryInto(neighbor, direction, moving);
+  const { at, into, path: inside } = entryInto(neighbor, direction);
   const entered = replacedAt(neighbor, inside, () =>
     withChildAt(into, at, moving),
   );
@@ -281,11 +270,7 @@ type Entry = {
  * recurses into its focused child, and the node lands beside the shown window
  * on the side it came from.
  */
-const entryInto = (
-  container: Container,
-  direction: Direction,
-  moving: LayoutNode,
-): Entry => {
+const entryInto = (container: Container, direction: Direction): Entry => {
   const forward = isForward(direction);
   const showing = focusedChildIn(container);
   if (axisOf(container.layout) === axisOfDirection(direction)) {
@@ -294,18 +279,14 @@ const entryInto = (
       into: container,
       path: [],
     };
-  } else if (
-    showing.kind === NodeKind.Window ||
-    (isGroup(moving) && isGroup(showing))
-  ) {
-    // A tab group lands beside a shown group rather than in it.
+  } else if (showing.kind === NodeKind.Window) {
     return {
       at: container.focused + (forward ? 0 : 1),
       into: container,
       path: [],
     };
   } else {
-    const inside = entryInto(showing, direction, moving);
+    const inside = entryInto(showing, direction);
     return { ...inside, path: [container.focused, ...inside.path] };
   }
 };

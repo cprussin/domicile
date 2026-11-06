@@ -75,6 +75,8 @@ export const split = (axis: "h" | "v") => command("split", axis);
 /** Set the layout of the focused container. */
 export const layout = (as: "stacking" | "tabbed" | "toggle split") =>
   command("layout", ...as.split(" "));
+/** Turn the focused tab into a group of its own, nested in its slot. */
+export const group = () => command("group");
 /** Toggle fullscreen, across every screen with `global`. */
 export const fullscreen = (global = false) =>
   global
@@ -130,6 +132,7 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+d": launcher(),
   "Meta+e": layout("toggle split"),
   "Meta+f": fullscreen(),
+  "Meta+g": group(),
   "Meta+minus": scratchpad(),
   "Meta+Shift+a": focus("child"),
   "Meta+Shift+f": fullscreen(true),

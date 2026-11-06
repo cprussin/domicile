@@ -73,6 +73,7 @@ import {
   sentOff,
   shown,
   splitFlipped,
+  tabSubgrouped,
   tiledStretched,
   windowFloatToggled,
   windowGrown,
@@ -418,6 +419,7 @@ export enum WindowActionKind {
   ScreenshotTaken,
   ScreensDescribed,
   SplitToggled,
+  TabSubgrouped,
   VirtualMonitorAdded,
   VirtualMonitorRemoved,
   WindowBarPressed,
@@ -889,6 +891,9 @@ export const WindowAction = {
   /** `layout toggle split`. */
   SplitToggled: () => ({ kind: WindowActionKind.SplitToggled as const }),
 
+  /** `group`: turns the focused tab into a group of its own. */
+  TabSubgrouped: () => ({ kind: WindowActionKind.TabSubgrouped as const }),
+
   /** `virtual-monitor add`. The shell adds a monitor of `size`. */
   VirtualMonitorAdded: (size: {
     readonly width: number;
@@ -1307,6 +1312,9 @@ const reduceAction = (
     }
     case WindowActionKind.SplitToggled: {
       return onCurrent(state, splitFlipped);
+    }
+    case WindowActionKind.TabSubgrouped: {
+      return onCurrent(state, tabSubgrouped);
     }
     case WindowActionKind.DeskLocked: {
       // The compositor locks it and the host says so.

@@ -208,40 +208,70 @@ describe("movedBy", () => {
     expect(focusedNodeOf(moved)).toMatchObject({ id: "b" });
   });
 
-  it("swaps a selected tab group with the tab group beside it", () => {
-    // Joining groups is `layout tabbed` on their split; a move reorders them.
-    const groups = withFocusOn(
-      {
-        depth: 0,
-        root: LayoutNode.Container(Layout.SplitH, [
-          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
-          LayoutNode.Container(Layout.Tabbed, [
-            LayoutNode.Window("b"),
-            LayoutNode.Window("c"),
+  describe("a selected tab group", () => {
+    /** Groups `a1 a2` and `b1 b2` side by side, the first one selected. */
+    const groups = focusedParent(
+      withFocusOn(
+        {
+          depth: 0,
+          root: LayoutNode.Container(Layout.SplitH, [
+            LayoutNode.Container(Layout.Tabbed, [
+              LayoutNode.Window("a1"),
+              LayoutNode.Window("a2"),
+            ]),
+            LayoutNode.Container(Layout.Tabbed, [
+              LayoutNode.Window("b1"),
+              LayoutNode.Window("b2"),
+            ]),
           ]),
-        ]),
-      },
-      "b",
+        },
+        "a1",
+      ),
     );
+    const moving = { children: [{ id: "a1" }, { id: "a2" }] };
+    const right = (times: number) =>
+      Array.from({ length: times }).reduce<typeof groups>(
+        (tiling) => movedBy(tiling, Direction.Right),
+        groups,
+      );
 
-    const moved = movedBy(focusedParent(groups), Direction.Left);
+    it("enters the group beside it as its first tab", () => {
+      const moved = right(1);
 
-    expect(moved.root).toMatchObject({
-      children: [
-        { children: [{ id: "b" }, { id: "c" }] },
-        { children: [{ id: "a" }] },
-      ],
-      layout: Layout.SplitH,
+      expect(moved.root).toMatchObject({
+        children: [moving, { id: "b1" }, { id: "b2" }],
+        layout: Layout.Tabbed,
+      });
+      expect(focusedNodeOf(moved)).toMatchObject(moving);
     });
-    expect(focusedNodeOf(moved)).toMatchObject({ layout: Layout.Tabbed });
+
+    it("moves along that group's tabs", () => {
+      expect(right(3).root).toMatchObject({
+        children: [{ id: "b1" }, { id: "b2" }, moving],
+        layout: Layout.Tabbed,
+      });
+    });
+
+    it("leaves past that group's last tab, beside it", () => {
+      const moved = right(4);
+
+      expect(moved.root).toMatchObject({
+        children: [{ children: [{ id: "b1" }, { id: "b2" }] }, moving],
+        layout: Layout.SplitH,
+      });
+      expect(focusedNodeOf(moved)).toMatchObject(moving);
+    });
   });
 
-  it("puts a selected tab group beside the groups of a split it enters", () => {
+  it("puts a selected tab group in the shown group of a split it enters", () => {
     const row = withFocusOn(
       {
         depth: 0,
         root: LayoutNode.Container(Layout.SplitH, [
-          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+          LayoutNode.Container(Layout.Tabbed, [
+            LayoutNode.Window("a"),
+            LayoutNode.Window("d"),
+          ]),
           LayoutNode.Container(Layout.SplitV, [
             LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
             LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("c")]),
@@ -255,8 +285,7 @@ describe("movedBy", () => {
 
     expect(moved.root).toMatchObject({
       children: [
-        { children: [{ id: "a" }] },
-        { children: [{ id: "b" }] },
+        { children: [{ children: [{ id: "a" }, { id: "d" }] }, { id: "b" }] },
         { children: [{ id: "c" }] },
       ],
       layout: Layout.SplitV,
@@ -456,7 +485,7 @@ describe("movedBy", () => {
 });
 
 describe("pushedOn", () => {
-  it("puts a tab group arriving at a tab group beside it", () => {
+  it("puts a tab group arriving at a tab group in it as a tab", () => {
     const arriving = LayoutNode.Container(Layout.Tabbed, [
       LayoutNode.Window("a"),
       LayoutNode.Window("b"),
@@ -470,8 +499,8 @@ describe("pushedOn", () => {
     );
 
     expect(pushedOn(there, arriving, Direction.Right).root).toMatchObject({
-      children: [{ children: [{}, {}] }, { children: [{ id: "c" }] }],
-      layout: Layout.SplitH,
+      children: [{ children: [{ id: "a" }, { id: "b" }] }, { id: "c" }],
+      layout: Layout.Tabbed,
     });
   });
 });

@@ -13,6 +13,7 @@ replaces them.
 | Meta+1 … Meta+0 | Go to workspace 1–10. |
 | Meta+Shift+1 … Meta+Shift+0 | Send the window, or the `focus parent` selection, to workspace 1–10 and stay. |
 | Meta+B / Meta+V | `splith` / `splitv`: move the window out of its group, to the right / below. |
+| Meta+G | `group`: turn the tab into a group of its own, nested in its slot. |
 | Meta+W / Meta+S / Meta+E | `layout tabbed` / `layout stacking` / `layout toggle split`. |
 | Meta+A / Meta+Shift+A | `focus parent` / `focus child`. |
 | Meta+F / Meta+Shift+F | Fullscreen on this screen / on every screen. |
@@ -44,7 +45,7 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 | `focus left/right/up/down` | Move focus. |
 | `focus parent` / `focus child` | Select the enclosing container, or go back to the window. Both skip a container holding one child, such as a tab group of one window. |
 | `focus mode_toggle` | Switch between floating and tiled windows. |
-| `move left/right/up/down` | Move the window: along its tabs, then out of its group. A window alone in its group joins the next group that way. |
+| `move left/right/up/down` | Move the window, or the `focus parent` selection: along its tabs, then out of its group. A window alone in its group, or a selected group, joins the next group that way as a tab. |
 | `move scratchpad` / `scratchpad show` | Hide the window / show the oldest hidden one, or hide the shown one, so presses rotate through them. |
 | `move container to workspace <name>` | Send the window, or the `focus parent` selection, to workspace `1`–`10`. |
 | `workspace <name>` | Go to workspace `1`–`10`, or back to the previous one if it is already shown. |
@@ -59,6 +60,7 @@ Manganese-only commands:
 | Command | Action |
 |---|---|
 | `lock` | Lock the desktop. |
+| `group` | Turn the focused tab into a group of its own, nested in its slot, so new windows open in it. Does nothing for a window alone in its group. |
 | `launcher` | Toggle the launcher. |
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |

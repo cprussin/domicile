@@ -26,7 +26,7 @@ import { arrivedOn, droppedOn } from "./tree/drop";
 import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
 import { grouped, groupedBelowRoot, groupedRef } from "./tree/grouped";
 import { inserted, insertedNode } from "./tree/insert";
-import { laidOut, split, splitToggled } from "./tree/layout";
+import { laidOut, split, splitToggled, subgrouped } from "./tree/layout";
 import { movedBy, pushedOff, pushedOn } from "./tree/move";
 import type { LayoutNode } from "./tree/node";
 import { Layout, LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
@@ -580,6 +580,10 @@ export const windowGrown = (
 /** `splith` / `splitv`: moves the focus out of its tab group. */
 export const containerSplit = (workspace: Workspace, axis: Axis): Workspace =>
   inLayer(workspace, (tiling) => split(tiling, axis));
+
+/** `group`: turns the focused tab into a group of its own. */
+export const tabSubgrouped = (workspace: Workspace): Workspace =>
+  inLayer(workspace, subgrouped);
 
 /** `layout tabbed` / `layout stacking` on the container around the focus. */
 export const containerLaidOut = (

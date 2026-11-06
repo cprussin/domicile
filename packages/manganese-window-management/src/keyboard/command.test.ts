@@ -51,6 +51,7 @@ describe("parseCommand", () => {
     ["layout stacking", WindowAction.LayoutSet(Layout.Stacking)],
     ["layout tabbed", WindowAction.LayoutSet(Layout.Tabbed)],
     ["layout toggle split", WindowAction.SplitToggled()],
+    ["group", WindowAction.TabSubgrouped()],
     ["fullscreen toggle", WindowAction.FullscreenToggled(false)],
     ["fullscreen toggle global", WindowAction.FullscreenToggled(true)],
     ["floating toggle", WindowAction.FloatToggled()],

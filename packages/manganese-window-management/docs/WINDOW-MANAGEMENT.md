@@ -35,7 +35,11 @@ Manganese uses sway's layout model. For the key bindings, see
   windows into one group.
 - `move <direction>` moves a window alone in its group as the group would: into
   the next group that way, as a tab. A tab moves along its strip, then out of
-  the group past its end.
+  the group past its end. A selected group moves the same way, nesting as a
+  tab of the group it enters.
+- `group` (Meta+G) turns the focused tab into a group of one in the same
+  slot. New windows open in it, and `split h` / `split v` inside it make a
+  split within the outer tab. Moving its last window out removes it.
 - Every edge of a split lies on a whole pixel, as a float's does. Shares are
   kept exact; only the boxes round.
 - There are 10 workspaces for the whole desktop, plus the scratchpad and floating

@@ -32,6 +32,7 @@ or Super key).
 | Meta+S | Stacked |
 | Meta+E | Splits a group's tabs side by side, switching between across and down |
 | Meta+B / Meta+V | Move the window out of its group, to the right / below |
+| Meta+G | Turn the tab into a group of its own, nested inside its group |
 | Meta+A / Meta+Shift+A | Select the window's group / back to the window |
 
 ## The desktop

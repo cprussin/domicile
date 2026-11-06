@@ -18,8 +18,12 @@ float and close the same way.
   side.
 - Meta+Shift+arrow moves a window along its tabs, then out of its group. A
   window alone in its group joins the next group that way.
+- Groups nest. Meta+G turns the tab you are in into a group of its own, so
+  new windows open in it, and Meta+B or Meta+V inside it splits it within
+  its tab.
 - Meta+A selects the whole group, so the next key moves, floats or
-  fullscreens it. A window alone in its group skips it and selects the
+  fullscreens it. Meta+Shift+arrow then moves it like a window: in as a tab
+  of the next group, along its tabs, then out past the last one. A window alone in its group skips it and selects the
   windows around it.
 - Drag a window by its title bar, or anywhere with Meta held, to move it. A
   highlight shows where it will land: a side of a window, or the middle to

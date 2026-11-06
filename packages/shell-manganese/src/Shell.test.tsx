@@ -2826,6 +2826,7 @@ describe("Shell", () => {
 
     it("moves a window through the tiling with Shift held", () => {
       // A group of two beside a lone window: `focus parent` selects the group.
+      // It goes in as a tab of the window's group, past it, then out beside.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2834,6 +2835,8 @@ describe("Shell", () => {
       press("h");
       press("a");
 
+      press("l", true);
+      press("l", true);
       press("l", true);
 
       expect(boxOf(appBox(container, "three"))).toMatchObject({ x: "20px" });
@@ -3015,7 +3018,10 @@ describe("Shell", () => {
       clientAppears("three");
       pointerAt(1440, 800);
 
+      // In as a tab of one's group, past it, then out to its left.
       press("a");
+      press("h", true);
+      press("h", true);
       press("h", true);
 
       crossInto(appElement(container, "one"), 1440, 800);
@@ -3064,8 +3070,10 @@ describe("Shell", () => {
 
       press("a");
       press("h", true);
+      press("h", true);
+      press("h", true);
 
-      crossInto(appElement(container, "one"), 300, 500);
+      crossInto(appElement(container, "one"), 1700, 500);
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
       expect(pointedAtGroup(container)).toBe(false);
     });

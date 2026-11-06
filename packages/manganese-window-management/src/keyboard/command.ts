@@ -76,6 +76,8 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["layout stacking", WindowAction.LayoutSet(Layout.Stacking)],
   ["layout tabbed", WindowAction.LayoutSet(Layout.Tabbed)],
   ["layout toggle split", WindowAction.SplitToggled()],
+  // Manganese's: the focused tab becomes a group nested in its slot.
+  ["group", WindowAction.TabSubgrouped()],
   ["fullscreen toggle", WindowAction.FullscreenToggled(false)],
   ["fullscreen toggle global", WindowAction.FullscreenToggled(true)],
   ["floating toggle", WindowAction.FloatToggled()],

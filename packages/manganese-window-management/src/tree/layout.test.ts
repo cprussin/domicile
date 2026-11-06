@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import { Axis } from "../direction";
-import { laidOut, split, splitToggled } from "./layout";
+import { inserted } from "./insert";
+import { laidOut, split, splitToggled, subgrouped } from "./layout";
 import { Layout, LayoutNode } from "./node";
 import {
   focusedIdOf,
@@ -116,6 +117,102 @@ describe("split", () => {
 
   it("has nothing to split on an empty workspace", () => {
     expect(split(NOTHING_TILED, Axis.Horizontal)).toBe(NOTHING_TILED);
+  });
+});
+
+describe("subgrouped", () => {
+  const GROUP = withFocusOn(
+    {
+      depth: 0,
+      root: LayoutNode.Container(Layout.Tabbed, [
+        LayoutNode.Window("a"),
+        LayoutNode.Window("b"),
+        LayoutNode.Window("c"),
+      ]),
+    },
+    "b",
+  );
+
+  it("turns the focused tab into a group in the same slot", () => {
+    const grouped = subgrouped(GROUP);
+
+    expect(grouped.root).toMatchObject({
+      children: [
+        { id: "a" },
+        { children: [{ id: "b" }], layout: Layout.Tabbed },
+        { id: "c" },
+      ],
+      focused: 1,
+      layout: Layout.Tabbed,
+    });
+    expect(focusedNodeOf(grouped)).toMatchObject({ id: "b" });
+  });
+
+  it("opens the next window in the new group", () => {
+    const opened = inserted(subgrouped(GROUP), "d");
+
+    expect(opened.root).toMatchObject({
+      children: [
+        { id: "a" },
+        { children: [{ id: "b" }, { id: "d" }] },
+        { id: "c" },
+      ],
+    });
+  });
+
+  it("splits within the outer tab once it holds two", () => {
+    const opened = inserted(subgrouped(GROUP), "d");
+
+    expect(split(opened, Axis.Horizontal).root).toMatchObject({
+      children: [
+        { id: "a" },
+        {
+          children: [{ children: [{ id: "b" }] }, { id: "d" }],
+          layout: Layout.SplitH,
+        },
+        { id: "c" },
+      ],
+      layout: Layout.Tabbed,
+    });
+  });
+
+  it("takes the layout of the group around it", () => {
+    const stacked = withFocusOn(
+      {
+        depth: 0,
+        root: LayoutNode.Container(Layout.Stacking, [
+          LayoutNode.Window("a"),
+          LayoutNode.Window("b"),
+        ]),
+      },
+      "b",
+    );
+
+    expect(subgrouped(stacked).root).toMatchObject({
+      children: [{ id: "a" }, { layout: Layout.Stacking }],
+    });
+  });
+
+  it("leaves a window alone in its group where it is", () => {
+    const alone = withFocusOn(
+      {
+        depth: 0,
+        root: LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+      },
+      "a",
+    );
+
+    expect(subgrouped(alone)).toBe(alone);
+  });
+
+  it("leaves a selected group where it is", () => {
+    const selected = focusedParent(GROUP);
+
+    expect(subgrouped(selected)).toBe(selected);
+  });
+
+  it("has nothing to group on an empty workspace", () => {
+    expect(subgrouped(NOTHING_TILED)).toBe(NOTHING_TILED);
   });
 });
 

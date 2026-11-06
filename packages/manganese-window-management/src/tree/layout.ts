@@ -1,5 +1,5 @@
-// Layout commands: `splith`, `splitv`, `layout tabbed`, `layout stacking` and
-// `layout toggle split`.
+// Layout commands: `splith`, `splitv`, `layout tabbed`, `layout stacking`,
+// `layout toggle split` and manganese's `group`.
 //
 // A split moves a tab out of its group, beside it. A layout changes the
 // container the focus is in (the node itself if `focus parent` selected a
@@ -78,6 +78,35 @@ const besideGroup = (
       )
     : replacedAt(root, at, (node) =>
         Node.Container(splitFor(axis), [node, moving], 1),
+      );
+};
+
+/**
+ * `group`: turns the focused tab into a group of its own, in the same slot, so
+ * windows opened or moved into it nest there. Unchanged unless the focus is a
+ * window that is one of several tabs.
+ */
+export const subgrouped = (tiling: Tiling): Tiling => {
+  const { root } = tiling;
+  const path = root === undefined ? [] : focusPathOf(root, tiling.depth);
+  const around = path.slice(0, -1);
+  const group =
+    root === undefined || path.length === 0 ? undefined : nodeAt(root, around);
+  const focused = root === undefined ? undefined : nodeAt(root, path);
+  return root === undefined ||
+    focused?.kind !== NodeKind.Window ||
+    group?.kind !== NodeKind.Container ||
+    !showsOneChild(group.layout) ||
+    group.children.length === 1
+    ? tiling
+    : withCommandsOn(
+        {
+          ...tiling,
+          root: replacedAt(root, path, () =>
+            Node.Container(group.layout, [focused]),
+          ),
+        },
+        focused,
       );
 };
 
