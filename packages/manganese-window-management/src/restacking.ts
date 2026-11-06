@@ -6,7 +6,7 @@
 // compares two renders.
 
 import type { Placement } from "./placement";
-import { LEAVING, TILED } from "./placement";
+import { FULLSCREEN, TILED } from "./placement";
 import type { Rect } from "./rect";
 import { spanning } from "./rect";
 import type { Shown } from "./shown";
@@ -124,8 +124,9 @@ const awayFrom = (
       };
 };
 
-/** Whether `depth` is a float's: above the tiling, below `LEAVING`. */
-const isFloating = (depth: number): boolean => depth > TILED && depth < LEAVING;
+/** Whether `depth` is a float's: above the tiling, below fullscreen. */
+const isFloating = (depth: number): boolean =>
+  depth > TILED && depth < FULLSCREEN;
 
 /** Whether the two rects overlap. */
 const overlaps = (one: Rect, other: Rect): boolean =>

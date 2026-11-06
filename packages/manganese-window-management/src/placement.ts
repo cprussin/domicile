@@ -117,7 +117,8 @@ export const CROSSING = 2;
 
 /**
  * The lowest floating `z-index`, above a {@link CROSSING} window and its open
- * tab. Floats are two apart, leaving each one's {@link raised} depth free.
+ * tab. Floats are four apart, leaving each one's {@link raised} and
+ * {@link leaving} depths free.
  */
 const FLOATING = 4;
 
@@ -138,22 +139,23 @@ export const wellDepthOf = (depth: number): number =>
 export const raised = (depth: number): number => depth + 1;
 
 /**
- * The depth of a closing window, over every open one.
+ * The depth of a window at `depth` while it closes: over the windows at its
+ * depth and their open tabs, under the next window up.
  *
  * Its neighbors grow into its space during the close animation and would
- * otherwise cover it. See `closing.ts` for why it is not just moved to the end
- * of the document.
+ * otherwise cover it. Rising any higher would draw it over the floats above
+ * it. See `closing.ts` for why it is not just moved to the end of the
+ * document.
  */
-export const LEAVING = 1000;
+export const leaving = (depth: number): number => depth + 2;
 
 /**
  * The depth of a fullscreen window, over everything else, as in sway.
  *
- * It is above `LEAVING` so a closing window does not animate over it. A
- * closing fullscreen window clears its workspace's fullscreen (see
+ * A closing fullscreen window clears its workspace's fullscreen (see
  * `workspace.ts`), so it is never hidden itself.
  */
-const FULLSCREEN = 2000;
+export const FULLSCREEN = 2000;
 
 /**
  * The depth of the sheet that shows the cursor while a window moves, over
@@ -185,7 +187,7 @@ export const placementsOf = (
   const floating = workspace.floats
     .map((float) => onScreen(float, geometry.screen))
     .map((float, at) => ({
-      depth: FLOATING + 2 * (below + at),
+      depth: FLOATING + 4 * (below + at),
       float,
       ...framesOf(float, rectOf(float), floatingGapOf(float)),
     }));

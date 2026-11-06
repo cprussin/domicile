@@ -3,7 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 
 import { token } from "../styled-system/tokens";
 import type { Placement } from "./placement";
-import { LEAVING } from "./placement";
+import { leaving, TILED } from "./placement";
 import type { Shown } from "./shown";
 import { Layout } from "./tree/node";
 import { useWindowMotion } from "./useWindowMotion";
@@ -136,7 +136,7 @@ describe("useWindowMotion", () => {
       ).toMatchObject({
         motion: "closing",
         // At its old box, above the windows moving into it.
-        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+        placement: { ...placementOf(EDITOR.id), depth: leaving(TILED) },
       });
     });
 
@@ -172,7 +172,7 @@ describe("useWindowMotion", () => {
       expect(drawnOf(result, EDITOR.id)).toMatchObject({
         motion: "sending",
         // At its old box, above the windows moving into it.
-        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+        placement: { ...placementOf(EDITOR.id), depth: leaving(TILED) },
       });
     });
 
@@ -216,7 +216,7 @@ describe("useWindowMotion", () => {
 
       expect(drawnOf(result, EDITOR.id)).toMatchObject({
         motion: "sending",
-        placement: { ...moved(placementOf(EDITOR.id)), depth: LEAVING },
+        placement: { ...moved(placementOf(EDITOR.id)), depth: leaving(TILED) },
       });
     });
 
@@ -342,7 +342,7 @@ describe("useWindowMotion", () => {
         expect(drawnOf(result, TERMINAL.id)).toMatchObject({
           motion: "sending-tab",
           placement: {
-            depth: LEAVING,
+            depth: leaving(TILED),
             frame: tabOf(TERMINAL.id, group, 0).frame,
           },
         });
@@ -411,7 +411,7 @@ describe("useWindowMotion", () => {
         result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id),
       ).toMatchObject({
         motion: "stowing",
-        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+        placement: { ...placementOf(EDITOR.id), depth: leaving(TILED) },
       });
     });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Placement } from "./placement";
-import { LEAVING, TILED } from "./placement";
+import { FULLSCREEN, TILED } from "./placement";
 import type { Rect } from "./rect";
 import { restacked, SHUFFLE } from "./restacking";
 import type { Shown } from "./shown";
@@ -92,7 +92,7 @@ describe("restacked", () => {
     expect(
       restacked(
         desktop([placed("a", LEFT, TILED), placed("b", OVERLAPPING, 1)]),
-        desktop([placed("a", LEFT, LEAVING + 1), placed("b", OVERLAPPING, 1)]),
+        desktop([placed("a", LEFT, FULLSCREEN), placed("b", OVERLAPPING, 1)]),
       ),
     ).toStrictEqual([]);
   });

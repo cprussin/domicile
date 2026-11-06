@@ -7,7 +7,7 @@
 // desktop.
 
 import type { Placement } from "./placement";
-import { LEAVING } from "./placement";
+import { leaving } from "./placement";
 import type { Rect } from "./rect";
 import { spanning } from "./rect";
 import type { Shown } from "./shown";
@@ -23,7 +23,7 @@ export type Leaving = {
    */
   focused: boolean;
   /**
-   * Its last placement, raised to {@link LEAVING}.
+   * Its last placement, raised to {@link leaving}.
    *
    * Raised so the neighbors easing into its space do not cover it before it
    * has gone.
@@ -159,7 +159,7 @@ const leavingFrom = (
     // A hidden tab's contents, once raised, would cover the shown tab's
     // window.
     behind: undefined,
-    depth: LEAVING,
+    depth: leaving(placement.depth),
     frame,
   },
   window,

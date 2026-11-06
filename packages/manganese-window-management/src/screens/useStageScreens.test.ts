@@ -110,10 +110,10 @@ describe("useStageScreens", () => {
     const depths = () =>
       result.current.map(({ screenful }) => screenful.placements[0]?.depth);
 
-    expect(depths()).toEqual([6, 4]);
+    expect(depths()).toEqual([8, 4]);
 
     rerender({ now: reduce(floating, WindowAction.ScreenHovered("right")) });
 
-    expect(depths()).toEqual([4, 6]);
+    expect(depths()).toEqual([4, 8]);
   });
 });

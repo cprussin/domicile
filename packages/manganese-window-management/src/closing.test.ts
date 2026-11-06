@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { departed, withClosing } from "./closing";
 import type { Placement } from "./placement";
-import { LEAVING } from "./placement";
+import { leaving, TILED } from "./placement";
 import type { Shown } from "./shown";
 import { Layout } from "./tree/node";
 import { ShellWindow } from "./window";
@@ -41,7 +41,7 @@ describe("departed", () => {
         ({ placement, window }) => [window.title, placement],
       ),
     ).toStrictEqual([
-      ["kitty", { ...placementOf(TERMINAL.id), depth: LEAVING }],
+      ["kitty", { ...placementOf(TERMINAL.id), depth: leaving(TILED) }],
     ]);
   });
 
@@ -62,10 +62,22 @@ describe("departed", () => {
       departed(shown([TERMINAL, EDITOR]), [EDITOR]).map(
         ({ placement }) => placement.depth,
       ),
-    ).toStrictEqual([LEAVING]);
+    ).toStrictEqual([leaving(TILED)]);
   });
 
-  // At `LEAVING`, a hidden tab's contents would cover the shown window.
+  // A float over a closing tiled window must not flash under it.
+  it("stays under the windows that were over it", () => {
+    const before = shown([TERMINAL, EDITOR]);
+    const float = { ...placementOf(TERMINAL.id), depth: 8 };
+
+    expect(
+      departed({ ...before, placements: [float] }, [EDITOR]).map(
+        ({ placement }) => placement.depth,
+      ),
+    ).toStrictEqual([leaving(8)]);
+  });
+
+  // Once raised, a hidden tab's contents would cover the shown window.
   it("draws only the tab of a window a tab was hiding", () => {
     const before = shown([TERMINAL, EDITOR]);
     const hidden = {

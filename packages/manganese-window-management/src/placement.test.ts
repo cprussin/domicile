@@ -4,7 +4,7 @@ import { Axis, Direction } from "./direction";
 import type { Geometry } from "./placement";
 import {
   contentsOf,
-  LEAVING,
+  leaving,
   placementsOf,
   raised,
   TILED,
@@ -222,6 +222,24 @@ describe("placementsOf", () => {
     expect(raised(behind)).toBeLessThan(front);
   });
 
+  // A closing window draws over the windows easing into its space, open tab
+  // and all, but must stay under the next window up.
+  it("leaves room over each window to close in", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowSelected(appWindowId("kitty")),
+      WindowAction.FloatToggled(),
+    );
+
+    const front = placementFor(state, "kitty")?.depth ?? 0;
+    const behind = placementFor(state, "editor")?.depth ?? 0;
+    expect(leaving(TILED)).toBeGreaterThan(raised(TILED));
+    expect(raised(leaving(TILED))).toBeLessThan(behind);
+    expect(leaving(behind)).toBeGreaterThan(raised(behind));
+    expect(raised(leaving(behind))).toBeLessThan(front);
+  });
+
   it("lays a floating group out inside its box, all at one depth", () => {
     // `mod+a` then `mod+Shift+Tab` over a vertical split floats the split
     // whole.
@@ -330,15 +348,16 @@ describe("placementsOf", () => {
     );
   });
 
-  // Fullscreen is above `LEAVING`, so a closing window does not animate over
-  // it.
+  // So a closing window does not animate over it.
   it("stacks a fullscreen window over everything it covers", () => {
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.FullscreenToggled(false),
     );
 
-    expect(placementFor(state, "editor")?.depth).toBeGreaterThan(LEAVING);
+    expect(placementFor(state, "editor")?.depth).toBeGreaterThan(
+      leaving(TILED),
+    );
   });
 
   describe("a fullscreen group", () => {
@@ -367,7 +386,9 @@ describe("placementsOf", () => {
         bar: { width: 240, x: 0, y: 0 },
         depth: placementFor(full(), "editor")?.depth,
       });
-      expect(placementFor(full(), "editor")?.depth).toBeGreaterThan(LEAVING);
+      expect(placementFor(full(), "editor")?.depth).toBeGreaterThan(
+        leaving(TILED),
+      );
     });
 
     it("draws the tabs of the groups inside it over everything", () => {
