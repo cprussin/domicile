@@ -413,6 +413,34 @@ describe(Popover, () => {
       await waitForElementToBeRemoved(() => screen.queryByText("Body"));
     });
 
+    it("asks nothing of its owner when focus moves while it is closed", () => {
+      // Its panel lingers while closed: kept mounted, or playing its closing
+      // transition. A close asked for then would close a popover the same
+      // owner opened in its place, such as the tray's next extension popup.
+      const asked: boolean[] = [];
+      render(
+        <>
+          <Popover
+            keepMounted
+            onOpenChange={(open) => {
+              asked.push(open);
+            }}
+            open={false}
+            title="Connection"
+          >
+            Body
+          </Popover>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+
+      act(() => {
+        screen.getByRole("button", { name: "Elsewhere" }).focus();
+      });
+
+      expect(asked).toStrictEqual([]);
+    });
+
     it("stays open when focus moves within it", async () => {
       render(
         <Popover title="Connection" trigger={<Button>Details</Button>}>

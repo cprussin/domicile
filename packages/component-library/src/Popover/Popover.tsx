@@ -331,7 +331,9 @@ const bodyStyles = cva({
 
 /**
  * Closes the panel when focus leaves it, its trigger and the trigger that
- * opened it. Mounted inside the popup, so it listens only while open.
+ * opened it, while open. The popup also lingers closed (kept mounted, or
+ * playing its closing transition), and base-ui reports every close, so a close
+ * then would close a popover its owner opened in its place.
  *
  * Portaled content counts as inside: React focus events follow the component
  * tree and reach `within` before the document sees them.
@@ -355,6 +357,7 @@ const CloseOnFocusOut = ({
       if (
         target instanceof Node &&
         event !== within.current &&
+        popup.current?.hasAttribute("data-open") === true &&
         popup.current?.contains(target) !== true &&
         trigger.current?.contains(target) !== true &&
         opener.current?.contains(target) !== true
