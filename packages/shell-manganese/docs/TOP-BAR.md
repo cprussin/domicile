@@ -129,9 +129,11 @@ export const Shell = runManganese({
 
 - Each bar lists the workspaces on its screen that have windows, plus the one
   the screen shows.
-- Each is a number in a fixed-size circle. Hover draws an outline. The shown
+- Each is a number in a rounded square. Hover fills it faintly. The shown
   workspace is filled on the screen with the keyboard and outlined on other
   screens (sway's `focused_workspace` / `active_workspace`).
+- On a switch the fill slides to the new workspace with a small bounce, and
+  each number turns black as the fill passes under it.
 
 ## Clock
 
