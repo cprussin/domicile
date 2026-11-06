@@ -3329,7 +3329,11 @@ describe("Shell", () => {
         clientX: 100,
         clientY: 100,
       });
-      fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
+      fireEvent.pointerMove(window, {
+        buttons: 1,
+        clientX: 140,
+        clientY: 130,
+      });
       fireEvent.pointerUp(window, { clientX: 140, clientY: 130 });
 
       expect(Number.parseFloat(floatShadow(container).style.inlineSize)).toBe(
@@ -3348,7 +3352,11 @@ describe("Shell", () => {
         clientX: 100,
         clientY: 100,
       });
-      fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
+      fireEvent.pointerMove(window, {
+        buttons: 1,
+        clientX: 140,
+        clientY: 130,
+      });
       expect(appElement(container, "term").hasAttribute("resizing")).toBe(true);
 
       fireEvent.pointerUp(window, { clientX: 140, clientY: 130 });

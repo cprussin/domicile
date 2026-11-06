@@ -3,13 +3,13 @@ import { useRef } from "react";
 
 import type { Direction } from "../direction";
 import { Axis, axisOf } from "../direction";
+import { followPress } from "../follow-press";
 
 /** A border drag in progress, fixed when it started. */
 type Drag = {
   edge: Direction;
   /** The pointer at the last move; the next delta is measured from it. */
   last: { x: number; y: number };
-  onDrop: () => void;
   onStretch: (edge: Direction, by: number) => void;
 };
 
@@ -23,10 +23,8 @@ type Options = {
 };
 
 /**
- * Moves a tiled window's edge by the pointer's travel along the edge's axis.
- *
- * Listens for the rest of the drag on `window`, as `useFloatDrag` explains,
- * and only while it runs, since every tiled border has this hook.
+ * Moves a tiled window's edge by the pointer's travel along the edge's axis,
+ * for as long as `followPress` follows the press.
  */
 export const useBorderDrag = ({
   edge,
@@ -44,48 +42,26 @@ export const useBorderDrag = ({
     onPointerDown: (event) => {
       event.currentTarget.setPointerCapture(event.pointerId);
       running.current?.();
-      running.current = follow(
-        {
-          edge,
-          last: { x: event.clientX, y: event.clientY },
-          onDrop,
-          onStretch,
-        },
-        () => {
+      // The drag as of the last move, which the next is measured from.
+      let drag: Drag = {
+        edge,
+        last: { x: event.clientX, y: event.clientY },
+        onStretch,
+      };
+      running.current = followPress({
+        element: event.currentTarget,
+        onEnd: () => {
           running.current = undefined;
+          onDrop();
         },
-      );
+        onMove: ({ clientX, clientY }) => {
+          drag = followed(drag, clientX, clientY);
+        },
+        pointerId: event.pointerId,
+      });
       onGrab();
     },
   };
-};
-
-/**
- * Applies pointer moves to `drag` until a release or cancel drops it and calls
- * `ended`. Returns a function that stops listening without dropping.
- *
- * Only the first of release and cancel drops, since a browser can send both.
- */
-const follow = (started: Drag, ended: () => void): (() => void) => {
-  // The drag as of the last move, which the next is measured from.
-  let drag = started;
-  const moved = (event: PointerEvent) => {
-    drag = followed(drag, event.clientX, event.clientY);
-  };
-  const stop = () => {
-    window.removeEventListener("pointermove", moved);
-    window.removeEventListener("pointerup", released);
-    window.removeEventListener("pointercancel", released);
-  };
-  const released = () => {
-    stop();
-    ended();
-    drag.onDrop();
-  };
-  window.addEventListener("pointermove", moved);
-  window.addEventListener("pointerup", released);
-  window.addEventListener("pointercancel", released);
-  return stop;
 };
 
 /** Moves the edge to follow the pointer at `x`, `y`. */

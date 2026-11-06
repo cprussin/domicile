@@ -1,24 +1,31 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
+import { capturingElement } from "../captured-element";
 import { Direction } from "../direction";
 import { useBorderDrag } from "./useBorderDrag";
 
 /** A press, carrying what the hook actually reads off a pointer event. */
-const press = (x: number, y: number) =>
+const press = (x: number, y: number, border = capturingElement()) =>
   ({
     clientX: x,
     clientY: y,
-    currentTarget: { setPointerCapture: () => undefined },
+    currentTarget: border,
     pointerId: 1,
     // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the fields read
   }) as any;
 
+/** A move with the button still held, as every move in a drag is. */
 const moveTo = (x: number, y: number): void => {
-  fireEvent.pointerMove(window, { clientX: x, clientY: y, pointerId: 1 });
+  fireEvent.pointerMove(window, {
+    buttons: 1,
+    clientX: x,
+    clientY: y,
+    pointerId: 1,
+  });
 };
 
-const dragging = (edge: Direction) => {
+const dragging = (edge: Direction, border = capturingElement()) => {
   const calls = {
     onDrop: mock(() => undefined),
     onGrab: mock(() => undefined),
@@ -26,7 +33,7 @@ const dragging = (edge: Direction) => {
   };
   const { result } = renderHook(() => useBorderDrag({ edge, ...calls }));
   act(() => {
-    result.current.onPointerDown(press(100, 100));
+    result.current.onPointerDown(press(100, 100, border));
   });
   return calls;
 };
@@ -90,5 +97,22 @@ describe("useBorderDrag", () => {
     });
     expect(calls.onDrop).toHaveBeenCalledTimes(1);
     expect(calls.onStretch).not.toHaveBeenCalled();
+  });
+
+  // See `followPress`.
+  it("drops a release the page missed, and lets go of the pointer", () => {
+    const border = capturingElement();
+    const calls = dragging(Direction.Right, border);
+    act(() => {
+      fireEvent.pointerMove(window, {
+        buttons: 0,
+        clientX: 300,
+        clientY: 100,
+        pointerId: 1,
+      });
+    });
+    expect(calls.onDrop).toHaveBeenCalledTimes(1);
+    expect(calls.onStretch).not.toHaveBeenCalled();
+    expect(border.hasPointerCapture(1)).toBe(false);
   });
 });

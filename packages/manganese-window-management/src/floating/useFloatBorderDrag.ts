@@ -1,19 +1,10 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRef } from "react";
 
+import { followPress } from "../follow-press";
 import type { Rect } from "../rect";
 import type { Float, Grip } from "./float";
 import { rectOf, stretched } from "./float";
-
-/** A border drag in progress, fixed when it started. */
-type Drag = {
-  /** The box when the drag started; the pointer delta applies to it. */
-  box: Float;
-  from: { x: number; y: number };
-  grip: Grip;
-  onDrop: () => void;
-  onResize: (box: Rect) => void;
-};
 
 type Options = {
   float: Float;
@@ -26,10 +17,8 @@ type Options = {
 };
 
 /**
- * Resizes a floating window by dragging one of its borders.
- *
- * Listens for the rest of the drag on `window`, as `useFloatDrag` explains,
- * and only while it runs, since every float border has this hook.
+ * Resizes a floating window by dragging one of its borders, for as long as
+ * `followPress` follows the press.
  */
 export const useFloatBorderDrag = ({
   float,
@@ -48,54 +37,23 @@ export const useFloatBorderDrag = ({
     onPointerDown: (event) => {
       event.currentTarget.setPointerCapture(event.pointerId);
       running.current?.();
-      running.current = follow(
-        {
-          box: float,
-          from: { x: event.clientX, y: event.clientY },
-          grip,
-          onDrop,
-          onResize,
-        },
-        () => {
+      // Where the press started. The pointer's travel from it applies to
+      // `float`, the box as pressed.
+      const from = { x: event.clientX, y: event.clientY };
+      running.current = followPress({
+        element: event.currentTarget,
+        onEnd: () => {
           running.current = undefined;
+          onDrop();
         },
-      );
+        onMove: ({ clientX, clientY }) => {
+          onResize(
+            rectOf(stretched(float, grip, clientX - from.x, clientY - from.y)),
+          );
+        },
+        pointerId: event.pointerId,
+      });
       onGrab();
     },
   };
-};
-
-/**
- * Applies pointer moves to `drag` until a release or cancel drops it and calls
- * `ended`. Returns a function that stops listening without dropping.
- *
- * Only the first of release and cancel drops, since a browser can send both.
- */
-const follow = (drag: Drag, ended: () => void): (() => void) => {
-  const moved = (event: PointerEvent) => {
-    drag.onResize(
-      rectOf(
-        stretched(
-          drag.box,
-          drag.grip,
-          event.clientX - drag.from.x,
-          event.clientY - drag.from.y,
-        ),
-      ),
-    );
-  };
-  const stop = () => {
-    window.removeEventListener("pointermove", moved);
-    window.removeEventListener("pointerup", released);
-    window.removeEventListener("pointercancel", released);
-  };
-  const released = () => {
-    stop();
-    ended();
-    drag.onDrop();
-  };
-  window.addEventListener("pointermove", moved);
-  window.addEventListener("pointerup", released);
-  window.addEventListener("pointercancel", released);
-  return stop;
 };

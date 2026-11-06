@@ -272,6 +272,10 @@ such as a Slack huddle.
   move, a resize does not make the window transparent.
 - **Shared edges resize without a modifier**, over the window's border and the
   gap beside it (`tiled/borders.ts`).
+- An edge drag, tiled or floating, ends at its release. A release the page
+  never hears also ends it, at the first move with no button held or when the
+  edge loses the pointer, so the edge never keeps the pointer
+  (`follow-press.ts`).
 - Fullscreen windows cannot be dragged, nor can a fullscreen group by its
   strip.
 

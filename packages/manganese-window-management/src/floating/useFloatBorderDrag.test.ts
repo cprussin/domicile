@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
+import { capturingElement } from "../captured-element";
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
 import { LayoutNode } from "../tree/node";
@@ -19,20 +20,26 @@ const AT: Float = {
 };
 
 /** A press, carrying what the hook actually reads off a pointer event. */
-const press = (x: number, y: number) =>
+const press = (x: number, y: number, border = capturingElement()) =>
   ({
     clientX: x,
     clientY: y,
-    currentTarget: { setPointerCapture: () => undefined },
+    currentTarget: border,
     pointerId: 1,
     // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the fields read
   }) as any;
 
+/** A move with the button still held, as every move in a drag is. */
 const moveTo = (x: number, y: number): void => {
-  fireEvent.pointerMove(window, { clientX: x, clientY: y, pointerId: 1 });
+  fireEvent.pointerMove(window, {
+    buttons: 1,
+    clientX: x,
+    clientY: y,
+    pointerId: 1,
+  });
 };
 
-const dragging = (grip: Grip) => {
+const dragging = (grip: Grip, border = capturingElement()) => {
   const calls = {
     onDrop: mock(() => undefined),
     onGrab: mock(() => undefined),
@@ -42,7 +49,7 @@ const dragging = (grip: Grip) => {
     useFloatBorderDrag({ float: AT, grip, ...calls }),
   );
   act(() => {
-    result.current.onPointerDown(press(700, 300));
+    result.current.onPointerDown(press(700, 300, border));
   });
   return calls;
 };
@@ -115,5 +122,25 @@ describe("useFloatBorderDrag", () => {
     });
     expect(calls.onDrop).toHaveBeenCalledTimes(1);
     expect(calls.onResize).not.toHaveBeenCalled();
+  });
+
+  // See `followPress`.
+  it("drops a release the page missed, and lets go of the pointer", () => {
+    const border = capturingElement();
+    const calls = dragging(
+      { horizontal: Direction.Right, vertical: undefined },
+      border,
+    );
+    act(() => {
+      fireEvent.pointerMove(window, {
+        buttons: 0,
+        clientX: 800,
+        clientY: 300,
+        pointerId: 1,
+      });
+    });
+    expect(calls.onDrop).toHaveBeenCalledTimes(1);
+    expect(calls.onResize).not.toHaveBeenCalled();
+    expect(border.hasPointerCapture(1)).toBe(false);
   });
 });
