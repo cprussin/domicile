@@ -9,6 +9,9 @@
 //!   new compositor.
 //! - A part that keeps failing ends its desktop, and a new desktop starts
 //!   ([`keep_a_desktop_up`]).
+//! - An engine that finds no usable GPU soon after it starts
+//!   ([`renderer_unavailable`]) ends the run. Chromium has already tried every
+//!   GPU mode, and a new engine would try them again on the same card.
 //!
 //! The engine, the compositor and the desktop share [`Policy`] but count
 //! failures separately, so a crashing engine does not use up the compositor's
@@ -59,6 +62,21 @@ impl Default for Policy {
 /// A string because [`Exit`] stores the status as displayed, which tells
 /// signals apart from exit codes.
 pub const CLEANLY: &str = "exit status: 0";
+
+/// The [`Exit`] status text for an engine that found no usable GPU process,
+/// in any mode, the CPU included. Patch 0178 exits 69 (`EX_UNAVAILABLE`)
+/// where Chromium crashes with "GPU process isn't usable".
+pub const NO_USABLE_GPU: &str = "exit status: 69";
+
+/// Whether `exit` is an engine that cannot draw at all: a renderer
+/// unavailable, which ends the run instead of restarting.
+///
+/// An engine that ran for [`Policy::long_enough`] drew on its card, and lost
+/// its GPU modes to a cluster of crashes. A new engine starts on the GPU
+/// again, so that exit restarts like any other failure.
+pub fn renderer_unavailable(exit: &Exit, lived: Duration, policy: &Policy) -> bool {
+    exit.what == "engine" && exit.how == NO_USABLE_GPU && lived < policy.long_enough
+}
 
 /// Which part an exit restarts under the part still serving, or `None` when
 /// it ends the desktop.
@@ -123,6 +141,8 @@ pub enum Attempt {
     /// It stopped unexpectedly after running for `lived`. The cause is
     /// reported where it happened.
     Failed { lived: Duration },
+    /// Its engine could not draw. See [`renderer_unavailable`].
+    RendererUnavailable,
 }
 
 /// The outcome of a desktop's parts running until one exits.
@@ -132,6 +152,8 @@ pub enum PartAttempt {
     Ended,
     /// `part` stopped unexpectedly after running for `lived`.
     Failed { part: Started, lived: Duration },
+    /// The engine could not draw. See [`renderer_unavailable`].
+    RendererUnavailable,
 }
 
 /// How a run of desktops finished.
@@ -143,6 +165,8 @@ pub enum Ending {
     Stopped,
     /// Enough of `started` failed in a row.
     GaveUp { started: Started, failures: u32 },
+    /// The engine could not draw. See [`renderer_unavailable`].
+    RendererUnavailable,
 }
 
 /// A file from the last desktop that could not be removed.
@@ -180,6 +204,7 @@ pub fn keep_a_desktop_up(
                 part: Started::Desktop,
                 lived,
             },
+            Attempt::RendererUnavailable => PartAttempt::RendererUnavailable,
         },
         stopped,
         wait,
@@ -204,6 +229,7 @@ pub fn keep_the_parts_up(
     loop {
         match attempt() {
             PartAttempt::Ended => return Ending::Over,
+            PartAttempt::RendererUnavailable => return Ending::RendererUnavailable,
             PartAttempt::Failed { part, lived } => {
                 if stopped() {
                     return Ending::Stopped;

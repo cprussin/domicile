@@ -10,7 +10,8 @@ use std::time::Duration;
 
 use domicile_launch::restart::{
     clear_the_last_compositor, clear_the_last_engine, clear_the_last_one, keep_a_desktop_up,
-    keep_the_parts_up, restarts, Attempt, Ending, PartAttempt, Policy, Started, CLEANLY,
+    keep_the_parts_up, renderer_unavailable, restarts, Attempt, Ending, PartAttempt, Policy,
+    Started, CLEANLY, NO_USABLE_GPU,
 };
 use domicile_launch::spawn::Runtime;
 use domicile_launch::supervise::Exit;
@@ -437,6 +438,72 @@ fn a_compositor_that_fails_is_started_again_alone() {
         restarts(&exited("compositor", "exit status: 4"), "wayland"),
         Some(Started::Compositor)
     );
+}
+
+#[test]
+fn an_engine_with_no_usable_gpu_is_a_renderer_unavailable() {
+    // Patch 0178: the engine exits 69 once every GPU mode has failed.
+    let policy = Policy::default();
+    let soon = Duration::from_secs(2);
+    assert!(renderer_unavailable(
+        &exited("engine", NO_USABLE_GPU),
+        soon,
+        &policy
+    ));
+    assert!(!renderer_unavailable(
+        &exited("engine", "exit status: 3"),
+        soon,
+        &policy
+    ));
+    assert!(!renderer_unavailable(
+        &exited("compositor", NO_USABLE_GPU),
+        soon,
+        &policy
+    ));
+}
+
+#[test]
+fn an_engine_that_drew_for_a_while_before_losing_its_gpu_is_started_again() {
+    // A cluster of GPU crashes late in a session uses up Chromium's fallbacks,
+    // but a new engine starts on the GPU again.
+    let policy = Policy::default();
+    assert!(!renderer_unavailable(
+        &exited("engine", NO_USABLE_GPU),
+        policy.long_enough,
+        &policy
+    ));
+}
+
+#[test]
+fn a_renderer_unavailable_ends_the_run_without_a_restart() {
+    // No restart brings a GPU back, so the desktop is not started again.
+    let attempts = Cell::new(0);
+
+    let ending = keep_the_parts_up(
+        &Policy::default(),
+        &mut || {
+            attempts.set(attempts.get() + 1);
+            PartAttempt::RendererUnavailable
+        },
+        &|| false,
+        &mut |_| panic!("nothing is started again, so nothing is waited for"),
+        &mut |_| panic!("nothing is started again"),
+    );
+    assert_eq!(ending, Ending::RendererUnavailable);
+    assert_eq!(attempts.get(), 1);
+
+    let ending = keep_a_desktop_up(
+        &Policy::default(),
+        &mut || {
+            attempts.set(attempts.get() + 1);
+            Attempt::RendererUnavailable
+        },
+        &|| false,
+        &mut |_| panic!("nothing is started again, so nothing is waited for"),
+        &mut |_| panic!("nothing is started again"),
+    );
+    assert_eq!(ending, Ending::RendererUnavailable);
+    assert_eq!(attempts.get(), 2);
 }
 
 #[test]

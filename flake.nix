@@ -1460,7 +1460,8 @@
 
         # A tty desktop on a card with no 3D: 2D virtio-gpu, no virgl. The
         # launcher picks software compositing, the engine scans out dumb
-        # buffers, and a `wl_shm` client's window reaches the screen. See
+        # buffers, a `wl_shm` client's window reaches the screen, and one GPU
+        # process stays up under seccomp. See
         # docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output.
         #
         # Runs the pinned engine, so on a pull request that changes the fork it
@@ -1536,9 +1537,24 @@
                     return colors_on_the_screen("window").get((0x33, 0x66, 0xCC), 0) > 0.04
                 retry(window_is_up, timeout=dt.timedelta(seconds=300))
 
+            def the_gpu_process_stays_up_in_its_sandbox():
+                # One GPU process, not one restarting forever, under seccomp
+                # (`Seccomp: 2`). Mesa's GBM loads inside the sandbox
+                # (patch 0169) and the CPU draws through it (patch 0135).
+                def gpu_process():
+                    pids = machine.succeed("pgrep -u alice -f -- '--type=gpu-process' || true").split()
+                    assert len(pids) == 1, f"GPU processes: {pids}"
+                    return pids[0]
+                first = gpu_process()
+                machine.sleep(10)
+                assert gpu_process() == first, "the GPU process restarted"
+                seccomp = machine.succeed(f"grep -E '^Seccomp:' /proc/{first}/status").split()
+                assert seccomp == ["Seccomp:", "2"], f"the GPU process is not under seccomp: {seccomp}"
+
             machine.wait_for_unit("multi-user.target")
             try:
                 the_desktop_shows_a_window()
+                the_gpu_process_stays_up_in_its_sandbox()
             except Exception:
                 # What the screen showed instead: its biggest colors.
                 shares = colors_on_the_screen("failed")

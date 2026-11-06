@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 6 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an engine with no usable GPU exits as a renderer
+ unavailable
+
+When every GPU mode has failed, the CPU included, the browser logs
+"GPU process isn't usable. Goodbye." at ERROR and exits 69
+(EX_UNAVAILABLE) instead of crashing with LOG(FATAL).
+
+The launcher reads a 69 from an engine that just started as a renderer
+unavailable: it ends the run and exits 69 itself, instead of restarting
+the engine on a black screen.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ content/browser/gpu/gpu_data_manager_impl_private.cc | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/content/browser/gpu/gpu_data_manager_impl_private.cc b/content/browser/gpu/gpu_data_manager_impl_private.cc
+index 6a6ab74..1143db9 100644
+--- a/content/browser/gpu/gpu_data_manager_impl_private.cc
++++ b/content/browser/gpu/gpu_data_manager_impl_private.cc
+@@ -34,6 +34,7 @@
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/path_service.h"
++#include "base/process/process.h"
+ #include "base/rand_util.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+@@ -381,8 +382,12 @@ enum class CompositingMode {
+ };
+ 
+ // Intentionally crash with a very descriptive name.
++// DOMICILE: exits 69 (EX_UNAVAILABLE). Every GPU mode, the CPU included, has
++// failed. The launcher reads 69 as a renderer unavailable and ends the run
++// (`renderer_unavailable` in domicile-launch's `restart.rs`).
+ NOINLINE void IntentionallyCrashBrowserForUnusableGpuProcess() {
+-  LOG(FATAL) << "GPU process isn't usable. Goodbye.";
++  LOG(ERROR) << "GPU process isn't usable. Goodbye.";
++  base::Process::TerminateCurrentProcessImmediately(69);
+ }
+ 
+ #if BUILDFLAG(IS_WIN)
+

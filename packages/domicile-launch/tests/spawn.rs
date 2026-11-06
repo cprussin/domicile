@@ -122,10 +122,11 @@ fn a_tty_desktop_asks_for_the_whole_screen() {
 }
 
 #[test]
-fn a_tty_desktop_keeps_retrying_a_crashed_gpu_process() {
-    // After three GPU process crashes Chromium falls back to software
-    // compositing (`GpuProcessHost::RecordProcessCrash`). A compositor sending
-    // dmabufs would then blank every window.
+fn a_tty_desktop_gives_up_on_a_gpu_process_that_keeps_crashing() {
+    // After three crashes Chromium falls back to the CPU, which the
+    // compositor follows. When that fails too, the engine exits as a renderer
+    // unavailable (patch 0178). A card that cannot draw would otherwise
+    // restart the GPU process forever on a black screen.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -134,7 +135,7 @@ fn a_tty_desktop_keeps_retrying_a_crashed_gpu_process() {
         None,
     ));
     assert!(
-        args.contains(&"--disable-gpu-process-crash-limit".to_string()),
+        !args.contains(&"--disable-gpu-process-crash-limit".to_string()),
         "{args:?}"
     );
 }

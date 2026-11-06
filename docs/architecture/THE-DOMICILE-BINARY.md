@@ -288,6 +288,17 @@ Backoff:
   starts a new desktop.
 - A component that ran for a minute resets its counter.
 
+Renderer unavailable:
+
+- Chromium relaunches a crashed GPU process, falls back to the CPU after
+  three crashes, and gives up when the CPU fails too. Patch 0178 then exits
+  the engine 69 (`EX_UNAVAILABLE`).
+- An engine that exits 69 within a minute of starting ends the run
+  (`restart::renderer_unavailable`): the launcher prints
+  `domicile: renderer unavailable: ...` and exits 69 itself. One that ran
+  longer drew on its card and lost the GPU to a cluster of crashes, so it
+  restarts like any other failure.
+
 Detecting a new engine:
 
 - The engine calls the C ABI's `disconnected` (`domicile_engine.h`) when its

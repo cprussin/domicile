@@ -252,8 +252,10 @@ vkms) gives the GPU process no GL. The desktop is composited on the CPU instead.
 - **VMware:** patch 0170 drops the GPU blocklist's "VMware is buggy on Linux"
   entry, which put every VMware guest on the CPU. A guest with 3D on draws on
   the GPU, as GNOME does there.
-- `--disable-gpu-process-crash-limit` stays: a GPU process relaunched after a
-  crash keeps the GPU.
+- **GPU process crashes:** Chromium's crash limit is on. After three crashes
+  the engine falls back to the CPU, which the compositor follows. If the CPU
+  fails too, the engine exits as a renderer unavailable (see
+  [THE-DOMICILE-BINARY.md](THE-DOMICILE-BINARY.md#crashes-are-recovered)).
 - **Not covered:** no vsync provider (viz's begin frames pace painting) and
   casts of a window in memory.
 

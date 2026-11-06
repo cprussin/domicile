@@ -44,7 +44,7 @@ use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
-use domicile_launch::milestones::{reach, Milestone};
+use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
 use domicile_launch::open::{app_opening, opener, opening, AppOpening, Opening, Places, DESKTOP};
@@ -54,7 +54,8 @@ use domicile_launch::profile_claim::claim;
 use domicile_launch::profile_path::profile_directory;
 use domicile_launch::restart::{
     clear_the_last_compositor, clear_the_last_engine, clear_the_last_one, keep_a_desktop_up,
-    keep_the_parts_up, restarts, Attempt, Ending, PartAttempt, Policy, Started, CLEANLY,
+    keep_the_parts_up, renderer_unavailable, restarts, Attempt, Ending, PartAttempt, Policy,
+    Started, CLEANLY,
 };
 use domicile_launch::serving::serve;
 use domicile_launch::session::Session;
@@ -829,7 +830,33 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
             }
             ExitCode::FAILURE
         }
+        // The engine's own code, so a session manager can tell it apart.
+        Ending::RendererUnavailable => {
+            eprintln!(
+                "domicile: renderer unavailable: the engine cannot draw on this \
+                 graphics card, even on the CPU, so the desktop is not started again."
+            );
+            ExitCode::from(RENDERER_UNAVAILABLE)
+        }
     })
+}
+
+/// The exit code for [`Ending::RendererUnavailable`]: `EX_UNAVAILABLE`, as
+/// the engine exits. See `domicile_launch::restart::NO_USABLE_GPU`.
+const RENDERER_UNAVAILABLE: u8 = 69;
+
+/// Why a desktop came down.
+enum Down {
+    /// A part failed or was stopped, as the message says.
+    Failed(String),
+    /// See `domicile_launch::restart::renderer_unavailable`.
+    RendererUnavailable,
+}
+
+impl From<String> for Down {
+    fn from(why: String) -> Self {
+        Down::Failed(why)
+    }
 }
 
 /// Inputs shared by every desktop a run starts.
@@ -862,7 +889,8 @@ fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
     let started = Instant::now();
     let attempt = match up(desktop, &heard) {
         Ok(()) => Attempt::Ended,
-        Err(why) => {
+        Err(Down::RendererUnavailable) => Attempt::RendererUnavailable,
+        Err(Down::Failed(why)) => {
             eprintln!("domicile: {why}");
             Attempt::Failed {
                 lived: started.elapsed(),
@@ -880,7 +908,7 @@ fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
 
 /// Starts the engine, then the compositor, and restarts either one that dies
 /// under the other.
-fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
+fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), Down> {
     // Remove the last desktop's files. A stale session document would make
     // the wait below succeed too early.
     clear_the_last_one(desktop.places).map_err(|leftover| leftover.to_string())?;
@@ -908,13 +936,17 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
         &mut |next| eprintln!("domicile: {next}"),
     );
     match ending {
-        Ending::Over => over.expect("the parts' loop ends on an exit it recorded"),
-        Ending::Stopped => Err("a stop was asked for".to_string()),
+        Ending::Over => over
+            .expect("the parts' loop ends on an exit it recorded")
+            .map_err(Down::Failed),
+        Ending::Stopped => Err("a stop was asked for".to_string().into()),
         // The caller restarts the whole desktop.
         Ending::GaveUp { started, failures } => Err(format!(
             "{failures} {started}s in a row have failed in this desktop, so the desktop goes \
              with them"
-        )),
+        )
+        .into()),
+        Ending::RendererUnavailable => Err(Down::RendererUnavailable),
     }
 }
 
@@ -938,23 +970,31 @@ fn one_part(
         // `clear_the_last_engine` and `clear_the_last_compositor`.
         let replaced = match part {
             Started::Engine => clear_the_last_engine(desktop.places)
-                .map_err(|leftover| leftover.to_string())
+                .map_err(|leftover| Down::Failed(leftover.to_string()))
                 .and_then(|()| start_an_engine(desktop, running)),
             Started::Compositor => clear_the_last_compositor(desktop.places)
-                .map_err(|leftover| leftover.to_string())
+                .map_err(|leftover| Down::Failed(leftover.to_string()))
                 .and_then(|()| start_a_compositor(desktop, running, heard)),
             Started::Desktop => unreachable!("`restarts` names a part, never the desktop"),
         };
-        if let Err(why) = replaced {
-            eprintln!("domicile: {why}");
-            *replacing = Some(part);
-            return PartAttempt::Failed {
-                part,
-                lived: started.elapsed(),
-            };
+        match replaced {
+            Ok(()) => {}
+            Err(Down::RendererUnavailable) => return PartAttempt::RendererUnavailable,
+            Err(Down::Failed(why)) => {
+                eprintln!("domicile: {why}");
+                *replacing = Some(part);
+                return PartAttempt::Failed {
+                    part,
+                    lived: started.elapsed(),
+                };
+            }
         }
     }
     let exit = running.until_one_exits();
+    if renderer_unavailable(&exit, started.elapsed(), desktop.policy) {
+        eprintln!("domicile: {exit}");
+        return PartAttempt::RendererUnavailable;
+    }
     match restarts(&exit, desktop.platform) {
         // The other part keeps serving. A compositor rejoins the next engine
         // (`rejoin_the_engine` in the compositor), and a shell's control
@@ -993,7 +1033,7 @@ fn start_a_compositor(
     desktop: &Desktop,
     running: &mut Running,
     heard: &Arc<Mutex<Heard>>,
-) -> Result<(), String> {
+) -> Result<(), Down> {
     let mut spawn = compositor(
         &desktop.components.compositor,
         &desktop.components.engine,
@@ -1017,6 +1057,7 @@ fn start_a_compositor(
         &session(&desktop.places.session),
         &desktop.places.session,
         running,
+        desktop.policy,
     )?;
     desktop.said.say(desktop.places);
     Ok(())
@@ -1025,7 +1066,7 @@ fn start_a_compositor(
 /// Starts an engine and waits for its broker socket.
 ///
 /// The wait also watches for exits, so a crash is reported at once.
-fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), String> {
+fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down> {
     let mut spawn = engine(
         &desktop.components.engine,
         &served(desktop.serving),
@@ -1043,6 +1084,7 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Strin
         &broker(&desktop.places.broker, &desktop.components.engine),
         &desktop.places.broker,
         running,
+        desktop.policy,
     )
 }
 
@@ -1397,9 +1439,17 @@ fn replacing_the_splash(
 
 /// Waits for a milestone file, watching for exits and stop requests.
 ///
+/// An engine that exits as a renderer unavailable meanwhile is
+/// [`Down::RendererUnavailable`], so the run ends there too.
+///
 /// Checking for a stop here matters because startup can take a minute; see
 /// [`reach`] for what an ignored Ctrl-C leaves on a tty.
-fn wait_for(milestone: &Milestone, path: &Path, running: &mut Running) -> Result<(), String> {
+fn wait_for(
+    milestone: &Milestone,
+    path: &Path,
+    running: &mut Running,
+    policy: &Policy,
+) -> Result<(), Down> {
     let started = Instant::now();
     reach(
         milestone,
@@ -1411,7 +1461,13 @@ fn wait_for(milestone: &Milestone, path: &Path, running: &mut Running) -> Result
             started.elapsed()
         },
     )
-    .map_err(|stalled| stalled.to_string())
+    .map_err(|stalled| match stalled {
+        Stalled::Exited { exit, .. } if renderer_unavailable(&exit, started.elapsed(), policy) => {
+            eprintln!("domicile: {exit}");
+            Down::RendererUnavailable
+        }
+        stalled => Down::Failed(stalled.to_string()),
+    })
 }
 
 /// The engine's broker socket, which must exist before the compositor starts.

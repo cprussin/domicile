@@ -126,14 +126,12 @@ pub fn engine(
     // bounds, which `--window-size` cannot know in advance. Nested runs skip
     // this so the window stays a normal window.
     //
-    // Chromium's fallback after three GPU process crashes is software
-    // compositing, which takes windows only in shared memory. The compositor
-    // decided at start to send dmabufs (see `crate::software_compositing`),
-    // so the fallback would blank every window. Without the limit it
-    // relaunches the GPU process instead.
+    // Chromium's GPU process crash limit stays on: after three crashes it
+    // falls back to the CPU, which the compositor follows, and when that
+    // fails too the engine exits as a renderer unavailable
+    // (`crate::restart::renderer_unavailable`).
     if platform == SCANOUT_PLATFORM {
         args.push("--start-fullscreen".into());
-        args.push("--disable-gpu-process-crash-limit".into());
     }
     // A headless desk lays its windows out over the compositor's virtual
     // monitors, as drm does over CRTCs. Until one comes, the screen is a
