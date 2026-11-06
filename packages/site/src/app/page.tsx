@@ -25,7 +25,7 @@ import { shared } from "../page/shared";
 
 export const metadata = shared({
   description:
-    "Domicile brings Chromium and Wayland together, making websites and native applications part of the same desktop. Webviews become first-class windows, native apps become DOM elements, and browser extensions become desktop features.",
+    "Domicile brings Chromium and Wayland together, making websites and native applications part of the same desktop. Your desktop lays out websites, native apps become DOM elements, and browser features like casting, extensions and notifications become desktop features.",
   path: "/",
   title: "Domicile: the web doesn't have to live in a window",
 });

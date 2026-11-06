@@ -20,7 +20,7 @@ import { shared } from "../../page/shared";
 
 export const metadata = shared({
   description:
-    "A complete tiling Wayland desktop that feels like Sway, where websites are windows too. Built on Domicile, and customizable in React and CSS.",
+    "A complete tiling Wayland desktop that feels like Sway, where websites tile and tab right alongside your apps. Built on Domicile, and customizable in React and CSS.",
   path: "/manganese",
   title: "Manganese: a tiling Wayland desktop",
 });

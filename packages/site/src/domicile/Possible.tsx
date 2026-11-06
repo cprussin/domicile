@@ -28,7 +28,7 @@ const linkStyles = css({ color: "foreground", textDecoration: "underline" });
 /** The capabilities, each shown by a capture of a real desktop. */
 const DEMOS: readonly Demo[] = [
   {
-    body: "A website opens in a window of its own, with no browser around it. It tiles beside native apps, moves between workspaces, floats and resizes, with the same keys as every other window.",
+    body: "Websites don't have to live inside a browser app. Your desktop decides where they go: keep them in tabs, mix them in with your native apps, or put them somewhere websites don't usually go.",
     code: {
       language: "tsx",
       text: '<webview src="https://en.wikipedia.org" />',
@@ -39,7 +39,7 @@ const DEMOS: readonly Demo[] = [
         "In manganese, Wikipedia opened from the launcher beside a LibreOffice document, put side by side, sent to workspace 2 and floated",
     },
     more: { href: "/docs/shells/browser-windows", label: "Browser windows" },
-    title: "Websites are windows.",
+    title: "Your desktop lays out websites.",
   },
   {
     body: "An <app> element shows a native app's window, so CSS applies to it as to any element: layout, transforms, filters, blending and animation. This desktop is an article. The terminal floats in its text, and the windows scroll with the page.",

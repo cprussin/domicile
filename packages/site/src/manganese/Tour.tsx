@@ -14,10 +14,10 @@ const REASONS: readonly Feature[] = [
     title: "Tiling that feels like Sway",
   },
   {
-    body: "Put the page you're reading beside the document you're writing. Web pages tile, tab, float and move between workspaces like every other window, with the same keys.",
+    body: "Put the page you're reading beside the document you're writing. Websites tab, tile, float and move between workspaces right alongside your apps, with the same keys.",
     media: "tour-browser",
     shows: "LibreOffice beside a browser window with the address bar focused",
-    title: "Websites are windows",
+    title: "Websites and apps, side by side",
   },
   {
     body: "Add your password manager or ad blocker from the Chrome Web Store. Their buttons sit in the top bar, and they work in every browser window.",

@@ -1,6 +1,6 @@
 # Domicile
 
-**The web doesn't have to live in a window. Websites are windows, windows are DOM elements, and Chromium *is* the compositor. May God have mercy on our souls.**
+**The web doesn't have to live in a window. Your desktop lays out websites, native windows are DOM elements, and Chromium *is* the compositor. May God have mercy on our souls.**
 
 Domicile is an experimental Linux desktop where a modified Chromium is the Wayland compositor. Native apps, websites and the desktop's own interface are elements on one web page, laid out with CSS and composited together.
 
@@ -8,7 +8,7 @@ Domicile is an experimental Linux desktop where a modified Chromium is the Wayla
 
 ## What becomes possible
 
-- **Websites are windows.** A site opens in a window of its own and tiles, floats and moves between workspaces like any app.
+- **Your desktop lays out websites.** No browser app boxes them in. Keep them in tabs, mix them in with your native apps, or put them where websites don't usually go.
 - **Native windows are DOM elements.** Float a terminal in a paragraph, blend a heading over a video player, animate a window across the screen.
 - **Extensions see the whole desktop.** To a Chrome extension, every website on the desktop is a tab, on any workspace.
 - **Browser features are desktop features.** Share a native window into a web video call, cast to a TV, and get notifications from sites and apps in one list.

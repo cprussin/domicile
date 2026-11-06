@@ -18,9 +18,9 @@ export const Hero = () => (
     lede={
       <>
         Domicile brings Chromium and Wayland together, making websites and
-        native applications part of the same desktop. Webviews become
-        first-class windows, native apps become DOM elements, and browser
-        extensions become desktop features.
+        native applications part of the same desktop. Your desktop lays out
+        websites, native apps become DOM elements, and browser features like
+        casting, extensions and notifications become desktop features.
         <span className={experimentStyles}>
           An experiment in what becomes possible when the boundaries disappear.
         </span>
