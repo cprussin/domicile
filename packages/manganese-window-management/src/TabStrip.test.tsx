@@ -37,6 +37,7 @@ const stripProps = {
   onFloat: nothing,
   onFullscreen: nothing,
   onGrab: nothing,
+  onHover: nothing,
   onMove: nothing,
   onNewTab: nothing,
   onPull: nothing,
@@ -107,6 +108,26 @@ describe("TabStrip", () => {
     expect(
       stripOf(render(<TabStrip {...stripProps} />).container).className,
     ).not.toContain(strong);
+  });
+
+  // Focus follows the pointer onto the group's rail as onto its windows.
+  it("reports where the pointer crossed into any part of it", () => {
+    const crossed: (readonly [number, number])[] = [];
+    const { container } = render(
+      <TabStrip
+        {...stripProps}
+        onHover={(at) => {
+          crossed.push(at);
+        }}
+      />,
+    );
+
+    fireEvent.pointerOver(partOf(container, "[data-group-handle]"), {
+      clientX: 900,
+      clientY: 60,
+    });
+
+    expect(crossed).toStrictEqual([[900, 60]]);
   });
 
   describe("moving with its group", () => {

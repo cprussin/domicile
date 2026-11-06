@@ -424,6 +424,7 @@ export const Stage = memo(
                   onGroupFloat={onGroupFloat}
                   onGroupFullscreen={onGroupFullscreen}
                   onGroupGrab={groupGrabbed}
+                  onHover={onHover}
                   onMove={onMove}
                   onNewTab={onNewTab}
                   onPull={pull}
@@ -453,6 +454,7 @@ export const Stage = memo(
                 onGroupFloat={onGroupFloat}
                 onGroupFullscreen={onGroupFullscreen}
                 onGroupGrab={groupGrabbed}
+                onHover={onHover}
                 onMove={onMove}
                 onNewTab={onNewTab}
                 onPull={pull}
@@ -1271,6 +1273,7 @@ type GroupStripProps = {
   onGroupFloat: (group: NodeRef) => void;
   onGroupFullscreen: (group: NodeRef) => void;
   onGroupGrab: (group: NodeRef) => void;
+  onHover: (id: string, at: Spot) => void;
   onMove: (id: string, x: number, y: number) => void;
   onNewTab: (id: string) => void;
   onPull: () => void;
@@ -1301,6 +1304,7 @@ const GroupStrip = memo(
     onGroupFloat,
     onGroupFullscreen,
     onGroupGrab,
+    onHover,
     onMove,
     onNewTab,
     onPull,
@@ -1331,6 +1335,13 @@ const GroupStrip = memo(
         onGroupGrab(node);
       }
     }, [floating, id, node, onGrab, onGroupGrab]);
+    // Focus follows the pointer onto the group's open window.
+    const hovered = useCallback(
+      (at: Spot) => {
+        onHover(id, at);
+      },
+      [id, onHover],
+    );
     const moved = useCallback(
       (x: number, y: number) => {
         onMove(id, x, y);
@@ -1360,6 +1371,7 @@ const GroupStrip = memo(
           onFloat={floated}
           onFullscreen={filled}
           onGrab={grabbed}
+          onHover={hovered}
           onMove={moved}
           onNewTab={tabbed}
           onPull={onPull}

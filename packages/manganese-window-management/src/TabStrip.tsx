@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { cva, cx } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
 import type { Float } from "./floating/float";
+import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import { within } from "./rect";
 import type { Restack } from "./restacking";
@@ -66,6 +67,11 @@ type Props = {
   onFullscreen: () => void;
   /** The group taken hold of by the strip's end. */
   onGrab: () => void;
+  /**
+   * Called when the pointer enters any part of the strip, with the page
+   * position. Focus follows the cursor onto the group. See `WindowFrame`.
+   */
+  onHover: (at: Spot) => void;
   /** A floating group's new top-left corner. */
   onMove: (x: number, y: number) => void;
   /** A move of the group was pulled. See `StripEnd`. */
@@ -125,6 +131,7 @@ const PlacedStrip = ({
   onFloat,
   onFullscreen,
   onGrab,
+  onHover,
   onMove,
   onNewTab,
   onPull,
@@ -158,6 +165,10 @@ const PlacedStrip = ({
       data-strip
       // A leaving group's buttons would do nothing.
       inert={leaving}
+      // `pointerover` bubbles from whichever part the pointer entered.
+      onPointerOver={(event) => {
+        onHover([event.clientX, event.clientY]);
+      }}
       ref={element}
       style={{
         ...placedAt(box, depth),
