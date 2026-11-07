@@ -27,6 +27,7 @@ class DomicileContextMenuEvent;
 class DomicileDeviceRequestEvent;
 class DomicileDialogEvent;
 class DomicileExternalAppEvent;
+class DomicilePromptEvent;
 class DomicileSignInEvent;
 class DomicileFileChooserEvent;
 class DomicileMediaDevices;
@@ -193,6 +194,9 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // Releases the sign-in request once answered. See `sign_in_`.
   void SignInAnswered(DomicileSignInEvent&);
+
+  // Releases the prompt once answered. See `prompt_`.
+  void PromptAnswered(DomicilePromptEvent&);
 
   void Trace(Visitor*) const override;
 
@@ -384,6 +388,15 @@ class CORE_EXPORT HTMLWebViewElement final
   // `domicile-sign-in-withdrawn`, so the shell stops showing it.
   void SignInWithdrawn() override;
 
+  // Dispatches `domicile-prompt`. If no listener calls `preventDefault()`, it
+  // is dismissed after dispatch. See domicile_prompt_event.h.
+  void PromptRequested(domicile::mojom::blink::WebViewPromptPtr prompt,
+                       PromptRequestedCallback callback) override;
+
+  // Dismisses the held prompt and dispatches `domicile-prompt-withdrawn`, so
+  // the shell stops showing it.
+  void PromptWithdrawn() override;
+
   // Dispatches `domicile-will-navigate`; `preventDefault()` cancels. See
   // domicile_will_navigate_event.h.
   void WillNavigate(const KURL& url, WillNavigateCallback callback) override;
@@ -478,6 +491,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // The sign-in request the shell has not answered, if any. A newer one
   // replaces it. Held for `waiting_choosers_`' reason.
   Member<DomicileSignInEvent> sign_in_;
+
+  // The prompt the shell has not answered, if any. A newer one replaces it.
+  // Held for `waiting_choosers_`' reason.
+  Member<DomicilePromptEvent> prompt_;
 
   // See sitePermissions().
   Vector<std::pair<String, String>> site_permissions_;

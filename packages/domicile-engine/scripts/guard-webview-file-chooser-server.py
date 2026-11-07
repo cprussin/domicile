@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Serves the pages for guard-webview-upload.sh, guard-webview-download.sh and
-guard-webview-save-picker.sh.
+"""Serves the pages for guard-webview-upload.sh, guard-webview-download.sh,
+guard-webview-save-picker.sh and guard-webview-file-access.sh.
 
   /upload    a full-page `<input type="file">`. Logs `GUARD picked name=<name>
              text=<contents>` for a chosen file; reading the contents proves the
@@ -15,6 +15,11 @@ guard-webview-save-picker.sh.
              `guard-save.txt` and writing to the result. Logs
              `GUARD saved name=<name>`, or `GUARD save-refused <error>`.
 
+  /edit      a full-page button. The first press calls `showOpenFilePicker()`
+             and logs `GUARD opened name=<name>`; the second writes to the
+             file, which asks for permission to edit it. Logs
+             `GUARD edited name=<name>`, or `GUARD edit-refused <error>`.
+
 Each page logs `GUARD <name>-loaded` and `GUARD guest-mousedown`, so a run can
 tell that a click reached the guest. Requests are logged to stderr.
 """
@@ -27,6 +32,7 @@ UPLOAD = "/upload"
 DOWNLOAD = "/download"
 FILE = "/file"
 SAVE = "/save"
+EDIT = "/edit"
 
 # guard-webview-download.sh checks both; keep them in sync.
 FILE_NAME = "guard-download.txt"
@@ -98,9 +104,42 @@ SAVE_SCRIPT = """
       });
 """ % (SAVE_NAME, SAVE_TEXT)
 
+# guard-webview-file-access.sh checks it; keep them in sync.
+EDIT_TEXT = "a file a page edited once the shell allowed it"
+
+EDIT_TARGET = '<button id="target">edit</button>'
+EDIT_SCRIPT = """
+      // Two presses, because each asks for a user gesture of its own.
+      let opened;
+      document.getElementById("target").addEventListener("click", () => {
+        if (opened === undefined) {
+          showOpenFilePicker().then(
+            ([handle]) => {
+              opened = handle;
+              say(`opened name=${handle.name}`);
+            },
+            (error) => {
+              say(`open-refused ${error.name}`);
+            },
+          );
+        } else {
+          opened.createWritable().then(
+            async (writable) => {
+              await writable.write("%s");
+              await writable.close();
+              say(`edited name=${opened.name}`);
+            },
+            (error) => {
+              say(`edit-refused ${error.name}`);
+            },
+          );
+        }
+      });
+""" % EDIT_TEXT
+
 
 class PagesToPickFor(BaseHTTPRequestHandler):
-    """Serves the four paths above; anything else is a 404."""
+    """Serves the five paths above; anything else is a 404."""
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
         if self.path == UPLOAD:
@@ -118,6 +157,11 @@ class PagesToPickFor(BaseHTTPRequestHandler):
                 "text/html; charset=utf-8",
                 PAGE % {"which": "save", "target": SAVE_TARGET, "script": SAVE_SCRIPT},
             )
+        elif self.path == EDIT:
+            self.answer(
+                "text/html; charset=utf-8",
+                PAGE % {"which": "edit", "target": EDIT_TARGET, "script": EDIT_SCRIPT},
+            )
         elif self.path == FILE:
             self.answer(
                 "text/plain; charset=utf-8",
@@ -125,7 +169,7 @@ class PagesToPickFor(BaseHTTPRequestHandler):
                 disposition='attachment; filename="%s"' % FILE_NAME,
             )
         else:
-            self.send_error(404, "this server has four pages and that is none of them")
+            self.send_error(404, "this server has five pages and that is none of them")
 
     def answer(self, content_type, body, disposition=None):
         encoded = body.encode("utf-8")

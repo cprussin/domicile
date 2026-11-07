@@ -1141,6 +1141,43 @@ void WebViewGuest::WithdrawSignIn(int id) {
   client_->SignInWithdrawn();
 }
 
+int WebViewGuest::AskPrompt(mojom::WebViewPromptPtr prompt,
+                            PromptAnswered answered) {
+  const int id = ++last_prompt_;
+  open_prompt_ = id;
+  // Logged before asking; the prompt guard greps for it.
+  LOG(INFO) << "domicile: a <webview> needs an answer to a "
+            << prompt->kind << " prompt; asking the shell.";
+  // Wrapped, as in AskToSignIn: unanswered is no.
+  client_->PromptRequested(
+      std::move(prompt),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(
+              [](base::WeakPtr<WebViewGuest> guest, int id,
+                 PromptAnswered answered, bool accepted, int32_t choice,
+                 const std::string& text) {
+                if (guest && guest->open_prompt_ == id) {
+                  guest->open_prompt_ = 0;
+                }
+                // Logged for the prompt guard. Never the text, which may be a
+                // PIN.
+                LOG(INFO) << "domicile: a <webview>'s prompt was answered: "
+                          << (accepted ? "yes." : "no.");
+                std::move(answered).Run(accepted, choice, text);
+              },
+              weak_factory_.GetWeakPtr(), id, std::move(answered)),
+          false, 0, std::string()));
+  return id;
+}
+
+void WebViewGuest::WithdrawPrompt(int id) {
+  if (open_prompt_ != id || id == 0) {
+    return;
+  }
+  open_prompt_ = 0;
+  client_->PromptWithdrawn();
+}
+
 void WebViewGuest::Navigate(const GURL& url) {
   // This object is destroyed with the guest's WebContents, so guest_contents_
   // is never null here.
