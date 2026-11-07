@@ -256,6 +256,36 @@ struct WebViewPrompt {
   string pin;
 };
 
+// Why the page in a <webview> failed to load. The engine draws no error or
+// warning page for it: the page is left blank and the shell draws one.
+enum WebViewPageFailureKind {
+  // The page could not be reached: no network, no such host, refused, timed
+  // out, or blocked. `error` says which.
+  kNetwork,
+  // The server answered `http_status` with nothing to show.
+  kHttp,
+  // The site's certificate is not trusted, as Chrome's "Your connection is not
+  // private" page says.
+  kCertificate,
+  // Chrome warned before loading it: Safe Browsing, a lookalike address, or a
+  // site with no secure connection under HTTPS-First.
+  kWarning,
+};
+
+// What a page in a <webview> failed with. See PageFailureChanged.
+struct WebViewPageFailure {
+  WebViewPageFailureKind kind;
+  // The address that failed.
+  url.mojom.Url url;
+  // Chromium's name for the error, e.g. "ERR_NAME_NOT_RESOLVED".
+  string error;
+  // For kHttp, the status; otherwise 0.
+  int32 http_status;
+  // Whether WebViewGuest.ProceedPastWarning loads it anyway: a certificate
+  // the user may override, or a warning.
+  bool can_proceed;
+};
+
 // A device a page in a <webview> may be given, as the shell lists it.
 struct WebViewDevice {
   // Names the device in the answer to DeviceRequested. Stays the device's own
@@ -607,6 +637,11 @@ interface WebViewGuestClient {
   // sends nothing.
   RenderProcessChanged(WebViewRenderProcess state, int32 exit_code);
 
+  // The page failed to load, or a page loaded after one did (null). The page
+  // under it is blank; the shell draws the error. Sent only when it changes;
+  // a fresh guest sends nothing.
+  PageFailureChanged(WebViewPageFailure? failure);
+
   // The page is about to navigate its main frame to `url`: a link, a form or
   // a script setting `location`. Not sent for the shell's own navigations,
   // history steps or reloads. See components/domicile/browser/will_navigate.h.
@@ -708,6 +743,11 @@ interface WebViewGuest {
   // WebViewGuestClient.PageFullscreenChanged. Does nothing when the page is
   // not fullscreen.
   ExitPageFullscreen();
+
+  // Loads the page a warning (WebViewPageFailure.can_proceed) stopped, as
+  // Chrome's "Proceed anyway" does. Does nothing when no warning can be
+  // passed.
+  ProceedPastWarning();
 
   // Stores `setting` for `permission` on the page's site. Reported back as
   // WebViewGuestClient.SitePermissionsChanged. Dropped, and logged, when the

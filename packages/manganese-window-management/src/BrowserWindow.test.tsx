@@ -15,6 +15,7 @@ import {
   WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_PAGE_CHANGE_EVENT,
+  WEBVIEW_PAGE_FAILURE_CHANGE_EVENT,
   WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
   WEBVIEW_PROMPT_EVENT,
@@ -2159,6 +2160,71 @@ describe("BrowserWindow", () => {
 
       expect(answers).toStrictEqual(["sign in admin hunter2"]);
       expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+  });
+
+  // The engine leaves a failed page blank.
+  describe("a page that failed to load", () => {
+    it("draws the error over it, and tries again", async () => {
+      const reloads: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          isApp
+          motion="resting"
+          onDescription={noDescription}
+          onFocusRequest={() => undefined}
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          resizing={false}
+          url="https://example.invalid"
+          window="1"
+        />,
+      );
+      const element = view(container);
+      Object.defineProperties(element, {
+        pageFailure: { configurable: true, value: "network" },
+        pageFailureCanProceed: { configurable: true, value: false },
+        pageFailureError: {
+          configurable: true,
+          value: "ERR_NAME_NOT_RESOLVED",
+        },
+        pageFailureHttpStatus: { configurable: true, value: 0 },
+        pageFailureUrl: {
+          configurable: true,
+          value: "https://example.invalid/",
+        },
+        reload: {
+          configurable: true,
+          value: () => {
+            reloads.push("reload");
+          },
+        },
+      });
+      fireEvent(element, new Event(WEBVIEW_PAGE_FAILURE_CHANGE_EVENT));
+
+      const again = await screen.findByRole("button", { name: "Try again" });
+      expect(
+        screen.getByRole("heading", { name: "Can't reach example.invalid" }),
+      ).toBeTruthy();
+      // A focused window gives it the keyboard.
+      await waitFor(() => {
+        expect(again).toHaveFocus();
+      });
+      await userEvent.click(again);
+
+      expect(reloads).toStrictEqual(["reload"]);
     });
   });
 

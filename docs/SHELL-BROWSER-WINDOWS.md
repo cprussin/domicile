@@ -941,3 +941,48 @@ frame.addEventListener(WEBVIEW_PROMPT_EVENT, (event) => {
   and fires `domicile-prompt-withdrawn`, as does one the browser drops.
 
 Manganese asks over the page (`manganese-page-requests/PromptAsk.tsx`).
+
+## Error, warning and crashed pages
+
+The engine draws no error page, certificate or Safe Browsing warning, or
+crashed page: the page is left blank and the element says why.
+
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_PAGE_FAILURE_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const changed = () => {
+    setFailure(frame?.pageFailure ?? ""); // "" once a page loads
+  };
+  frame?.addEventListener(WEBVIEW_PAGE_FAILURE_CHANGE_EVENT, changed);
+  return () =>
+    frame?.removeEventListener(WEBVIEW_PAGE_FAILURE_CHANGE_EVENT, changed);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { WEBVIEW_PAGE_FAILURE_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_PAGE_FAILURE_CHANGE_EVENT, () => {
+  showFailure(frame.pageFailure); // "" once a page loads
+});
+```
+
+<!-- /tabs -->
+
+- **`pageFailure`:** `network`, `http`, `certificate` or `warning`, or `""`.
+  **`pageFailureUrl`:** the address that failed. **`pageFailureError`:**
+  Chromium's name for the error, such as `ERR_NAME_NOT_RESOLVED`.
+  **`pageFailureHttpStatus`:** the status for `http`.
+- **`proceedPastWarning()`:** loads the page a certificate or safety warning
+  stopped, only when **`pageFailureCanProceed`**.
+- A crashed page sets `renderProcessGone` instead
+  (`domicile-render-process-change`); `reload()` brings it back.
+
+Manganese draws these over the page
+(`manganese-window-management/src/browser/PageProblem.tsx`).

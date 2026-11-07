@@ -82,6 +82,7 @@ TOGETHER=(
   guard-webview-external-app
   guard-webview-sign-in
   guard-webview-file-access
+  guard-webview-page-failure
   guard-webview-print
   guard-webview-context-menu
   guard-webview-upload

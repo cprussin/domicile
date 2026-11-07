@@ -535,6 +535,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Leaves page fullscreen through content, which calls
   // ExitFullscreenModeForTab.
   void ExitPageFullscreen() override;
+  void ProceedPastWarning() override;
 
   // Stores the setting through the profile's HostContentSettingsMap, as
   // Chrome's page info does. The change reaches the shell through
@@ -821,6 +822,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // permissions.
   void PrimaryPageChanged(content::Page& page) override;
 
+  // Reports a failed load of the page, or a load after one, to the element.
+  // See PageFailureChanged in the mojom.
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+
   // content_settings::Observer:
   //
   // Any setting of a reported type may change the page's site's, so this
@@ -942,6 +948,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // element if either changed. See RenderProcessChanged in the mojom.
   void ReportRenderProcess();
 
+  // Reports the page's failure, or null, to the element if it changed. Run in
+  // a task after an error page commits, so Chrome's interstitial helper has
+  // taken its warning first.
+  void ReportPageFailure(GURL url, int net_error, int http_status);
+  void ReportPageFailure(mojom::WebViewPageFailurePtr failure);
+
   // Reports loading state to the element if it changed. LoadingStateChanged
   // also fires when nothing changed.
   void ReportLoading(bool should_show_loading_ui);
@@ -1036,6 +1048,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   mojom::WebViewRenderProcess reported_render_process_ =
       mojom::WebViewRenderProcess::kRunning;
   int reported_exit_code_ = 0;
+  // Null while the page loaded.
+  mojom::WebViewPageFailurePtr reported_page_failure_;
   // The renderer's last link, which stays set while the pointer is outside the
   // page. See PreHandleMouseEvent.
   GURL renderer_target_url_;
