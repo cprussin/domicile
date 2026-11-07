@@ -433,6 +433,20 @@ class WebViewGuest : public mojom::WebViewGuest,
   // answered or a newer request replaced it.
   void WithdrawSignIn(int id);
 
+  // Asks the shell `prompt`. See PromptRequested in the mojom and
+  // //chrome/browser/domicile/domicile_prompts.h.
+  //
+  // `answered` gets whether it was accepted, the choice and the text; no if
+  // the shell ignored it or the element went away. Returns the prompt's
+  // number, for WithdrawPrompt.
+  using PromptAnswered =
+      base::OnceCallback<void(bool accepted, int choice, std::string text)>;
+  int AskPrompt(mojom::WebViewPromptPtr prompt, PromptAnswered answered);
+
+  // Tells the shell to stop asking prompt `id`. Does nothing once it was
+  // answered or a newer prompt replaced it.
+  void WithdrawPrompt(int id);
+
   base::WeakPtr<WebViewGuest> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
@@ -1038,6 +1052,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // or 0 for none. See AskToSignIn.
   int last_sign_in_ = 0;
   int open_sign_in_ = 0;
+
+  // The same for AskPrompt.
+  int last_prompt_ = 0;
+  int open_prompt_ = 0;
   // Whether AskToClose is waiting on the page's beforeunload.
   bool asked_to_close_ = false;
 

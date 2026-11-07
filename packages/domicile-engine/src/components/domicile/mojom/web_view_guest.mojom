@@ -212,6 +212,50 @@ enum WebViewDialogType {
   kBeforeUnload,
 };
 
+// What a PromptRequested asks. Each is a question Chrome would ask with a
+// dialog of its own, drawn on the shell's window. See
+// //chrome/browser/domicile/domicile_prompts.h.
+enum WebViewPromptKind {
+  // Let the site view the file or folder named `subject`; `details` holds its
+  // full path. Accept allows.
+  kFileView,
+  // Let the site edit (save changes to) the file or folder named `subject`;
+  // `details` holds its full path. Accept allows.
+  kFileEdit,
+  // The site picked a folder that holds system files, which it may not open.
+  // Accept picks another; dismiss gives up.
+  kFileRestricted,
+  // The site would save the file named `subject`, which Safe Browsing calls
+  // dangerous; `details` holds its full path. Accept saves anyway; dismiss
+  // does not.
+  kFileDangerous,
+  // The site asks for a certificate to sign in with. `details` are the
+  // certificates, each "name\nissuer"; `choice` is the one picked. Dismiss
+  // continues without one.
+  kClientCertificate,
+  // The Bluetooth device `subject` needs a PIN to pair; `text` is it.
+  kBluetoothPin,
+  // Pair with the Bluetooth device `subject`. `pin`, when not empty, must
+  // match the one the device shows.
+  kBluetoothConfirm,
+  // The extension `subject` asks for more permissions, listed in `details`.
+  kExtensionPermissions,
+  // Add the extension `subject`, with the permissions in `details`.
+  kExtensionInstall,
+  // Turn the extension `subject` back on, with the permissions in `details`.
+  kExtensionReEnable,
+};
+
+// A question for the shell to ask over the page. `origin` is the site that
+// asked, or an empty URL for none (an extension's own page).
+struct WebViewPrompt {
+  WebViewPromptKind kind;
+  url.mojom.Url origin;
+  string subject;
+  array<string> details;
+  string pin;
+};
+
 // A device a page in a <webview> may be given, as the shell lists it.
 struct WebViewDevice {
   // Names the device in the answer to DeviceRequested. Stays the device's own
@@ -523,6 +567,20 @@ interface WebViewGuestClient {
   // the page navigated or another request for the same realm was answered.
   // Its answer, if one is sent, is ignored.
   SignInWithdrawn();
+
+  // The page, or an extension in this element, needs the user to answer
+  // `prompt`, which Chrome would ask with a dialog of its own drawn on the
+  // shell's window. See WebViewPromptKind for what each answer means.
+  //
+  // `accepted` is yes; `choice` and `text` are read only for the kinds that
+  // say so. An unhandled event or a closed pipe is no. A newer prompt
+  // replaces an older, unanswered one, which is answered no.
+  PromptRequested(WebViewPrompt prompt)
+      => (bool accepted, int32 choice, string text);
+
+  // The browser dropped the unanswered PromptRequested, for example because
+  // the page navigated. Its answer, if one is sent, is ignored.
+  PromptWithdrawn();
 
   // The page entered or left fullscreen, as a video's fullscreen button does.
   // The page fills the element's box; the shell decides whether the element

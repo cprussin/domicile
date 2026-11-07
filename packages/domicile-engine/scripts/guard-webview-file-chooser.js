@@ -1,9 +1,12 @@
-// Shell for guard-webview-upload.sh, guard-webview-download.sh and
-// guard-webview-save-picker.sh: one browser window that answers its
-// `domicile-file-chooser` events without drawing a picker.
+// Shell for guard-webview-upload.sh, guard-webview-download.sh,
+// guard-webview-save-picker.sh and guard-webview-file-access.sh: one browser
+// window that answers its `domicile-file-chooser` and `domicile-prompt`
+// events without drawing anything.
 //
 //   ?answer=choose&pick=<path>   choose <path>, absolute or relative to home
 //   ?answer=cancel               cancel (the control)
+//   ?prompt=accept               accept each prompt; optional
+//   ?prompt=dismiss              dismiss each prompt (the control)
 //
 // Logs to the console, which the engine writes to its log:
 //
@@ -12,6 +15,9 @@
 //   GUARD file-chooser mode=…    the element asked, and for what
 //     suggested=…
 //   GUARD answered               the answer did not throw
+//   GUARD prompt kind=… origin=… a prompt reached the shell, and what it
+//     subject=… details=…        carries
+//   GUARD prompt-answered        its answer did not throw
 //   GUARD downloads …            the desk's downloads changed: one
 //                                <state>:<path>:<window> per download
 //   GUARD download-removed       the finished download this page removed
@@ -62,6 +68,28 @@ export const HostShell = (_root, host) => {
     event.preventDefault();
     answerIt(event);
   });
+
+  // Prompts are answered only when `?prompt=` says how. Claimed in both runs,
+  // as above.
+  const prompt = parameters.get("prompt");
+  if (prompt !== null) {
+    document.addEventListener("domicile-prompt", (event) => {
+      say(
+        `prompt kind=${event.kind} origin=${event.origin} subject=${event.subject} details=${event.details.join(",")}`,
+      );
+      event.preventDefault();
+      if (prompt === "accept") {
+        event.accept();
+      } else if (prompt === "dismiss") {
+        event.dismiss();
+      } else {
+        throw new Error(
+          `guard-webview-file-chooser: ?prompt=${prompt} is not one`,
+        );
+      }
+      say("prompt-answered");
+    });
+  }
 
   /** Answers `event` as `?answer=` says and logs it. */
   const answerIt = (event) => {
