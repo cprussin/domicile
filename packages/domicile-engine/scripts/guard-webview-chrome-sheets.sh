@@ -68,6 +68,11 @@ FOR_SECONDS="${FOR_SECONDS:-90}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-chrome-sheets-engine.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-chrome-sheets-http.log}"
 
+# What the server writes for the page's report and for nothing else. The
+# `GUARD` prefix keeps the server's `serving /probe and /report` banner from
+# matching, which would end the wait before the page reported.
+REPORT_LINE="GUARD report "
+
 STARTED=()
 cleanup() {
   if [ ${#STARTED[@]} -gt 0 ]; then
@@ -143,7 +148,7 @@ wait_for_line "$TRIES" "GUARD shell-loaded" "$ENGINE_LOG" || {
 echo "the shell is up, with a <webview> under a ${STRIP_HEIGHT}px strip"
 
 # 3. The page's report.
-wait_for_line "$TRIES" "report " "$HTTP_LOG" ||
+wait_for_line "$TRIES" "$REPORT_LINE" "$HTTP_LOG" ||
   echo "the page never reported" >&2
 
 saw() { # $1 pattern
@@ -151,15 +156,15 @@ saw() { # $1 pattern
 }
 
 SAW_SHELL=$(grep -qF "GUARD shell-loaded" "$ENGINE_LOG" && echo 1 || echo 0)
-SAW_REPORT=$(saw "report ")
-SAW_APIS=$(grep -F "report " "$HTTP_LOG" | grep -F "credentials=object" |
+SAW_REPORT=$(saw "$REPORT_LINE")
+SAW_APIS=$(grep -F "$REPORT_LINE" "$HTTP_LOG" | grep -F "credentials=object" |
   grep -qF "docpip=object" && echo 1 || echo 0)
 SAW_NO_PAYMENT=$(saw "payment=undefined")
 SAW_NO_IDENTITY=$(saw "identity=undefined")
 SAW_NO_PIP=$(saw "pip=false")
 
 echo
-grep -F "report " "$HTTP_LOG" || true
+grep -F "$REPORT_LINE" "$HTTP_LOG" || true
 echo "shell=$SAW_SHELL report=$SAW_REPORT apis=$SAW_APIS"
 echo "no payment=$SAW_NO_PAYMENT no identity=$SAW_NO_IDENTITY no pip=$SAW_NO_PIP"
 echo
