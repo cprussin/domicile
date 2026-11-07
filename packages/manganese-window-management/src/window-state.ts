@@ -832,7 +832,8 @@ export const WindowAction = {
    * The page in browser window `id`, or the client of app window `id`, asked
    * to enter or leave fullscreen. See `pageFullscreened`.
    */
-  PageFullscreened: (id: string, fullscreen: boolean) => ({
+  PageFullscreened: (id: string, fullscreen: boolean, display?: string) => ({
+    display,
     fullscreen,
     id,
     kind: WindowActionKind.PageFullscreened as const,
@@ -1297,7 +1298,10 @@ const reduceAction = (
       };
     }
     case WindowActionKind.PageFullscreened: {
-      return onWorkspaceWith(state, action.id, (workspace) =>
+      const placed = action.fullscreen
+        ? onRequestedScreen(state, action.id, action.display)
+        : state;
+      return onWorkspaceWith(placed, action.id, (workspace) =>
         pageFullscreened(workspace, action.id, action.fullscreen),
       );
     }
@@ -2068,6 +2072,22 @@ const dropNode = (
     return onWorkspace({ ...left, focused: screen }, to.name, (workspace) =>
       nodeArrived(workspace, node, selected, target, edge),
     );
+  }
+};
+
+/** Fullscreen placement remains on the selected screen after fullscreen ends. */
+const onRequestedScreen = (
+  state: WindowState,
+  id: string,
+  display: string | undefined,
+): WindowState => {
+  if (
+    display === undefined ||
+    workspaceHolding(state, id)?.name === currentOn(state, display)
+  ) {
+    return state;
+  } else {
+    return dropOnScreen(state, { id, up: 0 }, display);
   }
 };
 

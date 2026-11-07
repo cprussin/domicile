@@ -220,13 +220,17 @@ export const useWindows = (
 };
 
 /**
- * What a client's request does. Fullscreen fills the window's screen, as a
- * page's fullscreen does. Windows tile, so maximizing changes nothing.
+ * What a client's request does. Fullscreen uses the requested display when
+ * named. Windows tile, so maximizing changes nothing.
  */
 const actionFor = (request: WindowRequest): WindowAction | undefined => {
   switch (request.kind) {
     case WindowRequestKind.Fullscreen:
-      return Action.PageFullscreened(appWindowId(request.appId), true);
+      return Action.PageFullscreened(
+        appWindowId(request.appId),
+        true,
+        request.display,
+      );
     case WindowRequestKind.Unfullscreen:
       return Action.PageFullscreened(appWindowId(request.appId), false);
     case WindowRequestKind.Maximize:
