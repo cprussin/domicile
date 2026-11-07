@@ -201,6 +201,10 @@ class MODULES_EXPORT DomicileHost final
   // Answers one grabShortcut of that name. The last one gives the chord back,
   // and its key too unless another name grabbed is on it.
   void ungrabShortcut(ScriptState*, const String& chord, ExceptionState&);
+  // The gesture, `swipe:3`, grabbed in the browser process, which hears the
+  // touchpad. Counted by name, like grabShortcut.
+  void grabGesture(ScriptState*, const String& gesture, ExceptionState&);
+  void ungrabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
 
   // Blink's DEFINE_ATTRIBUTE_EVENT_LISTENER, keyed on the fork's own names
@@ -345,6 +349,7 @@ class MODULES_EXPORT DomicileHost final
   void AppUrgent(const String& app_id, bool urgent) override;
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
+  void GesturePerformed(domicile::mojom::blink::GesturePtr gesture) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void Files(const String& query,
              const Vector<String>& files,
@@ -601,6 +606,13 @@ class MODULES_EXPORT DomicileHost final
     uint32_t holds = 1;
   };
   Vector<GrabbedChord> chords_;
+  // A gesture grabbed by name, and how many grabGesture calls no
+  // ungrabGesture has answered yet.
+  struct GrabbedGesture {
+    String written;
+    uint32_t holds = 1;
+  };
+  Vector<GrabbedGesture> gestures_;
   // Every keysym the keyboard types and the evdev key it is on, from the last
   // `shell_config`; nullopt until the first.
   std::optional<HashMap<String, uint32_t>> keys_;

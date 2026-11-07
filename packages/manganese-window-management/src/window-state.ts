@@ -441,6 +441,7 @@ export enum WindowActionKind {
   WindowStepped,
   WindowStretched,
   WorkspaceSelected,
+  WorkspaceStepped,
 }
 
 export const WindowAction = {
@@ -1073,6 +1074,12 @@ export const WindowAction = {
     kind: WindowActionKind.WorkspaceSelected as const,
     name,
   }),
+
+  /** `workspace next_on_output` or `workspace prev_on_output`. */
+  WorkspaceStepped: (way: "next" | "prev") => ({
+    kind: WindowActionKind.WorkspaceStepped as const,
+    way,
+  }),
 };
 
 export type WindowAction = ReturnType<
@@ -1443,6 +1450,9 @@ const reduceAction = (
     }
     case WindowActionKind.WorkspaceSelected: {
       return selectWorkspace(state, action.name);
+    }
+    case WindowActionKind.WorkspaceStepped: {
+      return stepWorkspace(state, action.way);
     }
   }
 };
@@ -1998,6 +2008,27 @@ const selectWorkspace = (state: WindowState, name: string): WindowState => {
   } else {
     return showWorkspace(state, state.previous);
   }
+};
+
+/**
+ * Shows the focused screen's next or previous workspace as its bar lists
+ * them, wrapping around like sway's `next_on_output`.
+ */
+const stepWorkspace = (
+  state: WindowState,
+  way: "next" | "prev",
+): WindowState => {
+  const listed = workspacesOn(state, state.focused);
+  const at = listed.indexOf(currentHere(state));
+  const to =
+    at === -1
+      ? undefined
+      : listed[
+          (at + (way === "next" ? 1 : -1) + listed.length) % listed.length
+        ];
+  return to === undefined || to === currentHere(state)
+    ? state
+    : showWorkspace(state, to);
 };
 
 /**

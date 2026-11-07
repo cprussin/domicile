@@ -951,6 +951,21 @@ source_set("desk_activity") {
   public_deps = [ "//base" ]
 }
 
+# The touchpad gestures the shell grabs, from the platform's input to one
+# control channel. Its own target for :desk_activity's reason.
+source_set("desk_gestures") {
+  sources = [
+    "browser/desk_gestures.cc",
+    "browser/desk_gestures.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/events",
+    "//ui/events/types:headers",
+  ]
+}
+
 # Where the pointer is on the desk, from the browser's own input to every
 # control channel. Its own target for :desk_activity's reason.
 source_set("desk_pointer") {
@@ -1042,6 +1057,7 @@ source_set("control_channel") {
     ":common",
     ":cursor_shape",
     ":desk_activity",
+    ":desk_gestures",
     ":desk_lock",
     ":desk_pointer",
     ":display_transform",
@@ -1079,6 +1095,7 @@ source_set("unit_tests") {
     "browser/context_menu_unittest.cc",
     "browser/control_channel_unittest.cc",
     "browser/desk_activity_unittest.cc",
+    "browser/desk_gestures_unittest.cc",
     "browser/desk_pointer_unittest.cc",
     "browser/desk_geometry_unittest.cc",
     "browser/desk_tabs_unittest.cc",
@@ -1126,6 +1143,7 @@ source_set("unit_tests") {
     "common/forwarded_keys_unittest.cc",
     "common/held_chords_unittest.cc",
     "common/locale_fallback_unittest.cc",
+    "common/native_gesture_sequence_unittest.cc",
     "common/pinch_metadata_unittest.cc",
     "common/scroll_metadata_unittest.cc",
     "common/synced_frame_unittest.cc",
@@ -1158,6 +1176,7 @@ source_set("unit_tests") {
     ":cursor_shape",
     ":desk_activity",
     ":desk_geometry",
+    ":desk_gestures",
     ":desk_pointer",
     ":desk_tabs",
     ":desktop_prefs",

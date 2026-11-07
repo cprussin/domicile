@@ -187,6 +187,23 @@
   [CallWith=ScriptState, RaisesException] undefined ungrabShortcut(
       DOMString chord);
 
+  // Route a touchpad gesture to the page rather than to the window under the
+  // pointer, in sway's grammar without the direction: `swipe:3`, `pinch:4`,
+  // `hold`. A count left out is any of three fingers or more; two are the
+  // page's, for its scrolling, zoom and history. Each phase comes back as a
+  // `gesture` event. Counted, like grabShortcut(). While the window with the
+  // keyboard holds a shortcuts inhibitor, a grabbed gesture fires nothing.
+  //
+  // Throws a SyntaxError for a gesture written wrong, or of fewer than three
+  // fingers.
+  [CallWith=ScriptState, RaisesException] undefined grabGesture(
+      DOMString gesture);
+
+  // Answer one grabGesture() of that name. A gesture not grabbed is a no-op.
+  // Throws a SyntaxError for a gesture written wrong.
+  [CallWith=ScriptState, RaisesException] undefined ungrabGesture(
+      DOMString gesture);
+
   // Click an extension's action, popup or not: the extension is granted
   // activeTab on the active tab, as a toolbar click grants it in Chrome. Then
   // an action with no popup has its `action.onClicked` dispatched; one with a
@@ -209,6 +226,9 @@
   // A shortcut that fired was let go: its key came up, or one of its
   // modifiers did, wherever the keyboard is. As a DomicileShortcutEvent.
   attribute EventHandler onshortcutrelease;
+
+  // A phase of a grabbed touchpad gesture, as a DomicileGestureEvent.
+  attribute EventHandler ongesture;
 
   // A client asked for the keyboard, as a DomicileAppEvent naming it; nothing
   // has moved. The shell answers by calling focusApp(), or does not, which

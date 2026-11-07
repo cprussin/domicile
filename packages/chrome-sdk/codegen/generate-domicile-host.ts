@@ -36,6 +36,7 @@ const HEADER = [
 const EVENT_TYPES = {
   extensionpopuprequested: "DomicileExtensionPopupEvent",
   focusrequested: "DomicileAppEvent",
+  gesture: "DomicileGestureEvent",
   portalrequests: "MessageEvent<string>",
   shortcut: "DomicileShortcutEvent",
   shortcutrelease: "DomicileShortcutEvent",

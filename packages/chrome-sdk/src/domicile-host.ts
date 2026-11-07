@@ -142,6 +142,17 @@ export type DomicileFileSearch = {
   readonly indexing: boolean;
 };
 
+export type DomicileGestureEventInit = EventInit & {
+  kind?: string;
+  phase?: string;
+  fingers?: number;
+  dx?: number;
+  dy?: number;
+  scale?: number;
+  rotation?: number;
+  canceled?: boolean;
+};
+
 export type DomicileShortcutEventInit = EventInit & {
   chord?: string;
   keycode?: number;
@@ -435,6 +446,30 @@ export type DomicileExtensionPopupEvent = Event & {
   readonly popup: string;
 };
 
+/**
+ * A phase of a touchpad gesture claimed with grabGesture().
+ *
+ * Its own type, like DomicileShortcutEvent: a gesture belongs to no window.
+ */
+export type DomicileGestureEvent = Event & {
+  /** `swipe`, `pinch` or `hold`. */
+  readonly kind: string;
+  /** `begin`, `update` or `end`. */
+  readonly phase: string;
+  readonly fingers: number;
+  /** This update's motion, in the touchpad's accelerated pointer units. */
+  readonly dx: number;
+  readonly dy: number;
+  /**
+   * A pinch's scale relative to its begin, and this update's rotation in
+   * degrees clockwise.
+   */
+  readonly scale: number;
+  readonly rotation: number;
+  /** On an end: the gesture was abandoned rather than finished. */
+  readonly canceled: boolean;
+};
+
 /** Every event `DomicileHost` fires, by name. */
 export type DomicileHostEventMap = {
   /** A grabbed shortcut fired, as a DomicileShortcutEvent. */
@@ -444,6 +479,8 @@ export type DomicileHostEventMap = {
    * modifiers did, wherever the keyboard is. As a DomicileShortcutEvent.
    */
   shortcutrelease: DomicileShortcutEvent;
+  /** A phase of a grabbed touchpad gesture, as a DomicileGestureEvent. */
+  gesture: DomicileGestureEvent;
   /**
    * A client asked for the keyboard, as a DomicileAppEvent naming it; nothing
    * has moved. The shell answers by calling focusApp(), or does not, which
@@ -720,6 +757,23 @@ export type DomicileHost = {
    * page is its key, not a `shortcut`.
    */
   ungrabShortcut(chord: string): void;
+  /**
+   * Route a touchpad gesture to the page rather than to the window under the
+   * pointer, in sway's grammar without the direction: `swipe:3`, `pinch:4`,
+   * `hold`. A count left out is any of three fingers or more; two are the
+   * page's, for its scrolling, zoom and history. Each phase comes back as a
+   * `gesture` event. Counted, like grabShortcut(). While the window with the
+   * keyboard holds a shortcuts inhibitor, a grabbed gesture fires nothing.
+   *
+   * Throws a SyntaxError for a gesture written wrong, or of fewer than three
+   * fingers.
+   */
+  grabGesture(gesture: string): void;
+  /**
+   * Answer one grabGesture() of that name. A gesture not grabbed is a no-op.
+   * Throws a SyntaxError for a gesture written wrong.
+   */
+  ungrabGesture(gesture: string): void;
   /**
    * Click an extension's action, popup or not: the extension is granted
    * activeTab on the active tab, as a toolbar click grants it in Chrome. Then

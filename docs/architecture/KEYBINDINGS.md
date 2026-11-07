@@ -49,6 +49,10 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
   `Ctrl`/`Control`, `Alt`/`Mod1`.
 - Modifiers match exactly: `Meta+l` does not fire while Shift is held.
 
+**Gestures** bind in the same tables, in sway's `bindgesture` grammar:
+`swipe:3:left`, `pinch:4:inward`, `hold`. See
+[GESTURES.md](GESTURES.md#bindings).
+
 ### Commands from a terminal
 
 ```
