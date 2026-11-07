@@ -115,6 +115,7 @@ Headless.
 | `guard-webview-dialog.sh` | a page's `prompt()` from a press asks the shell as `domicile-dialog`, and the shell's text reaches the page as `prompt()`'s value |
 | `guard-webview-external-app.sh` | a press on a page's `domicile-guard:` link asks the shell as `domicile-external-app` with the link, the site and `mayRemember`, in place of Chrome's dialog (patch 0176), and the shell's answer reaches the browser |
 | `guard-webview-sign-in.sh` | a page behind a sign-in (HTTP authentication) asks the shell as `domicile-sign-in` with the site, the realm, `proxy` and `secure`, in place of Chrome's dialog (patch 0177), and the shell's user name and password sign the page in |
+| `guard-webview-file-access.sh` | a page that opened a file and writes to it asks the shell as `domicile-prompt` (`file-edit`, with the site, the name and the path) in place of Chrome's prompt (patch 0179), and the shell's yes lets the page write it; its control says no and the file is kept |
 | `guard-webview-print.sh` | a browser window's `print()`, then its page's own `window.print()`, each start and finish a print through the system dialog, with no Print Preview |
 | `guard-webview-beforeunload.sh` | `closeBrowserWindow` on a page whose `beforeunload` asks to stay asks the shell as a `beforeunload` dialog; Cancel keeps the window and Leave closes it |
 | `guard-webview-fullscreen.sh` | a page enters fullscreen from its own button, the shell hears it as `pageFullscreen`, and Escape (typed on a swapped Caps Lock) and `exitPageFullscreen()` each take it out |

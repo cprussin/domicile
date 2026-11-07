@@ -1,0 +1,42 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Dispatched by a <webview> when its page, or an extension shown in it, needs
+// the user to answer a question Chrome would ask with a dialog of its own:
+// letting a site edit a file, picking a certificate, pairing a Bluetooth
+// device, or granting an extension permissions. Waits until the shell answers
+// on the event.
+//
+// Domicile-only, not a web standard. No constructor: only the browser creates
+// one.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicilePromptEvent : Event {
+  // What is asked: "file-view", "file-edit", "file-restricted",
+  // "file-dangerous", "client-certificate", "bluetooth-pin",
+  // "bluetooth-confirm", "extension-permissions", "extension-install" or
+  // "extension-re-enable".
+  readonly attribute DOMString kind;
+
+  // The site that asked, e.g. "https://vscode.dev", or "" for none.
+  readonly attribute USVString origin;
+
+  // What it is about: a file or folder's name, a device's name or an
+  // extension's name. "" for a certificate or a system folder.
+  readonly attribute DOMString subject;
+
+  // More about it: a file's full path, the certificates to pick from as
+  // "name\nissuer", or an extension's permissions.
+  readonly attribute FrozenArray<DOMString> details;
+
+  // The PIN a Bluetooth device shows, to check it matches, or "".
+  readonly attribute DOMString pin;
+
+  // Answers yes, with the picked entry of `details` and the typed text where
+  // the kind reads them; or no. Each throws InvalidStateError if already
+  // answered or withdrawn.
+  [RaisesException] undefined accept(optional long choice = 0,
+                                     optional DOMString text = "");
+  [RaisesException] undefined dismiss();
+};

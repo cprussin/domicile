@@ -142,6 +142,22 @@ Patch `0110`:
 - Chrome's password manager does not fill or save these.
 - A page outside any guest gets no sign-in.
 
+## Other prompts
+
+- File System Access (view or edit a file or folder, a folder of system
+  files, a dangerous file), client certificates, Bluetooth pairing and
+  extension install, permission and re-enable prompts ask the shell
+  (`domicile-prompt`), not Chrome's dialogs, which anchor to the shell's
+  window the same way.
+- Patch `0179` adds the overrides; `chrome/browser/domicile/domicile_prompts.h`
+  sets them. Client certificates use Chrome's existing selector hook.
+- A guest has no File System Access prompt manager, so these were refused
+  outright before; now the shell asks. Reading and editing are asked
+  separately, as Chrome's request does.
+- With no certificate installed, the page continues without one and nothing
+  is asked, as in Chrome.
+- A page outside any guest gets no.
+
 ## Host shortcuts when nested
 
 Under a host compositor, the engine inhibits the host's shortcuts so the shell
@@ -193,5 +209,6 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-will-navigate.sh`: will-navigate.
 - `guard-webview-external-app.sh`: links for applications.
 - `guard-webview-sign-in.sh`: sign-ins.
+- `guard-webview-file-access.sh`: file access prompts.
 - `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.

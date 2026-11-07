@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/html/domicile/domicile_external_app_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_prompt_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_sign_in_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_will_navigate_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -134,6 +135,11 @@ constexpr char kExternalAppWithdrawnEvent[] = "domicile-external-app-withdrawn";
 // and its withdrawal. See domicile_sign_in_event.h.
 constexpr char kSignInEvent[] = "domicile-sign-in";
 constexpr char kSignInWithdrawnEvent[] = "domicile-sign-in-withdrawn";
+
+// A question Chrome would ask with its own dialog, which the shell answers on
+// the event, and its withdrawal. See domicile_prompt_event.h.
+constexpr char kPromptEvent[] = "domicile-prompt";
+constexpr char kPromptWithdrawnEvent[] = "domicile-prompt-withdrawn";
 
 // The values of a site permission's setting. Strings, as for `security`.
 constexpr char kSettingAsk[] = "ask";
@@ -284,6 +290,7 @@ void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(dialog_);
   visitor->Trace(external_app_);
   visitor->Trace(sign_in_);
+  visitor->Trace(prompt_);
   visitor->Trace(pointer_listener_);
   HTMLFrameElementBase::Trace(visitor);
 }
@@ -1061,6 +1068,38 @@ void HTMLWebViewElement::SignInWithdrawn() {
 void HTMLWebViewElement::SignInAnswered(DomicileSignInEvent& event) {
   if (sign_in_ == &event) {
     sign_in_ = nullptr;
+  }
+}
+
+// Held in `prompt_` until answered. A newer prompt replaces an older one,
+// which is answered no and withdrawn from the shell first.
+void HTMLWebViewElement::PromptRequested(
+    domicile::mojom::blink::WebViewPromptPtr prompt,
+    PromptRequestedCallback callback) {
+  if (prompt_) {
+    prompt_->DismissIfUnanswered();
+    DispatchEvent(*Event::CreateBubble(AtomicString(kPromptWithdrawnEvent)));
+  }
+  auto* event = MakeGarbageCollected<DomicilePromptEvent>(
+      AtomicString(kPromptEvent), *prompt, std::move(callback), *this);
+  prompt_ = event;
+  DispatchEvent(*event);
+  if (!event->defaultPrevented()) {
+    event->DismissIfUnanswered();
+  }
+}
+
+// Only for a prompt still held: one the shell answered is already gone.
+void HTMLWebViewElement::PromptWithdrawn() {
+  if (prompt_) {
+    prompt_->DismissIfUnanswered();
+    DispatchEvent(*Event::CreateBubble(AtomicString(kPromptWithdrawnEvent)));
+  }
+}
+
+void HTMLWebViewElement::PromptAnswered(DomicilePromptEvent& event) {
+  if (prompt_ == &event) {
+    prompt_ = nullptr;
   }
 }
 
