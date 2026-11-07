@@ -2331,3 +2331,39 @@ describe("a client's popups", () => {
     expect(state.windows.map(({ id }) => id)).toEqual([APP("term")]);
   });
 });
+
+describe("stepping through the workspaces", () => {
+  /** Windows on workspaces 1 and 3, showing 3. */
+  const onOneAndThree = () =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.WorkspaceSelected("3"),
+      WindowAction.AppAppeared("foot", "foot"),
+    );
+
+  it("goes to the screen's next and previous ones, as its bar lists them", () => {
+    const back = reduce(onOneAndThree(), WindowAction.WorkspaceStepped("prev"));
+    const ahead = reduce(back, WindowAction.WorkspaceStepped("next"));
+
+    expect(currentHere(back)).toBe("1");
+    expect(currentHere(ahead)).toBe("3");
+  });
+
+  it("wraps around, as sway's `next_on_output` does", () => {
+    const state = reduce(
+      onOneAndThree(),
+      WindowAction.WorkspaceStepped("next"),
+    );
+
+    expect(currentHere(state)).toBe("1");
+  });
+
+  it("stays put with nothing else on the screen", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.WorkspaceStepped("next"),
+    );
+
+    expect(currentHere(state)).toBe("1");
+  });
+});

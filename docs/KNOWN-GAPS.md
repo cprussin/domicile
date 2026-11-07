@@ -20,8 +20,11 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#open-questions).
 
-- **No touchscreen, and no multi-finger gestures for the shell.** A touch
-  is a pointer click, and three-finger swipes do nothing.
+- **No touchscreen.** A touch is a pointer click.
+  [GESTURES.md](/docs/architecture/GESTURES.md).
+- **A window's shortcuts inhibitor does not get the shell's gestures.** A VM
+  that holds one gets grabbed chords as keys, but a three-finger swipe the
+  shell binds still goes to the shell, which ignores it.
   [GESTURES.md](/docs/architecture/GESTURES.md).
 
 ## Displays

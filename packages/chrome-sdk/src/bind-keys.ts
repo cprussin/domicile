@@ -4,13 +4,28 @@
 // every press, from a `<webview>` or the page, as a `shortcut` event carrying
 // the chord.
 //
+// Touchpad gestures (`swipe:3:left`) bind beside chords and share their
+// modes. `grabGesture` takes each kind and count; the engine sends every
+// phase as a `gesture` event, and a binding runs once its gesture ends going
+// its way. See docs/architecture/GESTURES.md.
+//
 // Binding modes are tracked here; the engine does not know about them. A
 // command typed as `domicile send-shell` arrives as a shell command system
 // event and runs as its `SendShell` binding would. See
 // docs/architecture/KEYBINDINGS.md.
 
+import type { Gestures } from "./desktop/gestures";
 import type { Keyboard } from "./desktop/keyboard";
 import type { ShellNamespace } from "./desktop/shell";
+import type { FinishedGesture } from "./gesture-binding";
+import {
+  bestGesture,
+  gestureTracker,
+  grabOf,
+  isGesture,
+  parseGesture,
+} from "./gesture-binding";
+import type { KeyAction } from "./key-action";
 import { KeyActionKind } from "./key-action";
 import type { KeybindingsByMode, ShellKeybindings } from "./own-keybindings";
 import { ownKeybindings } from "./own-keybindings";
@@ -36,12 +51,13 @@ export type KeyHandlers = {
 export type KeyBinding = {
   /** Switch to binding mode `name`; see {@link bindKeys}. */
   setMode: (name: string) => void;
-  /** Stop handling keys, and give back every chord grabbed. */
+  /** Stop handling keys, and give back every chord and gesture grabbed. */
   unbind: () => void;
 };
 
 /** The part of the desktop that `bindKeys` uses. */
 export type KeyDesktop = {
+  readonly gestures: Pick<Gestures, "grab" | "on" | "ungrab">;
   readonly keyboard: Pick<Keyboard, "grab" | "on" | "ungrab">;
   readonly shell: Pick<ShellNamespace, "commands">;
 };
@@ -51,10 +67,12 @@ export type KeyDesktop = {
  *
  * - Every chord in every mode is grabbed once, until `unbind`. A key bound in
  *   any mode is grabbed from all clients while bound.
+ * - So is every gesture's kind and count: `swipe:3:left` grabs every
+ *   three-finger swipe, whichever way it goes.
  * - `setMode` syncs the mode across pages without calling `onModeChanged`. An
  *   unknown mode falls back to `default` and is reported.
  *
- * @throws for an invalid chord (see `ownKeybindings`), before anything is
+ * @throws for an invalid chord or gesture (see `ownKeybindings`), before anything is
  *   grabbed. A keysym the layout cannot type is logged, so the other keys
  *   still work.
  */
@@ -73,8 +91,7 @@ export const bindKeys = (
     }
   };
 
-  const onShortcut = ({ chord }: { readonly chord: string }) => {
-    const action = bindings.get(mode)?.get(chord);
+  const run = (action: KeyAction | undefined) => {
     switch (action?.kind) {
       case KeyActionKind.SendShell: {
         onCommand(action.args);
@@ -90,11 +107,42 @@ export const bindKeys = (
     }
   };
 
+  const gesturesByMode = new Map(
+    [...bindings].map(([name, byName]) => [
+      name,
+      [...byName]
+        .filter(([written]) => isGesture(written))
+        .map(([written, action]) => [parseGesture(written), action] as const),
+    ]),
+  );
+  const onGesture = (finished: FinishedGesture | undefined) => {
+    if (finished !== undefined) {
+      run(bestGesture(gesturesByMode.get(mode) ?? [], finished));
+    }
+  };
+
+  const names = new Set(
+    [...bindings.values()].flatMap((byName) => [...byName.keys()]),
+  );
   const grabbed = grabEach(
     domicile.keyboard,
-    new Set([...bindings.values()].flatMap((byChord) => [...byChord.keys()])),
+    [...names].filter((name) => !isGesture(name)),
   );
-  const stopShortcuts = domicile.keyboard.on("shortcut", onShortcut);
+  const grabbedGestures = grabEach(
+    domicile.gestures,
+    new Set(
+      [...gesturesByMode.values()].flatMap((byGesture) =>
+        byGesture.map(([gesture]) => grabOf(gesture)),
+      ),
+    ),
+  );
+  const stopShortcuts = domicile.keyboard.on("shortcut", ({ chord }) => {
+    run(bindings.get(mode)?.get(chord));
+  });
+  const tracker = gestureTracker();
+  const stopGestures = domicile.gestures.on("gesture", (gesture) => {
+    onGesture(tracker.feed(gesture));
+  });
   const commands = hearCommands(domicile.shell, onCommand, report);
   return {
     setMode: (name) => {
@@ -106,26 +154,30 @@ export const bindKeys = (
     },
     unbind: () => {
       stopShortcuts();
+      stopGestures();
       commands.stop();
       // Emptied, so a second unbind does not answer somebody else's grab.
       for (const chord of grabbed.splice(0)) {
         domicile.keyboard.ungrab(chord);
+      }
+      for (const gesture of grabbedGestures.splice(0)) {
+        domicile.gestures.ungrab(gesture);
       }
     },
   };
 };
 
 /**
- * Grab each of `chords`, and return those the engine took. A keysym the
- * layout cannot type is logged.
+ * Grab each of `names`, and return those the engine took. One it refuses,
+ * such as a keysym the layout cannot type, is logged.
  */
 const grabEach = (
-  keyboard: Pick<Keyboard, "grab">,
-  chords: Iterable<string>,
+  grabber: { readonly grab: (name: string) => void },
+  names: Iterable<string>,
 ): string[] =>
-  [...chords].filter((chord) => {
+  [...names].filter((name) => {
     try {
-      keyboard.grab(chord);
+      grabber.grab(name);
       return true;
     } catch (error) {
       // biome-ignore lint/suspicious/noConsole: the user fixes a keysym the layout cannot type, so the shell reports it

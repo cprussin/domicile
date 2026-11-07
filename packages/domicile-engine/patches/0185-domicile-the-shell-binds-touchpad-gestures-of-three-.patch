@@ -1,0 +1,488 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 7 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell binds touchpad gestures of three fingers
+ or more
+
+A swipe, pinch or hold of three fingers or more goes to the shell when
+it grabs one (DomicileHost.grabGesture), instead of to the window under
+the pointer. Two fingers stay the page's.
+
+- `libinput_event_converter`: HandleShellGesture offers each libinput
+  gesture to the NativeGestureSink before the pinch path. A swipe or
+  hold the shell does not take is dropped, as before; an untaken pinch
+  goes on to the page. Disabling the device cancels a taken gesture.
+- `wayland_zwp_pointer_gestures`: when nested, binds the host's swipe
+  gesture too, and offers swipes, pinches and holds to the sink first.
+- `ui/events` builds the sink; `ui/events/types` exports NativeGesture.
+- bindings: build DomicileGestureEvent and its init dictionary.
+- The test server answers get_swipe_gesture.
+
+The sink, the event and the grab are new files under src/.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ .../bindings/generated_in_modules.gni         |  4 +
+ .../renderer/bindings/idl_in_modules.gni      |  2 +
+ ui/events/BUILD.gn                            |  2 +
+ .../ozone/evdev/libinput_event_converter.cc   | 73 +++++++++++++++
+ .../ozone/evdev/libinput_event_converter.h    |  5 ++
+ ui/events/types/BUILD.gn                      |  1 +
+ .../platform/wayland/common/wayland_object.cc |  1 +
+ .../platform/wayland/common/wayland_object.h  |  1 +
+ .../host/wayland_zwp_pointer_gestures.cc      | 90 ++++++++++++++++++-
+ .../host/wayland_zwp_pointer_gestures.h       | 30 +++++++
+ .../wayland/test/test_wp_pointer_gestures.cc  | 12 ++-
+ 11 files changed, 217 insertions(+), 4 deletions(-)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 5e0a9d4..c4b3a7d 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -278,6 +278,8 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension_popup_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension_popup_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_gesture_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_gesture_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_header.cc",
+@@ -2337,6 +2339,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension_popup_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension_popup_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_gesture_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_gesture_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_browser_window.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_browser_window.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cast_sink.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 9f2b8a7..fd7d62b 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -284,6 +284,8 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_extension.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_extension_popup_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_extension_popup_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_gesture_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_gesture_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_file_search.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_fetch_header.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_fetch_response.idl",
+diff --git a/ui/events/BUILD.gn b/ui/events/BUILD.gn
+index e362fad..60a0335 100644
+--- a/ui/events/BUILD.gn
++++ b/ui/events/BUILD.gn
+@@ -269,6 +269,8 @@ component("events") {
+   ]
+ 
+   sources = [
++    "domicile/native_gesture_sink.cc",
++    "domicile/native_gesture_sink.h",
+     "domicile/scroll_metadata.h",
+     "event.cc",
+     "event_dispatcher.cc",
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
+index dc0514f..40e39d8 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.cc
++++ b/ui/events/ozone/evdev/libinput_event_converter.cc
+@@ -351,6 +351,7 @@ void LibInputEventConverter::ApplyDeviceSettings(
+ void LibInputEventConverter::OnDisabled() {
+   const auto time = base::TimeTicks::Now();
+   CancelPinch(time);
++  shell_gesture_.Cancel();
+   if (auto stop = active_scroll_axes_.TakeStop()) {
+     ScrollEventParams params(input_device_.id, EventType::kScroll,
+                              cursor_->GetLocation(), gfx::Vector2dF(),
+@@ -412,6 +413,9 @@ void LibInputEventConverter::HandleEvent(libinput_event* native_event) {
+   if (!IsEnabled()) {
+     return;
+   }
++  if (HandleShellGesture(native_event)) {
++    return;
++  }
+   const auto type = libinput_event_get_type(native_event);
+   if (type == LIBINPUT_EVENT_GESTURE_PINCH_BEGIN ||
+       type == LIBINPUT_EVENT_GESTURE_PINCH_UPDATE ||
+@@ -574,6 +578,75 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+   dispatcher_->DispatchMouseWheelEvent(params);
+ }
+ 
++bool LibInputEventConverter::HandleShellGesture(libinput_event* native_event) {
++  // libinput 1.19's hold gestures. Chromium's sysroot has an older libinput,
++  // whose header lacks them; the library on the machine sends them.
++  constexpr int kHoldBegin = 806;
++  constexpr int kHoldEnd = 807;
++  const int type = libinput_event_get_type(native_event);
++  NativeGesture gesture;
++  switch (type) {
++    case LIBINPUT_EVENT_GESTURE_SWIPE_BEGIN:
++    case LIBINPUT_EVENT_GESTURE_PINCH_BEGIN:
++    case kHoldBegin:
++      gesture.phase = NativeGesturePhase::kBegin;
++      break;
++    case LIBINPUT_EVENT_GESTURE_SWIPE_UPDATE:
++    case LIBINPUT_EVENT_GESTURE_PINCH_UPDATE:
++      gesture.phase = NativeGesturePhase::kUpdate;
++      break;
++    case LIBINPUT_EVENT_GESTURE_SWIPE_END:
++    case LIBINPUT_EVENT_GESTURE_PINCH_END:
++    case kHoldEnd:
++      gesture.phase = NativeGesturePhase::kEnd;
++      break;
++    default:
++      return false;
++  }
++  switch (type) {
++    case LIBINPUT_EVENT_GESTURE_SWIPE_BEGIN:
++    case LIBINPUT_EVENT_GESTURE_SWIPE_UPDATE:
++    case LIBINPUT_EVENT_GESTURE_SWIPE_END:
++      gesture.kind = NativeGestureKind::kSwipe;
++      break;
++    case LIBINPUT_EVENT_GESTURE_PINCH_BEGIN:
++    case LIBINPUT_EVENT_GESTURE_PINCH_UPDATE:
++    case LIBINPUT_EVENT_GESTURE_PINCH_END:
++      gesture.kind = NativeGestureKind::kPinch;
++      break;
++    default:
++      gesture.kind = NativeGestureKind::kHold;
++      break;
++  }
++  auto* event = libinput_event_get_gesture_event(native_event);
++  gesture.fingers =
++      static_cast<uint32_t>(libinput_event_gesture_get_finger_count(event));
++  switch (gesture.phase) {
++    case NativeGesturePhase::kBegin:
++      break;
++    case NativeGesturePhase::kUpdate:
++      gesture.dx = libinput_event_gesture_get_dx(event);
++      gesture.dy = libinput_event_gesture_get_dy(event);
++      if (gesture.kind == NativeGestureKind::kPinch) {
++        gesture.scale = libinput_event_gesture_get_scale(event);
++        gesture.rotation = libinput_event_gesture_get_angle_delta(event);
++      }
++      break;
++    case NativeGesturePhase::kEnd:
++      gesture.canceled = libinput_event_gesture_get_cancelled(event) != 0;
++      break;
++  }
++  // Two fingers are the page's, and a pinch the shell does not bind goes to
++  // the page too. A swipe or hold the shell does not bind goes nowhere: only
++  // the shell binds them.
++  const bool taken =
++      gesture.phase == NativeGesturePhase::kBegin
++          ? gesture.fingers >= kFewestShellGestureFingers &&
++                shell_gesture_.Begin(gesture)
++          : shell_gesture_.Continue(gesture);
++  return taken || gesture.kind != NativeGestureKind::kPinch;
++}
++
+ void LibInputEventConverter::HandlePinch(libinput_event* native_event) {
+   auto* event = libinput_event_get_gesture_event(native_event);
+   const auto type = libinput_event_get_type(native_event);
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
+index 9a689b9..0c2ab6f 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.h
++++ b/ui/events/ozone/evdev/libinput_event_converter.h
+@@ -14,6 +14,7 @@
+ 
+ #include "base/files/scoped_file.h"
+ #include "base/memory/raw_ptr.h"
++#include "ui/events/domicile/native_gesture_sink.h"
+ #include "ui/events/ozone/evdev/domicile/active_scroll_axes.h"
+ #include "ui/events/ozone/evdev/domicile/input_settings.h"
+ #include "ui/events/ozone/evdev/domicile/libinput_keyboard_event_converter.h"
+@@ -120,6 +121,9 @@ class LibInputEventConverter : public LibInputKeyboardEventConverter {
+   MouseButtonMapType ButtonMap() const;
+   void HandlePointerAxis(const LibInputEvent& evt);
+   void HandleWheel(const LibInputEvent& evt);
++  // Whether `event` was a touchpad gesture handled here: one of the shell's
++  // (see `NativeGestureSink`), or a swipe or hold, which only the shell binds.
++  bool HandleShellGesture(libinput_event* event);
+   void HandlePinch(libinput_event* event);
+   void CancelPinch(base::TimeTicks time);
+   base::TimeTicks Timestamp(const LibInputEvent& evt);
+@@ -140,6 +144,7 @@ class LibInputEventConverter : public LibInputKeyboardEventConverter {
+   ScrollAccelerator scroll_accelerator_;
+   double scroll_factor_ = 1;
+   std::optional<double> pinch_scale_;
++  NativeGestureSequence shell_gesture_;
+   bool typing_applies_ = true;
+ 
+   // DOMICILE: null for a mouse, and until the factory attaches this.
+diff --git a/ui/events/types/BUILD.gn b/ui/events/types/BUILD.gn
+index 461d3df..bfe395a 100644
+--- a/ui/events/types/BUILD.gn
++++ b/ui/events/types/BUILD.gn
+@@ -5,6 +5,7 @@
+ source_set("headers") {
+   sources = [
+     "event_type.h",
++    "native_gesture.h",
+     "native_pinch.h",
+     "native_scroll_source.h",
+     "scroll_input_type.h",
+diff --git a/ui/ozone/platform/wayland/common/wayland_object.cc b/ui/ozone/platform/wayland/common/wayland_object.cc
+index 390c605..0ad2467 100644
+--- a/ui/ozone/platform/wayland/common/wayland_object.cc
++++ b/ui/ozone/platform/wayland/common/wayland_object.cc
+@@ -231,6 +231,7 @@ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_locked_pointer_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_pointer_constraints_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_pointer_gesture_hold_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_pointer_gesture_pinch_v1)
++IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_pointer_gesture_swipe_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_pointer_gestures_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_manager_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_v1)
+diff --git a/ui/ozone/platform/wayland/common/wayland_object.h b/ui/ozone/platform/wayland/common/wayland_object.h
+index d746805..ddbe2d1 100644
+--- a/ui/ozone/platform/wayland/common/wayland_object.h
++++ b/ui/ozone/platform/wayland/common/wayland_object.h
+@@ -195,6 +195,7 @@ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_locked_pointer_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_pointer_constraints_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_pointer_gesture_hold_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_pointer_gesture_pinch_v1)
++DECLARE_WAYLAND_OBJECT_TRAITS(zwp_pointer_gesture_swipe_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_pointer_gestures_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_manager_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_v1)
+diff --git a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
+index d5a96b2..b437f0e 100644
+--- a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
++++ b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
+@@ -78,6 +78,15 @@ void WaylandZwpPointerGestures::Init() {
+   zwp_pointer_gesture_pinch_v1_add_listener(pinch_.get(), &kPinchListener,
+                                             this);
+ 
++  swipe_.reset(zwp_pointer_gestures_v1_get_swipe_gesture(obj_.get(), pointer));
++  static constexpr zwp_pointer_gesture_swipe_v1_listener kSwipeListener = {
++      .begin = &OnSwipeBegin,
++      .update = &OnSwipeUpdate,
++      .end = &OnSwipeEnd,
++  };
++  zwp_pointer_gesture_swipe_v1_add_listener(swipe_.get(), &kSwipeListener,
++                                            this);
++
+ #if defined(ZWP_POINTER_GESTURES_V1_GET_HOLD_GESTURE_SINCE_VERSION)
+   if (zwp_pointer_gestures_v1_get_version(obj_.get()) <
+       ZWP_POINTER_GESTURES_V1_GET_HOLD_GESTURE_SINCE_VERSION) {
+@@ -100,6 +109,11 @@ void WaylandZwpPointerGestures::OnPinchBegin(
+     struct wl_surface* surface,
+     uint32_t fingers) {
+   auto* self = static_cast<WaylandZwpPointerGestures*>(data);
++  if (self->ShellTakes({.kind = NativeGestureKind::kPinch,
++                        .phase = NativeGesturePhase::kBegin,
++                        .fingers = fingers})) {
++    return;
++  }
+ 
+   self->current_scale_ = 1;
+ 
+@@ -119,6 +133,14 @@ void WaylandZwpPointerGestures::OnPinchUpdate(
+     wl_fixed_t scale,
+     wl_fixed_t rotation) {
+   auto* self = static_cast<WaylandZwpPointerGestures*>(data);
++  if (self->ShellTakes({.kind = NativeGestureKind::kPinch,
++                        .phase = NativeGesturePhase::kUpdate,
++                        .dx = wl_fixed_to_double(dx),
++                        .dy = wl_fixed_to_double(dy),
++                        .scale = wl_fixed_to_double(scale),
++                        .rotation = wl_fixed_to_double(rotation)})) {
++    return;
++  }
+ 
+   // During the pinch zoom session, libinput sends the current scale relative to
+   // the start of the session.  On the other hand, the compositor expects the
+@@ -146,6 +168,11 @@ void WaylandZwpPointerGestures::OnPinchEnd(
+     uint32_t time,
+     int32_t canceled) {
+   auto* self = static_cast<WaylandZwpPointerGestures*>(data);
++  if (self->ShellTakes({.kind = NativeGestureKind::kPinch,
++                        .phase = NativeGesturePhase::kEnd,
++                        .canceled = canceled != 0})) {
++    return;
++  }
+ 
+   self->delegate_->OnPinchEvent(
+       EventType::kGesturePinchEnd, gfx::Vector2dF() /*delta*/,
+@@ -154,6 +181,55 @@ void WaylandZwpPointerGestures::OnPinchEnd(
+                   canceled != 0});
+ }
+ 
++// static
++void WaylandZwpPointerGestures::OnSwipeBegin(
++    void* data,
++    struct zwp_pointer_gesture_swipe_v1* zwp_pointer_gesture_swipe_v1,
++    uint32_t serial,
++    uint32_t time,
++    struct wl_surface* surface,
++    uint32_t fingers) {
++  static_cast<WaylandZwpPointerGestures*>(data)->ShellTakes(
++      {.kind = NativeGestureKind::kSwipe,
++       .phase = NativeGesturePhase::kBegin,
++       .fingers = fingers});
++}
++
++// static
++void WaylandZwpPointerGestures::OnSwipeUpdate(
++    void* data,
++    struct zwp_pointer_gesture_swipe_v1* zwp_pointer_gesture_swipe_v1,
++    uint32_t time,
++    wl_fixed_t dx,
++    wl_fixed_t dy) {
++  static_cast<WaylandZwpPointerGestures*>(data)->ShellTakes(
++      {.kind = NativeGestureKind::kSwipe,
++       .phase = NativeGesturePhase::kUpdate,
++       .dx = wl_fixed_to_double(dx),
++       .dy = wl_fixed_to_double(dy)});
++}
++
++// static
++void WaylandZwpPointerGestures::OnSwipeEnd(
++    void* data,
++    struct zwp_pointer_gesture_swipe_v1* zwp_pointer_gesture_swipe_v1,
++    uint32_t serial,
++    uint32_t time,
++    int32_t canceled) {
++  static_cast<WaylandZwpPointerGestures*>(data)->ShellTakes(
++      {.kind = NativeGestureKind::kSwipe,
++       .phase = NativeGesturePhase::kEnd,
++       .canceled = canceled != 0});
++}
++
++bool WaylandZwpPointerGestures::ShellTakes(const NativeGesture& gesture) {
++  // Two fingers are the page's. See `kFewestShellGestureFingers`.
++  return gesture.phase == NativeGesturePhase::kBegin
++             ? gesture.fingers >= kFewestShellGestureFingers &&
++                   shell_gesture_.Begin(gesture)
++             : shell_gesture_.Continue(gesture);
++}
++
+ #if defined(ZWP_POINTER_GESTURE_HOLD_V1_BEGIN_SINCE_VERSION)
+ // static
+ void WaylandZwpPointerGestures::OnHoldBegin(
+@@ -164,6 +240,11 @@ void WaylandZwpPointerGestures::OnHoldBegin(
+     struct wl_surface* surface,
+     uint32_t fingers) {
+   auto* self = static_cast<WaylandZwpPointerGestures*>(data);
++  if (self->ShellTakes({.kind = NativeGestureKind::kHold,
++                        .phase = NativeGesturePhase::kBegin,
++                        .fingers = fingers})) {
++    return;
++  }
+ 
+   self->delegate_->OnHoldEvent(
+       EventType::kTouchPressed, fingers, wl::EventMillisecondsToTimeTicks(time),
+@@ -178,11 +259,16 @@ void WaylandZwpPointerGestures::OnHoldEnd(
+     struct zwp_pointer_gesture_hold_v1* zwp_pointer_gesture_hold_v1,
+     uint32_t serial,
+     uint32_t time,
+-    int32_t cancelled) {
++    int32_t canceled) {
+   auto* self = static_cast<WaylandZwpPointerGestures*>(data);
++  if (self->ShellTakes({.kind = NativeGestureKind::kHold,
++                        .phase = NativeGesturePhase::kEnd,
++                        .canceled = canceled != 0})) {
++    return;
++  }
+ 
+   self->delegate_->OnHoldEvent(
+-      cancelled ? EventType::kTouchCancelled : EventType::kTouchReleased, 0,
++      canceled ? EventType::kTouchCancelled : EventType::kTouchReleased, 0,
+       wl::EventMillisecondsToTimeTicks(time), self->obj_.id(),
+       wl::EventDispatchPolicy::kImmediate);
+ }
+diff --git a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.h b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.h
+index 506a6ee..49bf862 100644
+--- a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.h
++++ b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.h
+@@ -11,6 +11,7 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/time/time.h"
++#include "ui/events/domicile/native_gesture_sink.h"
+ #include "ui/events/types/event_type.h"
+ #include "ui/events/types/native_pinch.h"
+ #include "ui/ozone/platform/wayland/common/wayland_object.h"
+@@ -74,6 +75,31 @@ class WaylandZwpPointerGestures
+       uint32_t time,
+       int32_t cancelled);
+ 
++  // zwp_pointer_gesture_swipe_v1_listener callbacks. Only the shell binds a
++  // swipe; see `NativeGestureSink`.
++  static void OnSwipeBegin(
++      void* data,
++      struct zwp_pointer_gesture_swipe_v1* zwp_pointer_gesture_swipe_v1,
++      uint32_t serial,
++      uint32_t time,
++      struct wl_surface* surface,
++      uint32_t fingers);
++  static void OnSwipeUpdate(
++      void* data,
++      struct zwp_pointer_gesture_swipe_v1* zwp_pointer_gesture_swipe_v1,
++      uint32_t time,
++      wl_fixed_t dx,
++      wl_fixed_t dy);
++  static void OnSwipeEnd(
++      void* data,
++      struct zwp_pointer_gesture_swipe_v1* zwp_pointer_gesture_swipe_v1,
++      uint32_t serial,
++      uint32_t time,
++      int32_t canceled);
++
++  // Whether the shell took `gesture`. See `NativeGestureSink`.
++  bool ShellTakes(const NativeGesture& gesture);
++
+   // zwp_pointer_gesture_hold_v1_listener callbacks:
+ #if defined(ZWP_POINTER_GESTURE_HOLD_V1_BEGIN_SINCE_VERSION)
+   static void OnHoldBegin(
+@@ -95,6 +121,10 @@ class WaylandZwpPointerGestures
+ 
+   wl::Object<zwp_pointer_gestures_v1> obj_;
+   wl::Object<zwp_pointer_gesture_pinch_v1> pinch_;
++  wl::Object<zwp_pointer_gesture_swipe_v1> swipe_;
++  // The gesture in progress, if the shell took it. The host compositor sends
++  // one gesture at a time.
++  NativeGestureSequence shell_gesture_;
+ #if defined(ZWP_POINTER_GESTURES_V1_GET_HOLD_GESTURE_SINCE_VERSION)
+   wl::Object<zwp_pointer_gesture_hold_v1> hold_;
+ #endif
+diff --git a/ui/ozone/platform/wayland/test/test_wp_pointer_gestures.cc b/ui/ozone/platform/wayland/test/test_wp_pointer_gestures.cc
+index b521b68..97d3d8a 100644
+--- a/ui/ozone/platform/wayland/test/test_wp_pointer_gestures.cc
++++ b/ui/ozone/platform/wayland/test/test_wp_pointer_gestures.cc
+@@ -8,7 +8,6 @@
+ #include <wayland-server-core.h>
+ 
+ #include "base/logging.h"
+-#include "base/notimplemented.h"
+ 
+ namespace wl {
+ 
+@@ -18,6 +17,8 @@ const struct zwp_pointer_gesture_pinch_v1_interface kTestPinchImpl = {
+     DestroyResource};
+ const struct zwp_pointer_gesture_hold_v1_interface kTestHoldImpl = {
+     DestroyResource};
++const struct zwp_pointer_gesture_swipe_v1_interface kTestSwipeImpl = {
++    DestroyResource};
+ 
+ constexpr uint32_t kInterfaceVersion = 3;
+ 
+@@ -42,7 +43,14 @@ void TestWpPointerGestures::GetSwipeGesture(struct wl_client* client,
+                                             struct wl_resource* resource,
+                                             uint32_t id,
+                                             struct wl_resource* pointer) {
+-  NOTIMPLEMENTED_LOG_ONCE();
++  // Created so the client's swipe object can be destroyed; no test sends one.
++  wl_resource* swipe =
++      wl_resource_create(client, &zwp_pointer_gesture_swipe_v1_interface, 1, id);
++  if (!swipe) {
++    wl_client_post_no_memory(client);
++    return;
++  }
++  wl_resource_set_implementation(swipe, &kTestSwipeImpl, nullptr, nullptr);
+ }
+ 
+ // static

@@ -70,6 +70,9 @@ export const moveToWorkspace = (name: string) =>
   command("move", "container", "to", "workspace", name);
 /** Go to a workspace, `1` to `10`. */
 export const workspace = (name: string) => command("workspace", name);
+/** Go to the screen's next or previous workspace, wrapping around. */
+export const stepWorkspace = (way: "next" | "prev") =>
+  command("workspace", `${way}_on_output`);
 /** Wrap the focused window in a new container. */
 export const split = (axis: "h" | "v") => command("split", axis);
 /** Set the layout of the focused container. */
@@ -123,8 +126,9 @@ const everyWorkspace = (
   );
 
 /**
- * Default bindings for mode `default`: sway's, on Meta. Spread into your own
- * table to override individual keys.
+ * Default bindings for mode `default`: sway's, on Meta, and three-finger
+ * touchpad swipes between workspaces. Spread into your own table to override
+ * individual keys.
  */
 export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+a": focus("parent"),
@@ -148,6 +152,9 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+v": split("v"),
   "Meta+w": layout("tabbed"),
   Print: screenshot(),
+  // The workspace follows the fingers, as a page does.
+  "swipe:3:left": stepWorkspace("next"),
+  "swipe:3:right": stepWorkspace("prev"),
   XF86AudioLowerVolume: volume("down"),
   XF86AudioMicMute: micMute(),
   XF86AudioMute: volume("mute"),

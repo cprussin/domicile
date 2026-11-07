@@ -20,6 +20,8 @@ import type { Extensions } from "./extensions";
 import { extensions } from "./extensions";
 import type { Files } from "./files";
 import { files } from "./files";
+import type { Gestures } from "./gestures";
+import { gestures } from "./gestures";
 import type { GoogleCast } from "./google-cast";
 import { googleCast } from "./google-cast";
 import type { Keyboard } from "./keyboard";
@@ -68,6 +70,7 @@ export type Domicile = {
   readonly downloads: Downloads;
   readonly extensions: Extensions;
   readonly files: Files;
+  readonly gestures: Gestures;
   readonly googleCast: GoogleCast;
   readonly keyboard: Keyboard;
   readonly notifications: Notifications;
@@ -110,6 +113,7 @@ const build = (host: DomicileHost): Domicile => {
     downloads: downloads(host),
     extensions: extensions(host),
     files: files(host, calls),
+    gestures: gestures(host),
     googleCast: googleCast(host),
     keyboard: keyboard(host, calls),
     notifications: notifications(host),

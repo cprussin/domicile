@@ -63,6 +63,32 @@ struct Shortcut {
   bool meta;
 };
 
+// A touchpad gesture the shell binds, as `zwp_pointer_gestures_v1` names them.
+enum GestureKind { kSwipe, kPinch, kHold };
+
+enum GesturePhase { kBegin, kUpdate, kEnd };
+
+// A gesture the shell grabs: its kind, and its finger count or 0 for any.
+// See DomicileHost::grabGesture.
+struct GestureGrab {
+  GestureKind kind;
+  uint32 fingers;
+};
+
+// One phase of a grabbed gesture. `dx` and `dy` are this update's motion;
+// `scale` is a pinch's, relative to its begin, and `rotation` its update's,
+// in degrees clockwise. A hold has only a begin and an end.
+struct Gesture {
+  GestureKind kind;
+  GesturePhase phase;
+  uint32 fingers;
+  double dx;
+  double dy;
+  double scale;
+  double rotation;
+  bool canceled;
+};
+
 // What a client asked the chrome to show over its own surface.
 //
 // An enum rather than the string it arrives as. `wp_cursor_shape_v1`'s shapes
@@ -424,6 +450,14 @@ interface ControlChannel {
   // This page no longer wants `shortcut`. See ShortcutRegistry::Ungrab.
   UngrabShortcut(Shortcut shortcut);
 
+  // A touchpad gesture to hand the page rather than the window under the
+  // pointer. It stops in the browser process, in DeskGestures, which the
+  // platform asks at each gesture's begin.
+  GrabGesture(GestureGrab grab);
+
+  // This page no longer wants `grab`. See DeskGestures::Ungrab.
+  UngrabGesture(GestureGrab grab);
+
   // Put the cursor where the page says, in the page's own coordinates.
   //
   // THE ONE MESSAGE ABOUT INPUT THAT GOES THE OTHER WAY, and it stops in the
@@ -535,6 +569,11 @@ interface ControlChannelClient {
   // and the modifiers are those still held. Sent only for a claimed chord's
   // key or a modifier, either of which can let go of a chord the page holds.
   ShortcutReleased(Shortcut shortcut);
+
+  // A phase of a touchpad gesture this page grabbed. Like a shortcut, matched
+  // in the browser process (DeskGestures) and never on the compositor's
+  // socket.
+  GesturePerformed(Gesture gesture);
 
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.
