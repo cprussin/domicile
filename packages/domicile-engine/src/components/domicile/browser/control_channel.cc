@@ -19,6 +19,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
 #include "components/domicile/browser/desk_lock.h"
@@ -68,6 +69,46 @@ base::DictValue DeskCursorMessage(const ui::DeskCursorImage& image) {
   return message;
 }
 
+ui::NativeGestureKind GestureKindFromMojo(mojom::GestureKind kind) {
+  switch (kind) {
+    case mojom::GestureKind::kSwipe:
+      return ui::NativeGestureKind::kSwipe;
+    case mojom::GestureKind::kPinch:
+      return ui::NativeGestureKind::kPinch;
+    case mojom::GestureKind::kHold:
+      return ui::NativeGestureKind::kHold;
+  }
+  NOTREACHED();
+}
+
+mojom::GestureKind GestureKindToMojo(ui::NativeGestureKind kind) {
+  switch (kind) {
+    case ui::NativeGestureKind::kSwipe:
+      return mojom::GestureKind::kSwipe;
+    case ui::NativeGestureKind::kPinch:
+      return mojom::GestureKind::kPinch;
+    case ui::NativeGestureKind::kHold:
+      return mojom::GestureKind::kHold;
+  }
+  NOTREACHED();
+}
+
+mojom::GesturePhase GesturePhaseToMojo(ui::NativeGesturePhase phase) {
+  switch (phase) {
+    case ui::NativeGesturePhase::kBegin:
+      return mojom::GesturePhase::kBegin;
+    case ui::NativeGesturePhase::kUpdate:
+      return mojom::GesturePhase::kUpdate;
+    case ui::NativeGesturePhase::kEnd:
+      return mojom::GesturePhase::kEnd;
+  }
+  NOTREACHED();
+}
+
+GestureGrab GestureGrabFromMojo(const mojom::GestureGrab& grab) {
+  return GestureGrab{GestureKindFromMojo(grab.kind), grab.fingers};
+}
+
 }  // namespace
 
 ControlChannel::ControlChannel(
@@ -109,6 +150,9 @@ ControlChannel::ControlChannel(
   activity_ = DeskActivity::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::SomebodyIsHere, weak_factory_.GetWeakPtr())));
+  gestures_ = DeskGestures::Get().AddChannel(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeliverGesture, weak_factory_.GetWeakPtr())));
   pointer_ = DeskPointer::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeskPointerMoved, weak_factory_.GetWeakPtr())));
@@ -122,6 +166,7 @@ ControlChannel::ControlChannel(
 ControlChannel::~ControlChannel() {
   ui::DeskCursorImageSource::Get().RemoveListener(cursor_);
   DeskPointer::Get().RemoveListener(pointer_);
+  DeskGestures::Get().RemoveChannel(gestures_);
   DeskActivity::Get().RemoveListener(activity_);
   ShortcutRegistry::Get().RemoveChannel(channel_);
 }
@@ -634,6 +679,16 @@ void ControlChannel::UngrabShortcut(mojom::ShortcutPtr shortcut) {
                       shortcut->shift, shortcut->meta});
 }
 
+void ControlChannel::GrabGesture(mojom::GestureGrabPtr grab) {
+  // Recorded here, not relayed, for GrabShortcut's reason: the platform
+  // recognizes gestures in this process, and the compositor never sees them.
+  DeskGestures::Get().Grab(gestures_, GestureGrabFromMojo(*grab));
+}
+
+void ControlChannel::UngrabGesture(mojom::GestureGrabPtr grab) {
+  DeskGestures::Get().Ungrab(gestures_, GestureGrabFromMojo(*grab));
+}
+
 void ControlChannel::Key(const std::string& app_id,
                          uint32_t keycode,
                          bool pressed) {
@@ -793,6 +848,15 @@ void ControlChannel::DeliverShortcut(Chord chord) {
   if (client_) {
     client_->ShortcutPressed(mojom::Shortcut::New(
         chord.keycode, chord.alt, chord.ctrl, chord.shift, chord.meta));
+  }
+}
+
+void ControlChannel::DeliverGesture(const ui::NativeGesture& gesture) {
+  if (client_) {
+    client_->GesturePerformed(mojom::Gesture::New(
+        GestureKindToMojo(gesture.kind), GesturePhaseToMojo(gesture.phase),
+        gesture.fingers, gesture.dx, gesture.dy, gesture.scale,
+        gesture.rotation, gesture.canceled));
   }
 }
 

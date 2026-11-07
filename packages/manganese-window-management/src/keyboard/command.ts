@@ -88,6 +88,8 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
       WindowAction.WindowGrown(way),
     ],
   ),
+  ["workspace next_on_output", WindowAction.WorkspaceStepped("next")],
+  ["workspace prev_on_output", WindowAction.WorkspaceStepped("prev")],
   ...WORKSPACES.flatMap((name): Command[] => [
     [`workspace ${name}`, WindowAction.WorkspaceSelected(name)],
     [

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { KeyDesktop } from "./bind-keys";
 import { bindKeys } from "./bind-keys";
+import type { Gesture } from "./desktop/gestures";
+import { gestures } from "./desktop/gestures";
 import { keyboard } from "./desktop/keyboard";
 import { shell } from "./desktop/shell";
 import { system } from "./desktop/system-calls";
@@ -31,6 +33,8 @@ const DESK: ShellKeybindings = {
 class FakeHost extends EventTarget {
   readonly grabbed: string[] = [];
   readonly ungrabbed: string[] = [];
+  readonly grabbedGestures: string[] = [];
+  readonly ungrabbedGestures: string[] = [];
   readonly calls: [id: number, request: unknown][] = [];
 
   grabShortcut(chord: string): void {
@@ -39,6 +43,39 @@ class FakeHost extends EventTarget {
 
   ungrabShortcut(chord: string): void {
     this.ungrabbed.push(chord);
+  }
+
+  grabGesture(gesture: string): void {
+    this.grabbedGestures.push(gesture);
+  }
+
+  ungrabGesture(gesture: string): void {
+    this.ungrabbedGestures.push(gesture);
+  }
+
+  /** Send a whole gesture: its begin, one update, and an end. */
+  gestured(
+    kind: Gesture["kind"],
+    fingers: number,
+    update: Partial<Gesture>,
+    canceled = false,
+  ): void {
+    const base = {
+      canceled: false,
+      dx: 0,
+      dy: 0,
+      fingers,
+      kind,
+      rotation: 0,
+      scale: 1,
+    };
+    for (const phase of [
+      { ...base, phase: "begin" },
+      { ...base, ...update, phase: "update" },
+      { ...base, canceled, phase: "end" },
+    ]) {
+      this.dispatchEvent(Object.assign(new Event("gesture"), phase));
+    }
   }
 
   callSystem(id: number, request: string): void {
@@ -68,7 +105,11 @@ class FakeHost extends EventTarget {
 const keysOf = (fake: FakeHost): KeyDesktop => {
   const host = fake as unknown as DomicileHost;
   const calls = system(host);
-  return { keyboard: keyboard(host, calls), shell: shell(host, calls) };
+  return {
+    gestures: gestures(host),
+    keyboard: keyboard(host, calls),
+    shell: shell(host, calls),
+  };
 };
 
 /** The handler calls, in order. */
@@ -281,6 +322,83 @@ describe("bindKeys", () => {
         ["mode", "default"],
         ["command", ["terminal"]],
       ]);
+    });
+  });
+
+  describe("gestures", () => {
+    const SWIPES: ShellKeybindings = {
+      keybindings: {
+        "Meta+r": KeyAction.Mode("resize"),
+        "pinch:4:inward": KeyAction.SendShell(["overview"]),
+        "swipe:3:left": KeyAction.SendShell(["workspace", "next"]),
+        "swipe:3:right": KeyAction.SendShell(["workspace", "prev"]),
+      },
+      modes: {
+        resize: {
+          "Meta+Escape": KeyAction.Mode("default"),
+          "swipe:left": KeyAction.SendShell(["resize", "shrink", "width"]),
+        },
+      },
+    };
+
+    it("grabs each gesture's kind and count once, not its direction", () => {
+      const { host } = bound(SWIPES);
+
+      expect(host.grabbed).toStrictEqual(["Meta+r", "Meta+Escape"]);
+      expect(host.grabbedGestures).toStrictEqual([
+        "pinch:4",
+        "swipe:3",
+        "swipe",
+      ]);
+    });
+
+    it("runs the binding a finished gesture fits", () => {
+      const { heard, host } = bound(SWIPES);
+
+      host.gestured("swipe", 3, { dx: -40, dy: 3 });
+      host.gestured("pinch", 4, { scale: 0.5 });
+      host.gestured("swipe", 4, { dx: -40 });
+
+      expect(heard).toStrictEqual([
+        ["command", ["workspace", "next"]],
+        ["command", ["overview"]],
+      ]);
+    });
+
+    it("runs nothing for a canceled gesture", () => {
+      const { heard, host } = bound(SWIPES);
+
+      host.gestured("swipe", 3, { dx: -40 }, true);
+
+      expect(heard).toStrictEqual([]);
+    });
+
+    it("reads gestures in the mode the keys are in", () => {
+      const { heard, host } = bound(SWIPES);
+
+      host.pressed("Meta+r");
+      host.gestured("swipe", 4, { dx: -40 });
+      host.gestured("swipe", 3, { dx: 40 });
+
+      expect(heard).toStrictEqual([
+        ["mode", "resize"],
+        ["command", ["resize", "shrink", "width"]],
+      ]);
+    });
+
+    it("gives every gesture back once unbound, and stops listening", () => {
+      const { heard, host } = bound(SWIPES);
+
+      unbind();
+      unbind();
+      host.gestured("swipe", 3, { dx: -40 });
+
+      expect(host.ungrabbedGestures).toStrictEqual([
+        "pinch:4",
+        "swipe:3",
+        "swipe",
+      ]);
+      expect(heard).toStrictEqual([]);
     });
   });
 });

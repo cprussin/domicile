@@ -17,6 +17,12 @@ Unverified. On a tty with a touchpad, open Google Chrome with
 `RUST_LOG=domicile_compositor=trace` logs each `pointer_pinch` the compositor
 gets. No line: the engine never saw the pinch.
 
+In Manganese with windows on two workspaces of one monitor:
+
+- a three-finger swipe left goes to the next workspace, and right to the
+  previous one;
+- a three-finger swipe does not scroll the window under the pointer.
+
 ## Suspend and resume
 
 Close the lid, then open it.

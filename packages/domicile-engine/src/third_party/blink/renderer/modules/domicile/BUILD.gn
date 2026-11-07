@@ -38,6 +38,8 @@ blink_modules_sources("domicile") {
     "domicile_download.h",
     "domicile_event_names.cc",
     "domicile_event_names.h",
+    "domicile_gesture_event.cc",
+    "domicile_gesture_event.h",
     "domicile_extension.cc",
     "domicile_extension.h",
     "domicile_extension_popup_event.cc",

@@ -15,6 +15,7 @@ import {
   removeVirtualMonitor,
   screenshot,
   searchClipboard,
+  stepWorkspace,
   virtualMonitor,
   volume,
 } from "./commands";
@@ -106,6 +107,17 @@ describe("manganese's default keys", () => {
     expect(DEFAULT_KEYBINDINGS["Meta+Shift+space"]).toEqual(searchClipboard());
     expect(searchClipboard()).toEqual({
       args: ["search-clipboard"],
+      kind: KeyActionKind.SendShell,
+    });
+  });
+
+  it("swipe three fingers between the screen's workspaces", () => {
+    expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      "swipe:3:left": stepWorkspace("next"),
+      "swipe:3:right": stepWorkspace("prev"),
+    });
+    expect(stepWorkspace("next")).toEqual({
+      args: ["workspace", "next_on_output"],
       kind: KeyActionKind.SendShell,
     });
   });
