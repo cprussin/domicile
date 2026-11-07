@@ -1,5 +1,20 @@
 # @domicile-desktop/system-backlight
 
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies [8eaae53]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [a354497]
+- Updated dependencies [1af639c]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [9246b97]
+- Updated dependencies [bb1e4cb]
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/react@0.1.2
+
 ## 1.1.1
 
 ### Patch Changes

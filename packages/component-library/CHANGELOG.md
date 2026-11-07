@@ -1,5 +1,22 @@
 # @domicile-desktop/component-library
 
+## 2.0.2
+
+### Patch Changes
+
+- 3d22f74: A closing popover no longer closes the one opened in its place, so clicking another extension's action opens its popup.
+- 75708d7: The workspace switcher's chip slides smoothly when a workspace comes or goes at the end of the row: the bar items beside its empty middle no longer clip while they resize (`FluidItem`'s new `overflow` prop), and the chip's clip no longer depends on the row's width.
+- Updated dependencies [8eaae53]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [a354497]
+- Updated dependencies [1af639c]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [9246b97]
+- Updated dependencies [bb1e4cb]
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/system-apps@1.2.0
+
 ## 2.0.1
 
 ### Patch Changes

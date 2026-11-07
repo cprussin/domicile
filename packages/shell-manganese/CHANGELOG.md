@@ -1,5 +1,66 @@
 # @domicile-desktop/manganese
 
+## 1.1.2
+
+### Patch Changes
+
+- b3e7457: Drag a nested group's tab along its strip or out of it, and move other tabs past it. The tab strip above a nested group no longer turns into a resize handle.
+- bc45b4c: Gmail's page no longer notifies the same mail again while its window is open.
+- d69b2f4: A page's notification names its browser window, so only the Gmail inbox's own window has its duplicate notifications cleared; Gmail in another window notifies again.
+- Updated dependencies [f4f993a]
+- Updated dependencies [8eaae53]
+- Updated dependencies [b3e7457]
+- Updated dependencies [f6dc5b2]
+- Updated dependencies [cd7e4ba]
+- Updated dependencies [bc45b4c]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [28e836c]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [1af639c]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [9246b97]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [280ce42]
+- Updated dependencies [e481089]
+- Updated dependencies [75708d7]
+  - @domicile-desktop/manganese-window-management@1.3.0
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/manganese-notifications@1.1.2
+  - @domicile-desktop/manganese-inbox-gmail@0.1.2
+  - @domicile-desktop/component-library@2.0.2
+  - @domicile-desktop/system-apps@1.2.0
+  - @domicile-desktop/manganese-bar-module-workspace-switcher@1.1.2
+  - @domicile-desktop/manganese-bar@1.1.2
+  - @domicile-desktop/manganese-clipboard@1.1.2
+  - @domicile-desktop/manganese-launcher@1.1.2
+  - @domicile-desktop/manganese-lock@1.0.3
+  - @domicile-desktop/manganese-wallpaper@1.1.2
+  - @domicile-desktop/manganese-bar-module-battery@1.1.2
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.2
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.2
+  - @domicile-desktop/manganese-bar-module-cast@0.1.2
+  - @domicile-desktop/manganese-bar-module-downloads@0.1.2
+  - @domicile-desktop/manganese-bar-module-gmail@2.0.2
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.2
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.2
+  - @domicile-desktop/manganese-bar-module-keymap@0.1.2
+  - @domicile-desktop/manganese-bar-module-network@1.1.2
+  - @domicile-desktop/manganese-bar-module-sharing@1.1.2
+  - @domicile-desktop/manganese-bar-module-tray@1.1.2
+  - @domicile-desktop/manganese-bar-module-volume@2.0.2
+  - @domicile-desktop/manganese-host@2.0.2
+  - @domicile-desktop/react@0.1.2
+  - @domicile-desktop/system-audio@1.1.2
+  - @domicile-desktop/system-backlight@1.1.2
+  - @domicile-desktop/manganese-bar-module-notifications@1.1.2
+  - @domicile-desktop/manganese-inbox-google-messages@0.1.2
+  - @domicile-desktop/manganese-bar-module-clock@1.0.3
+  - @domicile-desktop/manganese-bar-module-launcher-button@1.0.3
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.2
+  - @domicile-desktop/manganese-quick-settings@1.0.2
+
 ## 1.1.1
 
 ### Patch Changes
