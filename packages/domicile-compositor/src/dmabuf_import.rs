@@ -40,6 +40,8 @@ pub enum ImportError {
     NoEgl(#[from] libloading::Error),
     #[error("EGL exposes no device to render on")]
     NoDevice,
+    #[error("cannot list the DRM render nodes")]
+    NoRenderNodes(#[source] std::io::Error),
     #[error("EGL setup failed")]
     Egl(#[from] smithay::backend::egl::Error),
     #[error("GLES failed to import or read back the buffer")]
@@ -75,7 +77,7 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
         Err(err) => {
             tracing::debug!(%err, "EGL cannot list devices; trying GBM on each render node");
             let (display, node) = gbm_display(Path::new("/dev/dri"))?;
-            let main_device = std::fs::metadata(&node).ok().map(|node| node.rdev());
+            let main_device = device_number(&node);
             tracing::debug!(device = ?node, main_device, "dmabuf import device");
             (display, Some(node), main_device)
         }
@@ -90,7 +92,7 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
 /// An EGL display over libgbm on the first render node in `dir` that has one,
 /// and that node.
 fn gbm_display(dir: &Path) -> Result<(EGLDisplay, PathBuf), ImportError> {
-    for node in render_nodes(dir) {
+    for node in render_nodes(dir).map_err(ImportError::NoRenderNodes)? {
         let gbm = match Gbm::open(crate::gbm::LIBRARY, &node) {
             Ok(gbm) => gbm,
             Err(err) => {
@@ -109,16 +111,16 @@ fn gbm_display(dir: &Path) -> Result<(EGLDisplay, PathBuf), ImportError> {
 }
 
 /// The render nodes in `dir`, in order.
-fn render_nodes(dir: &Path) -> Vec<PathBuf> {
-    let mut nodes: Vec<PathBuf> = std::fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_name().to_string_lossy().starts_with("renderD"))
-        .map(|entry| entry.path())
-        .collect();
+fn render_nodes(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut nodes = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_name().to_string_lossy().starts_with("renderD") {
+            nodes.push(entry.path());
+        }
+    }
     nodes.sort();
-    nodes
+    Ok(nodes)
 }
 
 /// A libgbm device as an EGL native display.
@@ -181,18 +183,21 @@ impl DmabufImporter {
 /// The `dev_t` of the DRM node a device renders on. `None` for a software
 /// rasterizer.
 fn drm_node(device: &EGLDevice) -> Option<u64> {
-    match device
+    device
         .render_device_path()
         .or_else(|_| device.drm_device_path())
-    {
-        Ok(path) => match std::fs::metadata(&path) {
-            Ok(node) => Some(node.rdev()),
-            Err(err) => {
-                tracing::warn!(?path, %err, "cannot stat the render node");
-                None
-            }
-        },
-        Err(_) => None,
+        .ok()
+        .and_then(|path| device_number(&path))
+}
+
+/// The `dev_t` of the DRM node at `path`.
+fn device_number(path: &Path) -> Option<u64> {
+    match std::fs::metadata(path) {
+        Ok(node) => Some(node.rdev()),
+        Err(err) => {
+            tracing::warn!(?path, %err, "cannot stat the render node");
+            None
+        }
     }
 }
 
@@ -272,13 +277,13 @@ mod tests {
         }
 
         assert_eq!(
-            render_nodes(dir.path()),
+            render_nodes(dir.path()).unwrap(),
             [dir.path().join("renderD128"), dir.path().join("renderD129")]
         );
     }
 
     #[test]
-    fn no_dri_directory_has_no_render_nodes() {
-        assert!(render_nodes(std::path::Path::new("/nonexistent/dri")).is_empty());
+    fn a_missing_dri_directory_is_an_error() {
+        assert!(render_nodes(std::path::Path::new("/nonexistent/dri")).is_err());
     }
 }
