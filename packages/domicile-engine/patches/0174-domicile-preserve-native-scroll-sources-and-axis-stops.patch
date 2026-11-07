@@ -15,14 +15,14 @@ Subject: [PATCH] domicile: preserve native scroll distances, sources and stops
  .../evdev/device_event_dispatcher_evdev.cc    |  4 +
  .../evdev/device_event_dispatcher_evdev.h     | 12 ++-
  ui/events/ozone/evdev/event_factory_evdev.cc  |  5 ++
- .../ozone/evdev/libinput_event_converter.cc   | 80 ++++++++++++++-----
+ .../ozone/evdev/libinput_event_converter.cc   | 84 ++++++++++++++-----
  ui/events/types/BUILD.gn                      |  1 +
  .../wayland/host/wayland_event_source.cc      | 54 +++++++++++++
  .../wayland/host/wayland_event_source.h       |  7 ++
  .../platform/wayland/host/wayland_pointer.cc  |  5 +-
  .../platform/wayland/host/wayland_pointer.h   |  3 +
  .../wayland/host/wayland_pointer_unittest.cc  | 74 ++++++++++++-----
- 18 files changed, 290 insertions(+), 47 deletions(-)
+ 18 files changed, 294 insertions(+), 47 deletions(-)
 
 diff --git a/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc b/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
 index 8527714..7389432 100644
@@ -427,7 +427,7 @@ index 821dcca..52a6c8e 100644
  
  void LibInputEventConverter::ApplyDeviceSettings(
      const InputDeviceSettingsEvdev& settings) {
-@@ -587,35 +593,51 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+@@ -587,35 +593,55 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
    // `MouseWheelEvent`, the way every other platform delivers one. Dispatched
    // as a scroll it would move a page by libinput's degrees -- 15 pixels a
    // click -- and fling like a pad.
@@ -491,12 +491,16 @@ index 821dcca..52a6c8e 100644
 +                                    : NativeScrollSource::kContinuous;
 +  params.axis_stop_x = stop_x;
 +  params.axis_stop_y = stop_y;
-+  params.native_axis_distance = std::array<double, 2>{delta.x(), delta.y()};
++  // A native client runs its own kinetic scrolling, as on any compositor, so
++  // it gets libinput's linear distance. Accelerated, its fling overshoots.
++  params.native_axis_distance =
++      std::array<double, 2>{ScaleScrollAxis(raw_delta.x(), scroll_factor_),
++                            ScaleScrollAxis(raw_delta.y(), scroll_factor_)};
 +  dispatcher_->DispatchScrollEvent(params);
  }
  
  void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
-@@ -626,8 +648,22 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+@@ -626,8 +652,22 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
  
    DVLOG(3) << "Wheel: " << ticks.ToString();
  

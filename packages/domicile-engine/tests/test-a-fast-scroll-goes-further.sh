@@ -56,6 +56,28 @@ else
     "calling Scroll with a zero delta resets both axes after an independent stop"
 fi
 
+# A native client runs its own kinetic scrolling, as on any compositor. Fed
+# accelerated distances, its fling launches up to four times too far.
+if python3 - "$PATCHES" <<'CHECK'
+from pathlib import Path
+import re
+import sys
+added = "\n".join(line[1:] for patch in sorted(Path(sys.argv[1]).glob("*.patch"))
+                  for line in patch.read_text().splitlines()
+                  if line.startswith("+") and not line.startswith("+++"))
+linear = re.search(
+    r"params\.native_axis_distance\s*=\s*std::array<double, 2>\{\s*"
+    r"ScaleScrollAxis\(raw_delta\.x\(\), scroll_factor_\),\s*"
+    r"ScaleScrollAxis\(raw_delta\.y\(\), scroll_factor_\)\}", added)
+sys.exit(0 if linear else 1)
+CHECK
+then
+  ok "a native client gets libinput's unaccelerated distance"
+else
+  fail "a native client gets libinput's unaccelerated distance" \
+    "HandlePointerAxis sends the accelerated delta as the native distance, so a client's own fling overshoots"
+fi
+
 if in_patches '"domicile/scroll_accelerator.cc"'; then
   ok "the accelerator is in the evdev component"
 else

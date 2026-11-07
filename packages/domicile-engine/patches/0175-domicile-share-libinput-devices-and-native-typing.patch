@@ -976,16 +976,20 @@ index 52a6c8e..a513d7d 100644
  }
  
  void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
-@@ -637,6 +535,8 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+@@ -637,10 +535,12 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
    params.axis_stop_x = stop_x;
    params.axis_stop_y = stop_y;
-   params.native_axis_distance = std::array<double, 2>{delta.x(), delta.y()};
+   // A native client runs its own kinetic scrolling, as on any compositor, so
+   // it gets libinput's linear distance. Accelerated, its fling overshoots.
+   params.native_axis_distance =
+       std::array<double, 2>{ScaleScrollAxis(raw_delta.x(), scroll_factor_),
+                             ScaleScrollAxis(raw_delta.y(), scroll_factor_)};
 +  active_scroll_axes_.Observe(params.native_scroll_source, delta.x() != 0,
 +                              delta.y() != 0, stop_x, stop_y);
    dispatcher_->DispatchScrollEvent(params);
  }
  
-@@ -676,6 +576,7 @@ std::ostream& LibInputEventConverter::DescribeForLog(std::ostream& os) const {
+@@ -680,6 +576,7 @@ std::ostream& LibInputEventConverter::DescribeForLog(std::ostream& os) const {
    os << "class=ui::LibInputEventConverter id=" << input_device_.id << std::endl
       << " has_keyboard=" << has_keyboard_ << std::endl
       << " has_mouse=" << has_mouse_ << std::endl

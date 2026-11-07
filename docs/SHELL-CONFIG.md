@@ -247,7 +247,7 @@ restores its default.
 | `touchpad.middle_emulation`, `mouse.middle_emulation` | Left and right together produce a middle click | `false` |
 | `touchpad.scroll_method` | `"default"`, `"two_finger"`, `"edge"`, `"on_button_down"` | `"default"` |
 | `touchpad.scroll_factor`, `mouse.scroll_factor` | Positive scroll-distance multiplier, applied once to both axes | `1` |
-| `touchpad.scroll_acceleration` | Increase scroll distance with gesture speed, up to four times | `true` |
+| `touchpad.scroll_acceleration` | Increase page scroll distance with gesture speed, up to four times | `true` |
 | `touchpad.disable_while_typing` | `"enabled"`, `"disabled"`, `"internal"`, `"libinput"` | `"enabled"` |
 | `touchpad.typing_pause_ms` | Pause after one typing key, from `0` to `2147483647` milliseconds | `200` |
 | `touchpad.typing_repeat_pause_ms` | Pause during continued typing, in the same range | `500` |
@@ -256,6 +256,9 @@ restores its default.
   left, right and middle to one-, two- and three-finger physical clicks.
 - A device applies the settings it supports. Unsupported capabilities are
   reported in the engine log.
+- `scroll_acceleration` applies to pages only. Native apps always get
+  libinput's distance times `scroll_factor`, because they run their own
+  momentum scrolling.
 - `scroll_acceleration: false` with `scroll_factor: 1` preserves libinput's
   scrolling distance, as in Sway. The multiplier is independent of pointer
   speed and acceleration.
