@@ -1,7 +1,7 @@
 //! Toplevel windows: announcing them to the chromes, their sizes and resizes, and
 //! forgetting them.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use smithay::reexports::{
     calloop::timer::{TimeoutAction, Timer},
@@ -20,6 +20,7 @@ use crate::chrome_hub::broadcast_closed;
 use crate::clients::owner_of;
 use crate::configure_answers::Resize;
 use crate::decorations::asks_to_draw_its_frame;
+use crate::engine_lingering::{Linger, LINGER};
 use crate::surface_commit::Role;
 use crate::{CalloopData, DomicileCompositor};
 
@@ -248,20 +249,48 @@ impl DomicileCompositor {
             .expect("the compositor's own loop takes a timer");
     }
 
+    /// Destroy a closed window's surface once the shell has animated it out.
+    /// Its held buffers come back then, since no release will come for a
+    /// gone surface, and the client may still be running.
+    fn end_linger_after(&self, linger: Linger, after: Duration) {
+        self.loop_handle
+            .insert_source(
+                Timer::from_duration(after),
+                move |_, _, data: &mut CalloopData| {
+                    let state = &mut data.state;
+                    let abandoned = state
+                        .engine
+                        .as_mut()
+                        .map(|session| session.linger_over(linger))
+                        .unwrap_or_default();
+                    for release in abandoned {
+                        state.returned(release.buffer);
+                    }
+                    TimeoutAction::Drop
+                },
+            )
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
+    }
+
     /// Release everything held for an app (window or popup) and tell the
     /// chromes it is gone.
     pub fn forget(&mut self, app_id: &str) {
-        // Take back the engine's held buffers now. No release will come for a
-        // gone surface, and the client may still be running.
-        let abandoned = self
+        // The surface stays on screen through the shell's close animation;
+        // only frames that never went up come back now.
+        let gone = self
             .engine
             .as_mut()
             .map(|session| session.window_gone(app_id))
             .unwrap_or_default();
-        for release in abandoned {
+        for release in gone.releases {
             self.returned(release.buffer);
         }
-        // All of viz's buffers came back above, so the uploads can go.
+        if let Some(linger) = gone.linger {
+            self.end_linger_after(linger, LINGER);
+        }
+        // The engine has its own fds for the uploads its last frame shows.
         self.uploads.forget(app_id);
         self.configure_answers.remove(app_id);
         self.shown.missed(app_id);
