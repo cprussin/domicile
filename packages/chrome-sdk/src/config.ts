@@ -476,7 +476,7 @@ export type TouchpadConfig = {
   middle_emulation?: boolean;
   /** Move content in the direction the fingers move. */
   natural_scroll?: boolean;
-  /** Increase scroll distance with gesture speed, up to four times. */
+  /** Increase page scroll distance with gesture speed, up to four times. */
   scroll_acceleration?: boolean;
   /** Multiplier applied once to both scrolling axes; must be positive. */
   scroll_factor?: number;
