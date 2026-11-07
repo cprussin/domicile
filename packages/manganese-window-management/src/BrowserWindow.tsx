@@ -37,6 +37,7 @@ import { mediaDeviceChoiceFor } from "./browser/media-devices";
 import { PageMenu } from "./browser/PageMenu";
 import { PagePopup } from "./browser/PagePopup";
 import { PageProblem } from "./browser/PageProblem";
+import { PageTooltip } from "./browser/PageTooltip";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
@@ -766,6 +767,7 @@ export const BrowserWindow = ({
             />
           )}
           <LinkTarget view={view} />
+          <PageTooltip view={view} />
           <PagePopup
             closesAfter={ZOOM_POPUP_MS}
             cue={popupCue}

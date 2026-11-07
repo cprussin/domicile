@@ -15,15 +15,16 @@
 ] interface DomicilePromptEvent : Event {
   // What is asked: "file-view", "file-edit", "file-restricted",
   // "file-dangerous", "client-certificate", "bluetooth-pin",
-  // "bluetooth-confirm", "extension-permissions", "extension-install" or
-  // "extension-re-enable".
+  // "bluetooth-confirm", "extension-permissions", "extension-install",
+  // "extension-re-enable", "resend-form" or "unresponsive".
   readonly attribute DOMString kind;
 
   // The site that asked, e.g. "https://vscode.dev", or "" for none.
   readonly attribute USVString origin;
 
   // What it is about: a file or folder's name, a device's name or an
-  // extension's name. "" for a certificate or a system folder.
+  // extension's name, or the page's title. "" for a certificate or a system
+  // folder.
   readonly attribute DOMString subject;
 
   // More about it: a file's full path, the certificates to pick from as

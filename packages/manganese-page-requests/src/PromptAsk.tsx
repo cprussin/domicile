@@ -153,6 +153,23 @@ const wordsFor = (request: PromptRequest): Words => {
         yes: "Turn on",
       };
     }
+    case "resend-form": {
+      return {
+        message:
+          "Reloading sends what you entered on this page again, which could repeat something like a purchase or a post.",
+        no: "Cancel",
+        title: "Send the form again?",
+        yes: "Send again",
+      };
+    }
+    case "unresponsive": {
+      return {
+        message: `${subject === "" ? site : subject} isn't responding. You can wait for it, or close it and reload later.`,
+        no: "Wait",
+        title: "This page isn't responding",
+        yes: "Close page",
+      };
+    }
   }
 };
 
@@ -233,7 +250,9 @@ const detailsFor = (
       );
     }
     case "file-restricted":
-    case "bluetooth-confirm": {
+    case "bluetooth-confirm":
+    case "resend-form":
+    case "unresponsive": {
       return undefined;
     }
   }

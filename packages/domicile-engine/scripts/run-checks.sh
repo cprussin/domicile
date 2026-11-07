@@ -83,6 +83,7 @@ TOGETHER=(
   guard-webview-sign-in
   guard-webview-file-access
   guard-webview-page-failure
+  guard-webview-resend-form
   guard-webview-print
   guard-webview-context-menu
   guard-webview-upload

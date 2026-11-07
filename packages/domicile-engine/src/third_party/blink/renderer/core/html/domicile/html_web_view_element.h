@@ -116,9 +116,18 @@ class CORE_EXPORT HTMLWebViewElement final
   // components/domicile/mojom/web_view_guest.mojom.
   const String& targetUrl() const { return target_url_; }
 
+  // The tooltip under the pointer, or empty, and where the pointer was when it
+  // appeared, in this element's CSS pixels. See TooltipChanged in
+  // components/domicile/mojom/web_view_guest.mojom.
+  const String& tooltip() const { return tooltip_; }
+  int32_t tooltipX() const { return tooltip_x_; }
+  int32_t tooltipY() const { return tooltip_y_; }
+
   // Tells the browser the pointer left the page when the document sees a
-  // move off this element. Listens only while a link is shown.
+  // move off this element. Listens only while a link or tooltip is shown;
+  // UpdatePointerListener adds and removes it.
   void PointerMoved(Event* event);
+  void UpdatePointerListener();
   void setZoom(double factor, ExceptionState&);
 
   // Find in page. The browser searches the guest; results arrive in
@@ -315,6 +324,7 @@ class CORE_EXPORT HTMLWebViewElement final
   void DescriptionChanged(const String& description) override;
 
   void TargetUrlChanged(const KURL& url) override;
+  void TooltipChanged(const String& text, int32_t x, int32_t y) override;
 
   // Sent only on change, like HistoryChanged.
   void FindChanged(int32_t matches, int32_t active_match) override;
@@ -462,7 +472,11 @@ class CORE_EXPORT HTMLWebViewElement final
   String favicon_;
   String description_;
   String target_url_;
-  // On the document's `mousemove` while `target_url_` is set. See
+  String tooltip_;
+  int32_t tooltip_x_ = 0;
+  int32_t tooltip_y_ = 0;
+  // On the document's `mousemove` while `target_url_` or `tooltip_` is set.
+  // See
   // PointerMoved.
   Member<NativeEventListener> pointer_listener_;
   int32_t find_matches_ = 0;

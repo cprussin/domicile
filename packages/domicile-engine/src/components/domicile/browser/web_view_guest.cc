@@ -73,6 +73,7 @@
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/result_codes.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/url_constants.h"
 #include "media/mojo/mojom/capture_handle.mojom.h"
@@ -905,6 +906,9 @@ void WebViewGuest::ReportEverything() {
   reported_find_active_match_ = 0;
   // The new element starts over no link; the next pointer move reports one.
   reported_target_url_ = GURL();
+  // And no tooltip.
+  reported_tooltip_.clear();
+  pointer_inside_ = false;
 
   ReportHistory();
   ReportPage();
@@ -1634,7 +1638,9 @@ void WebViewGuest::EditWhenFocused(EditCommand command, int tries) {
 }
 
 void WebViewGuest::PointerLeft() {
+  pointer_inside_ = false;
   ReportTargetUrl(GURL());
+  ReportTooltip();
 }
 
 void WebViewGuest::ExitPageFullscreen() {
@@ -1776,11 +1782,113 @@ void WebViewGuest::UpdateTargetURL(content::WebContents* source,
 bool WebViewGuest::PreHandleMouseEvent(content::WebContents* source,
                                        const blink::WebMouseEvent& event) {
   // Any other mouse event means the pointer is over the page.
-  ReportTargetUrl(event.GetType() == blink::WebInputEvent::Type::kMouseLeave
-                      ? GURL()
-                      : renderer_target_url_);
+  pointer_inside_ =
+      event.GetType() != blink::WebInputEvent::Type::kMouseLeave;
+  pointer_ = gfx::ToFlooredPoint(event.PositionInWidget());
+  ReportTargetUrl(pointer_inside_ ? renderer_target_url_ : GURL());
+  // A press hides the tooltip until the page shows another, as Chrome's does.
+  if (event.GetType() == blink::WebInputEvent::Type::kMouseDown) {
+    tooltip_.clear();
+  }
+  ReportTooltip();
   // The page still gets the event.
   return false;
+}
+
+bool WebViewGuest::DomicileTooltip(content::WebContents* source,
+                                   const std::u16string& text) {
+  tooltip_ = base::UTF16ToUTF8(text);
+  ReportTooltip();
+  return true;
+}
+
+void WebViewGuest::ReportTooltip() {
+  const std::string& tooltip = pointer_inside_ ? tooltip_ : base::EmptyString();
+  // Report only changes; every mouse event calls this. The position is where
+  // the tooltip appeared, so moving under one tooltip sends nothing.
+  if (tooltip != reported_tooltip_) {
+    reported_tooltip_ = tooltip;
+    client_->TooltipChanged(tooltip, pointer_.x(), pointer_.y());
+  }
+}
+
+void WebViewGuest::ShowRepostFormWarningDialog(content::WebContents* source) {
+  CHECK(guest_contents_);
+  AskPrompt(
+      mojom::WebViewPrompt::New(
+          mojom::WebViewPromptKind::kResendForm,
+          guest_contents_->GetPrimaryMainFrame()
+              ->GetLastCommittedOrigin()
+              .GetURL(),
+          base::UTF16ToUTF8(guest_contents_->GetTitle()),
+          std::vector<std::string>(), std::string()),
+      base::BindOnce(
+          [](base::WeakPtr<WebViewGuest> guest, bool accepted, int,
+             std::string) {
+            if (!guest || !guest->guest_contents_) {
+              return;
+            }
+            // Continue does nothing if a navigation replaced the reload.
+            content::NavigationController& history =
+                guest->guest_contents_->GetController();
+            if (accepted) {
+              history.ContinuePendingReload();
+            } else {
+              history.CancelPendingReload();
+            }
+          },
+          weak_factory_.GetWeakPtr()));
+}
+
+void WebViewGuest::RendererUnresponsive(
+    content::WebContents* source,
+    content::RenderWidgetHost* render_widget_host,
+    base::RepeatingClosure hang_monitor_restarter) {
+  CHECK(guest_contents_);
+  // Content asks again while it stays hung; one question is enough.
+  if (unresponsive_prompt_ != 0) {
+    return;
+  }
+  const int id = AskPrompt(
+      mojom::WebViewPrompt::New(
+          mojom::WebViewPromptKind::kUnresponsive,
+          guest_contents_->GetPrimaryMainFrame()
+              ->GetLastCommittedOrigin()
+              .GetURL(),
+          base::UTF16ToUTF8(guest_contents_->GetTitle()),
+          std::vector<std::string>(), std::string()),
+      base::BindOnce(
+          [](base::WeakPtr<WebViewGuest> guest,
+             content::ChildProcessId process,
+             base::RepeatingClosure hang_monitor_restarter, bool accepted,
+             int, std::string) {
+            // Withdrawn because the page responded: nothing to do.
+            if (!guest || guest->unresponsive_prompt_ == 0) {
+              return;
+            }
+            guest->unresponsive_prompt_ = 0;
+            content::RenderProcessHost* host =
+                content::RenderProcessHost::FromID(process);
+            if (accepted && host) {
+              // As Chrome's "Exit page" does. The element then reports the
+              // page as crashed.
+              host->Shutdown(content::RESULT_CODE_HUNG);
+            } else {
+              // Waits, and asks again if it stays hung.
+              hang_monitor_restarter.Run();
+            }
+          },
+          weak_factory_.GetWeakPtr(), render_widget_host->GetProcess()->GetID(),
+          std::move(hang_monitor_restarter)));
+  unresponsive_prompt_ = id;
+}
+
+void WebViewGuest::RendererResponsive(
+    content::WebContents* source,
+    content::RenderWidgetHost* render_widget_host) {
+  const int id = unresponsive_prompt_;
+  unresponsive_prompt_ = 0;
+  WithdrawPrompt(id);
 }
 
 void WebViewGuest::ReportTargetUrl(const GURL& url) {

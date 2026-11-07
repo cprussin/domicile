@@ -159,4 +159,43 @@ describe("PromptAsk", () => {
       ).toHaveAccessibleDescription("It needs no special permissions.");
     });
   });
+
+  describe("a form sent again", () => {
+    it("resends it", async () => {
+      const answers: string[] = [];
+      ask(requestFor(answers, "resend-form", { subject: "Checkout" }));
+
+      screen.getByRole("alertdialog", { name: "Send the form again?" });
+      await userEvent.click(screen.getByRole("button", { name: "Send again" }));
+
+      expect(answers).toStrictEqual(["accept 0 "]);
+    });
+  });
+
+  describe("a page that stopped responding", () => {
+    it("names the page and waits for it", async () => {
+      const answers: string[] = [];
+      ask(requestFor(answers, "unresponsive", { subject: "Inbox" }));
+
+      expect(
+        screen.getByRole("alertdialog", {
+          name: "This page isn't responding",
+        }),
+      ).toHaveAccessibleDescription(
+        "Inbox isn't responding. You can wait for it, or close it and reload later.",
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Wait" }));
+
+      expect(answers).toStrictEqual(["dismiss"]);
+    });
+
+    it("closes it", async () => {
+      const answers: string[] = [];
+      ask(requestFor(answers, "unresponsive"));
+
+      await userEvent.click(screen.getByRole("button", { name: "Close page" }));
+
+      expect(answers).toStrictEqual(["accept 0 "]);
+    });
+  });
 });
