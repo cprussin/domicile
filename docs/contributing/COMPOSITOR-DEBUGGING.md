@@ -131,7 +131,17 @@ The lines below are debug; run with `RUST_LOG=warn,domicile_compositor=debug`.
   mapping sees nothing. It sizes itself to the output unless configured.
 - **`weston-flower` commits twice and stops**, under weston as well, so it is
   not a compositor bug. Use `weston-simple-shm` as the shm client; it animates.
-- **`wev` segfaults.** **`weston-eventdemo` prints no pointer events.** Use
-  `WAYLAND_DEBUG=1` instead.
+- **`wev` segfaults.** **`weston-eventdemo` prints no pointer events.** Watch
+  input with the test client instead. `--trace` prints its Wayland messages in
+  `WAYLAND_DEBUG` form, input included. The filter drops the buffer release it
+  prints every frame:
+
+  ```sh
+  cargo run -p domicile-compositor --bin domicile-test-client -- --trace 2>&1 \
+    | grep -v '^wl_buffer@'
+  ```
+
+  `libinput debug-events` beside it shows what the device sent. It reads
+  `/dev/input` without grabbing the devices.
 - **Containers only have llvmpipe**, which cannot allocate a dmabuf.
   `e2e-dmabuf.sh` asserts the global and then skips.
