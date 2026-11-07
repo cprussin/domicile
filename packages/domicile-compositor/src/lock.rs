@@ -1009,6 +1009,7 @@ mod tests {
             (
                 "the page warming the monitors",
                 ClientRequest::SetWhitePoint {
+                    output: None,
                     white_point: domicile_host::white_point::white_point(3400),
                 },
             ),

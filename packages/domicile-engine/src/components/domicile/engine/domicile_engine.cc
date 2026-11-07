@@ -20,6 +20,7 @@
 #include "base/compiler_specific.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/span.h"
+#include "base/containers/to_vector.h"
 #include "base/containers/flat_map.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
@@ -642,7 +643,8 @@ class Displays : public mojom::DisplayListObserver {
                         .physical_width_mm = one->physical_size_mm.width(),
                         .physical_height_mm = one->physical_size_mm.height(),
                         .refresh_mhz = one->refresh_mhz,
-                        .connector = one->connector});
+                        .connector = one->connector,
+                        .gamma_size = one->gamma_size});
     }
     queue_->Push(event);
   }
@@ -898,7 +900,18 @@ struct DomicileEngine {
           // The strings belong to `event`, which lives in the drained vector
           // until the loop ends, so they outlive the callback as the header
           // promises.
-          if (callbacks_.connected_displays) {
+          if (callbacks_.ramped_displays) {
+            std::vector<DomicileRampedDisplay> records;
+            records.reserve(event.displays.size());
+            for (const domicile::EngineDisplay& display : event.displays) {
+              records.push_back(DomicileRampedDisplay{
+                  .connected = {.display = RecordOf(display),
+                                .connector = display.connector.c_str()},
+                  .gamma_size = display.gamma_size});
+            }
+            callbacks_.ramped_displays(callbacks_.user_data, records.data(),
+                                       static_cast<uint32_t>(records.size()));
+          } else if (callbacks_.connected_displays) {
             std::vector<DomicileConnectedDisplay> records;
             records.reserve(event.displays.size());
             for (const domicile::EngineDisplay& display : event.displays) {
@@ -1163,10 +1176,11 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
-  void SetWhitePoint(float red, float green, float blue) {
+  void SetGamma(int64_t display_id, domicile::mojom::GammaRampPtr ramp) {
     thread_.task_runner()->PostTask(
-        FROM_HERE, base::BindOnce(&DomicileEngine::SetWhitePointOnThread,
-                                  base::Unretained(this), red, green, blue));
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::SetGammaOnThread,
+                       base::Unretained(this), display_id, std::move(ramp)));
   }
 
   // Drops a kind this build does not know, from a newer compositor.
@@ -1402,9 +1416,10 @@ struct DomicileEngine {
     }
   }
 
-  void SetWhitePointOnThread(float red, float green, float blue) {
+  void SetGammaOnThread(int64_t display_id,
+                        domicile::mojom::GammaRampPtr ramp) {
     if (broker_) {
-      broker_->SetWhitePoint(red, green, blue);
+      broker_->SetGamma(display_id, std::move(ramp));
     }
   }
 
@@ -2014,13 +2029,21 @@ void domicile_input_inject(DomicileEngine* engine,
   }
 }
 
-void domicile_displays_set_white_point(DomicileEngine* engine,
-                                       float red,
-                                       float green,
-                                       float blue) {
-  if (engine) {
-    engine->SetWhitePoint(red, green, blue);
+void domicile_displays_set_gamma(DomicileEngine* engine,
+                                 int64_t display_id,
+                                 const uint16_t* ramp,
+                                 uint32_t size) {
+  if (!engine) {
+    return;
   }
+  // `size` red, then green, then blue; see the header. `UNSAFE_BUFFERS` is
+  // required to span an ABI pointer and length.
+  const auto entries =
+      UNSAFE_BUFFERS(base::span(ramp, static_cast<size_t>(size) * 3));
+  engine->SetGamma(display_id, domicile::mojom::GammaRamp::New(
+                                   base::ToVector(entries.first(size)),
+                                   base::ToVector(entries.subspan(size, size)),
+                                   base::ToVector(entries.last(size))));
 }
 
 void domicile_clipboard_set(DomicileEngine* engine,

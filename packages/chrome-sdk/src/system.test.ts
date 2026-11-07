@@ -732,6 +732,17 @@ describe("color temperature", () => {
     expect(await setting).toStrictEqual(Ok("set"));
   });
 
+  it("warms one monitor, by name", async () => {
+    const host = new FakeHost();
+    const setting = system(host).setColorTemperature(3400, "eDP-2");
+    host.reply(1, { kind: "set" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "set_color_temperature", display: "eDP-2", kelvin: 3400 }],
+    ]);
+    expect(await setting).toStrictEqual(Ok("set"));
+  });
+
   it("sends a whole number of kelvin", () => {
     const host = new FakeHost();
     system(host)

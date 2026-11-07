@@ -78,6 +78,19 @@ struct Display {
   // after it, as sway does. Read in the GPU process by
   // ui/ozone/platform/drm/domicile/connector_name.cc.
   string connector;
+
+  // How many entries the display's gamma ramp has, or 0 if it has none: a
+  // DisplayLink dock, a virtual display, any platform but DRM. The producer
+  // offers gamma control at this size. Read from the CRTC in the GPU process.
+  uint32 gamma_size;
+};
+
+// One display's gamma ramp: each channel 0 to 65535, all the same length.
+// Empty channels draw colors as they are.
+struct GammaRamp {
+  array<uint16> red;
+  array<uint16> green;
+  array<uint16> blue;
 };
 
 // How the producer wants one display's connector driven.
@@ -364,10 +377,11 @@ interface FrameSinkBroker {
   // `ConfigureDisplays` like one, but lights no CRTC.
   ConfigureVirtualDisplays(array<VirtualDisplay> displays);
 
-  // Sets what each channel is multiplied by on every display, for a night
-  // light: 1 leaves a channel as it is. The browser keeps it and sets it again
-  // after each modeset. Ignored outside a tty, as `ConfigureDisplays` is.
-  SetWhitePoint(float red, float green, float blue);
+  // Sets the gamma ramp of display `display_id`, a `Display.id`, for a night
+  // light or a gamma-control client. The browser keeps each display's and sets
+  // it again after each modeset. Ignored outside a tty, as `ConfigureDisplays`
+  // is. Channels of different lengths are a bad message.
+  SetGamma(int64 display_id, GammaRamp ramp);
 
   // Delivers emulated input to the desk, as the engine's own devices' would
   // be: the shell sees it first. Ignored where the engine reads no input of

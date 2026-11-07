@@ -86,7 +86,7 @@ pub fn write_copy(into: OwnedFd, copy: &[u8], patience: Duration) -> io::Result<
 }
 
 /// Makes `fd` non-blocking and wraps it in a `File` for `Read` and `Write`.
-fn without_blocking(fd: OwnedFd) -> io::Result<std::fs::File> {
+pub fn without_blocking(fd: OwnedFd) -> io::Result<std::fs::File> {
     // SAFETY: `fd` is owned here. A pipe's two ends are separate open file
     // descriptions, so this does not change the client's end.
     let flags = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFL) };
