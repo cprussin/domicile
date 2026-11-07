@@ -255,6 +255,10 @@ The engine routes the pointer and keyboard over an `<app>` to its client, in
 the client's own coordinates through every CSS transform, so no helper is
 required.
 
+Touchpad pinch over an `<app>` is forwarded to the native client as a Wayland
+gesture. It does not zoom the surrounding shell. A shell can take the gesture
+by canceling its `wheel` events, as it can other default input handling.
+
 **Tests:** hand `FakeDomicileHost`'s `domicile` to your shell. `set` changes
 attributes and says they changed, `appear`, `change` and `close` edit the
 windows, `dispatch` fires a moment, and `calls` records every call the shell

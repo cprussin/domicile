@@ -133,7 +133,9 @@ impl Capture {
                 });
                 true
             }
-            (true, Some(_), ClientRequest::PointerLeave) => true,
+            (true, Some(_), ClientRequest::PointerLeave | ClientRequest::PointerPinch { .. }) => {
+                true
+            }
             (true, Some(_), _) => false,
         };
         taken

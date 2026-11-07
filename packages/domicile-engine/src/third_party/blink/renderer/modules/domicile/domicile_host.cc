@@ -1014,6 +1014,29 @@ void DomicileHost::AppPointerLeave(const String& app_id) {
   }
 }
 
+void DomicileHost::AppPointerPinch(const String& app_id,
+                                   const ui::NativePinch& pinch) {
+  if (!EnsureBound()) {
+    return;
+  }
+  domicile::mojom::blink::PinchPhase phase;
+  switch (pinch.phase) {
+    case ui::NativePinchPhase::kBegin:
+      phase = domicile::mojom::blink::PinchPhase::kBegin;
+      break;
+    case ui::NativePinchPhase::kUpdate:
+      phase = domicile::mojom::blink::PinchPhase::kUpdate;
+      break;
+    case ui::NativePinchPhase::kEnd:
+      phase = domicile::mojom::blink::PinchPhase::kEnd;
+      break;
+  }
+  channel_->PointerPinch(
+      app_id, domicile::mojom::blink::Pinch::New(
+                  phase, pinch.device, pinch.time, pinch.fingers, pinch.dx,
+                  pinch.dy, pinch.scale, pinch.rotation, pinch.canceled));
+}
+
 void DomicileHost::AppPointerAxis(const String& app_id,
                                   double dx,
                                   double dy,

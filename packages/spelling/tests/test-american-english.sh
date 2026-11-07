@@ -54,8 +54,10 @@ BRITISH='\b('\
 ')\b'
 
 # Other projects' APIs: Nix's `--realise` flag, GitHub's `cancelled()` and
-# Chromium's `DownloadItem::CANCELLED`. Only those exact forms are exempt.
-EXEMPT='--realise\b|\bcancelled\(\)|\bDownloadItem::CANCELLED\b'
+# Chromium's `DownloadItem::CANCELLED`, and a foreign cancellation field mapped
+# to an American local binding (Smithay and wayland-client). Only these exact
+# forms are exempt.
+EXEMPT='--realise\b|\bcancelled\(\)|\bDownloadItem::CANCELLED\b|\bcancelled:[[:space:]]+canceled\b'
 
 # Skip binaries, lockfiles, this file (it contains the list) and the vendored
 # IANA TLD list (`.theatre` is a real TLD).

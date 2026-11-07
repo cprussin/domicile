@@ -26,8 +26,42 @@ autoninja -C out/Domicile domicile_unittests ozone_unittests
   cover per-device serialization, canceled claims, queued replacements,
   release failures, delayed release echoes, native retries and stale resume
   names.
+- `WaylandPointerGesturesTest` covers cumulative pinch scale and hold canceling
+  a fling after the native axis-stop frame.
 - A filter that matches nothing exits 0, so the minimum count is what catches a
   missing suite. Add a new suite to the filter and raise the count.
+
+## Native Chrome gestures
+
+`scripts/guard-native-chrome-gestures.py` tests a native Google Chrome `--app`
+window through two private compositors and the engine. It requires an installed
+Google Chrome and a built compositor. Run it with the engine's runtime libraries:
+
+```sh
+python3 packages/domicile-engine/scripts/guard-native-chrome-gestures.py \
+  --compositor "$PWD/target/debug/domicile-compositor" \
+  --chrome /path/to/google-chrome-stable \
+  --engine /path/to/chromium/src/out/Official \
+  --require-official --out /tmp/native-chrome-gesture-receipt
+```
+
+The output directory must be new. The test creates empty profiles and private
+runtime directories, then records page scale, history changes, process exits and
+crash dumps. It checks pinch zoom, cancellation when an `<app>` is removed during
+dispatch, a new pinch after removal, horizontal history navigation and vertical
+scrolling without navigation. `--history-only` isolates the existing finger-scroll
+behavior. Omitting `--engine` tests the compositor and native client directly.
+
+The input is native Wayland pinch and finger-axis events from the outer
+compositor. CDP reads the resulting page state; it does not inject gestures.
+This test covers nested Wayland acquisition and forwarding. Physical libinput
+recognition, device pairing and reconnect require the DRM hardware checks.
+
+`PinchMetadataTest` covers scale and rotation through Aura copies and Mojo,
+cancellation, wheel coalescing and consumed ownership through target removal.
+`ControlChannelTest` covers the typed pinch
+messages, including unsigned timestamps above `INT32_MAX`. These run in
+`domicile_unittests` without requiring Google Chrome.
 
 ## Everything CI runs
 
