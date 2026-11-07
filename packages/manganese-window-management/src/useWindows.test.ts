@@ -219,6 +219,42 @@ describe("a client's window requests", () => {
     expect(workspaceOn(result.current, "left").fullscreen).toBeUndefined();
   });
 
+  it("keeps a client on its requested display after leaving fullscreen", async () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+    host.announces("recorder");
+    host.announces("witness");
+    const id = listening(host);
+
+    await asks(host, id, "recorder", { display: "right", kind: "fullscreen" });
+    expect(workspaceOn(result.current, "right").fullscreen?.id).toBe(
+      appWindowId("recorder"),
+    );
+    expect(windowsOn(workspaceOn(result.current, "left"))).toEqual([
+      appWindowId("witness"),
+    ]);
+
+    const tiling = workspaceOn(result.current, "right").tiling;
+    await asks(host, id, "recorder", { display: "right", kind: "fullscreen" });
+    expect(workspaceOn(result.current, "right").tiling).toBe(tiling);
+
+    await asks(host, id, "recorder", { kind: "unfullscreen" });
+    expect(workspaceOn(result.current, "right").fullscreen).toBeUndefined();
+    expect(windowsOn(workspaceOn(result.current, "right"))).toEqual([
+      appWindowId("recorder"),
+    ]);
+  });
+
+  it("fullscreens a client where it is when its requested display is gone", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("recorder");
+    const id = listening(host);
+
+    await asks(host, id, "recorder", { display: "right", kind: "fullscreen" });
+    expect(workspaceOn(result.current, "left").fullscreen?.id).toBe(
+      appWindowId("recorder"),
+    );
+  });
+
   it("leave a tiled window as it is when the client asks to maximize", async () => {
     const { host, result } = desktop([LEFT]);
     host.announces("gedit");
