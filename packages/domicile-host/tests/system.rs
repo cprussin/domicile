@@ -1370,28 +1370,70 @@ mod color_temperature {
     fn setting_a_temperature_hands_its_white_point_to_the_compositor() {
         let (told, asked) = channel();
         let (system, heard) = system_in(&std::env::temp_dir());
-        let system = system.setting_white_points_with(move |point| {
-            told.send(point).unwrap();
+        let system = system.setting_white_points_with(move |display, point| {
+            told.send((display, point)).unwrap();
             Ok(())
         });
 
-        system.handle(1, SystemRequest::SetColorTemperature { kelvin: 3400 });
+        system.handle(
+            1,
+            SystemRequest::SetColorTemperature {
+                kelvin: 3400,
+                display: None,
+            },
+        );
 
         assert_eq!(reply(&heard, 1), SystemReply::Set);
-        assert_eq!(asked.recv().unwrap(), white_point(3400));
+        assert_eq!(asked.recv().unwrap(), (None, white_point(3400)));
+    }
+
+    #[test]
+    fn setting_one_displays_temperature_names_it_to_the_compositor() {
+        let (told, asked) = channel();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.setting_white_points_with(move |display, point| {
+            told.send((display, point)).unwrap();
+            Ok(())
+        });
+
+        system.handle(
+            1,
+            SystemRequest::SetColorTemperature {
+                kelvin: 3400,
+                display: Some("eDP-2".into()),
+            },
+        );
+
+        assert_eq!(reply(&heard, 1), SystemReply::Set);
+        assert_eq!(
+            asked.recv().unwrap(),
+            (Some("eDP-2".into()), white_point(3400))
+        );
     }
 
     #[test]
     fn a_temperature_out_of_range_is_refused() {
-        let (told, asked) = channel::<WhitePoint>();
+        let (told, asked) = channel::<(Option<String>, WhitePoint)>();
         let (system, heard) = system_in(&std::env::temp_dir());
-        let system = system.setting_white_points_with(move |point| {
-            told.send(point).unwrap();
+        let system = system.setting_white_points_with(move |display, point| {
+            told.send((display, point)).unwrap();
             Ok(())
         });
 
-        system.handle(1, SystemRequest::SetColorTemperature { kelvin: 999 });
-        system.handle(2, SystemRequest::SetColorTemperature { kelvin: 6501 });
+        system.handle(
+            1,
+            SystemRequest::SetColorTemperature {
+                kelvin: 999,
+                display: None,
+            },
+        );
+        system.handle(
+            2,
+            SystemRequest::SetColorTemperature {
+                kelvin: 6501,
+                display: None,
+            },
+        );
 
         assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::InvalidInput);
         assert_eq!(failure(reply(&heard, 2)), SystemErrorKind::InvalidInput);
@@ -1402,7 +1444,13 @@ mod color_temperature {
     fn a_system_that_sets_no_white_point_says_so() {
         let (system, heard) = system_in(&std::env::temp_dir());
 
-        system.handle(1, SystemRequest::SetColorTemperature { kelvin: 3400 });
+        system.handle(
+            1,
+            SystemRequest::SetColorTemperature {
+                kelvin: 3400,
+                display: None,
+            },
+        );
 
         assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
     }
@@ -1424,7 +1472,10 @@ mod color_temperature {
     #[test]
     fn setting_a_temperature_tints() {
         assert_eq!(
-            reach(&SystemRequest::SetColorTemperature { kelvin: 3400 }),
+            reach(&SystemRequest::SetColorTemperature {
+                kelvin: 3400,
+                display: None,
+            }),
             Reach::Tints
         );
     }
@@ -1434,7 +1485,13 @@ mod color_temperature {
         let Some(HostMessage::SystemReply {
             id: 4,
             reply: SystemReply::Failed { error },
-        }) = refused_to_an_app(4, &SystemRequest::SetColorTemperature { kelvin: 3400 })
+        }) = refused_to_an_app(
+            4,
+            &SystemRequest::SetColorTemperature {
+                kelvin: 3400,
+                display: None,
+            },
+        )
         else {
             panic!("expected a failure");
         };

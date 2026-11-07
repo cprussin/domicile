@@ -74,6 +74,11 @@ class SnapshotBuilder {
     connector_ = std::move(connector);
     return *this;
   }
+  // How many entries the CRTC's gamma ramp has, as the GPU process sets it.
+  SnapshotBuilder& GammaSize(uint32_t size) {
+    gamma_size_ = size;
+    return *this;
+  }
 
   // The formats the device's planes scan out.
   SnapshotBuilder& PlaneFormats(const std::vector<uint32_t>& formats) {
@@ -105,6 +110,7 @@ class SnapshotBuilder {
         /*year_of_manufacture=*/0, gfx::Size(),
         display::VariableRefreshRateState::kVrrNotCapable, plane_formats_);
     snapshot->set_domicile_connector(connector_);
+    snapshot->set_domicile_gamma_size(gamma_size_);
     return snapshot;
   }
 
@@ -118,6 +124,7 @@ class SnapshotBuilder {
   int64_t product_code_ = display::DisplaySnapshot::kInvalidProductCode;
   std::vector<uint8_t> edid_;
   std::string connector_ = "DP-1";
+  uint32_t gamma_size_ = 0;
   display::DrmFormatsAndModifiers plane_formats_;
 };
 
@@ -653,6 +660,22 @@ TEST(DrmScreenTest, TheScreenKnowsEachDisplaysConnector) {
   EXPECT_EQ(screen.connectors(),
             (base::flat_map<int64_t, std::string>{{11, "eDP-1"},
                                                   {12, "HDMI-A-1"}}));
+}
+
+// The compositor offers gamma control at each display's ramp size, and none
+// where it is 0.
+TEST(DrmScreenTest, TheScreenKnowsEachDisplaysGammaSize) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).GammaSize(4096).Build());
+  snapshots.push_back(
+      SnapshotBuilder().Id(12).Origin(gfx::Point(1920, 0)).Build());
+
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
+
+  EXPECT_EQ(screen.gamma_sizes(),
+            (base::flat_map<int64_t, uint32_t>{{11, 4096}, {12, 0}}));
 }
 
 TEST(DrmScreenTest, AnUnpluggedDisplaysConnectorIsForgotten) {

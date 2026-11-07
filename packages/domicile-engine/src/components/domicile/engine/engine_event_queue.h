@@ -36,6 +36,8 @@ struct EngineDisplay {
   int32_t refresh_mhz = 0;
   // The kernel's name for its connector ("HDMI-A-1"), or empty.
   std::string connector;
+  // How many entries its gamma ramp has, or 0 for none.
+  uint32_t gamma_size = 0;
 };
 
 // One frame of a display capture.

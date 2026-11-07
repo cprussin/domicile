@@ -130,6 +130,12 @@ class DrmScreen : public PlatformScreen {
     return connectors_;
   }
 
+  // How many entries each display's gamma ramp has, by display id; 0 for one
+  // with no gamma. Current when `connectors()` is.
+  const base::flat_map<int64_t, uint32_t>& gamma_sizes() const {
+    return gamma_sizes_;
+  }
+
   // PlatformScreen:
   const std::vector<display::Display>& GetAllDisplays() const override;
   display::Display GetPrimaryDisplay() const override;
@@ -152,6 +158,7 @@ class DrmScreen : public PlatformScreen {
   const raw_ptr<DrmCursor> cursor_;
   display::DisplayList display_list_;
   base::flat_map<int64_t, std::string> connectors_;
+  base::flat_map<int64_t, uint32_t> gamma_sizes_;
 };
 
 }  // namespace ui
