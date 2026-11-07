@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 6 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: Chrome draws no dialog and no picture-in-picture
+
+Chrome draws a WebContents' modal dialogs over the outermost
+WebContents' window, which for a <webview> guest is the shell's own.
+Each dialog Domicile knows of is now the shell's; this makes any it
+does not fail closed instead of drawing a Chrome box over the desktop.
+
+- `web_contents_modal_dialog_manager`: RefuseEveryDialog. Once called
+  (domicile_chrome_dialogs.cc, from StartDesk), a dialog is closed as
+  it is shown, as a cancel, and logged at ERROR.
+- `chrome_content_browser_client.cc`: picture-in-picture video is off,
+  since Chrome floats it in a window of its own. Document
+  picture-in-picture is unaffected: a guest opens it as a shell window.
+  Payment requests are off too, as their sheet is Chrome's; Blink reads
+  this setting for them, so --disable-blink-features alone can't.
+---
+ .../browser/chrome_content_browser_client.cc  | 11 +++++++++
+ .../web_contents_modal_dialog_manager.cc      | 24 +++++++++++++++++++
+ .../web_contents_modal_dialog_manager.h       |  8 +++++++
+ 3 files changed, 43 insertions(+)
+
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index ea92efc..ea9a9c0 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -5070,6 +5070,17 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+       web_prefs->preferred_color_scheme ==
+           blink::mojom::PreferredColorScheme::kDark);
+ 
++  // Domicile's engine fork: no picture-in-picture video. Chrome floats the
++  // video in a window of its own with its own controls, which is not the
++  // shell's, so a page sees picture-in-picture as off: its video controls
++  // have no picture-in-picture button and requestPictureInPicture() is
++  // refused. Document picture-in-picture is not this setting's; it opens a
++  // window of the page's own, which a <webview> shows as a shell window.
++  web_prefs->picture_in_picture_enabled = false;
++  // Nor payment requests: the payment sheet is Chrome's too, and this
++  // setting, not --disable-blink-features, is what Blink reads for it.
++  web_prefs->payment_request_enabled = false;
++
+   web_prefs->root_scrollbar_theme_color =
+       GetRootScrollbarThemeColor(web_contents);
+ 
+diff --git a/components/web_modal/web_contents_modal_dialog_manager.cc b/components/web_modal/web_contents_modal_dialog_manager.cc
+index 94340c8..f39bf12 100644
+--- a/components/web_modal/web_contents_modal_dialog_manager.cc
++++ b/components/web_modal/web_contents_modal_dialog_manager.cc
+@@ -8,6 +8,7 @@
+ #include <utility>
+ 
+ #include "base/check.h"
++#include "base/logging.h"
+ #include "components/back_forward_cache/back_forward_cache_disable.h"
+ #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
+ #include "content/public/browser/back_forward_cache.h"
+@@ -20,6 +21,18 @@ using content::WebContents;
+ 
+ namespace web_modal {
+ 
++namespace {
++
++// Domicile's engine fork. See RefuseEveryDialog.
++bool g_refuse_every_dialog = false;
++
++}  // namespace
++
++// static
++void WebContentsModalDialogManager::RefuseEveryDialog() {
++  g_refuse_every_dialog = true;
++}
++
+ WebContentsModalDialogManager::~WebContentsModalDialogManager() {
+   DCHECK(child_dialogs_.empty());
+ }
+@@ -48,6 +61,17 @@ void WebContentsModalDialogManager::SetDelegate(
+ void WebContentsModalDialogManager::ShowDialogWithManager(
+     gfx::NativeWindow dialog,
+     std::unique_ptr<SingleWebContentsDialogManager> manager) {
++  // Domicile's engine fork. Kept as a dialog until it is closed, so WillClose
++  // finds it, but never shown and never blocking the page.
++  if (g_refuse_every_dialog) {
++    LOG(ERROR) << "domicile: refused a Chrome dialog for "
++               << web_contents()->GetLastCommittedURL().possibly_invalid_spec()
++               << "; the shell has no answer for it, so it is canceled. This "
++                  "is a gap in what the shell draws.";
++    child_dialogs_.emplace_back(dialog, std::move(manager));
++    child_dialogs_.back().manager->Close();
++    return;
++  }
+   observer_list_.Notify(&Observer::OnWillShow);
+   if (delegate_) {
+     manager->HostChanged(
+diff --git a/components/web_modal/web_contents_modal_dialog_manager.h b/components/web_modal/web_contents_modal_dialog_manager.h
+index 19fe193..d58dd8b 100644
+--- a/components/web_modal/web_contents_modal_dialog_manager.h
++++ b/components/web_modal/web_contents_modal_dialog_manager.h
+@@ -57,6 +57,14 @@ class WEB_MODAL_EXPORT WebContentsModalDialogManager
+   WebContentsModalDialogManagerDelegate* delegate() const { return delegate_; }
+   void SetDelegate(WebContentsModalDialogManagerDelegate* d);
+ 
++  // Domicile's engine fork. From now on, every dialog is closed as it is
++  // shown, and logged, in place of being drawn. Chrome draws a WebContents'
++  // modal dialogs over the outermost WebContents' window, which for a
++  // <webview> guest is the shell's own, so any left is a Chrome box over the
++  // desktop. Each one Domicile knows of is the shell's instead; this makes
++  // one it does not fail closed, as a cancel, and shows in the log.
++  static void RefuseEveryDialog();
++
+   // Allow clients to supply their own native dialog manager. Suitable for
+   // bubble clients.
+   void ShowDialogWithManager(
+-- 
+2.43.0
+

@@ -85,6 +85,7 @@ TOGETHER=(
   guard-webview-page-failure
   guard-webview-resend-form
   guard-webview-page-picker
+  guard-webview-chrome-sheets
   guard-webview-print
   guard-webview-context-menu
   guard-webview-upload

@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
+#include "chrome/browser/domicile/domicile_chrome_dialogs.h"
 #include "chrome/browser/domicile/domicile_desk_functions.h"
 #include "chrome/browser/domicile/domicile_device_chooser.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
@@ -114,6 +115,9 @@ void StartDesk(Profile* profile) {
     // File access, certificates, Bluetooth pairing and extension prompts,
     // asked by the shell.
     UseTheShellForPrompts();
+    // Any Chrome dialog left fails closed, and Chrome's payment and account
+    // sheets and picture-in-picture window are off.
+    RefuseChromeDialogs();
     return true;
   }();
   CHECK(installed);

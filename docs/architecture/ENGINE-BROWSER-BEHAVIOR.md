@@ -199,6 +199,28 @@ Patch `0110`:
 - A crashed page was already reported (`renderProcessGone`); the shell now
   draws it too.
 
+## Chrome's dialogs, sheets and floating windows
+
+No Chrome dialog is drawn. Chrome draws a page's dialogs over the outermost
+window, which for a `<webview>` is the shell's, so every one Domicile knows of
+asks the shell instead (the sections above). `RefuseChromeDialogs`
+(`domicile_chrome_dialogs.cc`, from `StartDesk`) covers the rest:
+
+- Patch `0183`: any Chrome dialog left is closed as it is shown, as a cancel,
+  and logged at ERROR (`domicile: refused a Chrome dialog for ...`). A gap
+  fails closed and shows in the log.
+- Payment Request and FedCM ("Sign in with Google"'s account chooser) are off
+  (FedCM by `--disable-blink-features=FedCm`, added for every renderer;
+  Payment Request by `payment_request_enabled` in patch `0183`'s
+  `OverrideWebPreferences`, which Blink reads over that switch).
+  Each asks with a Chrome sheet. A site falls back to its own checkout form or
+  sign-in page, as it does without passwords and passkeys.
+- Patch `0183`: picture-in-picture video is off
+  (`picture_in_picture_enabled`), since Chrome floats it in a window of its
+  own. A video has no picture-in-picture button and
+  `requestPictureInPicture()` is refused. Document picture-in-picture stays:
+  its window is the page's own, and a `<webview>` opens it as a shell window.
+
 ## Host shortcuts when nested
 
 Under a host compositor, the engine inhibits the host's shortcuts so the shell
@@ -254,5 +276,7 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-page-failure.sh`: error pages.
 - `guard-webview-resend-form.sh`: sending a form again.
 - `guard-webview-page-picker.sh`: pickers.
+- `guard-webview-chrome-sheets.sh`: Payment Request, FedCM and
+  picture-in-picture are off.
 - `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.
