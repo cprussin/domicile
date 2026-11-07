@@ -295,7 +295,7 @@ std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
   displays.push_back(mojom::Display::New(id, gfx::Rect(size),
                                          gfx::Size(597, 336),
                                          "DEL DELL U3219Q 2ZLS413", 59997,
-                                         "eDP-1"));
+                                         "eDP-1", 4096));
   return displays;
 }
 
@@ -432,7 +432,7 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::SoftwareInterface,
                             base::Unretained(this)),
         FrameSinkBroker::VirtualDisplaysSetter(),
-        base::BindRepeating(&FrameSinkBrokerTest::RecordWhitePoint,
+        base::BindRepeating(&FrameSinkBrokerTest::RecordGamma,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordInput,
                             base::Unretained(this)),
@@ -496,8 +496,8 @@ class FrameSinkBrokerTest : public testing::Test {
     inputs_.push_back(input.Clone());
   }
 
-  void RecordWhitePoint(float red, float green, float blue) {
-    white_points_.push_back({red, green, blue});
+  void RecordGamma(int64_t display_id, const mojom::GammaRamp& ramp) {
+    gamma_.emplace_back(display_id, ramp.Clone());
   }
 
   // Fake for the ozone platform that owns the clipboard.
@@ -526,7 +526,7 @@ class FrameSinkBrokerTest : public testing::Test {
   std::vector<std::vector<mojom::PointerTargetPtr>> pointers_;
 
   // Every white point the producer sent, in order.
-  std::vector<std::vector<float>> white_points_;
+  std::vector<std::pair<int64_t, mojom::GammaRampPtr>> gamma_;
   std::vector<mojom::DeskInputPtr> inputs_;
   std::vector<std::string> input_configs_;
 
@@ -1150,6 +1150,7 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
   EXPECT_EQ(observer.lists_[0][0]->name, "DEL DELL U3219Q 2ZLS413");
   EXPECT_EQ(observer.lists_[0][0]->refresh_mhz, 59997);
   EXPECT_EQ(observer.lists_[0][0]->connector, "eDP-1");
+  EXPECT_EQ(observer.lists_[0][0]->gamma_size, 4096u);
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
@@ -1244,17 +1245,35 @@ TEST_F(FrameSinkBrokerTest,
   EXPECT_EQ(input_configs_, (std::vector<std::string>{config, "{}"}));
 }
 
-TEST_F(FrameSinkBrokerTest, AProducerSetsTheWhitePoint) {
-  // A night light: only the producer's shell knows the time of day, and only
-  // the browser holds the CRTCs.
+TEST_F(FrameSinkBrokerTest, AProducerSetsADisplaysGamma) {
+  // A night light or a gamma-control client: only the producer knows what
+  // each display should draw with, and only the browser holds the CRTCs.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
-  remote->SetWhitePoint(1.f, 0.75f, 0.5f);
+  remote->SetGamma(7, mojom::GammaRamp::New(std::vector<uint16_t>{0, 65535},
+                                            std::vector<uint16_t>{0, 32768},
+                                            std::vector<uint16_t>{0, 16384}));
   RunUntilIdle();
 
-  ASSERT_EQ(white_points_.size(), 1u);
-  EXPECT_EQ(white_points_[0], (std::vector<float>{1.f, 0.75f, 0.5f}));
+  ASSERT_EQ(gamma_.size(), 1u);
+  EXPECT_EQ(gamma_[0].first, 7);
+  EXPECT_EQ(gamma_[0].second->green, (std::vector<uint16_t>{0, 32768}));
+}
+
+TEST_F(FrameSinkBrokerTest, ARampWhoseChannelsDifferIsABadMessage) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  mojo::test::BadMessageObserver bad_message;
+  remote->SetGamma(7, mojom::GammaRamp::New(std::vector<uint16_t>{0, 65535},
+                                            std::vector<uint16_t>{0},
+                                            std::vector<uint16_t>{0, 16384}));
+
+  // A substring, as above.
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("channels differ in length"));
+  EXPECT_TRUE(gamma_.empty());
 }
 
 TEST_F(FrameSinkBrokerTest, AProducersEmulatedInputReachesTheDesk) {

@@ -3,7 +3,6 @@
 //!
 //! [`crate::engine`] is the ABI; this module uses it.
 
-use domicile_host::white_point::WhitePoint;
 use std::collections::HashMap;
 use std::os::fd::{AsFd as _, OwnedFd};
 use std::path::Path;
@@ -370,11 +369,11 @@ impl EngineSession {
         self.engine.configure_pointers(pointers);
     }
 
-    /// Sets the white point every monitor draws with.
+    /// Sets the gamma ramp one monitor draws with.
     ///
-    /// See [`crate::engine::Engine::set_white_point`].
-    pub fn set_white_point(&self, white_point: WhitePoint) {
-        self.engine.set_white_point(white_point);
+    /// See [`crate::engine::Engine::set_gamma`].
+    pub fn set_gamma(&self, display: i64, ramp: &[u16]) {
+        self.engine.set_gamma(display, ramp);
     }
 
     /// Hands one emulated event to the shell's window.
@@ -664,6 +663,7 @@ impl EngineSession {
                 } => self.import_finished(*request, *buffer, now, &mut dispatched),
                 Event::Copied { .. }
                 | Event::Displays(_)
+                | Event::GammaSizes(_)
                 | Event::Captured { .. }
                 | Event::CaptureEnded { .. }
                 | Event::FrameDone { .. }

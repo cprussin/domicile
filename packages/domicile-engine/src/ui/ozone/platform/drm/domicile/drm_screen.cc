@@ -251,8 +251,10 @@ void DrmScreen::OnDisplaysChanged(
 
   // Before the list changes, so its observers read the new connectors.
   connectors_.clear();
+  gamma_sizes_.clear();
   for (const display::DisplaySnapshot* snapshot : snapshots) {
     connectors_[snapshot->display_id()] = snapshot->domicile_connector();
+    gamma_sizes_[snapshot->display_id()] = snapshot->domicile_gamma_size();
   }
 
   // Not always the first snapshot: a profile may turn the laptop panel off.

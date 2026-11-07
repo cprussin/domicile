@@ -52,7 +52,7 @@ FrameSinkBroker::FrameSinkBroker(
     PointerTargetsSetter set_pointer_targets,
     SharedImageInterfaceGetter get_software_shared_image_interface,
     VirtualDisplaysSetter set_virtual_displays,
-    WhitePointSetter set_white_point,
+    GammaSetter set_gamma,
     InputInjector inject_input,
     InputConfigSetter set_input_config)
     : host_frame_sink_manager_(host_frame_sink_manager),
@@ -67,7 +67,7 @@ FrameSinkBroker::FrameSinkBroker(
           std::move(get_browser_window_capture_target)),
       set_pointer_targets_(std::move(set_pointer_targets)),
       set_virtual_displays_(std::move(set_virtual_displays)),
-      set_white_point_(std::move(set_white_point)),
+      set_gamma_(std::move(set_gamma)),
       inject_input_(std::move(inject_input)),
       set_input_config_(std::move(set_input_config)) {
   CHECK(host_frame_sink_manager);
@@ -280,12 +280,17 @@ void FrameSinkBroker::ConfigureVirtualDisplays(
   set_virtual_displays_.Run(std::move(displays));
 }
 
-void FrameSinkBroker::SetWhitePoint(float red, float green, float blue) {
-  if (!set_white_point_) {
+void FrameSinkBroker::SetGamma(int64_t display_id, mojom::GammaRampPtr ramp) {
+  if (ramp->red.size() != ramp->green.size() ||
+      ramp->red.size() != ramp->blue.size()) {
+    receivers_.ReportBadMessage("A gamma ramp's channels differ in length");
+    return;
+  }
+  if (!set_gamma_) {
     // No CRTC outside a tty, as for ConfigureDisplays.
     return;
   }
-  set_white_point_.Run(red, green, blue);
+  set_gamma_.Run(display_id, *ramp);
 }
 
 void FrameSinkBroker::InjectInput(mojom::DeskInputPtr input) {

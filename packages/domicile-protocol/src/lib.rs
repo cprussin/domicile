@@ -1954,12 +1954,19 @@ pub enum SystemRequest {
     /// Answered with [`SystemReply::Set`], or [`SystemErrorKind::NotFound`]
     /// for a name the config does not have. Lasts until the desktop restarts.
     SelectKeymap { keymap: KeymapChoice },
-    /// Draw every monitor as if its white were a light of `kelvin`, as a
-    /// night light does; `6500` draws colors as they are. Answered with
-    /// [`SystemReply::Set`], or [`SystemErrorKind::InvalidInput`] outside
-    /// 1000 to 6500. Changes nothing on a nested desktop. See
-    /// `docs/SHELL-SYSTEM-ACCESS.md`.
-    SetColorTemperature { kelvin: u32 },
+    /// Draw `display`, a [`DisplayInfo::name`], or every monitor when
+    /// `None`, as if its white were a light of `kelvin`, as a night light
+    /// does; `6500` draws colors as they are. Every monitor's replaces each
+    /// one's. Answered with [`SystemReply::Set`],
+    /// [`SystemErrorKind::InvalidInput`] outside 1000 to 6500, or
+    /// [`SystemErrorKind::NotFound`] for a display the desktop does not have.
+    /// Changes nothing on a nested desktop, nor on a monitor a gamma-control
+    /// client holds. See `docs/DISPLAYS.md#night-light-and-gamma-control`.
+    SetColorTemperature {
+        kelvin: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        display: Option<String>,
+    },
 }
 
 /// Which keymap [`SystemRequest::SelectKeymap`] switches to.
