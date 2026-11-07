@@ -238,6 +238,11 @@ impl Host {
         self.displays = displays;
     }
 
+    /// The display named `name`, if the desktop has it.
+    pub fn display(&self, name: &str) -> Option<&DisplayInfo> {
+        self.displays.iter().find(|display| display.name == name)
+    }
+
     /// The displays message, sent on handshake and broadcast on change.
     pub fn describe_desktop(&self) -> HostMessage {
         HostMessage::Displays {
