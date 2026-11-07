@@ -84,6 +84,7 @@ TOGETHER=(
   guard-webview-file-access
   guard-webview-page-failure
   guard-webview-resend-form
+  guard-webview-page-picker
   guard-webview-print
   guard-webview-context-menu
   guard-webview-upload

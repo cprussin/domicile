@@ -582,6 +582,49 @@ export const WEBVIEW_PROMPT_KINDS = [
 /** One of {@link WEBVIEW_PROMPT_KINDS}. */
 export type WebViewPromptKind = (typeof WEBVIEW_PROMPT_KINDS)[number];
 
+/**
+ * Fired when a form control in the page opens a picker the browser would
+ * otherwise draw itself: a color input, a date or time input, or a text
+ * input's `<datalist>`. See {@link WEBVIEW_PICKER_KINDS}. The control waits
+ * until it is answered. Bubbles.
+ *
+ * The browser draws no picker. Call `preventDefault()` to handle it, then
+ * answer with {@link DomicilePickerEvent.choose} or
+ * {@link DomicilePickerEvent.cancel}. If no listener calls `preventDefault()`,
+ * the control keeps its value.
+ */
+export const WEBVIEW_PICKER_EVENT = "domicile-picker";
+
+/**
+ * Fired when the page closes the unanswered {@link WEBVIEW_PICKER_EVENT}, for
+ * example because the control went away, or a newer one replaces it.
+ * Answering it afterward throws. Carries no payload. Bubbles.
+ */
+export const WEBVIEW_PICKER_WITHDRAWN_EVENT = "domicile-picker-withdrawn";
+
+/**
+ * What a {@link WEBVIEW_PICKER_EVENT} picks, as {@link DomicilePickerEvent.kind},
+ * and the format of its value:
+ *
+ * - `color`: `"#rrggbb"`.
+ * - `date`, `time`, `datetime-local`, `month`, `week`: the input's HTML
+ *   format, such as `"2026-11-06"`, `"13:45"`, `"2026-11-06T13:45"`,
+ *   `"2026-11"` and `"2026-W45"`.
+ * - `list`: one of `options`, for a text input's `<datalist>`.
+ */
+export const WEBVIEW_PICKER_KINDS = [
+  "color",
+  "date",
+  "time",
+  "datetime-local",
+  "month",
+  "week",
+  "list",
+] as const;
+
+/** One of {@link WEBVIEW_PICKER_KINDS}. */
+export type WebViewPickerKind = (typeof WEBVIEW_PICKER_KINDS)[number];
+
 /** The dialogs a page can open, as {@link DomicileDialogEvent.dialogType}. */
 export const WEBVIEW_DIALOG_TYPES = [
   "alert",
@@ -1101,6 +1144,37 @@ declare global {
   }
 
   /**
+   * The {@link WEBVIEW_PICKER_EVENT} event. The engine defines it in
+   * `domicile_picker_event.idl`.
+   */
+  interface DomicilePickerEvent extends Event {
+    /** What to pick: one of {@link WEBVIEW_PICKER_KINDS}. */
+    readonly kind: WebViewPickerKind;
+    /** The control's value now, or the typed text for `list`. */
+    readonly value: string;
+    /** The control's `min`, `max` and `step` as written, or `""`. */
+    readonly min: string;
+    readonly max: string;
+    readonly step: string;
+    /** Suggestions: a `<datalist>`'s values, or a color input's colors. */
+    readonly options: readonly string[];
+    /** Each option's label at the same index, or `""` for none. */
+    readonly labels: readonly string[];
+    /** The control's box in the element's CSS pixels. */
+    readonly anchorX: number;
+    readonly anchorY: number;
+    readonly anchorWidth: number;
+    readonly anchorHeight: number;
+    /**
+     * Pick `value`, in the kind's format. Answering twice, or after
+     * {@link WEBVIEW_PICKER_WITHDRAWN_EVENT}, throws an `InvalidStateError`.
+     */
+    choose(value: string): void;
+    /** Keep the old value. */
+    cancel(): void;
+  }
+
+  /**
    * The {@link WEBVIEW_WILL_NAVIGATE_EVENT} event. The engine defines it in
    * `domicile_will_navigate_event.idl`.
    */
@@ -1123,6 +1197,7 @@ declare global {
     "domicile-device-request": DomicileDeviceRequestEvent;
     "domicile-dialog": DomicileDialogEvent;
     "domicile-external-app": DomicileExternalAppEvent;
+    "domicile-picker": DomicilePickerEvent;
     "domicile-prompt": DomicilePromptEvent;
     "domicile-sign-in": DomicileSignInEvent;
     "domicile-will-navigate": DomicileWillNavigateEvent;

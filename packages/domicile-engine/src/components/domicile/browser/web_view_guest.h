@@ -45,6 +45,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -222,7 +223,8 @@ class WebViewGuest : public mojom::WebViewGuest,
                      public content::JavaScriptDialogManager,
                      public content::WebContentsObserver,
                      public content_settings::Observer,
-                     public content::DownloadManager::Observer {
+                     public content::DownloadManager::Observer,
+                     public mojom::PagePicker {
  public:
   // Creates a guest for `placeholder`, a child frame of `owner`, and starts
   // attaching it. The attach replaces and destroys `placeholder`; a refused
@@ -447,6 +449,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // answered or a newer prompt replaced it.
   void WithdrawPrompt(int id);
 
+  // Binds a picker for `frame`, a frame of this guest's page. See
+  // mojom::PagePicker and PopulateChromeFrameBinders.
+  void BindPagePicker(content::RenderFrameHost& frame,
+                      mojo::PendingReceiver<mojom::PagePicker> receiver);
+
   base::WeakPtr<WebViewGuest> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
@@ -536,6 +543,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // ExitFullscreenModeForTab.
   void ExitPageFullscreen() override;
   void ProceedPastWarning() override;
+
+  // mojom::PagePicker: asks the shell with PickerRequested, with the anchor
+  // moved into the element's coordinates.
+  void Pick(mojom::WebViewPickerPtr picker, PickCallback callback) override;
 
   // Stores the setting through the profile's HostContentSettingsMap, as
   // Chrome's page info does. The change reaches the shell through
@@ -922,6 +933,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Sends the tooltip, empty while the pointer is outside the page, if it
   // changed.
   void ReportTooltip();
+  // Withdraws the shell's picker when its page closes the pipe that asked.
+  void PagePickerClosed();
 
   // Reads the description of `frame`, the guest's main frame, in an isolated
   // world, so the page's own scripts cannot see or change the read.
@@ -1103,6 +1116,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The same for AskPrompt.
   int last_prompt_ = 0;
   int open_prompt_ = 0;
+  // The page's pickers, each with the frame that asked, and the one the
+  // shell is asked now, or none. See Pick.
+  mojo::ReceiverSet<mojom::PagePicker, content::GlobalRenderFrameHostId>
+      page_pickers_;
+  std::optional<mojo::ReceiverId> open_picker_;
   // Whether AskToClose is waiting on the page's beforeunload.
   bool asked_to_close_ = false;
 

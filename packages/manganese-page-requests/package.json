@@ -31,6 +31,7 @@
     "./ExternalAppAsk": "./src/ExternalAppAsk.tsx",
     "./PageDialog": "./src/PageDialog.tsx",
     "./PermissionAsk": "./src/PermissionAsk.tsx",
+    "./PickerAsk": "./src/PickerAsk.tsx",
     "./PromptAsk": "./src/PromptAsk.tsx",
     "./permission-names": "./src/permission-names.tsx",
     "./SignInAsk": "./src/SignInAsk.tsx",
@@ -40,6 +41,7 @@
     "./useExternalAppRequest": "./src/useExternalAppRequest.ts",
     "./useLinkOpener": "./src/useLinkOpener.ts",
     "./usePermissionRequest": "./src/usePermissionRequest.ts",
+    "./usePickerRequest": "./src/usePickerRequest.ts",
     "./usePromptRequest": "./src/usePromptRequest.ts",
     "./useSignInRequest": "./src/useSignInRequest.ts"
   },

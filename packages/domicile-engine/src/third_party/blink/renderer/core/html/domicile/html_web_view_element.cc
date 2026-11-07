@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/html/domicile/domicile_external_app_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_picker_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_prompt_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_sign_in_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_will_navigate_event.h"
@@ -141,6 +142,8 @@ constexpr char kSignInWithdrawnEvent[] = "domicile-sign-in-withdrawn";
 // A question Chrome would ask with its own dialog, which the shell answers on
 // the event, and its withdrawal. See domicile_prompt_event.h.
 constexpr char kPromptEvent[] = "domicile-prompt";
+constexpr char kPickerEvent[] = "domicile-picker";
+constexpr char kPickerWithdrawnEvent[] = "domicile-picker-withdrawn";
 constexpr char kPromptWithdrawnEvent[] = "domicile-prompt-withdrawn";
 
 // The values of a site permission's setting. Strings, as for `security`.
@@ -309,6 +312,7 @@ void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(external_app_);
   visitor->Trace(sign_in_);
   visitor->Trace(prompt_);
+  visitor->Trace(picker_);
   visitor->Trace(pointer_listener_);
   HTMLFrameElementBase::Trace(visitor);
 }
@@ -1158,6 +1162,35 @@ void HTMLWebViewElement::PromptWithdrawn() {
 void HTMLWebViewElement::PromptAnswered(DomicilePromptEvent& event) {
   if (prompt_ == &event) {
     prompt_ = nullptr;
+  }
+}
+
+void HTMLWebViewElement::PickerRequested(
+    domicile::mojom::blink::WebViewPickerPtr picker,
+    PickerRequestedCallback callback) {
+  if (picker_) {
+    picker_->CancelIfUnanswered();
+    DispatchEvent(*Event::CreateBubble(AtomicString(kPickerWithdrawnEvent)));
+  }
+  auto* event = MakeGarbageCollected<DomicilePickerEvent>(
+      AtomicString(kPickerEvent), *picker, std::move(callback), *this);
+  picker_ = event;
+  DispatchEvent(*event);
+  if (!event->defaultPrevented()) {
+    event->CancelIfUnanswered();
+  }
+}
+
+void HTMLWebViewElement::PickerWithdrawn() {
+  if (picker_) {
+    picker_->CancelIfUnanswered();
+    DispatchEvent(*Event::CreateBubble(AtomicString(kPickerWithdrawnEvent)));
+  }
+}
+
+void HTMLWebViewElement::PickerAnswered(DomicilePickerEvent& event) {
+  if (picker_ == &event) {
+    picker_ = nullptr;
   }
 }
 

@@ -27,6 +27,7 @@ class DomicileContextMenuEvent;
 class DomicileDeviceRequestEvent;
 class DomicileDialogEvent;
 class DomicileExternalAppEvent;
+class DomicilePickerEvent;
 class DomicilePromptEvent;
 class DomicileSignInEvent;
 class DomicileFileChooserEvent;
@@ -217,6 +218,8 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // Releases the prompt once answered. See `prompt_`.
   void PromptAnswered(DomicilePromptEvent&);
+  // Releases the picker once answered. See `picker_`.
+  void PickerAnswered(DomicilePickerEvent&);
 
   void Trace(Visitor*) const override;
 
@@ -419,6 +422,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // Dismisses the held prompt and dispatches `domicile-prompt-withdrawn`, so
   // the shell stops showing it.
   void PromptWithdrawn() override;
+  void PickerRequested(domicile::mojom::blink::WebViewPickerPtr picker,
+                       PickerRequestedCallback callback) override;
+  void PickerWithdrawn() override;
 
   // Dispatches `domicile-will-navigate`; `preventDefault()` cancels. See
   // domicile_will_navigate_event.h.
@@ -527,6 +533,8 @@ class CORE_EXPORT HTMLWebViewElement final
   // The prompt the shell has not answered, if any. A newer one replaces it.
   // Held for `waiting_choosers_`' reason.
   Member<DomicilePromptEvent> prompt_;
+  // The open picker, held as `prompt_` is.
+  Member<DomicilePickerEvent> picker_;
 
   // See sitePermissions().
   Vector<std::pair<String, String>> site_permissions_;

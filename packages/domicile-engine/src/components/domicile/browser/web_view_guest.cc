@@ -61,6 +61,7 @@
 #include "content/public/browser/page.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -1190,6 +1191,56 @@ void WebViewGuest::WithdrawPrompt(int id) {
   }
   open_prompt_ = 0;
   client_->PromptWithdrawn();
+}
+
+void WebViewGuest::BindPagePicker(
+    content::RenderFrameHost& frame,
+    mojo::PendingReceiver<mojom::PagePicker> receiver) {
+  page_pickers_.Add(this, std::move(receiver), frame.GetGlobalId());
+  page_pickers_.set_disconnect_handler(base::BindRepeating(
+      &WebViewGuest::PagePickerClosed, base::Unretained(this)));
+}
+
+void WebViewGuest::Pick(mojom::WebViewPickerPtr picker,
+                        PickCallback callback) {
+  // The anchor arrives in the frame's local root's DIPs. A frame in another
+  // process has a view of its own; the page's root is the element's box.
+  content::RenderFrameHost* frame =
+      content::RenderFrameHost::FromID(page_pickers_.current_context());
+  if (frame && frame->GetView()) {
+    const gfx::PointF origin = frame->GetView()->TransformPointToRootCoordSpaceF(
+        gfx::PointF(picker->anchor.origin()));
+    picker->anchor.set_origin(gfx::ToFlooredPoint(origin));
+  }
+  open_picker_ = page_pickers_.current_receiver();
+  // Logged before asking; the picker guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s page needs a " << picker->kind
+            << " picker; asking the shell.";
+  // Wrapped, as in AskPrompt: unanswered is no.
+  client_->PickerRequested(
+      std::move(picker),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(
+              [](base::WeakPtr<WebViewGuest> guest, mojo::ReceiverId id,
+                 PickCallback callback, bool picked,
+                 const std::string& value) {
+                if (guest && guest->open_picker_ == id) {
+                  guest->open_picker_.reset();
+                }
+                // Logged for the picker guard. Never the value.
+                LOG(INFO) << "domicile: a <webview>'s picker was answered: "
+                          << (picked ? "picked." : "kept.");
+                std::move(callback).Run(picked, value);
+              },
+              weak_factory_.GetWeakPtr(), *open_picker_, std::move(callback)),
+          false, std::string()));
+}
+
+void WebViewGuest::PagePickerClosed() {
+  if (open_picker_ == page_pickers_.current_receiver()) {
+    open_picker_.reset();
+    client_->PickerWithdrawn();
+  }
 }
 
 void WebViewGuest::Navigate(const GURL& url) {
