@@ -53,6 +53,29 @@ describe("TopBar", () => {
     );
   });
 
+  it("lets only the items beside the open middle spill into it as they resize", () => {
+    // The left column's last item and the right column's first have nothing
+    // beside them, so motion inside them, like the workspace switcher's
+    // slide, is not cut off while they ease.
+    const { container } = render(
+      <TopBar
+        layout={{
+          ...EMPTY,
+          left: [<span key="a">a</span>, <span key="b">b</span>],
+          right: [<span key="c">c</span>, <span key="d">d</span>],
+        }}
+      />,
+    );
+
+    const [left, , right] = container.querySelector("header")?.children ?? [];
+    const spills = (slot: Element | undefined) =>
+      slot?.className.includes(css({ overflowX: "visible" }));
+    expect(spills(left?.children[0])).toBe(false);
+    expect(spills(left?.children[1])).toBe(true);
+    expect(spills(right?.children[0])).toBe(true);
+    expect(spills(right?.children[1])).toBe(false);
+  });
+
   it("eases an item out when it stops showing anything", async () => {
     const Sharing = ({ shown }: { shown: boolean }) =>
       shown ? <button type="button">Sharing screen</button> : null;

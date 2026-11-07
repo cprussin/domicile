@@ -34,7 +34,9 @@ package's default export path:
 Every item, yours included, eases its width and fades as it shows, hides or
 changes size, so its neighbors slide aside. An item hides by rendering
 nothing. The bar wraps each item in a `FluidItem`
-(`@domicile-desktop/component-library/FluidItem`) to do this.
+(`@domicile-desktop/component-library/FluidItem`) to do this. An item is
+clipped to its width while it eases, except the last on the left and the first
+on the right, which can spill into the bar's empty middle.
 
 Items no default bar has:
 

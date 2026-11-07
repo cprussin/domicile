@@ -4,16 +4,16 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { css, cva, cx } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
 
-/** A chip's distance from the row's start and from its end, in px. */
-export type Edges = { end: number; start: number };
+/** A chip's distance from the row's start and its width, in px. */
+export type Place = { start: number; width: number };
 
 /**
- * Calls `onEdges` with `chip`'s edges in its row now and whenever the row's
+ * Calls `onPlace` with `chip`'s place in its row now and whenever the row's
  * layout changes, until the returned function stops it.
  */
 export type MeasureChip = (
   chip: HTMLElement,
-  onEdges: (edges: Edges) => void,
+  onPlace: (place: Place) => void,
 ) => () => void;
 
 type Props = {
@@ -47,19 +47,19 @@ type Props = {
 export const Workspaces = ({
   current,
   focused,
-  measureChip = offsetEdges,
+  measureChip = offsetPlace,
   onSelect,
   workspaces,
 }: Props) => {
   const chips = useRef(new Map<string, HTMLButtonElement>());
-  const [edges, setEdges] = useState<Edges>();
+  const [place, setPlace] = useState<Place>();
 
   useLayoutEffect(() => {
     const chip = chips.current.get(current);
     if (chip === undefined) {
       throw new Error(`manganese: workspace ${current} is not in the bar`);
     }
-    return measureChip(chip, setEdges);
+    return measureChip(chip, setPlace);
   }, [current, measureChip]);
 
   return (
@@ -90,7 +90,7 @@ export const Workspaces = ({
           <span className={labelStyles}>{name}</span>
         </button>
       ))}
-      {edges !== undefined && (
+      {place !== undefined && (
         <div
           aria-hidden="true"
           className={highlightStyles}
@@ -98,8 +98,8 @@ export const Workspaces = ({
           data-testid="highlight"
           style={
             {
-              "--highlight-end": `${edges.end}px`,
-              "--highlight-start": `${edges.start}px`,
+              "--highlight-start": `${place.start}px`,
+              "--highlight-width": `${place.width}px`,
             } as CSSProperties
           }
         >
@@ -115,15 +115,15 @@ export const Workspaces = ({
 };
 
 /** `MeasureChip` from offsets, again whenever the row resizes. */
-const offsetEdges: MeasureChip = (chip, onEdges) => {
+const offsetPlace: MeasureChip = (chip, onPlace) => {
   const row = chip.parentElement;
   if (row === null) {
     throw new Error("manganese: workspace chip has no row");
   }
   const measure = () => {
-    onEdges({
-      end: row.clientWidth - chip.offsetLeft - chip.offsetWidth,
+    onPlace({
       start: chip.offsetLeft,
+      width: chip.offsetWidth,
     });
   };
   const observer = new ResizeObserver(measure);
@@ -211,8 +211,10 @@ const highlightStyles = css({
   "&[data-shown=false]": { opacity: 0 },
   alignItems: "center",
   backgroundColor: "onPhoto",
+  // From the start edge only, so the chip slides smoothly while a workspace
+  // comes or goes at the row's end and the row's width jumps.
   clipPath:
-    "inset(0 calc(var(--highlight-end) + {spacing.10}) 0 calc(var(--highlight-start) + {spacing.10}) round {radii.lg})",
+    "xywh(calc(var(--highlight-start) + {spacing.10}) 0 var(--highlight-width) 100% round {radii.lg})",
   color: "black",
   display: "flex",
   fontWeight: "semibold",

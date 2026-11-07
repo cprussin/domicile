@@ -30,10 +30,19 @@ type Props = {
   gap?: Gap | undefined;
   /** Injectable for tests; defaults to a `ResizeObserver`. */
   observeWidth?: ObserveWidth | undefined;
+  /**
+   * Whether its content shows past the eased width: `visible` for an item
+   * with open space beside it, whose own motion would otherwise be cut off
+   * while it resizes.
+   */
+  overflow?: Overflow | undefined;
 };
 
 /** The edges a `FluidItem` can keep still. */
 export type Anchor = "start" | "end";
+
+/** What a `FluidItem` does with content past its eased width. */
+export type Overflow = "clip" | "visible";
 
 /** The gaps a row of `FluidItem`s can have. */
 export type Gap = "none" | "narrow" | "wide";
@@ -52,6 +61,7 @@ export const FluidItem = ({
   children,
   gap = "none",
   observeWidth = resizeObserverWidth,
+  overflow = "clip",
 }: Props) => {
   const slot = useRef<HTMLSpanElement>(null);
   const content = useRef<HTMLSpanElement>(null);
@@ -108,7 +118,7 @@ export const FluidItem = ({
 
   return (
     <span
-      className={slotStyles({ anchor })}
+      className={slotStyles({ anchor, overflow })}
       onTransitionEnd={(event) => {
         // It has faded out, so what left can go.
         if (
@@ -141,7 +151,6 @@ const slotStyles = cva({
     flexShrink: 0,
     inlineSize: "var(--fluid-width, auto)",
     opacity: 1,
-    overflowX: "clip",
     transition:
       "inline-size {durations.normal} {easings.in-out}, opacity {durations.normal} {easings.default}",
   },
@@ -149,6 +158,10 @@ const slotStyles = cva({
     anchor: {
       end: { justifyContent: "flex-end" },
       start: {},
+    },
+    overflow: {
+      clip: { overflowX: "clip" },
+      visible: { overflowX: "visible" },
     },
   },
 });

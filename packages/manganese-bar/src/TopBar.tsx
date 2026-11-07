@@ -42,9 +42,13 @@ export const TOP_BAR = 32;
  */
 export const TopBar = memo(({ layout }: { layout: BarLayout }) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
-    <div className={startStyles}>{fluid(layout.left, "wide", "start")}</div>
-    <div className={centerStyles}>{fluid(layout.center, "none", "start")}</div>
-    <div className={endStyles}>{fluid(layout.right, "wide", "end")}</div>
+    <div className={startStyles}>
+      {fluid(layout.left, "wide", "start", layout.left.length - 1)}
+    </div>
+    <div className={centerStyles}>
+      {fluid(layout.center, "none", "start", undefined)}
+    </div>
+    <div className={endStyles}>{fluid(layout.right, "wide", "end", 0)}</div>
   </header>
 ));
 
@@ -101,10 +105,22 @@ const centerStyles = css({ justifySelf: "center" });
 // Most items are 28px buttons around a 15px icon, so icons sit 29px apart.
 const endStyles = hstack({ gap: 0, justify: "flex-end", marginInline: -2 });
 
-/** `items`, each in a `FluidItem`, keeping their keys. */
-const fluid = (items: readonly ReactNode[], gap: Gap, anchor: Anchor) =>
-  Children.map(items, (item) => (
-    <FluidItem anchor={anchor} gap={gap}>
+/**
+ * `items`, each in a `FluidItem`, keeping their keys. The one at `open`, beside
+ * the bar's empty middle, may spill into it while it resizes.
+ */
+const fluid = (
+  items: readonly ReactNode[],
+  gap: Gap,
+  anchor: Anchor,
+  open: number | undefined,
+) =>
+  Children.map(items, (item, index) => (
+    <FluidItem
+      anchor={anchor}
+      gap={gap}
+      overflow={index === open ? "visible" : "clip"}
+    >
       {item}
     </FluidItem>
   ));
