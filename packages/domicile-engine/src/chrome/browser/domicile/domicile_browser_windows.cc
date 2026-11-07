@@ -28,6 +28,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -256,11 +257,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // Remove from the list now and destroy later. Close runs inside the
     // window's own WebContents (window.close(), tabs.remove), and destroying a
     // WebContents under its own call stack is a use-after-free.
-    closing_.push_back(std::move(found->guest));
-    windows_.erase(found);
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+    //
+    // Later is kLinger: the shell animates a closed window out, and its
+    // <webview> shows the page only while the page exists. Muted meanwhile,
+    // since the window is closed as far as anyone hears.
+    found->guest->contents().SetAudioMuted(true);
+    closing_.push_back({id, std::move(found->guest)});
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
-        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr()));
+        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(),
+                       closing_.back().id),
+        kLinger);
+    windows_.erase(found);
     LOG(INFO) << "domicile: closed browser window " << id << ".";
     Changed();
   }
@@ -427,14 +435,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return true;
   }
 
-  // Destroys closed windows' pages once none of their frames are on the stack.
+  // Destroys a closed window's page once its linger is over. A profile
+  // destroyed first already took it.
   //
-  // Takes the list first: destroying a page can close another window, as
-  // DevTools closes its own with the page it inspects, and that Close adds to
-  // `closing_` and posts its own Reap.
-  void Reap() {
-    std::vector<std::unique_ptr<WebViewGuest>> reaping;
-    reaping.swap(closing_);
+  // Takes it out of the list first: destroying a page can close another
+  // window, as DevTools closes its own with the page it inspects, and that
+  // Close adds to `closing_` and posts its own Reap.
+  void Reap(const std::string& id) {
+    auto found = std::ranges::find(closing_, id, &Closing::id);
+    if (found == closing_.end()) {
+      return;
+    }
+    std::unique_ptr<WebViewGuest> reaping = std::move(found->guest);
+    closing_.erase(found);
   }
 
   // Ends private browsing once the last private page closes: its cookies,
@@ -477,8 +490,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
       std::erase_if(windows_, [](const Window& window) {
         return window.guest->contents().GetBrowserContext()->IsOffTheRecord();
       });
-      std::erase_if(closing_, [](const std::unique_ptr<WebViewGuest>& guest) {
-        return guest->contents().GetBrowserContext()->IsOffTheRecord();
+      std::erase_if(closing_, [](const Closing& closing) {
+        return closing.guest->contents().GetBrowserContext()->IsOffTheRecord();
       });
       Changed();
       return;
@@ -495,9 +508,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
   std::vector<Window> windows_;
   int next_id_ = 1;
 
+  // How long a closed window's page outlives it: longer than the shell's
+  // close animation, which draws its <webview> until the end.
+  static constexpr base::TimeDelta kLinger = base::Seconds(1);
+
+  // A closed window awaiting Reap, by its old id. Ids are never reused.
+  struct Closing {
+    std::string id;
+    std::unique_ptr<WebViewGuest> guest;
+  };
+
   // Closed and awaiting Reap. Held here, not in a DeleteSoon, so a profile
   // destroyed first takes them with it, before its desk's window.
-  std::vector<std::unique_ptr<WebViewGuest>> closing_;
+  std::vector<Closing> closing_;
 
   base::ObserverList<Observer> observers_;
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
