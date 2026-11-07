@@ -77,6 +77,10 @@ follows the room's light, is here too.
 
 <!-- /tabs -->
 
+Apps such as gammastep and wl-gammarelay-rs can set each screen's color
+themselves, so two screens can be warmed differently. While one of them sets
+a screen, the night light leaves that screen alone.
+
 ## Cast to a TV
 
 When a Chromecast, Google TV, Fire TV, Roku or other TV that takes a cast is

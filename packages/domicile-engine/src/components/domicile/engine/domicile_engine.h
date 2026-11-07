@@ -203,6 +203,16 @@ typedef struct DomicileConnectedDisplay {
   const char* connector;
 } DomicileConnectedDisplay;
 
+// A display, its connector and its gamma ramp's size, for `ramped_displays`.
+typedef struct DomicileRampedDisplay {
+  DomicileConnectedDisplay connected;
+  // How many entries the display's gamma ramp has, or 0 if it has none: a
+  // DisplayLink dock, a virtual display, any platform but DRM. What
+  // `domicile_displays_set_gamma` takes, and what a compositor offers
+  // wlr-gamma-control clients.
+  uint32_t gamma_size;
+} DomicileRampedDisplay;
+
 // How the compositor wants one display's connector driven.
 //
 // The reverse of DomicileDisplay: the compositor's config decides, but the
@@ -420,6 +430,14 @@ typedef struct DomicileEngineCallbacks {
   // knows, and on every change, as when its GPU process falls back to
   // software. An older engine never calls it.
   void (*compositing)(void* user_data, int in_memory);
+  // Like `connected_displays`, plus each display's gamma ramp size. `displays`
+  // points at `count` records borrowed for the call.
+  //
+  // Called instead of `connected_displays` and `displays` when set. An older
+  // engine ignores it.
+  void (*ramped_displays)(void* user_data,
+                          const DomicileRampedDisplay* displays,
+                          uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
@@ -643,14 +661,19 @@ DOMICILE_ENGINE_EXPORT void domicile_virtual_displays_configure(
     const DomicileVirtualDisplay* displays,
     uint32_t count);
 
-// Sets what each channel is multiplied by on every display, for a night
-// light. 1 leaves a channel as it is; each is 0 to 1. The browser keeps it and
-// sets it again after each modeset. Ignored off a tty.
-DOMICILE_ENGINE_EXPORT void domicile_displays_set_white_point(
-    DomicileEngine* engine,
-    float red,
-    float green,
-    float blue);
+// Sets the gamma ramp display `display_id` draws with, for a night light or a
+// wlr-gamma-control client. `ramp` is `size` red entries, then `size` green,
+// then `size` blue, each 0 to 65535, as wlr-gamma-control lays them out. A
+// `size` of 0 draws colors as they are, and `ramp` may then be null. Any size
+// works: the browser resamples it to the CRTC's, but the display's
+// `gamma_size` maps one to one.
+//
+// The browser keeps each display's ramp and sets it again after each modeset.
+// Ignored off a tty. The entries are copied before this returns.
+DOMICILE_ENGINE_EXPORT void domicile_displays_set_gamma(DomicileEngine* engine,
+                                                        int64_t display_id,
+                                                        const uint16_t* ramp,
+                                                        uint32_t size);
 
 // Delivers emulated input (EIS) to the desk, as the engine's own pointer and
 // keyboard would: the shell sees it first, and the engine forwards what lands

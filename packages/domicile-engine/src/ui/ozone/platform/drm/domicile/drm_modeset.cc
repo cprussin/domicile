@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <string>
@@ -22,6 +23,7 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
@@ -42,6 +44,20 @@ const DomicileDisplayLayout* WantedFor(
 }
 
 }  // namespace
+
+display::GammaCurve GammaCurveOf(const DomicileGammaRamp& ramp) {
+  if (ramp.red.empty()) {
+    return display::GammaCurve::MakeScale(1.f, 1.f, 1.f);
+  }
+  std::vector<display::GammaRampRGBEntry> lut;
+  lut.reserve(ramp.red.size());
+  for (size_t index = 0; index < ramp.red.size(); ++index) {
+    lut.push_back({.r = ramp.red[index],
+                   .g = ramp.green[index],
+                   .b = ramp.blue[index]});
+  }
+  return display::GammaCurve(std::move(lut));
+}
 
 std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
     const DomicileVirtualDisplay& display) {
@@ -180,26 +196,28 @@ void DrmModeset::Relight() {
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
-void DrmModeset::SetWhitePoint(const DomicileWhitePoint& white_point) {
-  VLOG(1) << "domicile: the compositor wants white drawn as (" << white_point.red
-          << ", " << white_point.green << ", " << white_point.blue << ")";
-  white_point_ = white_point;
-  ApplyWhitePoint();
+void DrmModeset::SetGamma(int64_t display_id, DomicileGammaRamp ramp) {
+  CHECK_EQ(ramp.red.size(), ramp.green.size());
+  CHECK_EQ(ramp.red.size(), ramp.blue.size());
+  VLOG(1) << "domicile: the compositor wants display " << display_id
+          << " drawn with a " << ramp.red.size() << "-entry gamma ramp";
+  if (std::ranges::find(display_ids_, display_id) != display_ids_.end()) {
+    ApplyGammaTo(display_id, ramp);
+  }
+  ramps_.insert_or_assign(display_id, std::move(ramp));
 }
 
-void DrmModeset::ApplyWhitePoint() {
-  if (!white_point_.has_value()) {
-    return;
-  }
-  const DomicileWhitePoint& white = *white_point_;
-  // Neutral is an identity ramp, not an empty curve: an empty one left the
-  // last warm ramp on the CRTCs, so the night light never turned off.
-  const display::GammaAdjustment adjustment{
-      .curve = display::GammaCurve::MakeScale(white.red, white.green,
-                                              white.blue)};
+void DrmModeset::ApplyGamma() {
   for (const int64_t id : display_ids_) {
-    delegate_->SetGammaAdjustment(id, adjustment);
+    const auto ramp = ramps_.find(id);
+    if (ramp != ramps_.end()) {
+      ApplyGammaTo(id, ramp->second);
+    }
   }
+}
+
+void DrmModeset::ApplyGammaTo(int64_t id, const DomicileGammaRamp& ramp) {
+  delegate_->SetGammaAdjustment(id, {.curve = GammaCurveOf(ramp)});
 }
 
 void DrmModeset::OnConfigurationChanged() {
@@ -295,7 +313,7 @@ void DrmModeset::OnDisplaysReceived(
             }
             VLOG(1) << "domicile: the DRM thread confirmed the modeset";
             self->confirmed_ = std::move(asked);
-            self->ApplyWhitePoint();
+            self->ApplyGamma();
           },
           weak_factory_.GetWeakPtr(), params),
       {display::ModesetFlag::kCommitModeset});
