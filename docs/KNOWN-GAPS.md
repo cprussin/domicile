@@ -20,6 +20,10 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#open-questions).
 
+- **No touchscreen, and no multi-finger gestures for the shell.** A touch
+  is a pointer click, and three-finger swipes do nothing.
+  [GESTURES.md](/docs/architecture/GESTURES.md).
+
 ## Displays
 
 - **Presentation is unmeasured.** Every measurement reads a

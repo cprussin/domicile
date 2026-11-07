@@ -14,6 +14,8 @@
 #include "components/domicile/common/synced_frame.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
+#include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/pointer_event.h"
@@ -78,6 +80,13 @@ int32_t RoundHalfUp(double value) {
   return base::ClampFloor<int32_t>(value + 0.5);
 }
 
+// The app's default handler must finish before Chromium decides whether a
+// pinch wheel may zoom the shell. Only native-window regions block that ACK.
+class AppWheelListener final : public NativeEventListener {
+ public:
+  void Invoke(ExecutionContext*, Event*) override {}
+};
+
 }  // namespace
 
 const char AppInputClient::kSupplementName[] = "AppInputClient";
@@ -94,7 +103,12 @@ void AppInputClient::Trace(Visitor* visitor) const {
 }
 
 HTMLAppElement::HTMLAppElement(Document& document)
-    : HTMLElement(html_names::kAppTag, document) {}
+    : HTMLElement(html_names::kAppTag, document) {
+  AddEventListenerOptionsResolved options;
+  options.SetPassive(false);
+  addEventListener(event_type_names::kWheel,
+                   MakeGarbageCollected<AppWheelListener>(), options);
+}
 
 HTMLAppElement::~HTMLAppElement() = default;
 
@@ -109,6 +123,7 @@ cc::Layer* HTMLAppElement::ContentsCcLayer() const {
 void HTMLAppElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == html_names::kAppIdAttr) {
+    CancelPinch();
     // Re-embed into the existing layer so the element keeps its box and its
     // place in the layer tree.
     Embed();
@@ -144,6 +159,7 @@ Node::InsertionNotificationRequest HTMLAppElement::InsertedInto(
 }
 
 void HTMLAppElement::RemovedFrom(ContainerNode& insertion_point) {
+  CancelPinch();
   // Keep the embedder: a moved element shows the same window. A new embedder
   // would wait for the producer to reconnect, which a running client never
   // does.
@@ -369,8 +385,51 @@ void HTMLAppElement::DefaultEventHandler(Event& event) {
     event.SetDefaultHandled();
     return;
   }
+  if (const auto* wheel = DynamicTo<WheelEvent>(event);
+      wheel && wheel->NativeEvent().has_native_pinch) {
+    ForwardPinch(*client, app_id, *wheel);
+    event.SetDefaultHandled();
+    return;
+  }
   ForwardInput(*client, app_id, event);
   HTMLElement::DefaultEventHandler(event);
+}
+
+void HTMLAppElement::ForwardPinch(AppInputClient& client,
+                                  const String& app_id,
+                                  const WheelEvent& wheel) {
+  const auto& pinch = wheel.NativeEvent().native_pinch;
+  if (pinch.phase == ui::NativePinchPhase::kBegin) {
+    CancelPinch();
+    ForwardMotion(client, app_id, wheel);
+    active_pinch_ = pinch;
+    pinch_app_id_ = app_id;
+  } else if (!active_pinch_ || active_pinch_->device != pinch.device) {
+    return;
+  }
+  client.AppPointerPinch(app_id, pinch);
+  if (pinch.phase == ui::NativePinchPhase::kEnd) {
+    active_pinch_.reset();
+    pinch_app_id_ = String();
+  } else {
+    active_pinch_ = pinch;
+  }
+}
+
+void HTMLAppElement::CancelPinch() {
+  if (!active_pinch_) {
+    return;
+  }
+  auto pinch = *active_pinch_;
+  active_pinch_.reset();
+  pinch.phase = ui::NativePinchPhase::kEnd;
+  pinch.canceled = true;
+  if (auto* window = GetDocument().domWindow()) {
+    if (auto* client = AppInputClient::From(*window)) {
+      client->AppPointerPinch(pinch_app_id_, pinch);
+    }
+  }
+  pinch_app_id_ = String();
 }
 
 void HTMLAppElement::ForwardInput(AppInputClient& client,

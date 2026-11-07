@@ -56,6 +56,14 @@ pub enum ClientRequest {
         moved: bool,
     },
     PointerLeave,
+    PointerPinch {
+        owner: usize,
+        app_id: String,
+        pinch: domicile_protocol::pinch::Pinch,
+    },
+    PinchOwnerGone {
+        owner: usize,
+    },
     /// Somebody used the desk; see [`ChromeMessage::Activity`](domicile_protocol::ChromeMessage::Activity).
     Activity {
         input: Option<String>,
@@ -250,10 +258,20 @@ impl DomicileCompositor {
         }
         // Input the lock let through, before it reaches the seat.
         if self.captured(&event) {
+            self.cancel_pinch();
             return;
         }
         match event {
+            ClientRequest::PointerPinch {
+                owner,
+                app_id,
+                pinch,
+            } => self.forward_pinch(owner, &app_id, pinch),
+            ClientRequest::PinchOwnerGone { owner } => self.pinch_owner_gone(owner),
             ClientRequest::PointerMotion { app_id, x, y, .. } => {
+                if self.pointer_app.as_deref() != Some(&app_id) {
+                    self.cancel_pinch();
+                }
                 let Some(surface) = self.surface_for(&app_id) else {
                     tracing::debug!(%app_id, "pointer motion: no surface");
                     return;
@@ -282,6 +300,7 @@ impl DomicileCompositor {
                 pointer.frame(self);
             }
             ClientRequest::PointerLeave => {
+                self.cancel_pinch();
                 self.cast_pointer(None);
                 self.pointer_app = None;
                 let pointer = self.seat.get_pointer().unwrap();

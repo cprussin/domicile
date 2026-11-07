@@ -42,6 +42,7 @@ impl DomicileCompositor {
             // modifiers are the common case: they do not repeat, so they do not
             // wake the desktop.
             self.release_pressed_keys();
+            self.cancel_pinch();
             self.tell_the_chromes_whether_the_desk_is_locked();
         } else if !self.lock.locked() {
             warn!(
