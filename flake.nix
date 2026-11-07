@@ -1474,6 +1474,7 @@
             programs.domicile.enable = true;
             virtualisation = {
               memorySize = 4096;
+              useNixStoreImage = true;
               cores = 2;
               # The only card, so it is `card0`, and 2D.
               qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
@@ -1559,6 +1560,21 @@
                 # What the screen showed instead: its biggest colors.
                 shares = colors_on_the_screen("failed")
                 screen = sorted(shares.items(), key=lambda share: -share[1])[:4]
+                # DIAGNOSTIC (not for merge): the stuck desk, before it is stopped.
+                for command in [
+                    "uptime; date -u",
+                    "loginctl list-sessions --no-legend; loginctl show-session 1 -p Active -p State -p VTNr -p Type",
+                    "ps -u alice -Lo pid,tid,stat,etimes,time,wchan:28,comm --sort=pid | cut -c1-120",
+                    "for p in $(pgrep -u alice -f chrome); do echo \"== $p $(tr '\\0' ' ' </proc/$p/cmdline | cut -c1-160)\"; "
+                    "for t in /proc/$p/task/*; do echo \"-- $(basename $t) $(cat $t/comm) $(cat $t/wchan)\"; head -8 $t/stack; done; done",
+                    "for p in $(pgrep -u alice -f chrome); do echo \"== $p\"; "
+                    "timeout 60 gdb -p $p -batch -ex 'thread apply all bt 25' 2>&1 | grep -E '^(Thread|#)' | cut -c1-200; done",
+                    "journalctl -b --no-pager -o short-monotonic -u systemd-logind | tail -40 | cut -c1-200",
+                    "journalctl -b --no-pager -o short-monotonic _UID=1000 | tail -60 | cut -c1-200",
+                    "cut -c1-260 /tmp/domicile.log; cat /tmp/samples.log",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1", timeout=None)[1])
                 # The session ends first: a crashing process floods the console,
                 # and CI keeps only the last 100 lines.
                 machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
@@ -1580,6 +1596,8 @@
                     print(machine.execute(f"{command} 2>&1")[1])
                 print("the screen's biggest colors:", screen)
                 raise
+            # DIAGNOSTIC (not for merge): a passing run's timeline too.
+            print(machine.execute("uptime; ps -u alice -o pid,etimes,comm; cut -c1-220 /tmp/domicile.log | head -300; cat /tmp/samples.log 2>&1")[1])
           '';
         };
 
@@ -1598,6 +1616,7 @@
             programs.domicile.enable = true;
             virtualisation = {
               memorySize = 4096;
+              useNixStoreImage = true;
               cores = 2;
               qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
             };
@@ -1615,7 +1634,7 @@
                 exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
               fi
             '';
-            environment.systemPackages = [ pkgs.foot ];
+            environment.systemPackages = [ pkgs.foot pkgs.gdb ];
             fonts.enableDefaultPackages = true;
           };
           testScript = ''
@@ -1658,6 +1677,21 @@
             except Exception:
                 shares = colors_on_the_screen("failed")
                 screen = sorted(shares.items(), key=lambda share: -share[1])[:4]
+                # DIAGNOSTIC (not for merge): the stuck desk, before it is stopped.
+                for command in [
+                    "uptime; date -u",
+                    "loginctl list-sessions --no-legend; loginctl show-session 1 -p Active -p State -p VTNr -p Type",
+                    "ps -u alice -Lo pid,tid,stat,etimes,time,wchan:28,comm --sort=pid | cut -c1-120",
+                    "for p in $(pgrep -u alice -f chrome); do echo \"== $p $(tr '\\0' ' ' </proc/$p/cmdline | cut -c1-160)\"; "
+                    "for t in /proc/$p/task/*; do echo \"-- $(basename $t) $(cat $t/comm) $(cat $t/wchan)\"; head -8 $t/stack; done; done",
+                    "for p in $(pgrep -u alice -f chrome); do echo \"== $p\"; "
+                    "timeout 60 gdb -p $p -batch -ex 'thread apply all bt 25' 2>&1 | grep -E '^(Thread|#)' | cut -c1-200; done",
+                    "journalctl -b --no-pager -o short-monotonic -u systemd-logind | tail -40 | cut -c1-200",
+                    "journalctl -b --no-pager -o short-monotonic _UID=1000 | tail -60 | cut -c1-200",
+                    "cut -c1-260 /tmp/domicile.log; cat /tmp/samples.log",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1", timeout=None)[1])
                 machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                 for command in [
                     "ls -l /sys/class/drm/*/device/driver",
@@ -1672,6 +1706,8 @@
                     print(machine.execute(f"{command} 2>&1")[1])
                 print("the screen's biggest colors:", screen)
                 raise
+            # DIAGNOSTIC (not for merge): a passing run's timeline too.
+            print(machine.execute("uptime; ps -u alice -o pid,etimes,comm; cut -c1-220 /tmp/domicile.log | head -300; cat /tmp/samples.log 2>&1")[1])
           '';
         };
 
@@ -1690,6 +1726,7 @@
             programs.domicile.enable = true;
             virtualisation = {
               memorySize = 4096;
+              useNixStoreImage = true;
               cores = 2;
               # Both heads lit from boot. `video0` names the card to
               # `screendump`.

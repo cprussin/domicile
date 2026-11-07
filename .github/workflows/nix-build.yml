@@ -51,3 +51,11 @@ jobs:
       # node_modules.
       - uses: oven-sh/setup-bun@v2
       - run: bun run turbo run test:nix
+      # DIAGNOSTIC (not for merge).
+      - if: always()
+        run: |
+          for c in tty-on-a-card-with-no-3d tty-with-an-engine-that-fell-back-to-the-cpu; do
+            echo "=== $c"
+            nix log ".#checks.x86_64-linux.$c" 2>&1 | cut -c1-400 || true
+          done
+          cat "$TMPDIR/domicile-check-logs/nix-the-flake-checks.log" 2>/dev/null | grep -a 'vm-test-run-tty' | cut -c1-400 || true
