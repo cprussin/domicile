@@ -7,6 +7,20 @@ import "ui/gfx/geometry/mojom/geometry.mojom";
 
 enum PointerAxisSource { kWheel, kFinger, kContinuous, kWheelTilt };
 
+enum PinchPhase { kBegin, kUpdate, kEnd };
+
+struct Pinch {
+  PinchPhase phase;
+  uint32 device;
+  uint32 time;
+  uint32 fingers;
+  double dx;
+  double dy;
+  double scale;
+  double rotation;
+  bool canceled;
+};
+
 // The shell's control channel to the compositor, as a renderer-to-browser
 // interface rather than a socket the page opens.
 //
@@ -444,6 +458,7 @@ interface ControlChannel {
   PointerMotion(string app_id, double x, double y, bool moved);
   PointerLeave(string app_id);
   PointerButton(string app_id, uint32 button, bool pressed);
+  PointerPinch(string app_id, Pinch pinch);
   PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y,
               PointerAxisSource source, bool stop_x, bool stop_y);
 };

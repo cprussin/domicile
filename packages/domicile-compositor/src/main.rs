@@ -113,6 +113,7 @@ mod outbound;
 mod outputs;
 mod pam;
 mod peer_process;
+mod pinch;
 mod pnp_ids;
 mod popups;
 mod portals;
@@ -461,6 +462,7 @@ struct DomicileCompositor {
     /// Smithay keeps this list too but does not expose it. See
     /// [`DomicileCompositor::let_go_of_lost_presses`].
     held_buttons: Vec<u32>,
+    pinch: Option<pinch::ActivePinch>,
     /// InputCapture sessions, which take input once the pointer reaches a
     /// barrier. Set when the Wayland loop starts serving EIS. See
     /// [`crate::eis`].
@@ -849,6 +851,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // `rebind_the_keys`.
     let keys = shell_config::keys(keyboard)?;
     seat.add_pointer();
+    let _pointer_gestures =
+        smithay::wayland::pointer_gestures::PointerGesturesState::new::<DomicileCompositor>(&dh);
 
     // Advertise an output per described display, or one following Domicile's
     // window. Some clients (e.g. weston-terminal) wait for a `wl_output` before
@@ -1303,6 +1307,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         synced_moves: Default::default(),
         pointer_app: None,
         held_buttons: Vec::new(),
+        pinch: None,
         captures: None,
         start: Instant::now(),
         last_commit: None,

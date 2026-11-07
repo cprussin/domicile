@@ -251,6 +251,7 @@ impl DomicileCompositor {
     /// Release everything held for an app (window or popup) and tell the
     /// chromes it is gone.
     pub fn forget(&mut self, app_id: &str) {
+        self.pinch_window_gone(app_id);
         // Take back the engine's held buffers now. No release will come for a
         // gone surface, and the client may still be running.
         let abandoned = self

@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/platform/graphics/external_surface_embedder.h"
 #include "third_party/blink/renderer/platform/graphics/surface_layer_bridge.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
+#include "ui/events/types/native_pinch.h"
 #include "ui/events/types/native_scroll_source.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
@@ -23,6 +24,7 @@ namespace blink {
 
 class HTMLAppElement;
 class MouseEvent;
+class WheelEvent;
 
 // Where an <app> sends what lands on it: the desktop of the window it is in.
 //
@@ -59,6 +61,8 @@ class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
                                 uint32_t button,
                                 bool pressed) = 0;
   virtual void AppPointerLeave(const String& app_id) = 0;
+  virtual void AppPointerPinch(const String& app_id,
+                               const ui::NativePinch& pinch) = 0;
   // A scroll as `wl_pointer` wants it: a distance and 120ths of a detent.
   virtual void AppPointerAxis(const String& app_id,
                               double dx,
@@ -168,6 +172,11 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   void ForwardInput(AppInputClient& client,
                     const String& app_id,
                     const Event& event);
+  void ForwardPinch(AppInputClient&, const String&, const WheelEvent&);
+  void CancelPinch();
+  std::optional<ui::NativePinch> active_pinch_;
+  String pinch_app_id_;
+
   void ForwardMotion(AppInputClient& client,
                      const String& app_id,
                      const MouseEvent& event);
