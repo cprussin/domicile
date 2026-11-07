@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 6 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: error and warning pages are the shell's
+
+Chrome drew its own error page (the dinosaur), its "This page isn't
+working" page for an empty HTTP error, and its certificate and Safe
+Browsing warnings inside the page. A <webview>'s guest reports the
+failure to its element instead (PageFailureChanged), and the shell draws
+the page; this patch leaves the page itself blank, so no Chrome UI shows
+under the shell's:
+
+- `chrome_content_renderer_client.cc`: PrepareErrorPage and
+  PrepareErrorPageForHttpStatusError give a blank document.
+- `security_interstitial_page.cc`: GetHTMLContents gives the same, for
+  every interstitial.
+- `ssl_blocking_page.h`: overridable(), so the shell offers "Continue
+  anyway" only where Chrome would.
+---
+ .../chrome_content_renderer_client.cc         | 19 +++++++++++++++++++
+ .../content/security_interstitial_page.cc     | 15 +++++----------
+ .../content/ssl_blocking_page.h               |  4 ++++
+ 3 files changed, 28 insertions(+), 10 deletions(-)
+
+diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
+index 1499c45..0868e95 100644
+--- a/chrome/renderer/chrome_content_renderer_client.cc
++++ b/chrome/renderer/chrome_content_renderer_client.cc
+@@ -1237,6 +1237,17 @@ void ChromeContentRendererClient::GetInterface(
+       mojo::GenericPendingReceiver(interface_name, std::move(interface_pipe)));
+ }
+ 
++namespace {
++
++// Domicile: the shell draws error and warning pages over the page (see
++// //components/domicile/browser/web_view_guest.cc, PageFailureChanged), so
++// the page itself is blank: no Chrome UI under the shell's.
++constexpr char kDomicileBlankErrorPage[] =
++    "<!doctype html><meta charset=\"utf-8\">"
++    "<meta name=\"color-scheme\" content=\"light dark\">";
++
++}  // namespace
++
+ void ChromeContentRendererClient::PrepareErrorPage(
+     content::RenderFrame* render_frame,
+     const blink::WebURLError& web_error,
+@@ -1244,6 +1255,10 @@ void ChromeContentRendererClient::PrepareErrorPage(
+     content::mojom::AlternativeErrorPageOverrideInfoPtr
+         alternative_error_page_info,
+     std::string* error_html) {
++  if (error_html) {
++    *error_html = kDomicileBlankErrorPage;
++    return;
++  }
+   NetErrorHelper::Get(render_frame)
+       ->PrepareErrorPage(
+           error_page::Error::NetError(
+@@ -1267,6 +1282,10 @@ void ChromeContentRendererClient::PrepareErrorPageForHttpStatusError(
+     content::mojom::AlternativeErrorPageOverrideInfoPtr
+         alternative_error_page_info,
+     std::string* error_html) {
++  if (error_html) {
++    *error_html = kDomicileBlankErrorPage;
++    return;
++  }
+   NetErrorHelper::Get(render_frame)
+       ->PrepareErrorPage(error_page::Error::HttpError(error.url(), http_status),
+                          http_method == "POST",
+diff --git a/components/security_interstitials/content/security_interstitial_page.cc b/components/security_interstitials/content/security_interstitial_page.cc
+index b9dc350..18d7260 100644
+--- a/components/security_interstitials/content/security_interstitial_page.cc
++++ b/components/security_interstitials/content/security_interstitial_page.cc
+@@ -71,17 +71,12 @@ SecurityInterstitialPage::TypeID SecurityInterstitialPage::GetTypeForTesting() {
+   return nullptr;
+ }
+ 
++// Domicile: the shell draws the warning over the page and passes it with the
++// <webview>'s proceedPastWarning(), so the page itself is blank: no Chrome UI
++// under the shell's. Its strings and template are not built.
+ std::string SecurityInterstitialPage::GetHTMLContents() {
+-  base::DictValue load_time_data;
+-  PopulateInterstitialStrings(load_time_data);
+-  webui::SetLoadTimeDataDefaults(controller()->GetApplicationLocale(),
+-                                 &load_time_data);
+-  std::string html =
+-      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
+-          GetHTMLTemplateId());
+-
+-  webui::AppendWebUiCssTextDefaults(&html);
+-  return webui::GetLocalizedHtml(html, load_time_data);
++  return "<!doctype html><meta charset=\"utf-8\">"
++         "<meta name=\"color-scheme\" content=\"light dark\">";
+ }
+ 
+ SecurityInterstitialControllerClient* SecurityInterstitialPage::controller()
+diff --git a/components/security_interstitials/content/ssl_blocking_page.h b/components/security_interstitials/content/ssl_blocking_page.h
+index 198762d..f123da9 100644
+--- a/components/security_interstitials/content/ssl_blocking_page.h
++++ b/components/security_interstitials/content/ssl_blocking_page.h
+@@ -46,6 +46,10 @@ class SSLBlockingPage : public SSLBlockingPageBase {
+   // Returns true if |options_mask| refers to a soft-overridable SSL error.
+   static bool IsOverridable(int options_mask);
+ 
++  // Domicile: whether this page's error may be passed, for the shell's
++  // "Continue anyway".
++  bool overridable() const { return overridable_; }
++
+   SSLBlockingPage(
+       content::WebContents* web_contents,
+       net::Error cert_error,
+-- 
+2.43.0
+

@@ -605,6 +605,10 @@ source_set("web_view_guest") {
     # for.
     "//components/security_state/content",
     "//components/security_state/core",
+    # Chrome's certificate and Safe Browsing warnings, which the shell draws
+    # and may pass (ProceedPastWarning).
+    "//components/security_interstitials/content:security_interstitial_page",
+    "//components/security_interstitials/core",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
     "//third_party/blink/public/common",

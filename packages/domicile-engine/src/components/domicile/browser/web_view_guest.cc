@@ -23,6 +23,7 @@
 #include "base/memory/self_deleting.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
@@ -43,6 +44,10 @@
 #include "components/domicile/browser/site_permissions.h"
 #include "components/permissions/permissions_client.h"
 #include "components/domicile/browser/web_view_url.h"
+#include "components/security_interstitials/content/security_interstitial_page.h"
+#include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "components/security_interstitials/content/ssl_blocking_page.h"
+#include "components/security_interstitials/core/controller_client.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
@@ -73,7 +78,9 @@
 #include "media/mojo/mojom/capture_handle.mojom.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
+#include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
+#include "net/http/http_response_headers.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -929,6 +936,9 @@ void WebViewGuest::ReportEverything() {
   reported_render_process_ = mojom::WebViewRenderProcess::kRunning;
   reported_exit_code_ = 0;
   ReportRenderProcess();
+  if (reported_page_failure_) {
+    client_->PageFailureChanged(reported_page_failure_.Clone());
+  }
 }
 
 WebViewGuest::WebViewGuest(
@@ -1908,6 +1918,103 @@ void WebViewGuest::TitleWasSetForMainFrame(
     content::RenderFrameHost* render_frame_host) {
   if (render_frame_host == guest_contents_->GetPrimaryMainFrame()) {
     ReadDescription(*render_frame_host);
+  }
+}
+
+namespace {
+
+// The warning Chrome's interstitial helper holds for `contents`' page, or
+// null.
+security_interstitials::SecurityInterstitialPage* WarningOf(
+    content::WebContents& contents) {
+  auto* helper =
+      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
+          &contents);
+  return helper ? helper->GetBlockingPageForFrame(
+                      contents.GetPrimaryMainFrame()->GetFrameTreeNodeId())
+                : nullptr;
+}
+
+}  // namespace
+
+void WebViewGuest::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInPrimaryMainFrame() ||
+      !navigation_handle->HasCommitted() ||
+      navigation_handle->IsSameDocument()) {
+    return;
+  }
+  if (!navigation_handle->IsErrorPage()) {
+    ReportPageFailure(nullptr);
+    return;
+  }
+  const net::HttpResponseHeaders* headers =
+      navigation_handle->GetResponseHeaders();
+  // Posted: the interstitial helper, which may have attached after this
+  // observer, takes the warning in its own DidFinishNavigation.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          static_cast<void (WebViewGuest::*)(GURL, int, int)>(
+              &WebViewGuest::ReportPageFailure),
+          weak_factory_.GetWeakPtr(), navigation_handle->GetURL(),
+          static_cast<int>(navigation_handle->GetNetErrorCode()),
+          headers ? headers->response_code() : 0));
+}
+
+void WebViewGuest::ReportPageFailure(GURL url,
+                                     int net_error,
+                                     int http_status) {
+  using Kind = mojom::WebViewPageFailureKind;
+  auto failure = mojom::WebViewPageFailure::New();
+  failure->url = std::move(url);
+  failure->error = net::ErrorToShortString(net_error);
+  security_interstitials::SecurityInterstitialPage* warning =
+      WarningOf(*guest_contents_);
+  if (net::IsCertificateError(net_error)) {
+    failure->kind = Kind::kCertificate;
+    // Only Chrome's certificate page may be passed, and only when the error
+    // allows it (patch 0180's overridable()).
+    failure->can_proceed =
+        warning &&
+        warning->GetTypeForTesting() ==
+            SSLBlockingPage::kTypeForTesting &&
+        static_cast<SSLBlockingPage*>(warning)
+            ->overridable();
+  } else if (warning) {
+    failure->kind = Kind::kWarning;
+    failure->can_proceed = true;
+  } else if (net_error == net::ERR_HTTP_RESPONSE_CODE_FAILURE) {
+    failure->kind = Kind::kHttp;
+    failure->http_status = http_status;
+  } else {
+    failure->kind = Kind::kNetwork;
+  }
+  // Logged for the error page guard.
+  LOG(INFO) << "domicile: a <webview>'s page failed to load ("
+            << failure->kind << ", " << failure->error
+            << "); the shell draws it.";
+  ReportPageFailure(std::move(failure));
+}
+
+void WebViewGuest::ReportPageFailure(mojom::WebViewPageFailurePtr failure) {
+  if (failure.Equals(reported_page_failure_)) {
+    return;
+  }
+  reported_page_failure_ = failure.Clone();
+  client_->PageFailureChanged(std::move(failure));
+}
+
+void WebViewGuest::ProceedPastWarning() {
+  CHECK(guest_contents_);
+  if (!reported_page_failure_ || !reported_page_failure_->can_proceed) {
+    return;
+  }
+  if (security_interstitials::SecurityInterstitialPage* warning =
+          WarningOf(*guest_contents_)) {
+    LOG(INFO) << "domicile: a <webview>'s page is loaded past its warning.";
+    warning->CommandReceived(
+        base::NumberToString(security_interstitials::CMD_PROCEED));
   }
 }
 

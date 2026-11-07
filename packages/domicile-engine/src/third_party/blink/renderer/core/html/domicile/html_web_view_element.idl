@@ -114,6 +114,23 @@
   readonly attribute DOMString renderProcessGone;
   readonly attribute long renderProcessExitCode;
 
+  // Why the page failed to load: "network", "http", "certificate" or
+  // "warning"; empty while it loaded. The page under it is blank: the shell
+  // draws the error. `pageFailureUrl` is the address that failed,
+  // `pageFailureError` Chromium's name for the error (e.g.
+  // "ERR_NAME_NOT_RESOLVED"), `pageFailureHttpStatus` the status for "http",
+  // and `pageFailureCanProceed` whether proceedPastWarning() loads it anyway.
+  // `domicile-page-failure-change` signals a change.
+  readonly attribute DOMString pageFailure;
+  readonly attribute USVString pageFailureUrl;
+  readonly attribute DOMString pageFailureError;
+  readonly attribute long pageFailureHttpStatus;
+  readonly attribute boolean pageFailureCanProceed;
+
+  // Loads the page a certificate or safety warning stopped, as Chrome's
+  // "Proceed anyway" does. Does nothing unless `pageFailureCanProceed`.
+  undefined proceedPastWarning();
+
   // Open DevTools for the page in a new browser window. If DevTools is already
   // open, the <webview> showing it dispatches `domicile-focus-request`.
   undefined inspect();

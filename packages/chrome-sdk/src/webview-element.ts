@@ -252,6 +252,34 @@ export type WebViewRenderProcessGone =
   (typeof WEBVIEW_RENDER_PROCESS_GONE_REASONS)[number];
 
 /**
+ * Fired when {@link HTMLWebViewElement.pageFailure} or the attributes beside
+ * it change: the page failed to load, or a page loaded after one did. Carries
+ * no payload. Bubbles.
+ */
+export const WEBVIEW_PAGE_FAILURE_CHANGE_EVENT = "domicile-page-failure-change";
+
+/**
+ * Why a `<webview>`'s page failed to load, as
+ * {@link HTMLWebViewElement.pageFailure}. The engine draws no error or warning
+ * page: the page is blank and the shell draws one.
+ *
+ * - `network`: it could not be reached (no network, no such host, refused,
+ *   timed out, blocked); `pageFailureError` says which.
+ * - `http`: the server answered `pageFailureHttpStatus` with nothing to show.
+ * - `certificate`: the site's certificate is not trusted.
+ * - `warning`: the browser warned before loading it (Safe Browsing, a
+ *   lookalike address, no secure connection under HTTPS-First).
+ */
+export const WEBVIEW_PAGE_FAILURES = [
+  "network",
+  "http",
+  "certificate",
+  "warning",
+] as const;
+
+export type WebViewPageFailure = (typeof WEBVIEW_PAGE_FAILURES)[number];
+
+/**
  * Fired when the page needs a file picked: an `<input type="file">` or a
  * download. Bubbles.
  *
@@ -682,6 +710,29 @@ declare global {
      * logs; branch on {@link HTMLWebViewElement.renderProcessGone}.
      */
     readonly renderProcessExitCode: number;
+    /**
+     * Why the page failed to load, or `""` while it loaded. The page is blank
+     * then, for the shell to draw the error over. Changes to it and the
+     * attributes below fire {@link WEBVIEW_PAGE_FAILURE_CHANGE_EVENT}.
+     */
+    readonly pageFailure: WebViewPageFailure | "";
+    /** The address that failed, or `""`. */
+    readonly pageFailureUrl: string;
+    /** Chromium's name for the error, e.g. `ERR_NAME_NOT_RESOLVED`, or `""`. */
+    readonly pageFailureError: string;
+    /** The HTTP status for an `http` failure; otherwise 0. */
+    readonly pageFailureHttpStatus: number;
+    /**
+     * Whether {@link HTMLWebViewElement.proceedPastWarning} loads the page
+     * anyway: a certificate the user may override, or a warning.
+     */
+    readonly pageFailureCanProceed: boolean;
+    /**
+     * Load the page a certificate or safety warning stopped, as Chrome's
+     * "Proceed anyway" does. Does nothing unless
+     * {@link HTMLWebViewElement.pageFailureCanProceed}.
+     */
+    proceedPastWarning(): void;
     /**
      * Open DevTools for the page in a new browser window. If DevTools is
      * already open, the view showing it fires

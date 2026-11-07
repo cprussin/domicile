@@ -98,6 +98,7 @@ constexpr char kPageFullscreenChangeEvent[] =
     "domicile-page-fullscreen-change";
 constexpr char kWakeLockChangeEvent[] = "domicile-wake-lock-change";
 constexpr char kRenderProcessChangeEvent[] = "domicile-render-process-change";
+constexpr char kPageFailureChangeEvent[] = "domicile-page-failure-change";
 
 // A request the shell answers on the event. See
 // domicile_file_chooser_event.h.
@@ -267,6 +268,22 @@ const char* RenderProcessName(
       return "launch-failed";
     case domicile::mojom::blink::WebViewRenderProcess::kMemoryEviction:
       return "memory-eviction";
+  }
+}
+
+// Maps why the page failed to `pageFailure`. No default, so a new mojom value
+// breaks the build. The names must match the SDK's.
+const char* PageFailureName(
+    domicile::mojom::blink::WebViewPageFailureKind kind) {
+  switch (kind) {
+    case domicile::mojom::blink::WebViewPageFailureKind::kNetwork:
+      return "network";
+    case domicile::mojom::blink::WebViewPageFailureKind::kHttp:
+      return "http";
+    case domicile::mojom::blink::WebViewPageFailureKind::kCertificate:
+      return "certificate";
+    case domicile::mojom::blink::WebViewPageFailureKind::kWarning:
+      return "warning";
   }
 }
 
@@ -540,6 +557,12 @@ void HTMLWebViewElement::print() {
 void HTMLWebViewElement::exitPageFullscreen() {
   if (guest_.is_bound()) {
     guest_->ExitPageFullscreen();
+  }
+}
+
+void HTMLWebViewElement::proceedPastWarning() {
+  if (guest_.is_bound()) {
+    guest_->ProceedPastWarning();
   }
 }
 
@@ -854,6 +877,26 @@ void HTMLWebViewElement::RenderProcessChanged(
   render_process_exit_code_ = exit_code;
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kRenderProcessChangeEvent)));
+}
+
+void HTMLWebViewElement::PageFailureChanged(
+    domicile::mojom::blink::WebViewPageFailurePtr failure) {
+  // Set all before dispatching, so a handler reads a matching set.
+  if (failure) {
+    page_failure_ = String(PageFailureName(failure->kind));
+    page_failure_url_ = failure->url.GetString();
+    page_failure_error_ = failure->error;
+    page_failure_http_status_ = failure->http_status;
+    page_failure_can_proceed_ = failure->can_proceed;
+  } else {
+    page_failure_ = g_empty_string;
+    page_failure_url_ = g_empty_string;
+    page_failure_error_ = g_empty_string;
+    page_failure_http_status_ = 0;
+    page_failure_can_proceed_ = false;
+  }
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kPageFailureChangeEvent)));
 }
 
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {

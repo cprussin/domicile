@@ -36,6 +36,7 @@ import { LinkTarget } from "./browser/LinkTarget";
 import { mediaDeviceChoiceFor } from "./browser/media-devices";
 import { PageMenu } from "./browser/PageMenu";
 import { PagePopup } from "./browser/PagePopup";
+import { PageProblem } from "./browser/PageProblem";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
@@ -53,6 +54,7 @@ import { useLowered } from "./useLowered";
 import { usePageDescription } from "./usePageDescription";
 import { usePageFullscreen } from "./usePageFullscreen";
 import { usePageIcon } from "./usePageIcon";
+import { usePageProblem } from "./usePageProblem";
 import { useReclaimFocus } from "./useReclaimFocus";
 import type { Settler } from "./useSettling";
 import { UPRIGHT, useSettling } from "./useSettling";
@@ -340,8 +342,13 @@ export const BrowserWindow = ({
   // permissions, and the element to focus. The engine draws no dialog.
   const prompt = usePromptRequest(view);
   const [promptBox, setPromptBox] = useState<HTMLElement | null>(null);
+  // Why the page shows nothing: a failed load or a crash, which the shell
+  // draws over the blank page; and its first answer, to focus.
+  const problem = usePageProblem(view);
+  const [problemBox, setProblemBox] = useState<HTMLElement | null>(null);
   // What the page waits on, which takes the keyboard while it is open.
-  const waiting = pickerBox ?? dialogBox ?? signInBox ?? promptBox ?? appAskBox;
+  const waiting =
+    pickerBox ?? dialogBox ?? signInBox ?? promptBox ?? appAskBox ?? problemBox;
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
@@ -740,6 +747,24 @@ export const BrowserWindow = ({
             // See `window`.
             window={window}
           />
+          {problem !== undefined && (
+            <PageProblem
+              canGoBack={canGoBack}
+              // A new page per problem, so Details starts closed.
+              key={problem.kind === "gone" ? problem.reason : problem.url}
+              onGoBack={drive((loaded) => {
+                loaded.goBack();
+              })}
+              onProceed={drive((loaded) => {
+                loaded.proceedPastWarning();
+              })}
+              onReload={drive((loaded) => {
+                loaded.reload();
+              })}
+              problem={problem}
+              ref={setProblemBox}
+            />
+          )}
           <LinkTarget view={view} />
           <PagePopup
             closesAfter={ZOOM_POPUP_MS}

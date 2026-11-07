@@ -158,6 +158,21 @@ Patch `0110`:
   is asked, as in Chrome.
 - A page outside any guest gets no.
 
+## Error, warning and crashed pages
+
+- A page that fails to load (a network error, an HTTP error with nothing to
+  show, a certificate error, or a Safe Browsing, lookalike or HTTPS-First
+  warning) is reported to the element (`pageFailure`,
+  `domicile-page-failure-change`), and the shell draws the page.
+- Patch `0180` leaves the page itself blank: Chrome's error page builder and
+  every interstitial's HTML give an empty document, so no Chrome UI shows
+  under the shell's.
+- `proceedPastWarning()` passes a warning as Chrome's "Proceed anyway" does,
+  and only where Chrome would (`pageFailureCanProceed`): a certificate error
+  the user may override, or a warning.
+- A crashed page was already reported (`renderProcessGone`); the shell now
+  draws it too.
+
 ## Host shortcuts when nested
 
 Under a host compositor, the engine inhibits the host's shortcuts so the shell
@@ -210,5 +225,6 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-external-app.sh`: links for applications.
 - `guard-webview-sign-in.sh`: sign-ins.
 - `guard-webview-file-access.sh`: file access prompts.
+- `guard-webview-page-failure.sh`: error pages.
 - `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.
