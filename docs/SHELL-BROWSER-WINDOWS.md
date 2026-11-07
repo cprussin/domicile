@@ -945,6 +945,67 @@ frame.addEventListener(WEBVIEW_PROMPT_EVENT, (event) => {
 
 Manganese asks over the page (`manganese-page-requests/PromptAsk.tsx`).
 
+## Pickers
+
+A color input, a date or time input, or a text input's `<datalist>` fires
+`domicile-picker` instead of opening a picker Chrome draws.
+
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_PICKER_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const opened = (event) => {
+    event.preventDefault(); // claim it
+    pick(event.kind, event.value, event.options, {
+      x: event.anchorX,
+      y: event.anchorY + event.anchorHeight,
+    }).then(
+      (value) => event.choose(value),
+      () => event.cancel(),
+    );
+  };
+  frame?.addEventListener(WEBVIEW_PICKER_EVENT, opened);
+  return () => frame?.removeEventListener(WEBVIEW_PICKER_EVENT, opened);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { WEBVIEW_PICKER_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_PICKER_EVENT, (event) => {
+  event.preventDefault(); // claim it
+  pick(event.kind, event.value, event.options, {
+    x: event.anchorX,
+    y: event.anchorY + event.anchorHeight,
+  }).then(
+    (value) => event.choose(value),
+    () => event.cancel(),
+  );
+});
+```
+
+<!-- /tabs -->
+
+- **`preventDefault()`:** claims it. Unclaimed, the control keeps its value.
+- **`kind`:** `color`, `date`, `time`, `datetime-local`, `month`, `week` or
+  `list`; `WEBVIEW_PICKER_KINDS` gives each one's value format.
+  **`value`**, **`min`**, **`max`**, **`step`:** the control's, as written.
+  **`options`** and **`labels`:** a `<datalist>`'s suggestions, or a color
+  input's.
+- **`anchorX`**, **`anchorY`**, **`anchorWidth`**, **`anchorHeight`:** the
+  control's box in the element's CSS pixels, to hang the picker from.
+- **`choose(value)`:** picks it, in the kind's format. **`cancel()`:** keeps
+  the old value.
+- **One at a time.** A newer one replaces the open one, which is canceled and
+  fires `domicile-picker-withdrawn`, as does one the page closes.
+
+Manganese draws them over the page (`manganese-page-requests/PickerAsk.tsx`).
+
 ## Error, warning and crashed pages
 
 The engine draws no error page, certificate or Safe Browsing warning, or

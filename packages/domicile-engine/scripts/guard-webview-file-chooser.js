@@ -1,12 +1,15 @@
 // Shell for guard-webview-upload.sh, guard-webview-download.sh,
-// guard-webview-save-picker.sh and guard-webview-file-access.sh: one browser
-// window that answers its `domicile-file-chooser` and `domicile-prompt`
-// events without drawing anything.
+// guard-webview-save-picker.sh, guard-webview-file-access.sh and
+// guard-webview-page-picker.sh: one browser window that answers its
+// `domicile-file-chooser`, `domicile-prompt` and `domicile-picker` events
+// without drawing anything.
 //
 //   ?answer=choose&pick=<path>   choose <path>, absolute or relative to home
 //   ?answer=cancel               cancel (the control)
 //   ?prompt=accept               accept each prompt; optional
 //   ?prompt=dismiss              dismiss each prompt (the control)
+//   ?picker=choose&value=<value> choose <value> in each picker; optional
+//   ?picker=cancel               cancel each picker (the control)
 //
 // Logs to the console, which the engine writes to its log:
 //
@@ -18,6 +21,9 @@
 //   GUARD prompt kind=… origin=… a prompt reached the shell, and what it
 //     subject=… details=…        carries
 //   GUARD prompt-answered        its answer did not throw
+//   GUARD picker kind=… value=…  a picker reached the shell, and what it
+//     options=… anchor=…         carries
+//   GUARD picker-answered        its answer did not throw
 //   GUARD downloads …            the desk's downloads changed: one
 //                                <state>:<path>:<window> per download
 //   GUARD download-removed       the finished download this page removed
@@ -88,6 +94,28 @@ export const HostShell = (_root, host) => {
         );
       }
       say("prompt-answered");
+    });
+  }
+
+  // Pickers are answered only when `?picker=` says how. Claimed in both runs,
+  // as above.
+  const picker = parameters.get("picker");
+  if (picker !== null) {
+    document.addEventListener("domicile-picker", (event) => {
+      say(
+        `picker kind=${event.kind} value=${event.value} options=${event.options.join(",")} anchor=${event.anchorWidth}x${event.anchorHeight}`,
+      );
+      event.preventDefault();
+      if (picker === "choose") {
+        event.choose(required(parameters, "value"));
+      } else if (picker === "cancel") {
+        event.cancel();
+      } else {
+        throw new Error(
+          `guard-webview-file-chooser: ?picker=${picker} is not one`,
+        );
+      }
+      say("picker-answered");
     });
   }
 

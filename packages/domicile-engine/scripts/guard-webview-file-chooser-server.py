@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Serves the pages for guard-webview-upload.sh, guard-webview-download.sh,
-guard-webview-save-picker.sh and guard-webview-file-access.sh.
+guard-webview-save-picker.sh, guard-webview-file-access.sh and
+guard-webview-page-picker.sh.
 
   /upload    a full-page `<input type="file">`. Logs `GUARD picked name=<name>
              text=<contents>` for a chosen file; reading the contents proves the
@@ -20,6 +21,10 @@ guard-webview-save-picker.sh and guard-webview-file-access.sh.
              file, which asks for permission to edit it. Logs
              `GUARD edited name=<name>`, or `GUARD edit-refused <error>`.
 
+  /color     a full-page `<input type="color">` set to black, suggesting
+             #1971c2 from a <datalist>. A press opens its picker. Logs
+             `GUARD color value=<value>` when it changes.
+
 Each page logs `GUARD <name>-loaded` and `GUARD guest-mousedown`, so a run can
 tell that a click reached the guest. Requests are logged to stderr.
 """
@@ -33,6 +38,7 @@ DOWNLOAD = "/download"
 FILE = "/file"
 SAVE = "/save"
 EDIT = "/edit"
+COLOR = "/color"
 
 # guard-webview-download.sh checks both; keep them in sync.
 FILE_NAME = "guard-download.txt"
@@ -138,8 +144,20 @@ EDIT_SCRIPT = """
 """ % EDIT_TEXT
 
 
+COLOR_TARGET = (
+    '<input id="target" type="color" value="#000000" list="suggested" />'
+    '<datalist id="suggested"><option value="#1971c2"></option></datalist>'
+)
+COLOR_SCRIPT = """
+      const color = document.getElementById("target");
+      color.addEventListener("change", () => {
+        say(`color value=${color.value}`);
+      });
+"""
+
+
 class PagesToPickFor(BaseHTTPRequestHandler):
-    """Serves the five paths above; anything else is a 404."""
+    """Serves the six paths above; anything else is a 404."""
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
         if self.path == UPLOAD:
@@ -162,6 +180,11 @@ class PagesToPickFor(BaseHTTPRequestHandler):
                 "text/html; charset=utf-8",
                 PAGE % {"which": "edit", "target": EDIT_TARGET, "script": EDIT_SCRIPT},
             )
+        elif self.path == COLOR:
+            self.answer(
+                "text/html; charset=utf-8",
+                PAGE % {"which": "color", "target": COLOR_TARGET, "script": COLOR_SCRIPT},
+            )
         elif self.path == FILE:
             self.answer(
                 "text/plain; charset=utf-8",
@@ -169,7 +192,7 @@ class PagesToPickFor(BaseHTTPRequestHandler):
                 disposition='attachment; filename="%s"' % FILE_NAME,
             )
         else:
-            self.send_error(404, "this server has five pages and that is none of them")
+            self.send_error(404, "this server has six pages and that is none of them")
 
     def answer(self, content_type, body, disposition=None):
         encoded = body.encode("utf-8")

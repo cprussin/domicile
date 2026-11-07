@@ -5,6 +5,7 @@ import { desktopFolders } from "@domicile-desktop/component-library/folders";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { ExternalAppAsk } from "@domicile-desktop/manganese-page-requests/ExternalAppAsk";
 import { PageDialog } from "@domicile-desktop/manganese-page-requests/PageDialog";
+import { PickerAsk } from "@domicile-desktop/manganese-page-requests/PickerAsk";
 import { PromptAsk } from "@domicile-desktop/manganese-page-requests/PromptAsk";
 import { SignInAsk } from "@domicile-desktop/manganese-page-requests/SignInAsk";
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
@@ -12,6 +13,7 @@ import { useDialogRequest } from "@domicile-desktop/manganese-page-requests/useD
 import { useExternalAppRequest } from "@domicile-desktop/manganese-page-requests/useExternalAppRequest";
 import { useLinkOpener } from "@domicile-desktop/manganese-page-requests/useLinkOpener";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
+import { usePickerRequest } from "@domicile-desktop/manganese-page-requests/usePickerRequest";
 import { usePromptRequest } from "@domicile-desktop/manganese-page-requests/usePromptRequest";
 import { useSignInRequest } from "@domicile-desktop/manganese-page-requests/useSignInRequest";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
@@ -343,13 +345,23 @@ export const BrowserWindow = ({
   // permissions, and the element to focus. The engine draws no dialog.
   const prompt = usePromptRequest(view);
   const [promptBox, setPromptBox] = useState<HTMLElement | null>(null);
+  // The color, date or list picker a form control in the page opened, and
+  // the element in it to focus. The engine draws no picker.
+  const pagePicker = usePickerRequest(view);
+  const [pagePickerBox, setPagePickerBox] = useState<HTMLElement | null>(null);
   // Why the page shows nothing: a failed load or a crash, which the shell
   // draws over the blank page; and its first answer, to focus.
   const problem = usePageProblem(view);
   const [problemBox, setProblemBox] = useState<HTMLElement | null>(null);
   // What the page waits on, which takes the keyboard while it is open.
   const waiting =
-    pickerBox ?? dialogBox ?? signInBox ?? promptBox ?? appAskBox ?? problemBox;
+    pickerBox ??
+    dialogBox ??
+    signInBox ??
+    promptBox ??
+    appAskBox ??
+    pagePickerBox ??
+    problemBox;
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
@@ -764,6 +776,19 @@ export const BrowserWindow = ({
               })}
               problem={problem}
               ref={setProblemBox}
+            />
+          )}
+          {pagePicker !== undefined && (
+            <PickerAsk
+              // A new picker per request, so each starts at the page's value.
+              key={[
+                pagePicker.kind,
+                pagePicker.value,
+                pagePicker.anchor.x,
+                pagePicker.anchor.y,
+              ].join("\n")}
+              ref={setPagePickerBox}
+              request={pagePicker}
             />
           )}
           <LinkTarget view={view} />

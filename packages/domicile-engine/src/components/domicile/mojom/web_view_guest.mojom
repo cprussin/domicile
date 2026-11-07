@@ -4,6 +4,7 @@
 module domicile.mojom;
 
 import "third_party/blink/public/mojom/tokens/tokens.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/url.mojom";
 
 // A <webview> requests a guest from the browser.
@@ -264,6 +265,47 @@ struct WebViewPrompt {
 
 // Why the page in a <webview> failed to load. The engine draws no error or
 // warning page for it: the page is left blank and the shell draws one.
+// What a page's form control asks the shell to pick. The engine draws no
+// picker of its own for these: the shell does.
+enum WebViewPickerKind {
+  // `<input type="color">`. The value is "#rrggbb".
+  kColor,
+  // `<input type="date">`, "time", "datetime-local", "month" and "week". The
+  // value is the input's, in its HTML format: "2026-11-06", "13:45",
+  // "2026-11-06T13:45", "2026-11" and "2026-W45".
+  kDate,
+  kTime,
+  kDateTimeLocal,
+  kMonth,
+  kWeek,
+  // A text input's `<datalist>`. The value is the typed text; the answer is
+  // one of `options`' values.
+  kList,
+};
+
+// One suggestion a picker offers: a `<datalist>` option, or a color one.
+struct WebViewPickerOption {
+  string value;
+  // The option's label, or empty for none.
+  string label;
+};
+
+// A picker for the shell to draw over the page.
+struct WebViewPicker {
+  WebViewPickerKind kind;
+  // The control's value now, or empty.
+  string value;
+  // The control's `min`, `max` and `step` attributes as written, or empty.
+  string min;
+  string max;
+  string step;
+  array<WebViewPickerOption> options;
+  // The control's box, which the picker hangs from. From the renderer, in
+  // its frame's local root's DIPs; from the guest, in the element's CSS
+  // pixels.
+  gfx.mojom.Rect anchor;
+};
+
 enum WebViewPageFailureKind {
   // The page could not be reached: no network, no such host, refused, timed
   // out, or blocked. `error` says which.
@@ -618,6 +660,16 @@ interface WebViewGuestClient {
   // the page navigated. Its answer, if one is sent, is ignored.
   PromptWithdrawn();
 
+  // A control in the page asks for `picker`. The shell draws it over the page
+  // and answers with the picked value, or no to keep the old one. An
+  // unhandled event or a closed pipe is no. A newer picker replaces an older,
+  // unanswered one, which is answered no.
+  PickerRequested(WebViewPicker picker) => (bool picked, string value);
+
+  // The page closed the unanswered picker, for example because the control
+  // went away. Its answer, if one is sent, is ignored.
+  PickerWithdrawn();
+
   // The page entered or left fullscreen, as a video's fullscreen button does.
   // The page fills the element's box; the shell decides whether the element
   // fills the screen. Sent only when it changes; a fresh guest sends nothing.
@@ -784,4 +836,12 @@ interface WebViewGuest {
   // gave no number: it navigated before the read ran, or the selector is not
   // valid there. The element rejects a selector it cannot parse first.
   CountMatches(string selector) => (int32? count);
+};
+
+// A page's channel to its <webview>'s shell for the pickers Chrome draws for
+// form controls. Bound for each picker by a frame in a guest; see
+// PopulateChromeFrameBinders. Closing the pipe withdraws the picker.
+interface PagePicker {
+  // Asks once. `picked` with the new value, or not to keep the old one.
+  Pick(WebViewPicker picker) => (bool picked, string value);
 };

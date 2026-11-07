@@ -1,0 +1,42 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Dispatched by a <webview> when a form control in its page opens a picker
+// Chrome would draw itself: a color input, a date or time input, or a text
+// input's <datalist>. Waits until the shell answers on the event.
+//
+// Domicile-only, not a web standard. No constructor: only the browser creates
+// one.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicilePickerEvent : Event {
+  // What to pick: "color", "date", "time", "datetime-local", "month", "week"
+  // or "list".
+  readonly attribute DOMString kind;
+
+  // The control's value now, in its HTML format ("#1971c2", "2026-11-06",
+  // "13:45"), or the typed text for "list".
+  readonly attribute DOMString value;
+
+  // The control's `min`, `max` and `step` as written, or "".
+  readonly attribute DOMString min;
+  readonly attribute DOMString max;
+  readonly attribute DOMString step;
+
+  // The suggestions: a <datalist>'s option values, or a color input's colors,
+  // with each one's label ("" for none) at the same index of `labels`.
+  readonly attribute FrozenArray<DOMString> options;
+  readonly attribute FrozenArray<DOMString> labels;
+
+  // The control's box in this element's CSS pixels, to hang the picker from.
+  readonly attribute long anchorX;
+  readonly attribute long anchorY;
+  readonly attribute long anchorWidth;
+  readonly attribute long anchorHeight;
+
+  // Picks `value`, in the kind's format; or keeps the old one. Each throws
+  // InvalidStateError if already answered or withdrawn.
+  [RaisesException] undefined choose(DOMString value);
+  [RaisesException] undefined cancel();
+};

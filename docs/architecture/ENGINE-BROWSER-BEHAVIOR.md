@@ -163,6 +163,18 @@ Patch `0110`:
   as Chrome's "Exit page" does, and it then shows as crashed; no waits, and
   it is asked again if it stays hung. Withdrawn when the page responds.
 
+## Pickers
+
+- A page's color, date and time pickers and a text input's `<datalist>` ask
+  the shell (`domicile-picker`). Chrome drew the first as page popups of its
+  own, and the `<datalist>` through autofill, which a guest has none of.
+- Patch `0182` routes Blink's choosers to
+  `third_party/blink/renderer/core/html/domicile/domicile_page_picker.h` in
+  every document but the shell's own, which binds `PagePicker` to the frame's
+  `WebViewGuest`. Closing the control withdraws it.
+- A frame outside every guest has no shell to ask: its picker is dropped and
+  the control keeps its value.
+
 ## Tooltips
 
 - A page's tooltips (`title` and the like) are reported to the element
@@ -241,5 +253,6 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-file-access.sh`: file access prompts.
 - `guard-webview-page-failure.sh`: error pages.
 - `guard-webview-resend-form.sh`: sending a form again.
+- `guard-webview-page-picker.sh`: pickers.
 - `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.
