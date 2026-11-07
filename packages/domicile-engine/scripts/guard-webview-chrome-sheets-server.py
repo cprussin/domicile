@@ -3,7 +3,7 @@
 
   /probe   a page that reads which of the APIs whose only UI is Chrome's it
            has, and sends what it found to /report.
-  /report  prints `report <query>` with what the page found.
+  /report  prints `GUARD report <query>` with what the page found.
 
 Served over HTTP because `crux` cannot reach arbitrary hosts. 127.0.0.1 is a
 secure context, so the APIs are offered here as on an https:// site.
@@ -57,7 +57,7 @@ class Probe(BaseHTTPRequestHandler):
             self.answer(PROBE_PAGE)
         elif path.path == REPORT:
             # Flushed, since the guard reads it while this server runs.
-            print("report %s" % path.query.replace("&", " "), flush=True)
+            print("GUARD report %s" % path.query.replace("&", " "), flush=True)
             self.answer("")
         else:
             self.send_error(404, "this server has two pages and that is neither")
