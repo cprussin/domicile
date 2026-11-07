@@ -758,7 +758,7 @@ in {
               default = 1;
             };
             scroll_acceleration = lib.mkOption {
-              description = "Increase scroll distance with gesture speed, up to four times.";
+              description = "Increase page scroll distance with gesture speed, up to four times.";
               type = lib.types.bool;
               default = true;
             };

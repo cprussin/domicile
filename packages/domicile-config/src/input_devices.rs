@@ -33,7 +33,7 @@ pub struct TouchpadConfig {
     /// Multiplier applied once to both scrolling axes; must be positive.
     #[schemars(schema_with = "scroll_factor_schema")]
     pub scroll_factor: f64,
-    /// Increase scroll distance with gesture speed, up to four times.
+    /// Increase page scroll distance with gesture speed, up to four times.
     pub scroll_acceleration: bool,
     /// Typing suppression policy; `libinput` preserves native keyboard pairing and contacts.
     /// Custom `internal` excludes external pads; `enabled` includes every touchpad.
