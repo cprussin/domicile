@@ -25,9 +25,14 @@ namespace domicile {
 // `connectors` names each display's connector by id, as
 // `ui::OzonePlatform::GetDomicileConnectors` gives them. A display it does not
 // name, as on a platform with no connectors, crosses with none.
+//
+// `gamma_sizes` is each display's gamma ramp size, as
+// `ui::OzonePlatform::GetDomicileGammaSizes` gives them. A display it does not
+// name crosses with 0: no gamma.
 std::vector<mojom::DisplayPtr> DisplayListFor(
     const std::vector<display::Display>& displays,
-    const base::flat_map<int64_t, std::string>& connectors);
+    const base::flat_map<int64_t, std::string>& connectors,
+    const base::flat_map<int64_t, uint32_t>& gamma_sizes);
 
 }  // namespace domicile
 

@@ -822,7 +822,27 @@ fn the_shell_sets_the_color_temperature() {
         ),
         ChromeMessage::SystemRequest {
             id: 5,
-            request: SystemRequest::SetColorTemperature { kelvin: 3400 },
+            request: SystemRequest::SetColorTemperature {
+                kelvin: 3400,
+                display: None,
+            },
+        }
+    );
+}
+
+/// The shell warms one monitor, leaving the others as they are.
+#[test]
+fn the_shell_sets_one_displays_color_temperature() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"set_color_temperature","kelvin":3400,"display":"eDP-2"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::SetColorTemperature {
+                kelvin: 3400,
+                display: Some("eDP-2".into()),
+            },
         }
     );
 }

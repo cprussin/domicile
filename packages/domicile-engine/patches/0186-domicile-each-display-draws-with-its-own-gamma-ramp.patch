@@ -1,0 +1,247 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: each display draws with its own gamma ramp
+
+A night light per display and wlr-gamma-control clients (gammastep,
+wl-gammarelay-rs) need a ramp per CRTC, at the CRTC's size.
+
+- CreateDisplaySnapshot reads the CRTC's GAMMA_LUT_SIZE, or its legacy
+  ramp size, into DisplaySnapshot::domicile_gamma_size. 0 means no
+  gamma, as on a DisplayLink dock. The snapshot's mojom carries it, and
+  Clone() keeps it.
+- OzonePlatform::GetDomicileGammaSizes lends DrmScreen's sizes to the
+  browser, as GetDomicileConnectors does the connectors.
+- SetDomicileGamma(display_id, ramp) replaces SetDomicileWhitePoint:
+  DrmModeset keeps each display's ramp and sets it again after each
+  confirmed modeset. Every other platform ignores it.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/display/mojom/display_snapshot.mojom       |  2 ++
+ .../mojom/display_snapshot_mojom_traits.cc    |  1 +
+ .../mojom/display_snapshot_mojom_traits.h     |  5 ++++
+ ui/display/types/display_snapshot.cc          |  1 +
+ ui/display/types/display_snapshot.h           |  8 +++++++
+ ui/ozone/platform/drm/common/drm_util.cc      | 21 ++++++++++++++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc   | 14 +++++++----
+ ui/ozone/public/ozone_platform.cc             |  5 ++++
+ ui/ozone/public/ozone_platform.h              | 24 +++++++++++--------
+ 9 files changed, 67 insertions(+), 14 deletions(-)
+
+diff --git a/ui/display/mojom/display_snapshot.mojom b/ui/display/mojom/display_snapshot.mojom
+index 79db6d0..881ce44 100644
+--- a/ui/display/mojom/display_snapshot.mojom
++++ b/ui/display/mojom/display_snapshot.mojom
+@@ -58,4 +58,6 @@ struct DisplaySnapshot {
+   map<uint32, array<uint64>> drm_formats_and_modifiers;
+   // DOMICILE: the kernel's name for the connector ("HDMI-A-1"), or empty.
+   string domicile_connector;
++  // DOMICILE: how many entries the CRTC's gamma ramp has, or 0 if it has none.
++  uint32 domicile_gamma_size;
+ };
+diff --git a/ui/display/mojom/display_snapshot_mojom_traits.cc b/ui/display/mojom/display_snapshot_mojom_traits.cc
+index 84c4908..70afd6f 100644
+--- a/ui/display/mojom/display_snapshot_mojom_traits.cc
++++ b/ui/display/mojom/display_snapshot_mojom_traits.cc
+@@ -192,6 +192,7 @@ bool StructTraits<display::mojom::DisplaySnapshotDataView,
+     return false;
+   }
+   (*out)->set_domicile_connector(domicile_connector);
++  (*out)->set_domicile_gamma_size(data.domicile_gamma_size());
+   return true;
+ }
+ 
+diff --git a/ui/display/mojom/display_snapshot_mojom_traits.h b/ui/display/mojom/display_snapshot_mojom_traits.h
+index 80b02a4..5ca71fb 100644
+--- a/ui/display/mojom/display_snapshot_mojom_traits.h
++++ b/ui/display/mojom/display_snapshot_mojom_traits.h
+@@ -189,6 +189,11 @@ struct StructTraits<display::mojom::DisplaySnapshotDataView,
+     return snapshot->domicile_connector();
+   }
+ 
++  static uint32_t domicile_gamma_size(
++      const std::unique_ptr<display::DisplaySnapshot>& snapshot) {
++    return snapshot->domicile_gamma_size();
++  }
++
+   static bool Read(display::mojom::DisplaySnapshotDataView data,
+                    std::unique_ptr<display::DisplaySnapshot>* out);
+ };
+diff --git a/ui/display/types/display_snapshot.cc b/ui/display/types/display_snapshot.cc
+index 5dff7d6..0cb5924 100644
+--- a/ui/display/types/display_snapshot.cc
++++ b/ui/display/types/display_snapshot.cc
+@@ -128,6 +128,7 @@ std::unique_ptr<DisplaySnapshot> DisplaySnapshot::Clone() const {
+   // cloned).
+   clone->set_current_mode(current_mode_);
+   clone->set_domicile_connector(domicile_connector_);
++  clone->set_domicile_gamma_size(domicile_gamma_size_);
+ 
+   return clone;
+ }
+diff --git a/ui/display/types/display_snapshot.h b/ui/display/types/display_snapshot.h
+index 0f6e828..5c60e32 100644
+--- a/ui/display/types/display_snapshot.h
++++ b/ui/display/types/display_snapshot.h
+@@ -151,6 +151,12 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
+   void set_domicile_connector(const std::string& connector) {
+     domicile_connector_ = connector;
+   }
++  // DOMICILE: how many entries the CRTC's gamma ramp has, or 0 if it has
++  // none (a DisplayLink dock, a virtual display). Domicile's compositor
++  // offers gamma control only where it is nonzero, at this size. A setter
++  // for `domicile_connector()`'s reason.
++  uint32_t domicile_gamma_size() const { return domicile_gamma_size_; }
++  void set_domicile_gamma_size(uint32_t size) { domicile_gamma_size_ = size; }
+ 
+   // Clones display state.
+   std::unique_ptr<DisplaySnapshot> Clone() const;
+@@ -293,6 +299,8 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
+ 
+   // DOMICILE: see `domicile_connector()`.
+   std::string domicile_connector_;
++  // DOMICILE: see `domicile_gamma_size()`.
++  uint32_t domicile_gamma_size_ = 0;
+ };
+ 
+ }  // namespace display
+diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
+index 85e22de..30c2832 100644
+--- a/ui/ozone/platform/drm/common/drm_util.cc
++++ b/ui/ozone/platform/drm/common/drm_util.cc
+@@ -630,6 +630,24 @@ bool IsVrrCapable(const DrmWrapper& drm, drmModeConnector* connector) {
+          UNSAFE_TODO(connector->prop_values[vrr_capable_index]);
+ }
+ 
++// DOMICILE: how many entries `crtc`'s gamma ramp has: GAMMA_LUT_SIZE where
++// the driver has one, else the legacy ramp's size. 0 means no gamma at all,
++// as on a DisplayLink dock (evdi).
++namespace {
++uint32_t DomicileGammaSize(const DrmWrapper& drm, drmModeCrtc* crtc) {
++  ScopedDrmObjectPropertyPtr crtc_props =
++      drm.GetObjectProperties(crtc->crtc_id, DRM_MODE_OBJECT_CRTC);
++  ScopedDrmPropertyPtr lut_size_property;
++  const int lut_size_index = GetDrmProperty(
++      drm, crtc_props.get(), "GAMMA_LUT_SIZE", &lut_size_property);
++  if (lut_size_index >= 0) {
++    return static_cast<uint32_t>(
++        UNSAFE_TODO(crtc_props->prop_values[lut_size_index]));
++  }
++  return crtc->gamma_size > 0 ? static_cast<uint32_t>(crtc->gamma_size) : 0u;
++}
++}  // namespace
++
+ bool IsVrrEnabled(const DrmWrapper& drm, drmModeCrtc* crtc) {
+   ScopedDrmObjectPropertyPtr crtc_props =
+       drm.GetObjectProperties(crtc->crtc_id, DRM_MODE_OBJECT_CRTC);
+@@ -1025,6 +1043,9 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
+   // names a monitor with no EDID name after it.
+   snapshot->set_domicile_connector(ConnectorName(
+       info->connector()->connector_type, info->connector()->connector_type_id));
++  // DOMICILE: only this process reads the CRTC. Domicile's compositor offers
++  // gamma control at this size.
++  snapshot->set_domicile_gamma_size(DomicileGammaSize(drm, info->crtc()));
+   return snapshot;
+ }
+ 
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 0fb6cbd..c819490 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -177,11 +177,11 @@ class OzonePlatformDrm : public OzonePlatform {
+     }
+   }
+ 
+-  // DOMICILE: a white point before `InitScreen` is dropped, as a layout is.
+-  // The compositor sends it again with each display report.
+-  void SetDomicileWhitePoint(const DomicileWhitePoint& white_point) override {
++  // DOMICILE: a ramp before `InitScreen` is dropped, as a layout is. The
++  // compositor sends each display's again with each display report.
++  void SetDomicileGamma(int64_t display_id, DomicileGammaRamp ramp) override {
+     if (modeset_) {
+-      modeset_->SetWhitePoint(white_point);
++      modeset_->SetGamma(display_id, std::move(ramp));
+     }
+   }
+ 
+@@ -259,6 +259,12 @@ class OzonePlatformDrm : public OzonePlatform {
+     return screen_->connectors();
+   }
+ 
++  // DOMICILE: asked with the connectors, so after `InitScreen`.
++  base::flat_map<int64_t, uint32_t> GetDomicileGammaSizes() const override {
++    CHECK(screen_) << "domicile: gamma sizes asked for before InitScreen";
++    return screen_->gamma_sizes();
++  }
++
+   // DOMICILE: the evdev input controller holds the setting; see
+   // ui/events/ozone/evdev/domicile/typing_guard.h.
+   std::optional<bool> GetDomicileDisableWhileTyping() const override {
+diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
+index c9a2ac5..8853218 100644
+--- a/ui/ozone/public/ozone_platform.cc
++++ b/ui/ozone/public/ozone_platform.cc
+@@ -140,6 +140,11 @@ base::flat_map<int64_t, std::string> OzonePlatform::GetDomicileConnectors()
+   return {};
+ }
+ 
++base::flat_map<int64_t, uint32_t> OzonePlatform::GetDomicileGammaSizes()
++    const {
++  return {};
++}
++
+ std::optional<bool> OzonePlatform::GetDomicileDisableWhileTyping() const {
+   return std::nullopt;
+ }
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index 01752f6..cb82181 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -123,13 +123,14 @@ struct DomicileVirtualDisplay {
+   std::string name;
+ };
+ 
+-// DOMICILE: what each channel is multiplied by on every display, for a night
+-// light. 1 leaves a channel as it is. See
++// DOMICILE: one display's gamma ramp, for a night light or a gamma-control
++// client. Each channel has the same number of entries, 0 to 65535; empty
++// channels draw colors as they are. See
+ // ui/ozone/platform/drm/domicile/drm_modeset.h.
+-struct DomicileWhitePoint {
+-  float red = 1.f;
+-  float green = 1.f;
+-  float blue = 1.f;
++struct DomicileGammaRamp {
++  std::vector<uint16_t> red;
++  std::vector<uint16_t> green;
++  std::vector<uint16_t> blue;
+ };
+ 
+ // DOMICILE: one event of emulated input (EIS) for the desk, as a pointer or
+@@ -447,10 +448,9 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   virtual void SetDomicileVirtualDisplays(
+       std::vector<DomicileVirtualDisplay> displays) {}
+ 
+-  // DOMICILE: the white point every display draws with, as a gamma ramp per
+-  // CRTC. DRM only, like the layout above: a nested desktop's monitors are
+-  // the host session's.
+-  virtual void SetDomicileWhitePoint(const DomicileWhitePoint& white_point) {}
++  // DOMICILE: the gamma ramp display `display_id` draws with. DRM only, like
++  // the layout above: a nested desktop's monitors are the host session's.
++  virtual void SetDomicileGamma(int64_t display_id, DomicileGammaRamp ramp) {}
+   // DOMICILE: emulated input for the desk host, which it hears as it hears
+   // the platform's own devices. A headless desk and DRM: a nested desktop's
+   // input is the host session's.
+@@ -486,6 +486,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   // names a monitor with no EDID name after it. Empty on every platform but
+   // DRM, which alone has connectors.
+   virtual base::flat_map<int64_t, std::string> GetDomicileConnectors() const;
++  // DOMICILE: how many entries each display's gamma ramp has, by
++  // `display::Display::id()`. A display it does not name has no ramp, as on
++  // every platform but DRM.
++  virtual base::flat_map<int64_t, uint32_t> GetDomicileGammaSizes() const;
+   // DOMICILE: whether touchpads rest while a keyboard types, or nothing on a
+   // platform whose touchpads another compositor reads. DRM only, like the
+   // layout above. See ui/events/ozone/evdev/domicile/typing_guard.h.
