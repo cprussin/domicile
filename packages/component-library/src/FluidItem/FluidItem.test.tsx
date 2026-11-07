@@ -88,6 +88,31 @@ describe(FluidItem, () => {
     );
   });
 
+  it("clips its content to the eased width", () => {
+    const { observe } = fakeWidths(40);
+    const { container } = render(<Item observe={observe} shown />);
+
+    expect(slotOf(container).className).toContain(css({ overflowX: "clip" }));
+  });
+
+  it("lets its content spill past the eased width when it overflows", () => {
+    // For an item with open space beside it, whose own motion would be cut
+    // off mid-resize.
+    const { observe } = fakeWidths(40);
+    const { container } = render(
+      <FluidItem observeWidth={observe} overflow="visible">
+        <button type="button">Downloads</button>
+      </FluidItem>,
+    );
+
+    expect(slotOf(container).className).toContain(
+      css({ overflowX: "visible" }),
+    );
+    expect(slotOf(container).className).not.toContain(
+      css({ overflowX: "clip" }),
+    );
+  });
+
   it("follows its content's width as it changes", () => {
     const widths = fakeWidths(40);
     const { container } = render(<Item observe={widths.observe} shown />);

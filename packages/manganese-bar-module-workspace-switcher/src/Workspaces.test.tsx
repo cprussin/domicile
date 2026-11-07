@@ -6,15 +6,15 @@ import type { MeasureChip } from "./Workspaces";
 import { Workspaces } from "./Workspaces";
 
 /**
- * Places each chip 30px after the last, 24px wide, in a 120px row, and
+ * Places each chip 30px after the last, 24px wide, and
  * records the chip it was last asked about.
  */
 const fakeLayout = () => {
   const asked: { chip?: HTMLElement } = {};
-  const measureChip: MeasureChip = (chip, onEdges) => {
+  const measureChip: MeasureChip = (chip, onPlace) => {
     asked.chip = chip;
     const index = [...(chip.parentElement?.children ?? [])].indexOf(chip);
-    onEdges({ end: 120 - index * 30 - 24, start: index * 30 });
+    onPlace({ start: index * 30, width: index === 3 ? 30 : 24 });
     return () => undefined;
   };
   return { asked, measureChip };
@@ -61,8 +61,8 @@ describe("Workspaces", () => {
       expect(highlight().style.getPropertyValue("--highlight-start")).toBe(
         "30px",
       );
-      expect(highlight().style.getPropertyValue("--highlight-end")).toBe(
-        "66px",
+      expect(highlight().style.getPropertyValue("--highlight-width")).toBe(
+        "24px",
       );
     });
 
@@ -75,7 +75,9 @@ describe("Workspaces", () => {
       expect(highlight().style.getPropertyValue("--highlight-start")).toBe(
         "90px",
       );
-      expect(highlight().style.getPropertyValue("--highlight-end")).toBe("6px");
+      expect(highlight().style.getPropertyValue("--highlight-width")).toBe(
+        "30px",
+      );
     });
 
     it("is a white chip that shows only the numbers under it, in black", () => {
@@ -91,8 +93,10 @@ describe("Workspaces", () => {
       expect(highlight().className).toContain(css({ color: "black" }));
       expect(highlight().className).toContain(
         css({
+          // From the start edge only, so it slides smoothly while a
+          // workspace comes or goes at the row's end.
           clipPath:
-            "inset(0 calc(var(--highlight-end) + {spacing.10}) 0 calc(var(--highlight-start) + {spacing.10}) round {radii.lg})",
+            "xywh(calc(var(--highlight-start) + {spacing.10}) 0 var(--highlight-width) 100% round {radii.lg})",
         }),
       );
     });
