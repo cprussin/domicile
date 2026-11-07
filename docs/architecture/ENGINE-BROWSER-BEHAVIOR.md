@@ -157,6 +157,20 @@ Patch `0110`:
 - With no certificate installed, the page continues without one and nothing
   is asked, as in Chrome.
 - A page outside any guest gets no.
+- Reloading a page a form posted to asks the shell (`resend-form`). Content's
+  default did nothing, so the reload never happened.
+- A page that stops responding asks the shell (`unresponsive`): yes ends it,
+  as Chrome's "Exit page" does, and it then shows as crashed; no waits, and
+  it is asked again if it stays hung. Withdrawn when the page responds.
+
+## Tooltips
+
+- A page's tooltips (`title` and the like) are reported to the element
+  (`tooltip`, `domicile-tooltip-change`), and the shell draws them. Chrome's
+  are native windows drawn by the shell's view, outside any shell UI.
+- Patch `0181` hands the tooltip to the WebContents' delegate first, and
+  draws none when it takes it. Cleared when the pointer leaves the page, or
+  on a press, as Chrome's is.
 
 ## Error, warning and crashed pages
 
@@ -226,5 +240,6 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-sign-in.sh`: sign-ins.
 - `guard-webview-file-access.sh`: file access prompts.
 - `guard-webview-page-failure.sh`: error pages.
+- `guard-webview-resend-form.sh`: sending a form again.
 - `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.

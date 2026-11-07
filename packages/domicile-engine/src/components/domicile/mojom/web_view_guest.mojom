@@ -244,6 +244,12 @@ enum WebViewPromptKind {
   kExtensionInstall,
   // Turn the extension `subject` back on, with the permissions in `details`.
   kExtensionReEnable,
+  // Reloading would send the page's form again. Accept resends; dismiss
+  // keeps the page as it is.
+  kResendForm,
+  // The page stopped responding. Accept ends it (the page then shows as
+  // crashed); dismiss waits for it. Withdrawn when it responds again.
+  kUnresponsive,
 };
 
 // A question for the shell to ask over the page. `origin` is the site that
@@ -642,6 +648,13 @@ interface WebViewGuestClient {
   // a fresh guest sends nothing.
   PageFailureChanged(WebViewPageFailure? failure);
 
+  // The tooltip under the pointer is now `text`, or none when empty, with the
+  // pointer at (`x`, `y`) in the page's DIPs from the element's top left,
+  // which are the element's CSS pixels. The engine draws no tooltip for the
+  // page: the shell does. Sent only when it changes; empty while the pointer
+  // is outside the page.
+  TooltipChanged(string text, int32 x, int32 y);
+
   // The page is about to navigate its main frame to `url`: a link, a form or
   // a script setting `location`. Not sent for the shell's own navigations,
   // history steps or reloads. See components/domicile/browser/will_navigate.h.
@@ -735,8 +748,8 @@ interface WebViewGuest {
   Print();
 
   // The shell's document saw the pointer move off the element, so the link
-  // under it is cleared until the pointer is back over the page. See
-  // WebViewGuestClient.TargetUrlChanged.
+  // and tooltip under it are cleared until the pointer is back over the page.
+  // See WebViewGuestClient.TargetUrlChanged and TooltipChanged.
   PointerLeft();
 
   // Takes the page out of fullscreen, as Escape does. Reported back as

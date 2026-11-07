@@ -621,6 +621,25 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool PreHandleMouseEvent(content::WebContents* source,
                            const blink::WebMouseEvent& event) override;
 
+  // Reports the page's tooltip to the shell, which draws it; Chrome draws
+  // none. See TooltipChanged in the mojom.
+  bool DomicileTooltip(content::WebContents* source,
+                       const std::u16string& text) override;
+
+  // Asks the shell whether to send the page's form again. See kResendForm in
+  // the mojom. Content's default does nothing, so the reload never happens.
+  void ShowRepostFormWarningDialog(content::WebContents* source) override;
+
+  // Asks the shell whether to end a page that stopped responding, and
+  // withdraws it when the page responds again. See kUnresponsive in the mojom.
+  void RendererUnresponsive(
+      content::WebContents* source,
+      content::RenderWidgetHost* render_widget_host,
+      base::RepeatingClosure hang_monitor_restarter) override;
+  void RendererResponsive(
+      content::WebContents* source,
+      content::RenderWidgetHost* render_widget_host) override;
+
   // Returns this, so the page's dialogs reach the shell. Content's default
   // has none, which dismisses each dialog at once.
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
@@ -900,6 +919,9 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // Sends the link under the pointer to the element if it changed.
   void ReportTargetUrl(const GURL& url);
+  // Sends the tooltip, empty while the pointer is outside the page, if it
+  // changed.
+  void ReportTooltip();
 
   // Reads the description of `frame`, the guest's main frame, in an isolated
   // world, so the page's own scripts cannot see or change the read.
@@ -1053,6 +1075,17 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The renderer's last link, which stays set while the pointer is outside the
   // page. See PreHandleMouseEvent.
   GURL renderer_target_url_;
+  // The renderer's last tooltip, which stays set while the pointer is outside
+  // the page, and the one the shell has. See DomicileTooltip.
+  std::string tooltip_;
+  std::string reported_tooltip_;
+  // Where the pointer last was over the page, in the guest's DIPs, and whether
+  // it is over the page now. See PreHandleMouseEvent.
+  gfx::Point pointer_;
+  bool pointer_inside_ = false;
+  // The unresponsive-page prompt's number while it is asked, or 0. See
+  // RendererUnresponsive.
+  int unresponsive_prompt_ = 0;
   // Whether the page is fullscreen. Also what IsFullscreenForTabOrPending
   // answers, so the renderer's state and the element's never differ.
   bool page_fullscreen_ = false;

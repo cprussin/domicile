@@ -215,6 +215,7 @@ stale state.
 | `favicon` | `domicile-favicon-change` | Icon URL, or `""` |
 | `description` | `domicile-description-change` | The page's `<meta name="description">`, trimmed, or `""` |
 | `targetUrl` | `domicile-target-url-change` | The link under the pointer, or `""`. The engine draws no status bubble; manganese's is `browser/LinkTarget.tsx` |
+| `tooltip`, `tooltipX`, `tooltipY` | `domicile-tooltip-change` | The tooltip under the pointer, such as a `title`, or `""`, and where the pointer was when it appeared, in the element's CSS pixels. The engine draws no tooltip; manganese's is `browser/PageTooltip.tsx` |
 | `findMatches`, `findActiveMatch` | `domicile-find-change` | Find-in-page results |
 | `contentWidth`, `contentHeight` | `domicile-content-size-change` | The size an `extensionpopup` view's page sized itself to |
 | `pageFullscreen` | `domicile-page-fullscreen-change` | Whether the page is fullscreen; see [Fullscreen](#fullscreen) |
@@ -890,8 +891,9 @@ Manganese asks over the page (`manganese-page-requests/SignInAsk.tsx`).
 
 Questions Chrome would ask with dialogs of its own fire `domicile-prompt`:
 letting a site view or edit a file or folder, picking a certificate to sign
-in with, pairing a Bluetooth device, and adding an extension or granting it
-permissions.
+in with, pairing a Bluetooth device, adding an extension or granting it
+permissions, sending a form again on reload, and ending a page that stopped
+responding.
 
 <!-- tab: React -->
 
@@ -931,14 +933,15 @@ frame.addEventListener(WEBVIEW_PROMPT_EVENT, (event) => {
 - **`preventDefault()`:** claims it. Unclaimed, it is answered no.
 - **`kind`:** what is asked; `WEBVIEW_PROMPT_KINDS` lists them and what each
   reads. **`origin`:** the site that asked. **`subject`:** the file's,
-  device's or extension's name. **`details`:** a file's full path, the
+  device's or extension's name, or the page's title. **`details`:** a file's full path, the
   certificates (`"name\nissuer"`), or an extension's permissions. **`pin`:**
   the PIN a Bluetooth device shows.
 - **`accept(choice, text)`:** yes. `choice` is the picked certificate;
   `text` the typed Bluetooth PIN. **`dismiss()`:** no. For a certificate, no
   continues without one.
 - **One at a time.** A newer one replaces the open one, which is answered no
-  and fires `domicile-prompt-withdrawn`, as does one the browser drops.
+  and fires `domicile-prompt-withdrawn`, as does one the browser drops. An
+  `unresponsive` prompt is withdrawn when the page responds again.
 
 Manganese asks over the page (`manganese-page-requests/PromptAsk.tsx`).
 

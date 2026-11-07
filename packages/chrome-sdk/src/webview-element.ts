@@ -179,6 +179,13 @@ export const WEBVIEW_DESCRIPTION_CHANGE_EVENT = "domicile-description-change";
 export const WEBVIEW_TARGET_URL_CHANGE_EVENT = "domicile-target-url-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.tooltip} changes, with
+ * {@link HTMLWebViewElement.tooltipX} and `tooltipY`. Carries no payload.
+ * Bubbles.
+ */
+export const WEBVIEW_TOOLTIP_CHANGE_EVENT = "domicile-tooltip-change";
+
+/**
  * Fired on Ctrl+wheel over a page that did not handle the wheel.
  *
  * The engine does not zoom; the shell picks the step and calls `setZoom`, so
@@ -551,6 +558,11 @@ export const WEBVIEW_PROMPT_WITHDRAWN_EVENT = "domicile-prompt-withdrawn";
  * - `extension-install`, `extension-permissions`, `extension-re-enable`: add,
  *   grant more permissions to, or turn back on the extension `subject`, with
  *   the permissions in `details`.
+ * - `resend-form`: reloading the page titled `subject` sends its form again.
+ *   Accepting resends; dismissing leaves the page as it is.
+ * - `unresponsive`: the page titled `subject` stopped responding. Accepting
+ *   ends it, and the page then shows as crashed; dismissing waits. Withdrawn
+ *   when it responds again.
  */
 export const WEBVIEW_PROMPT_KINDS = [
   "file-view",
@@ -563,6 +575,8 @@ export const WEBVIEW_PROMPT_KINDS = [
   "extension-permissions",
   "extension-install",
   "extension-re-enable",
+  "resend-form",
+  "unresponsive",
 ] as const;
 
 /** One of {@link WEBVIEW_PROMPT_KINDS}. */
@@ -660,6 +674,19 @@ declare global {
      * bubble like Chrome's. Changes fire {@link WEBVIEW_TARGET_URL_CHANGE_EVENT}.
      */
     readonly targetUrl: string;
+    /**
+     * The tooltip under the pointer, such as a `title`, or `""` if none. The
+     * engine draws no tooltip for the page, so the shell does. `""` while the
+     * pointer is outside the page. Changes fire
+     * {@link WEBVIEW_TOOLTIP_CHANGE_EVENT}.
+     */
+    readonly tooltip: string;
+    /**
+     * Where the pointer was when {@link HTMLWebViewElement.tooltip} appeared,
+     * in the element's CSS pixels from its top left.
+     */
+    readonly tooltipX: number;
+    readonly tooltipY: number;
     /**
      * Find `text` and select the next match, or the previous one when
      * `backward` is true. Repeating the same text steps through matches; `""`

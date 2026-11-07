@@ -76,6 +76,7 @@ constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 constexpr char kFaviconChangeEvent[] = "domicile-favicon-change";
 constexpr char kDescriptionChangeEvent[] = "domicile-description-change";
 constexpr char kTargetUrlChangeEvent[] = "domicile-target-url-change";
+constexpr char kTooltipChangeEvent[] = "domicile-tooltip-change";
 
 namespace {
 
@@ -814,10 +815,26 @@ void HTMLWebViewElement::DescriptionChanged(const String& description) {
 
 void HTMLWebViewElement::TargetUrlChanged(const KURL& url) {
   target_url_ = url.IsValid() ? url.GetString() : String("");
+  UpdatePointerListener();
 
+  DispatchEvent(*Event::CreateBubble(AtomicString(kTargetUrlChangeEvent)));
+}
+
+void HTMLWebViewElement::TooltipChanged(const String& text,
+                                        int32_t x,
+                                        int32_t y) {
+  tooltip_ = text;
+  tooltip_x_ = x;
+  tooltip_y_ = y;
+  UpdatePointerListener();
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kTooltipChangeEvent)));
+}
+
+void HTMLWebViewElement::UpdatePointerListener() {
   // The guest's renderer reports nothing when the pointer leaves the page, but
   // the pointer then moves over this document.
-  if (target_url_.empty()) {
+  if (target_url_.empty() && tooltip_.empty()) {
     if (pointer_listener_) {
       GetDocument().removeEventListener(event_type_names::kMousemove,
                                         pointer_listener_.Get(),
@@ -831,8 +848,6 @@ void HTMLWebViewElement::TargetUrlChanged(const KURL& url) {
     GetDocument().addEventListener(event_type_names::kMousemove,
                                    pointer_listener_.Get());
   }
-
-  DispatchEvent(*Event::CreateBubble(AtomicString(kTargetUrlChangeEvent)));
 }
 
 void HTMLWebViewElement::PointerMoved(Event* event) {

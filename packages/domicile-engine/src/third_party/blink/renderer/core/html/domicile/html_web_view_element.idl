@@ -73,6 +73,15 @@
   // over no link. `domicile-target-url-change` signals a change.
   readonly attribute USVString targetUrl;
 
+  // The tooltip under the pointer, such as a `title`, for the shell to draw:
+  // the engine draws none. Empty over none, and while the pointer is outside
+  // the page. `tooltipX` and `tooltipY` are where the pointer was when it
+  // appeared, in this element's CSS pixels. `domicile-tooltip-change` signals
+  // a change.
+  readonly attribute DOMString tooltip;
+  readonly attribute long tooltipX;
+  readonly attribute long tooltipY;
+
   // Finds `text` and selects the next match, or the previous one if
   // `backward`. Repeating the text finds the next match. Empty text stops
   // finding and clears the selection.

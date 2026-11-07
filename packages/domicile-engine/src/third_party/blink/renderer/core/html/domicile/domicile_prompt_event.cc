@@ -44,6 +44,10 @@ String NameOf(Kind kind) {
       return "extension-install";
     case Kind::kExtensionReEnable:
       return "extension-re-enable";
+    case Kind::kResendForm:
+      return "resend-form";
+    case Kind::kUnresponsive:
+      return "unresponsive";
   }
   NOTREACHED();
 }
