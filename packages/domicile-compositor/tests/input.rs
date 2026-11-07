@@ -642,3 +642,106 @@ fn unshifted_on(keymap: &str, name: &str) -> String {
 fn layout_name(keymap: &str) -> String {
     read_back(keymap).layout_get_name(0).to_string()
 }
+
+/// The native client sees the original pinch lifecycle and unscaled metadata.
+#[test]
+fn a_pinch_reaches_the_native_client_without_scroll_events() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+    for frame in [
+        serde_json::json!({"phase":"begin", "device":7, "time":10, "fingers":3}),
+        serde_json::json!({"phase":"update", "device":7, "time":11,
+            "dx":1.25, "dy":-2.5, "scale":1.5, "rotation":-12.0}),
+        serde_json::json!({"phase":"end", "device":7, "time":12, "canceled":true}),
+    ] {
+        let mut frame = frame;
+        frame["type"] = "pointer_pinch".into();
+        frame["app_id"] = app.clone().into();
+        chrome
+            .say(&serde_json::from_value::<ChromeMessage>(frame).unwrap())
+            .unwrap();
+    }
+    for receipt in [
+        "pinch_begin(10, 3)",
+        "pinch_update(11, 1.25, -2.5, 1.5, -12)",
+        "pinch_end(12, 1)",
+    ] {
+        assert!(
+            client.wait_for_trace(receipt, 1),
+            "{receipt} missing: {}",
+            client.trace()
+        );
+    }
+    assert!(
+        !client.trace().contains("axis("),
+        "pinch must not invent scroll distance"
+    );
+}
+
+/// A gesture belongs to the connection that began it, then ends on focus loss.
+#[test]
+fn a_pinch_ignores_another_sender_and_cancels_when_the_pointer_leaves() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+    let mut other = compositor.chrome();
+    let begin = serde_json::from_value(serde_json::json!({
+        "type": "pointer_pinch", "app_id": app, "phase": "begin",
+        "device": 7, "time": 10, "fingers": 2,
+    }))
+    .unwrap();
+    chrome.say(&begin).unwrap();
+    assert!(client.wait_for_trace("pinch_begin(10, 2)", 1));
+    let update = serde_json::from_value(serde_json::json!({
+        "type": "pointer_pinch", "app_id": app, "phase": "update",
+        "device": 7, "time": 11, "dx": 1.25, "dy": -2.5,
+        "scale": 1.5, "rotation": -12,
+    }))
+    .unwrap();
+    other.say(&update).unwrap();
+    chrome
+        .say(&ChromeMessage::PointerLeave {
+            app_id: app.clone(),
+        })
+        .unwrap();
+    // The canceled sequence's late tail must not reach the client.
+    chrome.say(&update).unwrap();
+    chrome
+        .say(&ChromeMessage::Key {
+            app_id: app,
+            keycode: EVDEV_KEY_C,
+            pressed: true,
+        })
+        .unwrap();
+    assert!(client.wait_for_trace(&format!(", {EVDEV_KEY_C}, 1)"), 1));
+    let trace = client.trace();
+    assert!(
+        trace
+            .lines()
+            .any(|line| line.contains("pinch_end(") && line.ends_with(", 1)")),
+        "{trace}"
+    );
+    assert!(!trace.contains("pinch_update("), "{trace}");
+}
+
+/// A dropped engine channel cannot leave a native client's pinch active.
+#[test]
+fn disconnecting_the_sender_cancels_its_pinch() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+    let begin = serde_json::from_value(serde_json::json!({
+        "type": "pointer_pinch", "app_id": app, "phase": "begin",
+        "device": 7, "time": 10, "fingers": 2,
+    }))
+    .unwrap();
+    chrome.say(&begin).unwrap();
+    assert!(client.wait_for_trace("pinch_begin(10, 2)", 1));
+    drop(chrome);
+    assert!(client.wait_for_trace("pinch_end(", 1));
+    let trace = client.trace();
+    assert!(
+        trace
+            .lines()
+            .any(|line| line.contains("pinch_end(") && line.ends_with(", 1)")),
+        "{trace}"
+    );
+}

@@ -6,6 +6,10 @@ Domicile's Chromium fork, kept as a patch series on a pinned Chromium revision.
   compositor submits. CSS then applies to a window like any other element.
 - It also adds an Ozone DRM platform, the shell's control channel, and
   `<webview>` browser windows.
+- Touchpad pinch over an `<app>` reaches its native Wayland client. The engine
+  keeps the platform gesture phases, absolute scale, rotation and cancellation;
+  the client chooses its zoom behavior. Finger scrolling retains its native
+  source and axis stops, including Chrome's two-finger history navigation.
 - Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md). Measurements:
   [ENGINE-FORK-MEASUREMENTS.md](/docs/architecture/ENGINE-FORK-MEASUREMENTS.md).
 

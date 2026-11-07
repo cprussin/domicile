@@ -31,6 +31,9 @@ use wayland_protocols::wp::idle_inhibit::zv1::client::{
 use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1, zwp_keyboard_shortcuts_inhibitor_v1,
 };
+use wayland_protocols::wp::pointer_gestures::zv1::client::{
+    zwp_pointer_gesture_pinch_v1, zwp_pointer_gestures_v1,
+};
 use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
@@ -488,6 +491,7 @@ struct Pixels {
 /// The advertised globals, and those bound from them.
 #[derive(Default)]
 struct Globals {
+    gestures: Option<zwp_pointer_gestures_v1::ZwpPointerGesturesV1>,
     compositor: Option<wl_compositor::WlCompositor>,
     shm: Option<wl_shm::WlShm>,
     /// For `--bubble`.
@@ -604,6 +608,9 @@ impl Client {
                 }
                 "wp_cursor_shape_manager_v1" => {
                     self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zwp_pointer_gestures_v1" => {
+                    self.globals.gestures = Some(registry.bind(name, version.min(3), handle, ()));
                 }
                 "xdg_activation_v1" => {
                     self.globals.activation = Some(registry.bind(name, version.min(1), handle, ()));
@@ -2011,6 +2018,9 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
             }
             if capabilities.contains(wl_seat::Capability::Pointer) {
                 let pointer = seat.get_pointer(handle, ());
+                if let Some(manager) = &client.globals.gestures {
+                    manager.get_pinch_gesture(&pointer, handle, ());
+                }
                 // Created now, because `set_shape` on pointer enter needs the
                 // device to exist.
                 client.cursor = client
@@ -2883,3 +2893,43 @@ mod tests {
         assert_eq!(shm_format(false), wl_shm::Format::Xrgb8888);
     }
 }
+
+impl Dispatch<zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        gesture: &zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1,
+        event: zwp_pointer_gesture_pinch_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        use zwp_pointer_gesture_pinch_v1::Event;
+        match event {
+            Event::Begin { time, fingers, .. } => {
+                crate::say!(gesture.id(), "pinch_begin({time}, {fingers})");
+            }
+            Event::Update {
+                time,
+                dx,
+                dy,
+                scale,
+                rotation,
+            } => {
+                crate::say!(
+                    gesture.id(),
+                    "pinch_update({time}, {dx}, {dy}, {scale}, {rotation})"
+                );
+            }
+            Event::End {
+                time,
+                cancelled: canceled,
+                ..
+            } => {
+                crate::say!(gesture.id(), "pinch_end({time}, {canceled})");
+            }
+            _ => unreachable!("the pinch protocol has only begin, update and end"),
+        }
+    }
+}
+
+delegate_noop!(Client: ignore zwp_pointer_gestures_v1::ZwpPointerGesturesV1);

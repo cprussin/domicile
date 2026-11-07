@@ -163,6 +163,7 @@ class ControlChannel : public mojom::ControlChannel {
   void PointerButton(const std::string& app_id,
                      uint32_t button,
                      bool pressed) override;
+  void PointerPinch(const std::string& app_id, mojom::PinchPtr pinch) override;
   void PointerAxis(const std::string& app_id,
                    double dx,
                    double dy,

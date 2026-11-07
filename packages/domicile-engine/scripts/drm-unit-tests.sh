@@ -67,6 +67,7 @@ SUITES=(
   AbsoluteMouseDeviceTest:2
   AbsoluteMouseConverterTest:7
   WaylandPointerTest:19
+  WaylandPointerGesturesTest:2
   WaylandKeyboardWithoutKeymapTest:1
   HeadlessDeskTest:6
   HeadlessDeskInputTest:10

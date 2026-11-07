@@ -31,6 +31,35 @@ export const pointerAxisSchema = z.object({
   v120_y: z.number().int(),
 });
 
+const pinchEnvelope = {
+  app_id: z.string(),
+  device: z.number().int().min(0).max(0xff_ff_ff_ff),
+  time: z.number().int().min(0).max(0xff_ff_ff_ff),
+  type: z.literal("pointer_pinch"),
+};
+
+/** Native pinch phases; scale is absolute and rotation is a relative angle. */
+export const pointerPinchSchema = z.discriminatedUnion("phase", [
+  z.object({
+    ...pinchEnvelope,
+    fingers: z.number().int().positive().max(0xff_ff_ff_ff),
+    phase: z.literal("begin"),
+  }),
+  z.object({
+    ...pinchEnvelope,
+    dx: z.number(),
+    dy: z.number(),
+    phase: z.literal("update"),
+    rotation: z.number(),
+    scale: z.number().positive(),
+  }),
+  z.object({
+    ...pinchEnvelope,
+    canceled: z.boolean(),
+    phase: z.literal("end"),
+  }),
+]);
+
 const sizeSchema = z.tuple([z.number(), z.number()]);
 
 /**

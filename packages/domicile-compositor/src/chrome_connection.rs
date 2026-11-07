@@ -156,6 +156,18 @@ fn chrome_connection(
     debug!("chrome client disconnected");
 }
 
+struct PinchOwner<'a> {
+    hub: &'a ChromeHub,
+    id: usize,
+}
+
+impl Drop for PinchOwner<'_> {
+    fn drop(&mut self) {
+        self.hub
+            .send_request(ClientRequest::PinchOwnerGone { owner: self.id });
+    }
+}
+
 fn read_chrome_messages(
     hub: &Arc<ChromeHub>,
     stream: UnixStream,
@@ -262,6 +274,7 @@ fn read_chrome_messages(
     // Whether this connection is an app's, which may make only the system
     // calls an app may. See `docs/architecture/APP-MODULES.md`.
     let mut app = false;
+    let mut pinch_owner = None;
     for line in reader.lines() {
         let Ok(line) = line else { break };
         let said = parse_chrome(line.trim());
@@ -431,6 +444,20 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::PointerLeave { .. }) => {
                 hub.send_request(ClientRequest::PointerLeave);
+                Vec::new()
+            }
+            Ok(ChromeMessage::PointerPinch { app_id, pinch }) => {
+                let owner = pinch_owner
+                    .get_or_insert_with(|| PinchOwner {
+                        hub,
+                        id: Arc::as_ptr(writer) as usize,
+                    })
+                    .id;
+                hub.send_request(ClientRequest::PointerPinch {
+                    owner,
+                    app_id,
+                    pinch,
+                });
                 Vec::new()
             }
             Ok(ChromeMessage::PointerButton {
