@@ -650,7 +650,7 @@
         },
         "scroll_acceleration": {
           "default": true,
-          "description": "Increase scroll distance with gesture speed, up to four times.",
+          "description": "Increase page scroll distance with gesture speed, up to four times.",
           "type": "boolean"
         },
         "scroll_factor": {
