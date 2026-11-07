@@ -1,5 +1,31 @@
 # @domicile-desktop/manganese-page-requests
 
+## 1.2.0
+
+### Minor Changes
+
+- a354497: A site or proxy that asks for a username and password now asks in the shell, over the page, instead of in Chrome's unstyled dialog drawn over the desktop. `<webview>` fires `domicile-sign-in`.
+- 1af639c: File access, client certificate, Bluetooth pairing and extension permission prompts now ask in the shell, over the page, instead of in Chrome's unstyled dialogs drawn over the desktop. Sites in browser windows can now be allowed to edit files they open. `<webview>` fires `domicile-prompt`.
+- 18413ff: A link for an app, such as Zoom or Slack, asks "Open Zoom?" over its page in the shell's style, naming the app and showing its icon, instead of Chrome's unstyled "Open xdg-open?" dialog. A secure site can be let open these links without asking. Shells get `domicile-external-app` on `<webview>`.
+- 9246b97: A page's color, date and time pickers and a text box's suggestion list are now drawn by the shell, hung from the control, instead of by Chrome. `<webview>` fires `domicile-picker` with the control's kind, value, suggestions and box, answered with `choose()` or `cancel()`.
+- bb1e4cb: A page's tooltips, the "send the form again?" question on reload and the "page isn't responding" question are now the shell's, instead of Chrome's. `<webview>` reports its tooltip as `tooltip` with `domicile-tooltip-change`, and `domicile-prompt` gains the `resend-form` and `unresponsive` kinds. Reloading a page a form posted to used to do nothing; it now asks.
+
+### Patch Changes
+
+- Updated dependencies [8eaae53]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [1af639c]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [9246b97]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [75708d7]
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/component-library@2.0.2
+  - @domicile-desktop/system-apps@1.2.0
+
 ## 1.1.1
 
 ### Patch Changes

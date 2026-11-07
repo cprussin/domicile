@@ -1,5 +1,25 @@
 # @domicile-desktop/manganese-inbox-gmail
 
+## 0.1.2
+
+### Patch Changes
+
+- bc45b4c: Gmail's page no longer notifies the same mail again while its window is open.
+- d69b2f4: A page's notification names its browser window, so only the Gmail inbox's own window has its duplicate notifications cleared; Gmail in another window notifies again.
+- Updated dependencies [8eaae53]
+- Updated dependencies [bc45b4c]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [a354497]
+- Updated dependencies [1af639c]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [9246b97]
+- Updated dependencies [bb1e4cb]
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/manganese-notifications@1.1.2
+  - @domicile-desktop/manganese-bar-module-gmail@2.0.2
+  - @domicile-desktop/react@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes

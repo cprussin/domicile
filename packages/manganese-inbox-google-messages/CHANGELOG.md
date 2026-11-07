@@ -1,5 +1,14 @@
 # @domicile-desktop/manganese-inbox-google-messages
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [bc45b4c]
+- Updated dependencies [d69b2f4]
+  - @domicile-desktop/manganese-notifications@1.1.2
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.2
+
 ## 0.1.1
 
 ### Patch Changes

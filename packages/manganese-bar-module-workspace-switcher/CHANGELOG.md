@@ -1,5 +1,29 @@
 # @domicile-desktop/manganese-bar-module-workspace-switcher
 
+## 1.1.2
+
+### Patch Changes
+
+- e481089: The workspace switcher's white chip slides to the new workspace with a small bounce, and each number turns black as the chip passes under it.
+- 75708d7: The workspace switcher's chip slides smoothly when a workspace comes or goes at the end of the row: the bar items beside its empty middle no longer clip while they resize (`FluidItem`'s new `overflow` prop), and the chip's clip no longer depends on the row's width.
+- Updated dependencies [f4f993a]
+- Updated dependencies [b3e7457]
+- Updated dependencies [f6dc5b2]
+- Updated dependencies [cd7e4ba]
+- Updated dependencies [28e836c]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [1af639c]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [9246b97]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [280ce42]
+- Updated dependencies [75708d7]
+  - @domicile-desktop/manganese-window-management@1.3.0
+  - @domicile-desktop/component-library@2.0.2
+  - @domicile-desktop/manganese-bar@1.1.2
+
 ## 1.1.1
 
 ### Patch Changes

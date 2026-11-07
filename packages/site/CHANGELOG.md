@@ -1,5 +1,32 @@
 # @domicile-desktop/site
 
+## 0.2.0
+
+### Minor Changes
+
+- fe97fd8: Reframe the site around blurring the web and the desktop: a new homepage story (why unify, what becomes possible, build something weird, manganese), a "How it works" docs page, new demo captures, and a "Built with AI" answer in the FAQ.
+
+### Patch Changes
+
+- b8a88e2: The FAQ and "How a shell works" say a shell can be written in Rust, and point to the Dioxus example.
+- e8696d9: `domicile load-shell` goes back to the shell you had when the new one fails to run, and prints why.
+- 56bab6c: Add Vercel Web Analytics to the site.
+- b8a88e2: Polish the "You're already running a browser" diagrams, reword the speed FAQ, and drop "Anthropic's AI model" from the AI disclosure.
+- 7e3f354: Shells can use WebAssembly, so a shell can be written in Rust or another language that compiles to wasm. `examples/dioxus-shell` is one, in Dioxus.
+- Updated dependencies [8eaae53]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [1af639c]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [9246b97]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [75708d7]
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/component-library@2.0.2
+  - @domicile-desktop/react@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes

@@ -1,5 +1,36 @@
 # domicile
 
+## 1.2.0
+
+### Minor Changes
+
+- 8eaae53: Configure touchpad tapping, clicking, scrolling and typing suppression, and mouse acceleration and scrolling, through the desktop config. Choose native libinput typing suppression or configurable pauses. Apply settings on reload and device reconnection.
+- 63db244: Chrome never draws a dialog over the desktop. Any Chrome dialog the shell has no answer for is canceled and logged, so a gap fails closed. Payment Request and FedCM ("Sign in with Google"'s account chooser) are off, so sites use their own checkout and sign-in pages, and picture-in-picture video is off since Chrome floats it in a window of its own. Document picture-in-picture still opens, as a shell window.
+- a354497: A site or proxy that asks for a username and password now asks in the shell, over the page, instead of in Chrome's unstyled dialog drawn over the desktop. `<webview>` fires `domicile-sign-in`.
+- 1af639c: File access, client certificate, Bluetooth pairing and extension permission prompts now ask in the shell, over the page, instead of in Chrome's unstyled dialogs drawn over the desktop. Sites in browser windows can now be allowed to edit files they open. `<webview>` fires `domicile-prompt`.
+- 18413ff: A link for an app, such as Zoom or Slack, asks "Open Zoom?" over its page in the shell's style, naming the app and showing its icon, instead of Chrome's unstyled "Open xdg-open?" dialog. A secure site can be let open these links without asking. Shells get `domicile-external-app` on `<webview>`.
+- 69fe0d8: A page that can't load, has a certificate problem, is flagged as unsafe or crashes now shows a shell page with Try again, Go back or Continue anyway, instead of Chrome's own error and warning pages. `<webview>` reports why as `pageFailure` with `domicile-page-failure-change`, and `proceedPastWarning()` passes a warning.
+- 9246b97: A page's color, date and time pickers and a text box's suggestion list are now drawn by the shell, hung from the control, instead of by Chrome. `<webview>` fires `domicile-picker` with the control's kind, value, suggestions and box, answered with `choose()` or `cancel()`.
+- bb1e4cb: A page's tooltips, the "send the form again?" question on reload and the "page isn't responding" question are now the shell's, instead of Chrome's. `<webview>` reports its tooltip as `tooltip` with `domicile-tooltip-change`, and `domicile-prompt` gains the `resend-form` and `unresponsive` kinds. Reloading a page a form posted to used to do nothing; it now asks.
+
+### Patch Changes
+
+- d69b2f4: A page's notification names its browser window, so only the Gmail inbox's own window has its duplicate notifications cleared; Gmail in another window notifies again.
+- e8696d9: `domicile load-shell` goes back to the shell you had when the new one fails to run, and prints why.
+- 7166899: Show GPU-drawn apps on NVIDIA drivers whose EGL can't list devices, by opening the GPU through GBM instead
+- 4b5b6f7: On a tty, a website's own pointer image (such as the hand over a Google map) turns with a rotated monitor instead of showing on its side.
+- f14ec1c: A tty desktop whose graphics card cannot draw, even on the CPU, no longer restarts its GPU process forever on a black screen. Chromium's GPU crash limit is back on, and when no GPU mode works `domicile` stops with "renderer unavailable" and exit code 69.
+- 7e3f354: Shells can use WebAssembly, so a shell can be written in Rust or another language that compiles to wasm. `examples/dioxus-shell` is one, in Dioxus.
+- Updated dependencies [b3e7457]
+- Updated dependencies [bc45b4c]
+- Updated dependencies [d69b2f4]
+  - @domicile-desktop/manganese@1.1.2
+  - @domicile-desktop/app-history@0.0.4
+  - @domicile-desktop/app-settings@0.1.2
+  - @domicile-desktop/shell-simple@0.0.4
+  - @domicile-desktop/shell-splash@0.0.4
+  - @domicile-desktop/builder@0.1.2
+
 ## 1.1.2
 
 ### Patch Changes
