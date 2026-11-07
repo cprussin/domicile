@@ -199,6 +199,11 @@ impl Gbm {
         }
     }
 
+    /// The `gbm_device`, for EGL's GBM platform. Valid while `self` lives.
+    pub fn raw(&self) -> *mut c_void {
+        self.device
+    }
+
     /// Whether a small renderable buffer allocates: the probe for a device
     /// that opens but allocates nothing.
     fn allocates(&self) -> bool {

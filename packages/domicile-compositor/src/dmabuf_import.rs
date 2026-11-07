@@ -9,12 +9,15 @@
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::Format;
-use smithay::backend::egl::{EGLContext, EGLDevice, EGLDisplay};
+use smithay::backend::egl::native::{EGLNativeDisplay, EGLPlatform};
+use smithay::backend::egl::{ffi, EGLContext, EGLDevice, EGLDisplay};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportDma as _;
 
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
+
+use crate::gbm::Gbm;
 
 /// The EGL library Smithay loads. Probed first so a missing GPU stack is an
 /// error instead of a crash.
@@ -53,22 +56,98 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
     // SAFETY: this opens the same library Smithay opens next, running the
     // same initializers.
     unsafe { libloading::Library::new(EGL_LIBRARY) }?;
-    let devices = EGLDevice::enumerate()?;
-    let device = preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
-    let main_device = drm_node(&device);
-    let node = device
-        .render_device_path()
-        .or_else(|_| device.drm_device_path())
-        .ok();
-    tracing::debug!(device = ?node, main_device, "dmabuf import device");
-    // SAFETY: the device comes from EGL's own enumeration, and the display
-    // takes ownership of it.
-    let display = unsafe { EGLDisplay::new(device) }?;
+    let (display, node, main_device) = match EGLDevice::enumerate() {
+        Ok(devices) => {
+            let device =
+                preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
+            let main_device = drm_node(&device);
+            let node = device
+                .render_device_path()
+                .or_else(|_| device.drm_device_path())
+                .ok();
+            tracing::debug!(device = ?node, main_device, "dmabuf import device");
+            // SAFETY: the device comes from EGL's own enumeration, and the
+            // display takes ownership of it.
+            (unsafe { EGLDisplay::new(device) }?, node, main_device)
+        }
+        // NVIDIA's EGL offers the GBM platform but not
+        // `EGL_EXT_device_enumeration`.
+        Err(err) => {
+            tracing::debug!(%err, "EGL cannot list devices; trying GBM on each render node");
+            let (display, node) = gbm_display(Path::new("/dev/dri"))?;
+            let main_device = std::fs::metadata(&node).ok().map(|node| node.rdev());
+            tracing::debug!(device = ?node, main_device, "dmabuf import device");
+            (display, Some(node), main_device)
+        }
+    };
     let context = EGLContext::new(&display)?;
     // SAFETY: the renderer is created, used and dropped on the Wayland
     // thread, which is where the context is made current.
     let renderer = unsafe { GlesRenderer::new(context) }?;
     Ok((renderer, DmabufImporter { main_device, node }))
+}
+
+/// An EGL display over libgbm on the first render node in `dir` that has one,
+/// and that node.
+fn gbm_display(dir: &Path) -> Result<(EGLDisplay, PathBuf), ImportError> {
+    for node in render_nodes(dir) {
+        let gbm = match Gbm::open(crate::gbm::LIBRARY, &node) {
+            Ok(gbm) => gbm,
+            Err(err) => {
+                tracing::debug!(?node, %err, "no GBM device on this render node");
+                continue;
+            }
+        };
+        // SAFETY: the display keeps the device, and so its fd, alive for its
+        // whole life.
+        match unsafe { EGLDisplay::new(GbmDisplay(gbm)) } {
+            Ok(display) => return Ok((display, node)),
+            Err(err) => tracing::debug!(?node, %err, "EGL refuses this GBM device"),
+        }
+    }
+    Err(ImportError::NoDevice)
+}
+
+/// The render nodes in `dir`, in order.
+fn render_nodes(dir: &Path) -> Vec<PathBuf> {
+    let mut nodes: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with("renderD"))
+        .map(|entry| entry.path())
+        .collect();
+    nodes.sort();
+    nodes
+}
+
+/// A libgbm device as an EGL native display.
+struct GbmDisplay(Gbm);
+
+// SAFETY: a gbm device is not tied to the thread that made it, and the EGL
+// display that owns this only uses it on the Wayland thread.
+unsafe impl Send for GbmDisplay {}
+
+impl EGLNativeDisplay for GbmDisplay {
+    fn supported_platforms(&self) -> Vec<EGLPlatform<'_>> {
+        let none = || vec![ffi::egl::NONE as ffi::EGLint];
+        vec![
+            EGLPlatform::new(
+                ffi::egl::PLATFORM_GBM_KHR,
+                "PLATFORM_GBM_KHR",
+                self.0.raw(),
+                none(),
+                &["EGL_KHR_platform_gbm"],
+            ),
+            EGLPlatform::new(
+                ffi::egl::PLATFORM_GBM_MESA,
+                "PLATFORM_GBM_MESA",
+                self.0.raw(),
+                none(),
+                &["EGL_MESA_platform_gbm"],
+            ),
+        ]
+    }
 }
 
 impl DmabufImporter {
@@ -147,7 +226,7 @@ fn preferred_device<D>(
 mod tests {
     use smithay::backend::allocator::{Format, Fourcc, Modifier};
 
-    use super::advertisable;
+    use super::{advertisable, render_nodes};
 
     fn format(code: Fourcc) -> Format {
         Format {
@@ -183,5 +262,23 @@ mod tests {
         ];
         expected.sort_by_key(|code| *code as u32);
         assert_eq!(advertised, expected);
+    }
+
+    #[test]
+    fn render_nodes_are_listed_in_order_without_primary_nodes() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["renderD129", "card0", "renderD128", "card1"] {
+            std::fs::write(dir.path().join(name), "").unwrap();
+        }
+
+        assert_eq!(
+            render_nodes(dir.path()),
+            [dir.path().join("renderD128"), dir.path().join("renderD129")]
+        );
+    }
+
+    #[test]
+    fn no_dri_directory_has_no_render_nodes() {
+        assert!(render_nodes(std::path::Path::new("/nonexistent/dri")).is_empty());
     }
 }
