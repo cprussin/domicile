@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
@@ -26,8 +27,8 @@
 #include "components/domicile/browser/system_call.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
-#include "components/domicile/common/theme.h"
 #include "components/domicile/common/domicile_scheme.h"
+#include "components/domicile/common/theme.h"
 #include "net/base/net_errors.h"
 
 namespace domicile {
@@ -664,6 +665,36 @@ void ControlChannel::PointerButton(const std::string& app_id,
   message.Set("button", static_cast<int>(button));
   message.Set("pressed", pressed);
   SendMessage(std::move(message));
+}
+
+void ControlChannel::PointerPinch(const std::string& app_id,
+                                  mojom::PinchPtr pinch) {
+  base::DictValue message = ForApp("pointer_pinch", app_id);
+  message.Set("device", static_cast<double>(pinch->device));
+  message.Set("time", static_cast<double>(pinch->time));
+  switch (pinch->phase) {
+    case mojom::PinchPhase::kBegin:
+      message.Set("phase", "begin");
+      message.Set("fingers", static_cast<double>(pinch->fingers));
+      break;
+    case mojom::PinchPhase::kUpdate:
+      message.Set("phase", "update");
+      message.Set("dx", pinch->dx);
+      message.Set("dy", pinch->dy);
+      message.Set("scale", pinch->scale);
+      message.Set("rotation", pinch->rotation);
+      break;
+    case mojom::PinchPhase::kEnd:
+      message.Set("phase", "end");
+      message.Set("canceled", pinch->canceled);
+      break;
+  }
+  // base::Value's integer is signed, but the Wayland clock is uint32. Keep
+  // whole-valued doubles as integer JSON tokens so Rust can read all 32 bits.
+  std::string line;
+  CHECK(base::JSONWriter::WriteWithOptions(
+      message, base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION, &line));
+  Send(line);
 }
 
 void ControlChannel::PointerAxis(const std::string& app_id,

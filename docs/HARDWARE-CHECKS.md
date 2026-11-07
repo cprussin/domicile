@@ -5,6 +5,18 @@ one: `crux` has a GPU but no panel, and the container has no `/dev/dri`. Each
 check is one run with a log line to look for. Run with `--vmodule=drm*=1` to
 see the `configuring N display(s)` lines.
 
+## Touchpad gestures
+
+Unverified. On a tty with a touchpad, open Google Chrome with
+`--ozone-platform=wayland --app=<a long page>`. Expect:
+
+- a two-finger pinch zooms the page, and the shell around it stays put;
+- a two-finger swipe right goes back, and left goes forward;
+- a vertical two-finger scroll scrolls without navigating.
+
+`RUST_LOG=domicile_compositor=trace` logs each `pointer_pinch` the compositor
+gets. No line: the engine never saw the pinch.
+
 ## Suspend and resume
 
 Close the lid, then open it.

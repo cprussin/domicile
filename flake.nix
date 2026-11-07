@@ -678,6 +678,14 @@
         '';
       };
 
+      # `domicile-test-client`, for the VM tests that need a window which
+      # prints every event it gets. Not installed by any package.
+      testClient = domicileBinaries.overrideAttrs {
+        pname = "domicile-test-client";
+        cargoBuildFlags = [ "-p" "domicile-compositor" "--bin" "domicile-test-client" ];
+        postFixup = "";
+      };
+
       # The workspace's manifests and lockfile: all `bun install` reads, so
       # editing source does not refetch the modules.
       workspaceManifests = pkgs.lib.fileset.toSource {
@@ -1890,6 +1898,232 @@
                     print(f"$ {command}")
                     print(machine.execute(f"{command} 2>&1")[1])
                 print("each monitor's biggest colors:", screens)
+                raise
+          '';
+        };
+
+        # A touchpad on a tty: libinput in the engine reads a uinput
+        # multitouch pad, and a native window under the pointer gets its
+        # two-finger swipe as finger scrolling with axis stops, and its pinch
+        # as `zwp_pointer_gestures_v1`. Covers the acquisition the nested
+        # guards cannot. See docs/architecture/GESTURES.md.
+        #
+        # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
+        touchpad-gestures-on-a-tty = pkgs.testers.runNixOSTest {
+          name = "touchpad-gestures-on-a-tty";
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit = ''
+              if [ "$(tty)" = /dev/tty1 ]; then
+                export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*evdev*=1,*domicile*=1"
+                export RUST_LOG=domicile_compositor=debug
+                exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
+              fi
+            '';
+            # A mouse to put the pointer over the window, and a multitouch pad
+            # libinput takes for a touchpad. The test writes a command per line
+            # to `/run/input`: `move DX DY`, `swipe` or `pinch`.
+            hardware.uinput.enable = true;
+            systemd.services.test-input = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-input"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+                import time
+
+                from evdev import AbsInfo, UInput, ecodes as e
+
+                # 100 x 65 mm at 40 units a millimeter.
+                WIDTH, HEIGHT, RESOLUTION = 4000, 2600, 40
+                mouse = UInput(
+                    {
+                        e.EV_REL: [e.REL_X, e.REL_Y],
+                        e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT],
+                    },
+                    name="test mouse",
+                )
+                pad = UInput(
+                    {
+                        e.EV_KEY: [
+                            e.BTN_LEFT, e.BTN_TOUCH, e.BTN_TOOL_FINGER,
+                            e.BTN_TOOL_DOUBLETAP, e.BTN_TOOL_TRIPLETAP,
+                            e.BTN_TOOL_QUADTAP,
+                        ],
+                        e.EV_ABS: [
+                            (e.ABS_X, AbsInfo(0, 0, WIDTH, 0, 0, RESOLUTION)),
+                            (e.ABS_Y, AbsInfo(0, 0, HEIGHT, 0, 0, RESOLUTION)),
+                            (e.ABS_MT_SLOT, AbsInfo(0, 0, 4, 0, 0, 0)),
+                            (e.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_X, AbsInfo(0, 0, WIDTH, 0, 0, RESOLUTION)),
+                            (e.ABS_MT_POSITION_Y, AbsInfo(0, 0, HEIGHT, 0, 0, RESOLUTION)),
+                        ],
+                    },
+                    name="test touchpad",
+                    input_props=[e.INPUT_PROP_POINTER, e.INPUT_PROP_BUTTONPAD],
+                )
+                tracking = 0
+
+
+                def frame(fingers):
+                    """Each finger's `(x, y)`, one slot each, then a report."""
+                    for slot, (x, y) in enumerate(fingers):
+                        pad.write(e.EV_ABS, e.ABS_MT_SLOT, slot)
+                        pad.write(e.EV_ABS, e.ABS_MT_POSITION_X, x)
+                        pad.write(e.EV_ABS, e.ABS_MT_POSITION_Y, y)
+                    pad.write(e.EV_ABS, e.ABS_X, fingers[0][0])
+                    pad.write(e.EV_ABS, e.ABS_Y, fingers[0][1])
+                    pad.syn()
+                    time.sleep(0.012)
+
+
+                def two_fingers(path):
+                    """Two fingers down, through `path`'s frames, then up."""
+                    global tracking
+                    for slot in range(2):
+                        tracking += 1
+                        pad.write(e.EV_ABS, e.ABS_MT_SLOT, slot)
+                        pad.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+                    pad.write(e.EV_KEY, e.BTN_TOUCH, 1)
+                    pad.write(e.EV_KEY, e.BTN_TOOL_DOUBLETAP, 1)
+                    frame(path[0])
+                    for fingers in path[1:]:
+                        frame(fingers)
+                    for slot in range(2):
+                        pad.write(e.EV_ABS, e.ABS_MT_SLOT, slot)
+                        pad.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+                    pad.write(e.EV_KEY, e.BTN_TOUCH, 0)
+                    pad.write(e.EV_KEY, e.BTN_TOOL_DOUBLETAP, 0)
+                    pad.syn()
+                    time.sleep(0.2)
+
+
+                def swipe():
+                    """Side by side, 15 mm apart, 40 mm to the right."""
+                    two_fingers([
+                        [(1000 + 40 * step, 1300), (1600 + 40 * step, 1300)]
+                        for step in range(40)
+                    ])
+
+
+                def pinch():
+                    """25 mm apart, spreading to 85 mm."""
+                    two_fingers([
+                        [(1500 - 30 * step, 1300), (2500 + 30 * step, 1300)]
+                        for step in range(40)
+                    ])
+
+
+                os.mkfifo("/run/input")
+                while True:
+                    with open("/run/input") as commands:
+                        for command in commands:
+                            match command.split():
+                                case ["move", dx, dy]:
+                                    mouse.write(e.EV_REL, e.REL_X, int(dx))
+                                    mouse.write(e.EV_REL, e.REL_Y, int(dy))
+                                    mouse.syn()
+                                case ["swipe"]:
+                                    swipe()
+                                case ["pinch"]:
+                                    pinch()
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+          };
+          testScript = ''
+            import datetime as dt
+
+            WAIT = dt.timedelta(seconds=300)
+            CLIENT = (
+                "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                "${testClient}/bin/domicile-test-client --trace --title gestures' "
+                ">/tmp/client.log 2>&1 &"
+            )
+
+
+            def say(command):
+                machine.succeed(f"echo '{command}' >/run/input")
+
+
+            def traced(pattern):
+                """Whether the client's trace has a line matching `pattern`."""
+                return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
+
+
+            def the_window_has_the_pointer():
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                # Sized, so the shell has placed it on the monitor. The first
+                # configure comes before the engine has a display, when the
+                # pointer has nowhere to move.
+                machine.wait_until_succeeds(
+                    "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
+
+                def entered(_):
+                    # The simple shell opens the first window at the top left,
+                    # 320 by 240. Into the corner, then a little way back out,
+                    # each try.
+                    machine.succeed("for _ in $(seq 40); do echo 'move -100 -100' >/run/input; done")
+                    machine.succeed("for _ in $(seq 10); do echo 'move 8 8' >/run/input; done")
+                    return traced(r"wl_pointer@[0-9]+\.enter\(")
+
+                retry(entered, timeout=dt.timedelta(seconds=60))
+
+
+            def a_swipe_scrolls_with_fingers_and_stops():
+                say("swipe")
+                # `wl_pointer.axis_source` finger is 1, and the horizontal axis
+                # is 1.
+                retry(lambda _: traced(r"axis_source\(1\)"), timeout=dt.timedelta(seconds=30))
+                assert traced(r"\baxis\([0-9]+, 1, "), "no horizontal finger scrolling"
+                # The stop comes when the fingers lift, after the whole swipe's
+                # scrolling has reached the client.
+                try:
+                    retry(lambda _: traced(r"axis_stop\([0-9]+, 1\)"), timeout=dt.timedelta(seconds=30))
+                except Exception:
+                    raise AssertionError("the horizontal axis never stopped")
+                assert not traced(r"axis_discrete\("), "a finger scroll came with wheel steps"
+
+
+            def a_pinch_reaches_the_window():
+                say("pinch")
+                retry(lambda _: traced(r"pinch_begin\([0-9]+, 2\)"), timeout=dt.timedelta(seconds=30))
+                assert traced(r"pinch_update\("), "the pinch never updated"
+                retry(lambda _: traced(r"pinch_end\([0-9]+, 0\)"), timeout=dt.timedelta(seconds=10))
+
+
+            machine.wait_for_unit("multi-user.target")
+            try:
+                the_window_has_the_pointer()
+                a_swipe_scrolls_with_fingers_and_stops()
+                a_pinch_reaches_the_window()
+            except Exception:
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # The runner keeps only the tail of this output, so the
+                # compositor and engine lines come last.
+                for command in [
+                    "grep -vE 'frame\\(|motion\\(|release\\(|global\\(' /tmp/client.log | tail -15 | cut -c1-160",
+                    "echo motions: $(grep -c 'motion(' /tmp/client.log)",
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                    "grep -vE '^\\[' /tmp/domicile.log | grep -iE 'pointer|focus|toplevel|seat|window' | tail -15 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'pointer|cursor|test mouse|touchpad' | tail -12 | cut -c1-200 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
                 raise
           '';
         };

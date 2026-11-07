@@ -114,6 +114,7 @@ class MODULES_EXPORT DomicileHost final
                         uint32_t button,
                         bool pressed) override;
   void AppPointerLeave(const String& app_id) override;
+  void AppPointerPinch(const String& app_id, const ui::NativePinch&) override;
   void AppPointerAxis(const String& app_id,
                       double dx,
                       double dy,

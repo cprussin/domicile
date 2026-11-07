@@ -76,6 +76,7 @@ impl SeatHandler for DomicileCompositor {
 impl TabletSeatHandler for DomicileCompositor {}
 
 delegate_seat!(DomicileCompositor);
+smithay::delegate_pointer_gestures!(DomicileCompositor);
 
 delegate_cursor_shape!(DomicileCompositor);
 
