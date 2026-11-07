@@ -420,9 +420,9 @@ Rules:
   the tab it uncovers is drawn first (`movingStyles`).
 - A closed or sent-away window keeps rendering from a saved record
   (`closing.ts`) at its old place in the document, so React does not remount
-  a `<webview>`. It takes no input while it leaves. A closed client's surface
-  is already gone, so only its frame animates; a browser window keeps its
-  page.
+  a `<webview>`. It takes no input while it leaves. Its contents animate
+  too: the compositor keeps a closed window's surface, and the engine a closed
+  browser window's page (muted), for a second after it closes.
 - A leaving window draws above the windows moving into its space, but under
   the windows that were over it (`leaving`).
 - Keyframes that move or fade a window never set `z-index`. Chromium runs an

@@ -24,9 +24,10 @@
 //
 // The engine's document calls `HostShell` once the module loads.
 
-// Time for the engine to end private browsing after its last page closes:
+// Time for the engine to end private browsing after its last page closes: a
+// closed window's page lingers a second for the shell's close animation, then
 // ProfileDestroyer waits up to a second for the pages' renderers.
-const END_MS = 3000;
+const END_MS = 4000;
 
 export const HostShell = (_root, desktop) => {
   /**

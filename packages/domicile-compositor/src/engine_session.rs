@@ -23,6 +23,7 @@ use crate::engine::{
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_imports::{Imports, Route, Then};
+use crate::engine_lingering::{Linger, Lingering};
 use crate::engine_surfaces::Surfaces;
 use crate::engine_waiting::Waiting;
 use crate::uploads::UploadId;
@@ -189,6 +190,19 @@ pub struct EngineSession {
     /// The frame each surface committed before a page embedded it. See
     /// `engine_waiting`.
     waiting: Waiting<Frame>,
+    /// Closed windows' surfaces, still drawn while the shell animates them
+    /// out. See `engine_lingering`.
+    lingering: Lingering,
+}
+
+/// What [`EngineSession::window_gone`] did.
+#[derive(Debug, Default)]
+pub struct WindowGone {
+    /// Buffers to release now: frames that never went up.
+    pub releases: Vec<Release>,
+    /// The surface left on screen, for the caller to end with
+    /// [`EngineSession::linger_over`] after [`crate::engine_lingering::LINGER`].
+    pub linger: Option<Linger>,
 }
 
 impl EngineSession {
@@ -205,6 +219,7 @@ impl EngineSession {
             held: HeldBuffers::default(),
             mapped: HashMap::new(),
             waiting: Waiting::default(),
+            lingering: Lingering::default(),
         })
     }
 
@@ -231,6 +246,9 @@ impl EngineSession {
             .map(|(app_id, surface)| (surface, app_id))
             .collect();
         let importing = self.imports.clear();
+        // The old engine took lingering surfaces with it; `taken` has their
+        // holds.
+        self.lingering.clear();
 
         let dialed = self.engine.reconnect(&self.socket);
         if dialed.is_ok() {
@@ -261,8 +279,8 @@ impl EngineSession {
         };
         for ((surface, _), buffer) in taken.on_screen {
             let Some(app_id) = apps.get(&surface) else {
-                // Unreachable: `window_gone` drops an app's holds when it
-                // forgets the app. Release the buffer anyway.
+                // A closed window's lingering surface, which has no app.
+                // Release the buffer.
                 session.releases.push(Release {
                     buffer,
                     surface,
@@ -704,29 +722,47 @@ impl EngineSession {
         self.held.next_expiry()
     }
 
-    /// Destroys the app's surface and returns its buffers at once, since no
-    /// release will arrive for them.
-    pub fn window_gone(&mut self, app_id: &str) -> Vec<Release> {
+    /// Forgets the app's surface, leaving its last frame on screen.
+    ///
+    /// The surface lingers, with its imports and holds, until
+    /// [`EngineSession::linger_over`], so the shell's close animation shows
+    /// the window rather than an empty box. Frames that never went up are
+    /// released now.
+    pub fn window_gone(&mut self, app_id: &str) -> WindowGone {
         self.mapped.remove(app_id);
         let Some(surface) = self.surfaces.forget(app_id) else {
+            return WindowGone::default();
+        };
+        // Taken now so a finished import has no app to show it for.
+        let gone = self.imports.surface_gone(surface);
+        let waited = self.waiting.take(surface).into_iter().chain(gone.waited);
+        WindowGone {
+            releases: waited
+                .map(|frame| Release {
+                    buffer: frame.buffer,
+                    surface,
+                    why: Returned::Abandoned,
+                })
+                .collect(),
+            linger: Some(self.lingering.start(surface, gone.ids)),
+        }
+    }
+
+    /// Destroys a closed window's lingering surface and returns its buffers,
+    /// since no release will arrive for them. Nothing if a lost engine already
+    /// took it.
+    pub fn linger_over(&mut self, linger: Linger) -> Vec<Release> {
+        let Some(imports) = self.lingering.over(linger) else {
             return Vec::new();
         };
+        let surface = linger.surface;
         // The GPU process keeps each imported buffer's fds until told to
         // forget it. Leaked imports exhaust its fds and crash it on a `CHECK`.
-        let gone = self.imports.surface_gone(surface);
-        for buffer in gone.ids {
+        for buffer in imports {
             self.engine.forget(surface, buffer);
         }
         self.engine.destroy_surface(surface);
-        let waited = self.waiting.take(surface).into_iter().chain(gone.waited);
         returned(self.held.abandon(surface), Returned::Abandoned)
-            .into_iter()
-            .chain(waited.map(|frame| Release {
-                buffer: frame.buffer,
-                surface,
-                why: Returned::Abandoned,
-            }))
-            .collect()
     }
 
     /// Drops a destroyed `wl_buffer`'s imports on every surface and returns
