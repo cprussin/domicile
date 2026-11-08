@@ -1482,6 +1482,10 @@
             programs.domicile.enable = true;
             virtualisation = {
               memorySize = 4096;
+              # The store as a disk image, not the host's over 9p. Over 9p the
+              # engine's startup page faults stall behind the runner's other
+              # builds, long enough that the desk misses the test's timeouts.
+              useNixStoreImage = true;
               cores = 2;
               # The only card, so it is `card0`, and 2D.
               qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
@@ -1606,6 +1610,8 @@
             programs.domicile.enable = true;
             virtualisation = {
               memorySize = 4096;
+              # Not over 9p; see `tty-on-a-card-with-no-3d`.
+              useNixStoreImage = true;
               cores = 2;
               qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
             };
@@ -1698,6 +1704,8 @@
             programs.domicile.enable = true;
             virtualisation = {
               memorySize = 4096;
+              # Not over 9p; see `tty-on-a-card-with-no-3d`.
+              useNixStoreImage = true;
               cores = 2;
               # Both heads lit from boot. `video0` names the card to
               # `screendump`.
@@ -1916,6 +1924,8 @@
             programs.domicile.enable = true;
             virtualisation = {
               memorySize = 4096;
+              # Not over 9p; see `tty-on-a-card-with-no-3d`.
+              useNixStoreImage = true;
               cores = 2;
               qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
             };
