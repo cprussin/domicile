@@ -37,6 +37,15 @@ an external monitor too once the touchscreen is bound in `input.pointers`
   finger as the pointer, and a tap clicks;
 - a finger on the shell outside every window works as before.
 
+In Manganese with windows on two workspaces of the touchscreen's monitor:
+
+- a swipe in from the right edge goes to the next workspace, and in from the
+  left edge to the previous one, and the window under the finger never
+  scrolls;
+- a scroll that starts at the very edge of a window still scrolls it, a
+  moment late;
+- a tap on a button at the very edge of a window still presses it.
+
 `RUST_LOG=domicile_compositor=trace` logs each `touch` line the compositor
 gets. No line: the engine never forwarded the finger. A line with `touch
 down: no surface` after it: the compositor did not know the window.

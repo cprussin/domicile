@@ -2141,7 +2141,10 @@
 
         # A touchscreen on a tty: the engine's evdev touch path reads a uinput
         # multitouch screen bound to the display in `input.pointers`, and a
-        # native window under the finger gets it as `wl_touch`. See
+        # native window under the finger gets it as `wl_touch`. In Manganese,
+        # which binds swipes in from the side edges: a finger along the edge
+        # is replayed to the window, and one in from the right edge is the
+        # shell's and goes to the next workspace. See
         # docs/architecture/GESTURES.md#touchscreen.
         #
         # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
@@ -2175,7 +2178,7 @@
                   cp ${config} ~/.config/domicile/domicile.json
                   export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
                   export RUST_LOG=domicile_compositor=trace
-                  exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
+                  exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
                 fi
               '';
             # A multitouch screen the engine takes for a touchscreen. The test
@@ -2277,11 +2280,16 @@
                 return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
 
 
+            def downs():
+                return int(machine.succeed(
+                    "grep -cE 'wl_touch@[0-9]+\\.down\\(' /tmp/client.log || true").strip())
+
+
             def a_window_is_up():
                 machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
                 machine.succeed(CLIENT)
-                # Sized, so the shell has placed it: the simple shell opens
-                # the first window at the top left, 320 by 240.
+                # Sized, so the shell has placed it: Manganese tiles the
+                # first window over the monitor, 20 pixels in from its sides.
                 machine.wait_until_succeeds(
                     "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
 
@@ -2290,7 +2298,7 @@
                 # Tried until one lands: the engine binds the screen to its
                 # display once the compositor has sent the displays.
                 def landed(_):
-                    say("drag 100 100 60 40")
+                    say("drag 600 400 60 40")
                     return traced(r"wl_touch@[0-9]+\.up\(")
 
                 retry(landed, timeout=dt.timedelta(seconds=60))
@@ -2300,10 +2308,32 @@
                 assert not traced(r"wl_pointer@[0-9]+\.button\("), "the finger was a click too"
 
 
+            def a_finger_along_the_edge_is_the_windows():
+                # Lands in the left edge's band, over the window past the
+                # gap, and goes down along the edge: withheld, then replayed.
+                before = downs()
+                say("drag 30 300 0 200")
+                retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
+
+
+            def a_finger_in_from_the_edge_is_the_shells():
+                # In from the right edge: the next workspace, which hides the
+                # window, and the window never has the finger.
+                before = downs()
+                say("drag 1275 400 -300 0")
+                try:
+                    retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("the swipe did not change the workspace")
+                assert downs() == before, "the window had the shell's finger"
+
+
             machine.wait_for_unit("multi-user.target")
             try:
                 a_window_is_up()
                 a_finger_reaches_the_window_as_touch()
+                a_finger_along_the_edge_is_the_windows()
+                a_finger_in_from_the_edge_is_the_shells()
             except Exception:
                 machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                 # The runner keeps only the tail of this output, so the

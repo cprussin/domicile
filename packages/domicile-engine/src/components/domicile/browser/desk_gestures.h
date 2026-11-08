@@ -17,11 +17,12 @@
 
 namespace domicile {
 
-// A touchpad gesture the shell binds: its kind and finger count, or any count
-// for `fingers` 0.
+// A gesture the shell binds: its kind and finger count, or any count for
+// `fingers` 0. An edge swipe's grab names its edge, or none for any.
 struct GestureGrab {
   ui::NativeGestureKind kind = ui::NativeGestureKind::kSwipe;
   uint32_t fingers = 0;
+  std::optional<ui::NativeGestureEdge> edge;
 
   friend bool operator==(const GestureGrab&, const GestureGrab&) = default;
 };
@@ -69,7 +70,7 @@ class DeskGestures : public ui::NativeGestureSink {
   void Ungrab(ChannelId channel, GestureGrab grab);
 
   // ui::NativeGestureSink:
-  bool Takes(ui::NativeGestureKind kind, uint32_t fingers) override;
+  bool Takes(const ui::NativeGesture& begin) override;
   void Take(const ui::NativeGesture& gesture) override;
 
  private:
@@ -79,8 +80,8 @@ class DeskGestures : public ui::NativeGestureSink {
     std::vector<GestureGrab> grabs;
   };
 
-  // The first channel grabbing a `kind` gesture of `fingers`.
-  const Channel* Grabbing(ui::NativeGestureKind kind, uint32_t fingers) const
+  // The first channel grabbing the gesture `begin` begins.
+  const Channel* Grabbing(const ui::NativeGesture& begin) const
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   base::Lock lock_;

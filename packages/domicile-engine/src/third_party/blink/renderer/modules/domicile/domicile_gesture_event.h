@@ -12,7 +12,7 @@ namespace blink {
 
 class DomicileGestureEventInit;
 
-// A phase of a touchpad gesture the page grabbed. See
+// A phase of a gesture the page grabbed. See
 // DomicileHost::grabGesture.
 class MODULES_EXPORT DomicileGestureEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
@@ -32,7 +32,8 @@ class MODULES_EXPORT DomicileGestureEvent final : public Event {
                        double dy,
                        double scale,
                        double rotation,
-                       bool canceled);
+                       bool canceled,
+                       const String& edge);
   ~DomicileGestureEvent() override;
 
   const String& kind() const { return kind_; }
@@ -43,6 +44,7 @@ class MODULES_EXPORT DomicileGestureEvent final : public Event {
   double scale() const { return scale_; }
   double rotation() const { return rotation_; }
   bool canceled() const { return canceled_; }
+  const String& edge() const { return edge_; }
 
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
@@ -56,6 +58,7 @@ class MODULES_EXPORT DomicileGestureEvent final : public Event {
   double scale_ = 1;
   double rotation_ = 0;
   bool canceled_ = false;
+  String edge_;
 };
 
 }  // namespace blink

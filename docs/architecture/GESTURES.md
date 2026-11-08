@@ -1,7 +1,8 @@
 # Gestures
 
 Touchpad gestures and touchscreen fingers reach the window under them, and
-the shell binds multi-finger gestures the way it binds keys. Tracks
+the shell binds multi-finger gestures and swipes in from a screen's edge the
+way it binds keys. Tracks
 [#1908](https://github.com/cprussin/domicile/issues/1908).
 
 ## Design
@@ -49,6 +50,36 @@ host wl_touch (nested) ─┴▶ engine ──▶ shell page ──▶ <app> ─
 - **Smithay sends `cancel` only to points with an event since the last
   frame,** so the compositor first resends each point where it is.
 
+### Edge swipes
+
+One touchscreen finger in from a display's edge, which the shell binds as it
+binds touchpad gestures. A tty only: nested, the host's edges are the host's.
+
+```
+evdev ──▶ EventFactoryEvdev ──▶ TouchEdgeSwipes ──▶ EdgeSwipe ──┬─▶ DeskGestures `gesture` ──▶ bindKeys
+          (UI thread)           (per device:        (decides)    │   (taken: the page never has it)
+                                 withholds, replays)             └─▶ DispatchTouchEventNow ──▶ page
+                                                                     (withheld touches first, as they came)
+```
+
+| Piece | Where | Does |
+|---|---|---|
+| Hook | engine `event_factory_evdev.cc` (patch `0187`) | Hands each touch to `TouchEdgeSwipes` before dispatching it |
+| Withholding | `ui/events/ozone/evdev/domicile/touch_edge_swipes.*` | Per touchscreen bound to a display: the display's rect (the device's corners through its touch transform), the withheld touches, and a 250 ms timer |
+| Recognizing | `ui/events/domicile/edge_swipe.*` | A finger landing within 3% of an edge the shell grabbed is withheld. 6% in, mostly away from the edge: the shell's, begin to end, in display pixels. Along the edge, back out, a tap, a second finger or 250 ms: released to the page |
+| Grab | `DomicileHost.grabGesture("edge:left")` | Per side, so a finger at an edge nobody binds is never withheld |
+
+- **The engine decides, not the compositor.** Touches reach the page before
+  the compositor ever sees them, so withholding has to happen where they are
+  read.
+- **Edges are the display's, after its touch transform,** so a turned
+  display's left is still its left.
+- **A finger the shell did not take is replayed whole.** The page sees the
+  same press and moves it would have, only late, so a scroll that starts at
+  the edge still scrolls.
+- **One gesture at a time.** `DeskGestures` follows one owner, so an edge
+  swipe during a touchpad gesture cuts in on it.
+
 Two-finger scrolling already reaches clients as finger `wl_pointer.axis` with
 axis stops (patch `0174`), which is what Chrome's history swipe reads.
 
@@ -62,14 +93,19 @@ axis stops (patch `0174`), which is what Chrome's history swipe reads.
   `inward` or `outward`, and `clockwise` or `counterclockwise`. A hold has
   none. Left out, any way.
 
+An edge swipe is `edge[:<side>]`: one touchscreen finger in from `left`,
+`right`, `top` or `bottom`, or from any side for `edge`. It always comes in,
+so it has no direction.
+
 A binding runs once its gesture ends without being canceled. A swipe went its
 larger axis's way, and also its smaller one's when that moved at least half as
 far, so `swipe:3:up+left` is a diagonal. A pinch went by its last scale and its
-summed rotation. Of the bindings a gesture fits, one with a count wins over
-one without, then more directions over fewer.
+summed rotation. Of the bindings a gesture fits, one with a count or a side
+wins over one without, then more directions over fewer.
 
 Manganese binds `swipe:3:left` and `swipe:3:right` to `workspace
-next_on_output` and `prev_on_output`.
+next_on_output` and `prev_on_output`, and `edge:right` and `edge:left` the
+same way: the workspace follows the finger.
 
 ## Key decisions
 
@@ -99,5 +135,6 @@ next_on_output` and `prev_on_output`.
   without touch. Acquired through upstream's evdev touch path, which already
   reaches the page, not libinput.
 - [x] A tty VM test with a uinput touchscreen (`touchscreen-on-a-tty`).
-- [ ] Edge swipes, recognized in the engine with withheld touches replayed.
+- [x] Edge swipes, recognized in the engine with withheld touches replayed
+  (`EdgeSwipeTest`, `touchscreen-on-a-tty`). No touchpad hot corners.
 - [x] Bind the host's swipes when nested, subject to what the host consumes.

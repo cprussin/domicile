@@ -26,6 +26,14 @@ DeskGestures::Performed Into(Heard* heard) {
       base::Unretained(heard));
 }
 
+NativeGesture Begin(NativeGestureKind kind, uint32_t fingers) {
+  return {.kind = kind, .fingers = fingers};
+}
+
+NativeGesture Edge(ui::NativeGestureEdge edge) {
+  return {.kind = NativeGestureKind::kEdge, .fingers = 1, .edge = edge};
+}
+
 NativeGesture Swipe(NativeGesturePhase phase, uint32_t fingers = 3) {
   return {.kind = NativeGestureKind::kSwipe,
           .phase = phase,
@@ -39,9 +47,9 @@ TEST(DeskGesturesTest, ItTakesOnlyTheKindAndFingersGrabbed) {
   const auto channel = gestures.AddChannel(Into(&heard));
   gestures.Grab(channel, {NativeGestureKind::kSwipe, 3});
 
-  EXPECT_TRUE(gestures.Takes(NativeGestureKind::kSwipe, 3));
-  EXPECT_FALSE(gestures.Takes(NativeGestureKind::kSwipe, 4));
-  EXPECT_FALSE(gestures.Takes(NativeGestureKind::kPinch, 3));
+  EXPECT_TRUE(gestures.Takes(Begin(NativeGestureKind::kSwipe, 3)));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kSwipe, 4)));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kPinch, 3)));
 }
 
 // `swipe:right`, with no count, is any number of fingers.
@@ -51,8 +59,8 @@ TEST(DeskGesturesTest, AGrabOfNoFingerCountTakesAny) {
   const auto channel = gestures.AddChannel(Into(&heard));
   gestures.Grab(channel, {NativeGestureKind::kHold, 0});
 
-  EXPECT_TRUE(gestures.Takes(NativeGestureKind::kHold, 3));
-  EXPECT_TRUE(gestures.Takes(NativeGestureKind::kHold, 5));
+  EXPECT_TRUE(gestures.Takes(Begin(NativeGestureKind::kHold, 3)));
+  EXPECT_TRUE(gestures.Takes(Begin(NativeGestureKind::kHold, 5)));
 }
 
 // Every page grabs the same gestures; one running the binding is enough.
@@ -89,7 +97,7 @@ TEST(DeskGesturesTest, AnUngrabMidGestureStillEndsIt) {
 
   EXPECT_EQ(heard,
             (Heard{NativeGesturePhase::kBegin, NativeGesturePhase::kEnd}));
-  EXPECT_FALSE(gestures.Takes(NativeGestureKind::kSwipe, 3));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kSwipe, 3)));
 }
 
 // A page that went away mid-gesture hears nothing more, and nobody else does.
@@ -120,7 +128,23 @@ TEST(DeskGesturesTest, OneUngrabAnswersRepeatedGrabs) {
 
   gestures.Ungrab(channel, {NativeGestureKind::kPinch, 4});
 
-  EXPECT_FALSE(gestures.Takes(NativeGestureKind::kPinch, 4));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kPinch, 4)));
+}
+
+// `edge:left` is a finger in from the left only; `edge` from any side.
+TEST(DeskGesturesTest, AnEdgeGrabTakesItsEdge) {
+  DeskGestures gestures;
+  Heard heard;
+  const auto channel = gestures.AddChannel(Into(&heard));
+  gestures.Grab(channel, {NativeGestureKind::kEdge, 1,
+                          ui::NativeGestureEdge::kLeft});
+
+  EXPECT_TRUE(gestures.Takes(Edge(ui::NativeGestureEdge::kLeft)));
+  EXPECT_FALSE(gestures.Takes(Edge(ui::NativeGestureEdge::kRight)));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kSwipe, 1)));
+
+  gestures.Grab(channel, {NativeGestureKind::kEdge, 1, std::nullopt});
+  EXPECT_TRUE(gestures.Takes(Edge(ui::NativeGestureEdge::kBottom)));
 }
 
 }  // namespace

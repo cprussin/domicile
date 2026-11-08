@@ -17,6 +17,7 @@ const phase = (
   canceled: false,
   dx: 0,
   dy: 0,
+  edge: undefined,
   fingers: 3,
   kind,
   rotation: 0,
@@ -44,6 +45,9 @@ describe("isGesture", () => {
     expect(isGesture("hold")).toBe(true);
     expect(isGesture("Meta+h")).toBe(false);
     expect(isGesture("holdup")).toBe(false);
+    expect(isGesture("edge:left")).toBe(true);
+    expect(isGesture("edge")).toBe(true);
+    expect(isGesture("edger")).toBe(false);
   });
 });
 
@@ -54,6 +58,8 @@ describe("spelledGesture", () => {
       "pinch:inward+counterclockwise",
     );
     expect(spelledGesture("hold:4")).toBe("hold:4");
+    expect(spelledGesture("edge:left")).toBe("edge:left");
+    expect(spelledGesture("edge")).toBe("edge");
   });
 
   it.each([
@@ -62,7 +68,9 @@ describe("spelledGesture", () => {
     ["hold:3:up", "direction"],
     ["swipe:3:left:up", "`+`"],
     ["swipe:3:left+left", "twice"],
-    ["rub:3", "swipe, pinch or hold"],
+    ["rub:3", "swipe, pinch, hold or edge"],
+    ["edge:corner", "an edge is left, right, top, bottom"],
+    ["edge:left:up", "more than one side"],
   ])("rejects %s", (written, why) => {
     expect(() => spelledGesture(written)).toThrow(why);
   });
@@ -72,6 +80,11 @@ describe("grabOf", () => {
   it("grabs the kind and count, not the direction", () => {
     expect(grabOf(parseGesture("swipe:3:left"))).toBe("swipe:3");
     expect(grabOf(parseGesture("pinch:inward"))).toBe("pinch");
+  });
+
+  it("grabs an edge swipe's side", () => {
+    expect(grabOf(parseGesture("edge:bottom"))).toBe("edge:bottom");
+    expect(grabOf(parseGesture("edge"))).toBe("edge");
   });
 });
 
@@ -84,6 +97,7 @@ describe("gestureTracker", () => {
       ]),
     ).toStrictEqual({
       directions: new Set(["left"]),
+      edge: undefined,
       fingers: 3,
       kind: "swipe",
     });
@@ -102,6 +116,17 @@ describe("gestureTracker", () => {
         { rotation: -1, scale: 0.6 },
       ])?.directions,
     ).toStrictEqual(new Set(["inward", "counterclockwise"]));
+  });
+
+  it("finishes an edge swipe with its side", () => {
+    expect(
+      finished("edge", [{ dx: 80, edge: "left" }], { edge: "left" }),
+    ).toStrictEqual({
+      directions: new Set(),
+      edge: "left",
+      fingers: 3,
+      kind: "edge",
+    });
   });
 
   it("finishes nothing for a canceled gesture", () => {
@@ -137,6 +162,7 @@ describe("bestGesture", () => {
     expect(
       bestGesture(bindings, {
         directions: new Set(["left"]),
+        edge: undefined,
         fingers: 3,
         kind: "swipe",
       }),
@@ -144,6 +170,7 @@ describe("bestGesture", () => {
     expect(
       bestGesture(bindings, {
         directions: new Set(["up", "left"]),
+        edge: undefined,
         fingers: 3,
         kind: "swipe",
       }),
@@ -151,16 +178,34 @@ describe("bestGesture", () => {
     expect(
       bestGesture(bindings, {
         directions: new Set(["left"]),
+        edge: undefined,
         fingers: 4,
         kind: "swipe",
       }),
     ).toBe("swipe:left");
   });
 
+  it("matches an edge swipe by its side, preferring the side named", () => {
+    const edges = ["edge", "edge:left"].map(
+      (written) => [parseGesture(written), written] as const,
+    );
+    const from = (edge: "left" | "top"): FinishedGesture => ({
+      directions: new Set(),
+      edge,
+      fingers: 1,
+      kind: "edge",
+    });
+
+    expect(bestGesture(edges, from("left"))).toBe("edge:left");
+    expect(bestGesture(edges, from("top"))).toBe("edge");
+    expect(bestGesture(bindings, from("left"))).toBeUndefined();
+  });
+
   it("matches nothing that went another way", () => {
     expect(
       bestGesture(bindings, {
         directions: new Set(["outward"]),
+        edge: undefined,
         fingers: 3,
         kind: "pinch",
       }),
