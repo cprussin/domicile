@@ -7,10 +7,10 @@ name: Publish packages
 # - Dispatched with `release`, promotes `stable` to `release`. It builds and
 #   installs the distribution packages at the versions changesets gave them,
 #   publishes npm under `latest`, the signed repositories on R2 and the AUR's
-#   `domicile-bin`, then tags each new version and moves `release`. Every step
-#   skips what is already published, so a failed release is rerun as it is.
-#   `dry_run`, on by default, builds and checks everything and publishes
-#   nothing.
+#   `domicile-bin`, then tags each new version, moves `release` and syncs
+#   `site` (site.yml). Every step skips what is already published, so a
+#   failed release is rerun as it is. `dry_run`, on by default, builds and
+#   checks everything and publishes nothing.
 # - With `prerelease` too, publishes `stable` as a prerelease of `domicile`'s
 #   version to the repositories and the AUR, for testing the installs: no npm,
 #   no tags, `release` stays. The release replaces it.
@@ -215,3 +215,11 @@ jobs:
         with:
           name: ${{ steps.marker.outputs.name }}
           path: dry-run/
+
+  # `site` follows the release, keeping the site fixes it doesn't have.
+  site:
+    needs: release
+    if: ${{ !inputs.dry_run && !inputs.prerelease && needs.release.result == 'success' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/site.yml

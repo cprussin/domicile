@@ -3,7 +3,7 @@
 # Builds production only, since every build costs. Checks the branch too, in
 # case Vercel leaves `VERCEL_ENV` out of this step.
 echo "VERCEL_ENV=${VERCEL_ENV:-} VERCEL_GIT_COMMIT_REF=${VERCEL_GIT_COMMIT_REF:-}"
-if [ "${VERCEL_ENV:-}" = production ] || [ "${VERCEL_GIT_COMMIT_REF:-}" = release ]; then
+if [ "${VERCEL_ENV:-}" = production ] || [ "${VERCEL_GIT_COMMIT_REF:-}" = site ]; then
   echo "production: building"
   exit 1
 fi

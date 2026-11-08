@@ -1,0 +1,40 @@
+name: Site
+
+# Moves `site`, the branch Vercel deploys domicile-desktop.com from, to
+# `release` plus the main commits picked onto it
+# (.github/scripts/site-sync.sh). Ships a site fix without a release.
+#
+# - Dispatched with `commits`, picks those main commits onto `site`.
+# - Each release calls it (publish-packages.yml), so `site` follows `release`
+#   and keeps only the picks the release doesn't have.
+on:
+  workflow_dispatch:
+    inputs:
+      commits:
+        description: Main commits to deploy, separated by spaces
+        type: string
+        default: ""
+  workflow_call:
+
+# One at a time, so two runs never race for the ref.
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # shellcheck disable=SC2086 # one commit per word is the point
+          .github/scripts/site-sync.sh $COMMITS
+        env:
+          COMMITS: ${{ inputs.commits }}

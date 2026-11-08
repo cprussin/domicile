@@ -14,10 +14,11 @@ const deploys = (branch: string) => {
   );
 };
 
-test("Vercel deploys release and no other branch", () => {
-  expect(deploys("release")).toBe(true);
+test("Vercel deploys site and no other branch", () => {
+  expect(deploys("site")).toBe(true);
   for (const branch of [
     "main",
+    "release",
     "stable",
     "claude/project-thread-cvi1pk",
     "renovate/major-deps",
