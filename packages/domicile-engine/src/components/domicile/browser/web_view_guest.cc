@@ -1551,6 +1551,20 @@ void WebViewGuest::ContentsZoomChange(bool zoom_in) {
   client_->ZoomRequested(zoom_in);
 }
 
+void WebViewGuest::DomicilePinchZoom(content::WebContents* source,
+                                     float scale) {
+  if (source != guest_contents_) {
+    return;
+  }
+  const double was = GetZoomFactor();
+  const double factor =
+      std::clamp(was * scale, blink::kMinimumBrowserZoomFactor,
+                 blink::kMaximumBrowserZoomFactor);
+  if (!blink::ZoomValuesEqual(factor, was)) {
+    ZoomTo(factor);
+  }
+}
+
 bool WebViewGuest::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
