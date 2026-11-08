@@ -25,6 +25,7 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 | Acquisition | engine `libinput_event_converter.cc`, `wayland_zwp_pointer_gestures.cc` (patch `0184`) | Turns libinput or host pinch into a `ui::GestureEvent` carrying `NativePinch`: phase, device, time, fingers, absolute scale, rotation, cancellation |
 | Page | engine `touchpad_pinch_event_queue.cc`, `mouse_wheel_event_manager.cc` | Keeps native pinches out of coalescing and page zoom. A canceled `wheel` claims the gesture for the shell |
 | `<app>` | `html_app_element.cc` | Forwards the pinch to its client as `pointer_pinch` |
+| Browser window | engine `render_widget_host_view_child_frame.cc`, `web_contents_delegate.h` (patch `0190`), `web_view_guest.cc` | A pinch the page left alone zooms that page (`DomicilePinchZoom`), as Ctrl+wheel does, and is remembered for the site. The root view (`render_widget_host_view_aura.cc`) never page-scales from a touchpad pinch |
 | Wire | `domicile_protocol::pinch::Pinch` | `begin`, `update`, `end` |
 | Delivery | `domicile-compositor` (`pinch.rs`) | One active pinch, owned by the connection and device that began it. Ends canceled on pointer leave, lock, window close or a dropped connection |
 | Shell grab | engine `native_gesture_sink.*` (patch `0185`), `desk_gestures.*`, `DomicileHost.grabGesture` | libinput (or the host, nested) offers each gesture of three fingers or more to the sink before the pinch path. `DeskGestures` takes it when a page grabbed its kind and count, and sends every phase to the first such page as a `gesture` event. A swipe or hold nobody grabbed goes to the next row; a pinch goes on to the page |
@@ -123,7 +124,10 @@ and `pinch:4:inward` toggles the overview.
   to the shell.
 - **Phases, not end-only.** Bindings match on direction once committed, and
   shell animations follow the fingers.
-- **Guest pinch is Chrome's visual zoom.** The shell's own scale stays 1.
+- **A browser window's pinch is its page zoom, and the desk never zooms.**
+  Chrome would hand a pinch a browser window's page left alone to the
+  outermost page, the desk, and visual zoom only exists there. The page zooms
+  by each update's scale instead, reflowing as it would for Ctrl+wheel.
 - **libinput recognizes; the engine keeps its numbers.** No thresholds of our
   own and no new settings.
 - **Grabs name a kind and count, not a direction.** The engine has to take a
