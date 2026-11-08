@@ -2161,7 +2161,7 @@
                 if [ "$(tty)" = /dev/tty1 ]; then
                   mkdir -p ~/.config/domicile
                   cp ${config} ~/.config/domicile/domicile.json
-                  export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*evdev*=1,*domicile*=1"
+                  export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
                   export RUST_LOG=domicile_compositor=trace
                   exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
                 fi
@@ -2297,10 +2297,11 @@
                 # The runner keeps only the tail of this output, so the
                 # compositor and engine lines come last.
                 for command in [
-                    "grep -vE 'frame\\(|global\\(' /tmp/client.log | tail -15 | cut -c1-160",
+                    "grep -E 'wl_(pointer|touch)@' /tmp/client.log | tail -10 | cut -c1-160 || true",
                     "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
-                    "grep -E 'touch' /tmp/domicile.log | tail -10 | cut -c1-200 || true",
-                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|evdev|pointer target' | tail -12 | cut -c1-200 || true",
+                    "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
+                    "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
                 ]:
                     print(f"$ {command}")
                     print(machine.execute(f"{command} 2>&1")[1])

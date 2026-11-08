@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
@@ -88,6 +89,16 @@ class AppWheelListener final : public NativeEventListener {
   void Invoke(ExecutionContext*, Event*) override {}
 };
 
+// The same for a finger: the compositor thread sends a touch to the page only
+// where something listens for it, and a pointer listener counts only when the
+// shell happens to have one. A blocking `touchstart` here makes every <app> a
+// touch handler region, so a finger on a window always reaches
+// `HTMLAppElement::ForwardTouch`. It never cancels: the shell still decides.
+class AppTouchListener final : public NativeEventListener {
+ public:
+  void Invoke(ExecutionContext*, Event*) override {}
+};
+
 }  // namespace
 
 const char AppInputClient::kSupplementName[] = "AppInputClient";
@@ -109,6 +120,8 @@ HTMLAppElement::HTMLAppElement(Document& document)
   options.SetPassive(false);
   addEventListener(event_type_names::kWheel,
                    MakeGarbageCollected<AppWheelListener>(), options);
+  addEventListener(event_type_names::kTouchstart,
+                   MakeGarbageCollected<AppTouchListener>(), options);
 }
 
 HTMLAppElement::~HTMLAppElement() = default;
@@ -526,8 +539,11 @@ void HTMLAppElement::ForwardTouch(AppInputClient& client,
   gfx::SizeF size;
   if (type == event_type_names::kPointerdown) {
     if (!MapToContent(pointer, point, size)) {
+      VLOG(1) << "domicile: a finger on " << app_id << " missed its content";
       return;
     }
+    VLOG(1) << "domicile: a finger down on " << app_id << " at "
+            << point.ToString();
     // A finger on another window first ends the points on the one before:
     // the element shows one window at a time.
     if (touch_app_id_ != app_id) {
