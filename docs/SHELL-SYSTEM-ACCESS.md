@@ -150,7 +150,7 @@ recorded output.
 | The home file index and `searchFiles` | speed: only the matches cross to the page |
 | Launching apps (`spawn`) | a client outlives a shell reload and runs on the compositor's Wayland display |
 | Clipboard history (`copyClipboardEntry`) | the compositor serves the paste, so it outlives the client that copied; full text stays out of the page ([CLIPBOARD.md](../packages/manganese-clipboard/docs/CLIPBOARD.md)) |
-| The screen's color temperature (`set_color_temperature`) | only the engine reaches the display's gamma ramp ([Night light](DISPLAYS.md#night-light)) |
+| The screen's color temperature (`set_color_temperature`) | only the engine reaches the display's gamma ramp ([Night light](DISPLAYS.md#night-light-and-gamma-control)) |
 | Theme (`theme`, `windowsTheme`) | clients read it from the portal's `Settings`; the compositor switches them only after every chrome captures its old frame |
 
 ## Wire

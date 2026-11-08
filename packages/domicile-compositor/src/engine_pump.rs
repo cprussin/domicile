@@ -223,6 +223,7 @@ impl DomicileCompositor {
                     captured,
                 } => self.cast_captured(capture, frame, captured),
                 engine::Event::Compositing { in_memory } => self.engine_composites(in_memory),
+                engine::Event::GammaSizes(sizes) => self.gamma_sizes_reported(sizes),
                 // Acted on at the next hello, which is the new engine's.
                 engine::Event::Disconnected => {
                     warn!("the engine this desktop was drawing through went away");
@@ -276,10 +277,10 @@ impl DomicileCompositor {
                     self.hub
                         .virtual_monitors
                         .set_extendable(self.config.current().output.desktop().is_none());
-                    if let Some(session) = self.engine.as_ref() {
-                        session.set_white_point(self.white_point);
-                    }
                     self.lay_out_the_engines_displays();
+                    // After the layout, which names the monitors the night
+                    // light is set for.
+                    self.restate_the_gamma();
                 }
             }
         }

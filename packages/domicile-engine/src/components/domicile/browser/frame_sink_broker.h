@@ -68,10 +68,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // when the embedder has no CRTC; the displays are then dropped.
   using VirtualDisplaysSetter =
       base::RepeatingCallback<void(std::vector<mojom::VirtualDisplayPtr>)>;
-  // Sets every display's white point, as red, green and blue gains. Injected
-  // for the same reason. Empty when the embedder has no CRTC; the white point
-  // is then dropped.
-  using WhitePointSetter = base::RepeatingCallback<void(float, float, float)>;
+  // Sets one display's gamma ramp. Injected for the same reason. Empty when
+  // the embedder has no CRTC; the ramp is then dropped.
+  using GammaSetter =
+      base::RepeatingCallback<void(int64_t, const mojom::GammaRamp&)>;
   // Delivers emulated input to the desk. Injected for the same reason. Empty
   // when the engine reads no input of its own; the input is then dropped.
   using InputInjector = base::RepeatingCallback<void(const mojom::DeskInput&)>;
@@ -115,7 +115,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       SharedImageInterfaceGetter get_software_shared_image_interface =
           SharedImageInterfaceGetter(),
       VirtualDisplaysSetter set_virtual_displays = VirtualDisplaysSetter(),
-      WhitePointSetter set_white_point = WhitePointSetter(),
+      GammaSetter set_gamma = GammaSetter(),
       InputInjector inject_input = InputInjector(),
       InputConfigSetter set_input_config = InputConfigSetter());
 
@@ -218,7 +218,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   void ConfigureInput(const std::string& config) override;
   void ConfigureVirtualDisplays(
       std::vector<mojom::VirtualDisplayPtr> displays) override;
-  void SetWhitePoint(float red, float green, float blue) override;
+  void SetGamma(int64_t display_id, mojom::GammaRampPtr ramp) override;
   void InjectInput(mojom::DeskInputPtr input) override;
   void SetClipboard(mojom::Clipboard clipboard,
                     const ClipboardContents& contents) override;
@@ -300,8 +300,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const PointerTargetsSetter set_pointer_targets_;
   // See VirtualDisplaysSetter.
   const VirtualDisplaysSetter set_virtual_displays_;
-  // See WhitePointSetter.
-  const WhitePointSetter set_white_point_;
+  // See GammaSetter.
+  const GammaSetter set_gamma_;
   // See InputInjector.
   const InputInjector inject_input_;
   const InputConfigSetter set_input_config_;

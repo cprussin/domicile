@@ -96,6 +96,8 @@ mod frame_descriptor;
 mod frame_pacing;
 mod frame_publishing;
 mod frame_report;
+mod gamma;
+mod gamma_control;
 mod gbm;
 mod held_frames;
 mod idle;
@@ -192,11 +194,11 @@ use domicile_host::data_dirs::data_dirs;
 use domicile_host::keymaps::Listed;
 use domicile_host::priority;
 use domicile_host::theme_turnover::Turnover;
-use domicile_host::white_point::{white_point, WhitePoint, NEUTRAL};
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::reexports::wayland_protocols_wlr::gamma_control::v1::server::zwlr_gamma_control_v1::ZwlrGammaControlV1;
 
 /// Log messages that tests and operators search for by text.
 ///
@@ -416,10 +418,11 @@ struct DomicileCompositor {
     /// keeps its last box here; input and casts read
     /// [`HeldFrames::shown`].
     app_bounds: HashMap<String, domicile_scene::Bounds>,
-    /// The white point the page last set (`SystemRequest::SetColorTemperature`),
-    /// sent again to an engine that reports its displays, since a new engine
+    /// Each monitor's night light and gamma-control client
+    /// (`SystemRequest::SetColorTemperature`, `zwlr_gamma_control_v1`), sent
+    /// again to an engine that reports its displays, since a new engine
     /// starts neutral.
-    white_point: WhitePoint,
+    gamma: gamma::Ramps<ZwlrGammaControlV1>,
     /// Frame callbacks of the windows the page hides. See
     /// [`crate::held_frames`].
     held_frames: HeldFrames<WlCallback>,
@@ -799,6 +802,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Screenshot and recording tools such as `grim` and `wf-recorder`, and
     // the windows they may capture.
     screencopy::advertise(&dh);
+    // Night-light tools such as gammastep and wl-gammarelay-rs.
+    gamma_control::advertise(&dh);
     let foreign_toplevels = foreign_toplevels::ForeignToplevels::new(&dh);
     // Windows laid out at a named place in the page.
     anchors::advertise(&dh);
@@ -1295,7 +1300,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         launched: launched.clone(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
-        white_point: white_point(NEUTRAL),
+        gamma: gamma::Ramps::default(),
         held_frames: HeldFrames::new(),
         suspended: HashSet::new(),
         presentations: Presentations::new(),

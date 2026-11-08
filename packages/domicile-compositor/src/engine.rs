@@ -7,8 +7,8 @@
 //! Chromium build. A missing library is still an error, never a silent
 //! fallback.
 
-use domicile_host::white_point::WhitePoint;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::{c_char, c_int, c_void, CString, NulError};
 use std::os::fd::{AsRawFd as _, BorrowedFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
@@ -345,6 +345,11 @@ pub enum Event {
     /// has been unplugged.
     Displays(Vec<Display>),
 
+    /// How many entries each display's gamma ramp has, by [`Display::id`].
+    /// A display it leaves out has no gamma. Sent just before each
+    /// [`Event::Displays`], by an engine with `ramped_displays`.
+    GammaSizes(HashMap<i64, u32>),
+
     /// A frame of a display capture. Release `frame` with
     /// [`Engine::release_captured`] once read; `Err` says why it could not be
     /// kept, and must be released too.
@@ -450,6 +455,7 @@ struct Callbacks {
     connected_displays: Option<extern "C" fn(*mut c_void, *const RawConnectedDisplay, u32)>,
     disconnected: Option<extern "C" fn(*mut c_void)>,
     compositing: Option<extern "C" fn(*mut c_void, c_int)>,
+    ramped_displays: Option<extern "C" fn(*mut c_void, *const RawRampedDisplay, u32)>,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -589,6 +595,15 @@ struct RawConnectedDisplay {
     /// The connector's name, borrowed for the callback. Never null; checked
     /// in [`connected_displays_from`].
     connector: *const std::ffi::c_char,
+}
+
+/// `DomicileRampedDisplay`, laid out as in the C header. 64 bytes, including
+/// 4 of tail padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawRampedDisplay {
+    connected: RawConnectedDisplay,
+    gamma_size: u32,
 }
 
 /// `DomicileDisplayLayout`, laid out as in the C header. 48 bytes, no
@@ -1395,26 +1410,22 @@ impl Engine {
         unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
     }
 
-    /// Sets the white point every monitor draws with, as a gamma ramp per
-    /// CRTC. Nested, the engine ignores it: the host session draws the
-    /// monitors.
-    pub fn set_white_point(&self, white_point: WhitePoint) {
-        let f: Symbol<unsafe extern "C" fn(*mut Handle, f32, f32, f32)> = match self.symbol(
-            b"domicile_displays_set_white_point\0",
-            "domicile_displays_set_white_point",
+    /// Sets the gamma ramp display `display` draws with: red, then green,
+    /// then blue, each a third of `ramp`, as `wlr-gamma-control` lays them
+    /// out. An empty ramp draws colors as they are. Nested, the engine ignores
+    /// it: the host session draws the monitors.
+    pub fn set_gamma(&self, display: i64, ramp: &[u16]) {
+        assert_eq!(ramp.len() % 3, 0, "a gamma ramp has three equal channels");
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, i64, *const u16, u32)> = match self.symbol(
+            b"domicile_displays_set_gamma\0",
+            "domicile_displays_set_gamma",
         ) {
             Ok(symbol) => symbol,
             Err(_) => return,
         };
-        // SAFETY: as above.
-        unsafe {
-            f(
-                self.handle,
-                white_point.red as f32,
-                white_point.green as f32,
-                white_point.blue as f32,
-            )
-        };
+        // SAFETY: as above, and `ramp` holds three channels of the size passed
+        // and outlives the call; the engine copies it.
+        unsafe { f(self.handle, display, ramp.as_ptr(), (ramp.len() / 3) as u32) };
     }
 
     /// Hands one emulated event to the shell's window, on a headless desk.
@@ -1661,6 +1672,7 @@ fn join(
         connected_displays: Some(on_connected_displays),
         disconnected: Some(on_disconnected),
         compositing: Some(on_compositing),
+        ramped_displays: Some(on_ramped_displays),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2023,6 +2035,34 @@ fn connected_displays_from(records: &[RawConnectedDisplay]) -> Vec<Display> {
         .collect()
 }
 
+/// Queues each display's gamma ramp size, then the display list. Called
+/// instead of [`on_connected_displays`] by an engine that reports ramp sizes.
+extern "C" fn on_ramped_displays(
+    user_data: *mut c_void,
+    displays: *const RawRampedDisplay,
+    count: u32,
+) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. Both conversions copy them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    push(user_data, Event::GammaSizes(gamma_sizes_from(records)));
+    let connected: Vec<RawConnectedDisplay> =
+        records.iter().map(|record| record.connected).collect();
+    push(
+        user_data,
+        Event::Displays(connected_displays_from(&connected)),
+    );
+}
+
+/// Each display's gamma ramp size, leaving out those with none.
+fn gamma_sizes_from(records: &[RawRampedDisplay]) -> HashMap<i64, u32> {
+    records
+        .iter()
+        .filter(|record| record.gamma_size > 0)
+        .map(|record| (record.connected.display.id, record.gamma_size))
+        .collect()
+}
+
 /// A buffer transform as the ABI's `DomicileBufferTransform`: the
 /// `wl_output.transform` order.
 fn abi_transform(transform: BufferTransform) -> u32 {
@@ -2132,10 +2172,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_fifteen_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `compositing` is last, as in
-        // the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 16 * 8);
+    fn the_callbacks_are_the_user_data_and_sixteen_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `ramped_displays` is last, as
+        // in the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 17 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2144,6 +2184,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Callbacks, connected_displays), 13 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, disconnected), 14 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, compositing), 15 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, ramped_displays), 16 * 8);
     }
 
     #[test]
@@ -2393,6 +2434,44 @@ mod tests {
     fn a_connected_display_is_a_display_and_a_pointer() {
         // 48 (`DomicileDisplay`) + 8 (connector). No padding.
         assert_eq!(std::mem::size_of::<RawConnectedDisplay>(), 56);
+    }
+
+    #[test]
+    fn a_ramped_display_is_a_connected_display_and_a_uint32() {
+        // 56 (`DomicileConnectedDisplay`) + 4 (`gamma_size`) + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawRampedDisplay>(), 64);
+        assert_eq!(std::mem::offset_of!(RawRampedDisplay, gamma_size), 56);
+    }
+
+    #[test]
+    fn a_display_with_no_gamma_has_no_gamma_size() {
+        let (laptop, _laptop_name) = named(
+            RawDisplay {
+                id: 7,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let (dock, _dock_name) = named(
+            RawDisplay {
+                id: 9,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("eDP-1").expect("no nul in it");
+        let ramped = |display, gamma_size| RawRampedDisplay {
+            connected: RawConnectedDisplay {
+                display,
+                connector: connector.as_ptr(),
+            },
+            gamma_size,
+        };
+
+        assert_eq!(
+            gamma_sizes_from(&[ramped(laptop, 4096), ramped(dock, 0)]),
+            HashMap::from([(7, 4096)])
+        );
     }
 
     #[test]

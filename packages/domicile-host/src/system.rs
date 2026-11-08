@@ -141,8 +141,10 @@ pub type SelectKeymap = Arc<dyn Fn(KeymapChoice) -> Result<(), SystemError> + Se
 pub type SetWindowStates =
     Arc<dyn Fn(AppId, Vec<WindowState>) -> Result<(), SystemError> + Send + Sync>;
 
-/// Sets the white point every monitor draws with.
-pub type SetWhitePoint = Arc<dyn Fn(WhitePoint) -> Result<(), SystemError> + Send + Sync>;
+/// Sets the white point one display draws with, by name, or every display
+/// with `None`.
+pub type SetWhitePoint =
+    Arc<dyn Fn(Option<String>, WhitePoint) -> Result<(), SystemError> + Send + Sync>;
 
 /// Takes a screenshot, into the file if one is given, and returns where it
 /// went. Blocks until it is kept, the dialog included.
@@ -517,10 +519,11 @@ impl System {
         self
     }
 
-    /// This system, setting every monitor's white point through `set`.
+    /// This system, setting a display's white point, or every display's,
+    /// through `set`.
     pub fn setting_white_points_with(
         mut self,
-        set: impl Fn(WhitePoint) -> Result<(), SystemError> + Send + Sync + 'static,
+        set: impl Fn(Option<String>, WhitePoint) -> Result<(), SystemError> + Send + Sync + 'static,
     ) -> System {
         self.set_white_point = Some(Arc::new(set));
         self
@@ -963,7 +966,7 @@ impl System {
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
-            SystemRequest::SetColorTemperature { kelvin } => {
+            SystemRequest::SetColorTemperature { kelvin, display } => {
                 let reply = match (&self.set_white_point, (WARMEST..=NEUTRAL).contains(&kelvin)) {
                     (_, false) => failed(SystemError {
                         kind: SystemErrorKind::InvalidInput,
@@ -975,7 +978,7 @@ impl System {
                         kind: SystemErrorKind::Other,
                         message: "this desktop sets no color temperature".into(),
                     }),
-                    (Some(set), true) => match set(white_point(kelvin)) {
+                    (Some(set), true) => match set(display, white_point(kelvin)) {
                         Ok(()) => SystemReply::Set,
                         Err(error) => failed(error),
                     },
