@@ -22,7 +22,8 @@ In Manganese with windows on two workspaces of one monitor:
 - a four-finger swipe left goes to the next workspace, and right to the
   previous one;
 - a four-finger swipe down pulls the scratchpad down, and up puts it away;
-- spreading four fingers opens the launcher;
+- spreading four fingers opens the launcher, from the overview too;
+- pinching four fingers in opens the overview, and again closes it;
 - with two windows side by side, a three-finger swipe right focuses the right
   one, and left the left one;
 - a three-finger swipe does not scroll the window under the pointer.

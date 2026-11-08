@@ -2,23 +2,33 @@ import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import { workspacesOn } from "@domicile-desktop/manganese-window-management/window-state";
 import { useWorkspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { useMemo } from "react";
+
+import { hstack } from "../styled-system/patterns";
+import { OverviewButton } from "./OverviewButton";
 import { Workspaces } from "./Workspaces";
 
-/** This screen's workspaces, with the visible one marked. */
+/**
+ * The overview button, then this screen's workspaces, with the visible one
+ * marked.
+ */
 export const WorkspaceSwitcher = () => {
   const { screen } = useBar();
-  const { current, focused, homes, select } = useWorkspaces();
+  const { current, focused, homes, overviewOpen, select, toggleOverview } =
+    useWorkspaces();
   const workspaces = useMemo(
     () => workspacesOn({ homes }, screen),
     [homes, screen],
   );
   return (
-    <Workspaces
-      current={shownOn(current, screen)}
-      focused={focused === screen}
-      onSelect={select}
-      workspaces={workspaces}
-    />
+    <div className={rowStyles}>
+      <OverviewButton onToggle={toggleOverview} open={overviewOpen} />
+      <Workspaces
+        current={shownOn(current, screen)}
+        focused={focused === screen}
+        onSelect={select}
+        workspaces={workspaces}
+      />
+    </div>
   );
 };
 
@@ -34,3 +44,5 @@ const shownOn = (
     return workspace;
   }
 };
+
+const rowStyles = hstack({ gap: 1 });

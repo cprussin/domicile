@@ -173,6 +173,19 @@ export const iconKeyframes = {
     "70%": { transform: "translateY(4px)" },
     "100%": { transform: "none" },
   },
+  // A sparkle's star turns a quarter, which lands where it began, dipping
+  // as it goes, so it glints in place.
+  iconSparkleTwinkle: {
+    "0%": { transform: "none" },
+    "50%": { transform: "rotate(45deg) scale(0.8)" },
+    "100%": { transform: "rotate(90deg)" },
+  },
+  // Its glints wink out and pop back a little past full size.
+  iconSparkleWink: {
+    "0%, 100%": { transform: "none" },
+    "35%": { transform: "scale(0)" },
+    "70%": { transform: "scale(1.3)" },
+  },
   // A download's tray gives under the arrow landing in it.
   iconTrayGive: {
     "0%, 100%": { transform: "none" },

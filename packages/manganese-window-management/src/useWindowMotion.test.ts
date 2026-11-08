@@ -35,6 +35,7 @@ const desktop = (
 ): Shown => ({
   activeId: showing[0]?.id,
   current,
+  overview: false,
   placements: showing.map(({ id }) => placementOf(id)),
   scratchpad: [],
   tabs: [],
@@ -1001,6 +1002,43 @@ describe("useWindowMotion", () => {
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
+  // The overview shows every workspace in its own tile, so nothing slides,
+  // shrinks or leaves: each window eases from one tile to the next.
+  describe("in the overview", () => {
+    const overviewing = (shown: Shown): Shown => ({ ...shown, overview: true });
+
+    it("slides no workspace in or out", () => {
+      const { rerender, result } = showing(
+        overviewing(desktop("1", [TERMINAL, EDITOR], [TERMINAL])),
+      );
+
+      act(() => {
+        rerender(desktop("2", [TERMINAL, EDITOR], [EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(drawnOf(result, TERMINAL.id)).toMatchObject({
+        motion: "resting",
+        placement: undefined,
+      });
+    });
+
+    it("sends no window off its workspace", () => {
+      const { rerender, result } = showing(
+        overviewing(desktop("1", [TERMINAL, EDITOR])),
+      );
+
+      act(() => {
+        rerender(overviewing(desktop("1", [TERMINAL, EDITOR], [TERMINAL])));
+      });
+
+      expect(drawnOf(result, EDITOR.id)).toMatchObject({
+        motion: "resting",
+        placement: undefined,
+      });
     });
   });
 

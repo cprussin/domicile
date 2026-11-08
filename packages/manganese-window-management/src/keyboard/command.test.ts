@@ -17,6 +17,7 @@ describe("parseCommand", () => {
     ["kill", WindowAction.WindowKilled()],
     ["lock", WindowAction.DeskLocked()],
     ["launcher", WindowAction.LauncherToggled()],
+    ["overview", WindowAction.OverviewToggled()],
     ["clipboard", WindowAction.ClipboardToggled()],
     ["screenshot", WindowAction.ScreenshotTaken()],
     ["search-clipboard", WindowAction.ClipboardSearched()],

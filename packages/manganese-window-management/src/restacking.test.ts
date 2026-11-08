@@ -28,6 +28,7 @@ const placed = (id: string, frame: Rect, depth: number): Placement => ({
 const desktop = (placements: readonly Placement[], current = "1"): Shown => ({
   activeId: undefined,
   current,
+  overview: false,
   placements,
   scratchpad: [],
   tabs: [],

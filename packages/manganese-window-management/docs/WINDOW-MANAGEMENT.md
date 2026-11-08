@@ -330,6 +330,30 @@ such as a Slack huddle.
   `focused`, `focused_inactive` and `unfocused`, plus `leaf` for the focused
   window inside a selected group.
 
+## Overview
+
+`overview` (Meta+O, `pinch:4:inward`, the switcher's button) shows each
+screen's workspaces at once, as tiles in a grid (`overview/tiles.ts`): those
+with windows, and the shown one.
+
+- The windows are the real ones, scaled into their tile by a transform on
+  each part's wrapper (`overview/seen-styles.ts`), so they stay live. A
+  surface can only show in one place, so there are no copies.
+- Each wrapper takes its part's depth as its `z-index`, since the transform
+  gives it its own stacking context.
+- Hidden workspaces' windows get their placements as if shown and fade in.
+- Closing zooms the shown workspace back to full size while the others fade;
+  the overview is gone when the backdrop's fade ends, which fades out under
+  its own keyframe: a reversed animation that has played does not play
+  again. The fading windows, tab strips included, let presses through, since
+  the picker over them is gone.
+- `OverviewPicker` is a layer of buttons over the tiles: a click picks the
+  workspace or the window under it, a main-button drag moves that window to
+  another tile, arrows and Tab move between tiles and Escape closes.
+- Workspace switch and send slides are skipped while it shows.
+- Opening it closes the launcher and clipboard, and opening either closes it.
+- Opening it drops a window drag in progress, whose handles it hides.
+
 ## Animations
 
 - Opening: fade in and grow from the center.

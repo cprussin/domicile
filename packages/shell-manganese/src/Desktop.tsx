@@ -59,6 +59,11 @@ import type { Direction } from "@domicile-desktop/manganese-window-management/di
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { useKeybindings } from "@domicile-desktop/manganese-window-management/keyboard/useKeybindings";
 import { useModifiers } from "@domicile-desktop/manganese-window-management/keyboard/useModifiers";
+import { OverviewBackdrop } from "@domicile-desktop/manganese-window-management/overview/OverviewBackdrop";
+import { OverviewPicker } from "@domicile-desktop/manganese-window-management/overview/OverviewPicker";
+import { screenOverviewsOf } from "@domicile-desktop/manganese-window-management/overview/overview";
+import { sightOf } from "@domicile-desktop/manganese-window-management/overview/sight";
+import { useOverviewPhase } from "@domicile-desktop/manganese-window-management/overview/useOverviewPhase";
 import type { Geometry } from "@domicile-desktop/manganese-window-management/placement";
 import type {
   Focus,
@@ -100,7 +105,13 @@ import {
   useAutoBrightness,
 } from "@domicile-desktop/system-backlight/react";
 import type { ReactNode } from "react";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useCastHolds } from "./cast-holds";
 import { LOCK_BAR } from "./default-bars";
 import {
@@ -325,6 +336,28 @@ export const Desktop = ({
 
   const screens = useStageScreens(windows, displays);
 
+  // Each screen's workspaces at once, while open and while it closes.
+  const { closed: overviewClosed, phase: overviewPhase } = useOverviewPhase(
+    windows.overviewOpen,
+  );
+  const overviews = useMemo(
+    () =>
+      overviewPhase === undefined
+        ? undefined
+        : screenOverviewsOf(windows, screens, overviewPhase === "closing"),
+    [overviewPhase, screens, windows],
+  );
+  const sight = useMemo(
+    () => (overviews === undefined ? undefined : sightOf(overviews)),
+    [overviews],
+  );
+  // With no screen there is no backdrop to end the closing fade.
+  useEffect(() => {
+    if (overviewPhase === "closing" && overviews?.length === 0) {
+      overviewClosed();
+    }
+  }, [overviewClosed, overviewPhase, overviews]);
+
   // The pointer follows the keyboard. Focus follows the pointer, so otherwise
   // the next pointer event would undo a keyboard focus change. See
   // `pointer-warp.ts`.
@@ -510,6 +543,27 @@ export const Desktop = ({
     },
     [act],
   );
+  const overviewDismissed = useCallback(() => {
+    act(WindowAction.OverviewDismissed());
+  }, [act]);
+  const overviewPicked = useCallback(
+    (workspace: string) => {
+      act(WindowAction.OverviewPicked(workspace));
+    },
+    [act],
+  );
+  const overviewWindowPicked = useCallback(
+    (id: string) => {
+      act(WindowAction.OverviewWindowPicked(id));
+    },
+    [act],
+  );
+  const windowMovedTo = useCallback(
+    (id: string, workspace: string) => {
+      act(WindowAction.WindowMovedToWorkspace(id, workspace));
+    },
+    [act],
+  );
   const copied = useCallback(
     (entry: number) => {
       domicile.clipboard.copy(entry);
@@ -576,11 +630,22 @@ export const Desktop = ({
       focused: windows.focused,
       homes: windows.homes,
       mode: windows.mode,
+      overviewOpen: windows.overviewOpen,
       select: (workspace: string) => {
         act(WindowAction.WorkspaceSelected(workspace));
       },
+      toggleOverview: () => {
+        act(WindowAction.OverviewToggled());
+      },
     }),
-    [act, current, windows.focused, windows.homes, windows.mode],
+    [
+      act,
+      current,
+      windows.focused,
+      windows.homes,
+      windows.mode,
+      windows.overviewOpen,
+    ],
   );
 
   // A global shortcuts review flags these.
@@ -635,6 +700,17 @@ export const Desktop = ({
         />
       ))}
       {/*
+        Under every window and over the wallpaper: the overview's dimmed
+        screens, tiles and names.
+      */}
+      {overviews !== undefined && (
+        <OverviewBackdrop
+          closing={overviewPhase === "closing"}
+          onClosed={overviewClosed}
+          overviews={overviews}
+        />
+      )}
+      {/*
         Every window, once for the desk and after every bar, so a window wins a
         tie with a bar it overlaps; see `Stage`.
       */}
@@ -643,6 +719,7 @@ export const Desktop = ({
           activeId={windows.activeId}
           behindPanel={
             windows.launcherOpen ||
+            windows.overviewOpen ||
             windows.clipboardOpen ||
             opened !== undefined ||
             portal.url !== undefined ||
@@ -659,10 +736,22 @@ export const Desktop = ({
           focusedId={windows.focusedId}
           modifiers={modifiers}
           {...stageActions}
+          overview={sight}
           popups={windows.popups}
           scratchpad={windows.scratchpad}
           screens={screens}
           windows={windows.windows}
+        />
+      )}
+      {/* Over every window, while the overview is open. */}
+      {overviews !== undefined && overviewPhase === "open" && (
+        <OverviewPicker
+          focused={windows.focused}
+          onDismiss={overviewDismissed}
+          onMove={windowMovedTo}
+          onPick={overviewPicked}
+          onPickWindow={overviewWindowPicked}
+          overviews={overviews}
         />
       )}
       {/* Panels cover the whole desktop, not one screen. */}

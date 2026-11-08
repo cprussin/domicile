@@ -67,6 +67,18 @@ Each rule matches the window's app id and title, as regular expressions.
 - Going to a workspace another monitor shows moves you to that monitor.
 - Pressing the number of the workspace you are on goes back to the last one.
 
+## Overview
+
+Meta+O, a four-finger pinch in, or the button left of the workspaces in the
+bar shows each monitor's workspaces side by side, with their windows: the
+ones that have windows, and the one shown.
+
+- Click a workspace to go there, or a window to go to it.
+- Drag a window onto another workspace to move it there.
+- Arrow keys pick a workspace and Enter goes there.
+- Escape, Meta+O, another four-finger pinch in, or a click outside the
+  workspaces closes it. The launcher and clipboard close it too.
+
 ## Fullscreen
 
 Meta+F fills the monitor with the window, or with the group after Meta+A.

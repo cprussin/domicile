@@ -17,6 +17,7 @@ import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
 import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows";
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
@@ -124,6 +125,12 @@ const SOURCES: [string, readonly string[], Icon, IconWeight][] = [
     "DOWNLOAD_REGULAR",
     Object.values(parts.DOWNLOAD_REGULAR),
     DownloadSimpleIcon,
+    "regular",
+  ],
+  [
+    "SPARKLE_REGULAR",
+    [parts.SPARKLE_REGULAR.star, ...parts.SPARKLE_REGULAR.glints],
+    SparkleIcon,
     "regular",
   ],
 ];

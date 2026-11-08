@@ -54,6 +54,7 @@
     "./AnimatedPlusIcon": "./src/AnimatedPlusIcon/AnimatedPlusIcon.tsx",
     "./AnimatedReloadIcon": "./src/AnimatedReloadIcon/AnimatedReloadIcon.tsx",
     "./AnimatedSlidersIcon": "./src/AnimatedSlidersIcon/AnimatedSlidersIcon.tsx",
+    "./AnimatedSparkleIcon": "./src/AnimatedSparkleIcon/AnimatedSparkleIcon.tsx",
     "./AnimatedSpeakerIcon": "./src/AnimatedSpeakerIcon/AnimatedSpeakerIcon.tsx",
     "./AnimatedSquaresIcon": "./src/AnimatedSquaresIcon/AnimatedSquaresIcon.tsx",
     "./AnimatedThemeIcon": "./src/AnimatedThemeIcon/AnimatedThemeIcon.tsx",

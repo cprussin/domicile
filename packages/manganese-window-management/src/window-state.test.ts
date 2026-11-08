@@ -2404,3 +2404,116 @@ describe("stepping through the workspaces", () => {
     expect(currentHere(state)).toBe("1");
   });
 });
+
+describe("the overview", () => {
+  /** kitty on workspace 1, foot on 3, showing 3. */
+  const onOneAndThree = () =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.WorkspaceSelected("3"),
+      WindowAction.AppAppeared("foot", "foot"),
+    );
+
+  it("opens and shuts on the same key, closing the launcher and clipboard", () => {
+    const opened = reduce(
+      NO_WINDOWS,
+      WindowAction.LauncherToggled(),
+      WindowAction.ClipboardToggled(),
+      WindowAction.OverviewToggled(),
+    );
+
+    expect(opened.overviewOpen).toBe(true);
+    expect(opened.launcherOpen).toBe(false);
+    expect(opened.clipboardOpen).toBe(false);
+    expect(reduce(opened, WindowAction.OverviewToggled()).overviewOpen).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ["launcher", WindowAction.LauncherToggled(), "launcherOpen"],
+    ["clipboard", WindowAction.ClipboardToggled(), "clipboardOpen"],
+  ] as const)("gives way to the %s", (_, toggled, open) => {
+    // One panel at a time, as opening the overview closes the others.
+    const state = reduce(NO_WINDOWS, WindowAction.OverviewToggled(), toggled);
+
+    expect(state.overviewOpen).toBe(false);
+    expect(state[open]).toBe(true);
+  });
+
+  it("drops a window drag in progress as it opens", () => {
+    // The drag's handles go away under the overview, so its drop never comes.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.WindowGrabbed(appWindowId("kitty")),
+      WindowAction.OverviewToggled(),
+    );
+
+    expect(state.draggingId).toBeUndefined();
+  });
+
+  it("shuts on the workspace picked, even the one already shown", () => {
+    // Picking the shown workspace must not go back and forth, as its key does.
+    const elsewhere = reduce(
+      onOneAndThree(),
+      WindowAction.OverviewToggled(),
+      WindowAction.OverviewPicked("1"),
+    );
+    const here = reduce(
+      onOneAndThree(),
+      WindowAction.OverviewToggled(),
+      WindowAction.OverviewPicked("3"),
+    );
+
+    expect(currentHere(elsewhere)).toBe("1");
+    expect(elsewhere.overviewOpen).toBe(false);
+    expect(currentHere(here)).toBe("3");
+    expect(here.overviewOpen).toBe(false);
+  });
+
+  it("shuts on the window picked, focusing it and moving the pointer there", () => {
+    const before = reduce(onOneAndThree(), WindowAction.OverviewToggled());
+    const state = reduce(
+      before,
+      WindowAction.OverviewWindowPicked(APP("kitty")),
+    );
+
+    expect(currentHere(state)).toBe("1");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+    expect(state.overviewOpen).toBe(false);
+    expect(state.pressed).toBe(before.pressed + 1);
+  });
+
+  it("shuts when dismissed", () => {
+    const state = reduce(
+      NO_WINDOWS,
+      WindowAction.OverviewToggled(),
+      WindowAction.OverviewDismissed(),
+    );
+
+    expect(state.overviewOpen).toBe(false);
+  });
+
+  it("moves a window dropped on another workspace, leaving the screen where it was", () => {
+    const state = reduce(
+      onOneAndThree(),
+      WindowAction.OverviewToggled(),
+      WindowAction.WindowMovedToWorkspace(APP("kitty"), "3"),
+    );
+
+    expect(windowsOn(workspaceNamed(state, "1"))).toStrictEqual([]);
+    expect(windowsOn(workspaceNamed(state, "3")).toSorted()).toStrictEqual(
+      [APP("foot"), APP("kitty")].toSorted(),
+    );
+    expect(currentHere(state)).toBe("3");
+    expect(state.overviewOpen).toBe(true);
+  });
+
+  it("leaves a window dropped back on its own workspace", () => {
+    const before = reduce(onOneAndThree(), WindowAction.OverviewToggled());
+
+    expect(
+      reduce(before, WindowAction.WindowMovedToWorkspace(APP("kitty"), "1")),
+    ).toBe(before);
+  });
+});

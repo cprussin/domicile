@@ -13,6 +13,12 @@ describe("LauncherButton", () => {
     });
   });
 
+  // Four squares are the workspace switcher's overview button.
+  it("shows a sparkle", () => {
+    const { container } = render(<LauncherButton onOpen={() => undefined} />);
+    expect(container.querySelector("[data-part=star]")).not.toBeNull();
+  });
+
   it("names itself on hover", async () => {
     render(<LauncherButton onOpen={() => undefined} />);
     await userEvent.hover(screen.getByRole("button", { name: "Launcher" }));

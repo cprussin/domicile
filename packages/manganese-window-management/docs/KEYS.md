@@ -21,7 +21,10 @@ replaces them.
 | Meta+Shift+Tab | `floating toggle`. |
 | Meta+Minus / Meta+Shift+Minus | `scratchpad show` / `move scratchpad`. |
 | Meta+Shift+Q | Close the window. |
-| Meta+Space, Meta+D | Toggle the launcher. |
+| Meta+Space, Meta+D | Toggle the launcher, closing the overview. |
+| Meta+O | Toggle the overview. |
+| `pinch:4:inward` | Toggle the overview. |
+| `pinch:4:outward` | Toggle the launcher, closing the overview. |
 | Meta+Shift+V | Toggle the clipboard history. |
 | Meta+Shift+Space | Open the copied URL, or search Google for the copied text. Private from a private window. |
 | Meta+Shift+Return | Lock. Does nothing if the config has no `lock`. |
@@ -61,7 +64,8 @@ Manganese-only commands:
 |---|---|
 | `lock` | Lock the desktop. |
 | `group` | Turn the focused tab into a group of its own, nested in its slot, so new windows open in it. Does nothing for a window alone in its group. |
-| `launcher` | Toggle the launcher. |
+| `launcher` | Toggle the launcher. Closes the overview. |
+| `overview` | Toggle the overview: each screen's workspaces with windows, and the shown one, at once. Closes the launcher and clipboard. |
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |
 | `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. The window is private when the active one is. Reads the first 480 characters. |

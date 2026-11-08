@@ -9,6 +9,7 @@ import {
 } from "@domicile-desktop/test-support/popup-layout";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { Seen } from "./overview/sight";
 import { WindowFrame } from "./WindowFrame";
 import type { WindowMotion } from "./window-motion";
 
@@ -26,12 +27,14 @@ describe("WindowFrame", () => {
   it("keeps popups opened in the window inside its frame", async () => {
     render(
       <WindowFrame
+        depth={0}
         frame={{ height: 800, width: 400, x: 0, y: 0 }}
         motion="resting"
         onHover={noHover}
         onReach={noReach}
         rewound={0}
         screen={undefined}
+        seen={undefined}
       >
         <Popover trigger={<Button>Site settings</Button>}>Body</Popover>
       </WindowFrame>,
@@ -53,6 +56,7 @@ describe("WindowFrame", () => {
     const crossed: (readonly [number, number])[] = [];
     render(
       <WindowFrame
+        depth={0}
         frame={undefined}
         motion="resting"
         onHover={(at) => {
@@ -61,6 +65,7 @@ describe("WindowFrame", () => {
         onReach={noReach}
         rewound={0}
         screen={undefined}
+        seen={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -80,6 +85,7 @@ describe("WindowFrame", () => {
     const reached: string[] = [];
     render(
       <WindowFrame
+        depth={0}
         frame={undefined}
         motion="resting"
         onHover={noHover}
@@ -88,6 +94,7 @@ describe("WindowFrame", () => {
         }}
         rewound={0}
         screen={undefined}
+        seen={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -100,15 +107,20 @@ describe("WindowFrame", () => {
 
   describe("on a screen", () => {
     const SCREEN = { height: 800, width: 1280, x: 0, y: 100 };
-    const styleOf = (motion: WindowMotion = "resting") => {
+    const styleOf = (
+      motion: WindowMotion = "resting",
+      seen: Seen | undefined = undefined,
+    ) => {
       render(
         <WindowFrame
+          depth={2}
           frame={{ height: 400, width: 600, x: 40, y: 300 }}
           motion={motion}
           onHover={noHover}
           onReach={noReach}
           rewound={0}
           screen={SCREEN}
+          seen={seen}
         >
           <button type="button">part</button>
         </WindowFrame>,
@@ -124,6 +136,17 @@ describe("WindowFrame", () => {
     it("lifts its parts far enough to clear the top of the screen while the scratchpad slides it", () => {
       // The scratchpad slides a window up off the screen and back down.
       expect(styleOf("dropping")?.getPropertyValue("--lift")).toBe("600px");
+    });
+
+    it("shows its parts through their overview tile, at their depth", () => {
+      const style = styleOf("resting", {
+        fading: false,
+        showing: false,
+        view: { scale: 0.5, x: 10, y: 20 },
+      });
+
+      expect(style?.transform).toBe("matrix(0.5, 0, 0, 0.5, 10, 20)");
+      expect(style?.zIndex).toBe("2");
     });
   });
 });
