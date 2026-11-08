@@ -18,16 +18,21 @@ export const Hero = () => (
     lede={
       <>
         For years we've run Chromium's compositor inside another compositor.
-        Domicile asks what happens when the two become one: your desktop lays
-        out websites, native apps become DOM elements, and browser features like
-        casting, extensions and notifications become desktop features.
+        Domicile makes them one: your desktop lays out websites, native apps
+        become DOM elements, and browser features like casting, extensions and
+        notifications become desktop features.
         <span className={experimentStyles}>
           An experiment in what becomes possible when the boundaries disappear.
         </span>
       </>
     }
     tag={{ href: "#why", label: "A Linux desktop on Chromium" }}
-    title="You're already running two compositors."
+    title={
+      <>
+        You're already running two compositors.{" "}
+        <span className={questionStyles}>Why not make it one?</span>
+      </>
+    }
   >
     {/* A window needs a Wayland session: there is no X11 backend. */}
     <p className={trialStyles}>
@@ -38,6 +43,9 @@ export const Hero = () => (
     </p>
   </PageHero>
 );
+
+// The headline's question, on its own line in the accent.
+const questionStyles = css({ color: "accent", display: "block" });
 
 const experimentStyles = css({
   color: "foreground",
