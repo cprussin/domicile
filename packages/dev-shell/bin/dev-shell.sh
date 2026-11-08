@@ -50,8 +50,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Watch the shell only. A change to its dependencies needs a restart.
+#
+# Keep the output directory: emptying it on the first watch build deletes the
+# `shell.js` the turbo build wrote, and the desktop and reload loop below find
+# no shell if they start before that build ends.
 echo "watching $SHELL_DIR"
-(cd "$SHELL_DIR" && exec bunx vite build --watch) &
+(cd "$SHELL_DIR" && exec bunx vite build --watch --no-emptyOutDir) &
 WATCHING+=($!)
 # A shell that ships prebuilt CSS regenerates it with its `watch:css`.
 if grep -q '"watch:css"' "$SHELL_DIR/package.json"; then
