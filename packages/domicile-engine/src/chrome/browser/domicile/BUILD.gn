@@ -50,6 +50,8 @@ source_set("domicile") {
     "domicile_media_devices.h",
     "domicile_permissions.cc",
     "domicile_permissions.h",
+    "domicile_pointer_hiding.cc",
+    "domicile_pointer_hiding.h",
     "domicile_pointer_warp.cc",
     "domicile_pointer_warp.h",
     "domicile_printing.cc",
@@ -93,6 +95,11 @@ source_set("domicile") {
     "//components/domicile:desk_downloads",
     # Where the pointer is on the desk, from aura's own events.
     "//components/domicile:desk_pointer",
+    # Hides the pointer while typing and after a pause, from aura's own events
+    # and the touchpad gestures the shell and applications take.
+    "//components/domicile:desk_gestures",
+    "//components/domicile:desk_pointer_hiding",
+    "//components/domicile:pointer_hiding",
     "//components/domicile:notification_window",
     "//components/domicile:pointer_warp",
     "//components/domicile:shell_source",

@@ -4,9 +4,9 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorImage, CursorShape,
-    CursorTheme, DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PointerOverWindow,
-    PROTOCOL_VERSION,
+    negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorHiding, CursorImage,
+    CursorShape, CursorTheme, DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase,
+    PointerOverWindow, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -462,6 +462,40 @@ fn the_pointer_theme_rides_on_the_appearance() {
 
     let v = serde_json::to_value(HostMessage::Appearance(Appearance::default())).unwrap();
     assert!(v.get("cursor").is_none(), "{v}");
+}
+
+/// The browser process reads `cursor_hiding` off `appearance` by these names.
+#[test]
+fn hiding_the_pointer_rides_on_the_appearance() {
+    let hiding = HostMessage::Appearance(Appearance {
+        cursor_hiding: Some(CursorHiding {
+            after_ms: Some(1000),
+            when_typing: true,
+        }),
+        ..Appearance::default()
+    });
+    host_round_trip(&hiding);
+    let v = serde_json::to_value(hiding).unwrap();
+    assert_eq!(
+        v["cursor_hiding"],
+        serde_json::json!({ "after_ms": 1000, "when_typing": true })
+    );
+
+    let v = serde_json::to_value(HostMessage::Appearance(Appearance {
+        cursor_hiding: Some(CursorHiding {
+            after_ms: None,
+            when_typing: true,
+        }),
+        ..Appearance::default()
+    }))
+    .unwrap();
+    assert_eq!(
+        v["cursor_hiding"],
+        serde_json::json!({ "when_typing": true })
+    );
+
+    let v = serde_json::to_value(HostMessage::Appearance(Appearance::default())).unwrap();
+    assert!(v.get("cursor_hiding").is_none(), "{v}");
 }
 
 #[test]

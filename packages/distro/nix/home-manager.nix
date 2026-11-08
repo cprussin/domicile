@@ -625,6 +625,19 @@ in {
             example = 32;
           };
 
+          theme.cursor_hide_after_ms = lib.mkOption {
+            description = "Hides the pointer after this many milliseconds without pointer input. `null`, the default, never hides it.";
+            type = lib.types.nullOr (lib.types.ints.between 1 4294967295);
+            default = null;
+            example = 1000;
+          };
+
+          theme.cursor_hide_when_typing = lib.mkOption {
+            description = "Hides the pointer on a typing key press, until the pointer is next used.";
+            type = lib.types.bool;
+            default = false;
+          };
+
           theme.font_name = lib.mkOption {
             description = "The interface font applications draw text in, as a Pango font description, through the settings portal. `null`, the default, leaves each application its own.";
             type = lib.types.nullOr lib.types.str;

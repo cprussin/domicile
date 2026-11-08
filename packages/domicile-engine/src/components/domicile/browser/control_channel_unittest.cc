@@ -21,6 +21,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "base/time/time.h"
+#include "components/domicile/browser/desk_pointer_hiding.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shell_swap.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -470,6 +472,36 @@ TEST_F(ControlChannelTest, TheDesksPointerThemeReachesTheBrowser) {
   Say("{\"type\":\"appearance\",\"high_contrast\":false,"
       "\"reduced_motion\":false}\n");
   EXPECT_EQ(cursor_theme_.Take(), std::nullopt);
+}
+
+// The browser process hides the pointer, so the settings stop there. Settings
+// that cannot be read are refused, and none never hide it.
+TEST_F(ControlChannelTest, WhenToHideThePointerReachesTheBrowser) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  base::test::TestFuture<PointerHidingSettings> hiding;
+  const DeskPointerHiding::ListenerId listener =
+      DeskPointerHiding::Get().AddListener(
+          hiding.GetRepeatingCallback<const PointerHidingSettings&>());
+
+  Say("{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false,\"cursor_hiding\":{\"after_ms\":0,"
+      "\"when_typing\":true}}\n"
+      "{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false,\"cursor_hiding\":{\"after_ms\":1000}}\n"
+      "{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false,\"cursor_hiding\":{\"after_ms\":1000,"
+      "\"when_typing\":true}}\n");
+  EXPECT_EQ(hiding.Take(), (PointerHidingSettings{.after = base::Seconds(1),
+                                                  .when_typing = true}));
+  // Each appearance names its pointer theme too; take it so the next can.
+  EXPECT_EQ(cursor_theme_.Take(), std::nullopt);
+
+  Say("{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false}\n");
+  EXPECT_EQ(hiding.Take(), PointerHidingSettings());
+  EXPECT_EQ(cursor_theme_.Take(), std::nullopt);
+  DeskPointerHiding::Get().RemoveListener(listener);
 }
 
 // The sites to draw dark are for this process, so they reach it before the

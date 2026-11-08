@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use domicile_config::{AccentColor, Contrast, CursorThemeName, ThemeConfig, ThemeMode};
 use domicile_host::Appearances;
-use domicile_protocol::{CursorTheme, Theme};
+use domicile_protocol::{CursorHiding, CursorTheme, Theme};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
@@ -90,6 +90,8 @@ pub struct Appearance {
     pub icon_theme: Option<String>,
     pub cursor_theme: Option<CursorThemeName>,
     pub cursor_size: Option<u16>,
+    pub cursor_hide_after_ms: Option<u32>,
+    pub cursor_hide_when_typing: bool,
     pub font_name: Option<String>,
     pub monospace_font_name: Option<String>,
 }
@@ -103,6 +105,8 @@ impl From<&ThemeConfig> for Appearance {
             icon_theme: theme.icon_theme.clone(),
             cursor_theme: theme.cursor_theme.clone(),
             cursor_size: theme.cursor_size,
+            cursor_hide_after_ms: theme.cursor_hide_after_ms,
+            cursor_hide_when_typing: theme.cursor_hide_when_typing,
             font_name: theme.font_name.clone(),
             monospace_font_name: theme.monospace_font_name.clone(),
         }
@@ -120,6 +124,7 @@ impl From<&Appearance> for Appearances {
             high_contrast: appearance.contrast == Contrast::High,
             reduced_motion: appearance.reduced_motion,
             cursor: cursor_theme(theme, appearance),
+            cursor_hiding: cursor_hiding(appearance),
         };
         Appearances {
             dark: in_theme(Theme::Dark),
@@ -149,6 +154,21 @@ fn cursor_theme(theme: Theme, appearance: &Appearance) -> Option<CursorTheme> {
         (name, size) => Some(CursorTheme {
             name: name.unwrap_or(DEFAULT_CURSOR_THEME).into(),
             size: size.unwrap_or(DEFAULT_CURSOR_SIZE),
+        }),
+    }
+}
+
+/// When the browser process hides the pointer, or `None` to never hide it.
+/// The same in both modes.
+fn cursor_hiding(appearance: &Appearance) -> Option<CursorHiding> {
+    match (
+        appearance.cursor_hide_after_ms,
+        appearance.cursor_hide_when_typing,
+    ) {
+        (None, false) => None,
+        (after_ms, when_typing) => Some(CursorHiding {
+            after_ms,
+            when_typing,
         }),
     }
 }
@@ -430,6 +450,7 @@ mod tests {
                 high_contrast: true,
                 reduced_motion: true,
                 cursor: None,
+                cursor_hiding: None,
             }
         );
     }
@@ -457,6 +478,40 @@ mod tests {
                     size: 64,
                 })
             )
+        );
+    }
+
+    #[test]
+    fn the_browser_is_told_when_to_hide_the_pointer_in_both_modes() {
+        let hiding = CursorHiding {
+            after_ms: Some(1000),
+            when_typing: true,
+        };
+        let told = Appearances::from(&Appearance {
+            cursor_hide_after_ms: Some(1000),
+            cursor_hide_when_typing: true,
+            ..Appearance::default()
+        });
+        let typing_only = Appearances::from(&Appearance {
+            cursor_hide_when_typing: true,
+            ..Appearance::default()
+        })
+        .dark;
+
+        assert_eq!(
+            (told.dark.cursor_hiding, told.light.cursor_hiding),
+            (Some(hiding.clone()), Some(hiding))
+        );
+        assert_eq!(
+            typing_only.cursor_hiding,
+            Some(CursorHiding {
+                after_ms: None,
+                when_typing: true,
+            })
+        );
+        assert_eq!(
+            Appearances::from(&Appearance::default()).dark.cursor_hiding,
+            None
         );
     }
 
