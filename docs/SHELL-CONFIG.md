@@ -139,6 +139,7 @@ An edit applies to the running desktop, and windows stay open:
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
 | `theme.cursor_theme`, `cursor_size` | The pointer on a tty is redrawn; windows that read the settings portal follow |
+| `theme.cursor_hide_after_ms`, `cursor_hide_when_typing` | The pointer is shown, and hides by the new settings |
 | `theme.font_name`, `monospace_font_name` | Windows that read the settings portal follow |
 | `theme.force_dark` | Those sites are drawn dark from their next load |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
@@ -418,6 +419,23 @@ The engine draws every pointer on a tty, including a window's, from
   the XCursor path`.
 - A cursor larger than the GPU's cursor plane, often 64 or 256 pixels, is
   cut off.
+
+The engine hides the pointer by two keys, which applications do not read:
+
+| Key | Values | Default |
+|---|---|---|
+| `theme.cursor_hide_after_ms` | milliseconds without pointer input, at least `1` | unset: never |
+| `theme.cursor_hide_when_typing` | `true`, `false` | `false` |
+
+- The next pointer input shows it: a move, click, scroll, touchpad pinch or
+  touchpad gesture of three or more fingers. Keys and touch do not.
+- A typing key is one without Ctrl, Alt or Super held, and not a modifier,
+  function, media, volume, brightness or power key. A held key repeating, or
+  a key pressed during a drag, does not hide it.
+- The timeout does not run while a mouse button is held.
+- Hiding changes only the image: hover and the window under the pointer
+  stay. It covers every monitor and screen casts, and the host's pointer
+  when nested.
 - Nested, the host draws the pointer from its own theme.
 
 In manganese:

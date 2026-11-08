@@ -139,6 +139,13 @@ const settingsSchema = z.strictObject({
         .regex(/^#[0-9a-fA-F]{6}$/)
         .optional(),
       contrast: z.enum(CONTRASTS).default("normal"),
+      cursor_hide_after_ms: z
+        .number()
+        .int()
+        .positive()
+        .max(4_294_967_295)
+        .optional(),
+      cursor_hide_when_typing: z.boolean().optional(),
       cursor_size: z.number().int().positive().max(65_535).optional(),
       cursor_theme: z
         .union([

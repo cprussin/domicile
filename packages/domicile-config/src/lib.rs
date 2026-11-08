@@ -677,6 +677,12 @@ pub struct ThemeConfig {
     /// The cursor size in logical pixels, for clients and the engine's
     /// pointer. Unset leaves clients their own. Zero is refused.
     pub cursor_size: Option<u16>,
+    /// Hides the engine's pointer after this many milliseconds without
+    /// pointer input. Unset never hides it. Zero is refused.
+    pub cursor_hide_after_ms: Option<u32>,
+    /// Hides the engine's pointer on a typing key press, until the pointer is
+    /// next used.
+    pub cursor_hide_when_typing: bool,
     /// The interface font as a Pango description, such as `Inter 11`. Unset
     /// leaves clients their own.
     pub font_name: Option<String>,
@@ -720,6 +726,11 @@ impl ThemeConfig {
             ))),
             (None, Some(0)) => Err(ConfigError::Validation(
                 "theme.cursor_size must be at least 1; leave the key out for the clients' own"
+                    .into(),
+            )),
+            (None, _) if self.cursor_hide_after_ms == Some(0) => Err(ConfigError::Validation(
+                "theme.cursor_hide_after_ms must be at least 1; leave the key out to never hide \
+                 the pointer"
                     .into(),
             )),
             (None, _) => Ok(()),

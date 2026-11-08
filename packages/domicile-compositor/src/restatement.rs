@@ -19,6 +19,7 @@
 //! | `idle.blank_after_seconds`, `idle.warn_before_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
 //! | `theme.mode` | sent to every chrome and the desk's clients, with the mode's own `cursor_theme` if it has one (`take_up_the_theme`) |
 //! | `theme.accent_color`, `contrast`, `reduced_motion`, `icon_theme`, `cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name` | sent to the desk's clients (`Portals::restyle`); `icon_theme` also redraws tray and notification icons; `cursor_theme` and `cursor_size` also go to every chrome's browser, which draws the pointer (`Host::set_appearance`) |
+//! | `theme.cursor_hide_after_ms`, `cursor_hide_when_typing` | sent to every chrome's browser, which hides the pointer (`Host::set_appearance`) |
 //! | `theme.force_dark` | sent to every chrome, whose browser draws those sites dark from their next load (`Host::set_force_dark`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
@@ -202,6 +203,19 @@ mod tests {
             Restatement::between(&was, &parsed(A_DESK_DRAWN_LIGHT)).appearance,
             None
         );
+    }
+
+    #[test]
+    fn hiding_the_pointer_is_restated_when_it_moved() {
+        // The browser hides the pointer; nothing else reads these keys.
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DVORAK_DESK_HIDING_ITS_POINTER);
+
+        assert_eq!(
+            Restatement::between(&was, &now).appearance,
+            Some(now.theme.clone())
+        );
+        assert_eq!(Restatement::between(&now, &now).appearance, None);
     }
 
     #[test]
@@ -451,6 +465,16 @@ mod tests {
     "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
   },
   "theme": { "force_dark": ["mail.google.com"] },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
+"#;
+
+    const A_DVORAK_DESK_HIDING_ITS_POINTER: &str = r#"
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "theme": { "cursor_hide_after_ms": 1000, "cursor_hide_when_typing": true },
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;

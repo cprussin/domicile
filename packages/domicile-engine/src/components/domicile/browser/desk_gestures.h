@@ -76,6 +76,10 @@ class DeskGestures : public ui::NativeGestureSink {
   // `channel` gives `grab` back.
   void Ungrab(ChannelId channel, GestureGrab grab);
 
+  // Calls `touched` on each phase of a touchpad gesture this takes. One
+  // listener: the browser's pointer, which a touchpad gesture shows.
+  void ListenForTouchpad(base::RepeatingClosure touched);
+
   // ui::NativeGestureSink:
   bool Takes(const ui::NativeGesture& begin) override;
   void Take(const ui::NativeGesture& gesture) override;
@@ -106,6 +110,7 @@ class DeskGestures : public ui::NativeGestureSink {
   std::vector<Channel> channels_ GUARDED_BY(lock_);
   // The channel that took the gesture in progress.
   std::optional<Owner> owner_ GUARDED_BY(lock_);
+  base::RepeatingClosure touched_ GUARDED_BY(lock_);
 };
 
 }  // namespace domicile
