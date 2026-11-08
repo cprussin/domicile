@@ -772,6 +772,105 @@ fn disconnecting_the_sender_cancels_its_pinch() {
     );
 }
 
+fn say_json(chrome: &mut domicile_test_chrome::Chrome, frame: serde_json::Value) {
+    chrome
+        .say(&serde_json::from_value::<ChromeMessage>(frame).unwrap())
+        .unwrap();
+}
+
+/// The line of `trace` that begins `call(` and ends `tail`.
+fn traced(trace: &str, call: &str, tail: &str) -> bool {
+    trace
+        .lines()
+        .any(|line| line.contains(&format!("{call}(")) && line.ends_with(tail))
+}
+
+/// A swipe or hold the shell left unbound reaches the window under the
+/// pointer, though it names no window.
+#[test]
+fn an_unbound_swipe_and_hold_reach_the_pointers_window() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, _app) = a_client_being_typed_at(&compositor);
+    for frame in [
+        serde_json::json!({"type":"pointer_swipe", "phase":"begin", "fingers":3}),
+        serde_json::json!({"type":"pointer_swipe", "phase":"update", "dx":1.25, "dy":-2.5}),
+        serde_json::json!({"type":"pointer_swipe", "phase":"end", "canceled":false}),
+        serde_json::json!({"type":"pointer_hold", "phase":"begin", "fingers":4}),
+        serde_json::json!({"type":"pointer_hold", "phase":"end", "canceled":true}),
+    ] {
+        say_json(&mut chrome, frame);
+    }
+    assert!(client.wait_for_trace("hold_end(", 1), "{}", client.trace());
+    let trace = client.trace();
+    for (call, tail) in [
+        ("swipe_begin", ", 3)"),
+        ("swipe_update", ", 1.25, -2.5)"),
+        ("swipe_end", ", 0)"),
+        ("hold_begin", ", 4)"),
+        ("hold_end", ", 1)"),
+    ] {
+        assert!(traced(&trace, call, tail), "{call} missing: {trace}");
+    }
+}
+
+/// A swipe ends canceled when the pointer leaves its window, and one begun
+/// over no window reaches nobody.
+#[test]
+fn a_swipe_cancels_when_the_pointer_leaves_and_starts_nowhere() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+    say_json(
+        &mut chrome,
+        serde_json::json!({"type":"pointer_swipe", "phase":"begin", "fingers":3}),
+    );
+    assert!(client.wait_for_trace("swipe_begin(", 1));
+    chrome
+        .say(&ChromeMessage::PointerLeave {
+            app_id: app.clone(),
+        })
+        .unwrap();
+    // The canceled swipe's late tail, then a swipe over no window.
+    for frame in [
+        serde_json::json!({"type":"pointer_swipe", "phase":"update", "dx":1.0, "dy":0.0}),
+        serde_json::json!({"type":"pointer_swipe", "phase":"end", "canceled":false}),
+        serde_json::json!({"type":"pointer_swipe", "phase":"begin", "fingers":4}),
+    ] {
+        say_json(&mut chrome, frame);
+    }
+    chrome
+        .say(&ChromeMessage::Key {
+            app_id: app,
+            keycode: EVDEV_KEY_C,
+            pressed: true,
+        })
+        .unwrap();
+    assert!(client.wait_for_trace(&format!(", {EVDEV_KEY_C}, 1)"), 1));
+    let trace = client.trace();
+    assert!(traced(&trace, "swipe_end", ", 1)"), "{trace}");
+    assert!(!trace.contains("swipe_update("), "{trace}");
+    assert!(!traced(&trace, "swipe_end", ", 0)"), "{trace}");
+    assert!(!traced(&trace, "swipe_begin", ", 4)"), "{trace}");
+}
+
+/// A dropped engine channel cannot leave a native client's hold going.
+#[test]
+fn disconnecting_the_sender_cancels_its_hold() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, _app) = a_client_being_typed_at(&compositor);
+    say_json(
+        &mut chrome,
+        serde_json::json!({"type":"pointer_hold", "phase":"begin", "fingers":3}),
+    );
+    assert!(client.wait_for_trace("hold_begin(", 1));
+    drop(chrome);
+    assert!(client.wait_for_trace("hold_end(", 1));
+    assert!(
+        traced(&client.trace(), "hold_end", ", 1)"),
+        "{}",
+        client.trace()
+    );
+}
+
 /// A started client and its window's app id, with nothing driven at it yet.
 fn a_window(
     compositor: &Compositor,

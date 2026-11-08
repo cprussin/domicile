@@ -30,7 +30,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
-# ControlChannel 16, DeviceChoices 9, SurfaceFrames 8,
+# ControlChannel 17, DeviceChoices 9, SurfaceFrames 8,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, ShellWindowWait 4, ShellSwap 8,
@@ -38,10 +38,12 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
 # DeskPointer 5, PointerWarp 10, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
-# LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 7,
+# LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 10,
 # NativeGestureSequence 3, EdgeSwipe 10.
 #
-# 543, and it was 531 — a touchscreen finger in from a display's edge is
+# 547, and it was 543 — forwarding the swipes and holds the shell leaves to
+# the apps is three DeskGestures cases and one ControlChannel case. Before
+# that 543, and it was 531 — a touchscreen finger in from a display's edge is
 # ten EdgeSwipe cases and one DeskGestures case, and a touch on a window one
 # ControlChannel case. Before that 531, and it was 529 — night light is one
 # more FrameSinkBroker case and one more DomicileDisplayList case. Before
@@ -195,7 +197,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=543
+FLOOR=547
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
