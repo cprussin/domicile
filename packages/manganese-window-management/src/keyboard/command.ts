@@ -2,7 +2,7 @@
 //
 // - Commands use sway's syntax where sway has one (`focus left`, `layout
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
-//   `clipboard`, `search-clipboard`, `screenshot`, `volume`, `mic`,
+//   `overview`, `clipboard`, `search-clipboard`, `screenshot`, `volume`, `mic`,
 //   `brightness`, `keymap`, `notifications`, `idle-inhibitor`,
 //   `night-light`, `virtual-monitor` and `resize grow <direction>` are
 //   manganese's own.
@@ -40,6 +40,8 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   // A toggle, so the same key opens and closes it. Escape and the backdrop
   // close it from the dialog (see `launcher/Launcher.tsx`).
   ["launcher", WindowAction.LauncherToggled()],
+  // Each screen's workspaces at once; a toggle, like the launcher.
+  ["overview", WindowAction.OverviewToggled()],
   // Clipboard history; a toggle, like the launcher.
   ["clipboard", WindowAction.ClipboardToggled()],
   // The area is picked in the screenshot dialog.

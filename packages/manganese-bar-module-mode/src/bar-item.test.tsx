@@ -13,7 +13,9 @@ const inMode = (mode: string) =>
         focused: "left",
         homes: {},
         mode,
+        overviewOpen: false,
         select: () => undefined,
+        toggleOverview: () => undefined,
       }}
     >
       <Mode />

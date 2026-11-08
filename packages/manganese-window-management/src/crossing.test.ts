@@ -47,6 +47,7 @@ const screen = (shown: Shown) => ({ screen: shown });
 const desktop = (placements: readonly Placement[], current = "1"): Shown => ({
   activeId: undefined,
   current,
+  overview: false,
   placements,
   scratchpad: [],
   tabs: [],

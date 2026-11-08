@@ -171,6 +171,11 @@ export type WindowState = {
    */
   launcherOpen: boolean;
   /**
+   * Whether the overview, each screen's workspaces at once, is open.
+   * Kept here because key commands and gestures open it.
+   */
+  overviewOpen: boolean;
+  /**
    * Whether the clipboard history is open. Kept here because key commands
    * open it.
    */
@@ -219,6 +224,7 @@ export const NO_WINDOWS: WindowState = {
   homes: { "1": UNDESCRIBED_SCREEN },
   launcherOpen: false,
   mode: "default",
+  overviewOpen: false,
   popups: [],
   pressed: 0,
   previous: undefined,
@@ -276,7 +282,10 @@ export const workspacesOn = (
 ): readonly string[] => WORKSPACES.filter((name) => homes[name] === screen);
 
 /** The workspace called `name`. Throws for an unknown name. */
-export const workspaceNamed = (state: WindowState, name: string): Workspace => {
+export const workspaceNamed = (
+  state: Pick<WindowState, "workspaces">,
+  name: string,
+): Workspace => {
   const workspace = state.workspaces.find((found) => found.name === name);
   if (workspace === undefined) {
     throw new Error(`shell: no workspace ${name}`);
@@ -410,6 +419,10 @@ export enum WindowActionKind {
   NightLightToggled,
   NotificationsCleared,
   NotificationsToggled,
+  OverviewDismissed,
+  OverviewPicked,
+  OverviewToggled,
+  OverviewWindowPicked,
   PageFullscreened,
   ParentFocused,
   PopupPlaced,
@@ -436,6 +449,7 @@ export enum WindowActionKind {
   WindowHovered,
   WindowKilled,
   WindowMoved,
+  WindowMovedToWorkspace,
   WindowResized,
   WindowSelected,
   WindowSentToScratchpad,
@@ -831,6 +845,26 @@ export const WindowAction = {
     kind: WindowActionKind.NotificationsToggled as const,
   }),
 
+  /** Escape, or a press on no workspace, in the overview. */
+  OverviewDismissed: () => ({
+    kind: WindowActionKind.OverviewDismissed as const,
+  }),
+
+  /** A workspace pressed in the overview, which goes there. */
+  OverviewPicked: (name: string) => ({
+    kind: WindowActionKind.OverviewPicked as const,
+    name,
+  }),
+
+  /** `overview`, which opens and closes the overview. */
+  OverviewToggled: () => ({ kind: WindowActionKind.OverviewToggled as const }),
+
+  /** A window pressed in the overview, which goes to it. */
+  OverviewWindowPicked: (id: string) => ({
+    id,
+    kind: WindowActionKind.OverviewWindowPicked as const,
+  }),
+
   /**
    * The page in browser window `id`, or the client of app window `id`, asked
    * to enter or leave fullscreen. See `pageFullscreened`.
@@ -1036,6 +1070,16 @@ export const WindowAction = {
   }),
 
   /**
+   * Window `id` dropped on workspace `name` in the overview, from whichever
+   * workspace holds it. The screens keep showing what they showed.
+   */
+  WindowMovedToWorkspace: (id: string, name: string) => ({
+    id,
+    kind: WindowActionKind.WindowMovedToWorkspace as const,
+    name,
+  }),
+
+  /**
    * The user resized a floating window by a corner, which can also move it.
    */
   WindowResized: (id: string, box: Rect) => ({
@@ -1206,7 +1250,11 @@ const reduceAction = (
       return state;
     }
     case WindowActionKind.ClipboardToggled: {
-      return { ...state, clipboardOpen: !state.clipboardOpen };
+      return {
+        ...state,
+        clipboardOpen: !state.clipboardOpen,
+        overviewOpen: false,
+      };
     }
     case WindowActionKind.ContainerSplit: {
       return onCurrent(state, (workspace) =>
@@ -1285,7 +1333,11 @@ const reduceAction = (
       return { ...state, launcherOpen: false };
     }
     case WindowActionKind.LauncherToggled: {
-      return { ...state, launcherOpen: !state.launcherOpen };
+      return {
+        ...state,
+        launcherOpen: !state.launcherOpen,
+        overviewOpen: false,
+      };
     }
     case WindowActionKind.LayoutSet: {
       return onCurrent(state, (workspace) =>
@@ -1302,6 +1354,31 @@ const reduceAction = (
       return {
         ...reachWindow(state, openTabBeside(state, action.id)),
         launcherOpen: true,
+      };
+    }
+    case WindowActionKind.OverviewDismissed: {
+      return { ...state, overviewOpen: false };
+    }
+    case WindowActionKind.OverviewPicked: {
+      // Not `selectWorkspace`: picking the shown one stays on it.
+      return { ...showWorkspace(state, action.name), overviewOpen: false };
+    }
+    case WindowActionKind.OverviewToggled: {
+      return {
+        ...state,
+        clipboardOpen: false,
+        // Its handles go away under the overview, so its drop never comes.
+        draggingId: undefined,
+        launcherOpen: false,
+        overviewOpen: !state.overviewOpen,
+      };
+    }
+    case WindowActionKind.OverviewWindowPicked: {
+      // Counted as a press, so the pointer moves to the window.
+      return {
+        ...reachWindow(state, action.id, picked),
+        overviewOpen: false,
+        pressed: state.pressed + 1,
       };
     }
     case WindowActionKind.PopupPlaced: {
@@ -1433,6 +1510,9 @@ const reduceAction = (
     }
     case WindowActionKind.WindowMoved: {
       return floatDragged(state, action.id, action.x, action.y);
+    }
+    case WindowActionKind.WindowMovedToWorkspace: {
+      return moveToWorkspace(state, action.id, action.name);
     }
     case WindowActionKind.WindowResized: {
       return onWorkspaceWith(state, action.id, (workspace) =>
@@ -2222,6 +2302,32 @@ const sendToWorkspace = (state: WindowState, name: string): WindowState => {
   } else {
     return onWorkspace(
       onCurrent(state, () => leaving.rest),
+      name,
+      (workspace) => nodeTiledIn(workspace, leaving.node),
+    );
+  }
+};
+
+/**
+ * Moves window `id` to workspace `name`, tiled, from wherever it is, as
+ * `move container to workspace` would after focusing it. Unlike that command,
+ * no screen changes what it shows.
+ */
+const moveToWorkspace = (
+  state: WindowState,
+  id: string,
+  name: string,
+): WindowState => {
+  const from = workspaceHolding(state, id);
+  const leaving =
+    from === undefined || from.name === name
+      ? undefined
+      : sentOff(picked(from, id));
+  if (from === undefined || leaving === undefined) {
+    return state;
+  } else {
+    return onWorkspace(
+      onWorkspace(state, from.name, () => leaving.rest),
       name,
       (workspace) => nodeTiledIn(workspace, leaving.node),
     );

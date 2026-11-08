@@ -414,6 +414,7 @@ const MANGANESE_KEYS: ShellKeybindings = {
       line(keysym, true, `send-shell move ${way}`),
     ),
     line("v", true, "send-shell clipboard"),
+    line("o", false, "send-shell overview"),
     line("t", false, "send-shell keymap next"),
     line("b", false, "send-shell split h"),
     line("v", false, "send-shell split v"),
@@ -4000,6 +4001,56 @@ describe("Shell", () => {
         faceOf(barFor(container, "app:two")).className,
       );
     });
+  });
+});
+
+describe("the overview", () => {
+  const overview = (): HTMLElement | null =>
+    screen.queryByRole("dialog", { name: "Workspaces" });
+
+  it("opens on mod+o with a tile per workspace, the shown one current", async () => {
+    await renderShell();
+    clientAppears("one");
+
+    press("o");
+
+    expect(overview()).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Workspace 1" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+  });
+
+  it("opens from the workspace switcher's button", async () => {
+    await renderShell();
+
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+
+    expect(overview()).not.toBeNull();
+  });
+
+  it("shows the workspace picked from it", async () => {
+    await renderShell();
+    clientAppears("one");
+    press("parenright", true);
+    press("o");
+
+    fireEvent.click(screen.getByRole("button", { name: "Workspace 2" }));
+
+    expect(overview()).toBeNull();
+    expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+  });
+
+  it("closes on Escape", async () => {
+    await renderShell();
+    press("o");
+
+    fireEvent.keyDown(overview() ?? document, { key: "Escape" });
+
+    expect(overview()).toBeNull();
   });
 });
 

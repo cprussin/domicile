@@ -11,6 +11,11 @@ export type Shown = {
   activeId: string | undefined;
   /** The workspace on screen. */
   current: string;
+  /**
+   * Whether the overview shows the screen. Its windows move between tiles
+   * there, so neither a switch nor a send plays.
+   */
+  overview: boolean;
   placements: readonly Placement[];
   /** The windows hidden in the scratchpad. */
   scratchpad: readonly string[];

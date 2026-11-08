@@ -1,4 +1,5 @@
-// The workspaces, for the bar's switcher and binding mode.
+// The workspaces, for the bar's switcher, its overview button and the binding
+// mode.
 
 import { useProvided } from "@domicile-desktop/manganese-host/use-provided";
 import { createContext } from "react";
@@ -13,8 +14,12 @@ export type Workspaces = {
   homes: WindowState["homes"];
   /** The current binding mode. */
   mode: string;
+  /** Whether the overview is open. */
+  overviewOpen: boolean;
   /** Show workspace `name`. */
   select: (name: string) => void;
+  /** Open or close the overview. */
+  toggleOverview: () => void;
 };
 
 export const WorkspacesContext = createContext<Workspaces | undefined>(

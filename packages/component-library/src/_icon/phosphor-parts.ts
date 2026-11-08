@@ -1,6 +1,6 @@
 /**
  * Phosphor's icon paths, split into the parts that move.
- * `phosphor-parts.test.ts` checks that each set joins back into Phosphor's
+ * `phosphor-parts.test.tsx` checks that each set joins back into Phosphor's
  * icon.
  */
 
@@ -213,4 +213,14 @@ export const DOWNLOAD_REGULAR = {
   arrow:
     "M122.34 149.66A8 8 0 0 0 133.66 149.66L173.66 109.66A8 8 0 0 0 162.34 98.34L136 124.69V32A8 8 0 0 0 120 32V124.69L93.66 98.34A8 8 0 0 0 82.34 109.66Z",
   tray: "M224 144V208A8 8 0 0 1 216 216H40A8 8 0 0 1 32 208V144A8 8 0 0 1 48 144V200H208V144A8 8 0 0 1 224 144Z",
+} as const;
+
+/** Sparkle regular. */
+export const SPARKLE_REGULAR = {
+  // The two small crosses: the larger, up and to the left, then the smaller.
+  glints: [
+    "M144,40a8,8,0,0,1,8-8h16V16a8,8,0,0,1,16,0V32h16a8,8,0,0,1,0,16H184V64a8,8,0,0,1-16,0V48H152A8,8,0,0,1,144,40Z",
+    "M248,88a8,8,0,0,1-8,8h-8v8a8,8,0,0,1-16,0V96h-8a8,8,0,0,1,0-16h8V72a8,8,0,0,1,16,0v8h8A8,8,0,0,1,248,88Z",
+  ],
+  star: "M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88ZM137,164.22a8,8,0,0,0-4.74,4.74L112,223.85,91.78,169A8,8,0,0,0,87,164.22L32.15,144,87,123.78A8,8,0,0,0,91.78,119L112,64.15,132.22,119a8,8,0,0,0,4.74,4.74L191.85,144Z",
 } as const;

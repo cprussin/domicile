@@ -27,6 +27,7 @@ or Super key).
 | Meta+Shift+1 … Meta+Shift+0 | Send the window to workspace 1–10 |
 | Four-finger swipe left / right | Go to the next / previous workspace on this monitor |
 | Touchscreen: swipe in from the right / left edge | Go to the next / previous workspace on this monitor |
+| Meta+O, four-finger pinch in | [The overview](WINDOWS.md#overview): your workspaces side by side |
 
 ## Layout
 

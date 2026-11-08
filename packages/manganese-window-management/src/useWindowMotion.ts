@@ -236,6 +236,7 @@ const moved = (before: Desk, shown: Desk): boolean =>
       was === undefined ||
       was.activeId !== now.activeId ||
       was.current !== now.current ||
+      was.overview !== now.overview ||
       was.placements !== now.placements ||
       was.scratchpad !== now.scratchpad ||
       was.tabs !== now.tabs ||
@@ -351,7 +352,10 @@ const advanced = (
         ({ window }) => open.has(window.id) && !shownIds.has(window.id),
       ),
       ...screens.flatMap(({ name, now, was }) =>
-        sentAway(was, now, Object.values(shown)).map((sending) => {
+        (overviewing(was, now)
+          ? []
+          : sentAway(was, now, Object.values(shown))
+        ).map((sending) => {
           const motion = sendingMotion(shown, sending);
           return {
             ...sending,
@@ -399,7 +403,9 @@ const switchingAfter = (
   time: number,
 ): Switching | undefined => {
   const started = switchedTo(was, now);
-  if (started !== undefined) {
+  if (overviewing(was, now)) {
+    return undefined;
+  } else if (started !== undefined) {
     return { ...started, at: time, late: [] };
   } else if (playing === undefined) {
     return undefined;
@@ -407,6 +413,13 @@ const switchingAfter = (
     return { ...playing, late: lateIn(playing, was, now, time) };
   }
 };
+
+/**
+ * Whether the overview showed the screen before or shows it now. Its windows
+ * ease from tile to tile there, and on into the screen as it closes.
+ */
+const overviewing = (was: Shown, now: Shown): boolean =>
+  was.overview || now.overview;
 
 /**
  * The windows on `now` whose parts were first drawn after the switch

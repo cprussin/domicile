@@ -11,7 +11,8 @@ From left to right:
   [extensions](BROWSER.md#extensions). Drag them to reorder. Right-click an
   app's for its menu.
 - **Workspaces** on this monitor that have windows, and the one shown. Click
-  one to go there.
+  one to go there. The button before them opens
+  [the overview](WINDOWS.md#overview).
 - **Clock**, in the middle.
 - **Sharing**: a red pill while an app records or shares your screen. Click
   it to see who, and stop them.

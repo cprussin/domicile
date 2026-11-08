@@ -24,6 +24,7 @@ const placementOf = (id: string): Placement => ({
 const on = (current: string, showing: readonly ShellWindow[]): Shown => ({
   activeId: showing[0]?.id,
   current,
+  overview: false,
   placements: showing.map(({ id }) => placementOf(id)),
   scratchpad: [],
   tabs: [],

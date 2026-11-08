@@ -1,6 +1,7 @@
 # @domicile-desktop/manganese-bar-module-workspace-switcher
 
-A manganese bar item: the screen's workspaces.
+A manganese bar item: the screen's workspaces, after a button that opens the
+overview.
 
 ## Use
 

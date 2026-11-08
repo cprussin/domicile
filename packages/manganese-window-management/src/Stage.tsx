@@ -1,6 +1,8 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ReactNode } from "react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
+
+import { cx } from "../styled-system/css";
 import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
@@ -18,6 +20,8 @@ import { GrabbingSheet } from "./GrabbingSheet";
 import { GroupTitleBar } from "./GroupTitleBar";
 import { GroupWell } from "./GroupWell";
 import type { Modifiers } from "./keyboard/useModifiers";
+import { seenAt, seenStyles } from "./overview/seen-styles";
+import type { OverviewSight, Seen } from "./overview/sight";
 import type {
   Geometry,
   PlacedFocusBox,
@@ -131,6 +135,11 @@ type Props = {
    * the tiling of the screen `on`.
    */
   onStretch: (id: string, edge: Direction, by: number, on: Geometry) => void;
+  /**
+   * How the overview shows each window, while it is open or closing.
+   * `undefined` outside it.
+   */
+  overview: OverviewSight | undefined;
   /** Client popups, drawn over their parent windows. */
   popups: readonly Popup[];
   /** Every screen and what it shows. */
@@ -183,6 +192,7 @@ export const Stage = memo(
     onResize,
     onSelect,
     onStretch,
+    overview,
     popups,
     scratchpad,
     screens,
@@ -193,7 +203,15 @@ export const Stage = memo(
         screens.map(
           ({ current, geometry, screenful: { placements, tabs } }) => [
             geometry.name,
-            { activeId, current, placements, scratchpad, tabs, windows },
+            {
+              activeId,
+              current,
+              overview: overview !== undefined,
+              placements,
+              scratchpad,
+              tabs,
+              windows,
+            },
           ],
         ),
       ),
@@ -207,6 +225,13 @@ export const Stage = memo(
       () => new Map(windows.map((window) => [window.id, window])),
       [windows],
     );
+    // Every window, with a hidden workspace's laid out in its overview tile.
+    const drawn = useMemo(
+      () => motions.drawn.map((window) => seenIn(window, overview)),
+      [motions.drawn, overview],
+    );
+    // What the overview leaves out: it is for picking, not for working.
+    const working = overview === undefined;
     const lit = focusBoxShowing(screens, activeId);
     const { glows, onFaded } = useFocusGlows(lit);
     const active = motions.drawn.find(({ window }) => window.id === activeId);
@@ -217,6 +242,10 @@ export const Stage = memo(
     // A border drag or a tiled resize grab resizes in place, so unlike a move
     // it does not fade the window. See `stageStyles`.
     const [stretching, setStretching] = useState(false);
+    // The overview takes the grab's handles away before their drop.
+    if (!working && stretching) {
+      setStretching(false);
+    }
     // Whether the running move has been pulled, which shows the grabbing
     // pointer: a click moves nothing, so it shows none. Each grab clears it.
     const [pulled, setPulled] = useState(false);
@@ -253,18 +282,20 @@ export const Stage = memo(
           order. See `FloatShadow`. Skipped for fullscreen floats, whose shadow
           would spill onto the next display.
         */}
-          {motions.drawn.map(
-            ({ motion, placement, restack, rewound, screen, window }) => {
+          {drawn.map(
+            ({ motion, placement, restack, rewound, screen, seen, window }) => {
               const float = desk.floats.get(window.id);
               return placement !== undefined &&
                 !desk.fullscreen.has(window.id) &&
                 float !== undefined ? (
                 <Sliding
+                  depth={placement.depth}
                   frame={placement.frame}
                   key={window.id}
                   motion={motion}
                   on={screenNamed(desk, screen)}
                   rewound={rewound}
+                  seen={seen}
                 >
                   <FloatShadow
                     depth={placement.depth}
@@ -285,11 +316,13 @@ export const Stage = memo(
           {motions.tabs.map(({ motion, restack, screen, tab }) =>
             tab.well === undefined ? undefined : (
               <Sliding
+                depth={wellDepthOf(tab.depth)}
                 frame={tab.well}
                 key={`well-${tabKeyOf(tab)}`}
                 motion={motion}
                 on={screenNamed(desk, screen)}
                 rewound={0}
+                seen={overview?.shown.get(screen)}
               >
                 <GroupWell
                   // None for fullscreen floats, as for `FloatShadow`.
@@ -312,38 +345,43 @@ export const Stage = memo(
           its glow. Only the glow fading in follows the focused window's
           motion.
         */}
-          {glows.map(({ box, leaving }) => {
-            const following = leaving ? undefined : active;
-            const motion =
-              following === undefined ? "resting" : barMotion(following.motion);
-            return (
-              <Sliding
-                frame={following?.placement?.frame}
-                key={keyOf(box)}
-                motion={motion}
-                on={screenNamed(desk, following?.screen)}
-                rewound={following?.rewound ?? 0}
-              >
-                <FocusGlow
+          {working &&
+            glows.map(({ box, leaving }) => {
+              const following = leaving ? undefined : active;
+              const motion =
+                following === undefined
+                  ? "resting"
+                  : barMotion(following.motion);
+              return (
+                <Sliding
                   depth={box.depth}
-                  dragging={
-                    following !== undefined &&
-                    (stretching ||
-                      (activeId !== undefined && held.has(activeId)))
-                  }
-                  leaving={leaving}
+                  frame={following?.placement?.frame}
+                  key={keyOf(box)}
                   motion={motion}
-                  onFaded={() => {
-                    onFaded(box);
-                  }}
-                  rect={box.rect}
-                  restack={following?.restack}
-                  windows={box.windows}
-                />
-              </Sliding>
-            );
-          })}
-          {motions.drawn.map(
+                  on={screenNamed(desk, following?.screen)}
+                  rewound={following?.rewound ?? 0}
+                  seen={undefined}
+                >
+                  <FocusGlow
+                    depth={box.depth}
+                    dragging={
+                      following !== undefined &&
+                      (stretching ||
+                        (activeId !== undefined && held.has(activeId)))
+                    }
+                    leaving={leaving}
+                    motion={motion}
+                    onFaded={() => {
+                      onFaded(box);
+                    }}
+                    rect={box.rect}
+                    restack={following?.restack}
+                    windows={box.windows}
+                  />
+                </Sliding>
+              );
+            })}
+          {drawn.map(
             ({
               crossing,
               focused,
@@ -351,6 +389,7 @@ export const Stage = memo(
               placement,
               restack,
               screen,
+              seen,
               shownRewound,
               window,
             }) => (
@@ -391,6 +430,7 @@ export const Stage = memo(
                 rewound={shownRewound}
                 screen={screen}
                 screenBox={screenNamed(desk, screen)?.geometry.screen}
+                seen={seen}
                 window={window}
               />
             ),
@@ -400,8 +440,16 @@ export const Stage = memo(
           contents and before every bar, so the contents tuck under the strip
           and the tabs lie on it by document order. See `TabStrip`.
         */}
-          {motions.drawn.map(
-            ({ motion, placement, restack, screen, shownRewound, window }) =>
+          {drawn.map(
+            ({
+              motion,
+              placement,
+              restack,
+              screen,
+              seen,
+              shownRewound,
+              window,
+            }) =>
               placement?.strip?.open === true &&
               placement.tabbed !== undefined &&
               !leavesStrip(motion) ? (
@@ -431,6 +479,7 @@ export const Stage = memo(
                   onPull={pull}
                   restack={restack}
                   rewound={shownRewound}
+                  seen={seen}
                   strip={placement.strip}
                   targets={targets}
                 />
@@ -461,6 +510,7 @@ export const Stage = memo(
                 onPull={pull}
                 restack={restack}
                 rewound={0}
+                seen={overview?.shown.get(screen)}
                 strip={tab.strip}
                 targets={targets}
               />
@@ -473,7 +523,7 @@ export const Stage = memo(
           component for tiled and floating, so the bar is not remounted when
           the window floats. See `WindowTitleBar`. A bare float has none.
         */}
-          {motions.drawn.map(
+          {drawn.map(
             ({
               crossing,
               focused,
@@ -482,6 +532,7 @@ export const Stage = memo(
               restack,
               rewound,
               screen,
+              seen,
               window,
             }) =>
               placement === undefined || placement.bare ? undefined : (
@@ -512,6 +563,7 @@ export const Stage = memo(
                   rewound={rewound}
                   screen={screen}
                   screenBox={screenNamed(desk, screen)?.geometry.screen}
+                  seen={seen}
                   targets={targets}
                   window={window}
                 />
@@ -522,7 +574,7 @@ export const Stage = memo(
           order.
         */}
           {screens.flatMap((on) => {
-            const hanging = hangingOn(motions.drawn, on);
+            const hanging = working ? hangingOn(motions.drawn, on) : undefined;
             return hanging?.placement === undefined
               ? []
               : [
@@ -544,24 +596,26 @@ export const Stage = memo(
           before the grabs, so a modifier grab covers everything but the gaps.
         */}
           {screens.flatMap((on) =>
-            bordersOf(targetsOn(on)).map(({ edge, id, rect }) => (
-              <TileBorder
-                edge={edge}
-                id={id}
-                key={`${id}-${edge.toString()}`}
-                onDrop={() => {
-                  setStretching(false);
-                }}
-                onGrab={() => {
-                  setStretching(true);
-                  onSelect(id);
-                }}
-                onStretch={(stretched, by) => {
-                  onStretch(id, stretched, by, on.geometry);
-                }}
-                rect={rect}
-              />
-            )),
+            bordersOf(working ? targetsOn(on) : []).map(
+              ({ edge, id, rect }) => (
+                <TileBorder
+                  edge={edge}
+                  id={id}
+                  key={`${id}-${edge.toString()}`}
+                  onDrop={() => {
+                    setStretching(false);
+                  }}
+                  onGrab={() => {
+                    setStretching(true);
+                    onSelect(id);
+                  }}
+                  onStretch={(stretched, by) => {
+                    onStretch(id, stretched, by, on.geometry);
+                  }}
+                  rect={rect}
+                />
+              ),
+            ),
           )}
           {/*
           Floating window borders, at each float's depth so windows above cover
@@ -571,7 +625,8 @@ export const Stage = memo(
           {motions.drawn.map(({ placement, screen, window }) => {
             const on = screenNamed(desk, screen);
             const floating = desk.floatsFocusing.get(window.id);
-            return placement === undefined ||
+            return !working ||
+              placement === undefined ||
               on === undefined ||
               floating === undefined ||
               desk.fullscreen.has(window.id)
@@ -614,7 +669,7 @@ export const Stage = memo(
             const onHoverThis = (at: Spot) => {
               onHover(window.id, at);
             };
-            if (placement === undefined || on === undefined) {
+            if (!working || placement === undefined || on === undefined) {
               return undefined;
             } else {
               return (
@@ -710,6 +765,7 @@ export const Stage = memo(
                 onSelect={onSelect}
                 restack={restack}
                 screen={screen}
+                seen={overview?.shown.get(screen)}
                 tab={tab}
                 targets={targets}
                 title={tabbed.title}
@@ -721,12 +777,14 @@ export const Stage = memo(
           covers the selected container's windows and every tab. It follows
           the focused window as its glow does.
         */}
-          {lit?.selection !== undefined && (
+          {working && lit?.selection !== undefined && (
             <Sliding
+              depth={raised(lit.depth)}
               frame={active?.placement?.frame}
               motion={activeMotion}
               on={screenNamed(desk, active?.screen)}
               rewound={active?.rewound ?? 0}
+              seen={undefined}
             >
               <SelectionTint
                 depth={raised(lit.depth)}
@@ -739,14 +797,14 @@ export const Stage = memo(
               />
             </Sliding>
           )}
-          {aim !== undefined && <DropIndicator aim={aim} />}
+          {working && aim !== undefined && <DropIndicator aim={aim} />}
           {movingId !== undefined && pulled && <GrabbingSheet />}
           {/*
           Last, so a popup wins the `z-index` tie at its window's depth but
           stays under windows stacked above.
         */}
           {popupsOver(
-            popups,
+            working ? popups : [],
             screens.flatMap(({ screenful }) => screenful.placements),
           ).map((popup) => (
             <AppPopup key={popup.appId} popup={popup} />
@@ -836,6 +894,8 @@ type WindowContentsProps = {
   screen: string | undefined;
   /** The box of the screen it is drawn on. */
   screenBox: Rect | undefined;
+  /** How the overview shows it, if open. */
+  seen: Seen | undefined;
   window: ShellWindow;
 };
 
@@ -868,6 +928,7 @@ const WindowContents = memo(
     rewound,
     screen,
     screenBox,
+    seen,
     window,
   }: WindowContentsProps) => {
     const { id } = window;
@@ -899,12 +960,14 @@ const WindowContents = memo(
     );
     return (
       <WindowFrame
+        depth={contents?.depth ?? 0}
         frame={placement?.frame}
         motion={motion}
         onHover={hovered}
         onReach={reached}
         rewound={rewound}
         screen={screenBox}
+        seen={seen}
       >
         {window.kind === WindowKind.App ? (
           <AppWindow
@@ -991,6 +1054,8 @@ type WindowBarProps = {
   screen: string | undefined;
   /** The box of the screen it is drawn on. */
   screenBox: Rect | undefined;
+  /** How the overview shows it, if open. */
+  seen: Seen | undefined;
   targets: DropTargets;
   window: ShellWindow;
 };
@@ -1023,6 +1088,7 @@ const WindowBar = memo(
     rewound,
     screen,
     screenBox,
+    seen,
     targets,
     window,
   }: WindowBarProps) => {
@@ -1065,12 +1131,14 @@ const WindowBar = memo(
     );
     return (
       <WindowFrame
+        depth={placement.depth}
         frame={placement.frame}
         motion={motion}
         onHover={hovered}
         onReach={reached}
         rewound={rewound}
         screen={screenBox}
+        seen={seen}
       >
         <WindowTitleBar
           crossing={crossing}
@@ -1139,6 +1207,8 @@ type ContainerTabProps = {
   onSelect: (id: string) => void;
   restack: Restack | undefined;
   screen: string;
+  /** How the overview shows it, if open. */
+  seen: Seen | undefined;
   tab: PlacedTab;
   targets: DropTargets;
   /** The title of the window the tab is named after. */
@@ -1168,6 +1238,7 @@ const ContainerTab = memo(
     onSelect,
     restack,
     screen,
+    seen,
     tab,
     targets,
     title,
@@ -1198,7 +1269,14 @@ const ContainerTab = memo(
       onSelect(id);
     }, [id, onSelect]);
     return (
-      <Sliding frame={undefined} motion={motion} on={on} rewound={0}>
+      <Sliding
+        depth={tab.depth}
+        frame={undefined}
+        motion={motion}
+        on={on}
+        rewound={0}
+        seen={seen}
+      >
         <GroupTitleBar
           depth={tab.depth}
           description={description}
@@ -1245,29 +1323,42 @@ const ContainerTab = memo(
 
 /**
  * Gives its children the distances that slide `frame` off screen `on`, and
- * clips them to it during a workspace switch. See `screenClipStyles`.
+ * clips them to it during a workspace switch. See `screenClipStyles`. In the
+ * overview, shows them through their tile; see `seenAt`.
  */
 const Sliding = ({
   children,
+  depth,
   frame,
   motion,
   on,
   rewound,
+  seen,
 }: {
   children: ReactNode;
+  /** The depth of the part it holds. */
+  depth: number;
   frame: Rect | undefined;
   motion: WindowMotion;
   on: StageScreen | undefined;
   rewound: number;
+  seen: Seen | undefined;
 }) => (
   <div
-    className={screenClipStyles}
+    className={cx(
+      screenClipStyles,
+      seenStyles({
+        fading: seen?.fading ?? false,
+        showing: seen?.showing ?? false,
+      }),
+    )}
     style={
       on === undefined
         ? undefined
         : {
             ...slidAcross(on.geometry.screen, frame, motion, rewound),
             ...clippedTo(on.geometry.screen, motion),
+            ...seenAt(seen, on.geometry.screen, depth),
           }
     }
   >
@@ -1316,6 +1407,8 @@ type GroupStripProps = {
   onPull: () => void;
   restack: Restack | undefined;
   rewound: number;
+  /** How the overview shows it, if open. */
+  seen: Seen | undefined;
   strip: StripPlace;
   targets: DropTargets;
 };
@@ -1347,6 +1440,7 @@ const GroupStrip = memo(
     onPull,
     restack,
     rewound,
+    seen,
     strip,
     targets,
   }: GroupStripProps) => {
@@ -1389,7 +1483,14 @@ const GroupStrip = memo(
       onNewTab(id);
     }, [id, onNewTab]);
     return (
-      <Sliding frame={frame} motion={motion} on={on} rewound={rewound}>
+      <Sliding
+        depth={depth}
+        frame={frame}
+        motion={motion}
+        on={on}
+        rewound={rewound}
+        seen={seen}
+      >
         <TabStrip
           box={strip.box}
           depth={depth}
@@ -1550,5 +1651,38 @@ const engineWindowOf = (id: string): string => {
     throw new Error(`stage: ${id} is no browser window of the engine's`);
   } else {
     return engine;
+  }
+};
+
+/** A window to draw, and how the overview shows it, if open. */
+type SeenWindow = DrawnWindow & { seen: Seen | undefined };
+
+/**
+ * Window `drawn` as the overview shows it: a shown one through its screen's
+ * tile, a hidden workspace's one laid out in its own tile.
+ */
+const seenIn = (
+  drawn: DrawnWindow,
+  overview: OverviewSight | undefined,
+): SeenWindow => {
+  const hidden =
+    drawn.placement === undefined
+      ? overview?.hidden.get(drawn.window.id)
+      : undefined;
+  if (hidden === undefined) {
+    return {
+      ...drawn,
+      seen:
+        drawn.screen === undefined
+          ? undefined
+          : overview?.shown.get(drawn.screen),
+    };
+  } else {
+    return {
+      ...drawn,
+      placement: hidden.placement,
+      screen: hidden.screen,
+      seen: hidden.seen,
+    };
   }
 };

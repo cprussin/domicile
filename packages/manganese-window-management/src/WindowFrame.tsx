@@ -1,6 +1,9 @@
 import { PopupBoundary } from "@domicile-desktop/component-library/PopupBoundary";
 import type { ReactNode } from "react";
 
+import { cx } from "../styled-system/css";
+import { seenAt, seenStyles } from "./overview/seen-styles";
+import type { Seen } from "./overview/sight";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import type { WindowMotion } from "./window-motion";
@@ -9,6 +12,8 @@ import { clippedTo, screenClipStyles, slidAcross } from "./window-styles";
 type Props = {
   /** The window's contents or its bar. */
   children: ReactNode;
+  /** The depth of the contents or bar it holds. */
+  depth: number;
   /**
    * The window's frame, which the scratchpad slides lift and popups opened in
    * the window stay inside.
@@ -31,6 +36,8 @@ type Props = {
   rewound: number;
   /** Its screen, which the window's slides move it off. See `slidAcross`. */
   screen: Rect | undefined;
+  /** How the overview shows it, if open. See `seenAt`. */
+  seen: Seen | undefined;
 };
 
 /**
@@ -48,19 +55,28 @@ export const WINDOW_FRAME = "data-window-frame";
  *
  * Takes no space, stacking or pointer of its own (see `screenClipStyles`).
  * Its children inherit the slide distances from it, and it clips them to
- * their screen during a workspace switch.
+ * their screen during a workspace switch. In the overview, it shows them
+ * through their workspace's tile.
  */
 export const WindowFrame = ({
   children,
+  depth,
   frame,
   motion,
   onHover,
   onReach,
   rewound,
   screen,
+  seen,
 }: Props) => (
   <div
-    className={screenClipStyles}
+    className={cx(
+      screenClipStyles,
+      seenStyles({
+        fading: seen?.fading ?? false,
+        showing: seen?.showing ?? false,
+      }),
+    )}
     {...{ [WINDOW_FRAME]: "" }}
     onPointerDown={onReach}
     // `pointerover` bubbles from whichever part the pointer entered.
@@ -73,6 +89,7 @@ export const WindowFrame = ({
         : {
             ...slidAcross(screen, frame, motion, rewound),
             ...clippedTo(screen, motion),
+            ...seenAt(seen, screen, depth),
           }
     }
   >

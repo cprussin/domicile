@@ -14,6 +14,7 @@ import {
   micMute,
   nightLight,
   notifications,
+  overview,
   removeVirtualMonitor,
   scratchpad,
   screenshot,
@@ -153,6 +154,17 @@ describe("manganese's default keys", () => {
       "swipe:3:left": focus("left"),
       "swipe:3:right": focus("right"),
       "swipe:3:up": focus("up"),
+    });
+  });
+
+  it("open the overview on Meta+O or a four-finger pinch in", () => {
+    expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      "Meta+o": overview(),
+      "pinch:4:inward": overview(),
+    });
+    expect(overview()).toEqual({
+      args: ["overview"],
+      kind: KeyActionKind.SendShell,
     });
   });
 

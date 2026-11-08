@@ -1,4 +1,4 @@
-import { AnimatedSquaresIcon } from "@domicile-desktop/component-library/AnimatedSquaresIcon";
+import { AnimatedSparkleIcon } from "@domicile-desktop/component-library/AnimatedSparkleIcon";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 
 import { css } from "../styled-system/css";
@@ -20,7 +20,7 @@ export const LauncherButton = ({ onOpen }: Props) => (
         onClick={onOpen}
         type="button"
       >
-        <AnimatedSquaresIcon size={15} />
+        <AnimatedSparkleIcon size={15} />
       </button>
     }
   />

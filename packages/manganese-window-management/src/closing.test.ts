@@ -28,6 +28,7 @@ const placementOf = (id: string): Placement => ({
 const shown = (windows: readonly ShellWindow[], activeId?: string): Shown => ({
   activeId,
   current: "1",
+  overview: false,
   placements: windows.map(({ id }) => placementOf(id)),
   scratchpad: [],
   tabs: [],
@@ -128,6 +129,7 @@ describe("departed", () => {
         {
           activeId: undefined,
           current: "1",
+          overview: false,
           placements: [],
           scratchpad: [],
           tabs: [],
