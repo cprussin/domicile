@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub mod pinch;
+pub mod touch;
 
 /// The protocol version this build speaks.
 ///
@@ -173,6 +174,12 @@ pub enum ChromeMessage {
         app_id: String,
         #[serde(flatten)]
         pinch: pinch::Pinch,
+    },
+    /// A finger on a native app. See [`touch::Touch`].
+    Touch {
+        app_id: String,
+        #[serde(flatten)]
+        touch: touch::Touch,
     },
     /// Pointer button changed over an app. `button` is a Linux input event code
     /// (e.g. `0x110` = left, `0x111` = right, `0x112` = middle).

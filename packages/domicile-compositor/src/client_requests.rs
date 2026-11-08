@@ -64,6 +64,14 @@ pub enum ClientRequest {
     PinchOwnerGone {
         owner: usize,
     },
+    Touch {
+        owner: usize,
+        app_id: String,
+        touch: domicile_protocol::touch::Touch,
+    },
+    TouchOwnerGone {
+        owner: usize,
+    },
     /// Somebody used the desk; see [`ChromeMessage::Activity`](domicile_protocol::ChromeMessage::Activity).
     Activity {
         input: Option<String>,
@@ -259,6 +267,7 @@ impl DomicileCompositor {
         // Input the lock let through, before it reaches the seat.
         if self.captured(&event) {
             self.cancel_pinch();
+            self.cancel_touches();
             return;
         }
         match event {
@@ -268,6 +277,12 @@ impl DomicileCompositor {
                 pinch,
             } => self.forward_pinch(owner, &app_id, pinch),
             ClientRequest::PinchOwnerGone { owner } => self.pinch_owner_gone(owner),
+            ClientRequest::Touch {
+                owner,
+                app_id,
+                touch,
+            } => self.forward_touch(owner, &app_id, touch),
+            ClientRequest::TouchOwnerGone { owner } => self.touch_owner_gone(owner),
             ClientRequest::PointerMotion { app_id, x, y, .. } => {
                 if self.pointer_app.as_deref() != Some(&app_id) {
                     self.cancel_pinch();

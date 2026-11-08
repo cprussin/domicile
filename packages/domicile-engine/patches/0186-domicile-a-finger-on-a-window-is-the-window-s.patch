@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 8 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a finger on a window is the window's
+
+A touch on <app> went to the page's touch-action, which is auto: a drag
+over a native window panned the shell, or ended in a pointercancel
+before the client heard it. <app> is now `touch-action: none` in the UA
+stylesheet, so every touch point reaches HTMLAppElement::ForwardTouch,
+which hands it to the client as `wl_touch`.
+
+A shell can still set its own touch-action on an <app>.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ third_party/blink/renderer/core/html/resources/html.css | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/third_party/blink/renderer/core/html/resources/html.css b/third_party/blink/renderer/core/html/resources/html.css
+index 8a7ac1c..0bb115a 100644
+--- a/third_party/blink/renderer/core/html/resources/html.css
++++ b/third_party/blink/renderer/core/html/resources/html.css
+@@ -1907,7 +1907,11 @@ iframe {
+    way an <img> does; neither gets a border, because a shell draws its own
+    chrome and a default frame border would be inside the window. */
+ app {
+-    display: inline-block
++    display: inline-block;
++    /* A finger on a window is the window's: the page does not pan or zoom
++       under it, so the client gets every touch point (HTMLAppElement::
++       ForwardTouch). */
++    touch-action: none
+ }
+ 
+ webview {

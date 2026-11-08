@@ -28,7 +28,7 @@ The engine has two channels to the rest of Domicile:
   `focus_chrome`, `sync_frames`, `close_app`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`,
-  `pointer_pinch`.
+  `pointer_pinch`, `touch`.
   The browser also sends `hello` on connect, `activity` for its own
   input, at most every 200 ms, for the idle clock, `desk_pointer` for
   each pointer move, and `desk_cursor` for each change of the pointer's
@@ -60,6 +60,11 @@ The engine has two channels to the rest of Domicile:
   finger count, absolute scale, relative rotation and cancellation. The shell
   claims the default action by canceling the `wheel` event; it needs no routing
   method or generated SDK member for native-client forwarding.
+- **`touch`** comes from `<app>` default input handling of touch pointer
+  events. It carries `down` and `motion` with the point's `id` and its `x`
+  and `y` in the client's coordinates, `up` with the `id`, and `cancel`,
+  which ends every point on that window. `time` is the event's unsigned
+  millisecond clock.
 - **`call_system`** and **`system`** carry the shell's system calls. The
   browser wraps the page's request as a `system_request` line and relays
   `system_reply`, `system_event` and `system_end` lines whole, as a

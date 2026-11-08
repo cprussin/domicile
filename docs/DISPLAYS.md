@@ -166,6 +166,8 @@ tests) reads one as a mouse:
 - `DrmWindowHost` sends a bound touch to the desk's host, placed with
   `PointerInWindow` as the pointer is (patch `0122`).
 - Touches move no pointer. A touchscreen's button down and up are a tap.
+- A finger on a window reaches its client as `wl_touch`
+  ([GESTURES.md](architecture/GESTURES.md#touchscreen)).
 
 ## Rotation
 

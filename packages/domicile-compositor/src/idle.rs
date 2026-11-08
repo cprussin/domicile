@@ -398,8 +398,10 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         ClientRequest::PointerButton { .. } => Some("a click"),
         ClientRequest::PointerAxis { .. } => Some("a scroll"),
         ClientRequest::PointerPinch { .. } => Some("a pinch"),
+        ClientRequest::Touch { .. } => Some("a touch"),
         ClientRequest::PointerLeave
         | ClientRequest::PinchOwnerGone { .. }
+        | ClientRequest::TouchOwnerGone { .. }
         | ClientRequest::KeyboardFocus { .. }
         | ClientRequest::SetOutputScale { .. }
         | ClientRequest::SetOutputSize { .. }
