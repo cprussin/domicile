@@ -2430,6 +2430,21 @@ describe("the overview", () => {
     );
   });
 
+  it("opens and stays open on `overview show`, and closes on `overview hide`", () => {
+    const shown = reduce(
+      NO_WINDOWS,
+      WindowAction.LauncherToggled(),
+      WindowAction.OverviewShown(),
+    );
+
+    expect(shown.overviewOpen).toBe(true);
+    expect(shown.launcherOpen).toBe(false);
+    expect(reduceWindows(shown, WindowAction.OverviewShown())).toBe(shown);
+    expect(reduce(shown, WindowAction.OverviewDismissed()).overviewOpen).toBe(
+      false,
+    );
+  });
+
   it.each([
     ["launcher", WindowAction.LauncherToggled(), "launcherOpen"],
     ["clipboard", WindowAction.ClipboardToggled(), "clipboardOpen"],

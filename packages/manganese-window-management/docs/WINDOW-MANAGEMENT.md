@@ -332,7 +332,8 @@ such as a Slack huddle.
 
 ## Overview
 
-`overview` (Meta+O, `pinch:4:inward`, the switcher's button) shows each
+`overview` (Meta+O, the switcher's button) toggles, and `overview show`
+(`pinch:4:inward`) and `overview hide` (`pinch:4:outward`) go one way. It shows each
 screen's workspaces at once, as tiles in a grid (`overview/tiles.ts`): those
 with windows, and the shown one.
 

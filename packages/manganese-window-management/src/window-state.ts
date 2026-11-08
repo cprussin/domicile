@@ -428,6 +428,7 @@ export enum WindowActionKind {
   OverviewAimed,
   OverviewDismissed,
   OverviewPicked,
+  OverviewShown,
   OverviewToggled,
   OverviewWindowPicked,
   PageFullscreened,
@@ -869,6 +870,9 @@ export const WindowAction = {
     kind: WindowActionKind.OverviewPicked as const,
     name,
   }),
+
+  /** `overview show`: `overview` that never closes. */
+  OverviewShown: () => ({ kind: WindowActionKind.OverviewShown as const }),
 
   /** `overview`, which opens and closes the overview. */
   OverviewToggled: () => ({ kind: WindowActionKind.OverviewToggled as const }),
@@ -1478,6 +1482,11 @@ const reduceAction = (
     case WindowActionKind.OverviewPicked: {
       // Not `selectWorkspace`: picking the shown one stays on it.
       return { ...showWorkspace(state, action.name), overviewOpen: false };
+    }
+    case WindowActionKind.OverviewShown: {
+      return state.overviewOpen
+        ? state
+        : reduceAction(state, WindowAction.OverviewToggled());
     }
     case WindowActionKind.OverviewToggled: {
       return {

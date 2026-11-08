@@ -44,7 +44,7 @@ or Super key).
 
 | Keys | Does |
 |---|---|
-| Meta+Space, Meta+D, spreading four fingers | [The launcher](LAUNCHER.md) |
+| Meta+Space, Meta+D, spreading three fingers | [The launcher](LAUNCHER.md) |
 | Meta+Shift+V | [Clipboard history](CLIPBOARD.md) |
 | Meta+Shift+Space | Open the copied address, or search for the copied text |
 | Meta+Shift+Return | Lock |

@@ -42,6 +42,9 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["launcher", WindowAction.LauncherToggled()],
   // Each screen's workspaces at once; a toggle, like the launcher.
   ["overview", WindowAction.OverviewToggled()],
+  // Manganese's: one way each, for gestures that go one way.
+  ["overview show", WindowAction.OverviewShown()],
+  ["overview hide", WindowAction.OverviewDismissed()],
   // Clipboard history; a toggle, like the launcher.
   ["clipboard", WindowAction.ClipboardToggled()],
   // The area is picked in the screenshot dialog.
