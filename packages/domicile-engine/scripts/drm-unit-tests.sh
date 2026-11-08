@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the DRM platform's gtest cases in ozone_unittests, plus the evdev suites
-# linked there (`ScrollAcceleratorTest` and `WheelTicksTest`; see
-# packages/domicile-engine/tests/test-a-fast-scroll-goes-further.sh and
+# linked there (`ScrollAcceleratorTest`, `FlingTrackerTest` and `WheelTicksTest`;
+# see packages/domicile-engine/tests/test-a-fast-scroll-goes-further.sh,
+# packages/domicile-engine/tests/test-a-flick-on-a-page-glides.sh and
 # packages/domicile-engine/tests/test-a-mouse-goes-through-libinput.sh; and the `AbsoluteMouse*`
 # suites of patch 0123; `TypingGuardTest`, see
 # packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh), the native
@@ -57,6 +58,7 @@ SUITES=(
   DrmNoGbmModesetTest:1
   GbmPixmapScanoutTest:3
   ScrollAcceleratorTest:13
+  FlingTrackerTest:5
   LibInputKeyboardPathTest:2
   InputDeviceOpenCancellationTest:3
   ActiveScrollAxesTest:3
