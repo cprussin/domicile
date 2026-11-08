@@ -8,6 +8,7 @@ or Super key).
 | Keys | Does |
 |---|---|
 | Meta+H/J/K/L, Meta+arrows | Focus the window left, down, up or right |
+| Three-finger swipe left / down / up / right | Focus the window that way |
 | Meta+Shift+H/J/K/L, Meta+Shift+arrows | Move the window that way, onto the next monitor past the edge |
 | Meta+Shift+Q | Close the window |
 | Meta+F | Fullscreen on this monitor |
@@ -15,6 +16,7 @@ or Super key).
 | Meta+Shift+Tab | Float the window, or tile it again |
 | Meta+Tab | Switch between floating and tiled windows |
 | Meta+Minus | Show or hide the scratchpad |
+| Four-finger swipe down / up | Pull the scratchpad down / push it back up |
 | Meta+Shift+Minus | Move the window to the scratchpad |
 
 ## Workspaces
@@ -23,7 +25,7 @@ or Super key).
 |---|---|
 | Meta+1 … Meta+0 | Go to workspace 1–10 |
 | Meta+Shift+1 … Meta+Shift+0 | Send the window to workspace 1–10 |
-| Three-finger swipe left / right | Go to the next / previous workspace on this monitor |
+| Four-finger swipe left / right | Go to the next / previous workspace on this monitor |
 | Touchscreen: swipe in from the right / left edge | Go to the next / previous workspace on this monitor |
 
 ## Layout
@@ -41,7 +43,7 @@ or Super key).
 
 | Keys | Does |
 |---|---|
-| Meta+Space, Meta+D | [The launcher](LAUNCHER.md) |
+| Meta+Space, Meta+D, spreading four fingers | [The launcher](LAUNCHER.md) |
 | Meta+Shift+V | [Clipboard history](CLIPBOARD.md) |
 | Meta+Shift+Space | Open the copied address, or search for the copied text |
 | Meta+Shift+Return | Lock |

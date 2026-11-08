@@ -87,8 +87,12 @@ export const fullscreen = (global = false) =>
     : command("fullscreen", "toggle");
 /** Toggle floating. */
 export const floating = () => command("floating", "toggle");
-/** Show the next scratchpad window, or hide the shown one. */
-export const scratchpad = () => command("scratchpad", "show");
+/**
+ * Show the next scratchpad window, or hide the shown one. `bring` only shows
+ * one, when none is out; `hide` only hides it.
+ */
+export const scratchpad = (only?: "bring" | "hide") =>
+  command("scratchpad", only ?? "show");
 /** Grow the window in a direction, shrinking its neighbor. */
 export const grow = (way: Way) => command("resize", "grow", way);
 /** Enter a binding mode. */
@@ -126,13 +130,15 @@ const everyWorkspace = (
   );
 
 /**
- * Default bindings for mode `default`: sway's, on Meta, and three-finger
- * touchpad swipes and touchscreen swipes in from the sides between
- * workspaces. Spread into your own table to override individual keys.
+ * Default bindings for mode `default`: sway's, on Meta; touchpad swipes,
+ * three fingers moving focus and four going sideways between workspaces and
+ * down and up for the scratchpad; four fingers spreading for the launcher;
+ * and touchscreen swipes in from the sides between workspaces. Spread into
+ * your own table to override individual keys.
  */
 export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   // The workspace follows the finger in from the screen's side, as the
-  // three-finger swipes below go.
+  // four-finger swipes below go.
   "edge:left": stepWorkspace("prev"),
   "edge:right": stepWorkspace("next"),
   "Meta+a": focus("parent"),
@@ -156,9 +162,20 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+v": split("v"),
   "Meta+w": layout("tabbed"),
   Print: screenshot(),
+  // Fingers spreading open the launcher, as on other desktops' app grids.
+  "pinch:4:outward": launcher(),
+  // Focus goes where the fingers point, as Meta+H/J/K/L do: nothing slides.
+  "swipe:3:down": focus("down"),
+  "swipe:3:left": focus("left"),
+  "swipe:3:right": focus("right"),
+  "swipe:3:up": focus("up"),
+  // The scratchpad hangs from the top of the screen: pull it down, push it
+  // back up.
+  "swipe:4:down": scratchpad("bring"),
   // The workspace follows the fingers, as a page does.
-  "swipe:3:left": stepWorkspace("next"),
-  "swipe:3:right": stepWorkspace("prev"),
+  "swipe:4:left": stepWorkspace("next"),
+  "swipe:4:right": stepWorkspace("prev"),
+  "swipe:4:up": scratchpad("hide"),
   XF86AudioLowerVolume: volume("down"),
   XF86AudioMicMute: micMute(),
   XF86AudioMute: volume("mute"),

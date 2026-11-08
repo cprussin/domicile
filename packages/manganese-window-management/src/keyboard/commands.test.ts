@@ -7,12 +7,15 @@ import {
   clearNotifications,
   DEFAULT_KEYBINDINGS,
   exec,
+  focus,
   idleInhibitor,
   keymap,
+  launcher,
   micMute,
   nightLight,
   notifications,
   removeVirtualMonitor,
+  scratchpad,
   screenshot,
   searchClipboard,
   stepWorkspace,
@@ -111,10 +114,10 @@ describe("manganese's default keys", () => {
     });
   });
 
-  it("swipe three fingers between the screen's workspaces", () => {
+  it("swipe four fingers between the screen's workspaces", () => {
     expect(DEFAULT_KEYBINDINGS).toMatchObject({
-      "swipe:3:left": stepWorkspace("next"),
-      "swipe:3:right": stepWorkspace("prev"),
+      "swipe:4:left": stepWorkspace("next"),
+      "swipe:4:right": stepWorkspace("prev"),
     });
     expect(stepWorkspace("next")).toEqual({
       args: ["workspace", "next_on_output"],
@@ -126,6 +129,30 @@ describe("manganese's default keys", () => {
     expect(DEFAULT_KEYBINDINGS).toMatchObject({
       "edge:left": stepWorkspace("prev"),
       "edge:right": stepWorkspace("next"),
+    });
+  });
+
+  it("pull the scratchpad down with four fingers and push it back up", () => {
+    expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      "swipe:4:down": scratchpad("bring"),
+      "swipe:4:up": scratchpad("hide"),
+    });
+    expect(scratchpad("bring")).toEqual({
+      args: ["scratchpad", "bring"],
+      kind: KeyActionKind.SendShell,
+    });
+  });
+
+  it("open the launcher by spreading four fingers", () => {
+    expect(DEFAULT_KEYBINDINGS["pinch:4:outward"]).toEqual(launcher());
+  });
+
+  it("move focus where three fingers swipe", () => {
+    expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      "swipe:3:down": focus("down"),
+      "swipe:3:left": focus("left"),
+      "swipe:3:right": focus("right"),
+      "swipe:3:up": focus("up"),
     });
   });
 
