@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the GPU sandbox waits for /proc to drop joined
+ threads
+
+The kernel wakes a thread's joiner before it drops the thread from
+/proc/self/task. A thread the GPU process joined just before
+InitializeSandbox() could still be counted, and the GPU process then
+ran without its seccomp filter: "InitializeSandbox() called with
+multiple threads in process gpu-process". The tty VM test on a 2D
+virtio card hit it in about 2 of 5 sessions.
+
+- In the GPU process, InitializeSandbox() polls /proc every millisecond
+  for up to a second before it counts threads as real.
+- It logs how long it waited.
+- A thread still there after a second (a driver's own) keeps upstream's
+  behavior: a warning and no seccomp-BPF.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ sandbox/policy/linux/sandbox_linux.cc | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/sandbox/policy/linux/sandbox_linux.cc b/sandbox/policy/linux/sandbox_linux.cc
+index 12f64e9..7688240 100644
+--- a/sandbox/policy/linux/sandbox_linux.cc
++++ b/sandbox/policy/linux/sandbox_linux.cc
+@@ -32,6 +32,7 @@
+ #include "base/system/sys_info.h"
+ #include "base/threading/platform_thread.h"
+ #include "base/threading/thread_id_name_manager.h"
++#include "base/time/time.h"
+ #include "build/build_config.h"
+ #include "sandbox/constants.h"
+ #include "sandbox/linux/seccomp-bpf-helpers/sigsys_handlers.h"
+@@ -344,7 +345,22 @@ bool SandboxLinux::InitializeSandbox(sandbox::mojom::Sandbox sandbox_type,
+     CheckForBrokenPromises(sandbox_type);
+   };
+ 
+-  const bool has_threads = !IsSingleThreaded();
++  bool has_threads = !IsSingleThreaded();
++
++  // Domicile's engine fork: the kernel wakes a thread's joiner before it
++  // drops the thread from /proc/self/task, so a thread the GPU process
++  // joined just before can still be counted here. Counted, it cost the GPU
++  // process its seccomp filter, at random. Wait up to a second for /proc to
++  // catch up; a thread still there after that is real.
++  if (has_threads && process_type == switches::kGpuProcess) {
++    const base::TimeTicks start = base::TimeTicks::Now();
++    while (has_threads && base::TimeTicks::Now() - start < base::Seconds(1)) {
++      base::PlatformThread::Sleep(base::Milliseconds(1));
++      has_threads = !IsSingleThreaded();
++    }
++    LOG(INFO) << "domicile: waited " << base::TimeTicks::Now() - start
++              << " for the GPU process's other threads to leave /proc";
++  }
+ 
+   // The `options.allow_threads_during_sandbox_init` option is only used for
+   // the on-device model execution process.
