@@ -622,5 +622,41 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
   }
 }
 
+TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  for (const auto phase :
+       {mojom::PinchPhase::kBegin, mojom::PinchPhase::kUpdate,
+        mojom::PinchPhase::kEnd}) {
+    auto pinch =
+        mojom::Pinch::New(phase, 7, 3000000000u, 3, 1.25, -2.5, 1.6, -12, true);
+    control_->PointerPinch("app", std::move(pinch));
+    control_.FlushForTesting();
+    const std::string line = Heard();
+    EXPECT_NE(line.find("3000000000"), std::string::npos);
+    EXPECT_EQ(line.find("3000000000.0"), std::string::npos);
+    const auto frame = base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(frame);
+    EXPECT_EQ(*frame->FindString("type"), "pointer_pinch");
+    EXPECT_EQ(frame->FindInt("device"), 7);
+    switch (phase) {
+      case mojom::PinchPhase::kBegin:
+        EXPECT_EQ(*frame->FindString("phase"), "begin");
+        EXPECT_EQ(frame->FindInt("fingers"), 3);
+        break;
+      case mojom::PinchPhase::kUpdate:
+        EXPECT_EQ(*frame->FindString("phase"), "update");
+        EXPECT_EQ(frame->FindDouble("scale"), 1.6);
+        EXPECT_EQ(frame->FindDouble("rotation"), -12);
+        break;
+      case mojom::PinchPhase::kEnd:
+        EXPECT_EQ(*frame->FindString("phase"), "end");
+        EXPECT_EQ(frame->FindBool("canceled"), true);
+        break;
+    }
+  }
+}
+
 }  // namespace
 }  // namespace domicile

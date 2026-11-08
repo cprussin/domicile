@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub mod pinch;
+
 /// The protocol version this build speaks.
 ///
 /// Pinned at 1: the host and every chrome are built from the same commit, so
@@ -166,6 +168,12 @@ pub enum ChromeMessage {
     },
     /// Pointer left an app (focus returns to the chrome).
     PointerLeave { app_id: String },
+    /// A touchpad pinch over a native app, with scale relative to its beginning.
+    PointerPinch {
+        app_id: String,
+        #[serde(flatten)]
+        pinch: pinch::Pinch,
+    },
     /// Pointer button changed over an app. `button` is a Linux input event code
     /// (e.g. `0x110` = left, `0x111` = right, `0x112` = middle).
     PointerButton {

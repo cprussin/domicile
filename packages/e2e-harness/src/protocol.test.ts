@@ -4,6 +4,7 @@ import {
   PROTOCOL_VERSION,
   parseHostMessage,
   pointerAxisSchema,
+  pointerPinchSchema,
 } from "./protocol";
 
 describe("parseHostMessage", () => {
@@ -538,6 +539,45 @@ describe("pointerAxisSchema", () => {
       expect(() =>
         pointerAxisSchema.parse({ ...wire, source: "mouse" }),
       ).toThrow();
+    }
+  });
+});
+
+describe("pointerPinchSchema", () => {
+  it("preserves native phases and unsigned timestamps", () => {
+    for (const phase of [
+      { fingers: 3, phase: "begin" },
+      { dx: 1.25, dy: -2.5, phase: "update", rotation: -12, scale: 1.6 },
+      { canceled: true, phase: "end" },
+    ] as const) {
+      const wire = {
+        app_id: "term",
+        device: 7,
+        time: 3_000_000_000,
+        type: "pointer_pinch" as const,
+        ...phase,
+      };
+      expect(pointerPinchSchema.parse(wire)).toEqual(wire);
+    }
+  });
+
+  it("rejects fields that cannot reach the native gesture protocol", () => {
+    const begin = {
+      app_id: "term",
+      device: 7,
+      fingers: 2,
+      phase: "begin",
+      time: 0,
+      type: "pointer_pinch",
+    };
+    for (const invalid of [
+      { ...begin, device: -1 },
+      { ...begin, time: 0x1_00_00_00_00 },
+      { ...begin, fingers: 0x1_00_00_00_00 },
+      { ...begin, fingers: 0 },
+      { ...begin, dx: 0, dy: 0, phase: "update", rotation: 0, scale: 0 },
+    ]) {
+      expect(() => pointerPinchSchema.parse(invalid)).toThrow();
     }
   });
 });
