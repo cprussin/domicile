@@ -94,6 +94,47 @@ else
     "no 'FlingTrackerTest:<n>' in packages/domicile-engine/scripts/drm-unit-tests.sh"
 fi
 
+# The native stop is an ended wheel phase, which ends the browser's wheel
+# target. A fling start goes only to that target, so after the stop it is
+# dropped and the page never glides. Reads what the newest patch that shows
+# both leaves in the file.
+fling_before_stop() {
+  python3 - "$PATCHES" "$@" <<'CHECK'
+from pathlib import Path
+import sys
+patches, path, fling, stop = Path(sys.argv[1]), *sys.argv[2:]
+verdict = None
+for patch in sorted(patches.glob("*.patch")):
+    post, inside = [], False
+    for line in patch.read_text().splitlines():
+        if line.startswith("diff --git "):
+            inside = line.endswith(" b/" + path)
+        elif inside and line[:1] in (" ", "+") and not line.startswith("+++"):
+            post.append(line[1:])
+    starts = [i for i, l in enumerate(post) if fling in l]
+    stops = [i for i, l in enumerate(post) if stop in l]
+    if starts and stops:
+        verdict = starts[0] < stops[0]
+sys.exit(0 if verdict else 1)
+CHECK
+}
+
+if fling_before_stop ui/events/ozone/evdev/libinput_event_converter.cc \
+    "fling_tracker_.Release(" "dispatcher_->DispatchScrollEvent(params);"; then
+  ok "on a tty the glide starts before the scroll stop"
+else
+  fail "on a tty the glide starts before the scroll stop" \
+    "the converter dispatches the stop first, so the browser drops the fling"
+fi
+
+if fling_before_stop ui/ozone/platform/wayland/host/wayland_event_source.cc \
+    "is_fling_active_ = true;" "SetScrollMetadata(stopped,"; then
+  ok "nested, the glide starts before the scroll stop"
+else
+  fail "nested, the glide starts before the scroll stop" \
+    "the Wayland event source queues the stop first, so the browser drops the fling"
+fi
+
 # A native client runs its own momentum from the axis stop. The page's
 # momentum wheels reaching it too would glide it twice.
 APP="$SRC/third_party/blink/renderer/core/html/domicile/html_app_element.cc"

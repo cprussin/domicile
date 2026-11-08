@@ -59,7 +59,10 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
   scroll's unaccelerated speed as the fingers lift. The libinput converter starts the page's
   fling at that speed and cancels it when fingers rest (libinput's hold
   gesture) or scroll again. Native clients run
-  their own momentum from the axis stop and ignore the page's.
+  their own momentum from the axis stop and ignore the page's. The fling
+  start goes before the stop, on a tty and nested: the stop's ended wheel
+  phase ends the browser's wheel target, and a fling start reaches only
+  that target.
 - `ui/ozone/platform/drm/domicile/drm_input_opens.{h,cc}` serializes logind
   claims by device number. Canceled replies close and release their claim
   before a replacement starts; cancellation also prevents retries and resumes.
