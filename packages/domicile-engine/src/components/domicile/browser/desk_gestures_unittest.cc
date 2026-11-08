@@ -130,6 +130,7 @@ TEST(DeskGesturesTest, OneUngrabAnswersRepeatedGrabs) {
 
   EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kPinch, 4)));
 }
+
 NativeGesture Hold(NativeGesturePhase phase, uint32_t fingers = 3) {
   return {.kind = NativeGestureKind::kHold, .phase = phase, .fingers = fingers};
 }
@@ -193,7 +194,6 @@ TEST(DeskGesturesTest, OneChannelForwardsAGesture) {
   EXPECT_TRUE(second.empty());
   EXPECT_TRUE(bound.empty());
 }
-
 
 // `edge:left` is a finger in from the left only; `edge` from any side.
 TEST(DeskGesturesTest, AnEdgeGrabTakesItsEdge) {

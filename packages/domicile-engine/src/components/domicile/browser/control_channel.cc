@@ -927,7 +927,8 @@ void ControlChannel::DeliverGesture(const ui::NativeGesture& gesture) {
     client_->GesturePerformed(mojom::Gesture::New(
         GestureKindToMojo(gesture.kind), GesturePhaseToMojo(gesture.phase),
         gesture.fingers, gesture.dx, gesture.dy, gesture.scale,
-        gesture.rotation, gesture.canceled, GestureEdgeToMojo(gesture.edge)));
+        gesture.rotation, gesture.canceled,
+        GestureEdgeToMojo(gesture.edge)));
   }
 }
 
@@ -957,6 +958,7 @@ void ControlChannel::ForwardGesture(const ui::NativeGesture& gesture) {
       message.Set("canceled", gesture.canceled);
       break;
   }
+  SendMessage(std::move(message));
 }
 
 void ControlChannel::DeliverRelease(Chord chord) {

@@ -686,6 +686,10 @@ TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
         EXPECT_EQ(*frame->FindString("phase"), "end");
         EXPECT_EQ(frame->FindBool("canceled"), true);
         break;
+    }
+  }
+}
+
 // A swipe or hold the shell did not grab names no window: the compositor
 // gives it to the one under the pointer.
 TEST_F(ControlChannelTest, UnboundSwipesAndHoldsReachTheCompositor) {
@@ -722,10 +726,6 @@ TEST_F(ControlChannelTest, UnboundSwipesAndHoldsReachTheCompositor) {
   EXPECT_EQ(Heard(), R"({"fingers":3,"phase":"begin","type":"pointer_hold"})");
   EXPECT_EQ(Heard(),
             R"({"canceled":true,"phase":"end","type":"pointer_hold"})");
-}
-
-    }
-  }
 }
 
 }  // namespace

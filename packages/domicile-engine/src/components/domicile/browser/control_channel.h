@@ -221,11 +221,11 @@ class ControlChannel : public mojom::ControlChannel {
   void DeliverModifiers(Modifiers modifiers);
   // A phase of a touchpad gesture this page took; see DeskGestures. Posted
   // here for DeliverShortcut's reason: gestures arrive on the input thread.
+  void DeliverGesture(const ui::NativeGesture& gesture);
   // A phase of a swipe or hold the shell did not grab, for the compositor to
   // give the native window under the pointer. Dropped while no compositor is
   // connected: its gesture would begin on a window it never heard of.
   void ForwardGesture(const ui::NativeGesture& gesture);
-  void DeliverGesture(const ui::NativeGesture& gesture);
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
   void SomebodyIsHere(const std::string& input);
