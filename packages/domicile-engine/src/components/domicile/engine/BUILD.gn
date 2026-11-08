@@ -118,6 +118,28 @@ source_set("surface_frames_unit_tests") {
   ]
 }
 
+# Counts viz's holds on a window's buffers, so a buffer its client destroys stays
+# imported until viz is done drawing it.
+source_set("surface_holds") {
+  sources = [
+    "surface_holds.cc",
+    "surface_holds.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
+source_set("surface_holds_unit_tests") {
+  testonly = true
+
+  sources = [ "surface_holds_unittest.cc" ]
+
+  deps = [
+    ":surface_holds",
+    "//testing/gtest",
+  ]
+}
+
 # Holds a window's submits in order behind any whose acquire fence the browser
 # has not yet put in place, and its newest while viz is behind.
 source_set("surface_submits") {
@@ -196,6 +218,7 @@ shared_library("domicile_engine") {
     ":surface_alpha",
     ":surface_crop",
     ":surface_frames",
+    ":surface_holds",
     ":surface_submits",
     ":surface_transform",
     "//base",

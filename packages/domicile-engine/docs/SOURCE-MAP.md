@@ -35,6 +35,7 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | `components/domicile/engine/domicile_engine.{h,cc}` | `libdomicile_engine.so`: the C ABI, the broker pipe and the pollable fd |
 | `components/domicile/engine/engine_event_queue.{h,cc}` | queue from mojo's thread to the compositor's thread; an eventfd tells the compositor when to drain it |
 | `components/domicile/engine/surface_frames.{h,cc}` | numbers a window's frames and matches viz's acks and presentation feedback to them, for `frame_done` and `presented` |
+| `components/domicile/engine/surface_holds.{h,cc}` | counts viz's holds on a window's buffers, so a buffer its client destroys stays imported until viz returns it |
 | `components/domicile/engine/surface_submits.{h,cc}` | holds a window's submits in order behind one whose acquire fence the browser has not yet put in place (`FenceBuffer`), and its newest while viz has 16 frames to present (`SurfaceBacklog`) |
 | `components/domicile/engine/probe_wait.{h,cc}` | bounds a spike probe's wait for the browser; a probe never answered in 30s stops the producer with a fatal log naming it |
 | `components/domicile/engine/engine_smoke.c` | checks the C header compiles and the library works from C |
@@ -88,6 +89,7 @@ Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.
   capturer), `display_capture_target_unittest.cc`,
   `browser_window_capture_target_unittest.cc`, `window_diff_unittest.cc`,
   `engine_event_queue_unittest.cc`, `surface_frames_unittest.cc`,
+  `surface_holds_unittest.cc`,
   `surface_submits_unittest.cc`, `synced_frame_unittest.cc`,
   `probe_wait_unittest.cc`, `hidden_from_captures_unittest.cc`.
 - The Blink side and the probe have no unit tests. They need a display
