@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/platform/graphics/external_surface_embedder.h"
 #include "third_party/blink/renderer/platform/graphics/surface_layer_bridge.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/events/types/native_pinch.h"
 #include "ui/events/types/native_scroll_source.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -24,6 +25,7 @@ namespace blink {
 
 class HTMLAppElement;
 class MouseEvent;
+class PointerEvent;
 class WheelEvent;
 
 // Where an <app> sends what lands on it: the desktop of the window it is in.
@@ -37,6 +39,10 @@ class WheelEvent;
 // The element maps and the desktop forwards: a point arrives in the element's
 // own CSS pixels, and the desktop scales it to what the client drew, which is
 // the compositor's to say and is in `DomicileHost.windows`.
+// A touch point's step, as `wl_touch` has them. A cancel ends every point the
+// window holds.
+enum class AppTouchPhase { kDown, kMotion, kUp, kCancel };
+
 class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
  public:
   static const char kSupplementName[];
@@ -63,6 +69,15 @@ class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
   virtual void AppPointerLeave(const String& app_id) = 0;
   virtual void AppPointerPinch(const String& app_id,
                                const ui::NativePinch& pinch) = 0;
+  // A finger on `app_id`'s window. `id` names the point while it is down;
+  // `time` is in milliseconds, as `wl_touch` counts. `point` and `size` are as
+  // for motion, and mean nothing for an up or a cancel.
+  virtual void AppTouch(const String& app_id,
+                        AppTouchPhase phase,
+                        int32_t id,
+                        uint32_t time,
+                        const gfx::PointF& point,
+                        const gfx::SizeF& size) = 0;
   // A scroll as `wl_pointer` wants it: a distance and 120ths of a detent.
   virtual void AppPointerAxis(const String& app_id,
                               double dx,
@@ -172,6 +187,14 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   void ForwardInput(AppInputClient& client,
                     const String& app_id,
                     const Event& event);
+  // A finger, which is the window's as a touch, not a pointer.
+  void ForwardTouch(AppInputClient&, const String&, const PointerEvent&);
+  // Ends every point still down on the window, as a cancel.
+  void CancelTouches();
+  // The points down on this element, and the window they went to.
+  Vector<int32_t> touches_;
+  String touch_app_id_;
+
   void ForwardPinch(AppInputClient&, const String&, const WheelEvent&);
   void CancelPinch();
   std::optional<ui::NativePinch> active_pinch_;

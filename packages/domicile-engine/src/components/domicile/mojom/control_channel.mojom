@@ -9,6 +9,20 @@ enum PointerAxisSource { kWheel, kFinger, kContinuous, kWheelTilt };
 
 enum PinchPhase { kBegin, kUpdate, kEnd };
 
+// `wl_touch`'s steps. A cancel ends every point down on the window.
+enum TouchPhase { kDown, kMotion, kUp, kCancel };
+
+// One finger on a native window. `x` and `y` are in what the client drew, as
+// pointer motion is, and mean nothing for an up or a cancel. `time` is in
+// milliseconds and wraps, as Wayland's clock does.
+struct Touch {
+  TouchPhase phase;
+  int32 id;
+  uint32 time;
+  double x;
+  double y;
+};
+
 struct Pinch {
   PinchPhase phase;
   uint32 device;
@@ -493,6 +507,7 @@ interface ControlChannel {
   PointerLeave(string app_id);
   PointerButton(string app_id, uint32 button, bool pressed);
   PointerPinch(string app_id, Pinch pinch);
+  Touch(string app_id, Touch touch);
   PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y,
               PointerAxisSource source, bool stop_x, bool stop_y);
 };

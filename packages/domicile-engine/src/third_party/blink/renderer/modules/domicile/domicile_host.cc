@@ -1096,10 +1096,9 @@ void DomicileHost::AppPressed(HTMLAppElement& app, const String& app_id) {
   }
 }
 
-void DomicileHost::AppPointerMotion(const String& app_id,
-                                    const gfx::PointF& point,
-                                    const gfx::SizeF& size,
-                                    bool moved) {
+gfx::PointF DomicileHost::IntoClient(const String& app_id,
+                                     const gfx::PointF& point,
+                                     const gfx::SizeF& size) const {
   // Into what the client drew, which the compositor said; one that has drawn
   // nothing yet is mapped through its own box, 1:1.
   double x = point.x();
@@ -1111,9 +1110,48 @@ void DomicileHost::AppPointerMotion(const String& app_id,
       break;
     }
   }
+  return gfx::PointF(x, y);
+}
+
+void DomicileHost::AppPointerMotion(const String& app_id,
+                                    const gfx::PointF& point,
+                                    const gfx::SizeF& size,
+                                    bool moved) {
+  const gfx::PointF at = IntoClient(app_id, point, size);
   if (EnsureBound()) {
-    channel_->PointerMotion(app_id, x, y, moved);
+    channel_->PointerMotion(app_id, at.x(), at.y(), moved);
   }
+}
+
+void DomicileHost::AppTouch(const String& app_id,
+                            AppTouchPhase phase,
+                            int32_t id,
+                            uint32_t time,
+                            const gfx::PointF& point,
+                            const gfx::SizeF& size) {
+  if (!EnsureBound()) {
+    return;
+  }
+  domicile::mojom::blink::TouchPhase step;
+  switch (phase) {
+    case AppTouchPhase::kDown:
+      step = domicile::mojom::blink::TouchPhase::kDown;
+      break;
+    case AppTouchPhase::kMotion:
+      step = domicile::mojom::blink::TouchPhase::kMotion;
+      break;
+    case AppTouchPhase::kUp:
+      step = domicile::mojom::blink::TouchPhase::kUp;
+      break;
+    case AppTouchPhase::kCancel:
+      step = domicile::mojom::blink::TouchPhase::kCancel;
+      break;
+  }
+  const bool placed =
+      phase == AppTouchPhase::kDown || phase == AppTouchPhase::kMotion;
+  const gfx::PointF at = placed ? IntoClient(app_id, point, size) : gfx::PointF();
+  channel_->Touch(app_id, domicile::mojom::blink::Touch::New(
+                              step, id, time, at.x(), at.y()));
 }
 
 void DomicileHost::AppPointerButton(const String& app_id,

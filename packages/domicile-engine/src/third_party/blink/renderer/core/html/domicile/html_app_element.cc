@@ -7,9 +7,11 @@
 #include <optional>
 
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/time/time.h"
 #include "cc/layers/deadline_policy.h"
 #include "components/domicile/common/synced_frame.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -87,6 +89,16 @@ class AppWheelListener final : public NativeEventListener {
   void Invoke(ExecutionContext*, Event*) override {}
 };
 
+// The same for a finger: the compositor thread sends a touch to the page only
+// where something listens for it, and a pointer listener counts only when the
+// shell happens to have one. A blocking `touchstart` here makes every <app> a
+// touch handler region, so a finger on a window always reaches
+// `HTMLAppElement::ForwardTouch`. It never cancels: the shell still decides.
+class AppTouchListener final : public NativeEventListener {
+ public:
+  void Invoke(ExecutionContext*, Event*) override {}
+};
+
 }  // namespace
 
 const char AppInputClient::kSupplementName[] = "AppInputClient";
@@ -108,6 +120,8 @@ HTMLAppElement::HTMLAppElement(Document& document)
   options.SetPassive(false);
   addEventListener(event_type_names::kWheel,
                    MakeGarbageCollected<AppWheelListener>(), options);
+  addEventListener(event_type_names::kTouchstart,
+                   MakeGarbageCollected<AppTouchListener>(), options);
 }
 
 HTMLAppElement::~HTMLAppElement() = default;
@@ -124,6 +138,7 @@ void HTMLAppElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == html_names::kAppIdAttr) {
     CancelPinch();
+    CancelTouches();
     // Re-embed into the existing layer so the element keeps its box and its
     // place in the layer tree.
     Embed();
@@ -160,6 +175,7 @@ Node::InsertionNotificationRequest HTMLAppElement::InsertedInto(
 
 void HTMLAppElement::RemovedFrom(ContainerNode& insertion_point) {
   CancelPinch();
+  CancelTouches();
   // Keep the embedder: a moved element shows the same window. A new embedder
   // would wait for the producer to reconnect, which a running client never
   // does.
@@ -467,6 +483,10 @@ void HTMLAppElement::ForwardInput(AppInputClient& client,
   if (!pointer) {
     return;
   }
+  if (pointer->pointerType() == "touch") {
+    ForwardTouch(client, app_id, *pointer);
+    return;
+  }
   if (type == event_type_names::kPointermove) {
     ForwardMotion(client, app_id, *pointer);
   } else if (type == event_type_names::kPointerdown) {
@@ -495,6 +515,79 @@ void HTMLAppElement::ForwardInput(AppInputClient& client,
     // from one window straight to another tells the one left before the one
     // arrived at.
     client.AppPointerLeave(app_id);
+  }
+}
+
+// A FINGER IS THE WINDOW'S AS A TOUCH. A client that reads `wl_touch` scrolls,
+// zooms and drags under it as it would on any desktop; the compositor turns
+// it into the pointer for a client that has no `wl_touch`, so neither path
+// sends both.
+//
+// Blink captures a touch pointer to the element it went down on, so its moves
+// and its lift come here wherever the finger goes, and `touch-action: none`
+// on <app> (html.css) keeps the page from taking the finger to pan with, which
+// would end it in a `pointercancel`.
+void HTMLAppElement::ForwardTouch(AppInputClient& client,
+                                  const String& app_id,
+                                  const PointerEvent& pointer) {
+  const AtomicString& type = pointer.type();
+  const int32_t id = pointer.pointerId();
+  // Milliseconds on the monotonic clock, wrapping as `wl_touch`'s do.
+  const uint32_t time = static_cast<uint32_t>(
+      (pointer.PlatformTimeStamp() - base::TimeTicks()).InMilliseconds());
+  gfx::PointF point;
+  gfx::SizeF size;
+  if (type == event_type_names::kPointerdown) {
+    if (!MapToContent(pointer, point, size)) {
+      VLOG(1) << "domicile: a finger on " << app_id << " missed its content";
+      return;
+    }
+    VLOG(1) << "domicile: a finger down on " << app_id << " at "
+            << point.ToString();
+    // A finger on another window first ends the points on the one before:
+    // the element shows one window at a time.
+    if (touch_app_id_ != app_id) {
+      CancelTouches();
+    }
+    if (touches_.empty()) {
+      // The first finger down is the user reaching for this window, as a
+      // click is.
+      client.AppPressed(*this, app_id);
+    }
+    touches_.push_back(id);
+    touch_app_id_ = app_id;
+    client.AppTouch(app_id, AppTouchPhase::kDown, id, time, point, size);
+    return;
+  }
+  // The rest are for a point this element put down.
+  const wtf_size_t index = touches_.Find(id);
+  if (index == kNotFound || touch_app_id_ != app_id) {
+    return;
+  }
+  if (type == event_type_names::kPointermove) {
+    if (MapToContent(pointer, point, size)) {
+      client.AppTouch(app_id, AppTouchPhase::kMotion, id, time, point, size);
+    }
+  } else if (type == event_type_names::kPointerup) {
+    touches_.EraseAt(index);
+    client.AppTouch(app_id, AppTouchPhase::kUp, id, time, point, size);
+  } else if (type == event_type_names::kPointercancel) {
+    CancelTouches();
+  }
+}
+
+void HTMLAppElement::CancelTouches() {
+  if (touches_.empty()) {
+    return;
+  }
+  touches_.clear();
+  const String app_id = touch_app_id_;
+  touch_app_id_ = String();
+  if (auto* window = GetDocument().domWindow()) {
+    if (auto* client = AppInputClient::From(*window)) {
+      client->AppTouch(app_id, AppTouchPhase::kCancel, 0, 0, gfx::PointF(),
+                       gfx::SizeF());
+    }
   }
 }
 

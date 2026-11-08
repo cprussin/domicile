@@ -869,6 +869,7 @@ impl Host {
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }
             | ChromeMessage::PointerPinch { .. }
+            | ChromeMessage::Touch { .. }
             | ChromeMessage::PointerButton { .. }
             | ChromeMessage::PointerAxis { .. }
             | ChromeMessage::Key { .. }

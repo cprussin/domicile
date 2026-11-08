@@ -7,6 +7,7 @@
 #include <optional>
 #include <utility>
 
+#include "base/logging.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/gfx/geometry/transform.h"
 
@@ -101,8 +102,13 @@ void DrmPointerTargets::OnInputDeviceConfigurationChanged(
 void DrmPointerTargets::Configure() {
   DeviceDataManager* devices = DeviceDataManager::GetInstance();
   const std::vector<display::Display> displays = displays_.Run();
-  devices->ConfigureTouchDevices(
-      TouchTransformsFor(devices->GetTouchscreenDevices(), targets_, displays));
+  std::vector<TouchDeviceTransform> transforms =
+      TouchTransformsFor(devices->GetTouchscreenDevices(), targets_, displays);
+  VLOG(1) << "domicile: " << transforms.size() << " of "
+          << devices->GetTouchscreenDevices().size()
+          << " touchscreens bound, from " << targets_.size() << " targets on "
+          << displays.size() << " displays";
+  devices->ConfigureTouchDevices(std::move(transforms));
   areas_.Run(AbsoluteAreasFor(devices->GetMouseDevices(), targets_, displays));
 }
 

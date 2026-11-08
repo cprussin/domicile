@@ -14,7 +14,7 @@ use wayland_client::backend::ObjectId;
 use wayland_client::protocol::{
     wl_buffer, wl_callback, wl_compositor, wl_data_device, wl_data_device_manager, wl_data_offer,
     wl_data_source, wl_keyboard, wl_output, wl_pointer, wl_registry, wl_seat, wl_shm, wl_shm_pool,
-    wl_subcompositor, wl_subsurface, wl_surface,
+    wl_subcompositor, wl_subsurface, wl_surface, wl_touch,
 };
 use wayland_client::{
     delegate_noop, event_created_child, Connection, Dispatch, Proxy as _, QueueHandle, WEnum,
@@ -306,6 +306,8 @@ struct Client {
     xdg_wm_base_v1: bool,
     /// See [`crate::arguments::Arguments::wl_seat_v7`].
     wl_seat_v7: bool,
+    /// See [`crate::arguments::Arguments::no_touch`].
+    no_touch: bool,
     /// The serial of the keyboard's last `enter`, for
     /// [`AskForFocus::WhenLeft`].
     entered_at: Option<u32>,
@@ -557,6 +559,7 @@ impl Client {
             ask_to: asked.ask_to,
             xdg_wm_base_v1: asked.xdg_wm_base_v1,
             wl_seat_v7: asked.wl_seat_v7,
+            no_touch: asked.no_touch,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             inhibit_shortcuts: asked.inhibit_shortcuts,
@@ -2016,6 +2019,9 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
             if capabilities.contains(wl_seat::Capability::Keyboard) {
                 seat.get_keyboard(handle, ());
             }
+            if capabilities.contains(wl_seat::Capability::Touch) && !client.no_touch {
+                seat.get_touch(handle, ());
+            }
             if capabilities.contains(wl_seat::Capability::Pointer) {
                 let pointer = seat.get_pointer(handle, ());
                 if let Some(manager) = &client.globals.gestures {
@@ -2891,6 +2897,40 @@ mod tests {
         // `Argb8888`.
         assert_eq!(shm_format(true), wl_shm::Format::Argb8888);
         assert_eq!(shm_format(false), wl_shm::Format::Xrgb8888);
+    }
+}
+
+impl Dispatch<wl_touch::WlTouch, ()> for Client {
+    fn event(
+        _: &mut Client,
+        touch: &wl_touch::WlTouch,
+        event: wl_touch::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        use wl_touch::Event;
+        match event {
+            Event::Down {
+                time,
+                surface,
+                id,
+                x,
+                y,
+                ..
+            } => {
+                crate::say!(touch.id(), "down({time}, {}, {id}, {x}, {y})", surface.id());
+            }
+            Event::Motion { time, id, x, y } => {
+                crate::say!(touch.id(), "touch_motion({time}, {id}, {x}, {y})");
+            }
+            Event::Up { time, id, .. } => {
+                crate::say!(touch.id(), "up({time}, {id})");
+            }
+            Event::Frame => crate::say!(touch.id(), "touch_frame()"),
+            Event::Cancel => crate::say!(touch.id(), "cancel()"),
+            _ => {}
+        }
     }
 }
 
