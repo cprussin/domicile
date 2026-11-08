@@ -211,5 +211,25 @@ TEST(DeskGesturesTest, AnEdgeGrabTakesItsEdge) {
   EXPECT_TRUE(gestures.Takes(Edge(ui::NativeGestureEdge::kBottom)));
 }
 
+// A touchpad gesture is the pointer in use, and shows a hidden pointer; a
+// finger on the touchscreen is not.
+TEST(DeskGesturesTest, EveryPhaseOfATouchpadGestureIsTold) {
+  DeskGestures gestures;
+  Heard heard;
+  int touched = 0;
+  gestures.ListenForTouchpad(base::BindRepeating(
+      [](int* touched) { ++*touched; }, base::Unretained(&touched)));
+  const auto channel = gestures.AddChannel(Into(&heard));
+  gestures.Grab(channel, {NativeGestureKind::kSwipe, 3});
+  gestures.Grab(channel, {NativeGestureKind::kEdge, 1, std::nullopt});
+
+  gestures.Take(Swipe(NativeGesturePhase::kBegin));
+  gestures.Take(Swipe(NativeGesturePhase::kUpdate));
+  gestures.Take(Swipe(NativeGesturePhase::kEnd));
+  gestures.Take(Edge(ui::NativeGestureEdge::kLeft));
+
+  EXPECT_EQ(touched, 3);
+}
+
 }  // namespace
 }  // namespace domicile

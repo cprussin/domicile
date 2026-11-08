@@ -56,6 +56,8 @@ These are in the config file only:
   "theme": {
     "cursor_theme": { "dark": "Bibata-Modern-Ice", "light": "Bibata-Modern-Classic" },
     "cursor_size": 24,
+    "cursor_hide_after_ms": 3000,
+    "cursor_hide_when_typing": true,
     "font_name": "Inter 11",
     "monospace_font_name": "Iosevka 12"
   }
@@ -66,6 +68,9 @@ These are in the config file only:
 - Install icon and cursor themes the usual way, so they are under an `icons`
   folder, such as `~/.local/share/icons`.
 - Fonts apply to apps that follow the system's font.
+- `cursor_hide_after_ms` hides the pointer after that long without moving it,
+  and `cursor_hide_when_typing: true` hides it while you type. Moving it shows
+  it again.
 - The desktop itself draws its text in Inter. Pick another installed face with
   the manganese shell's `font` option.
 

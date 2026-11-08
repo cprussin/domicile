@@ -87,6 +87,8 @@ describe(readSettings, () => {
 
   it("reads a cursor and fonts, which Settings does not edit", () => {
     const theme = {
+      cursor_hide_after_ms: 1000,
+      cursor_hide_when_typing: true,
       cursor_size: 32,
       cursor_theme: "Bibata-Modern-Ice",
       font_name: "Inter 11",
@@ -96,6 +98,9 @@ describe(readSettings, () => {
       Ok({ ...theme, contrast: "normal", mode: "dark", reduced_motion: false }),
     );
     expect(readSettings({ theme: { cursor_size: 0 } }).isErr()).toBe(true);
+    expect(readSettings({ theme: { cursor_hide_after_ms: 0 } }).isErr()).toBe(
+      true,
+    );
   });
 
   it("reads a cursor theme per mode", () => {

@@ -413,6 +413,16 @@ export type ThemeConfig = {
   accent_color?: AccentColor | null;
   contrast?: Contrast;
   /**
+   * Hides the engine's pointer after this many milliseconds without
+   * pointer input. Unset never hides it. Zero is refused.
+   */
+  cursor_hide_after_ms?: number | null;
+  /**
+   * Hides the engine's pointer on a typing key press, until the pointer is
+   * next used.
+   */
+  cursor_hide_when_typing?: boolean;
+  /**
    * The cursor size in logical pixels, for clients and the engine's
    * pointer. Unset leaves clients their own. Zero is refused.
    */

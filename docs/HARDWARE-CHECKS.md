@@ -94,6 +94,18 @@ On a tty, set `theme.cursor_theme` to an installed theme with a distinct arrow
 - `no cursor theme "<theme>" on the XCursor path`: the theme is not under any
   directory [SHELL-CONFIG.md](SHELL-CONFIG.md#theme) lists.
 
+## Pointer hiding
+
+On a tty, set `theme.cursor_hide_after_ms = 1000` and
+`theme.cursor_hide_when_typing = true`. Expect:
+
+- `the desk hides the pointer after 1000 ms and while typing`.
+- The pointer gone from the screen (the CRTC cursor plane) 1 s after the last
+  move, and back on the next move or two-finger scroll.
+- Typing a letter hides it; Shift alone and `Ctrl+C` do not.
+- Hover kept while hidden: a link under the pointer stays underlined, and a
+  tooltip stays open.
+
 ## Dead GPU process
 
 ```sh
