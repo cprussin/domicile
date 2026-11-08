@@ -806,6 +806,20 @@ pub struct Appearance {
     /// absent for Chromium's own art. The page never sees it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<CursorTheme>,
+    /// When the browser process hides the pointer, or absent to never hide
+    /// it. The page never sees it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor_hiding: Option<CursorHiding>,
+}
+
+/// When the pointer is hidden. It shows again on the next pointer input.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CursorHiding {
+    /// Milliseconds without pointer input, or absent for no timeout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_ms: Option<u32>,
+    /// Whether a typing key press hides it.
+    pub when_typing: bool,
 }
 
 /// An XCursor theme at a size.
