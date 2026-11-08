@@ -156,15 +156,16 @@ fn chrome_connection(
     debug!("chrome client disconnected");
 }
 
-struct PinchOwner<'a> {
+/// The pinch, swipe or hold a connection began ends with it.
+struct GestureOwner<'a> {
     hub: &'a ChromeHub,
     id: usize,
 }
 
-impl Drop for PinchOwner<'_> {
+impl Drop for GestureOwner<'_> {
     fn drop(&mut self) {
         self.hub
-            .send_request(ClientRequest::PinchOwnerGone { owner: self.id });
+            .send_request(ClientRequest::GestureOwnerGone { owner: self.id });
     }
 }
 
@@ -301,7 +302,7 @@ fn read_chrome_messages(
     // Whether this connection is an app's, which may make only the system
     // calls an app may. See `docs/architecture/APP-MODULES.md`.
     let mut app = false;
-    let mut pinch_owner = None;
+    let mut gesture_owner = None;
     let mut touch_owner = None;
     for line in reader.lines() {
         let Ok(line) = line else { break };
@@ -475,8 +476,8 @@ fn read_chrome_messages(
                 Vec::new()
             }
             Ok(ChromeMessage::PointerPinch { app_id, pinch }) => {
-                let owner = pinch_owner
-                    .get_or_insert_with(|| PinchOwner {
+                let owner = gesture_owner
+                    .get_or_insert_with(|| GestureOwner {
                         hub,
                         id: Arc::as_ptr(writer) as usize,
                     })
@@ -486,6 +487,26 @@ fn read_chrome_messages(
                     app_id,
                     pinch,
                 });
+                Vec::new()
+            }
+            Ok(ChromeMessage::PointerSwipe { swipe }) => {
+                let owner = gesture_owner
+                    .get_or_insert_with(|| GestureOwner {
+                        hub,
+                        id: Arc::as_ptr(writer) as usize,
+                    })
+                    .id;
+                hub.send_request(ClientRequest::PointerSwipe { owner, swipe });
+                Vec::new()
+            }
+            Ok(ChromeMessage::PointerHold { hold }) => {
+                let owner = gesture_owner
+                    .get_or_insert_with(|| GestureOwner {
+                        hub,
+                        id: Arc::as_ptr(writer) as usize,
+                    })
+                    .id;
+                hub.send_request(ClientRequest::PointerHold { owner, hold });
                 Vec::new()
             }
             Ok(ChromeMessage::Touch { app_id, touch }) => {

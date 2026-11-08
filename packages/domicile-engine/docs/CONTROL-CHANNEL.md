@@ -31,8 +31,9 @@ The engine has two channels to the rest of Domicile:
   `pointer_pinch`, `touch`.
   The browser also sends `hello` on connect, `activity` for its own
   input, at most every 200 ms, for the idle clock, `desk_pointer` for
-  each pointer move, and `desk_cursor` for each change of the pointer's
-  image, for screen casts.
+  each pointer move, `desk_cursor` for each change of the pointer's
+  image, for screen casts, and `pointer_swipe` and `pointer_hold` for each
+  touchpad swipe or hold the shell did not grab.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,

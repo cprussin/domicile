@@ -686,6 +686,44 @@ TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
         EXPECT_EQ(*frame->FindString("phase"), "end");
         EXPECT_EQ(frame->FindBool("canceled"), true);
         break;
+// A swipe or hold the shell did not grab names no window: the compositor
+// gives it to the one under the pointer.
+TEST_F(ControlChannelTest, UnboundSwipesAndHoldsReachTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+
+  DeskGestures& gestures = DeskGestures::Get();
+  const auto swipe = [](ui::NativeGesturePhase phase) {
+    return ui::NativeGesture{.kind = ui::NativeGestureKind::kSwipe,
+                             .phase = phase,
+                             .fingers = 4,
+                             .dx = 1.25,
+                             .dy = -2.5};
+  };
+  const auto hold = [](ui::NativeGesturePhase phase) {
+    return ui::NativeGesture{.kind = ui::NativeGestureKind::kHold,
+                             .phase = phase,
+                             .fingers = 3,
+                             .canceled = true};
+  };
+  ASSERT_TRUE(gestures.Takes(swipe(ui::NativeGesturePhase::kBegin)));
+  gestures.Take(swipe(ui::NativeGesturePhase::kBegin));
+  gestures.Take(swipe(ui::NativeGesturePhase::kUpdate));
+  gestures.Take(swipe(ui::NativeGesturePhase::kEnd));
+  gestures.Take(hold(ui::NativeGesturePhase::kBegin));
+  gestures.Take(hold(ui::NativeGesturePhase::kEnd));
+
+  EXPECT_EQ(Heard(), R"({"fingers":4,"phase":"begin","type":"pointer_swipe"})");
+  EXPECT_EQ(Heard(),
+            R"({"dx":1.25,"dy":-2.5,"phase":"update","type":"pointer_swipe"})");
+  EXPECT_EQ(Heard(),
+            R"({"canceled":false,"phase":"end","type":"pointer_swipe"})");
+  EXPECT_EQ(Heard(), R"({"fingers":3,"phase":"begin","type":"pointer_hold"})");
+  EXPECT_EQ(Heard(),
+            R"({"canceled":true,"phase":"end","type":"pointer_hold"})");
+}
+
     }
   }
 }

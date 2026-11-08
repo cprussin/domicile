@@ -25,7 +25,11 @@ In Manganese with windows on two workspaces of one monitor:
 - spreading four fingers opens the launcher;
 - with two windows side by side, a three-finger swipe right focuses the right
   one, and left the left one;
-- a three-finger swipe does not scroll the window under the pointer.
+- a three-finger swipe does not scroll the window under the pointer;
+- with `WAYLAND_DEBUG=1 gtk4-demo 2>&1 | grep -E 'swipe|hold'` running, a
+  five-finger swipe over its window logs a swipe `begin`, `update`s and an
+  `end`, and resting three fingers logs a hold `begin` and `end`; a
+  four-finger swipe logs nothing and changes workspace.
 
 ## Touchscreen
 

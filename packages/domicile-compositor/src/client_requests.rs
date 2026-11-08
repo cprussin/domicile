@@ -61,7 +61,18 @@ pub enum ClientRequest {
         app_id: String,
         pinch: domicile_protocol::pinch::Pinch,
     },
-    PinchOwnerGone {
+    /// A touchpad swipe the shell did not bind; see [`crate::swipe`].
+    PointerSwipe {
+        owner: usize,
+        swipe: domicile_protocol::swipe::Swipe,
+    },
+    /// A touchpad hold the shell did not bind; see [`crate::swipe`].
+    PointerHold {
+        owner: usize,
+        hold: domicile_protocol::swipe::Hold,
+    },
+    /// The connection that sent a pinch, swipe or hold went away.
+    GestureOwnerGone {
         owner: usize,
     },
     Touch {
@@ -268,6 +279,7 @@ impl DomicileCompositor {
         // Input the lock let through, before it reaches the seat.
         if self.captured(&event) {
             self.cancel_pinch();
+            self.cancel_swipe();
             self.cancel_touches();
             return;
         }
@@ -277,7 +289,12 @@ impl DomicileCompositor {
                 app_id,
                 pinch,
             } => self.forward_pinch(owner, &app_id, pinch),
-            ClientRequest::PinchOwnerGone { owner } => self.pinch_owner_gone(owner),
+            ClientRequest::PointerSwipe { owner, swipe } => self.forward_swipe(owner, swipe),
+            ClientRequest::PointerHold { owner, hold } => self.forward_hold(owner, hold),
+            ClientRequest::GestureOwnerGone { owner } => {
+                self.pinch_owner_gone(owner);
+                self.swipe_owner_gone(owner);
+            }
             ClientRequest::Touch {
                 owner,
                 app_id,
@@ -287,6 +304,7 @@ impl DomicileCompositor {
             ClientRequest::PointerMotion { app_id, x, y, .. } => {
                 if self.pointer_app.as_deref() != Some(&app_id) {
                     self.cancel_pinch();
+                    self.cancel_swipe();
                 }
                 let Some(surface) = self.surface_for(&app_id) else {
                     tracing::debug!(%app_id, "pointer motion: no surface");
@@ -317,6 +335,7 @@ impl DomicileCompositor {
             }
             ClientRequest::PointerLeave => {
                 self.cancel_pinch();
+                self.cancel_swipe();
                 self.cast_pointer(None);
                 self.pointer_app = None;
                 let pointer = self.seat.get_pointer().unwrap();
