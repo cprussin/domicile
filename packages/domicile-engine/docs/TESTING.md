@@ -13,9 +13,9 @@ autoninja -C out/Domicile domicile_unittests ozone_unittests
 
 - `scripts/unit-tests.sh` and `scripts/drm-unit-tests.sh` hold the
   `--gtest_filter` lists and a minimum test count for each.
-- `InputSettingsTest`, `DrmInputControllerTest`, `TypingGuardTest` and
-  `ScrollAcceleratorTest` cover input parsing, retained settings, typing policy
-  and scroll scaling. `FrameSinkBrokerTest` covers the input configuration
+- `InputSettingsTest`, `DrmInputControllerTest`, `TypingGuardTest`,
+  `ScrollAcceleratorTest` and `FlingTrackerTest` cover input parsing, retained
+  settings, typing policy, scroll scaling and a flick's speed. `FrameSinkBrokerTest` covers the input configuration
   message crossing Mojo.
 - `LibInputKeyboardPathTest` feeds native keycodes through evdev filtering,
   duplicate suppression and release handling. `test-libinput-devices-share-a-seat.sh`

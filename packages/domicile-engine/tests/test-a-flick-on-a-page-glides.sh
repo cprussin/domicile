@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Checks a two-finger flick on a tty gives pages momentum.
+#
+# libinput reports a scroll stop when the fingers lift and nothing more, so
+# without a fling start the browser stops the page dead.
+# `src/ui/events/ozone/evdev/domicile/fling_tracker.cc` measures the speed; a
+# patch makes the libinput converter start and cancel the fling.
+#
+# Reads `src/` and the patches, not a Chromium tree, so it runs in the shell
+# group.
+set -u
+
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+ENGINE="$ROOT/packages/domicile-engine"
+PATCHES="$ENGINE/patches"
+SRC="$ENGINE/src"
+DOMICILE="$SRC/ui/events/ozone/evdev/domicile"
+[ -d "$PATCHES" ] || { echo "no patch series at $PATCHES" >&2; exit 1; }
+
+FAILED=0
+ok()   { printf '  ok    %s\n' "$1"; }
+fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
+
+added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
+in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
+
+for f in fling_tracker.h fling_tracker.cc fling_tracker_unittest.cc; do
+  if [ -f "$DOMICILE/$f" ]; then
+    ok "domicile/$f exists"
+  else
+    fail "domicile/$f exists" "no such file under src/ui/events/ozone/evdev/domicile"
+  fi
+done
+
+if in_patches "EventType::kScrollFlingStart" && in_patches "fling_tracker_.Release("; then
+  ok "the libinput converter starts a fling when the fingers lift"
+else
+  fail "the libinput converter starts a fling when the fingers lift" \
+    "no patch dispatches kScrollFlingStart from fling_tracker_.Release"
+fi
+
+# Accelerated distances would carry the accelerator's gain into the glide.
+if python3 - "$PATCHES" <<'CHECK'
+from pathlib import Path
+import re
+import sys
+added = "\n".join(line[1:] for patch in sorted(Path(sys.argv[1]).glob("*.patch"))
+                  for line in patch.read_text().splitlines()
+                  if line.startswith("+") and not line.startswith("+++"))
+linear = re.search(
+    r"fling_tracker_\.Scroll\(\s*gfx::Vector2dF\(ScaleScrollAxis\(raw_delta\.x\(\), scroll_factor_\),\s*"
+    r"ScaleScrollAxis\(raw_delta\.y\(\), scroll_factor_\)\)", added)
+sys.exit(0 if linear else 1)
+CHECK
+then
+  ok "the glide follows the fingers' unaccelerated speed"
+else
+  fail "the glide follows the fingers' unaccelerated speed" \
+    "fling_tracker_ measures accelerated distances, so a fast flick glides up to four times too fast"
+fi
+
+if in_patches "EventType::kScrollFlingCancel"; then
+  ok "the next scroll stops the glide"
+else
+  fail "the next scroll stops the glide" \
+    "no patch dispatches kScrollFlingCancel, so a new scroll fights the old fling"
+fi
+
+if in_patches "== kHoldBegin) {" && in_patches "CancelFling(base::TimeTicks() +"; then
+  ok "fingers resting on the pad stop the glide"
+else
+  fail "fingers resting on the pad stop the glide" \
+    "no patch cancels the fling at libinput's hold gesture, so a page glides under resting fingers"
+fi
+
+if in_patches '"domicile/fling_tracker.cc"'; then
+  ok "the tracker is in the evdev component"
+else
+  fail "the tracker is in the evdev component" \
+    "no patch adds domicile/fling_tracker.cc to ui/events/ozone/evdev/BUILD.gn"
+fi
+
+if in_patches '"//ui/events/ozone/evdev/domicile/fling_tracker_unittest.cc"'; then
+  ok "the unit test is in ozone_unittests"
+else
+  fail "the unit test is in ozone_unittests" \
+    "no patch adds fling_tracker_unittest.cc to ui/ozone/platform/drm/BUILD.gn"
+fi
+
+if grep -qE "^ *FlingTrackerTest:[0-9]+$" "$ENGINE/scripts/drm-unit-tests.sh"; then
+  ok "the DRM suite list carries a floor for the suite"
+else
+  fail "the DRM suite list carries a floor for the suite" \
+    "no 'FlingTrackerTest:<n>' in packages/domicile-engine/scripts/drm-unit-tests.sh"
+fi
+
+# A native client runs its own momentum from the axis stop. The page's
+# momentum wheels reaching it too would glide it twice.
+APP="$SRC/third_party/blink/renderer/core/html/domicile/html_app_element.cc"
+if grep -q "momentum_phase != blink::WebMouseWheelEvent::kPhaseNone" "$APP"; then
+  ok "a native window ignores the page's momentum"
+else
+  fail "a native window ignores the page's momentum" \
+    "html_app_element.cc forwards momentum wheels to the native client"
+fi
+
+if [ "$FAILED" -gt 0 ]; then
+  echo "$FAILED failed"
+  exit 1
+fi
+echo "all ok"
