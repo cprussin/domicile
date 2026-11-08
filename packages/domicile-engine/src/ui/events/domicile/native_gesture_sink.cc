@@ -29,9 +29,10 @@ bool NativeGestureSequence::Begin(const NativeGesture& gesture) {
   CHECK(gesture.phase == NativeGesturePhase::kBegin);
   Cancel();
   NativeGestureSink* sink = NativeGestureSink::Get();
-  taken_ = sink && sink->Takes(gesture.kind, gesture.fingers);
+  taken_ = sink && sink->Takes(gesture);
   kind_ = gesture.kind;
   fingers_ = gesture.fingers;
+  edge_ = gesture.edge;
   if (taken_) {
     sink->Take(gesture);
   }
@@ -45,6 +46,7 @@ bool NativeGestureSequence::Continue(const NativeGesture& gesture) {
   }
   NativeGesture continued = gesture;
   continued.fingers = fingers_;
+  continued.edge = edge_;
   if (gesture.phase == NativeGesturePhase::kEnd) {
     taken_ = false;
   }
@@ -60,6 +62,7 @@ void NativeGestureSequence::Cancel() {
   end.kind = kind_;
   end.phase = NativeGesturePhase::kEnd;
   end.fingers = fingers_;
+  end.edge = edge_;
   end.canceled = true;
   Continue(end);
 }

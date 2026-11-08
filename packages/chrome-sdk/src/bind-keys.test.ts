@@ -53,7 +53,10 @@ class FakeHost extends EventTarget {
     this.ungrabbedGestures.push(gesture);
   }
 
-  /** Send a whole gesture: its begin, one update, and an end. */
+  /**
+   * Send a whole gesture: its begin, one update, and an end. An edge swipe's
+   * every phase has the edge of `update`.
+   */
   gestured(
     kind: Gesture["kind"],
     fingers: number,
@@ -64,6 +67,7 @@ class FakeHost extends EventTarget {
       canceled: false,
       dx: 0,
       dy: 0,
+      edge: update.edge ?? "",
       fingers,
       kind,
       rotation: 0,
@@ -383,6 +387,24 @@ describe("bindKeys", () => {
       expect(heard).toStrictEqual([
         ["mode", "resize"],
         ["command", ["resize", "shrink", "width"]],
+      ]);
+    });
+
+    it("grabs and runs an edge swipe by its side", () => {
+      const { heard, host } = bound({
+        keybindings: {
+          edge: KeyAction.SendShell(["overview"]),
+          "edge:left": KeyAction.SendShell(["workspace", "prev"]),
+        },
+      });
+
+      host.gestured("edge", 1, { dx: 80, edge: "left" });
+      host.gestured("edge", 1, { dy: -80, edge: "bottom" });
+
+      expect(host.grabbedGestures).toStrictEqual(["edge", "edge:left"]);
+      expect(heard).toStrictEqual([
+        ["command", ["workspace", "prev"]],
+        ["command", ["overview"]],
       ]);
     });
 

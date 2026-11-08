@@ -77,21 +77,27 @@ struct Shortcut {
   bool meta;
 };
 
-// A touchpad gesture the shell binds, as `zwp_pointer_gestures_v1` names them.
-enum GestureKind { kSwipe, kPinch, kHold };
+// A touchpad gesture the shell binds, as `zwp_pointer_gestures_v1` names them,
+// or one touchscreen finger in from a display's edge.
+enum GestureKind { kSwipe, kPinch, kHold, kEdge };
+
+// The side of the display an edge swipe came in from.
+enum GestureEdge { kLeft, kRight, kTop, kBottom };
 
 enum GesturePhase { kBegin, kUpdate, kEnd };
 
-// A gesture the shell grabs: its kind, and its finger count or 0 for any.
-// See DomicileHost::grabGesture.
+// A gesture the shell grabs: its kind, and its finger count or 0 for any. An
+// edge swipe's names its edge, or none for any. See DomicileHost::grabGesture.
 struct GestureGrab {
   GestureKind kind;
   uint32 fingers;
+  GestureEdge? edge;
 };
 
 // One phase of a grabbed gesture. `dx` and `dy` are this update's motion;
 // `scale` is a pinch's, relative to its begin, and `rotation` its update's,
-// in degrees clockwise. A hold has only a begin and an end.
+// in degrees clockwise. A hold has only a begin and an end. An edge swipe has
+// its `edge`, and nothing else does.
 struct Gesture {
   GestureKind kind;
   GesturePhase phase;
@@ -101,6 +107,7 @@ struct Gesture {
   double scale;
   double rotation;
   bool canceled;
+  GestureEdge? edge;
 };
 
 // What a client asked the chrome to show over its own surface.

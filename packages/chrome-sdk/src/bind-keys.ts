@@ -4,8 +4,9 @@
 // every press, from a `<webview>` or the page, as a `shortcut` event carrying
 // the chord.
 //
-// Touchpad gestures (`swipe:3:left`) bind beside chords and share their
-// modes. `grabGesture` takes each kind and count; the engine sends every
+// Touchpad gestures (`swipe:3:left`) and touchscreen edge swipes
+// (`edge:left`) bind beside chords and share their modes. `grabGesture`
+// takes each kind and count, or edge; the engine sends every
 // phase as a `gesture` event, and a binding runs once its gesture ends going
 // its way. See docs/architecture/GESTURES.md.
 //
@@ -68,7 +69,8 @@ export type KeyDesktop = {
  * - Every chord in every mode is grabbed once, until `unbind`. A key bound in
  *   any mode is grabbed from all clients while bound.
  * - So is every gesture's kind and count: `swipe:3:left` grabs every
- *   three-finger swipe, whichever way it goes.
+ *   three-finger swipe, whichever way it goes. An edge swipe's side is
+ *   grabbed: `edge:left` withholds only fingers landing at the left edge.
  * - `setMode` syncs the mode across pages without calling `onModeChanged`. An
  *   unknown mode falls back to `default` and is reported.
  *
