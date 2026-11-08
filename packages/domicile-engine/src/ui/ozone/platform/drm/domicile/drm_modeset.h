@@ -5,12 +5,13 @@
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_MODESET_H_
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "ui/display/types/display_color_management.h"
 #include "ui/display/types/display_configuration_params.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/display/types/native_display_observer.h"
@@ -34,6 +35,11 @@ class DrmScreen;
 // docs/CASTING-TO-TVS.md in the Domicile repository.
 std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
     const DomicileVirtualDisplay& display);
+
+// The curve a CRTC draws `ramp` with. Empty channels are an identity ramp,
+// not an empty curve: an empty curve leaves the CRTC's last ramp on it, so a
+// night light never turned off.
+display::GammaCurve GammaCurveOf(const DomicileGammaRamp& ramp);
 
 // Builds the modeset request for the connected displays. A free function so
 // it can be unit tested.
@@ -119,11 +125,11 @@ class DrmModeset : public display::NativeDisplayObserver {
   // `DrmVtSwitcher`.
   void Relight();
 
-  // Sets the white point every display draws with, as a gamma ramp per CRTC,
-  // for a night light. Kept and set again after each confirmed modeset, since
-  // a resume or a console switch back can leave another process's ramp on the
-  // CRTCs.
-  void SetWhitePoint(const DomicileWhitePoint& white_point);
+  // Sets the gamma ramp display `display_id` draws with, for a night light or
+  // a gamma-control client. Empty channels draw colors as they are. Kept per
+  // display and set again after each confirmed modeset, since a resume or a
+  // console switch back can leave another process's ramp on the CRTCs.
+  void SetGamma(int64_t display_id, DomicileGammaRamp ramp);
 
   // display::NativeDisplayObserver:
   void OnConfigurationChanged() override;
@@ -133,8 +139,10 @@ class DrmModeset : public display::NativeDisplayObserver {
   void OnDisplaysReceived(
       const std::vector<raw_ptr<display::DisplaySnapshot,
                                 VectorExperimental>>& snapshots);
-  // Sends `white_point_` to every display in `display_ids_`.
-  void ApplyWhitePoint();
+  // Sends each display in `display_ids_` its ramp in `ramps_`, if it has one.
+  void ApplyGamma();
+  // Sends display `id` its ramp.
+  void ApplyGammaTo(int64_t id, const DomicileGammaRamp& ramp);
 
   const std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   const raw_ptr<DrmScreen> screen_;  // Not owned; outlives this.
@@ -148,9 +156,9 @@ class DrmModeset : public display::NativeDisplayObserver {
   // The connectors of the last reading. Emptied when their snapshots are
   // invalidated, because the delegate's hosts for them go too.
   std::vector<int64_t> display_ids_;
-  // The compositor's last white point. Until it sends one, the ramps are left
-  // as they are.
-  std::optional<DomicileWhitePoint> white_point_;
+  // The compositor's last ramp for each display. A display it has sent none
+  // for keeps the ramp it has.
+  base::flat_map<int64_t, DomicileGammaRamp> ramps_;
   // Whether `delegate_->Configure` is still running. A real modeset is
   // answered on a later task, so an answer that arrives while this is true
   // came from this process, not the hardware. See `OnDisplaysReceived`.

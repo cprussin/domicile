@@ -256,7 +256,7 @@ Calls (compositor → engine):
 | `domicile_surface_submit_fenced(…, transform, acquire_fence)` | the same, read once `acquire_fence` signals, like `zwp_linux_surface_synchronization_v1`'s acquire fence. The compositor's shm copies use it ([WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)). |
 | `domicile_surface_sync(engine, surface, frame)` | a commit whose popup or bubble the page moves: later submits go up at synced frame `frame` ([Synced frames](WINDOW-COMPOSITING.md#synced-frames)) |
 | `domicile_displays_configure(layout, count)` | output configuration |
-| `domicile_displays_set_white_point(engine, red, green, blue)` | `wlr-gamma-control`: every monitor's white, 0 to 1 per channel, for the night light ([DISPLAYS.md](../DISPLAYS.md#night-light)) |
+| `domicile_displays_set_gamma(engine, display, ramp, size)` | `wlr-gamma-control`'s `set_gamma`: one monitor's ramp, for the night light or a client ([DISPLAYS.md](../DISPLAYS.md#night-light-and-gamma-control)) |
 | `domicile_input_inject(engine, input)` | none: emulated input (EIS) delivered as the engine's own devices' would be, on a headless desk ([A-HEADLESS-DESKTOP.md](A-HEADLESS-DESKTOP.md)) |
 | `domicile_pointers_configure(targets, count)` | input-to-output mapping, as sway's `map_to_output` ([DISPLAYS.md](../DISPLAYS.md#tablets-and-touchscreens)) |
 | `domicile_clipboard_set_items(clipboard, items, count)` | `wl_data_offer.receive`. The compositor sends the selection it already read: its text and its image, each a `DomicileClipboardItem`. `domicile_clipboard_set(clipboard, text, length)` is the text-only form an older compositor calls. |
@@ -272,7 +272,7 @@ Callbacks (engine → compositor):
 | `released(surface, buffer)` | `wl_buffer.release` |
 | `imported(surface, request, buffer)` | none: the answer to `domicile_surface_import_async`; zero is a refusal |
 | `configure(surface, width, height)`, `configure_at(…, scale)`, `configure_box(…, box)` | `xdg_toplevel.configure` |
-| `connected_displays(displays, count)` | `wl_output`. Primary first, never empty. Each display with its connector. `displays(displays, count)` is the form without connectors, called when `connected_displays` is unset. |
+| `ramped_displays(displays, count)` | `wl_output`. Primary first, never empty. Each display with its connector and gamma ramp size. `connected_displays` is the form without ramp sizes and `displays` the form without connectors, each called when the ones before it are unset. |
 | `copied_items(clipboard, items, count)` | `wl_data_device.set_selection` for a copy made in a page: its text and its image. `copied(clipboard, text, length)` is the text-only form, called when `copied_items` is unset. |
 | `captured(capture, frame, record)`, `capture_ended(capture)` | none: a monitor's frame for a screen cast, and the browser ending the capture |
 | `frame_done(surface, frame)` | `wl_surface.frame`'s `done`: viz acked the frame |

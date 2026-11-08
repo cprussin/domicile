@@ -153,12 +153,17 @@ export type System = {
     states: readonly WindowState[],
   ) => Promise<Result<"set", SystemError>>;
   /**
-   * Draw every monitor as if its white were a light of `kelvin`, 1000 to
-   * 6500, as a night light does; 6500 draws colors as they are. Lasts until
-   * the shell sets another, across reloads. Changes nothing on a nested
-   * desktop. Allowed while the desktop is locked.
+   * Draw `display` (a display's `name`), or every monitor when it is left
+   * out, as if its white were a light of `kelvin`, 1000 to 6500, as a
+   * night light does; 6500 draws colors as they are. Every monitor's replaces
+   * each one's. Lasts until the shell sets another, across reloads. Changes
+   * nothing on a nested desktop, nor on a monitor a night-light app such as
+   * gammastep holds. Allowed while the desktop is locked.
    */
-  setColorTemperature: (kelvin: number) => Promise<Result<"set", SystemError>>;
+  setColorTemperature: (
+    kelvin: number,
+    display?: string,
+  ) => Promise<Result<"set", SystemError>>;
   /**
    * Hear each maximize and fullscreen request a client makes. The compositor
    * grants none; grant one with {@link System.setWindowStates}. Allowed while
@@ -311,11 +316,16 @@ export const system = (host: SystemHost): System => {
         { call: "select_keymap", keymap: wireKeymapChoice(choice) },
         (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
-    setColorTemperature: (kelvin) =>
+    setColorTemperature: (kelvin, display) =>
       oneShot(
         calls,
-        // The compositor reads a whole number.
-        { call: "set_color_temperature", kelvin: Math.round(kelvin) },
+        {
+          call: "set_color_temperature",
+          // Left out for every monitor.
+          ...(display === undefined ? {} : { display }),
+          // The compositor reads a whole number.
+          kelvin: Math.round(kelvin),
+        },
         (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
     setWindowStates: (appId, states) =>

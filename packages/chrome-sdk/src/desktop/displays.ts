@@ -32,9 +32,12 @@ export type Displays = {
    */
   addVirtual: System["addVirtualMonitor"];
   /**
-   * Draw every monitor as if its white were a light of `kelvin` (1000 to
-   * 6500), as a night light does; 6500 draws colors as they are. Allowed while
-   * the desktop is locked. Changes nothing on a nested desktop.
+   * Draw `display` (a {@link Display.name}), or every monitor when it is
+   * left out, as if its white were a light of `kelvin` (1000 to 6500), as a
+   * night light does; 6500 draws colors as they are. Every monitor's replaces
+   * each one's. Allowed while the desktop is locked. Changes nothing on a
+   * nested desktop, nor on a monitor a night-light app such as gammastep
+   * holds.
    */
   setColorTemperature: System["setColorTemperature"];
   on: On<DisplaysListeners>;
@@ -61,7 +64,8 @@ export const displays = (
       change: (listener) =>
         hostEvent(host, "displayschanged", () => listener()),
     }),
-    setColorTemperature: (kelvin) => calls.setColorTemperature(kelvin),
+    setColorTemperature: (kelvin, display) =>
+      calls.setColorTemperature(kelvin, display),
   };
 };
 
