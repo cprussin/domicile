@@ -62,7 +62,8 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
   their own momentum from the axis stop and ignore the page's. The fling
   start goes before the stop, on a tty and nested: the stop's ended wheel
   phase ends the browser's wheel target, and a fling start reaches only
-  that target.
+  that target. A slow lift sends a zero-speed fling start, as Wayland does:
+  the browser ends a fling-capable touchpad's scroll only there.
 - `ui/ozone/platform/drm/domicile/drm_input_opens.{h,cc}` serializes logind
   claims by device number. Canceled replies close and release their claim
   before a replacement starts; cancellation also prevents retries and resumes.

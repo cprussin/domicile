@@ -135,6 +135,36 @@ else
     "the Wayland event source queues the stop first, so the browser drops the fling"
 fi
 
+# Once a device has flung, Chromium's MouseWheelPhaseHandler ends a touchpad
+# scroll only at a fling start. A slow lift with no fling leaves it mid-scroll,
+# and it drops the next scroll's wheels. Wayland sends one at zero speed.
+if python3 - "$PATCHES" <<'CHECK'
+from pathlib import Path
+import sys
+path = "ui/events/ozone/evdev/libinput_event_converter.cc"
+verdict = None
+for patch in sorted(Path(sys.argv[1]).glob("*.patch")):
+    post, inside = [], False
+    for line in patch.read_text().splitlines():
+        if line.startswith("diff --git "):
+            inside = line.endswith(" b/" + path)
+        elif inside and line[:1] in (" ", "+") and not line.startswith("+++"):
+            post.append(line[1:])
+    release = [i for i, l in enumerate(post) if "fling_tracker_.Release(" in l]
+    start = next((i for i, l in enumerate(post)
+                  if release and i > release[0] and "kScrollFlingStart" in l),
+                 None)
+    if start is not None:
+        verdict = not any("IsZero" in l for l in post[release[0]:start])
+sys.exit(0 if verdict else 1)
+CHECK
+then
+  ok "a slow lift still ends the scroll with a fling start"
+else
+  fail "a slow lift still ends the scroll with a fling start" \
+    "the converter skips the fling start at zero speed, so the browser drops the next scroll"
+fi
+
 # A native client runs its own momentum from the axis stop. The page's
 # momentum wheels reaching it too would glide it twice.
 APP="$SRC/third_party/blink/renderer/core/html/domicile/html_app_element.cc"

@@ -14,20 +14,29 @@ a tty, and the Wayland event source when nested. The stop native
 clients need follows it. A native window still skips the page's
 momentum wheels, so it runs only its own glide.
 
+A slow lift now sends a fling start too, at zero speed, as the Wayland
+event source always has. Once a device has sent a fling event, the
+browser's `MouseWheelPhaseHandler` treats it as a touchpad that cancels
+a fling when fingers land and starts one when they lift, and ends each
+scroll only at that fling start. Without it the handler stayed
+mid-scroll, so the next scroll's wheels came as changes to a scroll the
+router had already ended, and were dropped: slow two-finger scrolls
+soon after a flick went missing, on pages and native windows alike.
+
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- .../ozone/evdev/libinput_event_converter.cc   |  6 ++-
+ .../ozone/evdev/libinput_event_converter.cc   | 19 ++++++----
  .../wayland/host/wayland_event_source.cc      | 24 ++++++------
  .../wayland/host/wayland_pointer_unittest.cc  | 37 ++++++++++---------
  .../wayland_zwp_pointer_gestures_unittest.cc  | 18 ++++-----
- 4 files changed, 43 insertions(+), 42 deletions(-)
+ 4 files changed, 50 insertions(+), 48 deletions(-)
 
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 895fa85..b49af11 100644
+index 895fa85..a33ef99 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
-@@ -576,10 +576,11 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+@@ -576,19 +576,22 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
                              ScaleScrollAxis(raw_delta.y(), scroll_factor_)};
    active_scroll_axes_.Observe(params.native_scroll_source, delta.x() != 0,
                                delta.y() != 0, stop_x, stop_y);
@@ -37,13 +46,22 @@ index 895fa85..b49af11 100644
 -  // momentum from the stop above; a page glides only if told to.
 +  // momentum from the stop; a page glides only if told to. The fling goes
 +  // first: the stop ends the browser's wheel scroll, and a fling after it
-+  // would find no page to glide.
++  // would find no page to glide. A slow lift still sends one, at zero speed,
++  // as Wayland does: once a device has flung, the browser waits for a fling
++  // start to end each touchpad scroll, and the next scroll is dropped until
++  // one comes.
    if (finger && raw_delta.IsZero() && (stop_x || stop_y)) {
      const gfx::Vector2dF velocity = fling_tracker_.Release(Timestamp(evt));
-     if (!velocity.IsZero()) {
-@@ -589,6 +590,7 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
-           cursor_->GetLocation(), velocity, velocity, 2, Timestamp(evt)));
-     }
+-    if (!velocity.IsZero()) {
+-      flinging_ = true;
+-      dispatcher_->DispatchScrollEvent(ScrollEventParams(
+-          input_device_.id, EventType::kScrollFlingStart,
+-          cursor_->GetLocation(), velocity, velocity, 2, Timestamp(evt)));
+-    }
++    flinging_ = true;
++    dispatcher_->DispatchScrollEvent(ScrollEventParams(
++        input_device_.id, EventType::kScrollFlingStart, cursor_->GetLocation(),
++        velocity, velocity, 2, Timestamp(evt)));
    }
 +  dispatcher_->DispatchScrollEvent(params);
  }
