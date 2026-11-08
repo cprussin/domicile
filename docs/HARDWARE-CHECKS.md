@@ -23,6 +23,24 @@ In Manganese with windows on two workspaces of one monitor:
   previous one;
 - a three-finger swipe does not scroll the window under the pointer.
 
+## Touchscreen
+
+Unverified. On a tty, on a laptop's own touchscreen with no config, and with
+an external monitor too once the touchscreen is bound in `input.pointers`
+([Tablets and touchscreens](DISPLAYS.md#tablets-and-touchscreens)):
+
+- in a GTK or Qt app, a finger drag scrolls or selects as on any Wayland
+  desktop, and a two-finger pinch zooms where the app supports it;
+- in Google Chrome with `--ozone-platform=wayland`, a finger drag scrolls the
+  page and a pinch zooms it, and the shell around it stays put;
+- `xeyes` under Xwayland, or another client without touch, follows the first
+  finger as the pointer, and a tap clicks;
+- a finger on the shell outside every window works as before.
+
+`RUST_LOG=domicile_compositor=trace` logs each `touch` line the compositor
+gets. No line: the engine never forwarded the finger. A line with `touch
+down: no surface` after it: the compositor did not know the window.
+
 ## Suspend and resume
 
 Close the lid, then open it.

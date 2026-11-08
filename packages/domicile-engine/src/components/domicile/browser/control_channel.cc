@@ -752,6 +752,34 @@ void ControlChannel::PointerPinch(const std::string& app_id,
   Send(line);
 }
 
+void ControlChannel::Touch(const std::string& app_id, mojom::TouchPtr touch) {
+  base::DictValue message = ForApp("touch", app_id);
+  message.Set("time", static_cast<double>(touch->time));
+  switch (touch->phase) {
+    case mojom::TouchPhase::kDown:
+    case mojom::TouchPhase::kMotion:
+      message.Set("phase",
+                  touch->phase == mojom::TouchPhase::kDown ? "down" : "motion");
+      message.Set("id", touch->id);
+      message.Set("x", touch->x);
+      message.Set("y", touch->y);
+      break;
+    case mojom::TouchPhase::kUp:
+      message.Set("phase", "up");
+      message.Set("id", touch->id);
+      break;
+    case mojom::TouchPhase::kCancel:
+      message.Set("phase", "cancel");
+      break;
+  }
+  // As for a pinch: the Wayland clock is uint32, which base::Value's int is
+  // not, so whole doubles go out as integer tokens.
+  std::string line;
+  CHECK(base::JSONWriter::WriteWithOptions(
+      message, base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION, &line));
+  Send(line);
+}
+
 void ControlChannel::PointerAxis(const std::string& app_id,
                                  double dx,
                                  double dy,

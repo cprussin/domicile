@@ -13,6 +13,7 @@
 #include "ui/events/devices/input_device.h"
 #include "ui/events/devices/touch_device_transform.h"
 #include "ui/events/devices/touchscreen_device.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -93,6 +94,22 @@ TEST(DrmPointerTargetsTest, AnUnboundTabletOrAnUnpluggedDisplayBindsNothing) {
   EXPECT_TRUE(TouchTransformsFor({Tablet(kFirst, kFirstPhys)},
                                  {{.device = kTablet, .display_id = 9}},
                                  Heads())
+                  .empty());
+}
+
+TEST(DrmPointerTargetsTest, AnUnboundTouchscreenCoversTheOnlyDisplay) {
+  const std::vector<display::Display> one = {
+      display::Display(kLeft, gfx::Rect(0, 0, 1920, 1080))};
+  const std::vector<TouchDeviceTransform> transforms =
+      TouchTransformsFor({Tablet(kFirst, kFirstPhys)}, {}, one);
+
+  ASSERT_EQ(transforms.size(), 1u);
+  EXPECT_EQ(transforms[0].display_id, kLeft);
+  EXPECT_EQ(transforms[0].transform.MapPoint(gfx::PointF(16384, 16384)),
+            gfx::PointF(960, 540));
+  // One bound to a display that is gone stays unbound: the config said where.
+  EXPECT_TRUE(TouchTransformsFor({Tablet(kFirst, kFirstPhys)},
+                                 {{.device = kTablet, .display_id = 9}}, one)
                   .empty());
 }
 

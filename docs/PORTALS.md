@@ -217,8 +217,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   - A point lands on the window under it by the page's last window bounds;
     overlaps go to the focused window, then the smallest. A point over the
     shell reaches nothing: only the engine can deliver to the page.
-  - The seat has no touchscreen, so a touch is the left button, one finger
-    at a time.
+  - An emulated touch is the left button, one finger at a time: it takes
+    the engine's pointer injection path, not the touchscreen's.
   - On a headless desk, emulated input goes to the engine instead, which
     hands it to the shell's window as a real hand's, so it reaches the shell
     and its lock screen. See

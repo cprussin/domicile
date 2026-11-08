@@ -362,6 +362,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::PointerMotion { .. }
             | ClientRequest::PointerLeave
             | ClientRequest::PointerPinch { .. }
+            | ClientRequest::Touch { .. }
             | ClientRequest::PointerButton { .. }
             | ClientRequest::PointerAxis { .. },
         ) => Some(Refusal::Hand),
@@ -381,6 +382,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
         Asked::OnTheWaylandThread(
             ClientRequest::KeyboardFocus { .. }
             | ClientRequest::PinchOwnerGone { .. }
+            | ClientRequest::TouchOwnerGone { .. }
             | ClientRequest::SetOutputScale { .. }
             | ClientRequest::SetOutputSize { .. }
             | ClientRequest::SetAppBounds { .. }

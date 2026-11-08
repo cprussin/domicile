@@ -138,6 +138,7 @@ mod synced_moves;
 mod theme_turnover;
 mod thread_priority;
 mod timing_window;
+mod touch;
 mod tray;
 mod unlock_backoff;
 mod uploads;
@@ -464,6 +465,8 @@ struct DomicileCompositor {
     /// [`DomicileCompositor::let_go_of_lost_presses`].
     held_buttons: Vec<u32>,
     pinch: Option<pinch::ActivePinch>,
+    touches: Option<touch::ActiveTouches>,
+    touch_clients: touch::TouchClients,
     /// InputCapture sessions, which take input once the pointer reaches a
     /// barrier. Set when the Wayland loop starts serving EIS. See
     /// [`crate::eis`].
@@ -852,6 +855,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // `rebind_the_keys`.
     let keys = shell_config::keys(keyboard)?;
     seat.add_pointer();
+    // Always, so a client with touch support finds it before the first
+    // finger; a client without it gets the pointer (see `touch`).
+    seat.add_touch();
     let _pointer_gestures =
         smithay::wayland::pointer_gestures::PointerGesturesState::new::<DomicileCompositor>(&dh);
 
@@ -1309,6 +1315,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         pointer_app: None,
         held_buttons: Vec::new(),
         pinch: None,
+        touches: None,
+        touch_clients: touch::TouchClients::default(),
         captures: None,
         start: Instant::now(),
         last_commit: None,

@@ -168,6 +168,19 @@ impl Drop for PinchOwner<'_> {
     }
 }
 
+/// The touch points a connection put down end with it, as its pinch does.
+struct TouchOwner<'a> {
+    hub: &'a ChromeHub,
+    id: usize,
+}
+
+impl Drop for TouchOwner<'_> {
+    fn drop(&mut self) {
+        self.hub
+            .send_request(ClientRequest::TouchOwnerGone { owner: self.id });
+    }
+}
+
 fn read_chrome_messages(
     hub: &Arc<ChromeHub>,
     stream: UnixStream,
@@ -275,6 +288,7 @@ fn read_chrome_messages(
     // calls an app may. See `docs/architecture/APP-MODULES.md`.
     let mut app = false;
     let mut pinch_owner = None;
+    let mut touch_owner = None;
     for line in reader.lines() {
         let Ok(line) = line else { break };
         let said = parse_chrome(line.trim());
@@ -457,6 +471,20 @@ fn read_chrome_messages(
                     owner,
                     app_id,
                     pinch,
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::Touch { app_id, touch }) => {
+                let owner = touch_owner
+                    .get_or_insert_with(|| TouchOwner {
+                        hub,
+                        id: Arc::as_ptr(writer) as usize,
+                    })
+                    .id;
+                hub.send_request(ClientRequest::Touch {
+                    owner,
+                    app_id,
+                    touch,
                 });
                 Vec::new()
             }
