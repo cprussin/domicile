@@ -23,8 +23,8 @@ replaces them.
 | Meta+Shift+Q | Close the window. |
 | Meta+Space, Meta+D | Toggle the launcher, closing the overview. |
 | Meta+O | Toggle the overview. |
-| `pinch:4:inward` | Toggle the overview. |
-| `pinch:4:outward` | Toggle the launcher, closing the overview. |
+| `pinch:4:inward` / `pinch:4:outward` | `overview show` / `overview hide`: open and close the overview. |
+| `pinch:3:outward` | Toggle the launcher, closing the overview. |
 | Meta+Shift+V | Toggle the clipboard history. |
 | Meta+Shift+Space | Open the copied URL, or search Google for the copied text. Private from a private window. |
 | Meta+Shift+Return | Lock. Does nothing if the config has no `lock`. |

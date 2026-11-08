@@ -20,8 +20,12 @@ export const kill = () => command("kill");
 export const lock = () => command("lock");
 /** Toggle the launcher. */
 export const launcher = () => command("launcher");
-/** Toggle the overview: each screen's workspaces at once. */
-export const overview = () => command("overview");
+/**
+ * Toggle the overview: each screen's workspaces at once. `only` opens it
+ * without closing it, or closes it without opening it.
+ */
+export const overview = (only?: "hide" | "show") =>
+  only === undefined ? command("overview") : command("overview", only);
 /** Toggle the clipboard history. */
 export const clipboard = () => command("clipboard");
 /** Open the newest copy as a site if it is a URL, else search for it. */
@@ -134,8 +138,8 @@ const everyWorkspace = (
 /**
  * Default bindings for mode `default`: sway's, on Meta; touchpad swipes,
  * three fingers moving focus and four going sideways between workspaces and
- * down and up for the scratchpad; four fingers pinching in for the overview
- * and spreading for the launcher; and touchscreen swipes in from the sides
+ * down and up for the scratchpad; four fingers pinching in to open the
+ * overview and spreading to close it; three spreading for the launcher; and touchscreen swipes in from the sides
  * between workspaces. Spread into your own table to override individual keys.
  */
 export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
@@ -165,11 +169,11 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+v": split("v"),
   "Meta+w": layout("tabbed"),
   Print: screenshot(),
-  // Pinching in zooms out to the workspaces, and again back in.
-  "pinch:4:inward": overview(),
-  // Fingers spreading open the launcher, as on other desktops' app grids,
-  // closing the overview.
-  "pinch:4:outward": launcher(),
+  // Three fingers spreading open the launcher, closing the overview.
+  "pinch:3:outward": launcher(),
+  // Pinching in zooms out to the workspaces, and spreading zooms back in.
+  "pinch:4:inward": overview("show"),
+  "pinch:4:outward": overview("hide"),
   // Focus goes where the fingers point, as Meta+H/J/K/L do: nothing slides.
   "swipe:3:down": focus("down"),
   "swipe:3:left": focus("left"),

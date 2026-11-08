@@ -80,7 +80,7 @@ ones that have windows, and the one shown.
   windows and all.
 - Other window and workspace keys, and the bar's workspace buttons, do
   nothing while it is open.
-- Escape, Meta+O, another four-finger pinch in, or a click outside the
+- Escape, Meta+O, a four-finger spread, or a click outside the
   workspaces closes it. The launcher and clipboard close it too.
 
 ## Fullscreen

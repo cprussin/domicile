@@ -144,8 +144,8 @@ describe("manganese's default keys", () => {
     });
   });
 
-  it("open the launcher by spreading four fingers", () => {
-    expect(DEFAULT_KEYBINDINGS["pinch:4:outward"]).toEqual(launcher());
+  it("open the launcher by spreading three fingers", () => {
+    expect(DEFAULT_KEYBINDINGS["pinch:3:outward"]).toEqual(launcher());
   });
 
   it("move focus where three fingers swipe", () => {
@@ -160,10 +160,18 @@ describe("manganese's default keys", () => {
   it("open the overview on Meta+O or a four-finger pinch in", () => {
     expect(DEFAULT_KEYBINDINGS).toMatchObject({
       "Meta+o": overview(),
-      "pinch:4:inward": overview(),
+      "pinch:4:inward": overview("show"),
     });
     expect(overview()).toEqual({
       args: ["overview"],
+      kind: KeyActionKind.SendShell,
+    });
+  });
+
+  it("close the overview on a four-finger spread", () => {
+    expect(DEFAULT_KEYBINDINGS["pinch:4:outward"]).toEqual(overview("hide"));
+    expect(overview("hide")).toEqual({
+      args: ["overview", "hide"],
       kind: KeyActionKind.SendShell,
     });
   });

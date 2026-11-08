@@ -113,8 +113,9 @@ as Meta+H/J/K/L do. Four fingers move things: `swipe:4:left` and
 workspace following the fingers, as do `edge:right` and `edge:left`, and
 `swipe:4:down` and `swipe:4:up` are `scratchpad bring` and `scratchpad hide`:
 the scratchpad hangs from the top of the screen, so it is pulled down and
-pushed back up. `pinch:4:outward`, four fingers spreading, opens the launcher,
-and `pinch:4:inward` toggles the overview.
+pushed back up. `pinch:4:inward` opens the overview and `pinch:4:outward`
+closes it, zooming out to the workspaces and back in. `pinch:3:outward`, three
+fingers spreading, toggles the launcher.
 
 ## Key decisions
 
