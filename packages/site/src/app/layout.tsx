@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  description: "You're already running two compositors.",
+  description: "You're already running two compositors. Why not make it one?",
   metadataBase: new URL("https://domicile-desktop.com"),
   title: { default: "Domicile", template: "%s · Domicile" },
 };

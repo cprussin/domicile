@@ -25,9 +25,10 @@ import { shared } from "../page/shared";
 
 export const metadata = shared({
   description:
-    "For years we've run Chromium's compositor inside another compositor. Domicile asks what happens when the two become one: your desktop lays out websites, native apps become DOM elements, and browser features like casting, extensions and notifications become desktop features.",
+    "For years we've run Chromium's compositor inside another compositor. Domicile makes them one: your desktop lays out websites, native apps become DOM elements, and browser features like casting, extensions and notifications become desktop features.",
   path: "/",
-  title: "Domicile: you're already running two compositors",
+  title:
+    "Domicile: you're already running two compositors, why not make it one?",
 });
 
 /** domicile-desktop.com: Domicile, and building on it. */
