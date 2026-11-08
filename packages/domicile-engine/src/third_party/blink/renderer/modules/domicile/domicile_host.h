@@ -115,6 +115,12 @@ class MODULES_EXPORT DomicileHost final
                         bool pressed) override;
   void AppPointerLeave(const String& app_id) override;
   void AppPointerPinch(const String& app_id, const ui::NativePinch&) override;
+  void AppTouch(const String& app_id,
+                AppTouchPhase phase,
+                int32_t id,
+                uint32_t time,
+                const gfx::PointF& point,
+                const gfx::SizeF& size) override;
   void AppPointerAxis(const String& app_id,
                       double dx,
                       double dy,
@@ -401,6 +407,11 @@ class MODULES_EXPORT DomicileHost final
                           RegisteredEventListener&) override;
 
  private:
+  // `point` in an element `size` big, scaled into what `app_id`'s client drew.
+  gfx::PointF IntoClient(const String& app_id,
+                         const gfx::PointF& point,
+                         const gfx::SizeF& size) const;
+
   // Bound lazily, on first use rather than at construction: a shell that never
   // touches the channel should not make the browser reach for the compositor's
   // socket, and the browser holds that connection open once asked.
