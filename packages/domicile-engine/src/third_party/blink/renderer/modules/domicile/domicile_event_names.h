@@ -24,6 +24,7 @@
 #define DOMICILE_EVENT_NAMES(X)                       \
   X(shortcut, Shortcut)                               \
   X(shortcutrelease, Shortcutrelease)                 \
+  X(gesture, Gesture)                                 \
   X(focusrequested, Focusrequested)                   \
   X(displayschanged, Displayschanged)                 \
   X(browserwindowschanged, Browserwindowschanged)     \

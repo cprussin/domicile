@@ -5,9 +5,13 @@
 // `Meta+Shift+l` one grab, and lets a `shortcut` event's `chord` find its
 // binding. See `docs/architecture/KEYBINDINGS.md`.
 
+import { isGesture, spelledGesture } from "./gesture-binding";
 import type { KeyAction } from "./key-action";
 
-/** One mode's bindings, from chord (`Meta+Shift+l`) to action. */
+/**
+ * One mode's bindings, from chord (`Meta+Shift+l`) or touchpad gesture
+ * (`swipe:3:left`, see `gesture-binding.ts`) to action.
+ */
 export type ModeKeybindings = Readonly<Record<string, KeyAction>>;
 
 /** A shell's keybindings: the `default` mode plus other modes by name. */
@@ -18,7 +22,7 @@ export type ShellKeybindings = {
   readonly modes?: Readonly<Record<string, ModeKeybindings>>;
 };
 
-/** Each mode's bindings, by chord in its one spelling. */
+/** Each mode's bindings, by chord or gesture in its one spelling. */
 export type KeybindingsByMode = ReadonlyMap<
   string,
   ReadonlyMap<string, KeyAction>
@@ -66,22 +70,25 @@ export const ownKeybindings = (own: ShellKeybindings): KeybindingsByMode => {
 };
 
 /**
- * Every chord `own` binds in any mode, once each, in its one spelling. Throws
- * as {@link ownKeybindings} does.
+ * Every chord `own` binds in any mode, once each, in its one spelling, and no
+ * gestures. Throws as {@link ownKeybindings} does.
  */
 export const ownedChords = (own: ShellKeybindings): readonly string[] => [
   ...new Set(
-    [...ownKeybindings(own).values()].flatMap((byChord) => [...byChord.keys()]),
+    [...ownKeybindings(own).values()].flatMap((byChord) =>
+      [...byChord.keys()].filter((chord) => !isGesture(chord)),
+    ),
   ),
 ];
 
 /** One mode's bindings by chord. Throws on two spellings of one chord. */
 const filed = (bindings: ModeKeybindings): ReadonlyMap<string, KeyAction> =>
   Object.entries(bindings).reduce((by, [written, action]) => {
-    const chord = spelled(written);
+    const gesture = isGesture(written);
+    const chord = gesture ? spelledGesture(written) : spelled(written);
     if (by.has(chord)) {
       throw new Error(
-        `domicile: chord ${JSON.stringify(written)} is ${chord}, which this mode already binds`,
+        `domicile: ${gesture ? "gesture" : "chord"} ${JSON.stringify(written)} is ${chord}, which this mode already binds`,
       );
     }
     return by.set(chord, action);

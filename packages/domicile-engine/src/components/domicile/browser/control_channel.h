@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "base/timer/timer.h"
 #include "components/domicile/browser/desk_activity.h"
+#include "components/domicile/browser/desk_gestures.h"
 #include "components/domicile/browser/desk_pointer.h"
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/line_framer.h"
@@ -154,6 +155,8 @@ class ControlChannel : public mojom::ControlChannel {
   void ShellFailed(const std::string& serial, const std::string& why) override;
   void GrabShortcut(mojom::ShortcutPtr shortcut) override;
   void UngrabShortcut(mojom::ShortcutPtr shortcut) override;
+  void GrabGesture(mojom::GestureGrabPtr grab) override;
+  void UngrabGesture(mojom::GestureGrabPtr grab) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
   void PointerMotion(const std::string& app_id,
                      double x,
@@ -215,6 +218,9 @@ class ControlChannel : public mojom::ControlChannel {
   void DeliverShortcut(Chord chord);
   void DeliverRelease(Chord chord);
   void DeliverModifiers(Modifiers modifiers);
+  // A phase of a touchpad gesture this page took; see DeskGestures. Posted
+  // here for DeliverShortcut's reason: gestures arrive on the input thread.
+  void DeliverGesture(const ui::NativeGesture& gesture);
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
   void SomebodyIsHere(const std::string& input);
@@ -257,6 +263,9 @@ class ControlChannel : public mojom::ControlChannel {
   DeskActivity::ListenerId activity_;
   // And with the process's DeskPointer.
   DeskPointer::ListenerId pointer_;
+  // And with the process's DeskGestures, which forgets this page's grabs with
+  // it: a reloaded shell grabs its gestures again.
+  DeskGestures::ChannelId gestures_;
   // And with the process's ui::DeskCursorImageSource.
   ui::DeskCursorImageSource::ListenerId cursor_;
 

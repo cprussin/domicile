@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_extension_popup_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_notification.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_notification_action.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_gesture_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_tray_item.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_window.h"
@@ -124,6 +125,73 @@ class DensityChanged final : public MediaQueryListListener {
  private:
   const base::RepeatingClosure report_;
 };
+
+// A grabbed gesture as written, `swipe:3`: its kind, and its fingers or 0 for
+// any. Sway's grammar without the direction, which the SDK matches on the
+// gesture's motion. Two fingers are the page's.
+struct WrittenGesture {
+  domicile::mojom::blink::GestureKind kind;
+  uint32_t fingers = 0;
+};
+
+std::optional<WrittenGesture> ParseGesture(const String& written,
+                                           String* error) {
+  const wtf_size_t colon = written.find(':');
+  const String name = colon == kNotFound ? written : written.substr(0, colon);
+  const String count =
+      colon == kNotFound ? String() : written.substr(colon + 1);
+  WrittenGesture gesture;
+  if (name == "swipe") {
+    gesture.kind = domicile::mojom::blink::GestureKind::kSwipe;
+  } else if (name == "pinch") {
+    gesture.kind = domicile::mojom::blink::GestureKind::kPinch;
+  } else if (name == "hold") {
+    gesture.kind = domicile::mojom::blink::GestureKind::kHold;
+  } else {
+    *error = "gesture \"" + written +
+             "\" is not a swipe, pinch or hold; write it as `swipe:3`";
+    return std::nullopt;
+  }
+  if (count.IsNull()) {
+    return gesture;
+  }
+  if (count.length() != 1 || count[0] < '0' || count[0] > '9') {
+    *error = "gesture \"" + written + "\": \"" + count +
+             "\" is not a number of fingers";
+    return std::nullopt;
+  }
+  gesture.fingers = count[0] - '0';
+  if (gesture.fingers < 3) {
+    *error = "gesture \"" + written +
+             "\": two fingers are the page's; bind three or more";
+    return std::nullopt;
+  }
+  return gesture;
+}
+
+String GestureKindName(domicile::mojom::blink::GestureKind kind) {
+  switch (kind) {
+    case domicile::mojom::blink::GestureKind::kSwipe:
+      return "swipe";
+    case domicile::mojom::blink::GestureKind::kPinch:
+      return "pinch";
+    case domicile::mojom::blink::GestureKind::kHold:
+      return "hold";
+  }
+  NOTREACHED();
+}
+
+String GesturePhaseName(domicile::mojom::blink::GesturePhase phase) {
+  switch (phase) {
+    case domicile::mojom::blink::GesturePhase::kBegin:
+      return "begin";
+    case domicile::mojom::blink::GesturePhase::kUpdate:
+      return "update";
+    case domicile::mojom::blink::GesturePhase::kEnd:
+      return "end";
+  }
+  NOTREACHED();
+}
 
 }  // namespace
 
@@ -773,6 +841,54 @@ void DomicileHost::ungrabShortcut(ScriptState*,
       if (press) {
         UngrabUnclaimed(*press);
       }
+      return;
+    }
+  }
+}
+
+void DomicileHost::grabGesture(ScriptState*,
+                               const String& written,
+                               ExceptionState& exception_state) {
+  String error;
+  const std::optional<WrittenGesture> gesture = ParseGesture(written, &error);
+  if (!gesture) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError, error);
+    return;
+  }
+  if (!Ready(exception_state)) {
+    return;
+  }
+  for (GrabbedGesture& grabbed : gestures_) {
+    if (grabbed.written == written) {
+      ++grabbed.holds;
+      return;
+    }
+  }
+  gestures_.push_back(GrabbedGesture{written});
+  channel_->GrabGesture(domicile::mojom::blink::GestureGrab::New(
+      gesture->kind, gesture->fingers));
+}
+
+void DomicileHost::ungrabGesture(ScriptState*,
+                                 const String& written,
+                                 ExceptionState& exception_state) {
+  String error;
+  const std::optional<WrittenGesture> gesture = ParseGesture(written, &error);
+  if (!gesture) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError, error);
+    return;
+  }
+  if (!Ready(exception_state)) {
+    return;
+  }
+  for (wtf_size_t i = 0; i < gestures_.size(); ++i) {
+    if (gestures_[i].written == written) {
+      if (--gestures_[i].holds > 0) {
+        return;
+      }
+      gestures_.EraseAt(i);
+      channel_->UngrabGesture(domicile::mojom::blink::GestureGrab::New(
+          gesture->kind, gesture->fingers));
       return;
     }
   }
@@ -1435,6 +1551,20 @@ void DomicileHost::ShortcutPressed(
     domicile::mojom::blink::ShortcutPtr shortcut) {
   FireShortcut(DomicilePress{shortcut->keycode, shortcut->alt, shortcut->ctrl,
                              shortcut->shift, shortcut->meta});
+}
+
+void DomicileHost::GesturePerformed(
+    domicile::mojom::blink::GesturePtr gesture) {
+  // A window holding a shortcuts inhibitor has the desktop's gestures as well
+  // as its keys. Not held for a late listener, as a shortcut is: a gesture's
+  // updates are a stream, and a stale one moves nothing.
+  if (KeyboardWindowInhibitsShortcuts()) {
+    return;
+  }
+  DispatchEvent(*MakeGarbageCollected<DomicileGestureEvent>(
+      domicile_event_names::Gesture(), GestureKindName(gesture->kind),
+      GesturePhaseName(gesture->phase), gesture->fingers, gesture->dx,
+      gesture->dy, gesture->scale, gesture->rotation, gesture->canceled));
 }
 
 void DomicileHost::ShortcutReleased(
