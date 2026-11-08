@@ -4,6 +4,7 @@ import { Layout } from "./tree/node";
 import {
   clippedTo,
   collapsedAlong,
+  contentsScaledAbout,
   movingStyles,
   placedAt,
   scaledAbout,
@@ -113,10 +114,24 @@ describe("movingStyles", () => {
     );
   });
 
+  /** What the uncovered tab's contents have that its bar lacks. */
+  const uncoveringDelay = (): readonly string[] => {
+    const bar = classes(movingStyles({ motion: "uncovering" }));
+    return classes(
+      movingStyles({ contents: true, motion: "uncovering" }),
+    ).filter((name) => !bar.includes(name));
+  };
+
   it("holds the uncovered tab under the closing one for as long", () => {
+    expect(uncoveringDelay()).not.toHaveLength(0);
+    expect(delayed()).toEqual(expect.arrayContaining([...uncoveringDelay()]));
+  });
+
+  // A fade alone, over the tab it uncovers, reads as a tab switch.
+  it("shrinks a closing tab's contents rather than only fading them", () => {
     expect(
-      classes(movingStyles({ contents: true, motion: "uncovering" })),
-    ).toEqual(expect.arrayContaining([...delayed()]));
+      delayed().filter((name) => !uncoveringDelay().includes(name)),
+    ).not.toHaveLength(0);
   });
 
   it("starts other motions at once", () => {
@@ -174,5 +189,23 @@ describe("clippedTo", () => {
   // A float dragged across screens draws on both.
   it("leaves any other window unclipped", () => {
     expect(clippedTo(SCREEN, "resting")).toStrictEqual({});
+  });
+});
+
+describe("contentsScaledAbout", () => {
+  const tab = { height: 32, width: 100, x: 100, y: 0 };
+  const contents = { height: 400, width: 600, x: 0, y: 32 };
+
+  it("scales a window's contents about its whole frame", () => {
+    expect(contentsScaledAbout("closing", tab, contents)).toStrictEqual(
+      scaledAbout(tab, contents),
+    );
+  });
+
+  // Its frame is its tab, which only the bar collapses about.
+  it("shrinks a closing tab's contents about their own middle", () => {
+    expect(contentsScaledAbout("closing-tab", tab, contents)).toStrictEqual({
+      transformOrigin: "300px 200px",
+    });
   });
 });

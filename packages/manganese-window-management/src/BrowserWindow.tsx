@@ -68,13 +68,13 @@ import { isLeaving, isMoving } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
+  contentsScaledAbout,
   edgeStyles,
   heldStyles,
   keptAt,
   movingStyles,
   originOf,
   placedAt,
-  scaledAbout,
   settlingStyles,
   shuffledBy,
   windowStyles,
@@ -677,7 +677,7 @@ export const BrowserWindow = ({
           ? undefined
           : {
               ...placedAt(rect, depth),
-              ...scaledAbout(frame, rect),
+              ...contentsScaledAbout(motion, frame, rect),
               ...shuffledBy(restack),
             }
       }

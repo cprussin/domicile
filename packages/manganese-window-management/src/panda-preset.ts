@@ -86,8 +86,9 @@ export const windowManagementPreset = definePreset({
         // A closing tab collapses along its strip: `--collapse-x` in a tabbed
         // container, `--collapse-y` in a stack; see `collapsedAlong`.
         //
-        // A visible tab's contents get neither and only fade, since the next
-        // tab is drawn underneath at the same box (see `windowUncovering`).
+        // Only the bar plays it. A closing tab's contents shrink and fade
+        // with `windowClosing` over the tab drawn underneath at the same box
+        // (see `movingStyles`).
         windowClosingTab: {
           "0%": { opacity: "1", transform: "scale(1, 1)" },
           "100%": {
