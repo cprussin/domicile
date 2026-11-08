@@ -456,6 +456,11 @@ void HTMLAppElement::ForwardInput(AppInputClient& client,
     if (const auto* wheel = DynamicTo<WheelEvent>(event)) {
       const double per_detent = PerDetent(wheel->deltaMode());
       const auto& native = wheel->NativeEvent();
+      // The client runs its own momentum from the axis stop. A page's fling
+      // reaching it too would glide it twice.
+      if (native.momentum_phase != blink::WebMouseWheelEvent::kPhaseNone) {
+        return;
+      }
       const bool is_wheel =
           native.native_scroll_source == ui::NativeScrollSource::kWheel ||
           native.native_scroll_source == ui::NativeScrollSource::kWheelTilt;
