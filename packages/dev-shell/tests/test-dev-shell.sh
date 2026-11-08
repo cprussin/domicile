@@ -135,6 +135,13 @@ expect "the pinned engine is fetched when none was given" \
 expect "and it is the flake's own engine that is built" "yes" \
   "$(grep -q '#engine' "$WORK/nix.log" && echo yes || echo no)"
 
+# The turbo build already wrote `shell.js`. Vite's first watch build would
+# empty the output directory, and a desktop or reload loop started in that
+# window finds no shell (#1936).
+expect "the watcher keeps the last build while it rebuilds" "yes" \
+  "$(grep -qF 'vite build --watch --no-emptyOutDir' "$SCRIPT_UNDER_TEST" &&
+     echo yes || echo no)"
+
 # The refusals, from the real script.
 refuse() { "$SCRIPT_UNDER_TEST" "$@" 2>&1 | head -1; }
 expect "a shell nobody named is refused with the usage" \
