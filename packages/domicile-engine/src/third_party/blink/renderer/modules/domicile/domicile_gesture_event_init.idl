@@ -10,4 +10,5 @@ dictionary DomicileGestureEventInit : EventInit {
   double scale = 1;
   double rotation = 0;
   boolean canceled = false;
+  DOMString edge = "";
 };

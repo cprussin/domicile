@@ -19,8 +19,8 @@ using ui::NativeGestureSink;
 // Takes three-finger swipes, and records what it was handed.
 class RecordingSink : public NativeGestureSink {
  public:
-  bool Takes(NativeGestureKind kind, uint32_t fingers) override {
-    return kind == NativeGestureKind::kSwipe && fingers == 3;
+  bool Takes(const NativeGesture& begin) override {
+    return begin.kind == NativeGestureKind::kSwipe && begin.fingers == 3;
   }
   void Take(const NativeGesture& gesture) override {
     taken.push_back(gesture);
