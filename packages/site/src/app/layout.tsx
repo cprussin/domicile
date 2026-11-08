@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  description: "The web doesn't have to live in a window.",
+  description: "You're already running two compositors.",
   metadataBase: new URL("https://domicile-desktop.com"),
   title: { default: "Domicile", template: "%s · Domicile" },
 };

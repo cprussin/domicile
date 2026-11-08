@@ -1,6 +1,6 @@
 # Domicile
 
-**The web doesn't have to live in a window. Your desktop lays out websites, native windows are DOM elements, and Chromium *is* the compositor. May God have mercy on our souls.**
+**You're already running two compositors. Your desktop lays out websites, native windows are DOM elements, and Chromium *is* the compositor. May God have mercy on our souls.**
 
 Domicile is an experimental Linux desktop where a modified Chromium is the Wayland compositor. Native apps, websites and the desktop's own interface are elements on one web page, laid out with CSS and composited together.
 
