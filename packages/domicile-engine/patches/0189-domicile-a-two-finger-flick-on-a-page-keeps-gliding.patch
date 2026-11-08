@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a two-finger flick on a page keeps gliding
+
+libinput reports a scroll stop when the fingers lift and leaves momentum
+to whoever draws the content. Native clients run their own; a page on a
+tty got nothing and stopped dead.
+
+- `FlingTracker` (`ui/events/ozone/evdev/domicile/`) measures the speed
+  over the last 100 ms before the lift. Fingers resting 100 ms before
+  lifting give no fling.
+- At a finger stop, the converter dispatches `kScrollFlingStart` at that
+  speed, after the stop native clients need. The browser runs its own
+  fling curve, as for a Wayland touchpad.
+- The speed is the fingers' own: libinput's distance times the scroll
+  factor, as native clients get it. `ScrollAccelerator` still speeds up a
+  fast drag, but the glide does not carry its gain on.
+- Fingers resting on the pad (libinput 1.19's hold gesture, which the
+  machine's libinput sends though the sysroot's header lacks it) or
+  scrolling again dispatch `kScrollFlingCancel`, catching the page.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/events/ozone/evdev/BUILD.gn                |  2 +
+ .../ozone/evdev/libinput_event_converter.cc   | 49 +++++++++++++++++--
+ .../ozone/evdev/libinput_event_converter.h    |  6 +++
+ ui/ozone/platform/drm/BUILD.gn                |  1 +
+ 4 files changed, 54 insertions(+), 4 deletions(-)
+
+diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
+index c48df6a..91d42b9 100644
+--- a/ui/events/ozone/evdev/BUILD.gn
++++ b/ui/events/ozone/evdev/BUILD.gn
+@@ -52,6 +52,8 @@ component("evdev") {
+     "device_event_dispatcher_evdev.h",
+     "domicile/absolute_mouse_event_converter_evdev.cc",
+     "domicile/absolute_mouse_event_converter_evdev.h",
++    "domicile/fling_tracker.cc",
++    "domicile/fling_tracker.h",
+     "domicile/input_settings.cc",
+     "domicile/input_settings.h",
+     "domicile/scroll_accelerator.cc",
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
+index 40e39d8..895fa85 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.cc
++++ b/ui/events/ozone/evdev/libinput_event_converter.cc
+@@ -27,6 +27,11 @@ namespace ui {
+ 
+ namespace {
+ 
++// libinput 1.19's hold gestures. Chromium's sysroot has an older libinput,
++// whose header lacks them; the library on the machine sends them.
++constexpr int kHoldBegin = 806;
++constexpr int kHoldEnd = 807;
++
+ double GetAxisValue(libinput_event_pointer* const event,
+                     const libinput_pointer_axis axis) {
+   // Check has_axis before get_axis_value to avoid spamming the logs
+@@ -413,6 +418,12 @@ void LibInputEventConverter::HandleEvent(libinput_event* native_event) {
+   if (!IsEnabled()) {
+     return;
+   }
++  // Fingers resting on the pad catch a gliding page.
++  if (libinput_event_get_type(native_event) == kHoldBegin) {
++    CancelFling(base::TimeTicks() +
++                base::Microseconds(libinput_event_gesture_get_time_usec(
++                    libinput_event_get_gesture_event(native_event))));
++  }
+   if (HandleShellGesture(native_event)) {
+     return;
+   }
+@@ -538,6 +549,18 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+ 
+   DVLOG(3) << "Pointer axis h:" << h << ", v:" << v;
+ 
++  const bool finger = source == LIBINPUT_POINTER_AXIS_SOURCE_FINGER;
++  if (finger && !raw_delta.IsZero()) {
++    // Fingers moving again without resting first.
++    CancelFling(Timestamp(evt));
++    // The glide follows the fingers' own speed. Accelerated, it would carry
++    // the acceleration on after the fingers lift and overshoot.
++    fling_tracker_.Scroll(
++        gfx::Vector2dF(ScaleScrollAxis(raw_delta.x(), scroll_factor_),
++                       ScaleScrollAxis(raw_delta.y(), scroll_factor_)),
++        Timestamp(evt));
++  }
++
+   ScrollEventParams params(input_device_.id, EventType::kScroll,
+                            cursor_->GetLocation(), delta, delta, 2,
+                            Timestamp(evt));
+@@ -554,6 +577,28 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+   active_scroll_axes_.Observe(params.native_scroll_source, delta.x() != 0,
+                               delta.y() != 0, stop_x, stop_y);
+   dispatcher_->DispatchScrollEvent(params);
++
++  // libinput's stop is the fingers lifting. A native client runs its own
++  // momentum from the stop above; a page glides only if told to.
++  if (finger && raw_delta.IsZero() && (stop_x || stop_y)) {
++    const gfx::Vector2dF velocity = fling_tracker_.Release(Timestamp(evt));
++    if (!velocity.IsZero()) {
++      flinging_ = true;
++      dispatcher_->DispatchScrollEvent(ScrollEventParams(
++          input_device_.id, EventType::kScrollFlingStart,
++          cursor_->GetLocation(), velocity, velocity, 2, Timestamp(evt)));
++    }
++  }
++}
++
++void LibInputEventConverter::CancelFling(base::TimeTicks time) {
++  if (!flinging_) {
++    return;
++  }
++  flinging_ = false;
++  dispatcher_->DispatchScrollEvent(ScrollEventParams(
++      input_device_.id, EventType::kScrollFlingCancel, cursor_->GetLocation(),
++      gfx::Vector2dF(), gfx::Vector2dF(), 2, time));
+ }
+ 
+ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+@@ -583,10 +628,6 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+ }
+ 
+ bool LibInputEventConverter::HandleShellGesture(libinput_event* native_event) {
+-  // libinput 1.19's hold gestures. Chromium's sysroot has an older libinput,
+-  // whose header lacks them; the library on the machine sends them.
+-  constexpr int kHoldBegin = 806;
+-  constexpr int kHoldEnd = 807;
+   const int type = libinput_event_get_type(native_event);
+   NativeGesture gesture;
+   switch (type) {
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
+index 0c2ab6f..9717e38 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.h
++++ b/ui/events/ozone/evdev/libinput_event_converter.h
+@@ -16,6 +16,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "ui/events/domicile/native_gesture_sink.h"
+ #include "ui/events/ozone/evdev/domicile/active_scroll_axes.h"
++#include "ui/events/ozone/evdev/domicile/fling_tracker.h"
+ #include "ui/events/ozone/evdev/domicile/input_settings.h"
+ #include "ui/events/ozone/evdev/domicile/libinput_keyboard_event_converter.h"
+ #include "ui/events/ozone/evdev/domicile/scroll_accelerator.h"
+@@ -121,6 +122,8 @@ class LibInputEventConverter : public LibInputKeyboardEventConverter {
+   MouseButtonMapType ButtonMap() const;
+   void HandlePointerAxis(const LibInputEvent& evt);
+   void HandleWheel(const LibInputEvent& evt);
++  // Stops the page gliding from this device's last flick, if it is.
++  void CancelFling(base::TimeTicks time);
+   // Whether `event` was a touchpad gesture handled here: one of the shell's
+   // (see `NativeGestureSink`), or a swipe or hold, which only the shell binds.
+   bool HandleShellGesture(libinput_event* event);
+@@ -142,6 +145,9 @@ class LibInputEventConverter : public LibInputKeyboardEventConverter {
+ 
+   ActiveScrollAxes active_scroll_axes_;
+   ScrollAccelerator scroll_accelerator_;
++  FlingTracker fling_tracker_;
++  // A page is gliding from this device's last flick.
++  bool flinging_ = false;
+   double scroll_factor_ = 1;
+   std::optional<double> pinch_scale_;
+   NativeGestureSequence shell_gesture_;
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 7839d4c..ca20cba 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -301,6 +301,7 @@ source_set("gbm_unittests") {
+     # console is the one platform whose touchpad goes through libinput.
+     "//ui/events/ozone/evdev/domicile/absolute_mouse_event_converter_evdev_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/active_scroll_axes_unittest.cc",
++    "//ui/events/ozone/evdev/domicile/fling_tracker_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/input_settings_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/typing_guard_unittest.cc",
+-- 
+2.43.0
+
