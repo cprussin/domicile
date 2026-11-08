@@ -825,6 +825,16 @@ describe("BrowserWindow", () => {
       expect(view(container).hasAttribute("resizing")).toBe(false);
     });
 
+    // A window on another workspace was not drawn, so a heavy page can take
+    // frames to draw again as the switch slides it in. The desk must not
+    // wait for it.
+    it("marks its page while it slides in", () => {
+      const { container } = render(
+        <BrowserWindow {...windowProps} focused motion="arriving-from-start" />,
+      );
+      expect(view(container).hasAttribute("resizing")).toBe(true);
+    });
+
     it("answers the page with what is picked, and puts the picker away", async () => {
       const answers: string[] = [];
       const { container } = render(<BrowserWindow {...windowProps} focused />);

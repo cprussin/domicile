@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { barMotion, isMoving } from "./window-motion";
+import { barMotion, isMoving, isSlidingIn } from "./window-motion";
 
 describe("barMotion", () => {
   // The bar of a window in a tabbed container is its tab, which stays on
@@ -35,5 +35,23 @@ describe("isMoving", () => {
       isMoving("concealing"),
       isMoving("uncovering"),
     ]).toStrictEqual([false, false, false, false]);
+  });
+});
+
+describe("isSlidingIn", () => {
+  // These bring in a window that was not drawn, whose client draws again.
+  it("is a workspace switch or the scratchpad bringing the window in", () => {
+    expect([
+      isSlidingIn("arriving-from-end"),
+      isSlidingIn("arriving-from-start"),
+      isSlidingIn("dropping"),
+    ]).toStrictEqual([true, true, true]);
+  });
+
+  it("is not a slide taking the window away", () => {
+    expect([
+      isSlidingIn("leaving-to-end"),
+      isSlidingIn("stowing"),
+    ]).toStrictEqual([false, false]);
   });
 });

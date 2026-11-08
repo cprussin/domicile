@@ -29,7 +29,8 @@ export const PageTooltip = ({ view }: Props) => {
   useLayoutEffect(() => {
     const tip = ref.current;
     const page = tip?.offsetParent;
-    if (tip === null || !(page instanceof HTMLElement)) {
+    // Measured again for each text, since the tip's size follows it.
+    if (text === "" || tip === null || !(page instanceof HTMLElement)) {
       setPlace({ left: x, top: y + BELOW_POINTER });
     } else {
       const below = y + BELOW_POINTER;

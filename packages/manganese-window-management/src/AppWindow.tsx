@@ -20,7 +20,7 @@ import type { Settler } from "./useSettling";
 import { UPRIGHT, useSettling } from "./useSettling";
 import { appWindowId } from "./window";
 import type { WindowMotion } from "./window-motion";
-import { isLeaving, isMoving } from "./window-motion";
+import { isLeaving, isMoving, isSlidingIn } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
@@ -341,8 +341,13 @@ export const AppWindow = ({
         frame={String(syncedFrame)}
         ref={setElement}
         // Also while the box settles, so the engine neither holds the page
-        // for the client nor stretches its old frame.
-        resizing={resizing || settlingFrom !== undefined ? "" : undefined}
+        // for the client nor stretches its old frame, and while it slides in,
+        // so the slide does not wait for the client to draw again.
+        resizing={
+          resizing || settlingFrom !== undefined || isSlidingIn(motion)
+            ? ""
+            : undefined
+        }
         // Inline because the cursor and size are runtime values that Panda
         // cannot extract at build time.
         style={{
