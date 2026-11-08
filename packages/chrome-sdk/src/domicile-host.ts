@@ -151,6 +151,7 @@ export type DomicileGestureEventInit = EventInit & {
   scale?: number;
   rotation?: number;
   canceled?: boolean;
+  edge?: string;
 };
 
 export type DomicileShortcutEventInit = EventInit & {
@@ -447,17 +448,23 @@ export type DomicileExtensionPopupEvent = Event & {
 };
 
 /**
- * A phase of a touchpad gesture claimed with grabGesture().
+ * A phase of a gesture claimed with grabGesture().
  *
  * Its own type, like DomicileShortcutEvent: a gesture belongs to no window.
  */
 export type DomicileGestureEvent = Event & {
-  /** `swipe`, `pinch` or `hold`. */
+  /**
+   * `swipe`, `pinch` or `hold` on a touchpad, or `edge`: one touchscreen
+   * finger in from a display's edge.
+   */
   readonly kind: string;
   /** `begin`, `update` or `end`. */
   readonly phase: string;
   readonly fingers: number;
-  /** This update's motion, in the touchpad's accelerated pointer units. */
+  /**
+   * This update's motion, in the touchpad's accelerated pointer units, or an
+   * edge swipe's in the display's pixels.
+   */
   readonly dx: number;
   readonly dy: number;
   /**
@@ -468,6 +475,11 @@ export type DomicileGestureEvent = Event & {
   readonly rotation: number;
   /** On an end: the gesture was abandoned rather than finished. */
   readonly canceled: boolean;
+  /**
+   * An edge swipe's: the side it came in from, `left`, `right`, `top` or
+   * `bottom`. Empty for every other kind.
+   */
+  readonly edge: string;
 };
 
 /** Every event `DomicileHost` fires, by name. */
@@ -479,7 +491,7 @@ export type DomicileHostEventMap = {
    * modifiers did, wherever the keyboard is. As a DomicileShortcutEvent.
    */
   shortcutrelease: DomicileShortcutEvent;
-  /** A phase of a grabbed touchpad gesture, as a DomicileGestureEvent. */
+  /** A phase of a grabbed gesture, as a DomicileGestureEvent. */
   gesture: DomicileGestureEvent;
   /**
    * A client asked for the keyboard, as a DomicileAppEvent naming it; nothing
@@ -761,9 +773,11 @@ export type DomicileHost = {
    * Route a touchpad gesture to the page rather than to the window under the
    * pointer, in sway's grammar without the direction: `swipe:3`, `pinch:4`,
    * `hold`. A count left out is any of three fingers or more; two are the
-   * page's, for its scrolling, zoom and history. Each phase comes back as a
-   * `gesture` event. Counted, like grabShortcut(). While the window with the
-   * keyboard holds a shortcuts inhibitor, a grabbed gesture fires nothing.
+   * page's, for its scrolling, zoom and history. Or a touchscreen finger in
+   * from a display's edge: `edge:left`, `right`, `top` or `bottom`, or `edge`
+   * for any. Each phase comes back as a `gesture` event. Counted, like
+   * grabShortcut(). While the window with the keyboard holds a shortcuts
+   * inhibitor, a grabbed gesture fires nothing.
    *
    * Throws a SyntaxError for a gesture written wrong, or of fewer than three
    * fingers.

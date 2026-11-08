@@ -129,10 +129,38 @@ class DensityChanged final : public MediaQueryListListener {
 // A grabbed gesture as written, `swipe:3`: its kind, and its fingers or 0 for
 // any. Sway's grammar without the direction, which the SDK matches on the
 // gesture's motion. Two fingers are the page's.
+//
+// Or `edge:left`: one touchscreen finger in from that side of a display, or
+// from any side for `edge`. The engine withholds a finger landing on a side
+// grabbed, so the side is the grab's.
 struct WrittenGesture {
   domicile::mojom::blink::GestureKind kind;
   uint32_t fingers = 0;
+  std::optional<domicile::mojom::blink::GestureEdge> edge;
 };
+
+std::optional<WrittenGesture> ParseEdge(const String& written,
+                                        const String& side,
+                                        String* error) {
+  WrittenGesture gesture{domicile::mojom::blink::GestureKind::kEdge, 1};
+  if (side.IsNull()) {
+    return gesture;
+  }
+  if (side == "left") {
+    gesture.edge = domicile::mojom::blink::GestureEdge::kLeft;
+  } else if (side == "right") {
+    gesture.edge = domicile::mojom::blink::GestureEdge::kRight;
+  } else if (side == "top") {
+    gesture.edge = domicile::mojom::blink::GestureEdge::kTop;
+  } else if (side == "bottom") {
+    gesture.edge = domicile::mojom::blink::GestureEdge::kBottom;
+  } else {
+    *error = "gesture \"" + written + "\": \"" + side +
+             "\" is not an edge; write left, right, top or bottom";
+    return std::nullopt;
+  }
+  return gesture;
+}
 
 std::optional<WrittenGesture> ParseGesture(const String& written,
                                            String* error) {
@@ -140,6 +168,9 @@ std::optional<WrittenGesture> ParseGesture(const String& written,
   const String name = colon == kNotFound ? written : written.substr(0, colon);
   const String count =
       colon == kNotFound ? String() : written.substr(colon + 1);
+  if (name == "edge") {
+    return ParseEdge(written, count, error);
+  }
   WrittenGesture gesture;
   if (name == "swipe") {
     gesture.kind = domicile::mojom::blink::GestureKind::kSwipe;
@@ -149,7 +180,7 @@ std::optional<WrittenGesture> ParseGesture(const String& written,
     gesture.kind = domicile::mojom::blink::GestureKind::kHold;
   } else {
     *error = "gesture \"" + written +
-             "\" is not a swipe, pinch or hold; write it as `swipe:3`";
+             "\" is not a swipe, pinch, hold or edge; write it as `swipe:3`";
     return std::nullopt;
   }
   if (count.IsNull()) {
@@ -177,6 +208,26 @@ String GestureKindName(domicile::mojom::blink::GestureKind kind) {
       return "pinch";
     case domicile::mojom::blink::GestureKind::kHold:
       return "hold";
+    case domicile::mojom::blink::GestureKind::kEdge:
+      return "edge";
+  }
+  NOTREACHED();
+}
+
+String GestureEdgeName(
+    std::optional<domicile::mojom::blink::GestureEdge> edge) {
+  if (!edge) {
+    return g_empty_string;
+  }
+  switch (*edge) {
+    case domicile::mojom::blink::GestureEdge::kLeft:
+      return "left";
+    case domicile::mojom::blink::GestureEdge::kRight:
+      return "right";
+    case domicile::mojom::blink::GestureEdge::kTop:
+      return "top";
+    case domicile::mojom::blink::GestureEdge::kBottom:
+      return "bottom";
   }
   NOTREACHED();
 }
@@ -866,7 +917,7 @@ void DomicileHost::grabGesture(ScriptState*,
   }
   gestures_.push_back(GrabbedGesture{written});
   channel_->GrabGesture(domicile::mojom::blink::GestureGrab::New(
-      gesture->kind, gesture->fingers));
+      gesture->kind, gesture->fingers, gesture->edge));
 }
 
 void DomicileHost::ungrabGesture(ScriptState*,
@@ -888,7 +939,7 @@ void DomicileHost::ungrabGesture(ScriptState*,
       }
       gestures_.EraseAt(i);
       channel_->UngrabGesture(domicile::mojom::blink::GestureGrab::New(
-          gesture->kind, gesture->fingers));
+          gesture->kind, gesture->fingers, gesture->edge));
       return;
     }
   }
@@ -1602,7 +1653,8 @@ void DomicileHost::GesturePerformed(
   DispatchEvent(*MakeGarbageCollected<DomicileGestureEvent>(
       domicile_event_names::Gesture(), GestureKindName(gesture->kind),
       GesturePhaseName(gesture->phase), gesture->fingers, gesture->dx,
-      gesture->dy, gesture->scale, gesture->rotation, gesture->canceled));
+      gesture->dy, gesture->scale, gesture->rotation, gesture->canceled,
+      GestureEdgeName(gesture->edge)));
 }
 
 void DomicileHost::ShortcutReleased(

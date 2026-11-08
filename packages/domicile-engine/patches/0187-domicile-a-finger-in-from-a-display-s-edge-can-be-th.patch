@@ -1,0 +1,119 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 8 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a finger in from a display's edge can be the
+ shell's
+
+A touchscreen finger went straight to the page, so a shell could not bind
+a swipe in from the screen's edge, as phones and tablets open their
+panels and switch their spaces.
+
+- EventFactoryEvdev hands each touch to TouchEdgeSwipes before
+  dispatching it (DispatchTouchEventNow). A finger landing at the edge of
+  the display its touchscreen is bound to, on a side the shell grabbed,
+  is withheld until EdgeSwipe decides. In far enough, it goes to the
+  NativeGestureSink as an edge gesture and the page never has it. Along
+  the edge, a tap, a second finger or 250 ms still, and the withheld
+  touches go to the page as they came.
+- `ui/events` builds EdgeSwipe; `ui/events/ozone/evdev` builds
+  TouchEdgeSwipes.
+
+EdgeSwipe and TouchEdgeSwipes are new files under src/.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/events/BUILD.gn                           | 2 ++
+ ui/events/ozone/evdev/BUILD.gn               | 2 ++
+ ui/events/ozone/evdev/event_factory_evdev.cc | 9 ++++++++-
+ ui/events/ozone/evdev/event_factory_evdev.h  | 9 +++++++++
+ 4 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/ui/events/BUILD.gn b/ui/events/BUILD.gn
+index 60a0335..e9b53fc 100644
+--- a/ui/events/BUILD.gn
++++ b/ui/events/BUILD.gn
+@@ -269,6 +269,8 @@ component("events") {
+   ]
+ 
+   sources = [
++    "domicile/edge_swipe.cc",
++    "domicile/edge_swipe.h",
+     "domicile/native_gesture_sink.cc",
+     "domicile/native_gesture_sink.h",
+     "domicile/scroll_metadata.h",
+diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
+index 0602b58..c48df6a 100644
+--- a/ui/events/ozone/evdev/BUILD.gn
++++ b/ui/events/ozone/evdev/BUILD.gn
+@@ -57,6 +57,8 @@ component("evdev") {
+     "domicile/scroll_accelerator.cc",
+     "domicile/scroll_accelerator.h",
+     "domicile/scroll_factor.h",
++    "domicile/touch_edge_swipes.cc",
++    "domicile/touch_edge_swipes.h",
+     "domicile/typing_guard.cc",
+     "domicile/typing_guard.h",
+     "domicile/wheel_ticks.cc",
+diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
+index 782b069..e7b626c 100644
+--- a/ui/events/ozone/evdev/event_factory_evdev.cc
++++ b/ui/events/ozone/evdev/event_factory_evdev.cc
+@@ -241,7 +241,10 @@ EventFactoryEvdev::EventFactoryEvdev(
+                         &mouse_button_map_,
+                         &pointing_stick_button_map_),
+       opener_factory_(std::move(opener_factory)),
+-      touch_id_generator_(0) {
++      touch_id_generator_(0),
++      edge_swipes_(
++          base::BindRepeating(&EventFactoryEvdev::DispatchTouchEventNow,
++                              base::Unretained(this))) {
+   DCHECK(device_manager_);
+ }
+ 
+@@ -415,7 +418,11 @@ void EventFactoryEvdev::DispatchScrollEvent(const ScrollEventParams& params) {
+ void EventFactoryEvdev::DispatchTouchEvent(const TouchEventParams& params) {
+   TRACE_EVENT1("evdev", "EventFactoryEvdev::DispatchTouchEvent", "device",
+                params.device_id);
++  // DOMICILE: on to DispatchTouchEventNow, now, later or never.
++  edge_swipes_.Touch(params);
++}
+ 
++void EventFactoryEvdev::DispatchTouchEventNow(const TouchEventParams& params) {
+   gfx::PointF location = GetTransformedEventLocation(params);
+   PointerDetails details = GetTransformedEventPointerDetails(params);
+   details.twist = 0.f;
+diff --git a/ui/events/ozone/evdev/event_factory_evdev.h b/ui/events/ozone/evdev/event_factory_evdev.h
+index b374fc8..2a2763a 100644
+--- a/ui/events/ozone/evdev/event_factory_evdev.h
++++ b/ui/events/ozone/evdev/event_factory_evdev.h
+@@ -15,6 +15,7 @@
+ #include "ui/events/event_modifiers.h"
+ #include "ui/events/ozone/device/device_event_observer.h"
+ #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
++#include "ui/events/ozone/evdev/domicile/touch_edge_swipes.h"
+ #include "ui/events/ozone/evdev/event_thread_evdev.h"
+ #include "ui/events/ozone/evdev/input_controller_evdev.h"
+ #include "ui/events/ozone/evdev/input_device_opener.h"
+@@ -139,6 +140,9 @@ class COMPONENT_EXPORT(EVDEV) EventFactoryEvdev : public DeviceEventObserver,
+   // Dispatch event via PlatformEventSource.
+   void DispatchUiEvent(ui::Event* event);
+ 
++  // DOMICILE: a touch `edge_swipes_` let through.
++  void DispatchTouchEventNow(const TouchEventParams& params);
++
+   int NextDeviceId();
+ 
+   // Device thread initialization.
+@@ -193,6 +197,11 @@ class COMPONENT_EXPORT(EVDEV) EventFactoryEvdev : public DeviceEventObserver,
+ 
+   scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner_;
+ 
++  // DOMICILE: a touchscreen finger in from its display's edge, which the shell
++  // may bind, goes through here before the page has it. Last, so it goes
++  // first: its timers call back into this.
++  TouchEdgeSwipes edge_swipes_;
++
+   // Support weak pointers for attach & detach callbacks.
+   base::WeakPtrFactory<EventFactoryEvdev> weak_ptr_factory_{this};
+ };

@@ -25,7 +25,8 @@ DomicileGestureEvent::DomicileGestureEvent(
       dy_(initializer->dy()),
       scale_(initializer->scale()),
       rotation_(initializer->rotation()),
-      canceled_(initializer->canceled()) {}
+      canceled_(initializer->canceled()),
+      edge_(initializer->edge()) {}
 
 DomicileGestureEvent::DomicileGestureEvent(const AtomicString& type,
                                            const String& kind,
@@ -35,7 +36,8 @@ DomicileGestureEvent::DomicileGestureEvent(const AtomicString& type,
                                            double dy,
                                            double scale,
                                            double rotation,
-                                           bool canceled)
+                                           bool canceled,
+                                           const String& edge)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       kind_(kind),
       phase_(phase),
@@ -44,7 +46,8 @@ DomicileGestureEvent::DomicileGestureEvent(const AtomicString& type,
       dy_(dy),
       scale_(scale),
       rotation_(rotation),
-      canceled_(canceled) {}
+      canceled_(canceled),
+      edge_(edge) {}
 
 DomicileGestureEvent::~DomicileGestureEvent() = default;
 

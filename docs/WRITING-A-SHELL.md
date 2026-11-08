@@ -262,7 +262,8 @@ by canceling its `wheel` events, as it can other default input handling.
 A finger on an `<app>` reaches the client as a touch point, or as the pointer
 for a client that reads no touch. `<app>` has `touch-action: none`, so the
 page never pans or zooms under a window. A shell can take a finger by
-canceling its pointer events.
+canceling its pointer events, or bind a swipe in from a screen's edge
+(`edge:left`) with `bindKeys`, as it binds touchpad gestures.
 
 **Tests:** hand `FakeDomicileHost`'s `domicile` to your shell. `set` changes
 attributes and says they changed, `appear`, `change` and `close` edit the

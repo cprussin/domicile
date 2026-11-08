@@ -58,9 +58,9 @@ void DeskGestures::Ungrab(ChannelId channel, GestureGrab grab) {
   std::erase(found->grabs, grab);
 }
 
-bool DeskGestures::Takes(ui::NativeGestureKind kind, uint32_t fingers) {
+bool DeskGestures::Takes(const ui::NativeGesture& begin) {
   base::AutoLock held(lock_);
-  return Grabbing(kind, fingers) != nullptr;
+  return Grabbing(begin) != nullptr;
 }
 
 void DeskGestures::Take(const ui::NativeGesture& gesture) {
@@ -68,7 +68,7 @@ void DeskGestures::Take(const ui::NativeGesture& gesture) {
   {
     base::AutoLock held(lock_);
     if (gesture.phase == ui::NativeGesturePhase::kBegin) {
-      const Channel* grabbing = Grabbing(gesture.kind, gesture.fingers);
+      const Channel* grabbing = Grabbing(gesture);
       owner_ = grabbing ? std::optional<ChannelId>(grabbing->id)
                         : std::nullopt;
     }
@@ -86,11 +86,12 @@ void DeskGestures::Take(const ui::NativeGesture& gesture) {
 }
 
 const DeskGestures::Channel* DeskGestures::Grabbing(
-    ui::NativeGestureKind kind,
-    uint32_t fingers) const {
+    const ui::NativeGesture& begin) const {
   auto found = std::ranges::find_if(channels_, [&](const Channel& channel) {
     return std::ranges::any_of(channel.grabs, [&](const GestureGrab& grab) {
-      return grab.kind == kind && (grab.fingers == 0 || grab.fingers == fingers);
+      return grab.kind == begin.kind &&
+             (grab.fingers == 0 || grab.fingers == begin.fingers) &&
+             (!grab.edge || grab.edge == begin.edge);
     });
   });
   return found == channels_.end() ? nullptr : &*found;

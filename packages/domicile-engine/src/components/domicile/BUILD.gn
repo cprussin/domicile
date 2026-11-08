@@ -1140,6 +1140,7 @@ source_set("unit_tests") {
     "browser/will_navigate_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
+    "common/edge_swipe_unittest.cc",
     "common/forwarded_keys_unittest.cc",
     "common/held_chords_unittest.cc",
     "common/locale_fallback_unittest.cc",

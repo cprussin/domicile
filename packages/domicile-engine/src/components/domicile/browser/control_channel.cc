@@ -77,6 +77,8 @@ ui::NativeGestureKind GestureKindFromMojo(mojom::GestureKind kind) {
       return ui::NativeGestureKind::kPinch;
     case mojom::GestureKind::kHold:
       return ui::NativeGestureKind::kHold;
+    case mojom::GestureKind::kEdge:
+      return ui::NativeGestureKind::kEdge;
   }
   NOTREACHED();
 }
@@ -89,6 +91,44 @@ mojom::GestureKind GestureKindToMojo(ui::NativeGestureKind kind) {
       return mojom::GestureKind::kPinch;
     case ui::NativeGestureKind::kHold:
       return mojom::GestureKind::kHold;
+    case ui::NativeGestureKind::kEdge:
+      return mojom::GestureKind::kEdge;
+  }
+  NOTREACHED();
+}
+
+std::optional<ui::NativeGestureEdge> GestureEdgeFromMojo(
+    std::optional<mojom::GestureEdge> edge) {
+  if (!edge) {
+    return std::nullopt;
+  }
+  switch (*edge) {
+    case mojom::GestureEdge::kLeft:
+      return ui::NativeGestureEdge::kLeft;
+    case mojom::GestureEdge::kRight:
+      return ui::NativeGestureEdge::kRight;
+    case mojom::GestureEdge::kTop:
+      return ui::NativeGestureEdge::kTop;
+    case mojom::GestureEdge::kBottom:
+      return ui::NativeGestureEdge::kBottom;
+  }
+  NOTREACHED();
+}
+
+std::optional<mojom::GestureEdge> GestureEdgeToMojo(
+    std::optional<ui::NativeGestureEdge> edge) {
+  if (!edge) {
+    return std::nullopt;
+  }
+  switch (*edge) {
+    case ui::NativeGestureEdge::kLeft:
+      return mojom::GestureEdge::kLeft;
+    case ui::NativeGestureEdge::kRight:
+      return mojom::GestureEdge::kRight;
+    case ui::NativeGestureEdge::kTop:
+      return mojom::GestureEdge::kTop;
+    case ui::NativeGestureEdge::kBottom:
+      return mojom::GestureEdge::kBottom;
   }
   NOTREACHED();
 }
@@ -106,7 +146,8 @@ mojom::GesturePhase GesturePhaseToMojo(ui::NativeGesturePhase phase) {
 }
 
 GestureGrab GestureGrabFromMojo(const mojom::GestureGrab& grab) {
-  return GestureGrab{GestureKindFromMojo(grab.kind), grab.fingers};
+  return GestureGrab{GestureKindFromMojo(grab.kind), grab.fingers,
+                     GestureEdgeFromMojo(grab.edge)};
 }
 
 }  // namespace
@@ -884,7 +925,8 @@ void ControlChannel::DeliverGesture(const ui::NativeGesture& gesture) {
     client_->GesturePerformed(mojom::Gesture::New(
         GestureKindToMojo(gesture.kind), GesturePhaseToMojo(gesture.phase),
         gesture.fingers, gesture.dx, gesture.dy, gesture.scale,
-        gesture.rotation, gesture.canceled));
+        gesture.rotation, gesture.canceled,
+        GestureEdgeToMojo(gesture.edge)));
   }
 }
 
