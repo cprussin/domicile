@@ -132,9 +132,9 @@ pushed back up. `pinch:4:outward`, four fingers spreading, opens the launcher.
 - **What the shell leaves, the apps get.** A swipe or hold the shell did not
   grab goes to the window under the pointer, so in Manganese, which binds
   swipes of three and four fingers, a five-finger swipe or any hold reaches
-  the app. The browser recognizes these, not a page,
-  so the compositor picks the window from where the pointer is. A browser
-  window under the pointer gets nothing: Chrome has no use for them.
+  the app. The browser recognizes these, not a page, so the compositor picks
+  the window from where the pointer is. A browser window under the pointer
+  gets nothing: Chrome has no use for them.
 - **A shortcut inhibitor silences gesture bindings,** as it does keys, but the
   window holding it does not get them yet: the engine takes the gesture before
   it knows. See [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md).
