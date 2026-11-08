@@ -2,7 +2,6 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ReactNode } from "react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
 
-import { cx } from "../styled-system/css";
 import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
@@ -20,7 +19,7 @@ import { GrabbingSheet } from "./GrabbingSheet";
 import { GroupTitleBar } from "./GroupTitleBar";
 import { GroupWell } from "./GroupWell";
 import type { Modifiers } from "./keyboard/useModifiers";
-import { seenAt, seenStyles } from "./overview/seen-styles";
+import { seenAt, seenClip, seenStyles } from "./overview/seen-styles";
 import type { OverviewSight, Seen } from "./overview/sight";
 import type {
   Geometry,
@@ -1345,24 +1344,26 @@ const Sliding = ({
   seen: Seen | undefined;
 }) => (
   <div
-    className={cx(
-      screenClipStyles,
-      seenStyles({
-        fading: seen?.fading ?? false,
-        showing: seen?.showing ?? false,
-      }),
-    )}
+    className={screenClipStyles}
     style={
       on === undefined
         ? undefined
         : {
             ...slidAcross(on.geometry.screen, frame, motion, rewound),
             ...clippedTo(on.geometry.screen, motion),
-            ...seenAt(seen, on.geometry.screen, depth),
+            ...seenClip(seen, on.geometry.screen, depth),
           }
     }
   >
-    {children}
+    <div
+      className={seenStyles({
+        arriving: seen?.arriving !== undefined,
+        fading: seen?.fading ?? false,
+      })}
+      style={seenAt(seen, on?.geometry.screen)}
+    >
+      {children}
+    </div>
   </div>
 );
 

@@ -266,7 +266,13 @@ const distance = ([fromX, fromY]: Spot, [toX, toY]: Spot): number =>
   Math.hypot(toX - fromX, toY - fromY);
 
 // A finger drags windows rather than scrolling or zooming the page.
-const pickerStyles = css({ outline: "none", touchAction: "none" });
+const pickerStyles = css({
+  // The rings come in with the names, once the overview has all but landed.
+  animation:
+    "overviewShowing {durations.normal} {easings.out} {durations.slow} backwards",
+  outline: "none",
+  touchAction: "none",
+});
 
 // Rings drawn outside the tile, so they never cover its windows: the accent
 // for the workspace on screen, white under the pointer or keyboard.

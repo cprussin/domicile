@@ -1,8 +1,7 @@
 import { PopupBoundary } from "@domicile-desktop/component-library/PopupBoundary";
 import type { ReactNode } from "react";
 
-import { cx } from "../styled-system/css";
-import { seenAt, seenStyles } from "./overview/seen-styles";
+import { seenAt, seenClip, seenStyles } from "./overview/seen-styles";
 import type { Seen } from "./overview/sight";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
@@ -70,13 +69,7 @@ export const WindowFrame = ({
   seen,
 }: Props) => (
   <div
-    className={cx(
-      screenClipStyles,
-      seenStyles({
-        fading: seen?.fading ?? false,
-        showing: seen?.showing ?? false,
-      }),
-    )}
+    className={screenClipStyles}
     {...{ [WINDOW_FRAME]: "" }}
     onPointerDown={onReach}
     // `pointerover` bubbles from whichever part the pointer entered.
@@ -89,10 +82,19 @@ export const WindowFrame = ({
         : {
             ...slidAcross(screen, frame, motion, rewound),
             ...clippedTo(screen, motion),
-            ...seenAt(seen, screen, depth),
+            ...seenClip(seen, screen, depth),
           }
     }
   >
-    <PopupBoundary box={frame}>{children}</PopupBoundary>
+    <div
+      className={seenStyles({
+        arriving: seen?.arriving !== undefined,
+        fading: seen?.fading ?? false,
+        placed: frame !== undefined,
+      })}
+      style={seenAt(seen, screen)}
+    >
+      <PopupBoundary box={frame}>{children}</PopupBoundary>
+    </div>
   </div>
 );

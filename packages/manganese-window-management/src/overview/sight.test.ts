@@ -48,33 +48,43 @@ describe("sightOf", () => {
   it("shrinks each workspace into its tile", () => {
     const sight = sightOf([overviewOf(false)]);
 
-    expect(sight.shown.get("left")).toStrictEqual({
-      fading: false,
-      showing: false,
-      view: { scale: 0.1, x: 100, y: 50 },
+    expect(sight.shown.get("left")?.view).toStrictEqual({
+      scale: 0.1,
+      x: 100,
+      y: 50,
     });
-    expect(sight.hidden.get("app:kitty")).toStrictEqual({
+    expect(sight.hidden.get("app:kitty")).toMatchObject({
       placement: KITTY,
       screen: "left",
-      seen: {
-        fading: false,
-        showing: true,
-        view: { scale: 0.1, x: 400, y: 50 },
-      },
+      seen: { fading: false, view: { scale: 0.1, x: 400, y: 50 } },
     });
   });
 
-  it("grows the shown workspace back and fades the rest while closing", () => {
+  it("pulls back from the shown workspace: the others arrive from where they sit beside it", () => {
+    // Workspace 2's tile is 300px right of 1's at a tenth of full size, so at
+    // full size it starts 3000px right: past the screen's right edge.
+    const sight = sightOf([overviewOf(false)]);
+
+    expect(sight.shown.get("left")?.arriving).toBeUndefined();
+    expect(sight.hidden.get("app:kitty")?.seen.arriving).toStrictEqual({
+      scale: 1,
+      x: 3000,
+      y: 0,
+    });
+  });
+
+  it("pushes back in while closing: the shown workspace fills its screen and the rest leave beside it", () => {
     const sight = sightOf([overviewOf(true)]);
 
     expect(sight.shown.get("left")).toStrictEqual({
+      arriving: undefined,
       fading: false,
-      showing: false,
       view: { scale: 1, x: 0, y: 0 },
     });
-    expect(sight.hidden.get("app:kitty")?.seen).toMatchObject({
+    expect(sight.hidden.get("app:kitty")?.seen).toStrictEqual({
+      arriving: undefined,
       fading: true,
-      showing: false,
+      view: { scale: 1, x: 3000, y: 0 },
     });
   });
 });

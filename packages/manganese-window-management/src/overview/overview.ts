@@ -8,8 +8,8 @@ import type { Rect } from "../rect";
 import type { StageScreen } from "../screens/stage-screens";
 import type { WindowState } from "../window-state";
 import { workspaceNamed, workspacesOn } from "../window-state";
-import type { OverviewTile } from "./tiles";
-import { seenThrough, tileAt, tilesOf, viewOf } from "./tiles";
+import type { OverviewTile, View } from "./tiles";
+import { inverseOf, seenThrough, tileAt, tilesOf, viewOf } from "./tiles";
 
 /** The overview on one screen. */
 export type ScreenOverview = {
@@ -92,3 +92,21 @@ const placementsIn = (
 
 const covers = ({ height, width, x, y }: Rect, [atX, atY]: Spot): boolean =>
   atX >= x && atX < x + width && atY >= y && atY < y + height;
+
+/** The view of `overview`'s shown workspace in its tile. */
+export const shownViewOf = ({ screen, tiles }: ScreenOverview): View => {
+  const tile = tiles.find(({ name }) => name === screen.current);
+  if (tile === undefined) {
+    throw new Error(`shell: workspace ${screen.current} has no overview tile`);
+  } else {
+    return viewOf(screen.geometry.screen, tile.box);
+  }
+};
+
+/**
+ * The camera on `overview`'s shown workspace: the view that fills the screen
+ * with its tile. The overview pulls back from it as it opens and pushes back
+ * into it as it closes, moving every tile and window together.
+ */
+export const cameraOf = (overview: ScreenOverview): View =>
+  inverseOf(shownViewOf(overview));

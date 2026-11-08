@@ -2316,7 +2316,10 @@ describe("Shell", () => {
       clientAppears("term");
 
       expect(
-        appBox(container, "term").parentElement?.style.getPropertyValue(
+        appBox(
+          container,
+          "term",
+        ).parentElement?.parentElement?.style.getPropertyValue(
           "--workspace-width",
         ),
       ).toBe("1280px");
@@ -2333,7 +2336,7 @@ describe("Shell", () => {
       press("braceright");
 
       const clips = movingParts(container, "leaving-to-start").map(
-        (part) => part.parentElement?.style.clip,
+        (part) => part.parentElement?.parentElement?.style.clip,
       );
       expect(clips).not.toHaveLength(0);
       expect(new Set(clips)).toStrictEqual(
@@ -2348,7 +2351,9 @@ describe("Shell", () => {
       clientAppears("term");
       motionsPlayOut(container);
 
-      expect(appBox(container, "term").parentElement?.style.clip).toBe("");
+      expect(
+        appBox(container, "term").parentElement?.parentElement?.style.clip,
+      ).toBe("");
     });
 
     it("and the other way when the switch goes the other way", async () => {

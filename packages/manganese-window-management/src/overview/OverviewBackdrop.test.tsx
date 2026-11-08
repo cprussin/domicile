@@ -26,6 +26,33 @@ describe("OverviewBackdrop", () => {
     expect(backdropOf(container).textContent).toBe("13");
   });
 
+  it("pulls back from the shown workspace's tile, and pushes back into it as it closes", () => {
+    // The tiles move with the windows: from the camera on workspace 3, which
+    // fills the screen, to where they rest, and back.
+    const gridOf = (closing: boolean) => {
+      const { container, unmount } = render(
+        <OverviewBackdrop
+          closing={closing}
+          onClosed={() => undefined}
+          overviews={[overviewOf(closing)]}
+        />,
+      );
+      const grid = container.querySelector<HTMLElement>("[data-overview-grid]");
+      const style = {
+        from: grid?.style.getPropertyValue("--overview-from"),
+        to: grid?.style.getPropertyValue("--overview-to"),
+      };
+      unmount();
+      return style;
+    };
+    const opening = gridOf(false);
+    const closing = gridOf(true);
+
+    expect(opening.from).toMatch(/^matrix\(/);
+    expect(opening.to).toBe("");
+    expect(closing.to).toBe(opening.from);
+  });
+
   it("is not closed by its fade in ending", () => {
     const closed: string[] = [];
     const { container } = render(

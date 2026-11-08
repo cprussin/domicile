@@ -58,9 +58,8 @@ export const windowManagementPreset = definePreset({
           "100%": { opacity: "0" },
         },
         dropLineShowing: BACKDROP_FADE,
-        // A hidden workspace's windows, and the overview's backdrop, fade in
-        // as the overview opens; the backdrop fades out by `overviewHiding`.
-        // See `overview/`.
+        // The overview's backdrop, names and picker rings fade in as it
+        // opens; the backdrop fades out by `overviewHiding`. See `overview/`.
         overviewHiding: BACKDROP_FADE,
         overviewShowing: BACKDROP_FADE,
         // A workspace switch slides every window on the workspace by one
