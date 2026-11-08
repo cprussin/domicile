@@ -623,6 +623,37 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
   }
 }
 
+TEST_F(ControlChannelTest, TouchesKeepTheirPointsAndUnsignedTimes) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  for (const auto& [phase, name] :
+       {std::pair(mojom::TouchPhase::kDown, "down"),
+        std::pair(mojom::TouchPhase::kMotion, "motion"),
+        std::pair(mojom::TouchPhase::kUp, "up"),
+        std::pair(mojom::TouchPhase::kCancel, "cancel")}) {
+    control_->Touch("app", mojom::Touch::New(phase, 4, 3000000000u, 12.5, 40));
+    control_.FlushForTesting();
+    const std::string line = Heard();
+    EXPECT_NE(line.find("3000000000"), std::string::npos);
+    EXPECT_EQ(line.find("3000000000.0"), std::string::npos);
+    const auto frame = base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(frame);
+    EXPECT_EQ(*frame->FindString("type"), "touch");
+    EXPECT_EQ(*frame->FindString("app_id"), "app");
+    EXPECT_EQ(*frame->FindString("phase"), name);
+    const bool placed = phase == mojom::TouchPhase::kDown ||
+                        phase == mojom::TouchPhase::kMotion;
+    EXPECT_EQ(frame->FindDouble("x").has_value(), placed);
+    if (placed) {
+      EXPECT_EQ(frame->FindDouble("x"), 12.5);
+      EXPECT_EQ(frame->FindDouble("y"), 40);
+    }
+    EXPECT_EQ(frame->FindInt("id").has_value(),
+              phase != mojom::TouchPhase::kCancel);
+  }
+}
+
 TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
