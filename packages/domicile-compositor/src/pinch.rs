@@ -32,22 +32,25 @@ impl DomicileCompositor {
             fingers,
         } = pinch
         {
-            self.cancel_pinch();
-            if self.pointer_app.as_deref() == Some(app_id) && self.surface_for(app_id).is_some() {
-                self.pinch = Some(ActivePinch {
-                    owner,
-                    device,
-                    app_id: app_id.to_owned(),
-                });
-                pointer.gesture_pinch_begin(
-                    self,
-                    &GesturePinchBeginEvent {
-                        serial: SERIAL_COUNTER.next_serial(),
-                        time,
-                        fingers: fingers.get(),
-                    },
-                );
+            // A begin for a window the pointer is not on starts nothing, and
+            // so must not end the pointer window's pinch either.
+            if self.pointer_app.as_deref() != Some(app_id) || self.surface_for(app_id).is_none() {
+                return;
             }
+            self.cancel_pinch();
+            self.pinch = Some(ActivePinch {
+                owner,
+                device,
+                app_id: app_id.to_owned(),
+            });
+            pointer.gesture_pinch_begin(
+                self,
+                &GesturePinchBeginEvent {
+                    serial: SERIAL_COUNTER.next_serial(),
+                    time,
+                    fingers: fingers.get(),
+                },
+            );
             return;
         }
         // An end on focus loss or cancellation retires the sequence. Its
