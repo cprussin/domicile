@@ -745,3 +745,116 @@ fn disconnecting_the_sender_cancels_its_pinch() {
         "{trace}"
     );
 }
+
+/// A started client and its window's app id, with nothing driven at it yet.
+fn a_window(
+    compositor: &Compositor,
+    extra: &[&str],
+) -> (domicile_test_chrome::Chrome, crate::running::Client, String) {
+    let mut chrome = compositor.chrome();
+    let client = compositor.client_with("app", extra);
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    (chrome, client, app_id)
+}
+
+fn touch(app_id: &str, step: serde_json::Value) -> ChromeMessage {
+    let mut frame = step;
+    frame["type"] = "touch".into();
+    frame["app_id"] = app_id.into();
+    serde_json::from_value(frame).expect("a touch step the protocol reads")
+}
+
+/// A client that reads `wl_touch` gets every finger as a touch point, each
+/// step in a frame, and never a pointer button for it.
+#[test]
+fn fingers_reach_a_touch_client_as_touch_points() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_window(&compositor, &[]);
+    for step in [
+        serde_json::json!({"phase":"down", "id":2, "time":10, "x":20.0, "y":30.0}),
+        serde_json::json!({"phase":"down", "id":3, "time":11, "x":60.0, "y":30.0}),
+        serde_json::json!({"phase":"motion", "id":2, "time":12, "x":25.0, "y":35.0}),
+        serde_json::json!({"phase":"up", "id":2, "time":13}),
+        serde_json::json!({"phase":"up", "id":3, "time":14}),
+    ] {
+        chrome.say(&touch(&app, step)).unwrap();
+    }
+    for receipt in [
+        ", 2, 20, 30)",
+        ", 3, 60, 30)",
+        "touch_motion(12, 2, 25, 35)",
+        "up(13, 2)",
+        "up(14, 3)",
+    ] {
+        assert!(
+            client.wait_for_trace(receipt, 1),
+            "{receipt} missing: {}",
+            client.trace()
+        );
+    }
+    let trace = client.trace();
+    assert!(trace.contains("touch_frame()"), "{trace}");
+    assert!(
+        !trace.contains(&format!(", {BTN_LEFT}, 1)")),
+        "a finger on a touch client is not also a click: {trace}"
+    );
+}
+
+/// A client with no `wl_touch` gets the first finger as the pointer and its
+/// primary button; a second finger at the same time is not a second press.
+#[test]
+fn a_client_without_touch_gets_a_finger_as_the_pointer() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_window(&compositor, &["--no-touch"]);
+    for step in [
+        serde_json::json!({"phase":"down", "id":2, "time":10, "x":20.0, "y":30.0}),
+        serde_json::json!({"phase":"down", "id":3, "time":11, "x":60.0, "y":30.0}),
+        serde_json::json!({"phase":"up", "id":3, "time":12}),
+        serde_json::json!({"phase":"motion", "id":2, "time":13, "x":25.0, "y":35.0}),
+        serde_json::json!({"phase":"up", "id":2, "time":14}),
+    ] {
+        chrome.say(&touch(&app, step)).unwrap();
+    }
+    assert!(
+        client.wait_for_trace(&format!(", {BTN_LEFT}, 0)"), 1),
+        "the finger's lift never released the button: {}",
+        client.trace()
+    );
+    let trace = client.trace();
+    assert!(trace.contains(".enter("), "{trace}");
+    assert_eq!(
+        trace.matches(&format!(", {BTN_LEFT}, 1)")).count(),
+        1,
+        "{trace}"
+    );
+    assert!(
+        trace.contains("motion(") && trace.contains(", 25, 35)"),
+        "{trace}"
+    );
+    assert!(!trace.contains("touch_frame()"), "{trace}");
+}
+
+/// A dropped engine channel cannot leave a finger down on a client.
+#[test]
+fn disconnecting_the_sender_cancels_its_touches() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_window(&compositor, &[]);
+    chrome
+        .say(&touch(
+            &app,
+            serde_json::json!({"phase":"down", "id":2, "time":10, "x":20.0, "y":30.0}),
+        ))
+        .unwrap();
+    assert!(
+        client.wait_for_trace(", 2, 20, 30)", 1),
+        "{}",
+        client.trace()
+    );
+    drop(chrome);
+    assert!(client.wait_for_trace("cancel()", 1), "{}", client.trace());
+}

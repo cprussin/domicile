@@ -157,6 +157,10 @@ pub struct Arguments {
     /// Smithay sends the keymap as a sealed memfd from version 7 and as a
     /// temporary file below it.
     pub wl_seat_v7: bool,
+
+    /// Whether to leave `wl_touch` unbound, as a client with no touch support
+    /// does, so the compositor gives it a finger as the pointer.
+    pub no_touch: bool,
 }
 
 /// An `xdg_toplevel` request about the window's state.
@@ -258,6 +262,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut ask_to = None;
     let mut xdg_wm_base_v1 = None;
     let mut wl_seat_v7 = None;
+    let mut no_touch = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -374,6 +379,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--wl-seat-v7" => {
                 take(&mut wl_seat_v7, &flag, true)?;
             }
+            "--no-touch" => {
+                take(&mut no_touch, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -410,6 +418,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         ask_to,
         xdg_wm_base_v1: xdg_wm_base_v1.unwrap_or(false),
         wl_seat_v7: wl_seat_v7.unwrap_or(false),
+        no_touch: no_touch.unwrap_or(false),
     })
 }
 

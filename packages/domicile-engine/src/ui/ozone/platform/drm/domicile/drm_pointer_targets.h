@@ -30,6 +30,9 @@ namespace ui {
 //   desktop, in CRTC pixels, unrotated: the device's axes are the panel's.
 //   `DrmWindowHost` then sends the touch to the window that hears it.
 // - A target whose display is not in `displays` binds nothing.
+// - A touchscreen no target names covers the only display, when there is one:
+//   a laptop's own screen works with no config. With several, which one it is
+//   on is the config's to say, so it binds nothing.
 //
 // See docs/DISPLAYS.md#tablets-and-touchscreens.
 std::vector<TouchDeviceTransform> TouchTransformsFor(

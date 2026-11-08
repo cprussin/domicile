@@ -2,6 +2,7 @@
 //! cursors, and the modifiers the chromes are told.
 
 use smithay::backend::input::{ButtonState, KeyState};
+use smithay::delegate_cursor_shape;
 use smithay::input::{
     keyboard::{FilterResult, Keycode},
     pointer::{ButtonEvent, CursorIcon, CursorImageStatus, MotionEvent},
@@ -17,7 +18,6 @@ use smithay::wayland::{
     selection::primary_selection::set_primary_focus, shell::xdg::XdgToplevelSurfaceData,
     tablet_manager::TabletSeatHandler,
 };
-use smithay::{delegate_cursor_shape, delegate_seat};
 use tracing::debug;
 
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
@@ -75,7 +75,24 @@ impl SeatHandler for DomicileCompositor {
 
 impl TabletSeatHandler for DomicileCompositor {}
 
-delegate_seat!(DomicileCompositor);
+// Smithay's `delegate_seat!`, but with `wl_seat` and `wl_touch` through
+// [`crate::touch::CountTouches`], which counts the `wl_touch`es each client
+// takes and hands everything else to Smithay.
+smithay::reexports::wayland_server::delegate_global_dispatch!(DomicileCompositor: [
+    smithay::reexports::wayland_server::protocol::wl_seat::WlSeat: smithay::wayland::seat::SeatGlobalData<DomicileCompositor>
+] => smithay::input::SeatState<DomicileCompositor>);
+smithay::reexports::wayland_server::delegate_dispatch!(DomicileCompositor: [
+    smithay::reexports::wayland_server::protocol::wl_seat::WlSeat: smithay::wayland::seat::SeatUserData<DomicileCompositor>
+] => crate::touch::CountTouches);
+smithay::reexports::wayland_server::delegate_dispatch!(DomicileCompositor: [
+    smithay::reexports::wayland_server::protocol::wl_pointer::WlPointer: smithay::wayland::seat::PointerUserData<DomicileCompositor>
+] => smithay::input::SeatState<DomicileCompositor>);
+smithay::reexports::wayland_server::delegate_dispatch!(DomicileCompositor: [
+    smithay::reexports::wayland_server::protocol::wl_keyboard::WlKeyboard: smithay::wayland::seat::KeyboardUserData<DomicileCompositor>
+] => smithay::input::SeatState<DomicileCompositor>);
+smithay::reexports::wayland_server::delegate_dispatch!(DomicileCompositor: [
+    smithay::reexports::wayland_server::protocol::wl_touch::WlTouch: smithay::wayland::seat::TouchUserData<DomicileCompositor>
+] => crate::touch::CountTouches);
 smithay::delegate_pointer_gestures!(DomicileCompositor);
 
 delegate_cursor_shape!(DomicileCompositor);
@@ -197,6 +214,7 @@ impl DomicileCompositor {
                 | ClientRequest::PointerLeave
                 | ClientRequest::PointerButton { .. }
                 | ClientRequest::PointerAxis { .. }
+                | ClientRequest::Touch { .. }
         );
         input
             && self

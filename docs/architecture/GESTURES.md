@@ -1,7 +1,7 @@
 # Gestures
 
-Touchpad gestures reach the window under them, and the shell binds
-multi-finger gestures the way it binds keys. Tracks
+Touchpad gestures and touchscreen fingers reach the window under them, and
+the shell binds multi-finger gestures the way it binds keys. Tracks
 [#1908](https://github.com/cprussin/domicile/issues/1908).
 
 ## Design
@@ -25,6 +25,29 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 | Delivery | `domicile-compositor` (`pinch.rs`) | One active pinch, owned by the connection and device that began it. Ends canceled on pointer leave, lock, window close or a dropped connection |
 | Shell grab | engine `native_gesture_sink.*` (patch `0185`), `desk_gestures.*`, `DomicileHost.grabGesture` | libinput (or the host, nested) offers each gesture of three fingers or more to the sink before the pinch path. `DeskGestures` takes it when a page grabbed its kind and count, and sends every phase to the first such page as a `gesture` event. A swipe or hold nobody grabbed goes nowhere; a pinch goes on to the page |
 | Bindings | `@domicile-desktop/sdk/gesture-binding`, `bind-keys` | Parses sway's grammar, grabs each kind and count, follows the phases, and runs the binding the finished gesture fits in the current mode |
+
+### Touchscreen
+
+```
+evdev (engine, tty)    ─┐
+host wl_touch (nested) ─┴▶ engine ──▶ shell page ──▶ <app> ──▶ compositor ──▶ client
+                                     (pointer events,  (default    (`touch`)     (wl_touch, or
+                                      touch-action:     handling)                 the pointer)
+                                      none on <app>)
+```
+
+| Piece | Where | Does |
+|---|---|---|
+| Acquisition | engine `TouchEventConverterEvdev`, bound to a display by patch `0122`; Ozone's `wl_touch` when nested | Upstream's touch path, unchanged |
+| Page | `html.css` (patch `0186`) | `touch-action: none` on `<app>`, so a finger on a window is never the page's pan or zoom |
+| `<app>` | `html_app_element.cc` | Forwards each touch pointer event as a touch point in the client's coordinates. The first finger also focuses the window, as a click does. Points end canceled when the element leaves the page or changes window |
+| Wire | `domicile_protocol::touch::Touch` | `down`, `motion`, `up`, `cancel` |
+| Delivery | `domicile-compositor` (`touch.rs`) | The seat always has `wl_touch`. One window's points at a time, owned by the connection that began them. A client that bound `wl_touch` gets touch points; one that did not gets the first finger as the pointer and its left button, as Weston and Mutter do. Ends canceled on window close, lock, input capture or a dropped connection |
+
+- **Whether a client reads touch is fixed at the first finger.** A client
+  that binds `wl_touch` mid-sequence is not sent an up it had no down for.
+- **Smithay sends `cancel` only to points with an event since the last
+  frame,** so the compositor first resends each point where it is.
 
 Two-finger scrolling already reaches clients as finger `wl_pointer.axis` with
 axis stops (patch `0174`), which is what Chrome's history swipe reads.
@@ -72,7 +95,9 @@ next_on_output` and `prev_on_output`.
 - [x] A tty VM test with a uinput touchpad (`touchpad-gestures-on-a-tty`).
 - [x] Gesture bindings in `bindKeys`, sharing its modes; Manganese
   defaults.
-- [ ] Touchscreen: always advertise `wl_touch`, acquired through the shared
-  libinput path; pointer fallback for clients without touch.
+- [x] Touchscreen: always advertise `wl_touch`; pointer fallback for clients
+  without touch. Acquired through upstream's evdev touch path, which already
+  reaches the page, not libinput.
+- [x] A tty VM test with a uinput touchscreen (`touchscreen-on-a-tty`).
 - [ ] Edge swipes, recognized in the engine with withheld touches replayed.
 - [x] Bind the host's swipes when nested, subject to what the host consumes.
