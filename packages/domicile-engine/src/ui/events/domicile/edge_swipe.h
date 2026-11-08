@@ -85,9 +85,10 @@ class EVENTS_EXPORT EdgeSwipe {
     kPage,
   };
 
-  // The edge a finger at `location` lands on, if any.
-  static std::optional<NativeGestureEdge> EdgeAt(const gfx::PointF& location,
-                                                 const gfx::RectF& display);
+  // The edges whose band a finger at `location` lands in, nearest first: two
+  // in a corner, one along a side, none elsewhere.
+  static std::vector<NativeGestureEdge> EdgesAt(const gfx::PointF& location,
+                                                const gfx::RectF& display);
 
   // How far `location` has come in from the edge, and along it, as shares of
   // the display.

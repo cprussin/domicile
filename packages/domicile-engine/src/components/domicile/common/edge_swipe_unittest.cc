@@ -125,6 +125,16 @@ TEST_F(EdgeSwipeTest, AFingerAlongTheEdgeIsThePages) {
   EXPECT_TRUE(sink_->taken.empty());
 }
 
+// Nearer the top, which is unbound, than the left, which is bound: still the
+// left edge's swipe.
+TEST_F(EdgeSwipeTest, InACornerTheNearerBoundEdgeWins) {
+  EXPECT_EQ(Down(1012, 3), Verdict::kWithhold);
+  EXPECT_EQ(Move(1080, 10), Verdict::kTaken);
+
+  ASSERT_FALSE(sink_->taken.empty());
+  EXPECT_EQ(sink_->taken[0].edge, NativeGestureEdge::kLeft);
+}
+
 TEST_F(EdgeSwipeTest, ATapAtTheEdgeIsThePages) {
   EXPECT_EQ(Down(1005, 100), Verdict::kWithhold);
   EXPECT_EQ(Up(1005, 100), Verdict::kRelease);
