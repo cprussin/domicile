@@ -427,6 +427,19 @@ describe("AppWindow", () => {
       });
     });
 
+    // A window on another workspace was not drawn, so its client draws
+    // again as the switch slides it in. The desk must not wait for it.
+    it("shows its client's latest frame as it slides in", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="arriving-from-end"
+        />,
+      );
+      expect(shownAt(container).resizing).toBe(true);
+    });
+
     it("gives a growing box's client its new size at once", () => {
       const { settler } = recordedSettles();
       const { container, rerender } = render(

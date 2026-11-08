@@ -64,7 +64,7 @@ import { UPRIGHT, useSettling } from "./useSettling";
 import { useShownPage } from "./useShownPage";
 import { useZoom } from "./useZoom";
 import type { WindowMotion } from "./window-motion";
-import { isLeaving, isMoving } from "./window-motion";
+import { isLeaving, isMoving, isSlidingIn } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
@@ -754,8 +754,14 @@ export const BrowserWindow = ({
             className={viewStyles}
             ref={setView}
             // Also while the window settles, so the engine neither holds the
-            // shell for the page nor stretches its old frame.
-            resizing={resizing || settlingFrom !== undefined ? "" : undefined}
+            // shell for the page nor stretches its old frame, and while it
+            // slides in, so the slide does not wait for the page to draw
+            // again.
+            resizing={
+              resizing || settlingFrom !== undefined || isSlidingIn(motion)
+                ? ""
+                : undefined
+            }
             // React sets attributes before insertion, when the engine reads it.
             // See `window`.
             window={window}

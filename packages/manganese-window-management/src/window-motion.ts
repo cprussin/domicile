@@ -119,6 +119,40 @@ export const isSwitching = (motion: WindowMotion): boolean => {
   }
 };
 
+/**
+ * Whether the window is sliding onto its screen from where it was not drawn:
+ * a workspace switch or the scratchpad bringing it in.
+ *
+ * Its client or page draws again as it comes in, and a heavy page takes
+ * frames to. The engine would hold the desk for it (`resizing`).
+ */
+export const isSlidingIn = (motion: WindowMotion): boolean => {
+  switch (motion) {
+    case "arriving-from-end":
+    case "arriving-from-start":
+    case "dropping": {
+      return true;
+    }
+    case "closing":
+    case "closing-tab":
+    case "concealing":
+    case "leaving-to-end":
+    case "leaving-to-start":
+    case "opening":
+    case "opening-tab":
+    case "restacking":
+    case "restacking-again":
+    case "resting":
+    case "revealing":
+    case "sending":
+    case "sending-tab":
+    case "stowing":
+    case "uncovering": {
+      return false;
+    }
+  }
+};
+
 /** Whether the scratchpad is sliding the window down onto or up off its screen. */
 export const isScratchpadSlide = (motion: WindowMotion): boolean => {
   switch (motion) {

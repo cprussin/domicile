@@ -430,6 +430,10 @@ Rules:
 - A float being dragged, or a window being resized, follows the pointer
   without easing. A dragged float carries all its windows, tabs and strip. A
   dragged tiled tab eases into each slot it moves to along its strip.
+- A window sliding in from where it was not drawn (a workspace switch, the
+  scratchpad) carries `resizing` too. Its client or page draws again as it
+  comes in, and the engine would otherwise hold the desk up to four frames
+  for it at the start of every slide.
 - While an edge drag or a modifier resize runs, every `<app>` and `<webview>`
   carries `resizing`, so the engine does not wait for a client or page to draw
   each box. Every window, since a tiled edge resizes the windows on both
