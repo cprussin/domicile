@@ -64,7 +64,7 @@ evdev ──▶ EventFactoryEvdev ──▶ TouchEdgeSwipes ──▶ EdgeSwipe 
 
 | Piece | Where | Does |
 |---|---|---|
-| Hook | engine `event_factory_evdev.cc` (patch `0187`) | Hands each touch to `TouchEdgeSwipes` before dispatching it |
+| Hook | engine `event_factory_evdev.cc` (patch `0188`) | Hands each touch to `TouchEdgeSwipes` before dispatching it |
 | Withholding | `ui/events/ozone/evdev/domicile/touch_edge_swipes.*` | Per touchscreen bound to a display: the display's rect (the device's corners through its touch transform), the withheld touches, and a 250 ms timer |
 | Recognizing | `ui/events/domicile/edge_swipe.*` | A finger landing within 3% of an edge the shell grabbed is withheld; in a corner, the nearer edge the shell grabbed. 6% in, mostly away from the edge: the shell's, begin to end, in display pixels. Along the edge, back out, a tap, a second finger or 250 ms: released to the page |
 | Grab | `DomicileHost.grabGesture("edge:left")` | Per side, so a finger at an edge nobody binds is never withheld |
