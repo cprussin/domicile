@@ -337,16 +337,30 @@ screen's workspaces at once, as tiles in a grid (`overview/tiles.ts`): those
 with windows, and the shown one.
 
 - The windows are the real ones, scaled into their tile by a transform on
-  each part's wrapper (`overview/seen-styles.ts`), so they stay live. A
-  surface can only show in one place, so there are no copies.
-- Each wrapper takes its part's depth as its `z-index`, since the transform
-  gives it its own stacking context.
-- Hidden workspaces' windows get their placements as if shown and fade in.
-- Closing zooms the shown workspace back to full size while the others fade;
-  the overview is gone when the backdrop's fade ends, which fades out under
-  its own keyframe: a reversed animation that has played does not play
-  again. The fading windows, tab strips included, let presses through, since
-  the picker over them is gone.
+  a box inside each part's wrapper (`overview/seen-styles.ts`), so they stay
+  live. A surface can only show in one place, so there are no copies.
+- Both the wrapper and the box clip to the screen. The box's clip moves with
+  it, keeping a float that hangs off the edge in its tile; the wrapper's
+  does not, keeping windows coming in from beside off the next monitor. The
+  wrapper takes its part's depth as its `z-index`, since the transformed box
+  is its own stacking context.
+- Hidden workspaces' windows get their placements as if shown.
+- One camera per screen moves every tile, name and window together
+  (`cameraOf`): opening, it pulls back from the shown workspace, whose tile
+  starts filling the screen, so the others come in from the side they sit
+  on. They come in from `--overview-from` by `@starting-style`, which only
+  applies as an element comes into view (the box is `display: none` while
+  its window has no placement). So a window already showing that moves to
+  another tile mid-overview eases there instead of flying in again. Every
+  move is a transition to `--overview-to`, never an animation, so closing
+  partway through opening turns back from where the camera got to. The
+  names and rings fade in once it has all but landed.
+- Closing, the camera pushes into the workspace picked, which grows to fill
+  the screen while the others leave beside it and fade. The overview is gone
+  when the backdrop's fade ends, which fades out under its own keyframe: a
+  reversed animation that has played does not play again. The leaving
+  windows, tab strips included, let presses through, since the picker over
+  them is gone.
 - `OverviewPicker` is a layer of buttons over the tiles: a click picks the
   workspace or the window under it, a main-button drag moves that window to
   another tile, arrows and Tab move between tiles and Escape closes.

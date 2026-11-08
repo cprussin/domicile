@@ -67,6 +67,34 @@ export const viewOf = (screen: Rect, tile: Rect): View => {
   return { scale, x: tile.x - screen.x * scale, y: tile.y - screen.y * scale };
 };
 
+/** The view that undoes `view`: the camera zoomed into its tile. */
+export const inverseOf = ({ scale, x, y }: View): View => ({
+  scale: 1 / scale,
+  x: -x / scale,
+  y: -y / scale,
+});
+
+/** `inner`, then `outer`, as one view. */
+export const composed = (outer: View, inner: View): View => ({
+  scale: outer.scale * inner.scale,
+  x: outer.scale * inner.x + outer.x,
+  y: outer.scale * inner.y + outer.y,
+});
+
+/**
+ * `view`, of page points, for points measured from `origin` instead: for an
+ * element placed there.
+ */
+export const fromOrigin = (view: View, origin: Rect): View => ({
+  scale: view.scale,
+  x: view.x + origin.x * view.scale - origin.x,
+  y: view.y + origin.y * view.scale - origin.y,
+});
+
+/** `view` as a CSS transform, about the top left corner. */
+export const matrixOf = ({ scale, x, y }: View): string =>
+  `matrix(${scale.toString()}, 0, 0, ${scale.toString()}, ${x.toString()}, ${y.toString()})`;
+
 /** Where `rect` shows through `view`. */
 export const seenThrough = (view: View, rect: Rect): Rect => ({
   height: rect.height * view.scale,

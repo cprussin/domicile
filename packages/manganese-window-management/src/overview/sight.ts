@@ -3,14 +3,20 @@
 
 import type { Placement } from "../placement";
 import type { ScreenOverview } from "./overview";
+import { cameraOf, shownViewOf } from "./overview";
 import type { View } from "./tiles";
-import { viewOf } from "./tiles";
+import { composed, viewOf } from "./tiles";
 
 /**
- * A window seen through a tile. A hidden workspace's windows fade in as the
- * overview opens (`showing`) and out as it closes (`fading`).
+ * A window seen through a tile. A hidden workspace's windows arrive, as the
+ * overview opens, from where they sat beside the shown workspace
+ * (`arriving`), and fade as it closes (`fading`).
  */
-export type Seen = { fading: boolean; showing: boolean; view: View };
+export type Seen = {
+  arriving: View | undefined;
+  fading: boolean;
+  view: View;
+};
 
 /** A hidden workspace's window, drawn only in the overview. */
 export type HiddenSeen = { placement: Placement; screen: string; seen: Seen };
@@ -27,23 +33,30 @@ export type OverviewSight = {
 const FULL: View = { scale: 1, x: 0, y: 0 };
 
 /**
- * How the stage draws `overviews`. Closing, the shown workspace grows back to
- * fill its screen and the hidden ones fade where they are.
+ * How the stage draws `overviews`, as one camera on each screen pulling back
+ * from its shown workspace. The shown workspace shrinks into its tile, and
+ * the hidden ones come in from beside it. Closing, the camera pushes back
+ * into the shown workspace, which grows to fill its screen while the rest
+ * leave beside it.
  */
 export const sightOf = (
   overviews: readonly ScreenOverview[],
 ): OverviewSight => ({
   hidden: new Map(
-    overviews.flatMap(({ closing, others, screen, tiles }) =>
-      others.flatMap(({ name, placements }) => {
+    overviews.flatMap((overview) => {
+      const { closing, others, screen, tiles } = overview;
+      const camera = cameraOf(overview);
+      return others.flatMap(({ name, placements }) => {
         const tile = tiles.find((found) => found.name === name);
         if (tile === undefined) {
           throw new Error(`shell: workspace ${name} has no overview tile`);
         } else {
+          const view = viewOf(screen.geometry.screen, tile.box);
+          const beside = composed(camera, view);
           const seen = {
+            arriving: closing ? undefined : beside,
             fading: closing,
-            showing: !closing,
-            view: viewOf(screen.geometry.screen, tile.box),
+            view: closing ? beside : view,
           };
           return placements.map(
             (placement) =>
@@ -53,26 +66,17 @@ export const sightOf = (
               ] as const,
           );
         }
-      }),
-    ),
+      });
+    }),
   ),
   shown: new Map(
-    overviews.map(({ closing, screen, tiles }) => {
-      const tile = tiles.find(({ name }) => name === screen.current);
-      if (tile === undefined) {
-        throw new Error(
-          `shell: workspace ${screen.current} has no overview tile`,
-        );
-      } else {
-        return [
-          screen.geometry.name,
-          {
-            fading: false,
-            showing: false,
-            view: closing ? FULL : viewOf(screen.geometry.screen, tile.box),
-          },
-        ] as const;
-      }
-    }),
+    overviews.map((overview) => [
+      overview.screen.geometry.name,
+      {
+        arriving: undefined,
+        fading: false,
+        view: overview.closing ? FULL : shownViewOf(overview),
+      },
+    ]),
   ),
 });

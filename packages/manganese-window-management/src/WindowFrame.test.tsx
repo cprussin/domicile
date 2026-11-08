@@ -125,28 +125,46 @@ describe("WindowFrame", () => {
           <button type="button">part</button>
         </WindowFrame>,
       );
-      return screen.getByRole("button").parentElement?.style;
+      const moved = screen.getByRole("button").parentElement;
+      return { moved: moved?.style, wrapper: moved?.parentElement?.style };
     };
 
     it("slides its parts the width of the screen", () => {
       // A workspace switch slides by the width of the window's screen.
-      expect(styleOf()?.getPropertyValue("--workspace-width")).toBe("1280px");
+      expect(styleOf().wrapper?.getPropertyValue("--workspace-width")).toBe(
+        "1280px",
+      );
     });
 
     it("lifts its parts far enough to clear the top of the screen while the scratchpad slides it", () => {
       // The scratchpad slides a window up off the screen and back down.
-      expect(styleOf("dropping")?.getPropertyValue("--lift")).toBe("600px");
+      expect(styleOf("dropping").wrapper?.getPropertyValue("--lift")).toBe(
+        "600px",
+      );
     });
 
     it("shows its parts through their overview tile, at their depth", () => {
-      const style = styleOf("resting", {
+      const { moved, wrapper } = styleOf("resting", {
+        arriving: undefined,
         fading: false,
-        showing: false,
         view: { scale: 0.5, x: 10, y: 20 },
       });
 
-      expect(style?.transform).toBe("matrix(0.5, 0, 0, 0.5, 10, 20)");
-      expect(style?.zIndex).toBe("2");
+      expect(moved?.getPropertyValue("--overview-to")).toBe(
+        "matrix(0.5, 0, 0, 0.5, 10, 20)",
+      );
+      expect(wrapper?.zIndex).toBe("2");
+    });
+
+    it("clips its parts to their screen both outside and inside what moves them, so they stay on their own monitor and in their tile", () => {
+      const { moved, wrapper } = styleOf("resting", {
+        arriving: { scale: 1, x: 1280, y: 0 },
+        fading: false,
+        view: { scale: 0.5, x: 10, y: 20 },
+      });
+
+      expect(wrapper?.clip).toBe("rect(100px, 1280px, 900px, 0px)");
+      expect(moved?.clip).toBe("rect(100px, 1280px, 900px, 0px)");
     });
   });
 });
