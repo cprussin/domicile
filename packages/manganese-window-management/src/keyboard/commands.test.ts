@@ -122,6 +122,13 @@ describe("manganese's default keys", () => {
     });
   });
 
+  it("swipe in from the touchscreen's side edges between its workspaces", () => {
+    expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      "edge:left": stepWorkspace("prev"),
+      "edge:right": stepWorkspace("next"),
+    });
+  });
+
   // No default terminal binding; users bind their own with `exec`.
   it("launch nothing on Meta+Return", () => {
     expect(DEFAULT_KEYBINDINGS["Meta+Return"]).toBeUndefined();
