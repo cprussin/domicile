@@ -45,6 +45,7 @@
 #include "components/domicile/engine/surface_alpha.h"
 #include "components/domicile/engine/surface_crop.h"
 #include "components/domicile/engine/surface_frames.h"
+#include "components/domicile/engine/surface_holds.h"
 #include "components/domicile/engine/surface_submits.h"
 #include "components/domicile/engine/surface_transform.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
@@ -132,6 +133,7 @@ class Surface : public mojom::SurfaceObserver,
   void Create(mojom::FrameSinkBroker* broker,
               const std::string& app_id,
               base::OnceCallback<void(bool)> done) {
+    broker_ = broker;
     mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client;
     client_receiver_.Bind(client.InitWithNewPipeAndPassReceiver());
     broker->CreateFrameSink(
@@ -174,11 +176,20 @@ class Surface : public mojom::SurfaceObserver,
                            has_alpha};
   }
 
+  // The client destroyed `buffer_id`. Its import goes once viz is done with
+  // it: the browser holds the only reference to its SharedImage, and viz draws
+  // a fallback image over any it cannot find.
   void Forget(uint64_t buffer_id) {
+    const bool unheld = holds_.Destroyed(buffer_id);
     auto iter = buffers_.find(buffer_id);
     if (iter != buffers_.end()) {
-      resource_to_buffer_.erase(iter->second.resource.id);
+      if (unheld) {
+        resource_to_buffer_.erase(iter->second.resource.id);
+      }
       buffers_.erase(iter);
+    }
+    if (unheld) {
+      broker_->DestroyBuffer(frame_sink_id_, buffer_id);
     }
   }
 
@@ -336,6 +347,7 @@ class Surface : public mojom::SurfaceObserver,
     sink_->SubmitCompositorFrame(
         AtSyncedFrame(shown.local_surface_id, submit.frame), std::move(frame),
         std::nullopt, 0);
+    holds_.Sent(submit.buffer);
   }
 
   void OnCreated(base::OnceCallback<void(bool)> done,
@@ -430,16 +442,28 @@ class Surface : public mojom::SurfaceObserver,
   }
 
   // Forwards returned resources as wl_buffer.release, so the client may draw
-  // into the buffer again.
+  // into the buffer again, and drops the imports of destroyed buffers viz no
+  // longer holds.
   void Release(const std::vector<viz::ReturnedResource>& resources) {
     for (const viz::ReturnedResource& resource : resources) {
       auto iter = resource_to_buffer_.find(resource.id);
       if (iter == resource_to_buffer_.end()) {
         continue;
       }
-      queue_->Push({.type = EngineEvent::Type::kReleased,
-                    .surface = id_,
-                    .buffer = iter->second});
+      const uint64_t buffer = iter->second;
+      switch (holds_.Returned(buffer, resource.count)) {
+        case SurfaceHolds::Return::kRelease:
+          queue_->Push({.type = EngineEvent::Type::kReleased,
+                        .surface = id_,
+                        .buffer = buffer});
+          break;
+        case SurfaceHolds::Return::kDestroy:
+          resource_to_buffer_.erase(iter);
+          broker_->DestroyBuffer(frame_sink_id_, buffer);
+          break;
+        case SurfaceHolds::Return::kKeep:
+          break;
+      }
     }
   }
 
@@ -451,6 +475,8 @@ class Surface : public mojom::SurfaceObserver,
 
   const DomicileSurfaceId id_;
   const raw_ptr<EngineEventQueue> queue_;
+  // The engine's broker, which outlives its surfaces.
+  raw_ptr<mojom::FrameSinkBroker> broker_ = nullptr;
 
   mojo::Receiver<mojom::SurfaceObserver> observer_receiver_{this};
   mojo::Remote<viz::mojom::CompositorFrameSink> sink_;
@@ -475,6 +501,7 @@ class Surface : public mojom::SurfaceObserver,
   viz::ResourceId next_resource_id_{1};
   viz::FrameTokenGenerator next_frame_token_;
   SurfaceFrames frames_;
+  SurfaceHolds holds_;
   SurfaceSubmits submits_;
   SurfaceBacklog backlog_;
 };
@@ -1743,7 +1770,6 @@ struct DomicileEngine {
     auto iter = surfaces_.find(surface);
     if (iter != surfaces_.end() && broker_) {
       iter->second->Forget(buffer);
-      broker_->DestroyBuffer(iter->second->frame_sink_id(), buffer);
     }
   }
 

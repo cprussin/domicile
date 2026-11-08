@@ -1228,6 +1228,7 @@ source_set("unit_tests") {
     "//components/domicile/engine:surface_alpha_unit_tests",
     "//components/domicile/engine:surface_crop_unit_tests",
     "//components/domicile/engine:surface_frames_unit_tests",
+    "//components/domicile/engine:surface_holds_unit_tests",
     "//components/domicile/engine:surface_submits_unit_tests",
     "//components/domicile/engine:surface_transform_unit_tests",
     "//components/input",
