@@ -59,6 +59,30 @@ describe("ownKeybindings", () => {
   it("refuses a table for `default` beside the default one", () => {
     expect(() => ownKeybindings({ modes: { default: {} } })).toThrow("default");
   });
+
+  it("files gestures beside chords, spelled the one way", () => {
+    expect([
+      ...(ownKeybindings({
+        keybindings: {
+          "Meta+h": KeyAction.Mode("x"),
+          "swipe:3:left+up": KeyAction.Mode("y"),
+        },
+      })
+        .get("default")
+        ?.keys() ?? []),
+    ]).toEqual(["Meta+h", "swipe:3:up+left"]);
+  });
+
+  it("rejects two spellings of one gesture", () => {
+    expect(() =>
+      ownKeybindings({
+        keybindings: {
+          "swipe:3:left+up": KeyAction.Mode("x"),
+          "swipe:3:up+left": KeyAction.Mode("y"),
+        },
+      }),
+    ).toThrow("gesture");
+  });
 });
 
 describe("ownedChords", () => {
@@ -74,5 +98,16 @@ describe("ownedChords", () => {
         },
       }),
     ).toEqual(["Shift+Meta+l", "Meta+h"]);
+  });
+
+  it("leaves gestures out", () => {
+    expect(
+      ownedChords({
+        keybindings: {
+          "Meta+h": KeyAction.Mode("x"),
+          "swipe:3:left": KeyAction.Mode("x"),
+        },
+      }),
+    ).toEqual(["Meta+h"]);
   });
 });

@@ -57,6 +57,8 @@ describe("parseCommand", () => {
     ["floating toggle", WindowAction.FloatToggled()],
     ["scratchpad show", WindowAction.ScratchpadShown()],
     ["workspace 1", WindowAction.WorkspaceSelected("1")],
+    ["workspace next_on_output", WindowAction.WorkspaceStepped("next")],
+    ["workspace prev_on_output", WindowAction.WorkspaceStepped("prev")],
     ["resize grow up", WindowAction.WindowGrown(Direction.Up)],
     ["resize grow right", WindowAction.WindowGrown(Direction.Right)],
     ["exec kitty --hold", WindowAction.CommandExecuted(["kitty", "--hold"])],
