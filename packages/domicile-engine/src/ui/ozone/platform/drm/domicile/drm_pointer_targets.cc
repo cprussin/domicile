@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "ui/events/devices/device_data_manager.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/transform.h"
 
 namespace ui {
