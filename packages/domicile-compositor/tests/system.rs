@@ -187,7 +187,10 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
     call(
         &mut chrome,
         5,
-        SystemRequest::SetColorTemperature { kelvin: 3400 },
+        SystemRequest::SetColorTemperature {
+            kelvin: 3400,
+            display: None,
+        },
     );
     assert_eq!(reply(&mut chrome, 5), SystemReply::Set);
 }

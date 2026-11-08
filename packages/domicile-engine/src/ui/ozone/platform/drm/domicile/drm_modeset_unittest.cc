@@ -657,8 +657,14 @@ std::vector<uint16_t> WhiteOf(const display::GammaCurve& curve) {
   return {white.r, white.g, white.b};
 }
 
-// A night light warms every monitor the reading has.
-TEST(DrmModesetTest, AWhitePointReachesEveryDisplay) {
+// A two-entry ramp that draws white as (65535, 32768, 16384): a warm one.
+DomicileGammaRamp WarmRamp() {
+  return {.red = {0, 65535}, .green = {0, 32768}, .blue = {0, 16384}};
+}
+
+// Each display draws with its own ramp, so one warms and its neighbor does
+// not.
+TEST(DrmModesetTest, AGammaRampReachesOnlyItsDisplay) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
@@ -671,18 +677,17 @@ TEST(DrmModesetTest, AWhitePointReachesEveryDisplay) {
   DrmModeset modeset(std::move(owned), &screen);
   modeset.Start();
 
-  modeset.SetWhitePoint({.red = 1.f, .green = 0.5f, .blue = 0.25f});
+  modeset.SetGamma(12, WarmRamp());
 
-  ASSERT_EQ(fake->gamma().size(), 2u);
-  EXPECT_EQ(fake->gamma()[0].first, 11);
-  EXPECT_EQ(fake->gamma()[1].first, 12);
+  ASSERT_EQ(fake->gamma().size(), 1u);
+  EXPECT_EQ(fake->gamma()[0].first, 12);
   EXPECT_EQ(WhiteOf(fake->gamma()[0].second),
             (std::vector<uint16_t>{65535, 32768, 16384}));
 }
 
-// Colors as they are write an identity ramp: an empty curve left the last warm
+// An empty ramp writes an identity ramp: an empty curve left the last warm
 // ramp on the CRTCs.
-TEST(DrmModesetTest, ANeutralWhitePointWritesAnIdentityRamp) {
+TEST(DrmModesetTest, AnEmptyRampWritesAnIdentityRamp) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
@@ -694,7 +699,7 @@ TEST(DrmModesetTest, ANeutralWhitePointWritesAnIdentityRamp) {
   DrmModeset modeset(std::move(owned), &screen);
   modeset.Start();
 
-  modeset.SetWhitePoint({.red = 1.f, .green = 1.f, .blue = 1.f});
+  modeset.SetGamma(11, {});
 
   ASSERT_EQ(fake->gamma().size(), 1u);
   EXPECT_FALSE(fake->gamma()[0].second.IsDefaultIdentity());
@@ -703,31 +708,37 @@ TEST(DrmModesetTest, ANeutralWhitePointWritesAnIdentityRamp) {
 }
 
 // A resume or a console switch back can leave the CRTCs at another process's
-// ramp, so each confirmed modeset sets the white point again.
-TEST(DrmModesetTest, AConfirmedModesetSetsTheWhitePointAgain) {
+// ramp, so each confirmed modeset sets every display's ramp again.
+TEST(DrmModesetTest, AConfirmedModesetSetsEachDisplaysRampAgain) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  snapshots.push_back(SnapshotBuilder().Id(12).Build());
   fake->SetSnapshots(Pointers(snapshots));
 
   DrmWindowHostManager window_manager;
   DrmScreen screen(&window_manager, nullptr);
   DrmModeset modeset(std::move(owned), &screen);
   modeset.Start();
-  modeset.SetWhitePoint({.red = 1.f, .green = 0.5f, .blue = 0.25f});
-  ASSERT_EQ(fake->gamma().size(), 1u);
+  modeset.SetGamma(11, WarmRamp());
+  modeset.SetGamma(12, {});
+  ASSERT_EQ(fake->gamma().size(), 2u);
 
   fake->Answer(true);
 
-  ASSERT_EQ(fake->gamma().size(), 2u);
-  EXPECT_EQ(WhiteOf(fake->gamma()[1].second),
+  ASSERT_EQ(fake->gamma().size(), 4u);
+  EXPECT_EQ(fake->gamma()[2].first, 11);
+  EXPECT_EQ(WhiteOf(fake->gamma()[2].second),
             (std::vector<uint16_t>{65535, 32768, 16384}));
+  EXPECT_EQ(fake->gamma()[3].first, 12);
+  EXPECT_EQ(WhiteOf(fake->gamma()[3].second),
+            (std::vector<uint16_t>{65535, 65535, 65535}));
 }
 
 // The browser's display hosts go with their snapshots, and a ramp for one
 // that is gone would reach nothing. The next reading names the displays.
-TEST(DrmModesetTest, AWhitePointWaitsForTheReadingAfterAnInvalidation) {
+TEST(DrmModesetTest, AGammaRampWaitsForTheReadingAfterAnInvalidation) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
@@ -741,12 +752,12 @@ TEST(DrmModesetTest, AWhitePointWaitsForTheReadingAfterAnInvalidation) {
   fake->Answer(true);
 
   modeset.OnDisplaySnapshotsInvalidated();
-  modeset.SetWhitePoint({.red = 1.f, .green = 0.5f, .blue = 0.25f});
+  modeset.SetGamma(11, WarmRamp());
   EXPECT_TRUE(fake->gamma().empty());
 }
 
 // No CRTC drives a virtual display, so it has no ramp to set.
-TEST(DrmModesetTest, AWhitePointLeavesVirtualDisplaysAlone) {
+TEST(DrmModesetTest, AGammaRampForAVirtualDisplayReachesNothing) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
@@ -763,10 +774,9 @@ TEST(DrmModesetTest, AWhitePointLeavesVirtualDisplaysAlone) {
                                .refresh_mhz = 60000,
                                .name = "TV"}});
 
-  modeset.SetWhitePoint({.red = 1.f, .green = 0.5f, .blue = 0.25f});
+  modeset.SetGamma(kVirtualId, WarmRamp());
 
-  ASSERT_EQ(fake->gamma().size(), 1u);
-  EXPECT_EQ(fake->gamma()[0].first, 11);
+  EXPECT_TRUE(fake->gamma().empty());
 }
 
 }  // namespace

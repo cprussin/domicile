@@ -37,7 +37,7 @@ case "$WHOLE_SUITE" in
 esac
 
 SUITES=(
-  DrmScreenTest:36
+  DrmScreenTest:37
   DrmModesetTest:22
   DrmVtSwitcherTest:20
   DrmSleepTest:2
