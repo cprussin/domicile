@@ -25,6 +25,7 @@ import {
   activeIdOf,
   activeIsPrivate,
   closedIdsOf,
+  isShutInOverview,
   killedIdsOf,
   NO_WINDOWS,
   reduceWindows,
@@ -123,7 +124,10 @@ export const useWindows = (
         closeWindows(domicile, closedIdsOf(drawn.current, [action.id]));
       }
       // A `focus parent` selection closes whole, as in sway.
-      if (action.kind === WindowActionKind.WindowKilled) {
+      if (
+        action.kind === WindowActionKind.WindowKilled &&
+        !isShutInOverview(drawn.current, action)
+      ) {
         closeWindows(
           domicile,
           closedIdsOf(drawn.current, killedIdsOf(drawn.current)),

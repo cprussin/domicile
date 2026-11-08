@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-
+import { Direction } from "../direction";
 import type { Rect } from "../rect";
-import { seenThrough, tileAt, tilesOf, viewOf } from "./tiles";
+import { seenThrough, tileAt, tilesOf, tileToward, viewOf } from "./tiles";
 
 const SCREEN: Rect = { height: 1080, width: 1920, x: 0, y: 0 };
 const AREA: Rect = { height: 1048, width: 1920, x: 0, y: 32 };
@@ -74,5 +74,29 @@ describe("tileAt", () => {
       tileAt(tiles, [second.x + 1, second.y + second.height - 1])?.name,
     ).toBe("2");
     expect(tileAt(tiles, [AREA.x, AREA.y])).toBeUndefined();
+  });
+});
+
+describe("tileToward", () => {
+  // Two rows: 1 and 2 on top, 3 alone and centered below.
+  const TILES = tilesOf(AREA, SCREEN, ["1", "2", "3"]);
+  const toward = (from: string, direction: Direction) =>
+    tileToward(TILES, from, direction)?.name;
+
+  it("steps along a row and between rows", () => {
+    expect(toward("1", Direction.Right)).toBe("2");
+    expect(toward("2", Direction.Left)).toBe("1");
+    expect(toward("1", Direction.Down)).toBe("3");
+    expect(toward("2", Direction.Down)).toBe("3");
+  });
+
+  it("goes up from a lone tile to the nearer of the tiles over it", () => {
+    // Centered under both, 3 is as near to each; the first wins.
+    expect(toward("3", Direction.Up)).toBe("1");
+  });
+
+  it("stops at the edge rather than wrapping", () => {
+    expect(toward("2", Direction.Right)).toBeUndefined();
+    expect(toward("1", Direction.Up)).toBeUndefined();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 
 import type { Rect } from "../rect";
 import { appWindowId } from "../window";
@@ -35,18 +36,26 @@ type Picked =
   | { picked: string }
   | { pickedWindow: string };
 
-const picker = () => {
-  const picked: Picked[] = [];
-  render(
+/** The picker, keeping the aim its keys move as the desktop does. */
+const Aiming = ({ picked }: { picked: Picked[] }) => {
+  const [aim, setAim] = useState<string | undefined>();
+  return (
     <OverviewPicker
+      aim={aim}
       focused=""
+      onAim={setAim}
       onDismiss={() => picked.push({ dismissed: true })}
       onMove={(id, workspace) => picked.push({ moved: [id, workspace] })}
       onPick={(workspace) => picked.push({ picked: workspace })}
       onPickWindow={(id) => picked.push({ pickedWindow: id })}
       overviews={[OVERVIEW]}
-    />,
+    />
   );
+};
+
+const picker = () => {
+  const picked: Picked[] = [];
+  render(<Aiming picked={picked} />);
   return picked;
 };
 
@@ -81,6 +90,25 @@ describe("OverviewPicker", () => {
     fireEvent.click(document.activeElement ?? document.body, { detail: 0 });
 
     expect(picked).toStrictEqual([{ picked: "1" }]);
+  });
+
+  it("moves the keyboard to the workspace aimed at by the overview's own keys", () => {
+    // Meta+H/J/K/L step the aim; see `steeredInOverview`.
+    const props = {
+      focused: "",
+      onAim: () => undefined,
+      onDismiss: () => undefined,
+      onMove: () => undefined,
+      onPick: () => undefined,
+      onPickWindow: () => undefined,
+      overviews: [OVERVIEW],
+    };
+    const { rerender } = render(<OverviewPicker aim={undefined} {...props} />);
+    expect(document.activeElement).toBe(tile("3"));
+
+    rerender(<OverviewPicker aim="1" {...props} />);
+
+    expect(document.activeElement).toBe(tile("1"));
   });
 
   it("keeps Tab among its tiles", () => {

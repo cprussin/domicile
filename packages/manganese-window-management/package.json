@@ -43,6 +43,7 @@
     "./overview/OverviewPicker": "./src/overview/OverviewPicker.tsx",
     "./overview/overview": "./src/overview/overview.ts",
     "./overview/sight": "./src/overview/sight.ts",
+    "./overview/steering": "./src/overview/steering.ts",
     "./overview/useOverviewPhase": "./src/overview/useOverviewPhase.ts",
     "./panda-preset": "./src/panda-preset.ts",
     "./placement": "./src/placement.ts",

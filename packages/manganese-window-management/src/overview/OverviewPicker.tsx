@@ -2,17 +2,26 @@ import type { KeyboardEvent, PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { css, cva } from "../../styled-system/css";
+import { Direction } from "../direction";
 import type { Spot } from "../pointer-warp";
 import type { Rect } from "../rect";
 import { within } from "../rect";
 import { placedAt, placedIn } from "../window-styles";
 import type { OverviewWindow, ScreenOverview } from "./overview";
 import { windowAt } from "./overview";
-import { tileAt } from "./tiles";
+import { tileAt, tileToward } from "./tiles";
 
 type Props = {
+  /**
+   * The workspace the keyboard is on, or `undefined` for the shown one of
+   * the `focused` screen. The arrow keys and Tab move it, as do the
+   * overview's own keys (see `steeredInOverview`).
+   */
+  aim: string | undefined;
   /** The screen with the keyboard, whose shown workspace takes focus. */
   focused: string;
+  /** The keyboard moved to another workspace. */
+  onAim: (workspace: string) => void;
   /** Escape, or a press between the tiles. */
   onDismiss: () => void;
   /** A window dropped on another workspace's tile. */
@@ -30,7 +39,8 @@ type Props = {
  * Each screen's workspace area is one layer, with a button over every tile.
  * A press on a window goes to it; anywhere else in a tile goes to its
  * workspace. Dragging a window onto another tile moves it there. The arrow
- * keys move between tiles, and Enter picks one.
+ * keys move between tiles the way they point, Tab in order, and Enter picks
+ * one.
  *
  * Windows ignore the pointer underneath: the layer covers them.
  */
@@ -56,7 +66,9 @@ const PICKER = 4000;
 type Drag = OverviewWindow & { from: Spot; pointerId: number; to: Spot };
 
 const ScreenPicker = ({
+  aim,
   focused,
+  onAim,
   onDismiss,
   onMove,
   onPick,
@@ -72,14 +84,39 @@ const ScreenPicker = ({
   // The click a press on a tile ends with dismisses nothing, wherever it is
   // let go.
   const onTile = useRef(false);
-  const shown = useRef<HTMLButtonElement>(null);
-  const takesFocus = geometry.name === focused;
+  const layer = useRef<HTMLDivElement>(null);
+  const aimedHere = overview.tiles.some(({ name }) => name === aim);
+  // The tile with the keyboard, if on this screen.
+  const aimed =
+    aimedHere || (aim === undefined && geometry.name === focused)
+      ? (aim ?? current)
+      : undefined;
 
   useEffect(() => {
-    if (takesFocus) {
-      shown.current?.focus();
+    if (aimed !== undefined) {
+      layer.current
+        ?.querySelector<HTMLElement>(`[data-workspace="${aimed}"]`)
+        ?.focus();
     }
-  }, [takesFocus]);
+  }, [aimed]);
+
+  /** Moves the keyboard `direction` of the tile it is on, if it can. */
+  const aimToward = (direction: Direction) => {
+    const to = tileToward(overview.tiles, aimed ?? current, direction);
+    if (to !== undefined) {
+      onAim(to.name);
+    }
+  };
+
+  /** Moves the keyboard `by` tiles in order, wrapping. */
+  const aimAlong = (by: number) => {
+    const { tiles } = overview;
+    const at = tiles.findIndex(({ name }) => name === (aimed ?? current));
+    const to = tiles[(at + by + tiles.length) % tiles.length];
+    if (to !== undefined) {
+      onAim(to.name);
+    }
+  };
 
   /** Whether `event` is another pointer than the one pressing a window. */
   const other = (event: PointerEvent<HTMLElement>) =>
@@ -160,19 +197,27 @@ const ScreenPicker = ({
       }
       case "Tab": {
         // The bar and the other screens are behind it.
-        stepFocus(event.currentTarget, event.shiftKey ? -1 : 1);
+        aimAlong(event.shiftKey ? -1 : 1);
         event.preventDefault();
         break;
       }
-      case "ArrowLeft":
+      case "ArrowLeft": {
+        aimToward(Direction.Left);
+        event.preventDefault();
+        break;
+      }
+      case "ArrowRight": {
+        aimToward(Direction.Right);
+        event.preventDefault();
+        break;
+      }
       case "ArrowUp": {
-        stepFocus(event.currentTarget, -1);
+        aimToward(Direction.Up);
         event.preventDefault();
         break;
       }
-      case "ArrowRight":
       case "ArrowDown": {
-        stepFocus(event.currentTarget, 1);
+        aimToward(Direction.Down);
         event.preventDefault();
         break;
       }
@@ -201,6 +246,7 @@ const ScreenPicker = ({
       onPointerDown={pressedOn}
       onPointerMove={movedTo}
       onPointerUp={released}
+      ref={layer}
       role="dialog"
       style={placedAt(area, PICKER)}
     >
@@ -215,6 +261,7 @@ const ScreenPicker = ({
               name !== pressed.workspace &&
               tileAt([{ box, name }], pressed.to) !== undefined,
           })}
+          data-workspace={name}
           key={name}
           onClick={(event) => {
             // From the keyboard, which no drag swallows: a touch drag ends
@@ -231,7 +278,6 @@ const ScreenPicker = ({
               onPickWindow(hit.id);
             }
           }}
-          ref={name === current ? shown : undefined}
           style={placedIn(within(box, area))}
           type="button"
         />
@@ -245,14 +291,6 @@ const ScreenPicker = ({
       )}
     </div>
   );
-};
-
-/** Moves keyboard focus `by` tiles along `layer`'s, wrapping around. */
-const stepFocus = (layer: HTMLElement, by: number) => {
-  const tiles = [...layer.querySelectorAll("button")];
-  const focused = layer.querySelector<HTMLButtonElement>("button:focus");
-  const at = focused === null ? -1 : tiles.indexOf(focused);
-  tiles[(at + by + tiles.length) % tiles.length]?.focus();
 };
 
 /** The dragged window's box, carried with the pointer. */

@@ -75,7 +75,11 @@ ones that have windows, and the one shown.
 
 - Click a workspace to go there, or a window to go to it.
 - Drag a window onto another workspace to move it there.
-- Arrow keys pick a workspace and Enter goes there.
+- Arrow keys or Meta+H/J/K/L pick a workspace, and Enter goes there.
+- Meta+Shift+H/J/K/L swaps the picked workspace with the next one that way,
+  windows and all.
+- Other window and workspace keys, and the bar's workspace buttons, do
+  nothing while it is open.
 - Escape, Meta+O, another four-finger pinch in, or a click outside the
   workspaces closes it. The launcher and clipboard close it too.
 

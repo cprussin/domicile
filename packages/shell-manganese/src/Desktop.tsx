@@ -63,6 +63,7 @@ import { OverviewBackdrop } from "@domicile-desktop/manganese-window-management/
 import { OverviewPicker } from "@domicile-desktop/manganese-window-management/overview/OverviewPicker";
 import { screenOverviewsOf } from "@domicile-desktop/manganese-window-management/overview/overview";
 import { sightOf } from "@domicile-desktop/manganese-window-management/overview/sight";
+import { steeredInOverview } from "@domicile-desktop/manganese-window-management/overview/steering";
 import { useOverviewPhase } from "@domicile-desktop/manganese-window-management/overview/useOverviewPhase";
 import type { Geometry } from "@domicile-desktop/manganese-window-management/placement";
 import type {
@@ -495,7 +496,17 @@ export const Desktop = ({
         }
         default: {
           spendShift();
-          act(action);
+          // In the overview, `focus` and `move` step its workspaces.
+          act(
+            windows.overviewOpen && overviews !== undefined
+              ? steeredInOverview(
+                  action,
+                  overviews,
+                  windows.overviewAim,
+                  windows.focused,
+                )
+              : action,
+          );
           // Moves the pointer with the keyboard; see `usePointerWarp`.
           // Dispatched in the same turn so both land in one render.
           act(WindowAction.KeyPressed());
@@ -511,9 +522,12 @@ export const Desktop = ({
       notificationIds,
       notificationsOpen,
       openNotifications,
+      overviews,
       spendShift,
       volumeKeys,
       windows.focused,
+      windows.overviewAim,
+      windows.overviewOpen,
     ],
   );
 
@@ -540,6 +554,12 @@ export const Desktop = ({
     (pick: Launch) => {
       setPicked(pick);
       act(WindowAction.LauncherDismissed());
+    },
+    [act],
+  );
+  const overviewAimed = useCallback(
+    (workspace: string) => {
+      act(WindowAction.OverviewAimed(workspace));
     },
     [act],
   );
@@ -746,7 +766,9 @@ export const Desktop = ({
       {/* Over every window, while the overview is open. */}
       {overviews !== undefined && overviewPhase === "open" && (
         <OverviewPicker
+          aim={windows.overviewAim}
           focused={windows.focused}
+          onAim={overviewAimed}
           onDismiss={overviewDismissed}
           onMove={windowMovedTo}
           onPick={overviewPicked}
