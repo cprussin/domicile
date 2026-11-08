@@ -4049,6 +4049,33 @@ describe("the overview", () => {
     );
   });
 
+  it("steps between workspaces on mod+h/j/k/l and swaps them with shift, leaving windows alone", async () => {
+    const { container } = await renderShell();
+    clientAppears("one");
+    press("parenright");
+    clientAppears("two");
+    press("o");
+
+    press("h");
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Workspace 1" }),
+    );
+    // Workspace 1's windows trade places with 2's, which stay on screen.
+    press("l", true);
+    fireEvent.keyDown(overview() ?? document, { key: "Escape" });
+    // The closing fade plays out.
+    const backdrop = container.querySelector("[data-overview-backdrop]");
+    if (backdrop !== null) {
+      fireEvent.animationEnd(backdrop);
+    }
+
+    expect(windowsOnScreen(container)).toEqual(["two"]);
+    expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+  });
+
   it("closes on Escape", async () => {
     await renderShell();
     press("o");

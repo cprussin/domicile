@@ -171,6 +171,11 @@ export type WindowState = {
    */
   launcherOpen: boolean;
   /**
+   * The workspace the overview's keys are on, or `undefined` for the shown
+   * one. Kept here because `focus` and `move` commands step it.
+   */
+  overviewAim: string | undefined;
+  /**
    * Whether the overview, each screen's workspaces at once, is open.
    * Kept here because key commands and gestures open it.
    */
@@ -224,6 +229,7 @@ export const NO_WINDOWS: WindowState = {
   homes: { "1": UNDESCRIBED_SCREEN },
   launcherOpen: false,
   mode: "default",
+  overviewAim: undefined,
   overviewOpen: false,
   popups: [],
   pressed: 0,
@@ -419,6 +425,7 @@ export enum WindowActionKind {
   NightLightToggled,
   NotificationsCleared,
   NotificationsToggled,
+  OverviewAimed,
   OverviewDismissed,
   OverviewPicked,
   OverviewToggled,
@@ -457,6 +464,7 @@ export enum WindowActionKind {
   WindowStepped,
   WindowStretched,
   WorkspaceSelected,
+  WorkspacesSwapped,
   WorkspaceStepped,
 }
 
@@ -845,6 +853,12 @@ export const WindowAction = {
     kind: WindowActionKind.NotificationsToggled as const,
   }),
 
+  /** The overview's keys moved onto workspace `name`. */
+  OverviewAimed: (name: string) => ({
+    kind: WindowActionKind.OverviewAimed as const,
+    name,
+  }),
+
   /** Escape, or a press on no workspace, in the overview. */
   OverviewDismissed: () => ({
     kind: WindowActionKind.OverviewDismissed as const,
@@ -1137,6 +1151,17 @@ export const WindowAction = {
     kind: WindowActionKind.WorkspaceStepped as const,
     way,
   }),
+
+  /**
+   * In the overview, the windows of workspaces `from` and `to` trade places,
+   * as do the screens showing them: what the screen showed stays shown,
+   * under its new name.
+   */
+  WorkspacesSwapped: (from: string, to: string) => ({
+    from,
+    kind: WindowActionKind.WorkspacesSwapped as const,
+    to,
+  }),
 };
 
 export type WindowAction = ReturnType<
@@ -1147,7 +1172,95 @@ export const reduceWindows = (
   state: WindowState,
   action: WindowAction,
 ): WindowState =>
-  rehomed(limited(state, regrouped(reduceAction(state, action))));
+  isShutInOverview(state, action)
+    ? state
+    : aimForgotten(
+        rehomed(limited(state, regrouped(reduceAction(state, action)))),
+      );
+
+/**
+ * Whether `action` does nothing in `state`, the overview being open: the
+ * reducer ignores it, and so must its side effects (see `useWindows`).
+ */
+export const isShutInOverview = (
+  state: Pick<WindowState, "overviewOpen">,
+  action: WindowAction,
+): boolean => state.overviewOpen && SHUT_IN_OVERVIEW.has(action.kind);
+
+/**
+ * The commands that change windows or workspaces, which do nothing while the
+ * overview is open: its picker and its own keys handle them (see
+ * `steeredInOverview`).
+ */
+const SHUT_IN_OVERVIEW: ReadonlySet<WindowActionKind> = new Set([
+  WindowActionKind.ChildFocused,
+  WindowActionKind.ContainerSplit,
+  WindowActionKind.FloatToggled,
+  WindowActionKind.FocusStepped,
+  WindowActionKind.FullscreenToggled,
+  WindowActionKind.LayoutSet,
+  WindowActionKind.ModeSwapped,
+  WindowActionKind.ParentFocused,
+  WindowActionKind.ScratchpadBrought,
+  WindowActionKind.ScratchpadHidden,
+  WindowActionKind.ScratchpadShown,
+  WindowActionKind.SplitToggled,
+  WindowActionKind.TabSubgrouped,
+  WindowActionKind.WindowGrown,
+  WindowActionKind.WindowKilled,
+  WindowActionKind.WindowSentToScratchpad,
+  WindowActionKind.WindowSentToWorkspace,
+  WindowActionKind.WindowStepped,
+  WindowActionKind.WorkspaceSelected,
+  WindowActionKind.WorkspaceStepped,
+]);
+
+// The overview's aim lasts only while it is open and its workspace has a
+// tile, which a workspace has while it has a home. Otherwise the keys go back
+// to the shown workspace.
+const aimForgotten = (state: WindowState): WindowState => {
+  const { homes, overviewAim, overviewOpen } = state;
+  if (overviewAim === undefined) {
+    return state;
+  } else if (overviewOpen && homes[overviewAim] !== undefined) {
+    return state;
+  } else {
+    return { ...state, overviewAim: undefined };
+  }
+};
+
+/**
+ * `from` and `to` trade windows, homes and the screens showing them; see
+ * `WorkspacesSwapped`.
+ */
+const swapped = (state: WindowState, from: string, to: string): WindowState => {
+  const other = (name: string | undefined) => {
+    if (name === from) {
+      return to;
+    } else if (name === to) {
+      return from;
+    } else {
+      return name;
+    }
+  };
+  return {
+    ...state,
+    homes: { ...state.homes, [from]: state.homes[to], [to]: state.homes[from] },
+    previous: other(state.previous),
+    screens: state.screens.map((screen) => ({
+      ...screen,
+      current: other(screen.current) ?? screen.current,
+    })),
+    workspaces: state.workspaces.map((workspace) =>
+      workspace.name === from || workspace.name === to
+        ? {
+            ...workspaceNamed(state, other(workspace.name) ?? workspace.name),
+            name: workspace.name,
+          }
+        : workspace,
+    ),
+  };
+};
 
 // Keeps every window in a tab group after any change (see `groupedOn`).
 const regrouped = (state: WindowState): WindowState => {
@@ -1356,6 +1469,9 @@ const reduceAction = (
         launcherOpen: true,
       };
     }
+    case WindowActionKind.OverviewAimed: {
+      return { ...state, overviewAim: action.name };
+    }
     case WindowActionKind.OverviewDismissed: {
       return { ...state, overviewOpen: false };
     }
@@ -1555,6 +1671,12 @@ const reduceAction = (
     }
     case WindowActionKind.WorkspaceSelected: {
       return selectWorkspace(state, action.name);
+    }
+    case WindowActionKind.WorkspacesSwapped: {
+      return {
+        ...swapped(state, action.from, action.to),
+        overviewAim: action.to,
+      };
     }
     case WindowActionKind.WorkspaceStepped: {
       return stepWorkspace(state, action.way);

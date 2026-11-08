@@ -2509,6 +2509,61 @@ describe("the overview", () => {
     expect(state.overviewOpen).toBe(true);
   });
 
+  it("aims at a workspace, forgetting the aim once it closes", () => {
+    const aimed = reduce(
+      onOneAndThree(),
+      WindowAction.OverviewToggled(),
+      WindowAction.OverviewAimed("1"),
+    );
+
+    expect(aimed.overviewAim).toBe("1");
+    expect(
+      reduce(aimed, WindowAction.OverviewDismissed()).overviewAim,
+    ).toBeUndefined();
+  });
+
+  it("forgets the aim once its workspace has no tile", () => {
+    // Its last window dragged away, workspace 1 leaves the bar and the
+    // overview; the keys go back to the shown workspace.
+    const state = reduce(
+      onOneAndThree(),
+      WindowAction.OverviewToggled(),
+      WindowAction.OverviewAimed("1"),
+      WindowAction.WindowMovedToWorkspace(APP("kitty"), "3"),
+    );
+
+    expect(state.overviewAim).toBeUndefined();
+  });
+
+  it("swaps two workspaces' windows, the screen and the aim following the one aimed at", () => {
+    // Workspace 3, shown, moves to slot 1: it is still what the screen
+    // shows, now as 1.
+    const state = reduce(
+      onOneAndThree(),
+      WindowAction.OverviewToggled(),
+      WindowAction.WorkspacesSwapped("3", "1"),
+    );
+
+    expect(windowsOn(workspaceNamed(state, "1"))).toStrictEqual([APP("foot")]);
+    expect(windowsOn(workspaceNamed(state, "3"))).toStrictEqual([APP("kitty")]);
+    expect(currentHere(state)).toBe("1");
+    expect(state.overviewAim).toBe("1");
+  });
+
+  it.each([
+    ["focus", WindowAction.FocusStepped(Direction.Left)],
+    ["move", WindowAction.WindowStepped(Direction.Left)],
+    ["workspace", WindowAction.WorkspaceSelected("1")],
+    ["layout", WindowAction.LayoutSet(Layout.Tabbed)],
+    ["kill", WindowAction.WindowKilled()],
+    ["scratchpad", WindowAction.ScratchpadShown()],
+  ] as const)("ignores `%s` while open", (_, action) => {
+    // Its keys steer the overview instead; see `steeredInOverview`.
+    const before = reduce(onOneAndThree(), WindowAction.OverviewToggled());
+
+    expect(reduce(before, action)).toBe(before);
+  });
+
   it("leaves a window dropped back on its own workspace", () => {
     const before = reduce(onOneAndThree(), WindowAction.OverviewToggled());
 

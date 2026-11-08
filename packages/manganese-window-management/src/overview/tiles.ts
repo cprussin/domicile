@@ -1,6 +1,7 @@
 // Where the overview draws each workspace of a screen: a tile the screen's
 // shape, and the view that shrinks the screen into it.
 
+import { Direction } from "../direction";
 import type { Spot } from "../pointer-warp";
 import type { Rect } from "../rect";
 
@@ -144,4 +145,65 @@ const tileWidth = (
       screen.width * LARGEST,
     ),
   );
+};
+
+/**
+ * The tile `direction` of workspace `from`'s, if any: the nearest whose middle
+ * is that way, counting a step off the line twice, so a row's neighbor beats
+ * a tile across and down. Stops at the edge.
+ */
+export const tileToward = (
+  tiles: readonly OverviewTile[],
+  from: string,
+  direction: Direction,
+): OverviewTile | undefined => {
+  const start = tiles.find(({ name }) => name === from);
+  if (start === undefined) {
+    return undefined;
+  } else {
+    const [x, y] = middleOf(start.box);
+    return tiles
+      .map((tile) => {
+        const [tx, ty] = middleOf(tile.box);
+        const [along, across] = alongAcross(direction, tx - x, ty - y);
+        return { across, along, tile };
+      })
+      .filter(({ along }) => along > 0)
+      .reduce<{ score: number; tile: OverviewTile } | undefined>(
+        (best, { across, along, tile }) => {
+          const score = along + 2 * Math.abs(across);
+          return best === undefined || score < best.score
+            ? { score, tile }
+            : best;
+        },
+        undefined,
+      )?.tile;
+  }
+};
+
+const middleOf = ({ height, width, x, y }: Rect): Spot => [
+  x + width / 2,
+  y + height / 2,
+];
+
+/** How far `dx`, `dy` goes `direction`, and how far off to the side. */
+const alongAcross = (
+  direction: Direction,
+  dx: number,
+  dy: number,
+): readonly [number, number] => {
+  switch (direction) {
+    case Direction.Left: {
+      return [-dx, dy];
+    }
+    case Direction.Right: {
+      return [dx, dy];
+    }
+    case Direction.Up: {
+      return [-dy, dx];
+    }
+    case Direction.Down: {
+      return [dy, dx];
+    }
+  }
 };

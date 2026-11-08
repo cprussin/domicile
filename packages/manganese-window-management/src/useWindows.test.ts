@@ -369,6 +369,21 @@ describe("a command", () => {
     ).toEqual(["foot"]);
   });
 
+  it("kills nothing while the overview is open", () => {
+    // The overview is for picking; its keys do nothing else.
+    const { host, result } = desktop([LEFT, RIGHT]);
+    host.announces("kitty");
+
+    act(() => {
+      result.current.act(WindowAction.OverviewToggled());
+    });
+    act(() => {
+      result.current.act(WindowAction.WindowKilled());
+    });
+
+    expect(host.fake.calls.filter(([name]) => name === "closeApp")).toEqual([]);
+  });
+
   it("kills every window in the group `focus parent` selected", () => {
     const { host, result } = desktop([LEFT, RIGHT]);
     host.announces("kitty");
