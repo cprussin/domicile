@@ -9,7 +9,7 @@
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::Format;
-use smithay::backend::egl::native::{EGLNativeDisplay, EGLPlatform};
+use smithay::backend::egl::native::{EGLNativeDisplay, EGLPlatform, EGLSurfacelessDisplay};
 use smithay::backend::egl::{ffi, EGLContext, EGLDevice, EGLDisplay};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportDma as _;
@@ -76,10 +76,7 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
         // `EGL_EXT_device_enumeration`.
         Err(err) => {
             tracing::debug!(%err, "EGL cannot list devices; trying GBM on each render node");
-            let (display, node) = gbm_display(Path::new("/dev/dri"))?;
-            let main_device = device_number(&node);
-            tracing::debug!(device = ?node, main_device, "dmabuf import device");
-            (display, Some(node), main_device)
+            gbm_or_surfaceless_display(Path::new("/dev/dri"))?
         }
     };
     let context = EGLContext::new(&display)?;
@@ -87,6 +84,28 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
     // thread, which is where the context is made current.
     let renderer = unsafe { GlesRenderer::new(context) }?;
     Ok((renderer, DmabufImporter { main_device, node }))
+}
+
+/// An EGL display over libgbm on a render node in `dir`, with that node and its
+/// device number, or a surfaceless one with neither when no node has GBM.
+///
+/// A VM whose only render node is not a GPU still gets a software renderer.
+fn gbm_or_surfaceless_display(
+    dir: &Path,
+) -> Result<(EGLDisplay, Option<PathBuf>, Option<u64>), ImportError> {
+    match gbm_display(dir) {
+        Ok((display, node)) => {
+            let main_device = device_number(&node);
+            tracing::debug!(device = ?node, main_device, "dmabuf import device");
+            Ok((display, Some(node), main_device))
+        }
+        Err(err) => {
+            tracing::debug!(%err, "no render node has GBM; using surfaceless EGL");
+            // SAFETY: a surfaceless display wraps no native handle.
+            let display = unsafe { EGLDisplay::new(EGLSurfacelessDisplay) }?;
+            Ok((display, None, None))
+        }
+    }
 }
 
 /// An EGL display over libgbm on the first render node in `dir` that has one,
@@ -231,7 +250,7 @@ fn preferred_device<D>(
 mod tests {
     use smithay::backend::allocator::{Format, Fourcc, Modifier};
 
-    use super::{advertisable, render_nodes};
+    use super::{advertisable, gbm_or_surfaceless_display, render_nodes};
 
     fn format(code: Fourcc) -> Format {
         Format {
@@ -280,6 +299,17 @@ mod tests {
             render_nodes(dir.path()).unwrap(),
             [dir.path().join("renderD128"), dir.path().join("renderD129")]
         );
+    }
+
+    // A VM whose only render node libgbm refuses still renders, in software.
+    #[test]
+    fn no_gbm_render_node_falls_back_to_surfaceless_egl() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("renderD128"), "").unwrap();
+
+        let (_display, node, main_device) = gbm_or_surfaceless_display(dir.path()).unwrap();
+
+        assert_eq!((node, main_device), (None, None));
     }
 
     #[test]
