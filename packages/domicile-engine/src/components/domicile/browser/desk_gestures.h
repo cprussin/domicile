@@ -36,6 +36,12 @@ struct GestureGrab {
 // took its begin: each page grabs the same gestures, and telling every page
 // would run a binding once per monitor.
 //
+// A swipe or hold of three or more fingers the shell did not grab goes to the
+// first channel that forwards them, which hands it to the compositor for the
+// native window under the pointer: what the shell leaves, the apps get. Fewer
+// fingers are the touchpad's pointer and scrolling, and a pinch nobody grabbed
+// goes to the page under the pointer, so neither is forwarded.
+//
 // Grabs arrive on a `ControlChannel` on the IO thread and gestures on the
 // platform's input thread, hence the lock. Callers wrap callbacks with
 // `base::BindPostTask`: they run on the thread a gesture arrives on, and never
@@ -56,8 +62,9 @@ class DeskGestures : public ui::NativeGestureSink {
   DeskGestures& operator=(const DeskGestures&) = delete;
   ~DeskGestures() override;
 
-  // A page that can grab gestures, told each phase of one it took.
-  ChannelId AddChannel(Performed performed);
+  // A page that can grab gestures, told each phase of one it took, and of
+  // each unbound swipe and hold if `unbound` is set.
+  ChannelId AddChannel(Performed performed, Performed unbound = {});
 
   // Drops `channel` and its grabs. A gesture it took ends unheard.
   void RemoveChannel(ChannelId channel);
@@ -77,18 +84,28 @@ class DeskGestures : public ui::NativeGestureSink {
   struct Channel {
     ChannelId id = 0;
     Performed performed;
+    Performed unbound;
     std::vector<GestureGrab> grabs;
+  };
+
+  struct Owner {
+    ChannelId channel = 0;
+    // Whether the gesture is one nobody grabbed, told to `unbound`.
+    bool unbound = false;
   };
 
   // The first channel grabbing the gesture `begin` begins.
   const Channel* Grabbing(const ui::NativeGesture& begin) const
+      EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  // The channel forwarding `begin`'s gesture, if nobody grabs it.
+  const Channel* Forwarding(const ui::NativeGesture& begin) const
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   base::Lock lock_;
   ChannelId next_id_ GUARDED_BY(lock_) = 1;
   std::vector<Channel> channels_ GUARDED_BY(lock_);
   // The channel that took the gesture in progress.
-  std::optional<ChannelId> owner_ GUARDED_BY(lock_);
+  std::optional<Owner> owner_ GUARDED_BY(lock_);
 };
 
 }  // namespace domicile

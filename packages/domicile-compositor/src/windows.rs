@@ -278,6 +278,7 @@ impl DomicileCompositor {
     /// chromes it is gone.
     pub fn forget(&mut self, app_id: &str) {
         self.pinch_window_gone(app_id);
+        self.swipe_window_gone(app_id);
         self.touch_window_gone(app_id);
         // The surface stays on screen through the shell's close animation;
         // only frames that never went up come back now.

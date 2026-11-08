@@ -193,7 +193,9 @@ ControlChannel::ControlChannel(
           &ControlChannel::SomebodyIsHere, weak_factory_.GetWeakPtr())));
   gestures_ = DeskGestures::Get().AddChannel(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
-          &ControlChannel::DeliverGesture, weak_factory_.GetWeakPtr())));
+          &ControlChannel::DeliverGesture, weak_factory_.GetWeakPtr())),
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::ForwardGesture, weak_factory_.GetWeakPtr())));
   pointer_ = DeskPointer::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeskPointerMoved, weak_factory_.GetWeakPtr())));
@@ -928,6 +930,35 @@ void ControlChannel::DeliverGesture(const ui::NativeGesture& gesture) {
         gesture.rotation, gesture.canceled,
         GestureEdgeToMojo(gesture.edge)));
   }
+}
+
+void ControlChannel::ForwardGesture(const ui::NativeGesture& gesture) {
+  if (!connected_) {
+    return;
+  }
+  const bool swipe = gesture.kind == ui::NativeGestureKind::kSwipe;
+  CHECK(swipe || gesture.kind == ui::NativeGestureKind::kHold);
+  base::DictValue message = Typed(swipe ? "pointer_swipe" : "pointer_hold");
+  switch (gesture.phase) {
+    case ui::NativeGesturePhase::kBegin:
+      message.Set("phase", "begin");
+      message.Set("fingers", static_cast<int>(gesture.fingers));
+      break;
+    case ui::NativeGesturePhase::kUpdate:
+      // A hold has no updates to give.
+      if (!swipe) {
+        return;
+      }
+      message.Set("phase", "update");
+      message.Set("dx", gesture.dx);
+      message.Set("dy", gesture.dy);
+      break;
+    case ui::NativeGesturePhase::kEnd:
+      message.Set("phase", "end");
+      message.Set("canceled", gesture.canceled);
+      break;
+  }
+  SendMessage(std::move(message));
 }
 
 void ControlChannel::DeliverRelease(Chord chord) {

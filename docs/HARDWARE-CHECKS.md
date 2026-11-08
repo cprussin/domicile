@@ -21,7 +21,11 @@ In Manganese with windows on two workspaces of one monitor:
 
 - a three-finger swipe left goes to the next workspace, and right to the
   previous one;
-- a three-finger swipe does not scroll the window under the pointer.
+- a three-finger swipe does not scroll the window under the pointer;
+- with `WAYLAND_DEBUG=1 gtk4-demo 2>&1 | grep -E 'swipe|hold'` running, a
+  four-finger swipe over its window logs a swipe `begin`, `update`s and an
+  `end`, and resting four fingers logs a hold `begin` and `end`; a
+  three-finger swipe logs nothing and changes workspace.
 
 ## Touchscreen
 

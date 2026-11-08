@@ -32,7 +32,8 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1, zwp_keyboard_shortcuts_inhibitor_v1,
 };
 use wayland_protocols::wp::pointer_gestures::zv1::client::{
-    zwp_pointer_gesture_pinch_v1, zwp_pointer_gestures_v1,
+    zwp_pointer_gesture_hold_v1, zwp_pointer_gesture_pinch_v1, zwp_pointer_gesture_swipe_v1,
+    zwp_pointer_gestures_v1,
 };
 use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
@@ -2026,6 +2027,10 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
                 let pointer = seat.get_pointer(handle, ());
                 if let Some(manager) = &client.globals.gestures {
                     manager.get_pinch_gesture(&pointer, handle, ());
+                    manager.get_swipe_gesture(&pointer, handle, ());
+                    if manager.version() >= 3 {
+                        manager.get_hold_gesture(&pointer, handle, ());
+                    }
                 }
                 // Created now, because `set_shape` on pointer enter needs the
                 // device to exist.
@@ -2968,6 +2973,61 @@ impl Dispatch<zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1, ()> for Cl
                 crate::say!(gesture.id(), "pinch_end({time}, {canceled})");
             }
             _ => unreachable!("the pinch protocol has only begin, update and end"),
+        }
+    }
+}
+
+impl Dispatch<zwp_pointer_gesture_swipe_v1::ZwpPointerGestureSwipeV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        gesture: &zwp_pointer_gesture_swipe_v1::ZwpPointerGestureSwipeV1,
+        event: zwp_pointer_gesture_swipe_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        use zwp_pointer_gesture_swipe_v1::Event;
+        match event {
+            Event::Begin { time, fingers, .. } => {
+                crate::say!(gesture.id(), "swipe_begin({time}, {fingers})");
+            }
+            Event::Update { time, dx, dy } => {
+                crate::say!(gesture.id(), "swipe_update({time}, {dx}, {dy})");
+            }
+            Event::End {
+                time,
+                cancelled: canceled,
+                ..
+            } => {
+                crate::say!(gesture.id(), "swipe_end({time}, {canceled})");
+            }
+            _ => unreachable!("the swipe protocol has only begin, update and end"),
+        }
+    }
+}
+
+impl Dispatch<zwp_pointer_gesture_hold_v1::ZwpPointerGestureHoldV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        gesture: &zwp_pointer_gesture_hold_v1::ZwpPointerGestureHoldV1,
+        event: zwp_pointer_gesture_hold_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        use zwp_pointer_gesture_hold_v1::Event;
+        match event {
+            Event::Begin { time, fingers, .. } => {
+                crate::say!(gesture.id(), "hold_begin({time}, {fingers})");
+            }
+            Event::End {
+                time,
+                cancelled: canceled,
+                ..
+            } => {
+                crate::say!(gesture.id(), "hold_end({time}, {canceled})");
+            }
+            _ => unreachable!("the hold protocol has only begin and end"),
         }
     }
 }

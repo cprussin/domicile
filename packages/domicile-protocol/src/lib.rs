@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub mod pinch;
+pub mod swipe;
 pub mod touch;
 
 /// The protocol version this build speaks.
@@ -174,6 +175,18 @@ pub enum ChromeMessage {
         app_id: String,
         #[serde(flatten)]
         pinch: pinch::Pinch,
+    },
+    /// A touchpad swipe the shell did not bind, for the native app under the
+    /// pointer. See [`swipe`].
+    PointerSwipe {
+        #[serde(flatten)]
+        swipe: swipe::Swipe,
+    },
+    /// A touchpad hold the shell did not bind, for the native app under the
+    /// pointer. See [`swipe`].
+    PointerHold {
+        #[serde(flatten)]
+        hold: swipe::Hold,
     },
     /// A finger on a native app. See [`touch::Touch`].
     Touch {

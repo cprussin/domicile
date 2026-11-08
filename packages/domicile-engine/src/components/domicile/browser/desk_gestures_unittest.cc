@@ -131,6 +131,70 @@ TEST(DeskGesturesTest, OneUngrabAnswersRepeatedGrabs) {
   EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kPinch, 4)));
 }
 
+NativeGesture Hold(NativeGesturePhase phase, uint32_t fingers = 3) {
+  return {.kind = NativeGestureKind::kHold, .phase = phase, .fingers = fingers};
+}
+
+// The shell binds three-finger swipes; a four-finger swipe and a hold go to
+// the apps, through the channel that forwards them, and not to the binding.
+TEST(DeskGesturesTest, WhatTheShellLeavesIsForwarded) {
+  DeskGestures gestures;
+  Heard bound;
+  Heard unbound;
+  const auto channel = gestures.AddChannel(Into(&bound), Into(&unbound));
+  gestures.Grab(channel, {NativeGestureKind::kSwipe, 3});
+
+  EXPECT_TRUE(gestures.Takes(Begin(NativeGestureKind::kSwipe, 4)));
+  gestures.Take(Swipe(NativeGesturePhase::kBegin, 4));
+  gestures.Take(Swipe(NativeGesturePhase::kUpdate, 4));
+  gestures.Take(Swipe(NativeGesturePhase::kEnd, 4));
+  gestures.Take(Hold(NativeGesturePhase::kBegin));
+  gestures.Take(Hold(NativeGesturePhase::kEnd));
+  gestures.Take(Swipe(NativeGesturePhase::kBegin));
+  gestures.Take(Swipe(NativeGesturePhase::kEnd));
+
+  EXPECT_EQ(unbound,
+            (Heard{NativeGesturePhase::kBegin, NativeGesturePhase::kUpdate,
+                   NativeGesturePhase::kEnd, NativeGesturePhase::kBegin,
+                   NativeGesturePhase::kEnd}));
+  EXPECT_EQ(bound,
+            (Heard{NativeGesturePhase::kBegin, NativeGesturePhase::kEnd}));
+}
+
+// Fewer fingers are pointing and scrolling, and an unbound pinch is the
+// page's: none of them is forwarded.
+TEST(DeskGesturesTest, PinchesAndFewFingersAreNotForwarded) {
+  DeskGestures gestures;
+  Heard bound;
+  Heard unbound;
+  gestures.AddChannel(Into(&bound), Into(&unbound));
+
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kPinch, 3)));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kSwipe, 2)));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kHold, 1)));
+  EXPECT_FALSE(gestures.Takes(Edge(ui::NativeGestureEdge::kLeft)));
+}
+
+// Every page could forward; the compositor needs to hear it once.
+TEST(DeskGesturesTest, OneChannelForwardsAGesture) {
+  DeskGestures gestures;
+  Heard bound;
+  Heard first;
+  Heard second;
+  gestures.AddChannel(Into(&bound));
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kSwipe, 3)));
+
+  gestures.AddChannel(Into(&bound), Into(&first));
+  gestures.AddChannel(Into(&bound), Into(&second));
+  gestures.Take(Hold(NativeGesturePhase::kBegin, 4));
+  gestures.Take(Hold(NativeGesturePhase::kEnd, 4));
+
+  EXPECT_EQ(first,
+            (Heard{NativeGesturePhase::kBegin, NativeGesturePhase::kEnd}));
+  EXPECT_TRUE(second.empty());
+  EXPECT_TRUE(bound.empty());
+}
+
 // `edge:left` is a finger in from the left only; `edge` from any side.
 TEST(DeskGesturesTest, AnEdgeGrabTakesItsEdge) {
   DeskGestures gestures;
