@@ -413,7 +413,9 @@ export enum WindowActionKind {
   PageFullscreened,
   ParentFocused,
   PopupPlaced,
+  ScratchpadBrought,
   ScratchpadDismissed,
+  ScratchpadHidden,
   ScratchpadShown,
   ScreenHovered,
   ScreenshotTaken,
@@ -849,10 +851,20 @@ export const WindowAction = {
     popup,
   }),
 
+  /** `scratchpad bring`: `scratchpad show` that never hides. */
+  ScratchpadBrought: () => ({
+    kind: WindowActionKind.ScratchpadBrought as const,
+  }),
+
   /** A click on the backdrop behind scratchpad window `id`, which hides it. */
   ScratchpadDismissed: (id: string) => ({
     id,
     kind: WindowActionKind.ScratchpadDismissed as const,
+  }),
+
+  /** `scratchpad hide`: `scratchpad show` that never shows. */
+  ScratchpadHidden: () => ({
+    kind: WindowActionKind.ScratchpadHidden as const,
   }),
 
   /** `scratchpad show`. */
@@ -1320,6 +1332,15 @@ const reduceAction = (
     }
     case WindowActionKind.ScratchpadShown: {
       return showScratchpad(state);
+    }
+    case WindowActionKind.ScratchpadBrought: {
+      return scratchpadShownHere(state) === undefined
+        ? showScratchpad(state)
+        : state;
+    }
+    case WindowActionKind.ScratchpadHidden: {
+      const id = scratchpadShownHere(state);
+      return id === undefined ? state : restowed(state, id);
     }
     case WindowActionKind.SplitToggled: {
       return onCurrent(state, splitFlipped);
@@ -2239,6 +2260,24 @@ const showScratchpad = (state: WindowState): WindowState => {
     return onCurrent({ ...state, scratchpad: rest }, (found) =>
       shown(found, hidden, screenHere(state)),
     );
+  }
+};
+
+/**
+ * The scratchpad window shown on the workspace on screen: the focused one, or
+ * else the frontmost, or `undefined` while none is out.
+ */
+const scratchpadShownHere = (state: WindowState): string | undefined => {
+  const workspace = workspaceHere(state);
+  const focused = focusedOn(workspace);
+  if (
+    focused !== undefined &&
+    floatOn(workspace, focused)?.scratchpad === true
+  ) {
+    return focused;
+  } else {
+    const front = workspace.floats.findLast((float) => float.scratchpad);
+    return front === undefined ? undefined : windowsIn(front.root)[0];
   }
 };
 

@@ -56,6 +56,8 @@ describe("parseCommand", () => {
     ["fullscreen toggle global", WindowAction.FullscreenToggled(true)],
     ["floating toggle", WindowAction.FloatToggled()],
     ["scratchpad show", WindowAction.ScratchpadShown()],
+    ["scratchpad bring", WindowAction.ScratchpadBrought()],
+    ["scratchpad hide", WindowAction.ScratchpadHidden()],
     ["workspace 1", WindowAction.WorkspaceSelected("1")],
     ["workspace next_on_output", WindowAction.WorkspaceStepped("next")],
     ["workspace prev_on_output", WindowAction.WorkspaceStepped("prev")],

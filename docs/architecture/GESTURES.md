@@ -103,9 +103,13 @@ far, so `swipe:3:up+left` is a diagonal. A pinch went by its last scale and its
 summed rotation. Of the bindings a gesture fits, one with a count or a side
 wins over one without, then more directions over fewer.
 
-Manganese binds `swipe:3:left` and `swipe:3:right` to `workspace
-next_on_output` and `prev_on_output`, and `edge:right` and `edge:left` the
-same way: the workspace follows the finger.
+Manganese binds `swipe:3:<way>` to `focus <way>`, pointing where focus goes,
+as Meta+H/J/K/L do. Four fingers move things: `swipe:4:left` and
+`swipe:4:right` are `workspace next_on_output` and `prev_on_output`, the
+workspace following the fingers, as do `edge:right` and `edge:left`, and
+`swipe:4:down` and `swipe:4:up` are `scratchpad bring` and `scratchpad hide`:
+the scratchpad hangs from the top of the screen, so it is pulled down and
+pushed back up. `pinch:4:outward`, four fingers spreading, opens the launcher.
 
 ## Key decisions
 

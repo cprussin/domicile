@@ -1043,6 +1043,43 @@ describe("the scratchpad", () => {
     expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
   });
 
+  // A gesture that goes one way: down only brings, up only hides.
+  it("brings a window only while none is out", () => {
+    const hidden = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToScratchpad(),
+      WindowAction.WindowSentToScratchpad(),
+    );
+    const brought = reduce(hidden, WindowAction.ScratchpadBrought());
+
+    expect(activeIdOf(brought)).toBe(APP("editor"));
+    expect(reduceWindows(brought, WindowAction.ScratchpadBrought())).toBe(
+      brought,
+    );
+  });
+
+  it("hides the window it shows, even once focus has moved on", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToScratchpad(),
+      WindowAction.ScratchpadBrought(),
+      WindowAction.WindowSelected(APP("kitty")),
+      WindowAction.ScratchpadHidden(),
+    );
+
+    expect(state.scratchpad).toEqual([APP("editor")]);
+    expect(workspaceHere(state).floats).toEqual([]);
+  });
+
+  it("has nothing to hide while nothing is out", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToScratchpad(),
+    );
+
+    expect(reduceWindows(state, WindowAction.ScratchpadHidden())).toBe(state);
+  });
+
   it("has nothing to show on an empty scratchpad", () => {
     const state = desktop("kitty");
 

@@ -82,6 +82,9 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["fullscreen toggle global", WindowAction.FullscreenToggled(true)],
   ["floating toggle", WindowAction.FloatToggled()],
   ["scratchpad show", WindowAction.ScratchpadShown()],
+  // Manganese's: one way each, for gestures that go one way.
+  ["scratchpad bring", WindowAction.ScratchpadBrought()],
+  ["scratchpad hide", WindowAction.ScratchpadHidden()],
   ...DIRECTIONS.map(
     ([word, way]): Command => [
       `resize grow ${word}`,
