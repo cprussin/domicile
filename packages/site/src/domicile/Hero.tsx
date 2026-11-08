@@ -17,9 +17,9 @@ export const Hero = () => (
     }
     lede={
       <>
-        Domicile brings Chromium and Wayland together, making websites and
-        native applications part of the same desktop. Your desktop lays out
-        websites, native apps become DOM elements, and browser features like
+        For years we've run Chromium's compositor inside another compositor.
+        Domicile asks what happens when the two become one: your desktop lays
+        out websites, native apps become DOM elements, and browser features like
         casting, extensions and notifications become desktop features.
         <span className={experimentStyles}>
           An experiment in what becomes possible when the boundaries disappear.
@@ -27,7 +27,7 @@ export const Hero = () => (
       </>
     }
     tag={{ href: "#why", label: "A Linux desktop on Chromium" }}
-    title="The web doesn't have to live in a window."
+    title="You're already running two compositors."
   >
     {/* A window needs a Wayland session: there is no X11 backend. */}
     <p className={trialStyles}>

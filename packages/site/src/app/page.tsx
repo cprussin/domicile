@@ -25,9 +25,9 @@ import { shared } from "../page/shared";
 
 export const metadata = shared({
   description:
-    "Domicile brings Chromium and Wayland together, making websites and native applications part of the same desktop. Your desktop lays out websites, native apps become DOM elements, and browser features like casting, extensions and notifications become desktop features.",
+    "For years we've run Chromium's compositor inside another compositor. Domicile asks what happens when the two become one: your desktop lays out websites, native apps become DOM elements, and browser features like casting, extensions and notifications become desktop features.",
   path: "/",
-  title: "Domicile: the web doesn't have to live in a window",
+  title: "Domicile: you're already running two compositors",
 });
 
 /** domicile-desktop.com: Domicile, and building on it. */
