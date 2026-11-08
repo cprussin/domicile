@@ -25,10 +25,12 @@ DeskGestures& DeskGestures::Get() {
 DeskGestures::DeskGestures() = default;
 DeskGestures::~DeskGestures() = default;
 
-DeskGestures::ChannelId DeskGestures::AddChannel(Performed performed) {
+DeskGestures::ChannelId DeskGestures::AddChannel(Performed performed,
+                                                 Performed unbound) {
   base::AutoLock held(lock_);
   const ChannelId id = next_id_++;
-  channels_.push_back(Channel{id, std::move(performed), {}});
+  channels_.push_back(
+      Channel{id, std::move(performed), std::move(unbound), {}});
   return id;
 }
 
@@ -37,7 +39,7 @@ void DeskGestures::RemoveChannel(ChannelId channel) {
   std::erase_if(channels_, [channel](const Channel& registered) {
     return registered.id == channel;
   });
-  if (owner_ == channel) {
+  if (owner_ && owner_->channel == channel) {
     owner_.reset();
   }
 }
@@ -60,7 +62,7 @@ void DeskGestures::Ungrab(ChannelId channel, GestureGrab grab) {
 
 bool DeskGestures::Takes(const ui::NativeGesture& begin) {
   base::AutoLock held(lock_);
-  return Grabbing(begin) != nullptr;
+  return Grabbing(begin) || Forwarding(begin);
 }
 
 void DeskGestures::Take(const ui::NativeGesture& gesture) {
@@ -68,16 +70,19 @@ void DeskGestures::Take(const ui::NativeGesture& gesture) {
   {
     base::AutoLock held(lock_);
     if (gesture.phase == ui::NativeGesturePhase::kBegin) {
-      const Channel* grabbing = Grabbing(gesture);
-      owner_ = grabbing ? std::optional<ChannelId>(grabbing->id)
-                        : std::nullopt;
+      owner_.reset();
+      if (const Channel* grabbing = Grabbing(gesture)) {
+        owner_ = Owner{grabbing->id, false};
+      } else if (const Channel* forwarding = Forwarding(gesture)) {
+        owner_ = Owner{forwarding->id, true};
+      }
     }
     if (!owner_) {
       return;
     }
-    auto found = std::ranges::find(channels_, *owner_, &Channel::id);
+    auto found = std::ranges::find(channels_, owner_->channel, &Channel::id);
     CHECK(found != channels_.end());
-    tell = found->performed;
+    tell = owner_->unbound ? found->unbound : found->performed;
     if (gesture.phase == ui::NativeGesturePhase::kEnd) {
       owner_.reset();
     }
@@ -93,6 +98,19 @@ const DeskGestures::Channel* DeskGestures::Grabbing(
              (grab.fingers == 0 || grab.fingers == begin.fingers) &&
              (!grab.edge || grab.edge == begin.edge);
     });
+  });
+  return found == channels_.end() ? nullptr : &*found;
+}
+
+const DeskGestures::Channel* DeskGestures::Forwarding(
+    const ui::NativeGesture& begin) const {
+  if ((begin.kind != ui::NativeGestureKind::kSwipe &&
+       begin.kind != ui::NativeGestureKind::kHold) ||
+      begin.fingers < 3) {
+    return nullptr;
+  }
+  auto found = std::ranges::find_if(channels_, [](const Channel& channel) {
+    return !channel.unbound.is_null();
   });
   return found == channels_.end() ? nullptr : &*found;
 }

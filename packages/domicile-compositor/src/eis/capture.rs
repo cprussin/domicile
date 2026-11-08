@@ -138,6 +138,8 @@ impl Capture {
                 Some(_),
                 ClientRequest::PointerLeave
                 | ClientRequest::PointerPinch { .. }
+                | ClientRequest::PointerSwipe { .. }
+                | ClientRequest::PointerHold { .. }
                 | ClientRequest::Touch { .. },
             ) => true,
             (true, Some(_), _) => false,

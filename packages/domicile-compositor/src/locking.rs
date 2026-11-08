@@ -43,6 +43,7 @@ impl DomicileCompositor {
             // wake the desktop.
             self.release_pressed_keys();
             self.cancel_pinch();
+            self.cancel_swipe();
             self.cancel_touches();
             self.tell_the_chromes_whether_the_desk_is_locked();
         } else if !self.lock.locked() {

@@ -13,8 +13,11 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 (engine, nested)             (ui::GestureEvent       (default    (pointer_pinch,  (zwp_pointer_
                               + NativePinch)          handling)   pointer_axis)    gestures_v1)
                                      │
-                                     └─▶ DomicileHost `gesture` ──▶ bindKeys
-                                         (3+ fingers, grabbed)
+                                     ├─▶ DomicileHost `gesture` ──▶ bindKeys
+                                     │   (3+ fingers, grabbed)
+                                     └─▶ compositor ──▶ client under the pointer
+                                         (3+ finger swipe or hold, not grabbed:
+                                          pointer_swipe, pointer_hold)
 ```
 
 | Piece | Where | Does |
@@ -24,7 +27,8 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 | `<app>` | `html_app_element.cc` | Forwards the pinch to its client as `pointer_pinch` |
 | Wire | `domicile_protocol::pinch::Pinch` | `begin`, `update`, `end` |
 | Delivery | `domicile-compositor` (`pinch.rs`) | One active pinch, owned by the connection and device that began it. Ends canceled on pointer leave, lock, window close or a dropped connection |
-| Shell grab | engine `native_gesture_sink.*` (patch `0185`), `desk_gestures.*`, `DomicileHost.grabGesture` | libinput (or the host, nested) offers each gesture of three fingers or more to the sink before the pinch path. `DeskGestures` takes it when a page grabbed its kind and count, and sends every phase to the first such page as a `gesture` event. A swipe or hold nobody grabbed goes nowhere; a pinch goes on to the page |
+| Shell grab | engine `native_gesture_sink.*` (patch `0185`), `desk_gestures.*`, `DomicileHost.grabGesture` | libinput (or the host, nested) offers each gesture of three fingers or more to the sink before the pinch path. `DeskGestures` takes it when a page grabbed its kind and count, and sends every phase to the first such page as a `gesture` event. A swipe or hold nobody grabbed goes to the next row; a pinch goes on to the page |
+| Unbound swipes and holds | `desk_gestures.*`, `control_channel.cc`, `domicile_protocol::swipe`, `domicile-compositor` (`swipe.rs`) | The first page's channel sends a swipe or hold of three fingers or more that nobody grabbed as `pointer_swipe` or `pointer_hold`, naming no window. The compositor gives it to the window under the pointer when it begins, if any. One at a time, owned by the connection that began it; ends canceled as a pinch does |
 | Bindings | `@domicile-desktop/sdk/gesture-binding`, `bind-keys` | Parses sway's grammar, grabs each kind and count, follows the phases, and runs the binding the finished gesture fits in the current mode |
 
 ### Touchscreen
@@ -121,6 +125,11 @@ same way: the workspace follows the finger.
   gesture at its begin, before it has gone anywhere.
 - **The first page to grab a gesture gets all of it,** begin to end, as
   `DeskGestures` decides at the begin.
+- **What the shell leaves, the apps get.** A swipe or hold the shell did not
+  grab goes to the window under the pointer, so a four-finger swipe reaches an
+  app while Manganese binds three. The browser recognizes these, not a page,
+  so the compositor picks the window from where the pointer is. A browser
+  window under the pointer gets nothing: Chrome has no use for them.
 - **A shortcut inhibitor silences gesture bindings,** as it does keys, but the
   window holding it does not get them yet: the engine takes the gesture before
   it knows. See [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md).
@@ -138,3 +147,6 @@ same way: the workspace follows the finger.
 - [x] Edge swipes, recognized in the engine with withheld touches replayed
   (`EdgeSwipeTest`, `touchscreen-on-a-tty`). No touchpad hot corners.
 - [x] Bind the host's swipes when nested, subject to what the host consumes.
+- [x] Unbound swipes and holds of three fingers or more to the native window
+  under the pointer (`DeskGesturesTest`, `domicile-compositor` `input`
+  tests). One- and two-finger holds stay with the engine.
