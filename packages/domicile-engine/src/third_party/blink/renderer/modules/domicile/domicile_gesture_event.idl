@@ -1,7 +1,7 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// A phase of a touchpad gesture claimed with grabGesture().
+// A phase of a gesture claimed with grabGesture().
 //
 // Its own type, like DomicileShortcutEvent: a gesture belongs to no window.
 
@@ -12,7 +12,8 @@
   constructor(DOMString type,
               optional DomicileGestureEventInit eventInitDict = {});
 
-  // `swipe`, `pinch` or `hold`.
+  // `swipe`, `pinch` or `hold` on a touchpad, or `edge`: one touchscreen
+  // finger in from a display's edge.
   readonly attribute DOMString kind;
 
   // `begin`, `update` or `end`.
@@ -20,7 +21,8 @@
 
   readonly attribute unsigned long fingers;
 
-  // This update's motion, in the touchpad's accelerated pointer units.
+  // This update's motion, in the touchpad's accelerated pointer units, or an
+  // edge swipe's in the display's pixels.
   readonly attribute double dx;
   readonly attribute double dy;
 
@@ -31,4 +33,8 @@
 
   // On an end: the gesture was abandoned rather than finished.
   readonly attribute boolean canceled;
+
+  // An edge swipe's: the side it came in from, `left`, `right`, `top` or
+  // `bottom`. Empty for every other kind.
+  readonly attribute DOMString edge;
 };

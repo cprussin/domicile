@@ -190,9 +190,11 @@
   // Route a touchpad gesture to the page rather than to the window under the
   // pointer, in sway's grammar without the direction: `swipe:3`, `pinch:4`,
   // `hold`. A count left out is any of three fingers or more; two are the
-  // page's, for its scrolling, zoom and history. Each phase comes back as a
-  // `gesture` event. Counted, like grabShortcut(). While the window with the
-  // keyboard holds a shortcuts inhibitor, a grabbed gesture fires nothing.
+  // page's, for its scrolling, zoom and history. Or a touchscreen finger in
+  // from a display's edge: `edge:left`, `right`, `top` or `bottom`, or `edge`
+  // for any. Each phase comes back as a `gesture` event. Counted, like
+  // grabShortcut(). While the window with the keyboard holds a shortcuts
+  // inhibitor, a grabbed gesture fires nothing.
   //
   // Throws a SyntaxError for a gesture written wrong, or of fewer than three
   // fingers.
@@ -227,7 +229,7 @@
   // modifiers did, wherever the keyboard is. As a DomicileShortcutEvent.
   attribute EventHandler onshortcutrelease;
 
-  // A phase of a grabbed touchpad gesture, as a DomicileGestureEvent.
+  // A phase of a grabbed gesture, as a DomicileGestureEvent.
   attribute EventHandler ongesture;
 
   // A client asked for the keyboard, as a DomicileAppEvent naming it; nothing

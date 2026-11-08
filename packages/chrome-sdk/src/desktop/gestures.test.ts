@@ -7,6 +7,7 @@ const swiping: Gesture = {
   canceled: false,
   dx: -12,
   dy: 1.5,
+  edge: undefined,
   fingers: 3,
   kind: "swipe",
   phase: "update",
@@ -33,9 +34,38 @@ describe("gestures", () => {
     desktop(fake.host).gestures.on("gesture", (gesture) => {
       heard.push(gesture);
     });
-    fake.dispatch("gesture", swiping);
+    fake.dispatch("gesture", { ...swiping, edge: "" });
 
     expect(heard).toStrictEqual([swiping]);
+  });
+
+  it("hears an edge swipe's side", () => {
+    const fake = new FakeDomicileHost();
+    const heard: Gesture[] = [];
+    desktop(fake.host).gestures.on("gesture", (gesture) => {
+      heard.push(gesture);
+    });
+    fake.dispatch("gesture", {
+      ...swiping,
+      edge: "left",
+      fingers: 1,
+      kind: "edge",
+    });
+
+    expect(heard.map(({ edge, kind }) => ({ edge, kind }))).toStrictEqual([
+      { edge: "left", kind: "edge" },
+    ]);
+  });
+
+  it("skips an edge it does not know", () => {
+    const fake = new FakeDomicileHost();
+    const heard: Gesture[] = [];
+    desktop(fake.host).gestures.on("gesture", (gesture) => {
+      heard.push(gesture);
+    });
+    fake.dispatch("gesture", { ...swiping, edge: "corner", kind: "edge" });
+
+    expect(heard).toStrictEqual([]);
   });
 
   it("skips a kind it does not know", () => {
@@ -44,7 +74,7 @@ describe("gestures", () => {
     desktop(fake.host).gestures.on("gesture", (gesture) => {
       heard.push(gesture);
     });
-    fake.dispatch("gesture", { ...swiping, kind: "rub" });
+    fake.dispatch("gesture", { ...swiping, edge: "", kind: "rub" });
 
     expect(heard).toStrictEqual([]);
   });

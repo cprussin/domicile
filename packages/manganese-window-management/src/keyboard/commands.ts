@@ -127,10 +127,14 @@ const everyWorkspace = (
 
 /**
  * Default bindings for mode `default`: sway's, on Meta, and three-finger
- * touchpad swipes between workspaces. Spread into your own table to override
- * individual keys.
+ * touchpad swipes and touchscreen swipes in from the sides between
+ * workspaces. Spread into your own table to override individual keys.
  */
 export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
+  // The workspace follows the finger in from the screen's side, as the
+  // three-finger swipes below go.
+  "edge:left": stepWorkspace("prev"),
+  "edge:right": stepWorkspace("next"),
   "Meta+a": focus("parent"),
   "Meta+b": split("h"),
   "Meta+d": launcher(),

@@ -9,8 +9,9 @@ import { isGesture, spelledGesture } from "./gesture-binding";
 import type { KeyAction } from "./key-action";
 
 /**
- * One mode's bindings, from chord (`Meta+Shift+l`) or touchpad gesture
- * (`swipe:3:left`, see `gesture-binding.ts`) to action.
+ * One mode's bindings, from chord (`Meta+Shift+l`), touchpad gesture
+ * (`swipe:3:left`) or touchscreen edge swipe (`edge:left`, see
+ * `gesture-binding.ts`) to action.
  */
 export type ModeKeybindings = Readonly<Record<string, KeyAction>>;
 

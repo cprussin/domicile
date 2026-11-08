@@ -1,9 +1,11 @@
 // Touchpad gestures as bindings, in sway's `bindgesture` grammar:
 // `<kind>[:<fingers>][:<direction>[+<direction>...]]`, such as `swipe:3:left`
-// or `pinch:4:inward`. They sit beside chords in a shell's keybindings and
-// share its modes. See docs/architecture/GESTURES.md.
+// or `pinch:4:inward`. A touchscreen finger in from a display's edge is
+// `edge[:<side>]`, such as `edge:left`, and always comes in. They sit beside
+// chords in a shell's keybindings and share its modes. See
+// docs/architecture/GESTURES.md.
 
-import type { Gesture, GestureKind } from "./desktop/gestures";
+import type { Gesture, GestureEdge, GestureKind } from "./desktop/gestures";
 
 export type GestureDirection =
   | "clockwise"
@@ -22,6 +24,8 @@ export type GestureBinding = {
   readonly fingers: number | undefined;
   /** Every direction the gesture must have gone; none for any. */
   readonly directions: ReadonlySet<GestureDirection>;
+  /** An edge swipe's side; `undefined` for any side, and for other kinds. */
+  readonly edge: GestureEdge | undefined;
 };
 
 /** A gesture that ended without being canceled, and where it went. */
@@ -29,6 +33,7 @@ export type FinishedGesture = {
   readonly kind: GestureKind;
   readonly fingers: number;
   readonly directions: ReadonlySet<GestureDirection>;
+  readonly edge: GestureEdge | undefined;
 };
 
 /** The fewest fingers the engine hands the shell; two are the page's. */
@@ -36,20 +41,47 @@ const FEWEST_FINGERS = 3;
 
 /** Directions in a spelled binding's order, by the kinds that have them. */
 const DIRECTIONS: Readonly<Record<GestureKind, readonly GestureDirection[]>> = {
+  edge: [],
   hold: [],
   pinch: ["inward", "outward", "clockwise", "counterclockwise"],
   swipe: ["up", "down", "left", "right"],
 };
 
 const KINDS: ReadonlyMap<string, GestureKind> = new Map([
+  ["edge", "edge"],
   ["hold", "hold"],
   ["pinch", "pinch"],
   ["swipe", "swipe"],
 ]);
 
+const EDGES: readonly GestureEdge[] = ["left", "right", "top", "bottom"];
+
 /** Whether `written` names a gesture rather than a chord. */
 export const isGesture = (written: string): boolean =>
-  /^(?:hold|pinch|swipe)(?::|$)/.test(written);
+  /^(?:edge|hold|pinch|swipe)(?::|$)/.test(written);
+
+/** `edge` or `edge:<side>`, after the kind. */
+const parseEdge = (
+  sides: readonly string[],
+  fail: (why: string) => never,
+): GestureBinding => {
+  if (sides.length > 1) {
+    fail("has more than one side; an edge swipe comes in from one");
+  }
+  const side = sides[0];
+  return {
+    directions: new Set(),
+    edge:
+      side === undefined
+        ? undefined
+        : (EDGES.find((known) => known === side) ??
+          fail(
+            `comes in from ${JSON.stringify(side)}; an edge is ${EDGES.join(", ")}`,
+          )),
+    fingers: undefined,
+    kind: "edge",
+  };
+};
 
 /** `written` parsed. Throws on a binding written wrong. */
 export const parseGesture = (written: string): GestureBinding => {
@@ -57,7 +89,10 @@ export const parseGesture = (written: string): GestureBinding => {
     throw new Error(`domicile: gesture ${JSON.stringify(written)} ${why}`);
   };
   const [name = "", ...rest] = written.split(":");
-  const kind = KINDS.get(name) ?? fail("is not a swipe, pinch or hold");
+  const kind = KINDS.get(name) ?? fail("is not a swipe, pinch, hold or edge");
+  if (kind === "edge") {
+    return parseEdge(rest, fail);
+  }
   const [count, directions] = /^\d+$/.test(rest[0] ?? "")
     ? [Number(rest[0]), rest.slice(1)]
     : [undefined, rest];
@@ -82,23 +117,28 @@ export const parseGesture = (written: string): GestureBinding => {
   if (new Set(went).size !== went.length) {
     fail("names a direction twice");
   }
-  return { directions: new Set(went), fingers: count, kind };
+  return { directions: new Set(went), edge: undefined, fingers: count, kind };
 };
 
 /** `written` in its one spelling, directions in a fixed order. */
 export const spelledGesture = (written: string): string => {
-  const { kind, fingers, directions } = parseGesture(written);
+  const { kind, fingers, directions, edge } = parseGesture(written);
   const went = DIRECTIONS[kind].filter((direction) =>
     directions.has(direction),
   );
-  return [kind, fingers, went.length === 0 ? undefined : went.join("+")]
+  return [kind, fingers ?? edge, went.length === 0 ? undefined : went.join("+")]
     .filter((part) => part !== undefined)
     .join(":");
 };
 
-/** What `binding` asks the engine for: its kind, and its count if it has one. */
-export const grabOf = ({ kind, fingers }: GestureBinding): string =>
-  fingers === undefined ? kind : `${kind}:${fingers}`;
+/**
+ * What `binding` asks the engine for: its kind, and its count or edge if it
+ * has one.
+ */
+export const grabOf = ({ kind, fingers, edge }: GestureBinding): string => {
+  const part = fingers ?? edge;
+  return part === undefined ? kind : `${kind}:${part}`;
+};
 
 /**
  * Follows one gesture at a time through its phases; `feed` returns it once
@@ -127,6 +167,7 @@ export const gestureTracker = (): {
       } else if (!gesture.canceled) {
         return {
           directions: directionsOf(gesture.kind, sum),
+          edge: gesture.edge,
           fingers: gesture.fingers,
           kind: gesture.kind,
         };
@@ -146,6 +187,7 @@ const directionsOf = (
   }: Record<"dx" | "dy" | "rotation" | "scale", number>,
 ): ReadonlySet<GestureDirection> => {
   switch (kind) {
+    case "edge":
     case "hold": {
       return new Set();
     }
@@ -176,8 +218,8 @@ const directionsOf = (
 
 /**
  * The binding of `bindings` that best fits `finished`, of those whose kind,
- * count and every direction it matches: a count over none, then more
- * directions over fewer.
+ * count, edge and every direction it matches: a count or an edge over none,
+ * then more directions over fewer.
  */
 export const bestGesture = <T>(
   bindings: Iterable<readonly [GestureBinding, T]>,
@@ -185,16 +227,18 @@ export const bestGesture = <T>(
 ): T | undefined =>
   [...bindings]
     .filter(
-      ([{ kind, fingers, directions }]) =>
+      ([{ kind, fingers, directions, edge }]) =>
         kind === finished.kind &&
         (fingers === undefined || fingers === finished.fingers) &&
+        (edge === undefined || edge === finished.edge) &&
         [...directions].every((direction) =>
           finished.directions.has(direction),
         ),
     )
     .sort(
       ([a], [b]) =>
-        Number(b.fingers !== undefined) - Number(a.fingers !== undefined) ||
+        Number(b.fingers !== undefined || b.edge !== undefined) -
+          Number(a.fingers !== undefined || a.edge !== undefined) ||
         b.directions.size - a.directions.size,
     )
     .at(0)?.[1];

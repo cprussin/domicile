@@ -5,6 +5,7 @@
 #define UI_EVENTS_DOMICILE_NATIVE_GESTURE_SINK_H_
 
 #include <cstdint>
+#include <optional>
 
 #include "ui/events/events_export.h"
 #include "ui/events/types/native_gesture.h"
@@ -16,21 +17,23 @@ namespace ui {
 // to bind.
 inline constexpr uint32_t kFewestShellGestureFingers = 3;
 
-// Where the platform hands the touchpad gestures the shell binds.
+// Where the platform hands the gestures the shell binds.
 //
-// libinput (tty) and `zwp_pointer_gestures_v1` (nested) recognize a gesture;
-// the shell binds it by kind and finger count. The platform asks `Takes` at a
-// gesture's begin and, if so, hands every phase to `Take` instead of
-// dispatching it. //components/domicile installs the one sink, so //ui needs no
-// dependency on it.
+// libinput (tty) and `zwp_pointer_gestures_v1` (nested) recognize a touchpad
+// gesture, and `EdgeSwipe` a touchscreen's edge swipe; the shell binds it by
+// kind, finger count and edge. The platform asks `Takes` at a gesture's begin
+// and, if so, hands every phase to `Take` instead of dispatching it.
+// //components/domicile installs the one sink, so //ui needs no dependency on
+// it.
 //
-// Called from the platform's input thread: an implementation locks.
+// Called from the platform's input thread, and from the UI thread for edge
+// swipes: an implementation locks.
 class EVENTS_EXPORT NativeGestureSink {
  public:
   virtual ~NativeGestureSink() = default;
 
-  // Whether the shell binds a `kind` gesture of `fingers`.
-  virtual bool Takes(NativeGestureKind kind, uint32_t fingers) = 0;
+  // Whether the shell binds the gesture `begin` begins.
+  virtual bool Takes(const NativeGesture& begin) = 0;
 
   // A phase of a gesture this took at its begin.
   virtual void Take(const NativeGesture& gesture) = 0;
@@ -61,6 +64,7 @@ class EVENTS_EXPORT NativeGestureSequence {
   bool taken_ = false;
   NativeGestureKind kind_ = NativeGestureKind::kSwipe;
   uint32_t fingers_ = 0;
+  std::optional<NativeGestureEdge> edge_;
 };
 
 }  // namespace ui
