@@ -1500,7 +1500,7 @@
             environment.loginShellInit = ''
               if [ "$(tty)" = /dev/tty1 ]; then
                 # What the engine does on the way to the desk, for a failure.
-                export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*ozone*=1,*domicile*=1,*viz*=1"
+                export DOMICILE_ENGINE_ARGS="--gpu-sandbox-failures-fatal --log-level=0 --vmodule=*ozone*=1,*domicile*=1,*viz*=1"
                 export RUST_LOG=domicile_compositor=debug
                 exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
               fi
@@ -1564,6 +1564,21 @@
                 assert seccomp == ["Seccomp:", "2"], f"the GPU process is not under seccomp: {seccomp}"
 
             machine.wait_for_unit("multi-user.target")
+            # DIAGNOSTIC: sample the GPU process's sandbox over several sessions.
+            report = []
+            for attempt in range(8):
+                if attempt > 0:
+                    machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3; rm -f /tmp/domicile.log")
+                    machine.execute("systemctl start getty@tty1.service")
+                machine.wait_until_succeeds("pgrep -u alice -f -- '--type=gpu-process'", timeout=dt.timedelta(seconds=180))
+                machine.sleep(15)
+                for command in [
+                    "for p in $(pgrep -u alice -f -- '--type=gpu-process'); do echo -n \"pid $p \"; grep -E '^(Seccomp|Threads):' /proc/$p/status | tr '\\n\\t' '  '; cat /proc/$p/task/*/comm | sort | uniq -c | tr -s '\\n ' ' '; echo; tr '\\0' ' ' < /proc/$p/cmdline | grep -oE -- '--(disable|no|use|enable|gpu|in-process)[a-z-]*(=[^ ]*)?' | tr '\\n' ' '; echo; done",
+                    "grep -iE 'sandbox|seccomp|multiple threads|ThreadId=|vaapi|libva|webnn' /tmp/domicile.log | head -12 | cut -c1-200 || true",
+                    "for p in $(pgrep -u alice -f -- '--type=gpu-process'); do grep -oE '[^/]*(libva|dri|gallium|gbm|vulkan|tflite|onnx)[^/ ]*$' /proc/$p/maps | sort -u | tr '\\n' ' '; done",
+                ]:
+                    report.append(f"[{attempt}] " + machine.execute(f"{command} 2>&1")[1].strip())
+            raise AssertionError("DIAGNOSTIC\n" + "\n".join(report))
             try:
                 the_desktop_shows_a_window()
                 the_gpu_process_stays_up_in_its_sandbox()
