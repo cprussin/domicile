@@ -38,16 +38,19 @@ gfx::Size PhysicalSizeMm(const display::Display& screen) {
 
 std::vector<mojom::DisplayPtr> DisplayListFor(
     const std::vector<display::Display>& displays,
-    const base::flat_map<int64_t, std::string>& connectors) {
+    const base::flat_map<int64_t, std::string>& connectors,
+    const base::flat_map<int64_t, uint32_t>& gamma_sizes) {
   std::vector<mojom::DisplayPtr> list;
   list.reserve(displays.size());
   // Not named `display`, which would shadow the namespace.
   for (const display::Display& screen : displays) {
     const auto connector = connectors.find(screen.id());
+    const auto gamma_size = gamma_sizes.find(screen.id());
     list.push_back(mojom::Display::New(
         screen.id(), screen.bounds(), PhysicalSizeMm(screen), screen.label(),
         base::ClampRound(screen.display_frequency() * kMillihertzPerHertz),
-        connector == connectors.end() ? std::string() : connector->second));
+        connector == connectors.end() ? std::string() : connector->second,
+        gamma_size == gamma_sizes.end() ? 0u : gamma_size->second));
   }
   return list;
 }

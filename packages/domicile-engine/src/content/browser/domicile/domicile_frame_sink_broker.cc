@@ -156,7 +156,8 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
   void Read() {
     broker_->OnDisplaysChanged(domicile::DisplayListFor(
         display::Screen::Get()->GetAllDisplays(),
-        ui::OzonePlatform::GetInstance()->GetDomicileConnectors()));
+        ui::OzonePlatform::GetInstance()->GetDomicileConnectors(),
+        ui::OzonePlatform::GetInstance()->GetDomicileGammaSizes()));
   }
 
   const raw_ptr<domicile::FrameSinkBroker> broker_;
@@ -270,11 +271,12 @@ void SetVirtualDisplays(
       std::move(wanted));
 }
 
-// Sets every display's white point. Lives here for SetDisplayLayout's reason;
+// Sets one display's gamma ramp. Lives here for SetDisplayLayout's reason;
 // every platform but DRM ignores it.
-void SetWhitePoint(float red, float green, float blue) {
-  ui::OzonePlatform::GetInstance()->SetDomicileWhitePoint(
-      {.red = red, .green = green, .blue = blue});
+void SetGamma(int64_t display_id, const domicile::mojom::GammaRamp& ramp) {
+  ui::OzonePlatform::GetInstance()->SetDomicileGamma(
+      display_id,
+      {.red = ramp.red, .green = ramp.green, .blue = ramp.blue});
 }
 
 // Delivers emulated input to the desk. Lives here for SetDisplayLayout's
@@ -346,7 +348,7 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
                 base::BindRepeating(&SetPointerTargets),
                 base::BindRepeating(&GetSoftwareSharedImageInterface),
                 base::BindRepeating(&SetVirtualDisplays),
-                base::BindRepeating(&SetWhitePoint),
+                base::BindRepeating(&SetGamma),
                 base::BindRepeating(&InjectInput),
                 base::BindRepeating(&SetInputConfig)),
         provider_(&broker_) {
