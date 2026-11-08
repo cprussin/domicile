@@ -723,6 +723,32 @@ fn a_pinch_ignores_another_sender_and_cancels_when_the_pointer_leaves() {
     assert!(!trace.contains("pinch_update("), "{trace}");
 }
 
+/// A begin for a window the pointer is not on leaves the active pinch alone.
+#[test]
+fn a_begin_for_another_window_keeps_the_pointer_windows_pinch() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+    for frame in [
+        serde_json::json!({"app_id": app, "phase":"begin", "device":7, "time":10, "fingers":2}),
+        serde_json::json!({"app_id": "elsewhere", "phase":"begin", "device":8, "time":11,
+            "fingers":2}),
+        serde_json::json!({"app_id": app, "phase":"update", "device":7, "time":12,
+            "dx":1.0, "dy":2.0, "scale":1.5, "rotation":0.0}),
+    ] {
+        let mut frame = frame;
+        frame["type"] = "pointer_pinch".into();
+        chrome
+            .say(&serde_json::from_value::<ChromeMessage>(frame).unwrap())
+            .unwrap();
+    }
+    assert!(
+        client.wait_for_trace("pinch_update(12, ", 1),
+        "the pinch ended under the other begin: {}",
+        client.trace()
+    );
+    assert!(!client.trace().contains("pinch_end("), "{}", client.trace());
+}
+
 /// A dropped engine channel cannot leave a native client's pinch active.
 #[test]
 fn disconnecting_the_sender_cancels_its_pinch() {
