@@ -118,6 +118,18 @@ export const clickThroughStyles = css({ pointerEvents: "none" });
 export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties =>
   originAt(originOf(frame, rect));
 
+/**
+ * Inline style setting a window's contents' `transform-origin`: the middle of
+ * its whole `frame`, as {@link scaledAbout}, except for a closing tab. Its
+ * `frame` is its tab, which the bar collapses about, but its contents shrink
+ * about their own middle (see `movingStyles`).
+ */
+export const contentsScaledAbout = (
+  motion: WindowMotion,
+  frame: Rect,
+  rect: Rect,
+): CSSProperties => scaledAbout(motion === "closing-tab" ? rect : frame, rect);
+
 /** Inline style setting part of a window's `transform-origin` to `point`. */
 export const originAt = ({ x, y }: Point): CSSProperties => ({
   transformOrigin: `${x.toString()}px ${y.toString()}px`,
@@ -264,6 +276,17 @@ export const movingStyles = cva({
         animationFillMode: "both",
       },
       motion: ["closing-tab", "uncovering"],
+    },
+    // A closing tab's contents shrink and fade as a closed window does, about
+    // their own middle (see `contentsScaledAbout`), over the tab they
+    // uncover. A fade alone, over the same box, reads as a tab switch.
+    {
+      contents: true,
+      css: {
+        animationName: "windowClosing",
+        animationTimingFunction: "token(easings.outQuart)",
+      },
+      motion: "closing-tab",
     },
   ],
   variants: {

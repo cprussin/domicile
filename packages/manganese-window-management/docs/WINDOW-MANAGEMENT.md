@@ -366,7 +366,7 @@ with windows, and the shown one.
 - Sending to a workspace no screen shows: shrink further and fade out. A
   tab group leaves as one: every part scales about the group's middle.
 - Closing a tab: it closes up toward its start as the tabs after it slide
-  back.
+  back. Its contents shrink and fade out over the tab it uncovers.
 - Sending away a tab: it shrinks and fades with its contents, as a sent
   window does, while the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
