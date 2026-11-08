@@ -129,6 +129,8 @@ display. Config: [SHELL-CONFIG.md](SHELL-CONFIG.md#tablets-and-touchscreens).
 - **Touchscreen:** any other device with absolute X and Y and no pen
   (`EventDeviceInfo::HasTouchscreen`), including one that clicks with
   `BTN_LEFT` alone.
+  An unbound one covers the only display when there is one
+  (`TouchTransformsFor`), and none when there are several.
 - The compositor resolves each entry's `display` against the engine's last
   display report (`pointer_targets`) and sends device-to-display-id targets
   on every report and reload:

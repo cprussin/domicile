@@ -283,8 +283,9 @@ restores its default.
 
 On a tty, `input.pointers` binds each tablet, touchscreen or absolute mouse
 (such as QEMU's USB tablet) to the display it covers. An unbound touchscreen
-covers no display. An unbound absolute mouse covers the display the pointer is
-on.
+covers the only display when there is one, such as a laptop's own screen, and
+no display when there are several. An unbound absolute mouse covers the
+display the pointer is on.
 
 ```json
 {
@@ -301,7 +302,9 @@ on.
   device that has it, so tell identical tablets apart by `phys`.
   `udevadm info /dev/input/eventN` prints both.
 - `display` names a display as a profile does
-  ([Naming a display](#naming-a-display)).
+  ([Naming a display](#naming-a-display)). QEMU's heads are `Virtual-1` and
+  so on only with `edid=off` on the `virtio-gpu` device; otherwise they have
+  an EDID description.
 - Details: [DISPLAYS.md](DISPLAYS.md#tablets-and-touchscreens).
 
 ## Idle

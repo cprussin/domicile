@@ -2143,7 +2143,9 @@
             virtualisation = {
               memorySize = 4096;
               cores = 2;
-              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
+              # No EDID, so the head is named by its connector, `Virtual-1`,
+              # as the config binds it.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800,edid=off" ];
             };
             users.users.alice = {
               isNormalUser = true;

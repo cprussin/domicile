@@ -16,6 +16,14 @@ namespace {
 
 // The display the first target naming `device` binds it to, if it is one of
 // `displays`.
+// Whether any target names `device`, whether or not its display is here.
+bool Named(const InputDevice& device,
+           const std::vector<DomicilePointerTarget>& targets) {
+  return std::ranges::any_of(targets, [&](const DomicilePointerTarget& target) {
+    return target.device == device.name || target.device == device.phys;
+  });
+}
+
 std::optional<display::Display> BoundDisplay(
     const InputDevice& device,
     const std::vector<DomicilePointerTarget>& targets,
@@ -43,8 +51,12 @@ std::vector<TouchDeviceTransform> TouchTransformsFor(
     const std::vector<display::Display>& displays) {
   std::vector<TouchDeviceTransform> transforms;
   for (const TouchscreenDevice& device : touchscreens) {
-    const std::optional<display::Display> display =
+    std::optional<display::Display> display =
         BoundDisplay(device, targets, displays);
+    if (!display.has_value() && displays.size() == 1 &&
+        !Named(device, targets)) {
+      display = displays.front();
+    }
     if (!display.has_value()) {
       continue;
     }

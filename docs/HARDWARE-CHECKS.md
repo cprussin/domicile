@@ -25,7 +25,8 @@ In Manganese with windows on two workspaces of one monitor:
 
 ## Touchscreen
 
-Unverified. On a tty with a touchscreen bound in `input.pointers`
+Unverified. On a tty, on a laptop's own touchscreen with no config, and with
+an external monitor too once the touchscreen is bound in `input.pointers`
 ([Tablets and touchscreens](DISPLAYS.md#tablets-and-touchscreens)):
 
 - in a GTK or Qt app, a finger drag scrolls or selects as on any Wayland

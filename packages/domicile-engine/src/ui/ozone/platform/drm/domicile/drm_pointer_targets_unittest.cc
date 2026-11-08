@@ -96,6 +96,22 @@ TEST(DrmPointerTargetsTest, AnUnboundTabletOrAnUnpluggedDisplayBindsNothing) {
                   .empty());
 }
 
+TEST(DrmPointerTargetsTest, AnUnboundTouchscreenCoversTheOnlyDisplay) {
+  const std::vector<display::Display> one = {
+      display::Display(kLeft, gfx::Rect(0, 0, 1920, 1080))};
+  const std::vector<TouchDeviceTransform> transforms =
+      TouchTransformsFor({Tablet(kFirst, kFirstPhys)}, {}, one);
+
+  ASSERT_EQ(transforms.size(), 1u);
+  EXPECT_EQ(transforms[0].display_id, kLeft);
+  EXPECT_EQ(transforms[0].transform.MapPoint(gfx::PointF(16384, 16384)),
+            gfx::PointF(960, 540));
+  // One bound to a display that is gone stays unbound: the config said where.
+  EXPECT_TRUE(TouchTransformsFor({Tablet(kFirst, kFirstPhys)},
+                                 {{.device = kTablet, .display_id = 9}}, one)
+                  .empty());
+}
+
 // QEMU's tablet read as an absolute mouse moves the pointer itself, so it
 // takes its display's rectangle rather than a touch transform.
 TEST(DrmPointerTargetsTest, AnAbsoluteMouseCoversTheDisplayItIsBoundTo) {
