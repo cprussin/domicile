@@ -23,6 +23,7 @@
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
 #include "components/domicile/browser/desk_lock.h"
+#include "components/domicile/browser/desk_pointer_hiding.h"
 #include "components/domicile/browser/portal_request.h"
 #include "components/domicile/browser/shell_swap.h"
 #include "components/domicile/browser/system_call.h"
@@ -1476,7 +1477,26 @@ void ControlChannel::DispatchLine(const std::string& line,
       }
       cursor_theme = ui::DeskCursorTheme{.name = *name, .size = *size};
     }
+    // When to hide the pointer stops here too. Absent never hides it.
+    // `after_ms` is read as a double: one past INT32_MAX does not fit
+    // base::Value's int.
+    PointerHidingSettings hiding;
+    if (const base::DictValue* cursor_hiding =
+            message.FindDict("cursor_hiding")) {
+      const std::optional<double> after_ms =
+          cursor_hiding->FindDouble("after_ms");
+      const std::optional<bool> when_typing =
+          cursor_hiding->FindBool("when_typing");
+      if ((after_ms && *after_ms < 1) || !when_typing) {
+        return;
+      }
+      hiding = PointerHidingSettings{
+          .after = after_ms ? std::make_optional(base::Milliseconds(*after_ms))
+                            : std::nullopt,
+          .when_typing = *when_typing};
+    }
     cursor_theme_sink_.Run(std::move(cursor_theme));
+    DeskPointerHiding::Get().Set(hiding);
     const std::string* accent_color = message.FindString("accent_color");
     client_->AppearanceChanged(
         accent_color ? std::make_optional(*accent_color) : std::nullopt,

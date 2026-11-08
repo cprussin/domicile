@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 8 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the pointer hides while typing and after a pause
+
+`theme.cursor_hide_after_ms` and `theme.cursor_hide_when_typing` reach
+the engine on `appearance`, and nothing acted on them.
+
+- `StartPointerHiding` (`chrome/browser/domicile/domicile_pointer_hiding.cc`)
+  observes aura's key, mouse, scroll and pinch events and hides or shows
+  the pointer through the shared cursor client. See
+  `components/domicile/browser/pointer_hiding.h`.
+- Started in `PostBrowserStart`, beside `StartDeskPointer`.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/chrome_browser_main.cc | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index eb1c729..c3130fc 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -9,6 +9,7 @@
+ #include "chrome/browser/domicile/domicile_desk_activity.h"
+ #include "chrome/browser/domicile/domicile_desk_pointer.h"
+ #include "chrome/browser/domicile/domicile_file_dialogs.h"
++#include "chrome/browser/domicile/domicile_pointer_hiding.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/desktop_prefs.h"
+ #include "components/domicile/browser/rtkit.h"
+@@ -1814,6 +1815,10 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+   // casts, which hear the pointer only over a window. Here for the same reason.
+   domicile::StartDeskPointer();
+ 
++  // Domicile's engine fork: hides the pointer while typing and after a pause,
++  // as the desk's config says. Here for the same reason.
++  domicile::StartPointerHiding();
++
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostBrowserStart();
+   }
+-- 
+2.43.0
+
