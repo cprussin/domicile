@@ -20,7 +20,8 @@ job builds it on `crux`.
  .../ozone/evdev/libinput_event_converter.cc   |  6 ++-
  .../wayland/host/wayland_event_source.cc      | 24 ++++++------
  .../wayland/host/wayland_pointer_unittest.cc  | 37 ++++++++++---------
- 3 files changed, 34 insertions(+), 33 deletions(-)
+ .../wayland_zwp_pointer_gestures_unittest.cc  | 18 ++++-----
+ 4 files changed, 43 insertions(+), 42 deletions(-)
 
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
 index 895fa85..b49af11 100644
@@ -220,6 +221,40 @@ index 8349dbf..109c4c7 100644
    SendAxisStopEvents();
    ASSERT_TRUE(event1);
    ASSERT_TRUE(event1->IsScrollEvent());
+diff --git a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures_unittest.cc b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures_unittest.cc
+index 28b62fb..f4d0f11 100644
+--- a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures_unittest.cc
++++ b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures_unittest.cc
+@@ -201,20 +201,20 @@ TEST_F(WaylandPointerGesturesTest, HoldEventCancelsFling) {
+   // One axis event should follow before the fling event.
+   ASSERT_TRUE(event1);
+   ASSERT_TRUE(event1->IsScrollEvent());
+-  // Native axis termination precedes Chromium's fling events.
++  // We expect a FLING_START event.
+   ASSERT_TRUE(event2);
+   ASSERT_TRUE(event2->IsScrollEvent());
+-  EXPECT_EQ(EventType::kScroll, event2->type());
+-  const auto stop = GetScrollMetadata(*event2, NativeScrollSource::kWheel);
++  EXPECT_EQ(EventType::kScrollFlingStart, event2->type());
++  // Native axis termination follows Chromium's fling start.
++  ASSERT_TRUE(event3);
++  ASSERT_TRUE(event3->IsScrollEvent());
++  EXPECT_EQ(EventType::kScroll, event3->type());
++  const auto stop = GetScrollMetadata(*event3, NativeScrollSource::kWheel);
+   EXPECT_EQ(NativeScrollSource::kFinger, stop.source);
+   EXPECT_TRUE(stop.stop_x);
+   EXPECT_TRUE(stop.stop_y);
+-  EXPECT_EQ(0.0f, event2->AsScrollEvent()->x_offset());
+-  EXPECT_EQ(0.0f, event2->AsScrollEvent()->y_offset());
+-  // We expect a FLING_START event.
+-  ASSERT_TRUE(event3);
+-  ASSERT_TRUE(event3->IsScrollEvent());
+-  EXPECT_EQ(EventType::kScrollFlingStart, event3->type());
++  EXPECT_EQ(0.0f, event3->AsScrollEvent()->x_offset());
++  EXPECT_EQ(0.0f, event3->AsScrollEvent()->y_offset());
+   // Finally, the hold must cancel the fling with zero offsets.
+   ASSERT_TRUE(event4);
+   ASSERT_TRUE(event4->IsScrollEvent());
 -- 
 2.43.0
 
