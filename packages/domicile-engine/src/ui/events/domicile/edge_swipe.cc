@@ -33,13 +33,20 @@ EdgeSwipe::Verdict EdgeSwipe::Touch(EventType type,
       if (type != EventType::kTouchPressed) {
         break;
       }
-      const std::optional<NativeGestureEdge> edge = EdgeAt(location, display);
+      // In a corner, the nearer edge the shell binds: a finger in from the
+      // left near the top is the left edge's when only the sides are bound.
       NativeGestureSink* sink = NativeGestureSink::Get();
-      if (edge && sink &&
-          sink->Takes({.kind = NativeGestureKind::kEdge,
-                       .phase = NativeGesturePhase::kBegin,
-                       .fingers = 1,
-                       .edge = edge})) {
+      std::optional<NativeGestureEdge> edge;
+      for (const NativeGestureEdge near : EdgesAt(location, display)) {
+        if (sink && sink->Takes({.kind = NativeGestureKind::kEdge,
+                                 .phase = NativeGesturePhase::kBegin,
+                                 .fingers = 1,
+                                 .edge = near})) {
+          edge = near;
+          break;
+        }
+      }
+      if (edge) {
         state_ = State::kDeciding;
         slot_ = slot;
         edge_ = *edge;
@@ -89,25 +96,29 @@ void EdgeSwipe::Expire() {
 }
 
 // static
-std::optional<NativeGestureEdge> EdgeSwipe::EdgeAt(const gfx::PointF& location,
-                                                   const gfx::RectF& display) {
+std::vector<NativeGestureEdge> EdgeSwipe::EdgesAt(
+    const gfx::PointF& location,
+    const gfx::RectF& display) {
   if (display.IsEmpty()) {
-    return std::nullopt;
+    return {};
   }
   const float x = (location.x() - display.x()) / display.width();
   const float y = (location.y() - display.y()) / display.height();
-  const std::pair<float, NativeGestureEdge> sides[] = {
+  std::pair<float, NativeGestureEdge> sides[] = {
       {x, NativeGestureEdge::kLeft},
       {1 - x, NativeGestureEdge::kRight},
       {y, NativeGestureEdge::kTop},
       {1 - y, NativeGestureEdge::kBottom},
   };
-  const auto& [away, edge] = *std::ranges::min_element(
-      sides, {}, &std::pair<float, NativeGestureEdge>::first);
-  if (away < 0 || away > kEdgeSwipeBand) {
-    return std::nullopt;
+  std::ranges::stable_sort(sides, {},
+                           &std::pair<float, NativeGestureEdge>::first);
+  std::vector<NativeGestureEdge> edges;
+  for (const auto& [away, edge] : sides) {
+    if (away >= 0 && away <= kEdgeSwipeBand) {
+      edges.push_back(edge);
+    }
   }
-  return edge;
+  return edges;
 }
 
 gfx::Vector2dF EdgeSwipe::Travel(const gfx::PointF& location) const {
