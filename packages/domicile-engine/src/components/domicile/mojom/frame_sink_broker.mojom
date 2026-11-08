@@ -344,8 +344,9 @@ interface FrameSinkBroker {
               gfx.mojom.GpuFenceHandle fence)
       => (gpu.mojom.SyncToken? sync_token);
 
-  // Drops an imported buffer the client destroyed. Buffers are also dropped
-  // with their sink.
+  // Drops an imported buffer the client destroyed. Send it only once viz has
+  // returned the buffer: viz draws a fallback image over a frame still showing
+  // it. Buffers are also dropped with their sink.
   DestroyBuffer(viz.mojom.FrameSinkId frame_sink_id, uint64 buffer_id);
 
   // Destroys the sink and invalidates `frame_sink_id`. All sinks are also
