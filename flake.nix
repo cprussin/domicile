@@ -2143,8 +2143,8 @@
         # multitouch screen bound to the display in `input.pointers`, and a
         # native window under the finger gets it as `wl_touch`. In Manganese,
         # which binds swipes in from the side edges: a finger along the edge
-        # is replayed to the window, and one in from the right edge is the
-        # shell's and goes to the next workspace. See
+        # is replayed to the window, and one in from the left edge is the
+        # shell's and goes back to the workspace before. See
         # docs/architecture/GESTURES.md#touchscreen.
         #
         # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
@@ -2316,13 +2316,22 @@
                 retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
 
 
+            def resumed():
+                return int(machine.succeed(
+                    "grep -cE '\\.suspended\\(false\\)' /tmp/client.log || true").strip())
+
+
             def a_finger_in_from_the_edge_is_the_shells():
-                # In from the right edge: the next workspace, which hides the
-                # window, and the window never has the finger.
-                before = downs()
-                say("drag 1275 400 -300 0")
+                # An empty workspace 2 hides the window. In from the left edge
+                # is the workspace before, which shows it again, and the
+                # window never has the finger: `workspace prev_on_output`
+                # needs a workspace to step to, as sway's does.
+                machine.send_key("meta_l-2")
+                retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=30))
+                before, shown = downs(), resumed()
+                say("drag 4 400 300 0")
                 try:
-                    retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=10))
+                    retry(lambda _: resumed() > shown, timeout=dt.timedelta(seconds=10))
                 except Exception:
                     raise AssertionError("the swipe did not change the workspace")
                 assert downs() == before, "the window had the shell's finger"
@@ -2343,6 +2352,8 @@
                     "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
                     "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
                     "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
+                    "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
                     "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
                 ]:
                     print(f"$ {command}")
