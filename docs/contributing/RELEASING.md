@@ -10,6 +10,8 @@ it holds that is not published yet.
 - **`stable`**: the newest main that runs the official engine. Moves on its
   own (`stable.yml`).
 - **`release`**: the newest release. Moves only through the release below.
+- **`site`**: what domicile-desktop.com deploys: `release` plus site fixes
+  picked from main ([below](#the-site)).
 
 ## Versions
 
@@ -41,6 +43,7 @@ Run **Publish packages** (`publish-packages.yml`) with `release` checked:
 5. Commits `domicile-bin` to the AUR (`release-aur.sh`, `packages/distro/aur.sh`).
 6. Tags `<package>@<version>` for each new version and `release-<time>`, then
    moves `release` (`release-tag.sh`).
+7. Moves `site` to the new `release` ([below](#the-site)).
 
 `dry_run` is checked by default: it runs every step and publishes nothing.
 Every step skips what is published already, so a failed release is run again
@@ -66,6 +69,19 @@ manager sorts it after the prereleases before it and before `<version>`, so
 the release replaces it. The run refuses a `<version>` already released, as
 its prerelease would sort before it; merge the "Version packages" pull request
 first. The repositories keep three versions, prereleases included.
+
+## The site
+
+Vercel deploys domicile-desktop.com from `site`, so the docs describe the
+released versions. To ship a site fix without a release, merge it to main,
+then run **Site** (`site.yml`) with its main commit(s):
+
+- Picks each onto `site` with `cherry-pick -x` (`.github/scripts/site-sync.sh`).
+- Each release resets `site` to `release` and picks again only the fixes the
+  release lacks.
+- Refuses a commit not on main, and a commit on `site` that is no pick.
+
+Pick only commits that describe what is released.
 
 ## Protection
 

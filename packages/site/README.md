@@ -3,7 +3,8 @@
 domicile-desktop.com: the Domicile landing page for shell authors (`/`) and
 the manganese landing page for its users (`/manganese`), and the docs
 (`/docs/…`). A Next.js app,
-hosted on Vercel and built from `release`, the latest Domicile release.
+hosted on Vercel and built from `site`: the latest Domicile release plus any
+site fixes picked onto it ([RELEASING.md](/docs/contributing/RELEASING.md#the-site)).
 
 ```sh
 bun run start:dev     # http://localhost:3000
@@ -37,11 +38,11 @@ bun run build:next
 - The build builds the workspace packages the site uses first with turbo,
   since their exports point at `dist/`. The install filter includes the root
   (`./`) so turbo is installed.
-- Production branch: `release` (set in the Vercel project).
-- `git.deploymentEnabled` deploys only `release`. Even a skipped deployment
+- Production branch: `site` (set in the Vercel project).
+- `git.deploymentEnabled` deploys only `site`. Even a skipped deployment
   counts toward the Hobby plan's daily limit, so other branches make none.
 - `vercel-ignore.sh` skips every deployment but production, since each build
   costs. It logs what it decided at the top of the build log.
-- Vercel also skips a `release` push that changes nothing under
+- Vercel also skips a `site` push that changes nothing under
   `packages/site` or its dependencies. To deploy without a site change, use
   **Redeploy** on the latest production deployment.
