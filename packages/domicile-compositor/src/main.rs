@@ -136,6 +136,7 @@ mod shortcuts_inhibit;
 mod spawning;
 mod spike_probes;
 mod surface_commit;
+mod swipe;
 mod synced_moves;
 mod theme_turnover;
 mod thread_priority;
@@ -468,6 +469,7 @@ struct DomicileCompositor {
     /// [`DomicileCompositor::let_go_of_lost_presses`].
     held_buttons: Vec<u32>,
     pinch: Option<pinch::ActivePinch>,
+    swipe: Option<swipe::ActiveSwipe>,
     touches: Option<touch::ActiveTouches>,
     touch_clients: touch::TouchClients,
     /// InputCapture sessions, which take input once the pointer reaches a
@@ -1320,6 +1322,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         pointer_app: None,
         held_buttons: Vec::new(),
         pinch: None,
+        swipe: None,
         touches: None,
         touch_clients: touch::TouchClients::default(),
         captures: None,
