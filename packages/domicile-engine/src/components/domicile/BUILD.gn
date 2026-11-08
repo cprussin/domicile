@@ -980,6 +980,33 @@ source_set("desk_pointer") {
   ]
 }
 
+# When the browser hides the pointer, from the `appearance` message to the
+# pointer. Its own target for :desk_activity's reason.
+source_set("desk_pointer_hiding") {
+  sources = [
+    "browser/desk_pointer_hiding.cc",
+    "browser/desk_pointer_hiding.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
+# Hides the pointer while typing and after a pause in pointer input. Its own
+# target for :pointer_warp's reason: the decisions are here with their tests,
+# and aura's events reach it from //chrome/browser/domicile.
+source_set("pointer_hiding") {
+  sources = [
+    "browser/pointer_hiding.cc",
+    "browser/pointer_hiding.h",
+  ]
+
+  public_deps = [
+    ":desk_pointer_hiding",
+    "//base",
+    "//ui/events",
+  ]
+}
+
 # What the browser checks and computes for the shell's fetches with the
 # profile's cookies: the refusals and the SAPISIDHASH. Its own target for
 # :pointer_warp's reason: the decisions are here, where a test reaches them
@@ -1060,6 +1087,7 @@ source_set("control_channel") {
     ":desk_gestures",
     ":desk_lock",
     ":desk_pointer",
+    ":desk_pointer_hiding",
     ":display_transform",
     ":extension_installer",
     ":line_framer",
@@ -1096,6 +1124,7 @@ source_set("unit_tests") {
     "browser/control_channel_unittest.cc",
     "browser/desk_activity_unittest.cc",
     "browser/desk_gestures_unittest.cc",
+    "browser/desk_pointer_hiding_unittest.cc",
     "browser/desk_pointer_unittest.cc",
     "browser/desk_geometry_unittest.cc",
     "browser/desk_tabs_unittest.cc",
@@ -1115,6 +1144,7 @@ source_set("unit_tests") {
     "browser/notification_window_unittest.cc",
     "browser/page_matches_unittest.cc",
     "browser/placeholder_stage_unittest.cc",
+    "browser/pointer_hiding_unittest.cc",
     "browser/pointer_warp_unittest.cc",
     "browser/portal_request_unittest.cc",
     "browser/private_pages_unittest.cc",
@@ -1179,6 +1209,7 @@ source_set("unit_tests") {
     ":desk_geometry",
     ":desk_gestures",
     ":desk_pointer",
+    ":desk_pointer_hiding",
     ":desk_tabs",
     ":desktop_prefs",
     ":device_choices",
@@ -1197,6 +1228,7 @@ source_set("unit_tests") {
     ":notification_window",
     ":page_matches",
     ":placeholder_stage",
+    ":pointer_hiding",
     ":pointer_warp",
     ":portal_file_chooser",
     ":rtkit",

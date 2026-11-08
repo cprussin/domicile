@@ -627,6 +627,30 @@ fn rejects_a_site_to_force_dark_that_is_not_a_host_name() {
 }
 
 #[test]
+fn a_desk_can_hide_the_pointer_while_typing_and_after_a_pause() {
+    let theme = Config::parse(
+        r#"{ "theme": { "cursor_hide_after_ms": 1000, "cursor_hide_when_typing": true } }"#,
+    )
+    .unwrap()
+    .theme;
+    assert_eq!(
+        (theme.cursor_hide_after_ms, theme.cursor_hide_when_typing),
+        (Some(1000), true)
+    );
+    let unset = Config::parse("{}").unwrap().theme;
+    assert_eq!(
+        (unset.cursor_hide_after_ms, unset.cursor_hide_when_typing),
+        (None, false)
+    );
+}
+
+#[test]
+fn rejects_hiding_the_pointer_after_zero_ms() {
+    let err = Config::parse(r#"{ "theme": { "cursor_hide_after_ms": 0 } }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+#[test]
 fn rejects_a_cursor_size_of_zero() {
     let err = Config::parse(r#"{ "theme": { "cursor_size": 0 } }"#).unwrap_err();
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
