@@ -274,8 +274,22 @@ fn read_chrome_messages(
     })
     .setting_white_points_with({
         let hub = hub.clone();
-        move |white_point| {
-            hub.send_request(ClientRequest::SetWhitePoint { white_point });
+        move |display, white_point| {
+            // Checked here so the page hears of a bad name. A monitor
+            // unplugged before the Wayland thread gets this keeps the white
+            // point for when it is back.
+            if let Some(name) = &display {
+                if hub.host.lock().unwrap().display(name).is_none() {
+                    return Err(SystemError {
+                        kind: SystemErrorKind::NotFound,
+                        message: format!("no display {name}"),
+                    });
+                }
+            }
+            hub.send_request(ClientRequest::SetWhitePoint {
+                output: display,
+                white_point,
+            });
             Ok(())
         }
     });

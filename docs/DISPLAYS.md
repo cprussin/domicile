@@ -263,21 +263,44 @@ code and the compositor logs one line at startup.
   display id comes from the EDID, so the same id is the same panel, with the
   same size and native mode.
 
-## Night light
+## Night light and gamma control
 
-The shell sets a color temperature; the compositor scales every monitor's
-gamma ramp to that white.
+Each monitor draws with its own gamma ramp. Two things set one:
+
+- **The night light.** The shell sets a color temperature for every monitor,
+  or for one by its display `name`. Every monitor's replaces each one's.
+- **A `wlr-gamma-control` client,** such as gammastep or wl-gammarelay-rs. It
+  sets one monitor's whole ramp, so it can warm, dim or curve each monitor
+  apart.
+
+Who owns a ramp (`domicile-compositor/src/gamma.rs`):
+
+- A client holding a monitor owns its ramp. The night light doesn't apply
+  there, so the two never multiply.
+- Every other monitor draws with its night light.
+- When the client lets go or exits, its monitor goes back to its night light.
+- One client per monitor; a second gets `failed`.
 
 ```
-set_color_temperature {kelvin}  →  domicile_host::white_point  →  domicile_displays_set_white_point
-  → FrameSinkBroker.SetWhitePoint  →  OzonePlatform::SetDomicileWhitePoint  →  DrmModeset::SetWhitePoint
+set_color_temperature {kelvin, display?}  ─┐
+zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicile_displays_set_gamma
+  → FrameSinkBroker.SetGamma  →  OzonePlatform::SetDomicileGamma  →  DrmModeset::SetGamma
   → NativeDisplayDelegate::SetGammaAdjustment
 ```
 
 - `kelvin` is 1000 to 6500. 6500 is neutral: an identity ramp. An empty
   curve would leave the last ramp on the CRTC.
 - A gamma ramp, not a color matrix, so it works on drivers without a CTM.
-- `DrmModeset` sets it again after each modeset, so a new monitor or a VT
-  switch keeps it. The compositor sends it again after an engine restart.
+- A client is told the CRTC's own ramp size: `GAMMA_LUT_SIZE`, or the legacy
+  ramp's. The GPU process reads it into each display's report
+  (`DomicileRampedDisplay.gamma_size`).
+- A monitor with no gamma gets `failed` at once: a DisplayLink dock, a nested
+  or headless desktop. So does a client whose monitor is unplugged.
+- A table that isn't three ramps of the advertised size is the
+  `invalid_gamma` protocol error. The fd is read without waiting, as wlroots
+  does.
+- `DrmModeset` sets each monitor's ramp again after each modeset, so a VT
+  switch or resume keeps it. The compositor sends every ramp again after each
+  display report, which covers a hotplug and an engine restart.
 - A nested desktop does nothing: the host compositor owns the screen.
-- Not yet: `wlr-gamma-control` for clients such as gammastep.
+- Sandboxed apps don't see the global.

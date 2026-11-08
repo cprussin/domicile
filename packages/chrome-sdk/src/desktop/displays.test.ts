@@ -97,4 +97,26 @@ describe("setColorTemperature", () => {
       ["callSystem", { call: "set_color_temperature", kelvin: 3400 }],
     ]);
   });
+
+  it("warms one monitor, by name", async () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host)
+      .displays.setColorTemperature(3400, "eDP-2")
+      .catch(() => {
+        /* never answered */
+      });
+    await Promise.resolve();
+
+    expect(
+      fake.calls.map(([method, , request]) => [
+        method,
+        JSON.parse(String(request)),
+      ]),
+    ).toStrictEqual([
+      [
+        "callSystem",
+        { call: "set_color_temperature", display: "eDP-2", kelvin: 3400 },
+      ],
+    ]);
+  });
 });
