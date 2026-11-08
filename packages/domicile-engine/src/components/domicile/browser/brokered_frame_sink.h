@@ -139,8 +139,9 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   std::optional<gpu::SyncToken> FenceBuffer(uint64_t buffer_id,
                                             gfx::GpuFenceHandle fence);
 
-  // Drops an imported buffer. Safe while viz still holds it: the SharedImage is
-  // refcounted, and no release is sent for it.
+  // Drops an imported buffer and its SharedImage, which this holds the only
+  // reference to. Viz draws a fallback image over any frame still showing it,
+  // so call this only once viz has returned it. No release is sent for it.
   void DestroyBuffer(uint64_t buffer_id);
 
   // viz::HostFrameSinkClient implementation.
