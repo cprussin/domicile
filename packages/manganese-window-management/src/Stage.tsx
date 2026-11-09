@@ -989,6 +989,7 @@ const WindowContents = memo(
             resizing={resizing}
             restack={restack}
             syncedFrame={window.syncedFrame}
+            tab={placement?.bar}
           />
         ) : (
           <BrowserWindow
@@ -1015,6 +1016,7 @@ const WindowContents = memo(
             rect={contents?.rect}
             resizing={resizing}
             restack={restack}
+            tab={placement?.bar}
             url={window.url}
             window={engineWindowOf(id)}
           />

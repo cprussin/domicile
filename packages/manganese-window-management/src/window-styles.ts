@@ -120,15 +120,22 @@ export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties =>
 
 /**
  * Inline style setting a window's contents' `transform-origin`: the middle of
- * its whole `frame`, as {@link scaledAbout}, except for a closing tab. Its
- * `frame` is its tab, which the bar collapses about, but its contents shrink
- * about their own middle (see `movingStyles`).
+ * its whole `frame`, as {@link scaledAbout}, except for a tab opening or
+ * closing. Its contents grow out of or shrink into its `tab` in the strip (see
+ * `movingStyles`), so they are seen to come from or go to it.
  */
 export const contentsScaledAbout = (
   motion: WindowMotion,
   frame: Rect,
+  tab: Rect | undefined,
   rect: Rect,
-): CSSProperties => scaledAbout(motion === "closing-tab" ? rect : frame, rect);
+): CSSProperties =>
+  scaledAbout(
+    (motion === "closing-tab" || motion === "opening-tab") && tab !== undefined
+      ? tab
+      : frame,
+    rect,
+  );
 
 /** Inline style setting part of a window's `transform-origin` to `point`. */
 export const originAt = ({ x, y }: Point): CSSProperties => ({
@@ -277,16 +284,27 @@ export const movingStyles = cva({
       },
       motion: ["closing-tab", "uncovering"],
     },
-    // A closing tab's contents shrink and fade as a closed window does, about
-    // their own middle (see `contentsScaledAbout`), over the tab they
-    // uncover. A fade alone, over the same box, reads as a tab switch.
+    // A closing tab's contents shrink into its tab and fade, over the tab
+    // they uncover; a new tab's grow out of it over the tab they hide (see
+    // `contentsScaledAbout`). A fade alone, over the same box, reads as a tab
+    // switch. Slower than a window's, so the move to the strip is seen.
     {
       contents: true,
       css: {
-        animationName: "windowClosing",
+        animationDuration: "token(durations.slow)",
+        animationName: "windowClosingIntoTab",
         animationTimingFunction: "token(easings.outQuart)",
       },
       motion: "closing-tab",
+    },
+    {
+      contents: true,
+      css: {
+        animationDuration: "token(durations.slow)",
+        animationName: "windowOpeningFromTab",
+        animationTimingFunction: "token(easings.outQuart)",
+      },
+      motion: "opening-tab",
     },
   ],
   variants: {
@@ -321,9 +339,10 @@ export const movingStyles = cva({
       "closing-tab": {
         animation: "windowClosingTab {durations.fast} {easings.out} forwards",
       },
-      // The tab being hidden; lasts as long as `revealing` so it stays under.
+      // The tab being hidden. Lasts as long as a new tab's contents, the
+      // longest that draws over it, so it stays under them.
       concealing: {
-        animation: "windowConcealing {durations.fast} {easings.in-out}",
+        animation: "windowConcealing {durations.slow} {easings.in-out}",
       },
       // The scratchpad's slides avoid front-loaded curves, so a slide of up
       // to a screen's height is seen: `out` settles the window into place.
@@ -383,9 +402,9 @@ export const movingStyles = cva({
         animation:
           "windowStowing {durations.slow} {easings.out} var(--motion-delay, 0ms) reverse forwards",
       },
-      // Lasts as long as `closing-tab`, which it is drawn under.
+      // Lasts as long as a closing tab's contents, which it is drawn under.
       uncovering: {
-        animation: "windowHeldTiled {durations.fast} {easings.out}",
+        animation: "windowHeldTiled {durations.slow} {easings.out}",
       },
     },
   },

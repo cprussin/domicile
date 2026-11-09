@@ -90,6 +90,11 @@ type Props = {
    * {@link scaledAbout}). `undefined` when {@link Props.rect} is.
    */
   frame: Rect | undefined;
+  /**
+   * Its tab in the strip, which its contents grow out of as it opens and
+   * shrink into as it closes (see {@link contentsScaledAbout}).
+   */
+  tab?: Rect | undefined;
   /** Whether the shell considers this window focused. */
   focused: boolean;
   /** Whether this window is fullscreen, which removes its edge and corners. */
@@ -167,6 +172,7 @@ export const AppWindow = ({
   restack,
   settler,
   syncedFrame,
+  tab,
 }: Props) => {
   // A closed window that is still animating out.
   const leaving = isLeaving(motion);
@@ -330,7 +336,7 @@ export const AppWindow = ({
           ? undefined
           : {
               ...placedAt(rect, depth),
-              ...contentsScaledAbout(motion, frame, rect),
+              ...contentsScaledAbout(motion, frame, tab, rect),
               ...shuffledBy(restack),
             }
       }

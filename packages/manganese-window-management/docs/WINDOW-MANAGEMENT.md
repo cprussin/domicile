@@ -395,7 +395,8 @@ with windows, and the shown one.
 
 - Opening: fade in and grow from the center.
 - Opening a tab: the tab opens out from its start as the tabs after it slide
-  along; the contents fade in.
+  along; the contents grow out of the tab and fade in over the tab they
+  hide, a little slower than a window opens so the move is seen.
 - Rearranging: windows ease to their new boxes.
 - Moving a tab along its strip, by keys or by dragging: the tabs slide to
   their new places, the moved one included.
@@ -403,7 +404,8 @@ with windows, and the shown one.
 - Sending to a workspace no screen shows: shrink further and fade out. A
   tab group leaves as one: every part scales about the group's middle.
 - Closing a tab: it closes up toward its start as the tabs after it slide
-  back. Its contents shrink and fade out over the tab it uncovers.
+  back. Its contents shrink into the tab and fade out over the tab it
+  uncovers, as slowly as a new tab's grow out.
 - Sending away a tab: it shrinks and fades with its contents, as a sent
   window does, while the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
