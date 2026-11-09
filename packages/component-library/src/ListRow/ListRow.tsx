@@ -106,7 +106,9 @@ export const ListRow = ({
     />
   );
   const under = (
-    <div className={belowStyles({ indented: icon !== undefined })}>
+    <div
+      className={belowStyles({ drawer: folds, indented: icon !== undefined })}
+    >
       {children}
     </div>
   );
@@ -324,6 +326,12 @@ const belowStyles = cva({
     paddingInline: 2,
   }),
   variants: {
+    // Room above and below the folded details. The gap and the bottom match
+    // a `PanelFooter`'s top, so its rule and button sit evenly spaced.
+    drawer: {
+      false: {},
+      true: { gap: 3, paddingBlockEnd: 3, paddingBlockStart: 1.5 },
+    },
     indented: { false: {}, true: { paddingInlineStart: 8.5 } },
   },
 });
