@@ -8,10 +8,10 @@ import { bellId } from "@domicile-desktop/manganese-notifications/notifications-
 import { css } from "../styled-system/css";
 
 type Props = {
-  /** Toasts are held back; the bell is struck through. */
-  doNotDisturb: boolean;
   /** Opens the drawer under this bell. */
   handle: NotificationsHandle;
+  /** Toasts are held back; the bell is struck through. */
+  paused: boolean;
   /** The bar's monitor. */
   screen: string;
   /** How many arrived since the drawer was last opened. */
@@ -25,16 +25,11 @@ type Props = {
  * It swings when the count goes up, to point back to notifications whose
  * toasts have gone, and not when they are read.
  */
-export const NotificationBell = ({
-  doNotDisturb,
-  handle,
-  screen,
-  unread,
-}: Props) => {
+export const NotificationBell = ({ handle, paused, screen, unread }: Props) => {
   const label = [
     "Notifications",
     ...(unread === 0 ? [] : [`${unread} unread`]),
-    ...(doNotDisturb ? ["do not disturb"] : []),
+    ...(paused ? ["paused"] : []),
   ].join(", ");
   return (
     <Tooltip
@@ -52,7 +47,7 @@ export const NotificationBell = ({
         >
           <AnimatedBellIcon
             cue={unread === 0 ? undefined : unread}
-            off={doNotDisturb}
+            off={paused}
             size={15}
           />
           <CountBadge count={unread} />

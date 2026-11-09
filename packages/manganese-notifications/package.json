@@ -8,7 +8,8 @@
     "@pandacss/dev": "catalog:",
     "@phosphor-icons/react": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "zod": "catalog:"
   },
   "description": "Manganese's notification toasts and drawer.",
   "devDependencies": {

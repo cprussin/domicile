@@ -615,13 +615,13 @@ export const Desktop = ({
   );
   const drawer = useMemo(
     () => ({
-      doNotDisturb: notifications.doNotDisturb,
       handle: notificationsHandle,
+      paused: notifications.pause !== undefined,
       unread: notifications.unread + inboxDrawer.unread,
     }),
     [
       inboxDrawer.unread,
-      notifications.doNotDisturb,
+      notifications.pause,
       notifications.unread,
       notificationsHandle,
     ],
@@ -853,7 +853,6 @@ export const Desktop = ({
       />
       {/* Under the bell that opened it. */}
       <NotificationDrawer
-        doNotDisturb={notifications.doNotDisturb}
         handle={notificationsHandle}
         inboxes={inboxes.length === 0 ? undefined : inboxDrawer.drawer}
         items={notifications.items}
@@ -861,10 +860,12 @@ export const Desktop = ({
         onAction={pressNotification}
         onClose={closeNotifications}
         onDismiss={notifications.dismiss}
-        onDoNotDisturb={notifications.setDoNotDisturb}
         onOpen={openNotifications}
+        onPause={notifications.pauseFor}
         onReply={notifications.reply}
+        onResume={notifications.resume}
         open={notificationsOpen && !lock.locked}
+        pause={notifications.pause}
         screen={notificationsOn}
       />
       {/*

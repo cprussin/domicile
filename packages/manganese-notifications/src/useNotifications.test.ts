@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it, jest } from "bun:test";
 import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { act, renderHook } from "@testing-library/react";
 
 import { notification } from "./fixture";
+import { PauseLength } from "./pause";
 import { useNotifications } from "./useNotifications";
 
 /** A fake host whose notifications a test sets. Records the hook's requests. */
@@ -44,6 +45,9 @@ const toasts = () => {
   return { added, closed, manager };
 };
 
+/** The time the tests' clock reads, in ms since the epoch. */
+const NOW = 1_000_000;
+
 const mounted = (
   uncounted: readonly string[] = [],
   replaced: readonly string[] = [],
@@ -51,7 +55,13 @@ const mounted = (
   const host = client();
   const shown = toasts();
   const { result, unmount } = renderHook(() =>
-    useNotifications(host.domicile, shown.manager, uncounted, replaced),
+    useNotifications(
+      host.domicile,
+      shown.manager,
+      uncounted,
+      replaced,
+      () => NOW,
+    ),
   );
   return { host, result, shown, unmount };
 };
@@ -121,11 +131,11 @@ describe("useNotifications", () => {
       ]);
     });
 
-    it("holds them back while do not disturb is on, but keeps the notification", () => {
+    it("holds them back while paused, but keeps the notification", () => {
       const { host, result, shown } = mounted();
       host.says([]);
       act(() => {
-        result.current.setDoNotDisturb(true);
+        result.current.pauseFor(PauseLength.UntilResumed);
       });
       const arrived = notification({ id: 7, time: 1 });
 
@@ -136,11 +146,11 @@ describe("useNotifications", () => {
       expect(result.current.unread).toBe(1);
     });
 
-    it("still toasts a critical one while do not disturb is on", () => {
+    it("still toasts a critical one while paused", () => {
       const { host, result, shown } = mounted();
       host.says([]);
       act(() => {
-        result.current.setDoNotDisturb(true);
+        result.current.pauseFor(PauseLength.UntilResumed);
       });
 
       host.says([notification({ id: 8, urgency: "critical" })]);
@@ -211,17 +221,59 @@ describe("useNotifications", () => {
     });
   });
 
-  describe("do not disturb", () => {
-    it("is off until turned on, and stays on through a reload", () => {
+  describe("pausing", () => {
+    it("is off until paused, and stays paused through a reload", () => {
       const first = mounted();
-      expect(first.result.current.doNotDisturb).toBe(false);
+      expect(first.result.current.pause).toBeUndefined();
 
       act(() => {
-        first.result.current.setDoNotDisturb(true);
+        first.result.current.pauseFor(PauseLength.Hour);
       });
       first.unmount();
 
-      expect(mounted().result.current.doNotDisturb).toBe(true);
+      expect(mounted().result.current.pause).toEqual({
+        until: NOW + 3_600_000,
+      });
+    });
+
+    it("resumes when asked", () => {
+      const { result } = mounted();
+      act(() => {
+        result.current.pauseFor(PauseLength.UntilResumed);
+      });
+
+      act(() => {
+        result.current.resume();
+      });
+
+      expect(result.current.pause).toBeUndefined();
+    });
+
+    it("resumes by itself when a timed pause ends, and toasts again", () => {
+      jest.useFakeTimers();
+      const { host, result, shown } = mounted();
+      host.says([]);
+      act(() => {
+        result.current.pauseFor(PauseLength.Hour);
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(3_600_000);
+      });
+      host.says([notification({ id: 9 })]);
+
+      expect(result.current.pause).toBeUndefined();
+      expect(shown.added).toEqual([expect.objectContaining({ id: "9" })]);
+      jest.useRealTimers();
+    });
+
+    it("is not paused by a stored pause that has already ended", () => {
+      globalThis.localStorage.setItem(
+        "notifications-paused:v1",
+        JSON.stringify({ until: NOW - 1 }),
+      );
+
+      expect(mounted().result.current.pause).toBeUndefined();
     });
   });
 

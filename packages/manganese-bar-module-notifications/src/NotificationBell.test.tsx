@@ -10,13 +10,13 @@ import userEvent from "@testing-library/user-event";
 import { NotificationBell } from "./NotificationBell";
 
 /** A bell on `left` with `unread`, and the drawer it opens. */
-const bell = (unread: number, opened: string[] = [], doNotDisturb = false) => {
+const bell = (unread: number, opened: string[] = [], paused = false) => {
   const handle = createHandle();
   return render(
     <>
       <NotificationBell
-        doNotDisturb={doNotDisturb}
         handle={handle}
+        paused={paused}
         screen="left"
         unread={unread}
       />
@@ -61,17 +61,17 @@ describe("NotificationBell", () => {
     ).toHaveTextContent("Notifications, 3 unread");
   });
 
-  it("says while do not disturb is on", () => {
+  it("says while notifications are paused", () => {
     bell(3, [], true);
 
     expect(
       screen.getByRole("button", {
-        name: "Notifications, 3 unread, do not disturb",
+        name: "Notifications, 3 unread, paused",
       }),
     ).toBeInTheDocument();
   });
 
-  it("strikes the bell through while do not disturb is on", () => {
+  it("strikes the bell through while notifications are paused", () => {
     const { container } = bell(3, [], true);
 
     expect(container.querySelector("svg")).toHaveAttribute("data-slashed");
@@ -89,16 +89,16 @@ describe("NotificationBell", () => {
     const handle = createHandle();
     const { container, rerender } = render(
       <NotificationBell
-        doNotDisturb={false}
         handle={handle}
+        paused={false}
         screen="left"
         unread={1}
       />,
     );
     rerender(
       <NotificationBell
-        doNotDisturb={false}
         handle={handle}
+        paused={false}
         screen="left"
         unread={2}
       />,
@@ -109,16 +109,16 @@ describe("NotificationBell", () => {
 
     const read = render(
       <NotificationBell
-        doNotDisturb={false}
         handle={handle}
+        paused={false}
         screen="right"
         unread={2}
       />,
     );
     read.rerender(
       <NotificationBell
-        doNotDisturb={false}
         handle={handle}
+        paused={false}
         screen="right"
         unread={0}
       />,

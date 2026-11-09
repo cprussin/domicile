@@ -32,7 +32,7 @@ const SHOWN: readonly { picture: ReactNode; title: string; body: string }[] = [
     title: "Chrome extensions",
   },
   {
-    body: "Native apps and web pages land in the same list, with one do not disturb switch.",
+    body: "Native apps and web pages land in the same list, and one button pauses them all.",
     picture: <NotificationsPicture />,
     title: "One place for notifications",
   },

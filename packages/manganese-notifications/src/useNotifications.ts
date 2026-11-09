@@ -4,7 +4,10 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { arrivals } from "./arrivals";
-import { storeDoNotDisturb, storedDoNotDisturb } from "./do-not-disturb";
+import type { PauseLength } from "./pause";
+import { pauseEnd } from "./pause";
+import type { Pause } from "./stored-pause";
+import { storedPause, storePause } from "./stored-pause";
 import { toastTimeout } from "./toast-timeout";
 
 export type NotificationCenter = {
@@ -23,9 +26,13 @@ export type NotificationCenter = {
   invoke: (id: number, action: string) => void;
   /** Send `text` from `id`'s reply field. */
   reply: (id: number, text: string) => void;
-  /** Holds back every toast but a critical one. Kept through a reload. */
-  doNotDisturb: boolean;
-  setDoNotDisturb: (on: boolean) => void;
+  /**
+   * Holds back every toast but a critical one, or `undefined` while not
+   * paused. Kept through a reload.
+   */
+  pause: Pause | undefined;
+  pauseFor: (length: PauseLength) => void;
+  resume: () => void;
 };
 
 /** The notifications and how far the user has read. */
@@ -49,8 +56,9 @@ type Desk = {
  *
  * A toast only interrupts. Closing it or timing out leaves the notification in
  * place. Clearing the notification (on any page) or its application closing it
- * removes the toast too. Do not disturb holds back every toast but a critical
- * one; the notifications still collect. See docs/architecture/NOTIFICATIONS.md.
+ * removes the toast too. A pause holds back every toast but a critical one;
+ * the notifications still collect. A timed pause ends by itself. See
+ * docs/architecture/NOTIFICATIONS.md.
  */
 export const useNotifications = (
   domicile: Pick<Domicile, "notifications">,
@@ -63,6 +71,7 @@ export const useNotifications = (
    * when the inbox notifies its mail itself.
    */
   replaced: readonly string[],
+  clock: typeof wallClock = wallClock,
 ): NotificationCenter => {
   const [desk, setDesk] = useState<Desk>({
     items: [],
@@ -71,9 +80,9 @@ export const useNotifications = (
   // The last list received, for `arrivals`. A ref because it is only used in
   // the handler, not for rendering.
   const told = useRef<readonly Notification[] | undefined>(undefined);
-  const [doNotDisturb, setQuiet] = useState(storedDoNotDisturb);
+  const [pause, setPause] = useState(() => unended(storedPause(), clock()));
   // Read by the handler, which subscribes once.
-  const quiet = useRef(doNotDisturb);
+  const quiet = useRef(pause !== undefined);
 
   useEffect(() => {
     const heard = (sent: readonly Notification[]) => {
@@ -122,11 +131,35 @@ export const useNotifications = (
     setDesk((previous) => ({ ...previous, readUpTo: latest(previous.items) }));
   }, []);
 
-  const setDoNotDisturb = useCallback((on: boolean) => {
-    quiet.current = on;
-    storeDoNotDisturb(on);
-    setQuiet(on);
+  const pauseAs = useCallback((next: Pause | undefined) => {
+    quiet.current = next !== undefined;
+    storePause(next);
+    setPause(next);
   }, []);
+
+  const pauseFor = useCallback(
+    (length: PauseLength) => {
+      const until = pauseEnd(length, clock());
+      pauseAs(until === undefined ? {} : { until });
+    },
+    [clock, pauseAs],
+  );
+
+  const resume = useCallback(() => {
+    pauseAs(undefined);
+  }, [pauseAs]);
+
+  const until = pause?.until;
+  useEffect(() => {
+    if (until === undefined) {
+      return undefined;
+    } else {
+      const timer = setTimeout(resume, until - clock());
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [clock, resume, until]);
 
   const dismiss = useCallback(
     (ids: readonly number[]) => {
@@ -151,18 +184,26 @@ export const useNotifications = (
 
   return {
     dismiss,
-    doNotDisturb,
     invoke,
     items: desk.items.toReversed(),
+    pause,
+    pauseFor,
     read,
     reply,
-    setDoNotDisturb,
+    resume,
     unread: desk.items.filter(
       ({ appName, time }) =>
         time > (desk.readUpTo ?? 0) && !uncounted.includes(appName),
     ).length,
   };
 };
+
+/** The wall clock in ms since the epoch; injected so tests can control it. */
+const wallClock = (): number => Date.now();
+
+/** `pause`, unless it ended by `now`. */
+const unended = (pause: Pause | undefined, now: number): Pause | undefined =>
+  pause?.until !== undefined && pause.until <= now ? undefined : pause;
 
 /** The newest `time` in `items`, or `0` for none. */
 const latest = (items: readonly Notification[]): number =>

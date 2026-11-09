@@ -342,11 +342,12 @@ button, and their controls in one panel, each labeled in words.
 - Critical toasts stay up and have a red ring.
 - No toasts show while locked.
 - The bell shows the count since it was last opened. It opens a panel under
-  itself of every uncleared notification, where you can open, clear or clear
-  all.
-- **Do not disturb**, a switch at the bottom of that panel, holds back every
-  toast but critical ones. Notifications still collect in the panel, and the
-  bell shows struck through. It stays on through a reload.
+  itself of every uncleared notification, where you can open or clear one.
+  **Clear all** sits beside the Recent label.
+- **Pause**, in that panel's header, holds back every toast but critical ones
+  for 1 hour, until 8 AM tomorrow, or until resumed. The header says until
+  when, and **Resume** ends it early. Notifications still collect in the
+  panel, and the bell shows struck through. A pause stays through a reload.
 - The compositor keeps the history, so it survives a reload. See
   [NOTIFICATIONS.md](../../../docs/architecture/NOTIFICATIONS.md).
 
