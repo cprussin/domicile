@@ -112,6 +112,7 @@ Headless.
 | `guard-webview-activate.sh` | a page brought to the front (`Page.bringToFront`, the same `Activate()` as a notification click's `client.focus()`) fires `domicile-focus-request` |
 | `guard-webview-routed-link.sh` | a middle click on a link opens a browser window through `OpenURLFromTab` |
 | `guard-webview-target-url.sh` | the link under the pointer reaches the shell as `targetUrl`, clears when the pointer leaves the page, and returns when it comes back |
+| `guard-webview-tooltip.sh` | a `title` in a frame from another site reaches the shell as the `<webview>`'s tooltip at the pointer, in the element's coordinates (patch 0181), after Chrome's delay |
 | `guard-webview-device-request.sh` | a page's `navigator.hid.requestDevice()` from a press asks the shell as `domicile-device-request`, and the shell's cancel reaches the page as no devices |
 | `guard-webview-dialog.sh` | a page's `prompt()` from a press asks the shell as `domicile-dialog`, and the shell's text reaches the page as `prompt()`'s value |
 | `guard-webview-external-app.sh` | a press on a page's `domicile-guard:` link asks the shell as `domicile-external-app` with the link, the site and `mayRemember`, in place of Chrome's dialog (patch 0176), and the shell's answer reaches the browser |

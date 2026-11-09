@@ -181,8 +181,13 @@ Patch `0110`:
   (`tooltip`, `domicile-tooltip-change`), and the shell draws them. Chrome's
   are native windows drawn by the shell's view, outside any shell UI.
 - Patch `0181` hands the tooltip to the WebContents' delegate first, and
-  draws none when it takes it. Cleared when the pointer leaves the page, or
-  on a press, as Chrome's is.
+  draws none when it takes it, naming the widget it came from. Cleared when
+  the pointer leaves the page, or on a press, as Chrome's is.
+- A new tooltip waits 500 ms, Chrome's delay; the renderer reports a title
+  at once.
+- A frame from another site (an extension's inline menu, a challenge frame)
+  is its own widget, with its own coordinates. `WebViewGuest` maps the
+  pointer from that widget into the page's.
 
 ## Error, warning and crashed pages
 
