@@ -34,8 +34,16 @@ class AuraPointer : public PointerHiding::Pointer {
  public:
   // PointerHiding::Pointer:
   void Hide() override {
-    if (aura::client::CursorClient* client = Client()) {
-      client->HideCursor();
+    aura::client::CursorClient* client = Client();
+    if (client == nullptr) {
+      VLOG(1) << "domicile: no shell page's cursor client to hide the pointer";
+      return;
+    }
+    client->HideCursor();
+    if (client->IsCursorVisible()) {
+      // The cursor manager defers a hide while its cursor is locked.
+      VLOG(1) << "domicile: the cursor client kept the pointer shown"
+              << (client->IsCursorLocked() ? ": its cursor is locked" : "");
     }
   }
   void Show() override {

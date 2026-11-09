@@ -5,6 +5,7 @@
 
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/gesture_event_details.h"
@@ -96,9 +97,13 @@ void PointerHiding::Configure(const PointerHidingSettings& settings) {
 
 void PointerHiding::Heard(const ui::Event& event) {
   if (event.IsKeyEvent()) {
-    if (settings_.when_typing && buttons_ == 0 &&
-        IsTyping(*event.AsKeyEvent())) {
-      Hide();
+    if (settings_.when_typing && IsTyping(*event.AsKeyEvent())) {
+      if (buttons_ == 0) {
+        Hide();
+      } else {
+        VLOG(1) << "domicile: a key left the pointer shown: buttons 0x"
+                << std::hex << buttons_ << " are held";
+      }
     }
     return;
   }
@@ -107,6 +112,12 @@ void PointerHiding::Heard(const ui::Event& event) {
   }
   if (event.IsMouseEvent()) {
     buttons_ = ButtonsHeldAfter(*event.AsMouseEvent());
+  }
+  if (hidden_) {
+    // `--vmodule=*pointer_hiding*=1` says what brought a hidden pointer back.
+    VLOG(1) << "domicile: " << event.GetName() << " from device "
+            << event.source_device_id() << ", flags 0x" << std::hex
+            << event.flags() << ", shows the pointer";
   }
   Used();
 }
@@ -125,6 +136,10 @@ void PointerHiding::Used() {
 
 void PointerHiding::Restart() {
   if (!settings_.after || buttons_ != 0) {
+    if (settings_.after) {
+      VLOG(1) << "domicile: no pause while buttons 0x" << std::hex << buttons_
+              << " are held";
+    }
     pause_.Stop();
   } else {
     // Unretained: `pause_` is a member, so it cannot outlive this.
@@ -136,6 +151,7 @@ void PointerHiding::Restart() {
 void PointerHiding::Hide() {
   // Every time, not once: aura shows the pointer itself on some mouse events
   // this does not read, such as an enter.
+  VLOG(1) << "domicile: hiding the pointer";
   hidden_ = true;
   pointer_->Hide();
 }

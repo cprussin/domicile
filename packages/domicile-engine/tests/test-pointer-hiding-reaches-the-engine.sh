@@ -53,4 +53,12 @@ grep -rqs 'domicile::StartPointerHiding()' "$PATCHES" || fail \
   "no patch calls domicile::StartPointerHiding()" \
   "Nothing would observe aura's events."
 
+# A shell warps the pointer on each keyboard focus change. Upstream reports
+# the warp as an unflagged move, which aura and `PointerHiding` take for a hand
+# on the mouse, so the pointer typing hid came back each time.
+awk '/^(@@|diff) /{in_warp = /^@@.*WarpCursorTo/} in_warp' "$PATCHES"/*.patch |
+  grep -q '^+ *-1 /\* device_id \*/, EF_IS_SYNTHESIZED' || fail \
+  "no patch makes EventFactoryEvdev::WarpCursorTo's move EF_IS_SYNTHESIZED" \
+  "Every keyboard focus change would show the hidden pointer."
+
 echo "pointer hiding's field names and every link of its crossing agree"
