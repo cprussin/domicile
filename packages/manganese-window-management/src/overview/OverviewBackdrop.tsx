@@ -1,13 +1,14 @@
 import type { CSSProperties } from "react";
-import { Fragment } from "react";
 
 import { css, cva } from "../../styled-system/css";
+import { token } from "../../styled-system/tokens";
 import type { Rect } from "../rect";
 import { within } from "../rect";
 import { placedAt, placedIn } from "../window-styles";
 import type { ScreenOverview } from "./overview";
 import { cameraOf } from "./overview";
-import { fromOrigin, LABEL, matrixOf } from "./tiles";
+import type { OverviewTile } from "./tiles";
+import { fromOrigin, LABEL, matrixOf, viewOf } from "./tiles";
 
 type Props = {
   /** Whether the overview is closing, which fades the backdrop out. */
@@ -15,6 +16,8 @@ type Props = {
   /** Called once the closing fade has played out. */
   onClosed: () => void;
   overviews: readonly ScreenOverview[];
+  /** Which card each tile shows; see `WindowState.overviewCards`. */
+  cards: Readonly<Record<string, string>>;
 };
 
 /**
@@ -24,7 +27,12 @@ type Props = {
  * At the wallpaper's depth, after it in the document, so it covers the
  * wallpaper and nothing else. The bars stay over it.
  */
-export const OverviewBackdrop = ({ closing, onClosed, overviews }: Props) => (
+export const OverviewBackdrop = ({
+  cards,
+  closing,
+  onClosed,
+  overviews,
+}: Props) => (
   <>
     {overviews.map((overview) => {
       const { screen, tiles } = overview;
@@ -52,19 +60,22 @@ export const OverviewBackdrop = ({ closing, onClosed, overviews }: Props) => (
             data-overview-grid=""
             style={gridAt(camera, closing)}
           >
+            {dealt(tiles, cards).map(({ box, card }) => (
+              <div
+                className={cardStyles}
+                data-overview-card={card}
+                key={card}
+                style={cardAt(screen.geometry.screen, box)}
+              />
+            ))}
             {tiles.map(({ box, name }) => (
-              <Fragment key={name}>
-                <div
-                  className={cardStyles}
-                  style={placedIn(within(box, screen.geometry.screen))}
-                />
-                <span
-                  className={labelStyles({ current: name === screen.current })}
-                  style={placedIn(labelOf(within(box, screen.geometry.screen)))}
-                >
-                  {name}
-                </span>
-              </Fragment>
+              <span
+                className={labelStyles({ current: name === screen.current })}
+                key={name}
+                style={placedIn(labelOf(within(box, screen.geometry.screen)))}
+              >
+                {name}
+              </span>
             ))}
           </div>
         </div>
@@ -84,6 +95,38 @@ const gridAt = (
   "--overview-from": camera,
   ...(closing ? { "--overview-to": camera } : {}),
 });
+
+/**
+ * Each tile's card, and the tile it is on, in the cards' own order: a card
+ * moved by a swap keeps its place in the document, which would otherwise
+ * restyle it from scratch rather than ease it to its new tile.
+ */
+const dealt = (
+  tiles: readonly OverviewTile[],
+  cards: Readonly<Record<string, string>>,
+): { box: Rect; card: string }[] =>
+  tiles
+    .map(({ box, name }) => ({ box, card: cards[name] ?? name }))
+    .toSorted((one, other) => one.card.localeCompare(other.card));
+
+/**
+ * Inline style drawing a card the size of `screen` through its tile at `box`,
+ * as the windows are drawn (see `seenAt`): one matrix it eases, so its size
+ * and place move together, as its windows' do. Its corners are scaled up to
+ * stay `md` once shrunk.
+ */
+const cardAt = (screen: Rect, box: Rect): CSSProperties => {
+  const view = viewOf({ ...screen, x: 0, y: 0 }, within(box, screen));
+  return {
+    blockSize: `${screen.height.toString()}px`,
+    borderRadius: `calc(${token.var("radii.md")} / ${view.scale.toString()})`,
+    inlineSize: `${screen.width.toString()}px`,
+    insetBlockStart: 0,
+    insetInlineStart: 0,
+    position: "absolute",
+    transform: matrixOf(view),
+  };
+};
 
 /** The wallpaper's depth. See `COVERED` in `placement.ts`. */
 const BACKDROP = -2;
@@ -133,10 +176,12 @@ const gridStyles = css({
 });
 
 // The empty desk behind a workspace's windows: lighter than the dimmed photo,
-// so an empty workspace still shows its shape.
+// so an empty workspace still shows its shape. Swapped, it slides with its
+// windows, as `seenStyles` moves them.
 const cardStyles = css({
   backgroundColor: "fillOverPhoto",
-  borderRadius: "md",
+  transformOrigin: "0 0",
+  transition: "transform {durations.slower} {easings.emphasized}",
 });
 
 const labelStyles = cva({
