@@ -1708,7 +1708,8 @@
         # started cold. Checks what docs/HARDWARE-CHECKS.md#several-monitors
         # asks of a lit panel: a bar and a wallpaper on each, keyboard focus
         # following the pointer across, `mod+2`, and an `exec` key opening its
-        # window on the monitor with the keyboard.
+        # window on the monitor with the keyboard. Also that a touchpad pinch
+        # works off the monitor hosting the desk.
         #
         # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
         two-monitors-on-a-tty = pkgs.testers.runNixOSTest {
@@ -1785,8 +1786,9 @@
               '';
             environment.systemPackages = [ pkgs.foot ];
             # A relative mouse the test moves through `/run/pointer`, one
-            # `dx dy` per line. QEMU's PS/2 mouse reached the kernel with no
-            # events.
+            # `dx dy` per line, or `meta pinch` for a two-finger spread on a
+            # multitouch pad with Meta held. QEMU's PS/2 mouse reached the
+            # kernel with no events.
             hardware.uinput.enable = true;
             systemd.services.test-pointer = {
               wantedBy = [ "multi-user.target" ];
@@ -1794,8 +1796,18 @@
               serviceConfig.ExecStart = pkgs.writers.writePython3 "test-pointer"
                 { libraries = [ pkgs.python3Packages.evdev ]; } ''
                 import os
+                import time
 
-                from evdev import UInput, ecodes
+                from evdev import AbsInfo, UInput, ecodes
+
+                # 100 x 65 mm at 40 units a millimeter.
+                WIDTH, HEIGHT, RESOLUTION = 4000, 2600, 40
+
+
+                def span(size):
+                    """An axis from 0 to `size` at the pad's resolution."""
+                    return AbsInfo(0, 0, size, 0, 0, RESOLUTION)
+
 
                 pointer = UInput(
                     {
@@ -1804,10 +1816,73 @@
                     },
                     name="test pointer",
                 )
+                keyboard = UInput(
+                    {ecodes.EV_KEY: [ecodes.KEY_LEFTMETA]},
+                    name="test keyboard",
+                )
+                pad = UInput(
+                    {
+                        ecodes.EV_KEY: [
+                            ecodes.BTN_LEFT, ecodes.BTN_TOUCH,
+                            ecodes.BTN_TOOL_FINGER, ecodes.BTN_TOOL_DOUBLETAP,
+                        ],
+                        ecodes.EV_ABS: [
+                            (ecodes.ABS_X, span(WIDTH)),
+                            (ecodes.ABS_Y, span(HEIGHT)),
+                            (ecodes.ABS_MT_SLOT, AbsInfo(0, 0, 4, 0, 0, 0)),
+                            (ecodes.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (ecodes.ABS_MT_POSITION_X, span(WIDTH)),
+                            (ecodes.ABS_MT_POSITION_Y, span(HEIGHT)),
+                        ],
+                    },
+                    name="test touchpad",
+                    input_props=[
+                        ecodes.INPUT_PROP_POINTER, ecodes.INPUT_PROP_BUTTONPAD,
+                    ],
+                )
+
+
+                def frame(fingers):
+                    """Each finger's `(x, y)`, one slot each, then a report."""
+                    for slot, (x, y) in enumerate(fingers):
+                        pad.write(ecodes.EV_ABS, ecodes.ABS_MT_SLOT, slot)
+                        pad.write(ecodes.EV_ABS, ecodes.ABS_MT_POSITION_X, x)
+                        pad.write(ecodes.EV_ABS, ecodes.ABS_MT_POSITION_Y, y)
+                    pad.write(ecodes.EV_ABS, ecodes.ABS_X, fingers[0][0])
+                    pad.write(ecodes.EV_ABS, ecodes.ABS_Y, fingers[0][1])
+                    pad.syn()
+                    time.sleep(0.012)
+
+
+                def meta_pinch():
+                    """Meta held, two fingers 25 mm apart spread to 85 mm."""
+                    keyboard.write(ecodes.EV_KEY, ecodes.KEY_LEFTMETA, 1)
+                    keyboard.syn()
+                    time.sleep(0.05)
+                    for slot in range(2):
+                        pad.write(ecodes.EV_ABS, ecodes.ABS_MT_SLOT, slot)
+                        pad.write(ecodes.EV_ABS, ecodes.ABS_MT_TRACKING_ID, slot + 1)
+                    pad.write(ecodes.EV_KEY, ecodes.BTN_TOUCH, 1)
+                    pad.write(ecodes.EV_KEY, ecodes.BTN_TOOL_DOUBLETAP, 1)
+                    for step in range(40):
+                        frame([(1500 - 30 * step, 1300), (2500 + 30 * step, 1300)])
+                    for slot in range(2):
+                        pad.write(ecodes.EV_ABS, ecodes.ABS_MT_SLOT, slot)
+                        pad.write(ecodes.EV_ABS, ecodes.ABS_MT_TRACKING_ID, -1)
+                    pad.write(ecodes.EV_KEY, ecodes.BTN_TOUCH, 0)
+                    pad.write(ecodes.EV_KEY, ecodes.BTN_TOOL_DOUBLETAP, 0)
+                    pad.syn()
+                    keyboard.write(ecodes.EV_KEY, ecodes.KEY_LEFTMETA, 0)
+                    keyboard.syn()
+
+
                 os.mkfifo("/run/pointer")
                 while True:
                     with open("/run/pointer") as moves:
                         for move in moves:
+                            if move.split() == ["meta", "pinch"]:
+                                meta_pinch()
+                                continue
                             dx, dy = (int(each) for each in move.split())
                             pointer.write(ecodes.EV_REL, ecodes.REL_X, dx)
                             pointer.write(ecodes.EV_REL, ecodes.REL_Y, dy)
@@ -1900,6 +1975,22 @@
                 # Closing it shows the blue terminal, still drawing.
                 machine.send_key("meta_l-shift-q")
                 retry(lambda _: share_of(1, BLUE, "blue-again") > 0.5, timeout=WAIT)
+
+                # With the pointer on the right monitor, whose window only
+                # presents the desk the left one hosts, Meta+pinch magnifies
+                # the desk there. A pinch went by the window holding the
+                # pointer's place, so off the host's monitor it reached
+                # nothing.
+                move_the_pointer(100)
+                time.sleep(1)
+                before = screen(1, "before-pinch")
+                machine.succeed("echo 'meta pinch' >/run/pointer")
+
+                def magnified(_):
+                    changed = ImageChops.difference(before, screen(1, "pinched")).getbbox()
+                    return changed is not None and changed[3] > BAR
+
+                retry(magnified, timeout=dt.timedelta(seconds=30))
 
             machine.wait_for_unit("multi-user.target")
             try:
