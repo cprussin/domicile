@@ -1,8 +1,7 @@
 # Copyright 2026 Connor Prussin
 # SPDX-License-Identifier: MIT
 
-# Arguments every engine build imports, to leave out what a desk never runs
-# or should not.
+# Arguments every engine build imports, to leave out what a desk never runs.
 #
 # Under `src/` so a change to it changes the series identity and rebuilds the
 # release.
@@ -11,13 +10,9 @@
 # speed up a WebUI page's first load.
 enable_webui_generate_code_cache = false
 
-# Chromium's field trial testing config, which turns on experiments meant for
-# Chromium's own bots. One, `CompositedAnimationsForceMainFrames` with
-# `intersection-observer`, runs a main frame and a commit for every frame of a
-# transform animation in a document with a `<webview>`, so every workspace
-# slide redoes the desk's paint each frame. Shipped Chrome runs none of them. See
-# guard-animation-main-frames.sh.
-disable_fieldtrial_testing_config = true
+# Not here: `disable_fieldtrial_testing_config`. The field trial testing config
+# turns on experiments a desk runs faster with. Patch 0196 drops the one study
+# in it that slowed every workspace slide.
 
 # Not here: `enable_compose`, `enable_on_device_translation` and
 # `use_on_device_model_service`. Only Android builds turn them off, and desktop
