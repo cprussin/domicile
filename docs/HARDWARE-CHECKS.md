@@ -108,6 +108,12 @@ On a tty, set `theme.cursor_hide_after_ms = 1000` and
 - Hover kept while hidden: a link under the pointer stays underlined, and a
   tooltip stays open.
 
+If it shows when it should not, or stops hiding, run with
+`--vmodule=*pointer_hiding*=1`. Each hide logs `hiding the pointer`. A hide
+the cursor client did not apply logs `kept the pointer shown`. Each input that
+brings the pointer back logs its event name, device and flags. A held button
+that blocks hiding logs `no pause while buttons ... are held`.
+
 ## Dead GPU process
 
 ```sh
