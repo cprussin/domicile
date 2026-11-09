@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a pointer warp does not show a hidden pointer
+
+The pointer that typing hid (patch 0194) came back on its own. A shell
+warps the pointer on each keyboard focus change, a window opening or the
+focused one closing (`domicile.pointer.warp`), and
+`EventFactoryEvdev::WarpCursorTo` reports the warp as a mouse move with
+no flags: to aura's `CompoundEventFilter`, which shows the cursor on any
+move that is not synthesized, and to the desk's pointer hiding, it was a
+hand on the mouse.
+
+- `WarpCursorTo` dispatches its move as `EF_IS_SYNTHESIZED`, as
+  `SynthesizeMouseMove` beside it does. Pages still see the move, and a
+  shell still finds where the pointer landed.
+- `EvdevWarpTest` in `ozone_unittests`.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/events/ozone/evdev/event_factory_evdev.cc | 8 +++++++-
+ ui/ozone/platform/drm/BUILD.gn               | 7 +++++++
+ 2 files changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
+index e7b626c..b225a3c 100644
+--- a/ui/events/ozone/evdev/event_factory_evdev.cc
++++ b/ui/events/ozone/evdev/event_factory_evdev.cc
+@@ -583,13 +583,19 @@ void EventFactoryEvdev::WarpCursorTo(gfx::AcceleratedWidget widget,
+ 
+   cursor_->MoveCursorTo(widget, location);
+ 
++  // DOMICILE: A WARP IS NOBODY MOVING THE POINTER. The move it reports is
++  // synthesized, as `SynthesizeMouseMove`'s is, so aura's
++  // `CompoundEventFilter` and the desk's pointer hiding do not read it as a
++  // hand on the mouse and show a pointer that typing hid. A shell warps on
++  // every keyboard focus change, so typing, switching windows and typing on
++  // brought the pointer back each time.
+   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+       FROM_HERE,
+       base::BindOnce(
+           &EventFactoryEvdev::DispatchMouseMoveEvent,
+           weak_ptr_factory_.GetWeakPtr(),
+           MouseMoveEventParams(
+-              -1 /* device_id */, EF_NONE, cursor_->GetLocation(),
++              -1 /* device_id */, EF_IS_SYNTHESIZED, cursor_->GetLocation(),
+               nullptr /* ordinal_delta */,
+               PointerDetails(EventPointerType::kMouse), EventTimeForNow())));
+ }
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index ca20cba..d7939b1 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -305,6 +305,7 @@ source_set("gbm_unittests") {
+     "//ui/events/ozone/evdev/domicile/input_settings_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/typing_guard_unittest.cc",
++    "//ui/events/ozone/evdev/domicile/warp_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/wheel_ticks_unittest.cc",
+     "//ui/events/ozone/evdev/event_converter_evdev_impl_unittest.cc",
+     "//ui/events/ozone/evdev/event_converter_test_util.cc",
+@@ -366,6 +367,12 @@ source_set("gbm_unittests") {
+     # needs, so it names both directly.
+     "//ui/events/ozone/evdev",
+ 
++    # `EvdevWarpTest` builds an `EventFactoryEvdev`, which wants a device
++    # manager, and watches the events it dispatches as a platform event
++    # source's observer.
++    "//ui/events/ozone",
++    "//ui/events/platform",
++
+     # `AbsoluteMouseDeviceTest` reads devices from their captured
+     # capabilities, as evdev's own tests do.
+     "//ui/events/ozone/evdev:event_device_info",
+-- 
+2.43.0
+
