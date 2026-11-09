@@ -110,7 +110,7 @@ if ! ( cd "$SHELL_DIR" && bun install >"$WORK/install.log" 2>&1 ); then
   exit 1
 fi
 
-if ! ( cd "$SHELL_DIR" && bunx tsc --noEmit >"$WORK/tsc.log" 2>&1 ); then
+if ! ( cd "$SHELL_DIR" && bunx --bun tsc --noEmit >"$WORK/tsc.log" 2>&1 ); then
   echo "FAIL: the example shell does not typecheck against the published SDK:"
   sed 's/^/    /' "$WORK/tsc.log"
   exit 1

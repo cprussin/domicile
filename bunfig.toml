@@ -2,3 +2,7 @@
 # Refuse npm versions published less than 7 days ago, so malicious releases
 # can be flagged before we install them.
 minimumReleaseAge = 604800
+
+[run]
+# Run tools whose scripts name node, such as vite, tsc and next, with bun.
+bun = true

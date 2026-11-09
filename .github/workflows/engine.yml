@@ -475,7 +475,7 @@ jobs:
           DOMICILE_CHECK_LOG_DIR: /tmp
         run: |
           nix develop .#full --command bash -c 'bun install --frozen-lockfile &&
-            node_modules/.bin/turbo run test:engine --filter=@domicile-desktop/engine --ui=stream'
+            bun run turbo run test:engine --filter=@domicile-desktop/engine --ui=stream'
 
       # ===================================================================
       # Release
