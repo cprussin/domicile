@@ -120,6 +120,11 @@ type Props = {
    * {@link scaledAbout}). `undefined` when {@link Props.rect} is.
    */
   frame: Rect | undefined;
+  /**
+   * Its tab in the strip, which its contents grow out of as it opens and
+   * shrink into as it closes (see {@link contentsScaledAbout}).
+   */
+  tab?: Rect | undefined;
   /** Whether this window is fullscreen, which removes its edge and corners. */
   fullscreen: boolean;
   /** Lists a directory for the file picker. */
@@ -242,6 +247,7 @@ export const BrowserWindow = ({
   resizing,
   restack,
   settler,
+  tab,
   url,
   window,
 }: Props) => {
@@ -677,7 +683,7 @@ export const BrowserWindow = ({
           ? undefined
           : {
               ...placedAt(rect, depth),
-              ...contentsScaledAbout(motion, frame, rect),
+              ...contentsScaledAbout(motion, frame, tab, rect),
               ...shuffledBy(restack),
             }
       }

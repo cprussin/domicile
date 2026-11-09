@@ -85,9 +85,15 @@ export const windowManagementPreset = definePreset({
         // A closing tab collapses along its strip: `--collapse-x` in a tabbed
         // container, `--collapse-y` in a stack; see `collapsedAlong`.
         //
-        // Only the bar plays it. A closing tab's contents shrink and fade
-        // with `windowClosing` over the tab drawn underneath at the same box
+        // Only the bar plays it. A closing tab's contents shrink into it with
+        // `windowClosingIntoTab` over the tab drawn underneath at the same box
         // (see `movingStyles`).
+        // A closing tab's contents shrink into its tab and fade, about the tab
+        // (see `contentsScaledAbout`).
+        windowClosingIntoTab: {
+          "0%": { opacity: "1", transform: "scale(1)" },
+          "100%": { opacity: "0", transform: "scale(0.15)" },
+        },
         windowClosingTab: {
           "0%": { opacity: "1", transform: "scale(1, 1)" },
           "100%": {
@@ -137,8 +143,14 @@ export const windowManagementPreset = definePreset({
           "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // The reverse of `windowClosingIntoTab`.
+        windowOpeningFromTab: {
+          "0%": { opacity: "0", transform: "scale(0.15)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
         // The reverse of `windowClosingTab`: a new tab opens out along its
-        // strip, and its contents only fade in over the tab they replace.
+        // strip. Only the bar plays it; the contents grow out of it with
+        // `windowOpeningFromTab` over the tab they hide (see `movingStyles`).
         windowOpeningTab: {
           "0%": {
             opacity: "0",

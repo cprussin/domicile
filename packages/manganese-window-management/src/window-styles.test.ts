@@ -107,6 +107,13 @@ describe("movingStyles", () => {
     expect(delayed()).not.toHaveLength(0);
   });
 
+  // A fade alone, over the tab it hides, reads as a tab switch.
+  it("grows a new tab's contents in, not only its bar", () => {
+    expect(movingStyles({ contents: true, motion: "opening-tab" })).not.toBe(
+      movingStyles({ motion: "opening-tab" }),
+    );
+  });
+
   // Both scale about one point, so they must keep time to stay together.
   it("starts a sent tab's bar as late as its contents", () => {
     expect(movingStyles({ contents: true, motion: "sending-tab" })).toBe(
@@ -193,19 +200,32 @@ describe("clippedTo", () => {
 });
 
 describe("contentsScaledAbout", () => {
+  const frame = { height: 432, width: 600, x: 0, y: 0 };
   const tab = { height: 32, width: 100, x: 100, y: 0 };
   const contents = { height: 400, width: 600, x: 0, y: 32 };
 
   it("scales a window's contents about its whole frame", () => {
-    expect(contentsScaledAbout("closing", tab, contents)).toStrictEqual(
-      scaledAbout(tab, contents),
+    expect(contentsScaledAbout("closing", frame, tab, contents)).toStrictEqual(
+      scaledAbout(frame, contents),
     );
   });
 
-  // Its frame is its tab, which only the bar collapses about.
-  it("shrinks a closing tab's contents about their own middle", () => {
-    expect(contentsScaledAbout("closing-tab", tab, contents)).toStrictEqual({
-      transformOrigin: "300px 200px",
-    });
+  // So they are seen to go into it.
+  it("shrinks a closing tab's contents about its tab", () => {
+    expect(
+      contentsScaledAbout("closing-tab", frame, tab, contents),
+    ).toStrictEqual(scaledAbout(tab, contents));
+  });
+
+  it("grows a new tab's contents out of its tab", () => {
+    expect(
+      contentsScaledAbout("opening-tab", frame, tab, contents),
+    ).toStrictEqual(scaledAbout(tab, contents));
+  });
+
+  it("falls back to the frame when the tab is unknown", () => {
+    expect(
+      contentsScaledAbout("opening-tab", frame, undefined, contents),
+    ).toStrictEqual(scaledAbout(frame, contents));
   });
 });
