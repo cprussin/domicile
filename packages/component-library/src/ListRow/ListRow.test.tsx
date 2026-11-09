@@ -1,8 +1,16 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { Button } from "../Button/Button";
+import { PanelFooter } from "../PanelFooter/PanelFooter";
 import { List, ListRow } from "./ListRow";
+
+loadEmittedStylesheet(
+  document,
+  new URL("../../styled-system/styles.css", import.meta.url),
+);
 
 describe(ListRow, () => {
   describe("rendering", () => {
@@ -71,6 +79,26 @@ describe(ListRow, () => {
 
       expect(toggle).toHaveAttribute("aria-expanded", "true");
       expect(screen.getByText("10.42.0.17")).toBeVisible();
+    });
+
+    it("pads its drawer, centering a footer between its rule and the tile's edge", async () => {
+      render(
+        <List>
+          <ListRow disclosure="Details" label="Centar">
+            <PanelFooter action={<Button>Disconnect</Button>} />
+          </ListRow>
+        </List>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Details" }));
+
+      const footer = screen.getByRole("contentinfo");
+      const drawer = globalThis.getComputedStyle(
+        footer.parentElement as Element,
+      );
+      expect(drawer.paddingBlockStart).toBe("0.375rem");
+      expect(drawer.paddingBlockEnd).toBe(
+        globalThis.getComputedStyle(footer).paddingBlockStart,
+      );
     });
 
     it("is one button when it can be pressed, named for assistive tech", async () => {
