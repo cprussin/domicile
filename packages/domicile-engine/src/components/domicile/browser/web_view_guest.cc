@@ -505,6 +505,10 @@ mojom::WebViewSecurity AsWebViewSecurity(security_state::SecurityLevel level) {
 constexpr int kEditTries = 25;
 constexpr base::TimeDelta kEditRetry = base::Milliseconds(20);
 
+// How long the pointer rests before a tooltip shows: Chrome's on Aura
+// (TooltipController's delay). The renderer reports a title at once.
+constexpr base::TimeDelta kTooltipDelay = base::Milliseconds(500);
+
 // User data key linking a guest's WebContents to it, for FromWebContents.
 constexpr char kGuestUserDataKey[] = "domicile_web_view_guest";
 
@@ -1861,20 +1865,68 @@ bool WebViewGuest::PreHandleMouseEvent(content::WebContents* source,
 }
 
 bool WebViewGuest::DomicileTooltip(content::WebContents* source,
+                                   content::RenderWidgetHost* widget,
                                    const std::u16string& text) {
   tooltip_ = base::UTF16ToUTF8(text);
+  tooltip_process_ = widget->GetProcess()->GetDeprecatedID();
+  tooltip_routing_ = widget->GetRoutingID();
   ReportTooltip();
   return true;
 }
 
 void WebViewGuest::ReportTooltip() {
-  const std::string& tooltip = pointer_inside_ ? tooltip_ : base::EmptyString();
   // Report only changes; every mouse event calls this. The position is where
   // the tooltip appeared, so moving under one tooltip sends nothing.
-  if (tooltip != reported_tooltip_) {
-    reported_tooltip_ = tooltip;
-    client_->TooltipChanged(tooltip, pointer_.x(), pointer_.y());
+  if (TooltipNow() == reported_tooltip_) {
+    tooltip_delay_.Stop();
+  } else if (TooltipNow().empty() || !reported_tooltip_.empty()) {
+    tooltip_delay_.Stop();
+    SendTooltip();
+  } else if (!tooltip_delay_.IsRunning()) {
+    // Unretained: the timer is a member, so it never runs after this is gone.
+    tooltip_delay_.Start(FROM_HERE, kTooltipDelay,
+                         base::BindOnce(&WebViewGuest::SendTooltip,
+                                        base::Unretained(this)));
   }
+}
+
+const std::string& WebViewGuest::TooltipNow() const {
+  // A frame's widget can go away under its tooltip, and its tooltip with it.
+  return pointer_inside_ && TooltipWidget() != nullptr ? tooltip_
+                                                       : base::EmptyString();
+}
+
+content::RenderWidgetHost* WebViewGuest::TooltipWidget() const {
+  content::RenderWidgetHost* widget =
+      content::RenderWidgetHost::FromID(tooltip_process_, tooltip_routing_);
+  // A crashed frame keeps its widget and loses its view.
+  return widget != nullptr && widget->GetView() != nullptr ? widget : nullptr;
+}
+
+void WebViewGuest::SendTooltip() {
+  const std::string& tooltip = TooltipNow();
+  if (tooltip == reported_tooltip_) {
+    return;
+  }
+  reported_tooltip_ = tooltip;
+  // Where the pointer is now, which is where Chrome shows it after its delay.
+  const gfx::Point at =
+      tooltip.empty() ? gfx::Point() : PointerInPage(*TooltipWidget());
+  client_->TooltipChanged(tooltip, at.x(), at.y());
+}
+
+gfx::Point WebViewGuest::PointerInPage(
+    content::RenderWidgetHost& widget) const {
+  CHECK(guest_contents_);
+  // Both views exist: the widget just drew a tooltip in the page, and the
+  // page's main frame view is the element's box.
+  content::RenderWidgetHostView* page =
+      guest_contents_->GetPrimaryMainFrame()->GetView();
+  CHECK(page);
+  CHECK(widget.GetView());
+  return gfx::ToFlooredPoint(page->TransformRootPointToViewCoordSpace(
+      widget.GetView()->TransformPointToRootCoordSpaceF(
+          gfx::PointF(pointer_))));
 }
 
 void WebViewGuest::ShowRepostFormWarningDialog(content::WebContents* source) {
