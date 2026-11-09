@@ -36,6 +36,13 @@
         });
       };
 
+      # bun named `node`, so the tools whose scripts start `#!/usr/bin/env node`
+      # (vite, tsc, next) run on bun. `patchShebangs` points them here.
+      bunAsNode = pkgs.runCommand "bun-as-node" { } ''
+        mkdir -p "$out/bin"
+        ln -s ${pkgs.bun}/bin/bun "$out/bin/node"
+      '';
+
       # Tools to build and test the pure-logic Rust crates and the TypeScript
       # workspace. No graphics libraries, so `nix develop` stays fast.
       coreTools = with pkgs; [
@@ -45,12 +52,11 @@
         clippy
         rust-analyzer
         pkg-config
-        # bun runs packages and tests, biome lints and formats. turbo comes
-        # from the lockfile via `bun install`. Node matches package.json's
-        # `engines.node` (>=24).
+        # bun runs packages, tests and the tools they call (`bunfig.toml`'s
+        # `[run] bun`), biome lints and formats. turbo comes from the lockfile
+        # via `bun install`.
         bun
         biome
-        nodejs_24
         # For the engine release scripts (`packages/domicile-engine/scripts/update-engine-release.sh`,
         # `.github/scripts/engine-release-*.sh`) and `spike-iframe.sh`. In the
         # core shell because the release workflow runs there.
@@ -307,7 +313,7 @@
         pname = "domicile-page-${name}";
         version = "0.0.0";
         src = self;
-        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        nativeBuildInputs = [ pkgs.bun bunAsNode ];
         configurePhase = sharedShellConfigure;
         buildPhase = ''
           runHook preBuild
@@ -345,7 +351,7 @@
         pname = "domicile-app-${name}";
         version = "0.0.0";
         src = self;
-        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        nativeBuildInputs = [ pkgs.bun bunAsNode ];
         configurePhase = sharedShellConfigure;
         buildPhase = ''
           runHook preBuild
@@ -389,7 +395,7 @@
         pname = "domicile-shell-workspace";
         version = "0.0.0";
         src = self;
-        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 pkgs.jq ];
+        nativeBuildInputs = [ pkgs.bun bunAsNode pkgs.jq ];
         configurePhase = sharedShellConfigure;
         buildPhase = ''
           runHook preBuild
@@ -774,7 +780,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-88Hp3Qru39vsyVZmNce7KCM+Fdt4Efi+SujIiknF8uM=";
+        outputHash = "sha256-YrJpKKeixvW1WKOxS6KLR+A3OkhNekjcf923aLIg4HI=";
       };
 
 
@@ -789,7 +795,7 @@
             done
             chmod -R u+w node_modules packages/*/node_modules
             # The sandbox has no `/usr/bin/env`, so `#!/usr/bin/env node`
-            # shims fail with `bad interpreter`. Point them at the store's node.
+            # shims fail with `bad interpreter`. Point them at `bunAsNode`.
             patchShebangs node_modules packages/*/node_modules
             export HOME="$TMPDIR"
             # Stops `//#build:install-modules` from running `bun install`;
@@ -2456,6 +2462,7 @@
         let
           script = pkgs.writeShellApplication {
             inherit name;
+            # npm: bun has no `dist-tag` or `unpublish`.
             runtimeInputs = [ pkgs.nodejs_24 pkgs.jq ];
             text = builtins.readFile ./.github/scripts/${name}.sh;
           };

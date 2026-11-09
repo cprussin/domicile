@@ -28,7 +28,7 @@ rm -rf "$SHELL_DIR/node_modules" "$SHELL_DIR/.vite"
   bun install
   cmp package.json "$EXAMPLE/package.json"
   echo "PASS: the committed manifest installs from npm"
-  bunx tsc --noEmit
+  bunx --bun tsc --noEmit
   echo "PASS: it type-checks"
   bun run build
   test -f .vite/renderer/main_window/shell.js

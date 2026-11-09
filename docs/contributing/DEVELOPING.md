@@ -7,7 +7,7 @@ How to run, test and debug Domicile from a checkout. Code rules are in
 ## Run and test
 
 ```sh
-nix develop                  # core shell: rust + node
+nix develop                  # core shell: rust + bun
 cargo test                   # Rust unit tests
 bun run turbo test           # TypeScript: lint, types, unit tests
 

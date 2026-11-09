@@ -120,7 +120,7 @@ export default defineConfig({
 ```sh
 bun add @domicile-desktop/react@next @domicile-desktop/sdk@next react react-dom
 bun add -d vite
-bunx vite build
+bunx --bun vite build
 domicile open --app ./dist/notes.js
 ```
 

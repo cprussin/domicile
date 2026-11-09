@@ -17,8 +17,9 @@
 #   SHA256SUMS
 #
 # Nix is the source of the pins: the engine is the one `nix build .#engine`
-# fetches, bun is the flake's `.#bun`, and node and nfpm are the flake's
-# nixpkgs'. The packages ship upstream's bun binary, the source of `.#bun`.
+# fetches, bun is the flake's `.#bun`, and nfpm is the flake's nixpkgs'. The
+# packages ship upstream's bun binary, the source of `.#bun`. `bun run turbo`
+# runs the tools under it on bun (`bunfig.toml`'s `[run] bun`).
 #
 # Builds the workspace in this checkout, as `shellPage`, `appModule` and
 # `shellWorkspace` do in `flake.nix`.
@@ -52,7 +53,7 @@ store_path() { # installable
 }
 
 echo "== tools and pins from the flake =="
-PATH="$(store_path '.#bun^out')/bin:$(store_path 'nixpkgs#nodejs_24^out')/bin:$PATH"
+PATH="$(store_path '.#bun^out')/bin:$PATH"
 NFPM="$(store_path 'nixpkgs#nfpm^out')/bin/nfpm"
 UNZIP="$(store_path 'nixpkgs#unzip^out')/bin/unzip"
 # `zstd` for `packages/distro/arch-optdepends.sh` too.
@@ -69,9 +70,9 @@ echo "== the workspace =="
 # stops turbo's `//#build:install-modules` from installing again.
 export CI=1 TURBO_TELEMETRY_DISABLED=1
 bun install --frozen-lockfile --ignore-scripts --no-progress
-node_modules/.bin/turbo run prepare build \
+bun run turbo run prepare build \
   --filter "@domicile-desktop/manganese..." --no-daemon
-node_modules/.bin/turbo build:vite --no-daemon \
+bun run turbo build:vite --no-daemon \
   --filter ./packages/shell-manganese \
   --filter ./packages/shell-simple \
   --filter ./packages/shell-splash \
