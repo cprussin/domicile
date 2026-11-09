@@ -681,6 +681,7 @@ export const Desktop = ({
     onModeChanged: (mode) => {
       act(WindowAction.ModeSet(mode));
     },
+    overviewOpen: windows.overviewOpen,
   });
 
   useScreenFollowsPointer({ act, displays, focused: windows.focused });

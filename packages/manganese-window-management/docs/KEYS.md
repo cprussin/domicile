@@ -65,7 +65,7 @@ Manganese-only commands:
 | `lock` | Lock the desktop. |
 | `group` | Turn the focused tab into a group of its own, nested in its slot, so new windows open in it. Does nothing for a window alone in its group. |
 | `launcher` | Toggle the launcher. Closes the overview. |
-| `overview` | Toggle the overview: each screen's workspaces with windows, and the shown one, at once. Closes the launcher and clipboard. While it is open, `focus <way>` moves between its workspaces and `move <way>` swaps them; other window and workspace commands do nothing. |
+| `overview` | Toggle the overview: each screen's workspaces with windows, and the shown one, at once. Closes the launcher and clipboard. While it is open, `focus <way>` moves between its workspaces and `move <way>` swaps them; no other key's command runs but `lock`, `screenshot`, the volume and brightness commands, `launcher`, `clipboard` and `overview` itself. |
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |
 | `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. The window is private when the active one is. Reads the first 480 characters. |
