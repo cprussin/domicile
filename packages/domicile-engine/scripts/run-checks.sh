@@ -100,6 +100,7 @@ TOGETHER=(
   guard-webview-hidden
   guard-webview-moved
   guard-webview-paused
+  guard-animation-main-frames
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state
