@@ -83,11 +83,11 @@ index 49dd25c..64e663e 100644
  }
  
 diff --git a/content/public/browser/web_contents_delegate.h b/content/public/browser/web_contents_delegate.h
-index 214b881..bd74182 100644
+index 2fadec5..1bd642c 100644
 --- a/content/public/browser/web_contents_delegate.h
 +++ b/content/public/browser/web_contents_delegate.h
-@@ -577,6 +577,11 @@ class CONTENT_EXPORT WebContentsDelegate {
-   virtual bool DomicileTooltip(WebContents* source,
+@@ -579,6 +579,11 @@ class CONTENT_EXPORT WebContentsDelegate {
+                                RenderWidgetHost* widget,
                                 const std::u16string& text);
  
 +  // Domicile: a touchpad pinch over `source`, an inner WebContents, that its
