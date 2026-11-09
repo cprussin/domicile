@@ -1,15 +1,18 @@
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
+import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { CountBadge } from "../CountBadge/CountBadge";
+import { DetailList } from "../DetailList/DetailList";
 
 import { List, ListRow as ListRowComponent, SURFACES } from "./ListRow";
 
 const meta = {
   args: {
     detail: "Battery 80%",
+    disclosure: undefined,
     end: (
       <Button size="xs" variant="primary">
         Disconnect
@@ -22,6 +25,7 @@ const meta = {
   argTypes: {
     children: { control: false, table: { category: "Contents" } },
     detail: { control: "text", table: { category: "Contents" } },
+    disclosure: { control: "text", table: { category: "Contents" } },
     end: { control: false, table: { category: "Contents" } },
     icon: { control: false, table: { category: "Contents" } },
     label: { control: "text", table: { category: "Contents" } },
@@ -55,6 +59,24 @@ const meta = {
 export default meta;
 
 export const Filled: StoryObj<typeof ListRowComponent> = {};
+
+export const WithDetails: StoryObj<typeof ListRowComponent> = {
+  args: {
+    children: (
+      <DetailList
+        rows={[
+          ["Speed", "866 Mb/s"],
+          ["IPv4 address", "192.168.1.42/24"],
+          ["Interface", "wlan0"],
+        ]}
+      />
+    ),
+    detail: "Connected · Good signal · 5 GHz",
+    disclosure: "Details",
+    icon: <WifiHighIcon size={15} weight="bold" />,
+    label: "Goodbody Home",
+  },
+};
 
 export const Pressable: StoryObj<typeof ListRowComponent> = {
   args: {
