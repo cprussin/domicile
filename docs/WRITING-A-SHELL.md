@@ -256,8 +256,11 @@ the client's own coordinates through every CSS transform, so no helper is
 required.
 
 Touchpad pinch over an `<app>` is forwarded to the native client as a Wayland
-gesture. It does not zoom the surrounding shell. A shell can take the gesture
-by canceling its `wheel` events, as it can other default input handling.
+gesture, and over a `<webview>` it magnifies that page. Neither zooms the
+surrounding shell. A shell can take the gesture by canceling its `wheel`
+events, as it can other default input handling. A pinch begun with Meta held,
+and Meta+scroll, magnify the shell's own page instead, and never reach a
+`<webview>`, an `<app>` or the shell's `wheel` listeners.
 
 A finger on an `<app>` reaches the client as a touch point, or as the pointer
 for a client that reads no touch. `<app>` has `touch-action: none`, so the
