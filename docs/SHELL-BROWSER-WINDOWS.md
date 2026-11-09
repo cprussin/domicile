@@ -215,7 +215,7 @@ stale state.
 | `favicon` | `domicile-favicon-change` | Icon URL, or `""` |
 | `description` | `domicile-description-change` | The page's `<meta name="description">`, trimmed, or `""` |
 | `targetUrl` | `domicile-target-url-change` | The link under the pointer, or `""`. The engine draws no status bubble; manganese's is `browser/LinkTarget.tsx` |
-| `tooltip`, `tooltipX`, `tooltipY` | `domicile-tooltip-change` | The tooltip under the pointer, such as a `title`, or `""`, and where the pointer was when it appeared, in the element's CSS pixels. The engine draws no tooltip; manganese's is `browser/PageTooltip.tsx` |
+| `tooltip`, `tooltipX`, `tooltipY` | `domicile-tooltip-change` | The tooltip under the pointer, such as a `title`, or `""`, and where the pointer was when it appeared, in the element's CSS pixels. A new one appears after Chrome's 500 ms delay. The engine draws no tooltip; manganese's is `browser/PageTooltip.tsx` |
 | `findMatches`, `findActiveMatch` | `domicile-find-change` | Find-in-page results |
 | `contentWidth`, `contentHeight` | `domicile-content-size-change` | The size an `extensionpopup` view's page sized itself to |
 | `pageFullscreen` | `domicile-page-fullscreen-change` | Whether the page is fullscreen; see [Fullscreen](#fullscreen) |
