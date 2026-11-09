@@ -24,6 +24,8 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 |---|---|---|
 | Acquisition | engine `libinput_event_converter.cc`, `wayland_zwp_pointer_gestures.cc` (patch `0184`) | Turns libinput or host pinch into a `ui::GestureEvent` carrying `NativePinch`: phase, device, time, fingers, absolute scale, rotation, cancellation |
 | Page | engine `touchpad_pinch_event_queue.cc`, `mouse_wheel_event_manager.cc` | Keeps native pinches out of coalescing and page zoom. A canceled `wheel` claims the gesture for the shell |
+| Page zoom | engine `cross_process_frame_connector.cc`, `render_widget_host_view_aura.cc` (patch `0196`) | A pinch a `<webview>`'s page leaves alone magnifies that page. The desk never takes a plain pinch |
+| Desk zoom | engine `render_widget_host_input_event_router.cc`, `event_factory_evdev.cc`, `wayland_event_source.cc` (patch `0196`) | A pinch begun with Meta held, or Meta+scroll, goes straight to the desk's page scale: no hit test and no synthetic ctrl+wheel, so no page or `<app>` sees it |
 | `<app>` | `html_app_element.cc` | Forwards the pinch to its client as `pointer_pinch` |
 | Wire | `domicile_protocol::pinch::Pinch` | `begin`, `update`, `end` |
 | Delivery | `domicile-compositor` (`pinch.rs`) | One active pinch, owned by the connection and device that began it. Ends canceled on pointer leave, lock, window close or a dropped connection |
@@ -121,14 +123,15 @@ fingers spreading, toggles the launcher.
 
 - **Two fingers go to the page, three or more to the shell.** Pinch zoom and
   history swipes belong to the window; workspace and overview gestures belong
-  to the shell.
+  to the shell. Meta+pinch is the shell's, below.
 - **Phases, not end-only.** Bindings match on direction once committed, and
   shell animations follow the fingers.
-- **A pinch over a browser window zooms the desk.** When the page leaves the
-  pinch alone, Chrome hands it to the outermost page, the desk, which zooms
-  as a whole, like a magnifier. Kept on purpose (user, 2026-11-09): page zoom
-  per window was tried (#1944) and reverted. A native app's pinch stays the
-  app's, and the shell's scale stays 1 over it.
+- **Pinch works as on a Mac** (user, 2026-11-09). A pinch magnifies the page
+  under the pointer, as Chrome does in a tab, without reflowing it; Ctrl+Plus
+  and Ctrl+Minus still change the zoom level. A native app gets its pinch.
+  Meta+pinch or Meta+scroll magnifies the whole desk around the pointer, like
+  macOS's Control+scroll. The desk never takes a plain pinch, so a pinch does
+  one thing over each window.
 - **libinput recognizes; the engine keeps its numbers.** No thresholds of our
   own and no new settings.
 - **Grabs name a kind and count, not a direction.** The engine has to take a
