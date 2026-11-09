@@ -726,6 +726,7 @@ export const Desktop = ({
       */}
       {overviews !== undefined && (
         <OverviewBackdrop
+          cards={windows.overviewCards}
           closing={overviewPhase === "closing"}
           onClosed={overviewClosed}
           overviews={overviews}

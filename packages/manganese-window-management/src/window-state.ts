@@ -176,6 +176,13 @@ export type WindowState = {
    */
   overviewAim: string | undefined;
   /**
+   * Which card each overview tile shows, by tile name, or the tile's own
+   * when missing. Swaps trade them, so a card follows its windows. Never
+   * dealt afresh: every card looks alike, and a reset would slide cards
+   * still drawn. Kept here because the overview's keys swap workspaces.
+   */
+  overviewCards: Readonly<Record<string, string>>;
+  /**
    * Whether the overview, each screen's workspaces at once, is open.
    * Kept here because key commands and gestures open it.
    */
@@ -230,6 +237,7 @@ export const NO_WINDOWS: WindowState = {
   launcherOpen: false,
   mode: "default",
   overviewAim: undefined,
+  overviewCards: {},
   overviewOpen: false,
   popups: [],
   pressed: 0,
@@ -1685,6 +1693,11 @@ const reduceAction = (
       return {
         ...swapped(state, action.from, action.to),
         overviewAim: action.to,
+        overviewCards: {
+          ...state.overviewCards,
+          [action.from]: state.overviewCards[action.to] ?? action.to,
+          [action.to]: state.overviewCards[action.from] ?? action.from,
+        },
       };
     }
     case WindowActionKind.WorkspaceStepped: {

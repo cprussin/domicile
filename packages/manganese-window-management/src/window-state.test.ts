@@ -2550,6 +2550,26 @@ describe("the overview", () => {
     expect(state.overviewAim).toBeUndefined();
   });
 
+  it("trades the two tiles' cards on each swap, so each follows its windows", () => {
+    const once = reduce(
+      onOneAndThree(),
+      WindowAction.OverviewToggled(),
+      WindowAction.WorkspacesSwapped("3", "1"),
+    );
+    const twice = reduce(once, WindowAction.WorkspacesSwapped("1", "2"));
+
+    expect(once.overviewCards).toStrictEqual({ "1": "3", "3": "1" });
+    expect(twice.overviewCards).toStrictEqual({ "1": "2", "2": "3", "3": "1" });
+    // Kept as it closes and opens again: every card looks alike, and
+    // dealing them afresh would slide cards still drawn as it reopens.
+    const reopened = reduce(
+      twice,
+      WindowAction.OverviewDismissed(),
+      WindowAction.OverviewToggled(),
+    );
+    expect(reopened.overviewCards).toStrictEqual(twice.overviewCards);
+  });
+
   it("swaps two workspaces' windows, the screen and the aim following the one aimed at", () => {
     // Workspace 3, shown, moves to slot 1: it is still what the screen
     // shows, now as 1.

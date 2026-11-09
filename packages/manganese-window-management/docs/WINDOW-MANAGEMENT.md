@@ -377,7 +377,11 @@ with windows, and the shown one.
   `screenToward` picks outside the overview (`aimedToward`), `move` along
   its own monitor's. A
   swap trades two workspaces' windows and homes; the screen keeps showing
-  what it showed, under its new name.
+  what it showed, under its new name. Each card follows its windows
+  (`overviewCards`, traded by each swap), drawn screen-sized through
+  its tile by one eased matrix as the windows are, in a fixed document
+  order, so a swap cut short turns back as its windows do. The names stay, as
+  the workspaces' places.
 - `useKeybindings` drops every key's command while it is open but its own,
   the launcher and clipboard toggles, lock, screenshot and the media keys
   (`HEARD_OVER_OVERVIEW`), as it does for the launcher.
