@@ -72,6 +72,7 @@ TOGETHER=(
   guard-app-window-reuse
   guard-webview-routed-link
   guard-webview-target-url
+  guard-webview-tooltip
   guard-webview-fullscreen
   guard-webview-wake-lock
   guard-webview-device-request

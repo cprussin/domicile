@@ -704,7 +704,8 @@ interface WebViewGuestClient {
   // pointer at (`x`, `y`) in the page's DIPs from the element's top left,
   // which are the element's CSS pixels. The engine draws no tooltip for the
   // page: the shell does. Sent only when it changes; empty while the pointer
-  // is outside the page.
+  // is outside the page. A new one is sent once the pointer has rested on it
+  // for Chrome's delay, with the pointer then.
   TooltipChanged(string text, int32 x, int32 y);
 
   // The page is about to navigate its main frame to `url`: a link, a form or
