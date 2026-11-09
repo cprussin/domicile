@@ -96,6 +96,9 @@ The engine has two channels to the rest of Domicile:
   desk's XCursor theme and size, which the DRM platform draws the pointer
   from. See `ui/base/cursor/domicile/desk_cursor_theme.h` and
   `ui/ozone/platform/drm/domicile/drm_cursor_factory.h`.
+- **`appearance`**'s `cursor_hiding` stops in the browser process. It is
+  when the desk hides the pointer: after `after_ms` without pointer input, and
+  on typing if `when_typing`. See `components/domicile/browser/pointer_hiding.h`.
 - **`extensions`** stops in the browser process. It is the desk's
   `[extensions]` list, installed into the profile by
   `chrome/browser/domicile/domicile_extension_installer.h`. See
