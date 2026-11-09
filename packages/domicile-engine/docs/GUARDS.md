@@ -138,7 +138,7 @@ Headless.
 | `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after; once shown it never blinks `hidden` (patch 0162) |
 | `guard-webview-moved.sh` | a browser window's page is attached again and visible after its `<webview>` moves in the shell's document, as React's `insertBefore` does |
 | `guard-webview-paused.sh` | a window whose page is paused on a `confirm()` slides and shrinks at the frame rate of one whose page runs (patch 0155) |
-| `guard-animation-main-frames.sh` | a composited transform slide runs without a main frame for each of its frames: the field trial testing config is off (`domicile_trim.gn`); `NEGATIVE=1` forces them and must see one a frame |
+| `guard-animation-main-frames.sh` | a composited transform slide runs without a main frame for each of its frames: the field trial testing config has no `CompositedAnimationsForceMainFrames` study (patch 0196); `NEGATIVE=1` forces them and must see one a frame |
 | `guard-webview-crash.sh` | a page whose renderer crashes sets `renderProcessGone` to `crashed`, its view draws nothing over the shell, and `reload()` brings it back (patch 0124) |
 | `guard-webview-permissions.sh` | a page's `getUserMedia` asks the shell over `domicile-permission-request`; the shell's allow reaches the page and is stored for the site (patch 0103) |
 | `guard-webview-media-devices.sh` | a `<webview>` lists the fake cameras, and `setMediaDevice` puts the chosen one first, the camera a page that names none gets (patch 0117) |
