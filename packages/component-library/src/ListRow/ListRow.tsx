@@ -1,6 +1,7 @@
+import { Collapsible } from "@base-ui/react/collapsible";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import type { ReactNode } from "react";
-import { Children, useId, useState } from "react";
+import { Children } from "react";
 
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
@@ -19,7 +20,7 @@ type Common = {
   detail?: ReactNode | undefined;
   /**
    * Folds `children` behind a toggle at the row's end, named this, such as
-   * "Details" for a connection's addresses.
+   * "Details" for a connection's addresses. They slide open and shut.
    */
   disclosure?: string | undefined;
   /** At the row's end: a figure, a pill, or, on a row that isn't pressed, buttons. */
@@ -82,29 +83,32 @@ export const ListRow = ({
   surface = "plain",
 }: Props) => {
   const below = Children.toArray(children).length > 0;
-  const belowId = useId();
-  const [unfolded, setUnfolded] = useState(false);
-  const toggle = disclosure !== undefined && below && (
-    <Button
-      afterIcon={
-        <CaretDownIcon
-          aria-hidden
-          className={caretStyles({ unfolded })}
-          size={12}
-          weight="bold"
-        />
+  const folds = disclosure !== undefined && below;
+  const toggle = folds && (
+    <Collapsible.Trigger
+      render={
+        <Button
+          afterIcon={
+            <CaretDownIcon
+              aria-hidden
+              className={caretStyles}
+              size={12}
+              weight="bold"
+            />
+          }
+          rounded
+          size="xs"
+          variant="ghost"
+        >
+          {disclosure}
+        </Button>
       }
-      aria-controls={belowId}
-      aria-expanded={unfolded}
-      onClick={() => {
-        setUnfolded(!unfolded);
-      }}
-      rounded
-      size="xs"
-      variant="ghost"
-    >
-      {disclosure}
-    </Button>
+    />
+  );
+  const under = (
+    <div className={belowStyles({ indented: icon !== undefined })}>
+      {children}
+    </div>
   );
   const face = (
     <>
@@ -126,7 +130,7 @@ export const ListRow = ({
     </>
   );
   const body = (
-    <>
+    <Collapsible.Root className={rootStyles}>
       {onPress === undefined ? (
         <div className={rowStyles({ pressable: false })}>{face}</div>
       ) : (
@@ -140,18 +144,17 @@ export const ListRow = ({
           {face}
         </button>
       )}
-      {below && (disclosure === undefined || unfolded) && (
-        <div className={belowStyles} id={belowId}>
-          {children}
-        </div>
+      {folds ? (
+        <Collapsible.Panel className={drawerStyles}>{under}</Collapsible.Panel>
+      ) : (
+        below && under
       )}
-    </>
+    </Collapsible.Root>
   );
   return motion === undefined ? (
     <li
       className={itemStyles({ surface })}
       data-end-on-hover={endOnHover ? "" : undefined}
-      data-icon={icon === undefined ? undefined : ""}
       data-surface={surface}
     >
       {body}
@@ -161,7 +164,6 @@ export const ListRow = ({
       <div
         className={itemStyles({ surface: "plain" })}
         data-end-on-hover={endOnHover ? "" : undefined}
-        data-icon={icon === undefined ? undefined : ""}
       >
         {body}
       </div>
@@ -242,11 +244,37 @@ const rowStyles = cva({
   },
 });
 
-const caretStyles = cva({
-  base: { transition: "transform {durations.fast} {easings.default}" },
-  variants: {
-    unfolded: { false: {}, true: { transform: "rotate(180deg)" } },
+// Only there to hold the disclosure's state; the item lays out its parts.
+const rootStyles = css({ display: "contents" });
+
+// Flips while the drawer is open; base-ui sets `data-panel-open`.
+const caretStyles = css({
+  "[data-panel-open] &": { transform: "rotate(180deg)" },
+  transition: "transform {durations.normal} {easings.out}",
+});
+
+// Opens to the height base-ui measures while what is in it slides down into
+// place, and runs back, quicker, to close.
+const drawerStyles = css({
+  "& > *": {
+    transition:
+      "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
   },
+  "&[data-ending-style]": {
+    "& > *": {
+      transitionDuration: "{durations.fast}",
+      transitionTimingFunction: "{easings.in}",
+    },
+    transitionDuration: "{durations.fast}",
+    transitionTimingFunction: "{easings.in}",
+  },
+  "&[data-starting-style], &[data-ending-style]": {
+    "& > *": { opacity: 0, transform: "translateY(calc({spacing.1.5} * -1))" },
+    blockSize: 0,
+  },
+  blockSize: "var(--collapsible-panel-height)",
+  overflow: "hidden",
+  transition: "block-size {durations.normal} {easings.out}",
 });
 
 const iconStyles = css({ display: "inline-flex", flexShrink: 0 });
@@ -288,10 +316,14 @@ const endStyles = flex({
 });
 
 // Lined up under the label, past the icon and its gap.
-const belowStyles = flex({
-  "[data-icon] > &": { paddingInlineStart: 8.5 },
-  direction: "column",
-  gap: 1.5,
-  paddingBlockEnd: 2,
-  paddingInline: 2,
+const belowStyles = cva({
+  base: flex.raw({
+    direction: "column",
+    gap: 1.5,
+    paddingBlockEnd: 2,
+    paddingInline: 2,
+  }),
+  variants: {
+    indented: { false: {}, true: { paddingInlineStart: 8.5 } },
+  },
 });

@@ -161,10 +161,7 @@ describe("WifiPanel", () => {
     [
       "disconnecting",
       "disconnect",
-      async () => {
-        await unfold();
-        return screen.getByRole("button", { name: "Disconnect" });
-      },
+      () => screen.getByRole("button", { name: "Disconnect" }),
       "Couldn't disconnect",
     ],
   ])(
@@ -431,9 +428,8 @@ describe("WifiPanel", () => {
       ).toStrictEqual(["Interface", "Hardware address"]);
     });
 
-    it("disconnects", async () => {
+    it("disconnects from the connection's row, with its details folded", async () => {
       const panel = await shown(Ok(Some(WIFI)));
-      await unfold();
 
       await userEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 

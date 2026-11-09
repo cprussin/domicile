@@ -175,7 +175,6 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
                 <Connection
                   addresses={addresses}
                   connection={wifi.connection}
-                  failed={requests.failed("disconnect")}
                   onDisconnect={() => {
                     requests.run("disconnect", () =>
                       actions.disconnectWifi(host, wifi),
@@ -211,6 +210,9 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
             wifi.connection !== undefined && (
               <PanelNote>No other networks nearby</PanelNote>
             )}
+          <Failure error={requests.failed("disconnect")}>
+            Couldn't disconnect
+          </Failure>
           <Failure error={requests.failed("scan")}>
             Couldn't look for networks
           </Failure>
@@ -264,14 +266,13 @@ type ConnectionProps = {
   addresses: Addresses;
   connection: WifiConnection;
   pending: boolean;
-  failed: SystemError | undefined;
   onDisconnect: () => void;
 };
 
+/** The connection, with Disconnect on its row, as a Bluetooth device's. */
 const Connection = ({
   addresses,
   connection,
-  failed,
   onDisconnect,
   pending,
   wifi,
@@ -279,17 +280,16 @@ const Connection = ({
   <ListRow
     detail={summaryOf(connection)}
     disclosure="Details"
+    end={
+      <Button loading={pending} onClick={onDisconnect} size="xs">
+        Disconnect
+      </Button>
+    }
     icon={<WifiSignalIcon strength={connection.strength} />}
     label={connection.ssid}
     surface="filled"
   >
     <DetailList rows={detailsOf(wifi, connection, addresses)} />
-    <span>
-      <Button loading={pending} onClick={onDisconnect} rounded size="xs">
-        Disconnect
-      </Button>
-    </span>
-    <Failure error={failed}>Couldn't disconnect</Failure>
   </ListRow>
 );
 
