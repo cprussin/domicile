@@ -18,6 +18,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/timer/timer.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
@@ -638,8 +639,10 @@ class WebViewGuest : public mojom::WebViewGuest,
                            const blink::WebMouseEvent& event) override;
 
   // Reports the page's tooltip to the shell, which draws it; Chrome draws
-  // none. See TooltipChanged in the mojom.
+  // none. See TooltipChanged in the mojom. `widget` is the page's or a frame's
+  // in another process, and the pointer is in its coordinates.
   bool DomicileTooltip(content::WebContents* source,
+                       content::RenderWidgetHost* widget,
                        const std::u16string& text) override;
 
   // Asks the shell whether to send the page's form again. See kResendForm in
@@ -936,8 +939,19 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Sends the link under the pointer to the element if it changed.
   void ReportTargetUrl(const GURL& url);
   // Sends the tooltip, empty while the pointer is outside the page, if it
-  // changed.
+  // changed. A new one waits kTooltipDelay, as Chrome's does; hiding one, or
+  // changing one already shown, is at once.
   void ReportTooltip();
+  // Sends the tooltip as it is now, if it changed, at the pointer.
+  void SendTooltip();
+  // The tooltip to show: none while the pointer is outside the page, or once
+  // the widget that reported it is gone.
+  const std::string& TooltipNow() const;
+  // The widget that reported `tooltip_`, or null once it or its view is gone.
+  content::RenderWidgetHost* TooltipWidget() const;
+  // The pointer in the page's coordinates. `pointer_` is in the tooltip
+  // widget's, which for a frame in another process are the frame's own.
+  gfx::Point PointerInPage(content::RenderWidgetHost& widget) const;
   // Withdraws the shell's picker when its page closes the pipe that asked.
   void PagePickerClosed();
 
@@ -1097,8 +1111,14 @@ class WebViewGuest : public mojom::WebViewGuest,
   // the page, and the one the shell has. See DomicileTooltip.
   std::string tooltip_;
   std::string reported_tooltip_;
-  // Where the pointer last was over the page, in the guest's DIPs, and whether
-  // it is over the page now. See PreHandleMouseEvent.
+  // The widget that reported `tooltip_`, as RenderWidgetHost::FromID's
+  // arguments: a frame's widget can go away under its tooltip.
+  int tooltip_process_ = 0;
+  int tooltip_routing_ = 0;
+  // Runs out when a new tooltip shows. See ReportTooltip.
+  base::OneShotTimer tooltip_delay_;
+  // Where the pointer last was over the page, in the DIPs of the widget under
+  // it, and whether it is over the page now. See PreHandleMouseEvent.
   gfx::Point pointer_;
   bool pointer_inside_ = false;
   // The unresponsive-page prompt's number while it is asked, or 0. See
