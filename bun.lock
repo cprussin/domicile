@@ -895,6 +895,7 @@
         "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",

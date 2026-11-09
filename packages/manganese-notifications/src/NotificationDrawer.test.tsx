@@ -7,14 +7,7 @@ import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { notification } from "./fixture";
@@ -22,6 +15,7 @@ import { Inbox, InboxReading } from "./inbox";
 import type { DrawerInboxes } from "./NotificationDrawer";
 import { NotificationDrawer } from "./NotificationDrawer";
 import { bellId } from "./notifications-context";
+import { PauseLength } from "./pause";
 
 type Asked = (readonly unknown[])[];
 
@@ -93,7 +87,6 @@ const element = (
   <>
     <Bell handle={handle} />
     <NotificationDrawer
-      doNotDisturb={false}
       handle={handle}
       items={items}
       now={0}
@@ -106,16 +99,20 @@ const element = (
       onDismiss={(ids) => {
         asked.push(["dismiss", ids]);
       }}
-      onDoNotDisturb={(on) => {
-        asked.push(["do not disturb", on]);
-      }}
       onOpen={(screen) => {
         asked.push(["open", screen]);
+      }}
+      onPause={(length) => {
+        asked.push(["pause", length]);
       }}
       onReply={(id, text) => {
         asked.push(["reply", id, text]);
       }}
+      onResume={() => {
+        asked.push(["resume"]);
+      }}
       open
+      pause={undefined}
       screen="left"
       {...more}
     />
@@ -148,12 +145,13 @@ describe("NotificationDrawer", () => {
     expect(asked).toEqual([["open", "left"]]);
   });
 
-  it("lists every notification, in the order it is handed them", async () => {
+  it("lists every notification under Recent, in the order it is handed them", async () => {
     await drawer([
       notification({ id: 2, summary: "Newer" }),
       notification({ id: 1, summary: "Older" }),
     ]);
 
+    expect(screen.getByRole("heading", { name: "Recent" })).toBeInTheDocument();
     const rows = within(screen.getByRole("list")).getAllByRole("listitem");
     expect(rows.map((row) => row.textContent)).toEqual([
       expect.stringContaining("Newer"),
@@ -225,22 +223,36 @@ describe("NotificationDrawer", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("turns do not disturb on and off, with nothing to clear", async () => {
+  it("pauses for as long as is picked from its menu", async () => {
     const asked: Asked = [];
-    const toggle = () => screen.getByRole("switch", { name: "Do not disturb" });
-
     await drawer([], asked);
-    expect(toggle()).not.toBeChecked();
-    await userEvent.click(toggle());
-    cleanup();
-    await drawer([], asked, { doNotDisturb: true });
-    expect(toggle()).toBeChecked();
-    await userEvent.click(toggle());
 
-    expect(asked).toEqual([
-      ["do not disturb", true],
-      ["do not disturb", false],
-    ]);
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(
+      (await screen.findAllByRole("menuitem")).map((item) => item.textContent),
+    ).toEqual(["For 1 hour", "Until tomorrow", "Until I resume"]);
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "Until tomorrow" }),
+    );
+
+    expect(asked).toEqual([["pause", PauseLength.Tomorrow]]);
+  });
+
+  it("says until when it is paused, and resumes", async () => {
+    const asked: Asked = [];
+    const now = new Date(2026, 10, 9, 14).getTime();
+    await drawer([], asked, {
+      now,
+      pause: { until: new Date(2026, 10, 9, 15).getTime() },
+    });
+
+    expect(screen.getByText("Paused until 3:00 PM")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Pause" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(asked).toEqual([["resume"]]);
   });
 
   it("lists the inboxes above the notifications", async () => {

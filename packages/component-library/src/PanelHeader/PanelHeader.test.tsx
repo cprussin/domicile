@@ -19,6 +19,14 @@ describe(PanelHeader, () => {
       expect(screen.getByRole("button", { name: "Scan" })).toBeInTheDocument();
     });
 
+    it("says the panel's state under its title, apart from its name", () => {
+      render(<PanelHeader status="Paused" title="Notifications" />);
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Notifications" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Paused")).toBeInTheDocument();
+    });
+
     it("has no back button with nowhere to go back to", () => {
       render(<PanelHeader title="Notifications" />);
       expect(

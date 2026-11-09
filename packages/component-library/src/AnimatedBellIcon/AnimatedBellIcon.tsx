@@ -13,7 +13,7 @@ type Props = {
   cue?: unknown;
   /** Names the icon; without one it is decorative. */
   label?: string | undefined;
-  /** Strikes the bell through, such as while do not disturb is on. */
+  /** Strikes the bell through, such as while notifications are paused. */
   off?: boolean | undefined;
   size: number;
 };

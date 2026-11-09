@@ -3,15 +3,17 @@ import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { LeavingRow } from "@domicile-desktop/component-library/LeavingRow";
 import { List } from "@domicile-desktop/component-library/ListRow";
 import type { Row } from "@domicile-desktop/component-library/leaving-rows";
-import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
+import { Menu } from "@domicile-desktop/component-library/Menu";
 import { PanelHeader } from "@domicile-desktop/component-library/PanelHeader";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import { Switch } from "@domicile-desktop/component-library/Switch";
 import { useLeavingRows } from "@domicile-desktop/component-library/useLeavingRows";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { PauseIcon } from "@phosphor-icons/react/dist/ssr/Pause";
+import { PlayIcon } from "@phosphor-icons/react/dist/ssr/Play";
 import { memo } from "react";
 
 import { css } from "../styled-system/css";
@@ -21,6 +23,8 @@ import type { Inbox, InboxReading } from "./inbox";
 import { NotificationCard } from "./NotificationCard";
 import type { NotificationsHandle } from "./notifications-context";
 import { bellId, screenOfBell } from "./notifications-context";
+import { PauseLength, pausedFor } from "./pause";
+import type { Pause } from "./stored-pause";
 
 /** The inboxes listed in the drawer, and what the shell knows of them. */
 export type DrawerInboxes = {
@@ -32,8 +36,6 @@ export type DrawerInboxes = {
 };
 
 type Props = {
-  /** Toasts are held back, but for critical ones. */
-  doNotDisturb: boolean;
   /** Opens it under the bell pressed. */
   handle: NotificationsHandle;
   /** The inboxes, listed above the notifications. */
@@ -43,6 +45,8 @@ type Props = {
   /** The current time, for the relative timestamps. */
   now: number;
   open: boolean;
+  /** Toasts are held back, but for critical ones, until it ends. */
+  pause: Pause | undefined;
   /** The monitor whose bell it opens under. */
   screen: string | undefined;
   /** The bell on monitor `screen` was pressed. */
@@ -50,8 +54,10 @@ type Props = {
   onClose: () => void;
   /** Clear `ids`. */
   onDismiss: (ids: readonly number[]) => void;
-  /** Turn do not disturb on or off. */
-  onDoNotDisturb: (on: boolean) => void;
+  /** Pause toasts for `length`. */
+  onPause: (length: PauseLength) => void;
+  /** End the pause. */
+  onResume: () => void;
   /** Press `key` on `id`. */
   onAction: (id: number, key: string) => void;
   /** Send `text` from `id`'s reply field. */
@@ -61,8 +67,8 @@ type Props = {
 /**
  * The notification drawer, a panel under the bell. Each notification can be
  * pressed or cleared, or all cleared at once. A press closes the drawer,
- * which would cover the window it raises. Do not disturb is switched in its
- * footer.
+ * which would cover the window it raises. Its header pauses notifications from
+ * a menu of lengths, and says until when while paused.
  *
  * A notification stays here after its toast is gone, until it is cleared or its
  * application withdraws it. See docs/architecture/NOTIFICATIONS.md.
@@ -75,7 +81,6 @@ type Props = {
  */
 export const NotificationDrawer = memo(
   ({
-    doNotDisturb,
     handle,
     inboxes,
     items,
@@ -83,10 +88,12 @@ export const NotificationDrawer = memo(
     onAction,
     onClose,
     onDismiss,
-    onDoNotDisturb,
     onOpen,
+    onPause,
     onReply,
+    onResume,
     open,
+    pause,
     screen,
   }: Props) => {
     const { onLeft, rows } = useLeavingRows(items, idOf, open);
@@ -117,7 +124,26 @@ export const NotificationDrawer = memo(
         triggerId={screen === undefined ? null : bellId(screen)}
       >
         <section aria-labelledby={TITLE_ID} className={drawerStyles}>
-          <PanelHeader title="Notifications" titleId={TITLE_ID} />
+          <PanelHeader
+            action={
+              pause === undefined ? (
+                <PauseMenu onPause={onPause} />
+              ) : (
+                <Button
+                  beforeIcon={<PlayIcon aria-hidden size={12} weight="fill" />}
+                  onClick={onResume}
+                  rounded
+                  size="xs"
+                  variant="accent"
+                >
+                  Resume
+                </Button>
+              )
+            }
+            status={pause === undefined ? undefined : pausedFor(pause, now)}
+            title="Notifications"
+            titleId={TITLE_ID}
+          />
           <div className={paneStyles}>
             {inboxes !== undefined && (
               <PanelSection label="Inboxes">
@@ -130,40 +156,69 @@ export const NotificationDrawer = memo(
                 </List>
               </PanelSection>
             )}
-            {inboxes === undefined ? (
-              notifications
-            ) : (
-              <PanelSection label="Recent">{notifications}</PanelSection>
-            )}
+            <PanelSection
+              action={
+                items.length > 0 && (
+                  <Button
+                    beforeIcon={<BroomIcon aria-hidden size={14} />}
+                    onClick={() => {
+                      onDismiss(items.map(({ id }) => id));
+                    }}
+                    rounded
+                    size="xs"
+                    variant="ghost"
+                  >
+                    Clear all
+                  </Button>
+                )
+              }
+              label="Recent"
+            >
+              {notifications}
+            </PanelSection>
           </div>
-          <PanelFooter
-            action={
-              items.length > 0 && (
-                <Button
-                  beforeIcon={<BroomIcon aria-hidden size={14} />}
-                  onClick={() => {
-                    onDismiss(items.map(({ id }) => id));
-                  }}
-                  rounded
-                  size="xs"
-                  variant="ghost"
-                >
-                  Clear all
-                </Button>
-              )
-            }
-          >
-            <Switch
-              checked={doNotDisturb}
-              label="Do not disturb"
-              onCheckedChange={onDoNotDisturb}
-            />
-          </PanelFooter>
         </section>
       </Popover>
     );
   },
 );
+
+type PauseMenuProps = Pick<Props, "onPause">;
+
+/** The header's Pause button, and the lengths it offers. */
+const PauseMenu = ({ onPause }: PauseMenuProps) => (
+  <Menu
+    trigger={
+      <Button
+        afterIcon={<CaretDownIcon aria-hidden size={10} weight="fill" />}
+        beforeIcon={<PauseIcon aria-hidden size={12} weight="fill" />}
+        rounded
+        size="xs"
+        variant="ghost"
+      >
+        Pause
+      </Button>
+    }
+  >
+    {PAUSE_LENGTHS.map(({ label, length }) => (
+      <Menu.Item
+        key={label}
+        onClick={() => {
+          onPause(length);
+        }}
+      >
+        {label}
+      </Menu.Item>
+    ))}
+  </Menu>
+);
+
+/** The Pause menu's items, shortest first. */
+const PAUSE_LENGTHS = [
+  { label: "For 1 hour", length: PauseLength.Hour },
+  { label: "Until tomorrow", length: PauseLength.Tomorrow },
+  { label: "Until I resume", length: PauseLength.UntilResumed },
+];
 
 /** Tells one notification from another. */
 const idOf = ({ id }: Notification): number => id;

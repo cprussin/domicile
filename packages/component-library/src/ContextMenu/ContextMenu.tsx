@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
+import { popupStyles, positionerStyles } from "./menu-popup";
 import "../stylesheet";
 
 /** A point in the viewport, in CSS pixels. */
@@ -246,40 +247,6 @@ export const ContextMenu = Object.assign(ContextMenuComponent, {
   RadioItem,
   Separator,
   Submenu,
-});
-
-const positionerStyles = css({
-  outlineStyle: "none",
-  zIndex: "modal",
-});
-
-// `&[data-starting-style]` rather than Panda's `_starting`: `@starting-style`
-// does not reliably fire for a portaled popup. See `Popover`.
-const popupStyles = css({
-  "&:has([data-item-icon]:not(:empty)) [data-item-icon]": {
-    display: "inline-flex",
-  },
-  "&[data-ending-style]": {
-    opacity: 0,
-    transition: "opacity {durations.fast} {easings.in}",
-  },
-  "&[data-starting-style]": {
-    opacity: 0,
-  },
-  backgroundColor: "card",
-  border: "1px solid {colors.border}",
-  borderRadius: "md",
-  boxShadow: "lifted",
-  color: "foreground",
-  display: "flex",
-  flexDirection: "column",
-  maxBlockSize: "var(--available-height)",
-  minInlineSize: "{spacing.56}",
-  opacity: 1,
-  outlineStyle: "none",
-  overflowY: "auto",
-  paddingBlock: 1,
-  transition: "opacity {durations.fast} {easings.out}",
 });
 
 // `Select`'s item. Its end holds a shortcut, check, dot or caret.

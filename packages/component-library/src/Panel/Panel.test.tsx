@@ -40,8 +40,10 @@ describe(Panel, () => {
         </Panel>,
       );
       const scan = await screen.findByRole("button", { name: "Scan" });
+      // The header row holds the title's column and the controls.
       expect(
-        screen.getByRole("heading", { name: "Wi-Fi" }).parentElement,
+        screen.getByRole("heading", { name: "Wi-Fi" }).parentElement
+          ?.parentElement,
       ).toContainElement(scan);
     });
 
