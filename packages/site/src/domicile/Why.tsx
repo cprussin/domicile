@@ -15,6 +15,8 @@ type Stage = {
   body: string;
   /** `engine` marks the stage the browser engine runs. */
   tone?: "engine" | undefined;
+  /** Draws the stage as a stack of boxes: one copy per app. */
+  stacked?: boolean | undefined;
 };
 
 type Source = {
@@ -24,7 +26,10 @@ type Source = {
 };
 
 /** One input and the stages it passes through on its own. */
-type Lane = { source: Source; stages?: readonly Stage[] | undefined };
+type Lane = {
+  source: Source;
+  stages?: readonly Stage[] | undefined;
+};
 
 type Diagram = {
   title: string;
@@ -42,7 +47,18 @@ const CONVENTIONAL: Diagram = {
         {
           body: "Renders and composites its pages into one window, with its own engine.",
           icon: <BrowsersIcon />,
-          title: "The browser",
+          title: "Chromium",
+        },
+      ],
+    },
+    {
+      source: { label: "Electron apps" },
+      stages: [
+        {
+          body: "Each app brings its own copy.",
+          icon: <BrowsersIcon />,
+          stacked: true,
+          title: "Chromium",
         },
       ],
     },
@@ -50,7 +66,7 @@ const CONVENTIONAL: Diagram = {
   ],
   stages: [
     {
-      body: "Arranges every window, the browser's included, and composites them.",
+      body: "Arranges every window, Chromium's included, and composites them.",
       icon: <StackIcon />,
       title: "The desktop compositor",
     },
@@ -62,12 +78,13 @@ const CONVENTIONAL: Diagram = {
 const DOMICILE: Diagram = {
   lanes: [
     { source: { code: "<webview>", label: "Websites" } },
+    { source: { label: "Domicile apps" } },
     { source: { code: "<app>", label: "Native apps" } },
     { source: { code: "HTML", label: "Your desktop" } },
   ],
   stages: [
     {
-      body: "Apps still draw their own windows, and Domicile's Wayland server hands them to the engine. The engine lays out the page, the websites and the windows with CSS, and composites them in one frame.",
+      body: "Native apps still draw their own windows, and Domicile's Wayland server hands them to the engine. The engine lays out your desktop, websites, Domicile apps and windows with CSS, and composites them in one frame.",
       icon: <BrowsersIcon />,
       title: "Domicile",
       tone: "engine",
@@ -81,7 +98,7 @@ const DOMICILE: Diagram = {
 export const Why = () => (
   <Section
     id="why"
-    lede="On most desktops the browser is one app among many. It has its own rendering engine and compositor, and it runs in a window that a separate desktop compositor arranges. That's a sound design. Domicile tries the other one."
+    lede="On most desktops the browser is one app among many, and every Electron app brings a copy of Chromium too. Each has its own rendering engine and compositor, and runs in a window that a separate desktop compositor arranges. That's a sound design. Domicile tries the other one."
     title="You're already running a browser."
   >
     <div className={diagramsStyles}>
@@ -92,6 +109,11 @@ export const Why = () => (
       <li>
         Websites still render in their own processes, and apps in theirs. What
         changes is what arranges and composites them: one engine, with CSS.
+      </li>
+      <li>
+        Domicile apps are web pages in app windows, so they share the one
+        engine. Electron apps still work as native apps, with their own
+        Chromium.
       </li>
       <li>
         It's a different arrangement, not a speedup. Pixels are still drawn,
@@ -129,7 +151,7 @@ const Flow = ({ diagram }: { diagram: Diagram }) => (
             {(lane.stages ?? []).map((stage) => (
               <span className={laneStageStyles} key={stage.title}>
                 <Connector />
-                <StageBox stage={stage} />
+                <StageBox compact stage={stage} />
               </span>
             ))}
             <Connector />
@@ -150,15 +172,29 @@ const Flow = ({ diagram }: { diagram: Diagram }) => (
 
 const Connector = () => <span aria-hidden="true" className={connectorStyles} />;
 
-const StageBox = ({ stage }: { stage: Stage }) => (
-  <div className={stageStyles({ tone: stage.tone ?? "plain" })}>
-    <span aria-hidden="true" className={stageIconStyles}>
+/** A `compact` box shares its row with other lanes, so on narrow screens it
+ * shows only its title. */
+const StageBox = ({
+  compact = false,
+  stage,
+}: {
+  compact?: boolean;
+  stage: Stage;
+}) => (
+  <div
+    className={stageStyles({
+      compact,
+      stacked: stage.stacked ?? false,
+      tone: stage.tone ?? "plain",
+    })}
+  >
+    <span aria-hidden="true" className={stageIconStyles({ compact })}>
       {stage.icon}
     </span>
     <div className={stageTextStyles}>
       <span className={stageTitleStyles}>{stage.title}</span>
       {stage.body === "" ? undefined : (
-        <span className={stageBodyStyles}>{stage.body}</span>
+        <span className={stageBodyStyles({ compact })}>{stage.body}</span>
       )}
     </div>
   </div>
@@ -166,17 +202,19 @@ const StageBox = ({ stage }: { stage: Stage }) => (
 
 const diagramsStyles = grid({
   alignItems: "start",
-  gap: 5,
+  gap: { base: 10, md: 5 },
   gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))",
 });
 
+// A card on wide screens. Narrow screens drop it, so the lanes get its
+// padding.
 const flowStyles = flex({
-  backgroundColor: "card",
-  border: "1px solid {colors.border}",
+  backgroundColor: { md: "card" },
+  border: { md: "1px solid {colors.border}" },
   borderRadius: "2xl",
   direction: "column",
   gap: 4,
-  padding: { base: 5, md: 7 },
+  padding: { base: 0, md: 7 },
 });
 
 const flowTitleStyles = css({
@@ -210,7 +248,7 @@ const sourceStyles = flex({
   gap: 0.5,
   justify: "center",
   paddingBlock: 2.5,
-  paddingInline: 3,
+  paddingInline: { base: 1.5, md: 3 },
   textAlign: "center",
 });
 
@@ -255,6 +293,24 @@ const stageStyles = cva({
     paddingInline: 4,
   },
   variants: {
+    compact: {
+      false: {},
+      true: {
+        gap: { base: 0, md: 3 },
+        justifyContent: { base: "center", md: "flex-start" },
+        paddingInline: { base: 1.5, md: 4 },
+      },
+    },
+    // Two more boxes peek out behind it, down and to the right.
+    stacked: {
+      false: {},
+      true: {
+        boxShadow:
+          "5px 5px 0 -1px {colors.background}, 5px 5px 0 0 {colors.border}, 10px 10px 0 -1px {colors.background}, 10px 10px 0 0 {colors.border}",
+        marginBlockEnd: "10px",
+        marginInlineEnd: "10px",
+      },
+    },
     tone: {
       engine: {
         backgroundImage:
@@ -270,19 +326,35 @@ const stageStyles = cva({
   },
 });
 
-const stageIconStyles = css({
-  color: "accent",
-  flex: "none",
-  fontSize: "xl",
-  lineHeight: "1",
-  marginBlockStart: "0.1em",
+const stageIconStyles = cva({
+  base: {
+    color: "accent",
+    flex: "none",
+    fontSize: "xl",
+    lineHeight: "1",
+    marginBlockStart: "0.1em",
+  },
+  variants: {
+    compact: {
+      false: {},
+      true: { display: { base: "none", md: "block" } },
+    },
+  },
 });
 
-const stageTextStyles = flex({ direction: "column", gap: 1 });
+const stageTextStyles = flex({ direction: "column", gap: 1, minInlineSize: 0 });
 
 const stageTitleStyles = css({ fontWeight: "semibold" });
 
-const stageBodyStyles = css({ color: "muted", fontSize: "sm" });
+const stageBodyStyles = cva({
+  base: { color: "muted", fontSize: "sm" },
+  variants: {
+    compact: {
+      false: {},
+      true: { display: { base: "none", md: "inline" } },
+    },
+  },
+});
 
 const notesStyles = flex({
   color: "muted",
