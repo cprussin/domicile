@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 import { css, cva } from "../../styled-system/css";
 import { token } from "../../styled-system/tokens";
@@ -32,57 +33,78 @@ export const OverviewBackdrop = ({
   closing,
   onClosed,
   overviews,
-}: Props) => (
-  <>
-    {overviews.map((overview) => {
-      const { screen, tiles } = overview;
-      // The camera on the shown workspace, for the grid placed at the
-      // screen's corner. See `cameraOf`.
-      const camera = matrixOf(
-        fromOrigin(cameraOf(overview), screen.geometry.screen),
-      );
-      return (
-        <div
-          aria-hidden
-          className={backdropStyles({ closing })}
-          data-overview-backdrop=""
-          key={screen.geometry.name}
-          onAnimationEnd={(event) => {
-            // Not the end of a tile's or name's own animation.
-            if (closing && event.target === event.currentTarget) {
-              onClosed();
-            }
-          }}
-          style={placedAt(screen.geometry.screen, BACKDROP)}
-        >
+}: Props) => {
+  // Where each card was last drawn: its tile, and the screen it was on.
+  const drawn = useRef(new Map<string, { box: Rect; screen: string }>());
+  useLayoutEffect(() => {
+    drawn.current = new Map(
+      overviews.flatMap(({ screen, tiles }) =>
+        dealt(tiles, cards).map(({ box, card }) => [
+          card,
+          { box, screen: screen.geometry.name },
+        ]),
+      ),
+    );
+  });
+  return (
+    <>
+      {overviews.map((overview) => {
+        const { screen, tiles } = overview;
+        // The camera on the shown workspace, for the grid placed at the
+        // screen's corner. See `cameraOf`.
+        const camera = matrixOf(
+          fromOrigin(cameraOf(overview), screen.geometry.screen),
+        );
+        return (
           <div
-            className={gridStyles}
-            data-overview-grid=""
-            style={gridAt(camera, closing)}
+            aria-hidden
+            className={backdropStyles({ closing })}
+            data-overview-backdrop=""
+            key={screen.geometry.name}
+            onAnimationEnd={(event) => {
+              // Not the end of a tile's or name's own animation.
+              if (closing && event.target === event.currentTarget) {
+                onClosed();
+              }
+            }}
+            style={placedAt(screen.geometry.screen, BACKDROP)}
           >
-            {dealt(tiles, cards).map(({ box, card }) => (
-              <div
-                className={cardStyles}
-                data-overview-card={card}
-                key={card}
-                style={cardAt(screen.geometry.screen, box)}
-              />
-            ))}
-            {tiles.map(({ box, name }) => (
-              <span
-                className={labelStyles({ current: name === screen.current })}
-                key={name}
-                style={placedIn(labelOf(within(box, screen.geometry.screen)))}
-              >
-                {name}
-              </span>
-            ))}
+            <div
+              className={gridStyles}
+              data-overview-grid=""
+              style={gridAt(camera, closing)}
+            >
+              {dealt(tiles, cards).map(({ box, card }) => {
+                const was = drawn.current.get(card);
+                const from =
+                  was === undefined || was.screen === screen.geometry.name
+                    ? undefined
+                    : was.box;
+                return (
+                  <div
+                    className={cardStyles({ crossing: from !== undefined })}
+                    data-overview-card={card}
+                    key={card}
+                    style={cardAt(screen.geometry.screen, box, from)}
+                  />
+                );
+              })}
+              {tiles.map(({ box, name }) => (
+                <span
+                  className={labelStyles({ current: name === screen.current })}
+                  key={name}
+                  style={placedIn(labelOf(within(box, screen.geometry.screen)))}
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      );
-    })}
-  </>
-);
+        );
+      })}
+    </>
+  );
+};
 
 /**
  * Inline style for the grid, which comes into view from `camera` and, as the
@@ -113,18 +135,26 @@ const dealt = (
  * Inline style drawing a card the size of `screen` through its tile at `box`,
  * as the windows are drawn (see `seenAt`): one matrix it eases, so its size
  * and place move together, as its windows' do. Its corners are scaled up to
- * stay `md` once shrunk.
+ * stay `md` once shrunk. A card just crossed from another screen starts from
+ * its tile there, at `from`.
  */
-const cardAt = (screen: Rect, box: Rect): CSSProperties => {
-  const view = viewOf({ ...screen, x: 0, y: 0 }, within(box, screen));
+const cardAt = (
+  screen: Rect,
+  box: Rect,
+  from?: Rect,
+): Record<`--${string}`, string> & CSSProperties => {
+  const seenIn = (tile: Rect) =>
+    viewOf({ ...screen, x: 0, y: 0 }, within(tile, screen));
+  const view = seenIn(box);
   return {
+    ...(from === undefined ? {} : { "--card-from": matrixOf(seenIn(from)) }),
+    "--card-at": matrixOf(view),
     blockSize: `${screen.height.toString()}px`,
     borderRadius: `calc(${token.var("radii.md")} / ${view.scale.toString()})`,
     inlineSize: `${screen.width.toString()}px`,
     insetBlockStart: 0,
     insetInlineStart: 0,
     position: "absolute",
-    transform: matrixOf(view),
   };
 };
 
@@ -177,11 +207,23 @@ const gridStyles = css({
 
 // The empty desk behind a workspace's windows: lighter than the dimmed photo,
 // so an empty workspace still shows its shape. Swapped, it slides with its
-// windows, as `seenStyles` moves them.
-const cardStyles = css({
-  backgroundColor: "fillOverPhoto",
-  transformOrigin: "0 0",
-  transition: "transform {durations.slower} {easings.emphasized}",
+// windows, as `seenStyles` moves them; swapped onto another screen, it is
+// drawn afresh there, sliding in from its old tile past the screen's edge.
+const cardStyles = cva({
+  base: {
+    backgroundColor: "fillOverPhoto",
+    // Through a property, since `@starting-style` loses to an inline
+    // `transform`; see `seenStyles`.
+    transform: "var(--card-at)",
+    transformOrigin: "0 0",
+    transition: "transform {durations.slower} {easings.emphasized}",
+  },
+  variants: {
+    crossing: {
+      false: {},
+      true: { _starting: { transform: "var(--card-from)" } },
+    },
+  },
 });
 
 const labelStyles = cva({

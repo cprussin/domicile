@@ -19,6 +19,8 @@ type Props = {
    * overview's own keys (see `steeredInOverview`).
    */
   aim: string | undefined;
+  /** Which card each tile shows; see `WindowState.overviewCards`. */
+  cards: Readonly<Record<string, string>>;
   /** The screen with the keyboard, whose shown workspace takes focus. */
   focused: string;
   /** The keyboard moved to another workspace. */
@@ -54,8 +56,60 @@ export const OverviewPicker = (props: Props) => (
         {...props}
       />
     ))}
+    <Rings {...props} />
   </>
 );
+
+/**
+ * The rings round the workspace on each screen and the one the keyboard is
+ * on, over every screen's picker. Each is keyed by the card under it (see
+ * `WindowState.overviewCards`), so a swap slides it with its card, across
+ * monitors too, while aiming elsewhere moves it at once.
+ */
+const Rings = ({ aim, cards, overviews }: Props) => {
+  const ringed = (name: string) => cards[name] ?? name;
+  const aimed = aim === undefined ? undefined : aimOf(overviews, aim);
+  return (
+    <div
+      aria-hidden
+      className={ringsStyles}
+      data-overview-rings=""
+      style={{ zIndex: PICKER + 1 }}
+    >
+      {overviews
+        .flatMap(({ screen, tiles }) =>
+          tiles
+            .filter(({ name }) => name === screen.current)
+            .map(({ box, name }) => ({ box, card: ringed(name) })),
+        )
+        // In the cards' order, which a swap leaves as it is: a ring moved in
+        // the document would be redrawn, not slid.
+        .toSorted((one, other) => one.card.localeCompare(other.card))
+        .map(({ box, card }) => (
+          <div
+            className={ringStyles({ kind: "shown" })}
+            data-overview-ring="shown"
+            key={`shown ${card}`}
+            style={placedIn(box)}
+          />
+        ))}
+      {aimed !== undefined && (
+        <div
+          className={ringStyles({ kind: "aim" })}
+          data-overview-ring="aim"
+          key={`aim ${ringed(aimed.name)}`}
+          style={placedIn(aimed.box)}
+        />
+      )}
+    </div>
+  );
+};
+
+/** The tile workspace `aim` is on, in any of `overviews`. */
+const aimOf = (overviews: readonly ScreenOverview[], aim: string) =>
+  overviews
+    .flatMap(({ tiles }) => tiles.filter(({ name }) => name === aim))
+    .at(0);
 
 /** How far, in page pixels, a press moves before it is a drag. */
 const DRAG_SLOP = 6;
@@ -266,7 +320,6 @@ const ScreenPicker = ({
               name !== pressed.workspace &&
               tileAt([{ box, name }], pressed.to) !== undefined,
           })}
-          data-aimed={aim !== undefined && name === aimed ? "" : undefined}
           data-workspace={name}
           key={name}
           onClick={(event) => {
@@ -318,16 +371,14 @@ const pickerStyles = css({
   touchAction: "none",
 });
 
-// Rings drawn outside the tile, so they never cover its windows: the accent
-// for the workspace on screen, white under the pointer or keyboard. The
-// overview's own keys are grabbed before the page sees them, so a tile they
-// aim at is not `:focus-visible` and is ringed by `data-aimed` instead.
+// A faint ring under the pointer, drawn outside the tile so it never covers
+// its windows. The workspace on screen and the one the keyboard is on are
+// ringed by `Rings`, over it.
 const tileStyles = cva({
   base: {
-    _focusVisible: { outlineColor: "onPhoto" },
-    _hover: { outlineColor: "onPhoto" },
-    "&[aria-current]": { outlineColor: "accent" },
-    "&[data-aimed]": { outlineColor: "onPhoto" },
+    _hover: {
+      outlineColor: "color-mix(in oklab, {colors.onPhoto} 40%, transparent)",
+    },
     backgroundColor: "transparent",
     borderRadius: "md",
     borderStyle: "none",
@@ -352,4 +403,37 @@ const ghostStyles = css({
   borderStyle: "solid",
   borderWidth: "2px",
   pointerEvents: "none",
+});
+
+// Over the pickers, never in the pointer's way. Comes in with them.
+const ringsStyles = css({
+  animation:
+    "overviewShowing {durations.normal} {easings.out} {durations.slow} backwards",
+  insetBlockStart: 0,
+  insetInlineStart: 0,
+  pointerEvents: "none",
+  position: "absolute",
+});
+
+// Outside the tile, as the hover ring: the accent round the workspace on
+// screen, a bolder white round the keyboard's, drawn over it. A swap slides
+// them as it does the cards (see `cardStyles` in `OverviewBackdrop`).
+const ringStyles = cva({
+  base: {
+    borderRadius: "md",
+    outlineColor: "accent",
+    outlineOffset: "3px",
+    outlineStyle: "solid",
+    outlineWidth: "2px",
+    transitionDuration: "slower",
+    transitionProperty:
+      "inset-block-start, inset-inline-start, block-size, inline-size",
+    transitionTimingFunction: "emphasized",
+  },
+  variants: {
+    kind: {
+      aim: { outlineColor: "onPhoto", outlineWidth: "3px" },
+      shown: {},
+    },
+  },
 });

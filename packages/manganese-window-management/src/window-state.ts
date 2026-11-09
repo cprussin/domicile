@@ -1165,9 +1165,10 @@ export const WindowAction = {
   }),
 
   /**
-   * In the overview, the windows of workspaces `from` and `to` trade places,
-   * as do the screens showing them: what the screen showed stays shown,
-   * under its new name.
+   * In the overview, the windows of workspaces `from` and `to` trade places.
+   * On one monitor, so do the screens showing them: what the screen showed
+   * stays shown, under its new name. Across two, each monitor keeps showing
+   * the same place, now holding the other's windows.
    */
   WorkspacesSwapped: (from: string, to: string) => ({
     from,
@@ -1242,10 +1243,13 @@ const aimForgotten = (state: WindowState): WindowState => {
 };
 
 /**
- * `from` and `to` trade windows, homes and the screens showing them; see
- * `WorkspacesSwapped`.
+ * `from` and `to` trade windows, and on one monitor the screen showing them;
+ * see `WorkspacesSwapped`.
  */
 const swapped = (state: WindowState, from: string, to: string): WindowState => {
+  // On one monitor, its screen follows what it showed. Across two, each keeps
+  // its places: what crosses is shown only if its new place is.
+  const across = state.homes[from] !== state.homes[to];
   const other = (name: string | undefined) => {
     if (name === from) {
       return to;
@@ -1257,12 +1261,13 @@ const swapped = (state: WindowState, from: string, to: string): WindowState => {
   };
   return {
     ...state,
-    homes: { ...state.homes, [from]: state.homes[to], [to]: state.homes[from] },
-    previous: other(state.previous),
-    screens: state.screens.map((screen) => ({
-      ...screen,
-      current: other(screen.current) ?? screen.current,
-    })),
+    previous: across ? state.previous : other(state.previous),
+    screens: across
+      ? state.screens
+      : state.screens.map((screen) => ({
+          ...screen,
+          current: other(screen.current) ?? screen.current,
+        })),
     workspaces: state.workspaces.map((workspace) =>
       workspace.name === from || workspace.name === to
         ? {
@@ -1690,9 +1695,16 @@ const reduceAction = (
       return selectWorkspace(state, action.name);
     }
     case WindowActionKind.WorkspacesSwapped: {
+      const after = swapped(state, action.from, action.to);
       return {
-        ...swapped(state, action.from, action.to),
-        overviewAim: action.to,
+        ...after,
+        // Following the windows, unless they left nothing to follow: an
+        // empty workspace swapped off its monitor's screen leaves the
+        // overview.
+        overviewAim:
+          rehomed(after).homes[action.to] === undefined
+            ? action.from
+            : action.to,
         overviewCards: {
           ...state.overviewCards,
           [action.from]: state.overviewCards[action.to] ?? action.to,

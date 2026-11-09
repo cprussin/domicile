@@ -769,6 +769,7 @@ export const Desktop = ({
       {overviews !== undefined && overviewPhase === "open" && (
         <OverviewPicker
           aim={windows.overviewAim}
+          cards={windows.overviewCards}
           focused={windows.focused}
           onAim={overviewAimed}
           onDismiss={overviewDismissed}
