@@ -202,6 +202,8 @@
         # And it `dlopen`s `libvulkan.so.1` by name for
         # `--enable-features=Vulkan` and WebGPU. nixpkgs' loader finds NixOS
         # drivers in `/run/opengl-driver/share`; the engine's own does not.
+        # Dawn also opens the `libvulkan.so.1` beside `chrome` directly, before
+        # the library path, so that file is replaced with nixpkgs' loader too.
         #
         # A wrapper, not an rpath: chrome re-execs itself for its zygote and
         # renderers, and only environment variables reach those children.
@@ -212,6 +214,7 @@
         # installs them where host data dirs never look. Without them every
         # start logs a GLib-GIO-CRITICAL. Prefixed, so host dirs still follow.
         postFixup = ''
+          ln -sf "${pkgs.vulkan-loader}/lib/libvulkan.so.1" "$out/libvulkan.so.1"
           mv "$out/chrome" "$out/.chrome-unwrapped"
           makeWrapper "$out/.chrome-unwrapped" "$out/chrome" \
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib:${
@@ -262,6 +265,12 @@
           # `dlopen`s by name for `--enable-features=Vulkan` and WebGPU.
           grep -q vulkan-loader "$out/chrome" || {
             echo "the engine's chrome carries no Vulkan loader, so Vulkan and WebGPU get no adapter" >&2
+            exit 1
+          }
+          # Check the loader beside chrome, which Dawn opens directly, is
+          # nixpkgs' too.
+          cmp -s "$out/libvulkan.so.1" "${pkgs.vulkan-loader}/lib/libvulkan.so.1" || {
+            echo "Dawn's engine-local Vulkan loader is not nixpkgs' NixOS-aware one" >&2
             exit 1
           }
           # Check the wrapper adds compiled GSettings schemas.
