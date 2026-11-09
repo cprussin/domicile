@@ -78,12 +78,15 @@ ones that have windows, and the one shown.
 - Arrow keys or Meta+H/J/K/L pick a workspace, on to the next monitor at
   the edge, and Enter goes there.
 - Meta+Shift+H/J/K/L swaps the picked workspace with the next one that way,
-  windows and all.
+  windows and all, on to the next monitor at the edge too. Each monitor
+  keeps showing the same spot, so a workspace you swap off-screen is no
+  longer on screen.
 - Other keys, and the bar's workspace buttons, do nothing while it is
   open. Lock, screenshot, volume and brightness keys still work, and Meta+O
   and the launcher and clipboard keys still close it.
-- The workspace your keys are on has a white ring; the one on screen has a
-  colored ring.
+- The workspace your keys are on has a bold white ring, and the one on
+  screen has a colored ring. The white ring moves with a workspace you
+  swap. The workspace under the pointer gets a faint ring.
 - Escape, Meta+O, a four-finger spread, or a click outside the
   workspaces closes it. The launcher and clipboard close it too.
 

@@ -12,8 +12,8 @@ import { tileToward } from "./tiles";
 /**
  * `action` as the open overview takes it. `focus <way>` aims at the next
  * workspace that way, on to the next monitor past the edge of its own (see
- * {@link aimedToward}). `move <way>` swaps the workspace aimed at with the next one
- * that way on its own monitor.
+ * {@link aimedToward}). `move <way>` swaps the workspace aimed at with the
+ * next one that way, found the same way.
  * Steps from `aim`, or the shown workspace of the `focused` screen. Every
  * other command is left as it is, for the reducer, which ignores those that
  * change windows (see `SHUT_IN_OVERVIEW`).
@@ -37,7 +37,7 @@ export const steeredInOverview = (
         return to === undefined ? action : Action.OverviewAimed(to.name);
       }
       case WindowActionKind.WindowStepped: {
-        const to = tileToward(overview.tiles, from, action.direction);
+        const to = aimedToward(overviews, from, action.direction);
         return to === undefined
           ? action
           : Action.WorkspacesSwapped(from, to.name);

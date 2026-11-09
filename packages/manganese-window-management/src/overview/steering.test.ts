@@ -70,7 +70,7 @@ describe("steeredInOverview", () => {
           name,
         ),
       ).toStrictEqual(WindowAction.OverviewAimed("3"));
-      // A swap moves a workspace along its own monitor's bar only.
+      // A swap crosses the same way.
       expect(
         steeredInOverview(
           WindowAction.WindowStepped(Direction.Right),
@@ -78,7 +78,7 @@ describe("steeredInOverview", () => {
           undefined,
           name,
         ),
-      ).toStrictEqual(WindowAction.WindowStepped(Direction.Right));
+      ).toStrictEqual(WindowAction.WorkspacesSwapped("3", "5"));
     }
   });
 

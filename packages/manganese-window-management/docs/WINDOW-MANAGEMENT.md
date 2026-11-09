@@ -385,9 +385,16 @@ with windows, and the shown one.
 - `useKeybindings` drops every key's command while it is open but its own,
   the launcher and clipboard toggles, lock, screenshot and the media keys
   (`HEARD_OVER_OVERVIEW`), as it does for the launcher.
-- The picker rings the aimed tile white by `data-aimed`, the shown one
-  too: the keys are grabbed before the page sees them, so focusing a tile
-  never makes it `:focus-visible`.
+- The picker's `Rings`, over every screen's picker, ring the aimed tile
+  bold white and each shown one in the accent: the keys are grabbed before
+  the page sees them, so focusing a tile never makes it `:focus-visible`.
+  Each ring is keyed by the card under it, and the shown ones are kept in
+  the cards' order, so a swap slides a ring with its card while aiming
+  elsewhere moves it at once. The aim's ring crosses monitors with its
+  card; a shown ring stays on its screen's place unless the card it rings
+  is shown again elsewhere. An aim whose windows a swap leaves empty and
+  unshown stays where it was. A hovered tile's own ring is faint, so it
+  never reads as the aim.
 - Opening it closes the launcher and clipboard, and opening either closes it.
 - Opening it drops a window drag in progress, whose handles it hides.
 

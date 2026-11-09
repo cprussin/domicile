@@ -2585,6 +2585,49 @@ describe("the overview", () => {
     expect(state.overviewAim).toBe("1");
   });
 
+  it("swaps with a workspace on another monitor, each monitor keeping its places", () => {
+    // 1 on the left, 2 on the right. The names stay where they are: the
+    // windows cross, and each screen shows what is in its own place now.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.ScreenHovered("right"),
+      WindowAction.AppAppeared("foot", "foot"),
+      WindowAction.OverviewToggled(),
+      WindowAction.WorkspacesSwapped("1", "2"),
+    );
+
+    expect(windowsOn(workspaceNamed(state, "1"))).toStrictEqual([APP("foot")]);
+    expect(windowsOn(workspaceNamed(state, "2"))).toStrictEqual([APP("kitty")]);
+    expect(currentOn(state, "left")).toBe("1");
+    expect(currentOn(state, "right")).toBe("2");
+    expect(state.homes["1"]).toBe("left");
+    expect(state.homes["2"]).toBe("right");
+    expect(state.overviewAim).toBe("2");
+  });
+
+  it("keeps the aim on its own monitor, and back-and-forth as it was, when a swap across empties what it followed", () => {
+    // The left screen shows 1, empty; 4 is hidden on the right with a
+    // window. Swapped, 4 is empty and hidden, so it leaves the overview: the
+    // aim stays on 1, where the window landed.
+    const state = reduce(
+      NO_WINDOWS,
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.ScreenHovered("right"),
+      WindowAction.WorkspaceSelected("4"),
+      WindowAction.AppAppeared("foot", "foot"),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.ScreenHovered("left"),
+      WindowAction.OverviewToggled(),
+      WindowAction.WorkspacesSwapped("1", "4"),
+    );
+
+    expect(windowsOn(workspaceNamed(state, "1"))).toStrictEqual([APP("foot")]);
+    expect(state.overviewAim).toBe("1");
+    // Back-and-forth goes where it went: the places stayed.
+    expect(state.previous).toBe("4");
+  });
+
   it.each([
     ["focus", WindowAction.FocusStepped(Direction.Left)],
     ["move", WindowAction.WindowStepped(Direction.Left)],

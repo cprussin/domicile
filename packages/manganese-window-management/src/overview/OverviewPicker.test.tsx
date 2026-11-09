@@ -49,6 +49,7 @@ const Aiming = ({
   return (
     <OverviewPicker
       aim={aim}
+      cards={{}}
       focused=""
       onAim={setAim}
       onDismiss={() => picked.push({ dismissed: true })}
@@ -102,6 +103,7 @@ describe("OverviewPicker", () => {
   it("moves the keyboard to the workspace aimed at by the overview's own keys", () => {
     // Meta+H/J/K/L step the aim; see `steeredInOverview`.
     const props = {
+      cards: {},
       focused: "",
       onAim: () => undefined,
       onDismiss: () => undefined,
@@ -118,10 +120,7 @@ describe("OverviewPicker", () => {
     expect(document.activeElement).toBe(tile("1"));
   });
 
-  it("rings the workspace aimed at, whatever moved the keyboard last", () => {
-    // The overview's own keys are grabbed before the page sees them, so the
-    // page cannot tell they were keys: `:focus-visible` would not ring the
-    // tile they move to.
+  describe("its rings", () => {
     const props = {
       focused: "",
       onAim: () => undefined,
@@ -129,18 +128,148 @@ describe("OverviewPicker", () => {
       onMove: () => undefined,
       onPick: () => undefined,
       onPickWindow: () => undefined,
-      overviews: [OVERVIEW],
     };
-    const { rerender } = render(<OverviewPicker aim={undefined} {...props} />);
-    expect(tile("3").hasAttribute("data-aimed")).toBe(false);
+    const ringOf = (container: HTMLElement, kind: "aim" | "shown") => {
+      const found = container.querySelector<HTMLElement>(
+        `[data-overview-ring="${kind}"]`,
+      );
+      if (found === null) {
+        throw new Error(`test: no ${kind} ring`);
+      } else {
+        return found;
+      }
+    };
+    const at = (ring: HTMLElement) => [
+      ring.style.getPropertyValue("inset-inline-start"),
+      ring.style.getPropertyValue("inset-block-start"),
+    ];
+    const placeOf = (box: Rect) => [
+      `${box.x.toString()}px`,
+      `${box.y.toString()}px`,
+    ];
 
-    rerender(<OverviewPicker aim="1" {...props} />);
+    it("slide with the workspaces they ring as those swap", () => {
+      // The whole tile moves, ring and all, not just what is in it.
+      const { container, rerender } = render(
+        <OverviewPicker aim="3" cards={{}} overviews={[OVERVIEW]} {...props} />,
+      );
+      const aimRing = ringOf(container, "aim");
+      const shownRing = ringOf(container, "shown");
+      expect(at(aimRing)).toStrictEqual(placeOf(tileBox("3")));
 
-    expect(tile("1").hasAttribute("data-aimed")).toBe(true);
-    expect(tile("3").hasAttribute("data-aimed")).toBe(false);
-    // On the one on screen too, which another monitor's shares the look of.
-    rerender(<OverviewPicker aim="3" {...props} />);
-    expect(tile("3").hasAttribute("data-aimed")).toBe(true);
+      // 3, shown and aimed at, swapped into 1's place.
+      const swappedOne = {
+        ...OVERVIEW,
+        screen: { ...OVERVIEW.screen, current: "1" },
+      };
+      rerender(
+        <OverviewPicker
+          aim="1"
+          cards={{ "1": "3", "3": "1" }}
+          overviews={[swappedOne]}
+          {...props}
+        />,
+      );
+
+      expect(ringOf(container, "aim")).toBe(aimRing);
+      expect(ringOf(container, "shown")).toBe(shownRing);
+      expect(at(aimRing)).toStrictEqual(placeOf(tileBox("1")));
+      expect(at(shownRing)).toStrictEqual(placeOf(tileBox("1")));
+    });
+
+    it("ring the workspace aimed at, whatever moved the keyboard last", () => {
+      // The overview's own keys are grabbed before the page sees them, so
+      // `:focus-visible` would not ring the tile they move to.
+      const { container, rerender } = render(
+        <OverviewPicker
+          aim={undefined}
+          cards={{}}
+          overviews={[OVERVIEW]}
+          {...props}
+        />,
+      );
+      expect(container.querySelector('[data-overview-ring="aim"]')).toBeNull();
+
+      rerender(
+        <OverviewPicker aim="1" cards={{}} overviews={[OVERVIEW]} {...props} />,
+      );
+
+      expect(at(ringOf(container, "aim"))).toStrictEqual(placeOf(tileBox("1")));
+    });
+
+    it("keep their order as two shown workspaces swap, so neither is redrawn", () => {
+      // Moving a ring in the document would cut its slide short.
+      const right = besideOf(OVERVIEW);
+      const { container, rerender } = render(
+        <OverviewPicker
+          aim="3"
+          cards={{}}
+          overviews={[OVERVIEW, right]}
+          {...props}
+        />,
+      );
+      const before = [
+        ...container.querySelectorAll('[data-overview-ring="shown"]'),
+      ];
+
+      rerender(
+        <OverviewPicker
+          aim="5"
+          cards={{ "3": "5", "5": "3" }}
+          overviews={[OVERVIEW, right]}
+          {...props}
+        />,
+      );
+
+      const after = [
+        ...container.querySelectorAll('[data-overview-ring="shown"]'),
+      ];
+      expect(after.length).toBe(before.length);
+      expect(after.every((ring, index) => ring === before[index])).toBe(true);
+    });
+
+    it("jump to another workspace aimed at, with nothing swapped", () => {
+      const { container, rerender } = render(
+        <OverviewPicker aim="3" cards={{}} overviews={[OVERVIEW]} {...props} />,
+      );
+      const before = ringOf(container, "aim");
+
+      rerender(
+        <OverviewPicker aim="1" cards={{}} overviews={[OVERVIEW]} {...props} />,
+      );
+
+      expect(ringOf(container, "aim")).not.toBe(before);
+      expect(at(ringOf(container, "aim"))).toStrictEqual(placeOf(tileBox("1")));
+    });
+
+    it("slide across to another monitor", () => {
+      const right = besideOf(OVERVIEW);
+      const fivesBox = right.tiles.find(({ name }) => name === "5")?.box;
+      const { container, rerender } = render(
+        <OverviewPicker
+          aim="3"
+          cards={{}}
+          overviews={[OVERVIEW, right]}
+          {...props}
+        />,
+      );
+      const before = ringOf(container, "aim");
+
+      rerender(
+        <OverviewPicker
+          aim="5"
+          cards={{ "3": "5", "5": "3" }}
+          overviews={[OVERVIEW, right]}
+          {...props}
+        />,
+      );
+
+      expect(ringOf(container, "aim")).toBe(before);
+      expect(fivesBox).toBeDefined();
+      if (fivesBox !== undefined) {
+        expect(at(before)).toStrictEqual(placeOf(fivesBox));
+      }
+    });
   });
 
   it("moves the keyboard on to the next monitor's workspaces at the edge of its own", () => {

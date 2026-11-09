@@ -90,8 +90,12 @@ describe("OverviewBackdrop", () => {
       return `matrix(${scale.toString()}, 0, 0, ${scale.toString()}, ${(box?.x ?? 0).toString()}, ${(box?.y ?? 0).toString()})`;
     };
     expect(cardOf("3")).toBe(before);
-    expect(cardOf("3")?.style.transform).toBe(seenIn(one?.box));
-    expect(cardOf("1")?.style.transform).toBe(seenIn(three?.box));
+    expect(cardOf("3")?.style.getPropertyValue("--card-at")).toBe(
+      seenIn(one?.box),
+    );
+    expect(cardOf("1")?.style.getPropertyValue("--card-at")).toBe(
+      seenIn(three?.box),
+    );
     expect(cardOf("1")?.style.getPropertyValue("inline-size")).toBe(
       `${screen.width.toString()}px`,
     );
@@ -118,8 +122,63 @@ describe("OverviewBackdrop", () => {
       container.querySelector<HTMLElement>(`[data-overview-card="${id}"]`);
 
     expect(screen.x).not.toBe(0);
-    expect(cardOf("6")?.style.transform).toBe(seenIn(five?.box));
-    expect(cardOf("5")?.style.transform).toBe(seenIn(six?.box));
+    expect(cardOf("6")?.style.getPropertyValue("--card-at")).toBe(
+      seenIn(five?.box),
+    );
+    expect(cardOf("5")?.style.getPropertyValue("--card-at")).toBe(
+      seenIn(six?.box),
+    );
+  });
+
+  it("slides a card crossing to another monitor in from where it was", () => {
+    // Each screen's cards are its own, so the card is drawn afresh on the
+    // other: from its old tile, as that screen sees it.
+    const left = overviewOf(false);
+    const right = besideOf(left);
+    const { container, rerender } = render(
+      <OverviewBackdrop
+        cards={{}}
+        closing={false}
+        onClosed={() => undefined}
+        overviews={[left, right]}
+      />,
+    );
+    const threesBox = left.tiles.find(({ name }) => name === "3")?.box;
+
+    rerender(
+      <OverviewBackdrop
+        cards={{ "3": "5", "5": "3" }}
+        closing={false}
+        onClosed={() => undefined}
+        overviews={[left, right]}
+      />,
+    );
+
+    const { screen } = right.screen.geometry;
+    const crossed = container.querySelector<HTMLElement>(
+      '[data-overview-card="3"]',
+    );
+    const scale = (threesBox?.width ?? 0) / screen.width;
+    expect(crossed?.closest("[data-overview-backdrop]")).toBe(
+      container.querySelectorAll("[data-overview-backdrop]")[1] ?? null,
+    );
+    expect(crossed?.style.getPropertyValue("--card-from")).toBe(
+      `matrix(${scale.toString()}, 0, 0, ${scale.toString()}, ${((threesBox?.x ?? 0) - screen.x).toString()}, ${((threesBox?.y ?? 0) - screen.y).toString()})`,
+    );
+    // Its next drawing is where it is.
+    rerender(
+      <OverviewBackdrop
+        cards={{ "3": "5", "5": "3" }}
+        closing={false}
+        onClosed={() => undefined}
+        overviews={[left, right]}
+      />,
+    );
+    expect(
+      container
+        .querySelector<HTMLElement>('[data-overview-card="3"]')
+        ?.style.getPropertyValue("--card-from"),
+    ).toBe("");
   });
 
   it("is not closed by its fade in ending", () => {
