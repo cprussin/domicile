@@ -14,7 +14,7 @@
 # document with an IntersectionObserver. A `<webview>` counts as one
 # (`RemoteFrameView::HasActiveIntersectionObservations`), so every workspace
 # switch redoes the desk's paint and commit each frame. Upstream leaves the
-# parameter off for its power cost. `domicile_trim.gn` builds without the
+# parameter off for its power cost. Patch 0196 drops that study from the
 # testing config.
 #
 # The shell slides a box across the viewport for a second and counts the
@@ -138,7 +138,7 @@ frames (${MEASURED##* } observer callbacks)"
     FAILURE="THE SHELL RAN A MAIN FRAME FOR EVERY FRAME OF A COMPOSITED SLIDE \
 (${MEASURED##* } observer callbacks): CompositedAnimationsForceMainFrames is \
 forcing them. The field trial testing config turns it on; \
-domicile_trim.gn sets disable_fieldtrial_testing_config"
+patch 0196 drops the CompositedAnimationsForceMainFrames study from it"
   fi
   ;;
 "control 1 "*)

@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a slide runs no main frame per frame
+
+The field trial testing config turns on
+`CompositedAnimationsForceMainFrames` with `intersection-observer`. A
+document with an intersection observation then runs a main frame and a
+commit for every frame of a composited transform animation. Every
+`<webview>` counts as one (`RemoteFrameView` always reports an active
+observation), so each workspace slide redid the desk's paint on every
+frame.
+
+The study is dropped from the config. The rest of the config stays: a
+build without it (`disable_fieldtrial_testing_config`) also lost the
+experiments a desk benefits from.
+
+Guarded by `guard-animation-main-frames.sh`.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ testing/variations/fieldtrial_testing_config.json | 25 -------------------------
+ 1 file changed, 25 deletions(-)
+
+diff --git a/testing/variations/fieldtrial_testing_config.json b/testing/variations/fieldtrial_testing_config.json
+index 9433e1b..ace9980 100644
+--- a/testing/variations/fieldtrial_testing_config.json
++++ b/testing/variations/fieldtrial_testing_config.json
+@@ -5009,31 +5009,6 @@
+             ]
+         }
+     ],
+-    "CompositedAnimationsForceMainFrames": [
+-        {
+-            "platforms": [
+-                "android",
+-                "android_webview",
+-                "chromeos",
+-                "fuchsia",
+-                "linux",
+-                "mac",
+-                "windows"
+-            ],
+-            "experiments": [
+-                {
+-                    "name": "Enabled",
+-                    "params": {
+-                        "anchor-transform": "true",
+-                        "intersection-observer": "true"
+-                    },
+-                    "enable_features": [
+-                        "CompositedAnimationsForceMainFrames"
+-                    ]
+-                }
+-            ]
+-        }
+-    ],
+     "CompressionDictionaryPreload": [
+         {
+             "platforms": [
+-- 
+2.43.0
+

@@ -67,7 +67,7 @@ expect "a few callbacks is the pass" "pass" "$(verdict "claim 1 5")"
 expect "the limit itself passes" "pass" "$(verdict "claim 1 10")"
 expect "one a frame is a failure" "fail" "$(verdict "claim 1 61")"
 expect "and names the testing config" "yes" \
-  "$(says "claim 1 61" "disable_fieldtrial_testing_config")"
+  "$(says "claim 1 61" "patch 0196")"
 expect "a slide that never ended is a failure" "fail" "$(verdict "claim 1 none")"
 expect "a shell that never ran is a failure" "fail" "$(verdict "claim 0 none")"
 
