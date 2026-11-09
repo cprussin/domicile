@@ -10,12 +10,13 @@ see the `configuring N display(s)` lines.
 Unverified. On a tty with a touchpad, open Google Chrome with
 `--ozone-platform=wayland --app=<a long page>`. Expect:
 
-- a two-finger pinch zooms the page, and the shell around it stays put;
+- a two-finger pinch zooms the whole desktop around the pointer, and the
+  page inside keeps its own zoom;
 - a two-finger swipe right goes back, and left goes forward;
 - a vertical two-finger scroll scrolls without navigating.
 
-`RUST_LOG=domicile_compositor=trace` logs each `pointer_pinch` the compositor
-gets. No line: the engine never saw the pinch.
+A two-finger pinch zooms the whole desktop the same way over a browser
+window, a native app and the empty desktop.
 
 In Manganese with windows on two workspaces of one monitor:
 

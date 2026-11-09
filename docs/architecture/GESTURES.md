@@ -10,8 +10,11 @@ way it binds keys. Tracks
 ```
 libinput (engine, tty)  ─┐
 host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ──▶ compositor ──▶ client
-(engine, nested)             (ui::GestureEvent       (default    (pointer_pinch,  (zwp_pointer_
-                              + NativePinch)          handling)   pointer_axis)    gestures_v1)
+(engine, nested)             (ui::GestureEvent       (default    (pointer_axis)   (wl_pointer
+                              + NativePinch)          handling)                    axis)
+                                     │
+                                     ├─▶ desk page scale
+                                     │   (any pinch not grabbed)
                                      │
                                      ├─▶ DomicileHost `gesture` ──▶ bindKeys
                                      │   (3+ fingers, grabbed)
@@ -23,11 +26,12 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 | Piece | Where | Does |
 |---|---|---|
 | Acquisition | engine `libinput_event_converter.cc`, `wayland_zwp_pointer_gestures.cc` (patch `0184`) | Turns libinput or host pinch into a `ui::GestureEvent` carrying `NativePinch`: phase, device, time, fingers, absolute scale, rotation, cancellation |
-| Page | engine `touchpad_pinch_event_queue.cc`, `mouse_wheel_event_manager.cc` | Keeps native pinches out of coalescing and page zoom. A canceled `wheel` claims the gesture for the shell |
-| `<app>` | `html_app_element.cc` | Forwards the pinch to its client as `pointer_pinch` |
+| Desk zoom | engine `render_widget_host_input_event_router.cc` (patch `0196`) | Every touchpad pinch the shell did not grab goes straight to the desk's page scale: no hit test, no synthetic ctrl+wheel, so no page or `<app>` sees it |
+| Page | engine `touchpad_pinch_event_queue.cc`, `mouse_wheel_event_manager.cc` | Keeps native pinches out of coalescing and page zoom. A canceled `wheel` claims the gesture for the shell. Unused while every pinch zooms the desk |
+| `<app>` | `html_app_element.cc` | Forwards the pinch to its client as `pointer_pinch`. Unused while every pinch zooms the desk |
 | Wire | `domicile_protocol::pinch::Pinch` | `begin`, `update`, `end` |
 | Delivery | `domicile-compositor` (`pinch.rs`) | One active pinch, owned by the connection and device that began it. Ends canceled on pointer leave, lock, window close or a dropped connection |
-| Shell grab | engine `native_gesture_sink.*` (patch `0185`), `desk_gestures.*`, `DomicileHost.grabGesture` | libinput (or the host, nested) offers each gesture of three fingers or more to the sink before the pinch path. `DeskGestures` takes it when a page grabbed its kind and count, and sends every phase to the first such page as a `gesture` event. A swipe or hold nobody grabbed goes to the next row; a pinch goes on to the page |
+| Shell grab | engine `native_gesture_sink.*` (patch `0185`), `desk_gestures.*`, `DomicileHost.grabGesture` | libinput (or the host, nested) offers each gesture of three fingers or more to the sink before the pinch path. `DeskGestures` takes it when a page grabbed its kind and count, and sends every phase to the first such page as a `gesture` event. A swipe or hold nobody grabbed goes to the next row; a pinch zooms the desk |
 | Unbound swipes and holds | `desk_gestures.*`, `control_channel.cc`, `domicile_protocol::swipe`, `domicile-compositor` (`swipe.rs`) | The first page's channel sends a swipe or hold of three fingers or more that nobody grabbed as `pointer_swipe` or `pointer_hold`, naming no window. The compositor gives it to the window under the pointer when it begins, if any. One at a time, owned by the connection that began it; ends canceled as a pinch does |
 | Bindings | `@domicile-desktop/sdk/gesture-binding`, `bind-keys` | Parses sway's grammar, grabs each kind and count, follows the phases, and runs the binding the finished gesture fits in the current mode |
 
@@ -119,16 +123,16 @@ fingers spreading, toggles the launcher.
 
 ## Key decisions
 
-- **Two fingers go to the page, three or more to the shell.** Pinch zoom and
+- **Two fingers go to the page, three or more to the shell.** Scrolling and
   history swipes belong to the window; workspace and overview gestures belong
-  to the shell.
+  to the shell. Pinch zoom is the exception, below.
 - **Phases, not end-only.** Bindings match on direction once committed, and
   shell animations follow the fingers.
-- **A pinch over a browser window zooms the desk.** When the page leaves the
-  pinch alone, Chrome hands it to the outermost page, the desk, which zooms
-  as a whole, like a magnifier. Kept on purpose (user, 2026-11-09): page zoom
-  per window was tried (#1944) and reverted. A native app's pinch stays the
-  app's, and the shell's scale stays 1 over it.
+- **A pinch always zooms the desk.** A touchpad pinch the shell did not grab
+  zooms the outermost page, the desk, as a whole, like a magnifier, whatever
+  is under the pointer: a browser window, a native app or the desk itself. No
+  page or app sees it (user, 2026-11-09). Zooming the page or app under the
+  pointer (#1944) made a pinch do something different over each window.
 - **libinput recognizes; the engine keeps its numbers.** No thresholds of our
   own and no new settings.
 - **Grabs name a kind and count, not a direction.** The engine has to take a
