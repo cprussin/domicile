@@ -1975,7 +1975,7 @@
             # A mouse to put the pointer over the window, a keyboard, and a
             # multitouch pad libinput takes for a touchpad. The test writes a
             # command per line to `/run/input`: `move DX DY`, `key a`, `key
-            # shift`, `swipe` or `pinch`.
+            # shift`, `swipe`, `pinch`, `meta pinch` or `meta scroll`.
             hardware.uinput.enable = true;
             systemd.services.test-input = {
               wantedBy = [ "multi-user.target" ];
@@ -1997,7 +1997,7 @@
                     name="test mouse",
                 )
                 keyboard = UInput(
-                    {e.EV_KEY: [e.KEY_A, e.KEY_LEFTSHIFT]},
+                    {e.EV_KEY: [e.KEY_A, e.KEY_LEFTSHIFT, e.KEY_LEFTMETA]},
                     name="test keyboard",
                 )
                 KEYS = {"a": e.KEY_A, "shift": e.KEY_LEFTSHIFT}
@@ -2072,6 +2072,24 @@
                     ])
 
 
+                def scroll():
+                    """Side by side, 15 mm apart, 30 mm down."""
+                    two_fingers([
+                        [(1700, 800 + 30 * step), (2300, 800 + 30 * step)]
+                        for step in range(40)
+                    ])
+
+
+                def with_meta(gesture):
+                    """`gesture` with the left Meta key held."""
+                    keyboard.write(e.EV_KEY, e.KEY_LEFTMETA, 1)
+                    keyboard.syn()
+                    time.sleep(0.05)
+                    gesture()
+                    keyboard.write(e.EV_KEY, e.KEY_LEFTMETA, 0)
+                    keyboard.syn()
+
+
                 os.mkfifo("/run/input")
                 while True:
                     with open("/run/input") as commands:
@@ -2091,6 +2109,10 @@
                                     swipe()
                                 case ["pinch"]:
                                     pinch()
+                                case ["meta", "pinch"]:
+                                    with_meta(pinch)
+                                case ["meta", "scroll"]:
+                                    with_meta(scroll)
               '';
             };
             fonts.enableDefaultPackages = true;
@@ -2198,12 +2220,50 @@
                 retry(lambda _: traced(r"pinch_end\([0-9]+, 0\)"), timeout=dt.timedelta(seconds=10))
 
 
+            def counted(pattern):
+                """How many of the client's trace lines match `pattern`."""
+                return int(machine.succeed(
+                    f"grep -cE '{pattern}' /tmp/client.log || true").strip())
+
+
+            def the_screen():
+                """A screenshot without the pointer, to compare."""
+                machine.succeed(
+                    "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                    "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                    "grim /tmp/screen.png' && cp /tmp/screen.png /tmp/before.png")
+
+
+            def the_screen_changed():
+                machine.succeed(
+                    "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                    "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                    "grim /tmp/screen.png'")
+                return machine.execute("cmp -s /tmp/screen.png /tmp/before.png")[0] != 0
+
+
+            def meta_magnifies_the_desk_instead(gesture, events):
+                """Meta+`gesture` over the window magnifies the desk, and the
+                window gets none of its `events`."""
+                before = counted(events)
+                say("move 1 1")
+                the_screen()
+                say(f"meta {gesture}")
+                try:
+                    retry(lambda _: the_screen_changed(), timeout=dt.timedelta(seconds=30))
+                except Exception:
+                    raise AssertionError(f"Meta+{gesture} never magnified the desk")
+                assert counted(events) == before, f"Meta+{gesture} reached the window"
+
+
             machine.wait_for_unit("multi-user.target")
             try:
                 the_window_has_the_pointer()
                 a_swipe_scrolls_with_fingers_and_stops()
                 a_pinch_reaches_the_window()
                 the_pointer_hides_while_typing_and_after_a_pause()
+                meta_magnifies_the_desk_instead("pinch", r"pinch_begin\(")
+                meta_magnifies_the_desk_instead("scroll", r"\baxis\(")
             except Exception:
                 machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                 # The runner keeps only the tail of this output, so the
