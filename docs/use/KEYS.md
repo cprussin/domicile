@@ -50,6 +50,7 @@ or Super key).
 | Meta+Shift+Return | Lock |
 | Print | [Screenshot](SCREENSHOTS.md) |
 | Volume, mute and brightness keys | Step the level, shown in a small notice |
+| Meta+pinch, Meta+two-finger scroll | Magnify the whole screen around the pointer |
 
 ## In a browser window
 
@@ -59,6 +60,7 @@ or Super key).
 | Ctrl+R | Reload |
 | Ctrl+F | Find in the page |
 | Ctrl+Plus / Ctrl+Minus / Ctrl+0 | Zoom in / out / reset |
+| Two-finger pinch | Magnify the page around your fingers |
 | Ctrl+Shift+P | Print |
 | Ctrl+Shift+I | Developer tools |
 
