@@ -1923,7 +1923,9 @@
         # multitouch pad, and a native window under the pointer gets its
         # two-finger swipe as finger scrolling with axis stops, and its pinch
         # as `zwp_pointer_gestures_v1`. Covers the acquisition the nested
-        # guards cannot. See docs/architecture/GESTURES.md.
+        # guards cannot. See docs/architecture/GESTURES.md. Also hides the
+        # pointer on typing and after a pause, and shows it on a move,
+        # keeping the window's pointer focus.
         #
         # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
         touchpad-gestures-on-a-tty = pkgs.testers.runNixOSTest {
@@ -1944,16 +1946,30 @@
               extraGroups = [ "domicile" "video" "input" ];
             };
             services.getty.autologinUser = "alice";
-            environment.loginShellInit = ''
-              if [ "$(tty)" = /dev/tty1 ]; then
-                export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*evdev*=1,*domicile*=1"
-                export RUST_LOG=domicile_compositor=debug
-                exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
-              fi
-            '';
-            # A mouse to put the pointer over the window, and a multitouch pad
-            # libinput takes for a touchpad. The test writes a command per line
-            # to `/run/input`: `move DX DY`, `swipe` or `pinch`.
+            environment.loginShellInit =
+              let
+                config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                  theme = {
+                    cursor_hide_after_ms = 5000;
+                    cursor_hide_when_typing = true;
+                  };
+                });
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.json
+                  export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*evdev*=1,*domicile*=1"
+                  export RUST_LOG=domicile_compositor=debug
+                  exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
+                fi
+              '';
+            # Screenshots with and without the pointer.
+            environment.systemPackages = [ pkgs.grim ];
+            # A mouse to put the pointer over the window, a keyboard, and a
+            # multitouch pad libinput takes for a touchpad. The test writes a
+            # command per line to `/run/input`: `move DX DY`, `key a`, `key
+            # shift`, `swipe` or `pinch`.
             hardware.uinput.enable = true;
             systemd.services.test-input = {
               wantedBy = [ "multi-user.target" ];
@@ -1974,6 +1990,11 @@
                     },
                     name="test mouse",
                 )
+                keyboard = UInput(
+                    {e.EV_KEY: [e.KEY_A, e.KEY_LEFTSHIFT]},
+                    name="test keyboard",
+                )
+                KEYS = {"a": e.KEY_A, "shift": e.KEY_LEFTSHIFT}
                 pad = UInput(
                     {
                         e.EV_KEY: [
@@ -2054,6 +2075,12 @@
                                     mouse.write(e.EV_REL, e.REL_X, int(dx))
                                     mouse.write(e.EV_REL, e.REL_Y, int(dy))
                                     mouse.syn()
+                                case ["key", name]:
+                                    keyboard.write(e.EV_KEY, KEYS[name], 1)
+                                    keyboard.syn()
+                                    time.sleep(0.05)
+                                    keyboard.write(e.EV_KEY, KEYS[name], 0)
+                                    keyboard.syn()
                                 case ["swipe"]:
                                     swipe()
                                 case ["pinch"]:
@@ -2118,6 +2145,46 @@
                 assert not traced(r"axis_discrete\("), "a finger scroll came with wheel steps"
 
 
+            def the_pointer_is_drawn():
+                """Whether a screenshot with the pointer differs from one without."""
+                shoot = (
+                    "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                    "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                    "grim {flag} /tmp/{name}.png'"
+                )
+                machine.succeed(shoot.format(flag="-c", name="with"))
+                machine.succeed(shoot.format(flag="", name="without"))
+                return machine.execute("cmp -s /tmp/with.png /tmp/without.png")[0] != 0
+
+
+            def leaves():
+                return int(machine.succeed(
+                    "grep -cE 'wl_pointer@[0-9]+\\.leave\\(' /tmp/client.log || true").strip())
+
+
+            def the_pointer_hides_while_typing_and_after_a_pause():
+                left = leaves()
+                say("move 1 1")
+                say("key shift")
+                assert the_pointer_is_drawn(), "Shift alone hid the pointer"
+                say("key a")
+                try:
+                    retry(lambda _: not the_pointer_is_drawn(), timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("typing never hid the pointer")
+                say("move 1 1")
+                try:
+                    retry(lambda _: the_pointer_is_drawn(), timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("a move never showed the pointer")
+                # `cursor_hide_after_ms` is 5000.
+                try:
+                    retry(lambda _: not the_pointer_is_drawn(), timeout=dt.timedelta(seconds=30))
+                except Exception:
+                    raise AssertionError("the pointer never hid after a pause")
+                assert leaves() == left, "hiding the pointer took it off the window"
+
+
             def a_pinch_reaches_the_window():
                 say("pinch")
                 retry(lambda _: traced(r"pinch_begin\([0-9]+, 2\)"), timeout=dt.timedelta(seconds=30))
@@ -2130,6 +2197,7 @@
                 the_window_has_the_pointer()
                 a_swipe_scrolls_with_fingers_and_stops()
                 a_pinch_reaches_the_window()
+                the_pointer_hides_while_typing_and_after_a_pause()
             except Exception:
                 machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                 # The runner keeps only the tail of this output, so the
@@ -2140,6 +2208,7 @@
                     "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
                     "grep -vE '^\\[' /tmp/domicile.log | grep -iE 'pointer|focus|toplevel|seat|window' | tail -15 | cut -c1-200 || true",
                     "grep -E '^\\[' /tmp/domicile.log | grep -iE 'pointer|cursor|test mouse|touchpad' | tail -12 | cut -c1-200 || true",
+                    "grep -E 'hides the pointer' /tmp/domicile.log | tail -3 | cut -c1-200 || true",
                 ]:
                     print(f"$ {command}")
                     print(machine.execute(f"{command} 2>&1")[1])

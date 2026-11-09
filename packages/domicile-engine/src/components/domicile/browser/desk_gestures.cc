@@ -60,6 +60,12 @@ void DeskGestures::Ungrab(ChannelId channel, GestureGrab grab) {
   std::erase(found->grabs, grab);
 }
 
+void DeskGestures::ListenForTouchpad(base::RepeatingClosure touched) {
+  base::AutoLock held(lock_);
+  CHECK(touched_.is_null());
+  touched_ = std::move(touched);
+}
+
 bool DeskGestures::Takes(const ui::NativeGesture& begin) {
   base::AutoLock held(lock_);
   return Grabbing(begin) || Forwarding(begin);
@@ -67,8 +73,13 @@ bool DeskGestures::Takes(const ui::NativeGesture& begin) {
 
 void DeskGestures::Take(const ui::NativeGesture& gesture) {
   Performed tell;
+  base::RepeatingClosure touched;
   {
     base::AutoLock held(lock_);
+    // An edge swipe is a touchscreen's; everything else is a touchpad's.
+    if (gesture.kind != ui::NativeGestureKind::kEdge) {
+      touched = touched_;
+    }
     if (gesture.phase == ui::NativeGesturePhase::kBegin) {
       owner_.reset();
       if (const Channel* grabbing = Grabbing(gesture)) {
@@ -77,17 +88,22 @@ void DeskGestures::Take(const ui::NativeGesture& gesture) {
         owner_ = Owner{forwarding->id, true};
       }
     }
-    if (!owner_) {
-      return;
-    }
-    auto found = std::ranges::find(channels_, owner_->channel, &Channel::id);
-    CHECK(found != channels_.end());
-    tell = owner_->unbound ? found->unbound : found->performed;
-    if (gesture.phase == ui::NativeGesturePhase::kEnd) {
-      owner_.reset();
+    if (owner_) {
+      auto found =
+          std::ranges::find(channels_, owner_->channel, &Channel::id);
+      CHECK(found != channels_.end());
+      tell = owner_->unbound ? found->unbound : found->performed;
+      if (gesture.phase == ui::NativeGesturePhase::kEnd) {
+        owner_.reset();
+      }
     }
   }
-  tell.Run(gesture);
+  if (!touched.is_null()) {
+    touched.Run();
+  }
+  if (!tell.is_null()) {
+    tell.Run(gesture);
+  }
 }
 
 const DeskGestures::Channel* DeskGestures::Grabbing(

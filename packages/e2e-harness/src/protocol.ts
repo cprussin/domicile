@@ -503,12 +503,16 @@ const windowsThemeMessageSchema = z.looseObject({
 });
 
 // The config's accent color, contrast and reduced motion, which the settings
-// portal also serves applications, and the pointer's XCursor theme, which the
-// browser process reads. Sent with the handshake and on a reload that changes
-// them. `accent_color` and `cursor` are absent when unset.
+// portal also serves applications, and the pointer's XCursor theme and when to
+// hide it, which the browser process reads. Sent with the handshake and on a
+// reload that changes them. `accent_color`, `cursor` and `cursor_hiding` are
+// absent when unset.
 const appearanceSchema = z.looseObject({
   accent_color: z.string().optional(),
   cursor: z.object({ name: z.string(), size: z.number() }).optional(),
+  cursor_hiding: z
+    .object({ after_ms: z.number().optional(), when_typing: z.boolean() })
+    .optional(),
   high_contrast: z.boolean(),
   reduced_motion: z.boolean(),
   type: z.literal("appearance"),
