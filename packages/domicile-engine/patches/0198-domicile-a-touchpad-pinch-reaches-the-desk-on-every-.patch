@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a touchpad pinch reaches the desk on every monitor
+
+A pinch did nothing on a docked laptop: not over a page, not over an app,
+and not with Meta held. `DrmWindowHost::CanDispatchEvent` sends every
+mouse, scroll and key event to the desk's host window (patch 0064), but a
+touchpad pinch is a gesture event, so it fell through to upstream's
+`bounds_.Contains`. That compares the pointer's place on the engine's
+CRTC row with each window's bounds, so a pinch with the pointer off the
+host's monitor went to a presenter, which takes nothing, or to no window.
+On one monitor the host is the only window, which is why it worked
+undocked.
+
+- `CanDispatchEvent`: a gesture event goes to the desk's host, as a mouse
+  or scroll event does.
+- `DispatchEvent`: a gesture event is placed with `cursor_->ToWindow`, as
+  a mouse or scroll event is, so it lands where the pointer is on the desk.
+
+The only platform gesture events on drm are evdev's touchpad pinches;
+touchscreen gestures are made later, by aura, from touches.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. The `two-monitors-on-a-tty` VM test checks it.
+---
+ ui/ozone/platform/drm/host/drm_window_host.cc | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index d0eed1e..639003a 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -391,7 +391,10 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
+   // DOMICILE: one page for the desk hears every pointer and key, on whichever
+   // monitor, and every touch from a device bound to a display
+   // (`DrmPointerTargets`). The rest are presenters, showing its page and
+-  // taking nothing. An unbound touch keeps upstream's answer below.
++  // taking nothing. An unbound touch keeps upstream's answer below. A
++  // touchpad pinch is the pointer's too: it is at the pointer, and on a desk
++  // of several monitors upstream's answer below sent it to whichever
++  // presenter's row the pointer's place fell in, or to none.
+   const gfx::AcceleratedWidget desk = window_manager_->desk_host();
+   const bool bound_touch =
+       event->IsTouchEvent() &&
+@@ -399,7 +402,7 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
+           event->source_device_id()) != display::kInvalidDisplayId;
+   if (desk != gfx::kNullAcceleratedWidget &&
+       (event->IsMouseEvent() || event->IsScrollEvent() ||
+-       event->IsKeyEvent() || bound_touch)) {
++       event->IsGestureEvent() || event->IsKeyEvent() || bound_touch)) {
+     return desk == widget_;
+   }
+ 
+@@ -517,10 +520,11 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
+     // y = 0 -- which on a desk of turned monitors at other densities is
+     // somewhere else entirely. On the host's own monitor it is the upstream
+     // arithmetic. See `PointerInWindow`. A touch reaches here only from a
+-    // device bound to a display, so it is placed the same way.
++    // device bound to a display, and a touchpad pinch is at the pointer, so
++    // both are placed the same way.
+     const gfx::PointF location =
+         event->IsMouseEvent() || event->IsScrollEvent() ||
+-                event->IsTouchEvent()
++                event->IsGestureEvent() || event->IsTouchEvent()
+             ? cursor_->ToWindow(widget_, located_event->location_f())
+             : located_event->location_f() -
+                   gfx::Vector2dF(bounds_.OffsetFromOrigin());
+-- 
+2.43.0
+
