@@ -5,7 +5,8 @@
 # packages/domicile-engine/tests/test-a-flick-on-a-page-glides.sh and
 # packages/domicile-engine/tests/test-a-mouse-goes-through-libinput.sh; and the `AbsoluteMouse*`
 # suites of patch 0123; `TypingGuardTest`, see
-# packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh), the native
+# packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh;
+# `EvdevWarpTest`, patch 0195), the native
 # input lifecycle suites, `WaylandPointerTest` and
 # `WaylandKeyboardWithoutKeymapTest` (see
 # packages/domicile-engine/tests/test-modifiers-wait-for-a-keymap.sh), and three
@@ -65,6 +66,7 @@ SUITES=(
   EventDeviceInfoTest:31
   InputSettingsTest:6
   TypingGuardTest:15
+  EvdevWarpTest:2
   WheelTicksTest:3
   AbsoluteMouseDeviceTest:2
   AbsoluteMouseConverterTest:7
