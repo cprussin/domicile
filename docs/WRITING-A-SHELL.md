@@ -255,10 +255,12 @@ The engine routes the pointer and keyboard over an `<app>` to its client, in
 the client's own coordinates through every CSS transform, so no helper is
 required.
 
-A touchpad pinch the shell did not bind zooms the shell's page, the whole
-desktop, wherever the pointer is. No `<app>` client or page gets it, and no
-`wheel` event fires for it. Bind pinches of three fingers or more with
-`bindKeys` to take them.
+Touchpad pinch over an `<app>` is forwarded to the native client as a Wayland
+gesture, and over a `<webview>` it magnifies that page. Neither zooms the
+surrounding shell. A shell can take the gesture by canceling its `wheel`
+events, as it can other default input handling. A pinch begun with Meta held,
+and Meta+scroll, magnify the shell's own page instead, and never reach a
+`<webview>`, an `<app>` or the shell's `wheel` listeners.
 
 A finger on an `<app>` reaches the client as a touch point, or as the pointer
 for a client that reads no touch. `<app>` has `touch-action: none`, so the

@@ -242,20 +242,47 @@ export const HostShell = (_root, desktop) => {
             if args.engine:
                 receipt["shell_scale_after"] = shell_evaluate("visualViewport.scale")
             (out / "receipt.json").write_text(json.dumps(receipt, indent=2))
+            assert receipt["after_pinch"]["scale"] > 1.2, receipt
             if args.engine:
-                # Through the engine, a pinch zooms the desk whatever is under
-                # the pointer, and the native window never sees it.
-                assert receipt["shell_scale_after"] > 1.2, receipt
-                assert receipt["after_pinch"]["scale"] == receipt["before_pinch"]["scale"], receipt
+                assert receipt["shell_scale_after"] == receipt["shell_scale_before"], receipt
+                command("Emulation.setPageScaleFactor", {"pageScaleFactor": 1})
+                shell_evaluate("""window.__pinchApp = document.querySelector('app');
+                    window.__removeOnPinch = event => {
+                      if (event.ctrlKey && event.deltaY !== 0) {
+                        window.removeEventListener('wheel', __removeOnPinch, true);
+                        __pinchApp.remove();
+                      }
+                    };
+                    window.addEventListener('wheel', __removeOnPinch,
+                      {capture:true, passive:true}); true""")
+                pinch("begin", fingers=2)
+                time.sleep(0.05)
+                pinch("update", dx=0, dy=0, scale=1.2, rotation=0)
+                time.sleep(0.05)
+                pinch("update", dx=0, dy=0, scale=1.4, rotation=0)
+                pinch("end", canceled=False)
+                time.sleep(0.4)
+                receipt["removed_during_pinch"] = {
+                    "chrome": state(), "shell_scale": shell_evaluate("visualViewport.scale")}
+                assert receipt["removed_during_pinch"]["chrome"]["scale"] == 1, receipt
+                assert receipt["removed_during_pinch"]["shell_scale"] == 1, receipt
                 trace = re.sub(r"\x1b\[[0-9;]*m", "",
                                (out / "chrome.stderr").read_text())
-                receipt["native_pinch_begins"] = len(re.findall(
-                    r"zwp_pointer_gesture_pinch_v1[^\n]*\.begin\(", trace))
-                assert receipt["native_pinch_begins"] == 0, receipt
-                cdp_wire.command(shell_wire, 501, "Emulation.setPageScaleFactor",
-                                 {"pageScaleFactor": 1})
-            else:
-                assert receipt["after_pinch"]["scale"] > 1.2, receipt
+                canceled_ends = re.findall(
+                    r"zwp_pointer_gesture_pinch_v1[^\n]*\.end\(\d+,\s*\d+,\s*1\)",
+                    trace)
+                receipt["native_pinch_cancellations"] = len(canceled_ends)
+                assert canceled_ends, "Chrome received no canceled Wayland pinch end"
+                shell_evaluate("document.body.append(__pinchApp); true")
+                input_say({"type":"pointer_motion", "app_id":input_app,
+                           "x":301,"y":201,"moved":True})
+                time.sleep(0.1)
+                pinch("begin", fingers=2)
+                pinch("update", dx=0, dy=0, scale=1.2, rotation=0)
+                pinch("end", canceled=False)
+                time.sleep(0.4)
+                receipt["pinch_after_removal"] = state()
+                assert receipt["pinch_after_removal"]["scale"] > 1.1, receipt
         command("Emulation.setPageScaleFactor", {"pageScaleFactor": 1})
         for path in ["/a", "/b", "/c"]:
             command("Page.navigate", {"url": url + path})

@@ -47,11 +47,10 @@ python3 packages/domicile-engine/scripts/guard-native-chrome-gestures.py \
 
 The output directory must be new. The test creates empty profiles and private
 runtime directories, then records page scale, history changes, process exits and
-crash dumps. Through the engine it checks that a pinch over the `<app>` zooms the
-shell and never reaches the native window; without `--engine` it checks the
-compositor's pinch reaches the client and zooms its page. Then it checks
-horizontal history navigation and vertical scrolling without navigation.
-`--history-only` isolates the existing finger-scroll behavior.
+crash dumps. It checks pinch zoom, cancellation when an `<app>` is removed during
+dispatch, a new pinch after removal, horizontal history navigation and vertical
+scrolling without navigation. `--history-only` isolates the existing finger-scroll
+behavior. Omitting `--engine` tests the compositor and native client directly.
 
 The input is native Wayland pinch and finger-axis events from the outer
 compositor. CDP reads the resulting page state; it does not inject gestures.
