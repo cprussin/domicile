@@ -598,11 +598,6 @@ class WebViewGuest : public mojom::WebViewGuest,
   // ZoomRequested in the mojom.
   void ContentsZoomChange(bool zoom_in) override;
 
-  // A touchpad pinch the page left alone zooms it, as Ctrl+wheel steps it,
-  // and is reported like SetZoom. Applied here, not asked of the shell: a
-  // pinch follows the fingers, update by update.
-  void DomicilePinchZoom(content::WebContents* source, float scale) override;
-
   // Sends the context menu to the element as ContextMenuRequested so the
   // shell draws it instead of Chrome. The page's own `contextmenu` event has
   // already fired.
