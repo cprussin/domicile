@@ -75,11 +75,15 @@ ones that have windows, and the one shown.
 
 - Click a workspace to go there, or a window to go to it.
 - Drag a window onto another workspace to move it there.
-- Arrow keys or Meta+H/J/K/L pick a workspace, and Enter goes there.
+- Arrow keys or Meta+H/J/K/L pick a workspace, on to the next monitor at
+  the edge, and Enter goes there.
 - Meta+Shift+H/J/K/L swaps the picked workspace with the next one that way,
   windows and all.
-- Other window and workspace keys, and the bar's workspace buttons, do
-  nothing while it is open.
+- Other keys, and the bar's workspace buttons, do nothing while it is
+  open. Lock, screenshot, volume and brightness keys still work, and Meta+O
+  and the launcher and clipboard keys still close it.
+- The workspace your keys are on has a white ring; the one on screen has a
+  colored ring.
 - Escape, Meta+O, a four-finger spread, or a click outside the
   workspaces closes it. The launcher and clipboard close it too.
 

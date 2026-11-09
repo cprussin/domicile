@@ -372,9 +372,18 @@ with windows, and the shown one.
   workspace buttons are ignored with the keys. The aim is forgotten once its
   workspace loses its tile. The desktop turns `focus <way>` into
   `OverviewAimed` and `move <way>` into `WorkspacesSwapped` first
-  (`overview/steering.ts`), stepping through the tiles by `tileToward`. A
+  (`overview/steering.ts`), stepping through the tiles by `tileToward`:
+  `focus` on to the monitor past the edge of its own's tiles, as
+  `screenToward` picks outside the overview (`aimedToward`), `move` along
+  its own monitor's. A
   swap trades two workspaces' windows and homes; the screen keeps showing
   what it showed, under its new name.
+- `useKeybindings` drops every key's command while it is open but its own,
+  the launcher and clipboard toggles, lock, screenshot and the media keys
+  (`HEARD_OVER_OVERVIEW`), as it does for the launcher.
+- The picker rings the aimed tile white by `data-aimed`, the shown one
+  too: the keys are grabbed before the page sees them, so focusing a tile
+  never makes it `:focus-visible`.
 - Opening it closes the launcher and clipboard, and opening either closes it.
 - Opening it drops a window drag in progress, whose handles it hides.
 

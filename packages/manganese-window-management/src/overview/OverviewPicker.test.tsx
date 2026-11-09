@@ -4,8 +4,9 @@ import { useState } from "react";
 
 import type { Rect } from "../rect";
 import { appWindowId } from "../window";
-import { overviewOf } from "./fixture";
+import { besideOf, overviewOf } from "./fixture";
 import { OverviewPicker } from "./OverviewPicker";
+import type { ScreenOverview } from "./overview";
 
 const OVERVIEW = overviewOf(false);
 
@@ -37,7 +38,13 @@ type Picked =
   | { pickedWindow: string };
 
 /** The picker, keeping the aim its keys move as the desktop does. */
-const Aiming = ({ picked }: { picked: Picked[] }) => {
+const Aiming = ({
+  overviews = [OVERVIEW],
+  picked,
+}: {
+  overviews?: readonly ScreenOverview[];
+  picked: Picked[];
+}) => {
   const [aim, setAim] = useState<string | undefined>();
   return (
     <OverviewPicker
@@ -48,7 +55,7 @@ const Aiming = ({ picked }: { picked: Picked[] }) => {
       onMove={(id, workspace) => picked.push({ moved: [id, workspace] })}
       onPick={(workspace) => picked.push({ picked: workspace })}
       onPickWindow={(id) => picked.push({ pickedWindow: id })}
-      overviews={[OVERVIEW]}
+      overviews={overviews}
     />
   );
 };
@@ -109,6 +116,42 @@ describe("OverviewPicker", () => {
     rerender(<OverviewPicker aim="1" {...props} />);
 
     expect(document.activeElement).toBe(tile("1"));
+  });
+
+  it("rings the workspace aimed at, whatever moved the keyboard last", () => {
+    // The overview's own keys are grabbed before the page sees them, so the
+    // page cannot tell they were keys: `:focus-visible` would not ring the
+    // tile they move to.
+    const props = {
+      focused: "",
+      onAim: () => undefined,
+      onDismiss: () => undefined,
+      onMove: () => undefined,
+      onPick: () => undefined,
+      onPickWindow: () => undefined,
+      overviews: [OVERVIEW],
+    };
+    const { rerender } = render(<OverviewPicker aim={undefined} {...props} />);
+    expect(tile("3").hasAttribute("data-aimed")).toBe(false);
+
+    rerender(<OverviewPicker aim="1" {...props} />);
+
+    expect(tile("1").hasAttribute("data-aimed")).toBe(true);
+    expect(tile("3").hasAttribute("data-aimed")).toBe(false);
+    // On the one on screen too, which another monitor's shares the look of.
+    rerender(<OverviewPicker aim="3" {...props} />);
+    expect(tile("3").hasAttribute("data-aimed")).toBe(true);
+  });
+
+  it("moves the keyboard on to the next monitor's workspaces at the edge of its own", () => {
+    const picked: Picked[] = [];
+    render(
+      <Aiming overviews={[OVERVIEW, besideOf(OVERVIEW)]} picked={picked} />,
+    );
+
+    fireEvent.keyDown(tile("3"), { key: "ArrowRight" });
+
+    expect(document.activeElement).toBe(tile("5"));
   });
 
   it("keeps Tab among its tiles", () => {

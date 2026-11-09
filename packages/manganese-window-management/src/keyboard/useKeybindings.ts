@@ -22,6 +22,8 @@ type Options = {
   launcherOpen: boolean;
   /** The desk-wide binding mode, whichever page entered it. */
   mode: string;
+  /** Whether the overview is open, which blocks every key but its own. */
+  overviewOpen: boolean;
   /** Receives the action a key asks for. */
   onAction: (action: WindowAction) => void;
   /** Called when a key on this page enters a binding mode. */
@@ -35,7 +37,7 @@ type Options = {
  *
  * The SDK grabs the chords and reads each `shortcut` in the binding mode. This
  * hook parses `send-shell` commands (see `command.ts`), blocks keys while the
- * launcher is open, and syncs the binding mode.
+ * launcher or the overview is open, and syncs the binding mode.
  *
  * The mode is desk-wide: each monitor is a separate page, so a mode entered on
  * one page goes out via `onModeChanged` and comes back to every page as
@@ -50,6 +52,7 @@ export const useKeybindings = ({
   mode,
   onAction,
   onModeChanged,
+  overviewOpen,
   report = logToConsole,
 }: Options): void => {
   const binding = useRef<KeyBinding | undefined>(undefined);
@@ -58,7 +61,10 @@ export const useKeybindings = ({
     parseCommand(args).match({
       Err: report,
       Ok: (action) => {
-        if (!launcherOpen || heardOverLauncher(action)) {
+        if (
+          (!launcherOpen || heardOverLauncher(action)) &&
+          (!overviewOpen || HEARD_OVER_OVERVIEW.has(action.kind))
+        ) {
           onAction(action);
         }
       },
@@ -92,3 +98,23 @@ export const useKeybindings = ({
  */
 const heardOverLauncher = (action: WindowAction): boolean =>
   action.kind === WindowActionKind.LauncherToggled;
+
+/**
+ * The actions a key runs while the overview is open: its own, which steer it
+ * (see `steeredInOverview`), close it or swap it for the launcher or the
+ * clipboard, and the keys a keyboard's hardware labels, which act on no
+ * window. The overview is for picking a workspace, so keys that open or work
+ * windows behind it wait.
+ */
+const HEARD_OVER_OVERVIEW: ReadonlySet<WindowActionKind> = new Set([
+  WindowActionKind.ClipboardToggled,
+  WindowActionKind.DeskLocked,
+  WindowActionKind.FocusStepped,
+  WindowActionKind.LauncherToggled,
+  WindowActionKind.MediaKeyPressed,
+  WindowActionKind.OverviewDismissed,
+  WindowActionKind.OverviewShown,
+  WindowActionKind.OverviewToggled,
+  WindowActionKind.ScreenshotTaken,
+  WindowActionKind.WindowStepped,
+]);

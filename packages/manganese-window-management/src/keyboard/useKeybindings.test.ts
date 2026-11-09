@@ -7,15 +7,21 @@ import { act, renderHook } from "@testing-library/react";
 import { Direction } from "../direction";
 import type { WindowAction as Action } from "../window-state";
 import { WindowAction } from "../window-state";
+import { MediaKey } from "./media-key";
 import { useKeybindings } from "./useKeybindings";
 
 /** A sample of manganese's bindings. */
 const KEYS: ShellKeybindings = {
   keybindings: {
     "Meta+l": KeyAction.SendShell(["focus", "right"]),
+    "Meta+o": KeyAction.SendShell(["overview"]),
+    "Meta+Return": KeyAction.SendShell(["exec", "foot"]),
     "Meta+r": KeyAction.Mode("resize"),
+    "Meta+Shift+l": KeyAction.SendShell(["move", "right"]),
     "Meta+space": KeyAction.SendShell(["launcher"]),
+    "Meta+v": KeyAction.SendShell(["clipboard"]),
     "Meta+x": KeyAction.SendShell(["terminal"]),
+    XF86AudioRaiseVolume: KeyAction.SendShell(["volume", "up"]),
   },
   modes: {
     resize: { "Meta+l": KeyAction.SendShell(["resize", "grow", "right"]) },
@@ -36,7 +42,7 @@ const client = () => {
 };
 
 /** Render the hook over a fake host. */
-const bound = (launcherOpen = false) => {
+const bound = (launcherOpen = false, overviewOpen = false) => {
   const { domicile, presses } = client();
   const acted: Action[] = [];
   const modes: string[] = [];
@@ -54,6 +60,7 @@ const bound = (launcherOpen = false) => {
         onModeChanged: (entered) => {
           modes.push(entered);
         },
+        overviewOpen,
         report: (error) => {
           reported.push(error);
         },
@@ -81,6 +88,27 @@ describe("useKeybindings", () => {
     presses("Meta+space");
 
     expect(acted).toStrictEqual([WindowAction.LauncherToggled()]);
+  });
+
+  it("answers only the overview's own keys while it is up, and the hardware keys", () => {
+    // The overview is for picking a workspace: a key that opens a window or
+    // works one behind it would act on a desk the user cannot see.
+    const { acted, presses } = bound(false, true);
+
+    presses("Meta+Return");
+    presses("Meta+l");
+    presses("Shift+Meta+l");
+    presses("XF86AudioRaiseVolume");
+    presses("Meta+v");
+    presses("Meta+o");
+
+    expect(acted).toStrictEqual([
+      WindowAction.FocusStepped(Direction.Right),
+      WindowAction.WindowStepped(Direction.Right),
+      WindowAction.MediaKeyPressed(MediaKey.VolumeUp),
+      WindowAction.ClipboardToggled(),
+      WindowAction.OverviewToggled(),
+    ]);
   });
 
   it("says which command it does not know, and does nothing", () => {

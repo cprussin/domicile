@@ -9,7 +9,8 @@ import { within } from "../rect";
 import { placedAt, placedIn } from "../window-styles";
 import type { OverviewWindow, ScreenOverview } from "./overview";
 import { windowAt } from "./overview";
-import { tileAt, tileToward } from "./tiles";
+import { aimedToward } from "./steering";
+import { tileAt } from "./tiles";
 
 type Props = {
   /**
@@ -74,6 +75,7 @@ const ScreenPicker = ({
   onPick,
   onPickWindow,
   overview,
+  overviews,
 }: Props & { overview: ScreenOverview }) => {
   const { geometry, current } = overview.screen;
   const area = geometry.workspace;
@@ -100,9 +102,12 @@ const ScreenPicker = ({
     }
   }, [aimed]);
 
-  /** Moves the keyboard `direction` of the tile it is on, if it can. */
+  /**
+   * Moves the keyboard `direction` of the tile it is on, if it can: on to
+   * the next monitor's at the edge of this one's, as `steeredInOverview`.
+   */
   const aimToward = (direction: Direction) => {
-    const to = tileToward(overview.tiles, aimed ?? current, direction);
+    const to = aimedToward(overviews, aimed ?? current, direction);
     if (to !== undefined) {
       onAim(to.name);
     }
@@ -261,6 +266,7 @@ const ScreenPicker = ({
               name !== pressed.workspace &&
               tileAt([{ box, name }], pressed.to) !== undefined,
           })}
+          data-aimed={aim !== undefined && name === aimed ? "" : undefined}
           data-workspace={name}
           key={name}
           onClick={(event) => {
@@ -313,12 +319,15 @@ const pickerStyles = css({
 });
 
 // Rings drawn outside the tile, so they never cover its windows: the accent
-// for the workspace on screen, white under the pointer or keyboard.
+// for the workspace on screen, white under the pointer or keyboard. The
+// overview's own keys are grabbed before the page sees them, so a tile they
+// aim at is not `:focus-visible` and is ringed by `data-aimed` instead.
 const tileStyles = cva({
   base: {
     _focusVisible: { outlineColor: "onPhoto" },
     _hover: { outlineColor: "onPhoto" },
     "&[aria-current]": { outlineColor: "accent" },
+    "&[data-aimed]": { outlineColor: "onPhoto" },
     backgroundColor: "transparent",
     borderRadius: "md",
     borderStyle: "none",

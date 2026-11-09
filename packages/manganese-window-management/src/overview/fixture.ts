@@ -3,6 +3,7 @@
 
 import type { Geometry } from "../placement";
 import { placementsOf } from "../placement";
+import type { Rect } from "../rect";
 import type { StageScreen } from "../screens/stage-screens";
 import type { WindowState } from "../window-state";
 import {
@@ -49,3 +50,27 @@ export const overviewOf = (closing: boolean): ScreenOverview => {
     return overview;
   }
 };
+
+/**
+ * `overview` as a second monitor to the right of it would show it, with
+ * workspaces 5, shown, and 6 in place of its tiles.
+ */
+export const besideOf = (overview: ScreenOverview): ScreenOverview => ({
+  ...overview,
+  screen: {
+    ...overview.screen,
+    current: "5",
+    geometry: {
+      ...overview.screen.geometry,
+      name: "right",
+      screen: shifted(overview.screen.geometry.screen),
+      workspace: shifted(overview.screen.geometry.workspace),
+    },
+  },
+  tiles: overview.tiles.map(({ box }, at) => ({
+    box: shifted(box),
+    name: at === 0 ? "5" : "6",
+  })),
+});
+
+const shifted = (box: Rect): Rect => ({ ...box, x: box.x + RECT.width });
