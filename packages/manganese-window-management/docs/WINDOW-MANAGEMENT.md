@@ -483,7 +483,9 @@ Rules:
   (`closing.ts`) at its old place in the document, so React does not remount
   a `<webview>`. It takes no input while it leaves. Its contents animate
   too: the compositor keeps a closed window's surface, and the engine a closed
-  browser window's page (muted), for a second after it closes.
+  browser window's page (muted), for a second after it closes. It keeps the
+  last frame even when the client destroys that buffer before closing, as
+  GLFW clients like kitty do.
 - A leaving window draws above the windows moving into its space, but under
   the windows that were over it (`leaving`).
 - Keyframes that move or fade a window never set `z-index`. Chromium runs an

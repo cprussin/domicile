@@ -23,6 +23,7 @@ use crate::engine::{
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_imports::{Imports, Route, Then};
 use crate::engine_lingering::{Linger, Lingering};
+use crate::engine_retired::Retired;
 use crate::engine_surfaces::Surfaces;
 use crate::engine_waiting::Waiting;
 use crate::uploads::UploadId;
@@ -192,6 +193,9 @@ pub struct EngineSession {
     /// Closed windows' surfaces, still drawn while the shell animates them
     /// out. See `engine_lingering`.
     lingering: Lingering,
+    /// Imports whose buffer the client destroyed while it was on screen. See
+    /// `engine_retired`.
+    retired: Retired,
 }
 
 /// What [`EngineSession::window_gone`] did.
@@ -219,6 +223,7 @@ impl EngineSession {
             mapped: HashMap::new(),
             waiting: Waiting::default(),
             lingering: Lingering::default(),
+            retired: Retired::default(),
         })
     }
 
@@ -238,6 +243,11 @@ impl EngineSession {
     /// No check in this repository covers this. See
     /// `docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open`.
     pub fn reconnect(&mut self, describe: &Describe, now: Instant) -> Reconnected {
+        // A retired import's buffer is gone, so it cannot go up again. Its
+        // window stays blank until the client draws.
+        for (surface, id) in self.retired.drain() {
+            drop(self.held.release(surface, id));
+        }
         let taken = self.held.take_all();
         let apps: HashMap<SurfaceId, String> = self
             .surfaces
@@ -647,7 +657,11 @@ impl EngineSession {
         for event in &events {
             match event {
                 Event::Released { surface, buffer } => {
-                    if let Some(buffer) = self.held.release(*surface, *buffer) {
+                    if self.retired.take(*surface, *buffer) {
+                        // Its client destroyed it, so it takes no release.
+                        drop(self.held.release(*surface, *buffer));
+                        self.engine.forget(*surface, *buffer);
+                    } else if let Some(buffer) = self.held.release(*surface, *buffer) {
                         dispatched.releases.push(Release {
                             buffer,
                             surface: *surface,
@@ -714,7 +728,16 @@ impl EngineSession {
     /// Buffers viz kept past the deadline, taken back so the client can draw.
     /// Each one is an engine bug, and the caller logs it.
     pub fn overdue(&mut self, now: Instant) -> Vec<Release> {
-        returned(self.held.expired(now), Returned::Expired)
+        let (retired, expired): (Vec<_>, Vec<_>) = self
+            .held
+            .expired(now)
+            .into_iter()
+            .partition(|((surface, id), _)| self.retired.take(*surface, *id));
+        // Their clients destroyed them, so they take no release.
+        for ((surface, id), _) in retired {
+            self.engine.forget(surface, id);
+        }
+        returned(expired, Returned::Expired)
     }
 
     /// When [`EngineSession::overdue`] next has a buffer to take back.
@@ -734,7 +757,9 @@ impl EngineSession {
             return WindowGone::default();
         };
         // Taken now so a finished import has no app to show it for.
-        let gone = self.imports.surface_gone(surface);
+        let mut gone = self.imports.surface_gone(surface);
+        // Most likely the last frame itself, which the close animation shows.
+        gone.ids.extend(self.retired.surface_gone(surface));
         let waited = self.waiting.take(surface).into_iter().chain(gone.waited);
         WindowGone {
             releases: waited
@@ -767,6 +792,8 @@ impl EngineSession {
 
     /// Drops a destroyed `wl_buffer`'s imports on every surface and returns
     /// its holds and waiting frames, since no release will arrive for them.
+    ///
+    /// An import still on screen is retired instead (see `engine_retired`).
     pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Vec<Release> {
         let key = ImportKey::Client(buffer.id());
         let embeds = self.waiting.take_where(|frame| frame.buffer.key() == key);
@@ -775,6 +802,16 @@ impl EngineSession {
             .ids
             .into_iter()
             .filter_map(|(surface, id)| {
+                // The frame on screen stays imported and held until viz lets
+                // it go, or the window's close animation would be blank.
+                if self
+                    .held
+                    .on_screen(surface)
+                    .is_some_and(|(shown, _)| shown == id)
+                {
+                    self.retired.retire(surface, id);
+                    return None;
+                }
                 self.engine.forget(surface, id);
                 self.held
                     .release(surface, id)
