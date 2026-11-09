@@ -260,8 +260,9 @@ The engine leaves out Chrome's own UI, which the shell replaces.
   a locale lacks.
   - A Chrome string the desk does show, dropped by mistake, appears in
     English. Take its source or prefix off the lists.
-- `src/build/args/domicile_trim.gn`: no WebUI code caches, and no field trial
-  testing config (Chromium's bot-only experiments).
+- `src/build/args/domicile_trim.gn`: no WebUI code caches.
+- The field trial testing config stays on, without its
+  `CompositedAnimationsForceMainFrames` study (patch 0196).
 
 ## Guards
 
