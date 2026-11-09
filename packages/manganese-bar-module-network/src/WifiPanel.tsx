@@ -7,6 +7,7 @@ import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
 import { Loading } from "@domicile-desktop/component-library/Loading";
+import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
 import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Switch } from "@domicile-desktop/component-library/Switch";
@@ -269,7 +270,7 @@ type ConnectionProps = {
   onDisconnect: () => void;
 };
 
-/** The connection, with Disconnect on its row, as a Bluetooth device's. */
+/** The connection, with Disconnect at the foot of its details. */
 const Connection = ({
   addresses,
   connection,
@@ -280,16 +281,25 @@ const Connection = ({
   <ListRow
     detail={summaryOf(connection)}
     disclosure="Details"
-    end={
-      <Button loading={pending} onClick={onDisconnect} size="xs">
-        Disconnect
-      </Button>
-    }
     icon={<WifiSignalIcon strength={connection.strength} />}
     label={connection.ssid}
     surface="filled"
   >
     <DetailList rows={detailsOf(wifi, connection, addresses)} />
+    <PanelFooter
+      action={
+        <Button
+          beforeIcon={<WifiSlashIcon aria-hidden size={14} />}
+          loading={pending}
+          onClick={onDisconnect}
+          rounded
+          size="xs"
+          variant="ghost"
+        >
+          Disconnect
+        </Button>
+      }
+    />
   </ListRow>
 );
 

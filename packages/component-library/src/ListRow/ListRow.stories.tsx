@@ -6,6 +6,7 @@ import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { CountBadge } from "../CountBadge/CountBadge";
 import { DetailList } from "../DetailList/DetailList";
+import { PanelFooter } from "../PanelFooter/PanelFooter";
 
 import { List, ListRow as ListRowComponent, SURFACES } from "./ListRow";
 
@@ -63,16 +64,26 @@ export const Filled: StoryObj<typeof ListRowComponent> = {};
 export const WithDetails: StoryObj<typeof ListRowComponent> = {
   args: {
     children: (
-      <DetailList
-        rows={[
-          ["Speed", "866 Mb/s"],
-          ["IPv4 address", "192.168.1.42/24"],
-          ["Interface", "wlan0"],
-        ]}
-      />
+      <>
+        <DetailList
+          rows={[
+            ["Speed", "866 Mb/s"],
+            ["IPv4 address", "192.168.1.42/24"],
+            ["Interface", "wlan0"],
+          ]}
+        />
+        <PanelFooter
+          action={
+            <Button rounded size="xs" variant="ghost">
+              Disconnect
+            </Button>
+          }
+        />
+      </>
     ),
     detail: "Connected · Good signal · 5 GHz",
     disclosure: "Details",
+    end: undefined,
     icon: <WifiHighIcon size={15} weight="bold" />,
     label: "Goodbody Home",
   },
