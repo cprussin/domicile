@@ -4,8 +4,7 @@
     "@domicile-desktop/check-runner": "workspace:*"
   },
   "engines": {
-    "bun": ">=1.4.2",
-    "node": ">=24"
+    "bun": ">=1.4.2"
   },
   "license": "MIT",
   "name": "@domicile-desktop/distro",

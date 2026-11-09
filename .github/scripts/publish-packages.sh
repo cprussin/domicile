@@ -71,7 +71,7 @@ for package in "${PACKAGES[@]}"; do
   tarball="$OUT/$(tr -d @ <<<"$name" | tr / -)-$version.tgz"
   # A release skips the packages that did not change; a rerun of a run that
   # stopped partway skips what it already published.
-  if npm view "$name@$version" version >/dev/null 2>&1; then
+  if bun info "$name@$version" version >/dev/null 2>&1; then
     echo "$name@$version is already on npm"
     continue
   fi
