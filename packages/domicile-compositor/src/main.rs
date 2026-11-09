@@ -86,6 +86,7 @@ mod engine_damage;
 mod engine_imports;
 mod engine_lingering;
 mod engine_pump;
+mod engine_retired;
 mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
