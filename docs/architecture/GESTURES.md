@@ -144,9 +144,14 @@ fingers spreading, toggles the launcher.
   the app. The browser recognizes these, not a page, so the compositor picks
   the window from where the pointer is. A browser window under the pointer
   gets nothing: Chrome has no use for them.
-- **A shortcut inhibitor silences gesture bindings,** as it does keys, but the
-  window holding it does not get them yet: the engine takes the gesture before
-  it knows. See [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md).
+- **A shortcuts inhibitor passes gesture bindings through,** as it does keys.
+  While the window with the keyboard holds one, each page tells
+  `DeskGestures` (`KeyboardWindowInhibitsShortcuts`), and its grabs take
+  nothing. A bound swipe or hold then goes the unbound way, to the window
+  under the pointer; a bound pinch goes to the page under the pointer and an
+  edge swipe to nobody, since neither is forwarded. The owner is picked at
+  the begin, so an inhibitor taken or let go mid-gesture changes nothing until
+  it ends.
 
 ## Plan
 
