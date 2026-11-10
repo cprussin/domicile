@@ -472,6 +472,10 @@ class MODULES_EXPORT DomicileHost final
   // Whether the window with the keyboard holds a shortcuts inhibitor, so the
   // desktop's chords are its keys.
   bool KeyboardWindowInhibitsShortcuts() const;
+  // Tells the browser process when `KeyboardWindowInhibitsShortcuts` changes,
+  // so the gestures it grabs go to that window. Called after each change to
+  // the keyboard window or to a window's inhibitor.
+  void TellWhetherTheKeyboardWindowInhibits();
   // A key went down on the page. One that is a chord grabbed by name is the
   // desktop's: taken from the page and dispatched as `shortcut`, the same as
   // the browser process does for one pressed in a `<webview>`.
@@ -638,6 +642,8 @@ class MODULES_EXPORT DomicileHost final
   // one reached for -- a press, a `focusApp()` -- or the one the compositor
   // says has the keyboard, whichever said so last.
   String keyboard_app_;
+  // What `TellWhetherTheKeyboardWindowInhibits` last told the browser.
+  bool told_inhibits_ = false;
   // The window each forwarded press was sent for, until the key comes up. A
   // release is owed for every press wherever the keyboard has moved since: the
   // seat's state outlives every window, and a lock key left down latches. And
