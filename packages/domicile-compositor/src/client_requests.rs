@@ -690,13 +690,14 @@ fn set_window_states(toplevel: &ToplevelSurface, states: &[WindowState]) {
 }
 
 /// Every `xdg_toplevel` state a shell sets.
-const SHELL_STATES: [xdg_toplevel::State; 6] = [
+const SHELL_STATES: [xdg_toplevel::State; 7] = [
     xdg_toplevel::State::TiledLeft,
     xdg_toplevel::State::TiledRight,
     xdg_toplevel::State::TiledTop,
     xdg_toplevel::State::TiledBottom,
     xdg_toplevel::State::Maximized,
     xdg_toplevel::State::Fullscreen,
+    xdg_toplevel::State::Resizing,
 ];
 
 /// The `xdg_wm_base` version that added the tiled states.
@@ -720,5 +721,6 @@ fn xdg_state(state: WindowState) -> xdg_toplevel::State {
         WindowState::TiledBottom => xdg_toplevel::State::TiledBottom,
         WindowState::Maximized => xdg_toplevel::State::Maximized,
         WindowState::Fullscreen => xdg_toplevel::State::Fullscreen,
+        WindowState::Resizing => xdg_toplevel::State::Resizing,
     }
 }
