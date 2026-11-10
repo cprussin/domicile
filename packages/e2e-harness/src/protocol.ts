@@ -628,6 +628,7 @@ const systemEventSchema = z.looseObject({
           kind: z.literal("fullscreen"),
         }),
         z.looseObject({ kind: z.literal("unfullscreen") }),
+        z.looseObject({ kind: z.literal("minimize") }),
       ]),
     }),
     z.looseObject({

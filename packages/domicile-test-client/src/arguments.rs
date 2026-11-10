@@ -174,6 +174,7 @@ pub enum AskTo {
     Unmaximize,
     Fullscreen,
     Unfullscreen,
+    Minimize,
 }
 
 /// When the client takes its idle inhibitor.
@@ -228,7 +229,9 @@ pub enum ArgumentError {
     #[error("--buffer-transform wants a wl_output.transform name, not {value}")]
     NotATransform { value: String },
 
-    #[error("--ask-to wants maximize, unmaximize, fullscreen or unfullscreen, not {value}")]
+    #[error(
+        "--ask-to wants maximize, unmaximize, fullscreen, unfullscreen or minimize, not {value}"
+    )]
     NotAWindowRequest { value: String },
 
     #[error("unknown argument {argument}")]
@@ -494,6 +497,7 @@ fn window_request(
         "unmaximize" => Ok(AskTo::Unmaximize),
         "fullscreen" => Ok(AskTo::Fullscreen),
         "unfullscreen" => Ok(AskTo::Unfullscreen),
+        "minimize" => Ok(AskTo::Minimize),
         _ => Err(ArgumentError::NotAWindowRequest { value: stated }),
     }
 }
