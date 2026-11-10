@@ -40,6 +40,7 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{Signature, Structure, StructureBuilder};
 
 use crate::base64::{decoded, encoded};
+use crate::bells::Bells;
 use crate::dbus_json::{self, NotABody};
 use crate::fanout::Listener;
 use crate::idle_holds::{self, IdleHolds};
@@ -95,6 +96,7 @@ pub struct System {
     set_window_states: Option<SetWindowStates>,
     /// The pages that hear a client's window requests.
     window_requests: WindowRequests,
+    bells: Bells,
     /// The keymaps, and the pages that hear them change.
     keymaps: Keymaps,
     /// Switches the keymap; `None` on a system that switches none.
@@ -266,6 +268,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::WindowRequests
+        | SystemRequest::Bells
         | SystemRequest::Keymaps => Reach::Listens,
         SystemRequest::SetWindowStates { .. } | SystemRequest::ResizeVirtualMonitor { .. } => {
             Reach::Arranges
@@ -311,6 +314,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
         | SystemRequest::WindowRequests
+        | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Keymaps
         | SystemRequest::SelectKeymap { .. } => Some(HostMessage::SystemReply {
@@ -361,6 +365,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
         | SystemRequest::WindowRequests
+        | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::ResizeVirtualMonitor { .. }
         | SystemRequest::Keymaps
@@ -407,6 +412,7 @@ impl System {
             unlock_refusals: UnlockRefusals::default(),
             set_window_states: None,
             window_requests: WindowRequests::default(),
+            bells: Bells::default(),
             add_virtual_monitor: None,
             keymaps: Keymaps::default(),
             select_keymap: None,
@@ -485,6 +491,12 @@ impl System {
     /// through `requests`.
     pub fn sharing_window_requests(mut self, requests: WindowRequests) -> System {
         self.window_requests = requests;
+        self
+    }
+
+    /// This system, telling a page that listens each bell `bells` hears.
+    pub fn sharing_bells(mut self, bells: Bells) -> System {
+        self.bells = bells;
         self
     }
 
@@ -986,6 +998,25 @@ impl System {
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
+            SystemRequest::Bells => self.starting(id, |system| {
+                let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                let listener = system.bells.listen(Arc::new(move |app_id| {
+                    let Some(running) = running.upgrade() else {
+                        return;
+                    };
+                    // Under the lock, as for shell commands.
+                    let running = running.lock().unwrap();
+                    if matches!(running.get(&id), Some(Running::Listening(_))) {
+                        tell(HostMessage::SystemEvent {
+                            id,
+                            event: SystemEvent::Bell {
+                                app_id: app_id.clone(),
+                            },
+                        });
+                    }
+                }));
+                Ok((Running::Listening(listener), Box::new(|| {})))
+            }),
             SystemRequest::WindowRequests => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system

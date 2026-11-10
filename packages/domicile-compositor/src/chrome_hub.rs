@@ -7,6 +7,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use domicile_host::bells::Bells;
 use domicile_host::idle_holds::IdleHolds;
 use domicile_host::idle_warnings::IdleWarnings;
 use domicile_host::ipc::{apply_chrome_message, to_line};
@@ -100,6 +101,9 @@ pub struct ChromeHub {
     /// connection's `System`. The writer thread sends to them; see
     /// [`Outbound::WindowRequest`].
     pub window_requests: WindowRequests,
+    /// The pages listening for bells, shared by every connection's `System`.
+    /// The writer thread sends to them; see [`Outbound::Bell`].
+    pub bells: Bells,
     /// The virtual monitors pages add. See [`crate::virtual_monitors`].
     pub virtual_monitors: VirtualMonitors,
     /// The keymaps and the one the desktop types on, shared by every
@@ -137,6 +141,7 @@ impl ChromeHub {
             idle_holds: IdleHolds::default(),
             unlock_refusals: UnlockRefusals::default(),
             window_requests: WindowRequests::default(),
+            bells: Bells::default(),
             virtual_monitors: VirtualMonitors::default(),
             keymaps: Keymaps::default(),
         });
@@ -288,6 +293,10 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
             Outbound::Message(message) => message,
             Outbound::WindowRequest(app_id, request) => {
                 hub.window_requests.send(&(app_id, request));
+                continue;
+            }
+            Outbound::Bell(app_id) => {
+                hub.bells.send(&app_id);
                 continue;
             }
         };

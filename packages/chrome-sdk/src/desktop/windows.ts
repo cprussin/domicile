@@ -41,6 +41,7 @@ export type Windows = {
   syncFrames: () => void;
   setStates: System["setWindowStates"];
   requests: System["windowRequests"];
+  bells: System["bells"];
   on: On<WindowsListeners>;
 };
 
@@ -59,12 +60,13 @@ export type WindowsHost = Pick<
 
 export const windows = (
   host: WindowsHost,
-  calls: Pick<System, "setWindowStates" | "windowRequests">,
+  calls: Pick<System, "bells" | "setWindowStates" | "windowRequests">,
 ): Windows => {
   const listOf = memoizeLast((list: readonly DomicileWindow[]) =>
     list.map(defined),
   );
   return {
+    bells: () => calls.bells(),
     close: (appId) => {
       host.closeApp(appId);
     },

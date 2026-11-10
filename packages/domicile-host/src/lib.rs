@@ -17,6 +17,7 @@ use domicile_protocol::{
 pub mod app_names;
 pub mod autostart;
 pub mod base64;
+pub mod bells;
 pub mod cast_grants;
 pub mod clipboard;
 pub mod cups;
