@@ -48,7 +48,7 @@ SUITES=(
   DrmInputOpensTest:17
   DrmInputControllerTest:6
   DrmCursorFactoryTest:5
-  DrmCursorFactoryThemeTest:4
+  DrmCursorFactoryThemeTest:5
   DrmClipboardTest:12
   DrmEdidSerialTest:18
   DrmConnectorNameTest:6

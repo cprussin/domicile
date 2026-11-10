@@ -203,6 +203,23 @@ TEST_F(DrmCursorFactoryThemeTest, ACursorTheThemeLacksIsChromiumsArt) {
   EXPECT_NE(factory_.GetDefaultCursor(mojom::CursorType::kNone), nullptr);
 }
 
+// `kNull` names no cursor, which is the default pointer: the theme's arrow,
+// not Chromium's. `wm::CursorLoader` asks for it whenever the cursor client
+// holds no cursor, as it does when the pointer comes back from hiding.
+TEST_F(DrmCursorFactoryThemeTest, NoCursorNamedIsTheThemesArrow) {
+  source_.Set(DeskCursorTheme{.name = "Amber", .size = 24});
+  factory_.GetDefaultCursor(mojom::CursorType::kPointer);
+  WaitForCursors();
+
+  const scoped_refptr<BitmapCursor> none_named =
+      BitmapCursor::FromPlatformCursor(
+          factory_.GetDefaultCursor(mojom::CursorType::kNull));
+  ASSERT_NE(none_named, nullptr);
+  ASSERT_EQ(none_named->bitmaps().size(), 1u);
+  EXPECT_EQ(none_named->bitmaps()[0].width(), 24);
+  EXPECT_EQ(none_named->hotspot(), gfx::Point(3, 4));
+}
+
 // A reload that names another theme drops the cursors loaded from the old
 // one, and says so, so the loader asks again and redraws.
 TEST_F(DrmCursorFactoryThemeTest, AnotherThemeReplacesTheCursorsOfTheLast) {
