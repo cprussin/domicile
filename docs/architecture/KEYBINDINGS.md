@@ -41,7 +41,7 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
 | Wire | `HostMessage::ShellConfig { keys }`, `packages/e2e-harness/src/protocol.ts` | Sends the table on connect and when a reload changes the keyboard |
 | Chords | engine `modules/domicile/domicile_chord.*`, `DomicileHost.grabShortcut` | Parses chords and resolves them against the table, again when it changes. Throws `SyntaxError` on a bad chord and `NotFoundError` on a keysym the layout cannot type. A press arrives as `shortcut` with its `chord`, its release as `shortcutrelease` |
 | Modes | `@domicile-desktop/sdk/own-keybindings` | Gives each chord one spelling and files the bindings by mode |
-| Dispatch | `@domicile-desktop/sdk/bind-keys` | Grabs every chord, matches `shortcut.chord` in the current mode, runs `Mode`, passes `SendShell` to `onCommand`, gives the chords back on `unbind` |
+| Dispatch | `@domicile-desktop/sdk/bind-keys` | Grabs every chord, matches `shortcut.chord` in the current mode, runs `Mode`, passes `SendShell` to `onCommand`, runs a `Hold`'s release on the `shortcutrelease` of the chord its press armed, gives the chords back on `unbind` |
 
 **Chord syntax:** `+`-separated modifiers, then one xkb keysym name.
 

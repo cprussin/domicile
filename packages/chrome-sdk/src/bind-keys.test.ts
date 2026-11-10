@@ -90,6 +90,10 @@ class FakeHost extends EventTarget {
     this.dispatchEvent(Object.assign(new Event("shortcut"), { chord }));
   }
 
+  released(chord: string): void {
+    this.dispatchEvent(Object.assign(new Event("shortcutrelease"), { chord }));
+  }
+
   /** Send a compositor line for system call 1, the one `bindKeys` makes. */
   answer(line: object): void {
     this.dispatchEvent(
@@ -325,6 +329,99 @@ describe("bindKeys", () => {
       expect(heard.slice(1)).toStrictEqual([
         ["mode", "default"],
         ["command", ["terminal"]],
+      ]);
+    });
+  });
+
+  describe("held actions", () => {
+    const PEEK: ShellKeybindings = {
+      keybindings: {
+        "Meta+r": KeyAction.Mode("resize"),
+        "Meta+s": KeyAction.Hold(
+          KeyAction.Mode("resize"),
+          KeyAction.Mode("default"),
+        ),
+        "Meta+Tab": KeyAction.Hold(
+          KeyAction.SendShell(["peek"]),
+          KeyAction.SendShell(["unpeek"]),
+        ),
+      },
+      modes: { resize: { "Meta+Escape": KeyAction.Mode("default") } },
+    };
+
+    it("runs the press action on press and the release action on release, once each", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+Tab");
+      host.pressed("Meta+Tab");
+      host.released("Meta+Tab");
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([
+        ["command", ["peek"]],
+        ["command", ["unpeek"]],
+      ]);
+    });
+
+    it("runs the release its press armed, whatever mode the keys are in", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+Tab");
+      host.pressed("Meta+r");
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([
+        ["command", ["peek"]],
+        ["mode", "resize"],
+        ["command", ["unpeek"]],
+      ]);
+    });
+
+    it("runs no release for a press its mode did not bind", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+r");
+      host.pressed("Meta+Tab");
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([["mode", "resize"]]);
+    });
+
+    it("holds a mode while the chord is down", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+s");
+      host.released("Meta+s");
+
+      expect(heard).toStrictEqual([
+        ["mode", "resize"],
+        ["mode", "default"],
+      ]);
+    });
+
+    it("refuses a held action on a gesture, which has no press of its own", () => {
+      expect(() =>
+        bound({
+          keybindings: {
+            "swipe:3:left": KeyAction.Hold(
+              KeyAction.SendShell(["peek"]),
+              KeyAction.SendShell(["unpeek"]),
+            ),
+          },
+        }),
+      ).toThrow("swipe:3:left");
+    });
+
+    it("runs each armed release once unbound", () => {
+      const { heard, host } = bound(PEEK);
+      host.pressed("Meta+Tab");
+
+      unbind();
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([
+        ["command", ["peek"]],
+        ["command", ["unpeek"]],
       ]);
     });
   });

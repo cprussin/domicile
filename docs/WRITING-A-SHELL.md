@@ -751,6 +751,11 @@ bindKeys(
   `shortcut` by its `chord` whether the press landed on the page or in a
   `<webview>`, handles `Mode` itself, and passes every `SendShell` to
   `onCommand`.
+- `KeyAction.Hold(press, release)` runs `press` on the chord's press and
+  `release` on its release, once per press. The release runs whatever mode the
+  keys are in by then; `unbind` runs any still armed. Gestures cannot hold an
+  action. For example, `"Meta+Tab": KeyAction.Hold(SendShell(["peek"]),
+  SendShell(["unpeek"]))`.
 - `domicile send-shell <word>…` from a terminal reaches `onCommand` too, on
   every page bound. A page that cannot listen calls `report`, which logs by
   default.

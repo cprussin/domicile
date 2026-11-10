@@ -26,7 +26,7 @@ import {
   isGesture,
   parseGesture,
 } from "./gesture-binding";
-import type { KeyAction } from "./key-action";
+import type { KeyAction, OneKeyAction } from "./key-action";
 import { KeyActionKind } from "./key-action";
 import type { KeybindingsByMode, ShellKeybindings } from "./own-keybindings";
 import { ownKeybindings } from "./own-keybindings";
@@ -93,7 +93,7 @@ export const bindKeys = (
     }
   };
 
-  const run = (action: KeyAction | undefined) => {
+  const run = (action: OneKeyAction | undefined) => {
     switch (action?.kind) {
       case KeyActionKind.SendShell: {
         onCommand(action.args);
@@ -109,12 +109,40 @@ export const bindKeys = (
     }
   };
 
+  // The release each held chord's press armed, by chord.
+  const armed = new Map<string, OneKeyAction>();
+  const press = (chord: string, action: KeyAction | undefined) => {
+    switch (action?.kind) {
+      case KeyActionKind.Hold: {
+        if (!armed.has(chord)) {
+          armed.set(chord, action.release);
+          run(action.press);
+        }
+        break;
+      }
+      case KeyActionKind.SendShell:
+      case KeyActionKind.Mode:
+      case undefined: {
+        run(action);
+        break;
+      }
+    }
+  };
+  const release = (chord: string) => {
+    const action = armed.get(chord);
+    armed.delete(chord);
+    run(action);
+  };
+
   const gesturesByMode = new Map(
     [...bindings].map(([name, byName]) => [
       name,
       [...byName]
         .filter(([written]) => isGesture(written))
-        .map(([written, action]) => [parseGesture(written), action] as const),
+        .map(
+          ([written, action]) =>
+            [parseGesture(written), gestureAction(written, action)] as const,
+        ),
     ]),
   );
   const onGesture = (finished: FinishedGesture | undefined) => {
@@ -139,7 +167,10 @@ export const bindKeys = (
     ),
   );
   const stopShortcuts = domicile.keyboard.on("shortcut", ({ chord }) => {
-    run(bindings.get(mode)?.get(chord));
+    press(chord, bindings.get(mode)?.get(chord));
+  });
+  const stopReleases = domicile.keyboard.on("shortcutrelease", ({ chord }) => {
+    release(chord);
   });
   const tracker = gestureTracker();
   const stopGestures = domicile.gestures.on("gesture", (gesture) => {
@@ -156,6 +187,10 @@ export const bindKeys = (
     },
     unbind: () => {
       stopShortcuts();
+      stopReleases();
+      for (const chord of [...armed.keys()]) {
+        release(chord);
+      }
       stopGestures();
       commands.stop();
       // Emptied, so a second unbind does not answer somebody else's grab.
@@ -167,6 +202,24 @@ export const bindKeys = (
       }
     },
   };
+};
+
+/**
+ * The action gesture `written` runs. A gesture runs its binding once it ends,
+ * so it has no press and release to hold an action between.
+ */
+const gestureAction = (written: string, action: KeyAction): OneKeyAction => {
+  switch (action.kind) {
+    case KeyActionKind.Hold: {
+      throw new Error(
+        `domicile: gesture ${JSON.stringify(written)} cannot hold an action; only a chord has a press and a release`,
+      );
+    }
+    case KeyActionKind.SendShell:
+    case KeyActionKind.Mode: {
+      return action;
+    }
+  }
 };
 
 /**
