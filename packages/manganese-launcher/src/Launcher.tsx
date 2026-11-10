@@ -76,8 +76,11 @@ import { useSettled } from "./useSettled";
 import { VideoPreview } from "./VideoPreview";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
-/** The box's placeholder and accessible name. */
+/** The box's accessible name. */
 const PROMPT = "Open an app, a file, a URL, or search";
+
+/** The box's placeholder: the prompt, naming a few tags so people find them. */
+const PLACEHOLDER = `${PROMPT}. Try !yt, !wiki or !gh.`;
 
 /**
  * How long the highlight must rest on a row before it is previewed. Long
@@ -344,7 +347,7 @@ const Query = ({
               }
             }
           }}
-          placeholder={PROMPT}
+          placeholder={PLACEHOLDER}
           prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
           ref={box}
           role="combobox"
