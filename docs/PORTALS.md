@@ -506,10 +506,19 @@ and `wf-recorder` work. The code is `src/screencopy/`.
 
 - **Each session is a cast** of its monitor or window
   (`Casting::start_for_client`), at the monitor's density or the window's
-  buffer size. The toplevel list names each Wayland window; browser windows
-  are not on it. The cast fills the client's buffers as it fills
+  buffer size. The cast fills the client's buffers as it fills
   PipeWire's, and its display capture runs until the session ends.
   `src/screencopy/taking.rs` lends a frame's buffer to the cast.
+- **The toplevel list** names each Wayland window and each browser window,
+  in that order of arrival. The engine reports the browser's windows on
+  connect and whenever one opens, closes or changes its title
+  (`browser_windows` in `domicile_engine.h`), and they leave the list when
+  the browser goes away. A browser window's handle has the page's title, and
+  an app window's has its app id; any other browser window has no app id,
+  since they are all the browser's. Capturing one shows its page alone, as
+  the ScreenCast portal's browser window source does, without the shell's
+  frame around it. With `paint_cursors` the pointer is drawn where it is
+  over the page, and nowhere while it is off it.
 - **A frame is ready once there is damage the client has not seen.** The
   first frame is damaged whole. Damage is reported in buffer pixels.
 - **Buffers** are shm `xrgb8888` or `argb8888` with packed rows, or a dmabuf

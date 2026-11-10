@@ -683,7 +683,8 @@ impl EngineSession {
                 | Event::FrameDone { .. }
                 | Event::Presented { .. }
                 | Event::Disconnected
-                | Event::Compositing { .. } => {}
+                | Event::Compositing { .. }
+                | Event::BrowserWindows(_) => {}
             }
         }
         dispatched.events = events;

@@ -133,6 +133,26 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   EXPECT_EQ(drained[0].displays[1].x, 2880);
 }
 
+TEST(EngineEventQueueTest, TheBrowserWindowsArriveWholeAcrossTheQueue) {
+  EngineEventQueue queue;
+  EngineEvent pushed{.type = EngineEvent::Type::kBrowserWindows};
+  pushed.browser_windows.push_back(
+      EngineBrowserWindow{.id = "3", .title = "Inbox", .app_id = "mail"});
+  pushed.browser_windows.push_back(EngineBrowserWindow{.id = "5"});
+  queue.Push(pushed);
+
+  const std::vector<EngineEvent> drained = queue.Drain();
+  ASSERT_EQ(drained.size(), 1u);
+  EXPECT_EQ(drained[0].type, EngineEvent::Type::kBrowserWindows);
+  ASSERT_EQ(drained[0].browser_windows.size(), 2u);
+  // The C ABI points into these strings, so the queue must keep them.
+  EXPECT_EQ(drained[0].browser_windows[0].id, "3");
+  EXPECT_EQ(drained[0].browser_windows[0].title, "Inbox");
+  EXPECT_EQ(drained[0].browser_windows[0].app_id, "mail");
+  EXPECT_EQ(drained[0].browser_windows[1].id, "5");
+  EXPECT_EQ(drained[0].browser_windows[1].title, "");
+}
+
 // The compositor dispatches once per wakeup, so a drain must return every
 // queued event or the rest wait for an unrelated wakeup.
 TEST(EngineEventQueueTest, DrainTakesEverythingQueuedAndThenSleeps) {

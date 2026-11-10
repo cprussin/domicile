@@ -410,6 +410,24 @@ pub enum Event {
     /// software, where it shows no dmabuf. Sent once the browser knows, and
     /// when its GPU process falls back.
     Compositing { in_memory: bool },
+
+    /// The browser's windows, in the order they opened, for capture tools to
+    /// list beside the native ones. Sent once the browser connects, and when a
+    /// window opens, closes or changes its title. An older engine never sends
+    /// it.
+    BrowserWindows(Vec<BrowserWindow>),
+}
+
+/// One of the browser's windows: a page it holds, which the shell draws with
+/// `<webview window>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserWindow {
+    /// Its id, as [`Engine::start_browser_window_capture`] takes it.
+    pub id: String,
+    /// The page's title, or empty.
+    pub title: String,
+    /// The app window's id, or empty for any other window.
+    pub app_id: String,
 }
 
 /// When and how a frame reached the screen.
@@ -477,6 +495,16 @@ struct Callbacks {
     compositing: Option<extern "C" fn(*mut c_void, c_int)>,
     ramped_displays: Option<extern "C" fn(*mut c_void, *const RawRampedDisplay, u32)>,
     moded_displays: Option<extern "C" fn(*mut c_void, *const RawModedDisplay, u32)>,
+    browser_windows: Option<extern "C" fn(*mut c_void, *const RawBrowserWindow, u32)>,
+}
+
+/// `DomicileBrowserWindow`, laid out as in the C header. Its strings are
+/// borrowed for the call it crosses in, and never null.
+#[repr(C)]
+struct RawBrowserWindow {
+    id: *const c_char,
+    title: *const c_char,
+    app_id: *const c_char,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -1747,6 +1775,7 @@ fn join(
         compositing: Some(on_compositing),
         ramped_displays: Some(on_ramped_displays),
         moded_displays: Some(on_moded_displays),
+        browser_windows: Some(on_browser_windows),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2036,6 +2065,39 @@ extern "C" fn on_compositing(user_data: *mut c_void, in_memory: c_int) {
     );
 }
 
+extern "C" fn on_browser_windows(
+    user_data: *mut c_void,
+    windows: *const RawBrowserWindow,
+    count: u32,
+) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the ABI says `windows` points at `count` records, valid for
+        // this call. `browser_windows_from` copies them.
+        unsafe { std::slice::from_raw_parts(windows, count as usize) }
+    };
+    push(
+        user_data,
+        Event::BrowserWindows(browser_windows_from(records)),
+    );
+}
+
+/// Copies the browser windows out of their records.
+fn browser_windows_from(records: &[RawBrowserWindow]) -> Vec<BrowserWindow> {
+    records
+        .iter()
+        .map(|record| BrowserWindow {
+            // SAFETY: the ABI's strings are non-null and valid for the call.
+            id: unsafe { copied(record.id) },
+            // SAFETY: as for `id`.
+            title: unsafe { copied(record.title) },
+            // SAFETY: as for `id`.
+            app_id: unsafe { copied(record.app_id) },
+        })
+        .collect()
+}
+
 extern "C" fn on_frame_done(user_data: *mut c_void, surface: SurfaceId, frame: u64) {
     push(user_data, Event::FrameDone { surface, frame });
 }
@@ -2323,10 +2385,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_seventeen_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `moded_displays` is last, as
+    fn the_callbacks_are_the_user_data_and_eighteen_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `browser_windows` is last, as
         // in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 18 * 8);
+        assert_eq!(std::mem::size_of::<Callbacks>(), 19 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2337,6 +2399,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Callbacks, compositing), 15 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, ramped_displays), 16 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, moded_displays), 17 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, browser_windows), 18 * 8);
     }
 
     #[test]
@@ -2466,6 +2529,52 @@ mod tests {
                     request: 6,
                     buffer: None,
                 },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_browser_window_is_three_strings_as_in_the_c_header() {
+        assert_eq!(std::mem::size_of::<RawBrowserWindow>(), 3 * 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindow, title), 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindow, app_id), 16);
+    }
+
+    #[test]
+    fn the_browser_windows_are_copied_out_of_their_records() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        let records = [
+            RawBrowserWindow {
+                id: c"3".as_ptr(),
+                title: c"Inbox".as_ptr(),
+                app_id: c"mail".as_ptr(),
+            },
+            RawBrowserWindow {
+                id: c"5".as_ptr(),
+                title: c"".as_ptr(),
+                app_id: c"".as_ptr(),
+            },
+        ];
+        on_browser_windows(queue, records.as_ptr(), 2);
+        on_browser_windows(queue, std::ptr::null(), 0);
+
+        assert_eq!(
+            events.into_inner(),
+            vec![
+                Event::BrowserWindows(vec![
+                    BrowserWindow {
+                        id: "3".into(),
+                        title: "Inbox".into(),
+                        app_id: "mail".into(),
+                    },
+                    BrowserWindow {
+                        id: "5".into(),
+                        title: String::new(),
+                        app_id: String::new(),
+                    },
+                ]),
+                Event::BrowserWindows(Vec::new()),
             ]
         );
     }
