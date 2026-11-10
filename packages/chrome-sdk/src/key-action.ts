@@ -1,12 +1,15 @@
-// The action a keybinding runs: a shell command or a binding mode change.
+// The action a keybinding runs: a shell command, a binding mode change, or a
+// pair of them held between a press and its release.
 
 /** The kind of action a binding runs. */
 export enum KeyActionKind {
   SendShell,
   Mode,
+  Hold,
 }
 
-export const KeyAction = {
+/** The actions one key event runs. */
+const OneKeyAction = {
   /**
    * Switch to another binding mode. The SDK handles this itself and tells the
    * shell the mode changed.
@@ -19,6 +22,25 @@ export const KeyAction = {
   SendShell: (args: readonly string[]) => ({
     args,
     kind: KeyActionKind.SendShell as const,
+  }),
+};
+
+/** An action one key event runs. */
+export type OneKeyAction = ReturnType<
+  (typeof OneKeyAction)[keyof typeof OneKeyAction]
+>;
+
+export const KeyAction = {
+  ...OneKeyAction,
+  /**
+   * Run `press` when the chord is pressed and `release` when it is let go.
+   * The release runs whatever binding mode the keys are in by then, and runs
+   * once per press however long the key repeats.
+   */
+  Hold: (press: OneKeyAction, release: OneKeyAction) => ({
+    kind: KeyActionKind.Hold as const,
+    press,
+    release,
   }),
 };
 
