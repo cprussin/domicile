@@ -27,6 +27,28 @@ const A_DVORAK_KEYBOARD: &str = r#"
 }
 "#;
 
+/// [`A_DVORAK_KEYBOARD`] repeating after 300 ms at 40 a second.
+const A_DVORAK_KEYBOARD_REPEATING_FAST: &str = r#"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "input": { "keyboard": {
+    "xkb_layout": "us", "xkb_variant": "dvorak",
+    "repeat": { "delay_ms": 300, "rate": 40 }
+  } }
+}
+"#;
+
+/// [`A_DVORAK_KEYBOARD`] that does not repeat.
+const A_DVORAK_KEYBOARD_NOT_REPEATING: &str = r#"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "input": { "keyboard": {
+    "xkb_layout": "us", "xkb_variant": "dvorak",
+    "repeat": { "delay_ms": 600, "rate": 0 }
+  } }
+}
+"#;
+
 /// A US QWERTY keyboard.
 ///
 /// The displays match [`A_DVORAK_KEYBOARD`] so a reload changes only the
@@ -506,6 +528,33 @@ fn the_keymap_the_config_names_reaches_the_chrome() {
         unshifted_on(&keymap, "AD01"),
         "apostrophe",
         "on `dvorak` the key qwerty prints `q` on is an apostrophe"
+    );
+}
+
+/// A client's keyboard repeats as the config says, from the start and after
+/// a reload, which sends no new keymap.
+#[test]
+fn a_client_repeats_keys_as_the_config_says() {
+    let compositor = Compositor::started_with(A_DVORAK_KEYBOARD_REPEATING_FAST);
+    let mut typing = compositor.client("typing");
+    assert!(
+        typing.wait_for_trace("repeat_info(40, 300)", 1),
+        "a bound keyboard hears the configured repeat:\n{}",
+        typing.trace()
+    );
+
+    compositor.reconfigure(A_DVORAK_KEYBOARD_NOT_REPEATING);
+
+    assert!(
+        typing.wait_for_trace("repeat_info(0, 600)", 1),
+        "an open keyboard hears the reloaded repeat:\n{}",
+        typing.trace()
+    );
+    assert_eq!(
+        typing.trace().matches("keymap(").count(),
+        1,
+        "the keymap is not resent:\n{}",
+        typing.trace()
     );
 }
 

@@ -1371,6 +1371,10 @@ impl Engine {
         let settings = serde_json::json!({
             "touchpad": input.touchpad,
             "mouse": input.mouse,
+            "keyboard": {
+                "repeat_delay_ms": input.keyboard.repeat.delay_ms,
+                "repeat_rate": input.keyboard.repeat.rate,
+            },
         });
         let settings = CString::new(settings.to_string()).expect("JSON escapes NUL bytes");
         // SAFETY: the handle is live and the engine copies the JSON before returning.

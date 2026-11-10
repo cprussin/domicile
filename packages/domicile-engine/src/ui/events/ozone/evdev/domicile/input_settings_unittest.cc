@@ -19,6 +19,19 @@ TEST(InputSettingsTest, OmittedValuesResetToDesktopDefaults) {
   EXPECT_EQ(settings->touchpad.typing_pause, base::Milliseconds(200));
   EXPECT_EQ(settings->touchpad.typing_repeat_pause, base::Milliseconds(500));
   EXPECT_EQ(settings->mouse.speed, 0);
+  EXPECT_EQ(settings->keyboard.repeat_delay, base::Milliseconds(500));
+  EXPECT_EQ(settings->keyboard.repeat_rate, 25);
+}
+
+TEST(InputSettingsTest, ParsesKeyRepeat) {
+  const auto settings = ParseDomicileInputSettings(
+      R"({"keyboard":{"repeat_delay_ms":250,"repeat_rate":0}})");
+  ASSERT_TRUE(settings.has_value());
+  EXPECT_EQ(settings->keyboard.repeat_delay, base::Milliseconds(250));
+  EXPECT_EQ(settings->keyboard.repeat_rate, 0);
+  EXPECT_FALSE(
+      ParseDomicileInputSettings(R"({"keyboard":{"repeat_rate":-1}})")
+          .has_value());
 }
 
 TEST(InputSettingsTest, ParsesEachIndependentDeviceClass) {

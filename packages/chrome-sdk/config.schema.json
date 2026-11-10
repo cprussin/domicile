@@ -286,6 +286,10 @@
           },
           "type": "array"
         },
+        "repeat": {
+          "$ref": "#/$defs/KeyRepeat",
+          "description": "How a held key repeats, in native windows and in pages."
+        },
         "xkb_layout": {
           "default": "us",
           "type": "string"
@@ -343,6 +347,29 @@
         "xkb_variant": {
           "default": "",
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "KeyRepeat": {
+      "additionalProperties": false,
+      "description": "How a held key repeats.",
+      "properties": {
+        "delay_ms": {
+          "default": 500,
+          "description": "Milliseconds a key is held before it repeats.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rate": {
+          "default": 25,
+          "description": "Repeats a second. 0 turns repeat off.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"

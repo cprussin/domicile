@@ -79,6 +79,17 @@ Reader Pause(base::TimeDelta& target) {
   };
 }
 
+Reader Rate(int& target) {
+  return [&target](const base::Value& value) -> Error {
+    const auto rate = value.GetIfInt();
+    if (!rate || *rate < 0) {
+      return "expected a nonnegative integer rate";
+    }
+    target = *rate;
+    return std::nullopt;
+  };
+}
+
 template <typename Enum>
 Reader Choice(
     Enum& target,
@@ -152,6 +163,14 @@ Error ReadMouse(const base::Value& value, DomicileMouseSettings& mouse) {
                     });
 }
 
+Error ReadKeyboard(const base::Value& value,
+                   DomicileKeyboardSettings& keyboard) {
+  return ReadFields(value, {
+                               {"repeat_delay_ms", Pause(keyboard.repeat_delay)},
+                               {"repeat_rate", Rate(keyboard.repeat_rate)},
+                           });
+}
+
 }  // namespace
 
 base::expected<DomicileInputSettings, std::string> ParseDomicileInputSettings(
@@ -170,6 +189,11 @@ base::expected<DomicileInputSettings, std::string> ParseDomicileInputSettings(
                              {"mouse",
                               [&settings](const base::Value& mouse) {
                                 return ReadMouse(mouse, settings.mouse);
+                              }},
+                             {"keyboard",
+                              [&settings](const base::Value& keyboard) {
+                                return ReadKeyboard(keyboard,
+                                                    settings.keyboard);
                               }},
                          });
   if (error) {

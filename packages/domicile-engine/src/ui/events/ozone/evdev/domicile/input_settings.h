@@ -40,9 +40,16 @@ struct DomicileTouchpadSettings : DomicileMouseSettings {
   base::TimeDelta typing_repeat_pause = base::Milliseconds(500);
 };
 
+struct DomicileKeyboardSettings {
+  base::TimeDelta repeat_delay = base::Milliseconds(500);
+  // Repeats a second; 0 turns repeat off.
+  int repeat_rate = 25;
+};
+
 struct DomicileInputSettings {
   DomicileTouchpadSettings touchpad;
   DomicileMouseSettings mouse;
+  DomicileKeyboardSettings keyboard;
 };
 
 // Parses the compositor's complete input settings; omitted values reset to
