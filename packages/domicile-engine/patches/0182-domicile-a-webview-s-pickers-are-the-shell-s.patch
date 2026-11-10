@@ -23,10 +23,10 @@ through domicile::mojom::PagePicker, and the shell draws the picker.
  5 files changed, 45 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 3c7d1e2..9fbf6d0 100644
+index 1f3e82d..9ea049d 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
-@@ -732,6 +732,23 @@ void PopulateChromeFrameBinders(
+@@ -745,6 +745,23 @@ void PopulateChromeFrameBinders(
              base::BindOnce(&domicile::BindAppChannel, std::move(receiver)));
        }));
  
@@ -51,10 +51,10 @@ index 3c7d1e2..9fbf6d0 100644
  
    map->Add<blink::mojom::ScriptToolHost>(
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index fcfbb8d..5c12ce3 100644
+index b6bbfd9..d2b0111 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
-@@ -1228,6 +1228,8 @@ generated_interface_sources_in_core = [
+@@ -1230,6 +1230,8 @@ generated_interface_sources_in_core = [
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_external_app_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_sign_in_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_sign_in_event.h",
@@ -64,10 +64,10 @@ index fcfbb8d..5c12ce3 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_prompt_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
-index c52f84e..ca5735f 100644
+index 4d26138..b884524 100644
 --- a/third_party/blink/renderer/bindings/idl_in_core.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_core.gni
-@@ -471,6 +471,7 @@ static_idl_files_in_core = [
+@@ -473,6 +473,7 @@ static_idl_files_in_core = [
    "//third_party/blink/renderer/core/html/domicile/domicile_will_navigate_event.idl",
    "//third_party/blink/renderer/core/html/domicile/domicile_external_app_event.idl",
    "//third_party/blink/renderer/core/html/domicile/domicile_sign_in_event.idl",
@@ -76,10 +76,10 @@ index c52f84e..ca5735f 100644
    "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
    "//third_party/blink/renderer/core/html/html_head_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index 1f042de..8c99f39 100644
+index 83ff3b6..6d60d43 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
-@@ -112,6 +112,10 @@ blink_core_sources_html = [
+@@ -114,6 +114,10 @@ blink_core_sources_html = [
    "domicile/domicile_external_app_event.h",
    "domicile/domicile_sign_in_event.cc",
    "domicile/domicile_sign_in_event.h",
@@ -91,7 +91,7 @@ index 1f042de..8c99f39 100644
    "domicile/domicile_prompt_event.h",
    "domicile/html_app_element.cc",
 diff --git a/third_party/blink/renderer/core/page/chrome_client_impl.cc b/third_party/blink/renderer/core/page/chrome_client_impl.cc
-index a682451..1336461 100644
+index 99de6ae..57b5242 100644
 --- a/third_party/blink/renderer/core/page/chrome_client_impl.cc
 +++ b/third_party/blink/renderer/core/page/chrome_client_impl.cc
 @@ -83,6 +83,7 @@
@@ -130,7 +130,7 @@ index a682451..1336461 100644
    // Android does not support PagePopup, so we must always use the native
    // picker.
  #if !BUILDFLAG(IS_ANDROID)
-@@ -1398,6 +1413,12 @@ void ChromeClientImpl::DidEndEditingOnTextField(
+@@ -1401,6 +1416,12 @@ void ChromeClientImpl::DidEndEditingOnTextField(
  
  void ChromeClientImpl::OpenTextDataListChooser(HTMLInputElement& input) {
    NotifyPopupOpeningObservers();
@@ -143,6 +143,3 @@ index a682451..1336461 100644
    if (auto* fill_client =
            AutofillClientFromFrame(input.GetDocument().GetFrame())) {
      fill_client->OpenTextDataListChooser(WebInputElement(&input));
--- 
-2.43.0
-

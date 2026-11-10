@@ -15,13 +15,13 @@ to its element instead, and the shell draws it.
 - `render_widget_host_impl.cc`: UpdateTooltipUnderCursor asks it first
   and draws nothing when the delegate shows the tooltip.
 ---
- content/browser/renderer_host/render_widget_host_delegate.cc | 5 +++++
- content/browser/renderer_host/render_widget_host_delegate.h  | 5 +++++
- content/browser/renderer_host/render_widget_host_impl.cc     | 5 +++++
- content/browser/web_contents/web_contents_impl.cc            | 5 +++++
- content/browser/web_contents/web_contents_impl.h             | 2 ++
- content/public/browser/web_contents_delegate.cc              | 6 ++++++
- content/public/browser/web_contents_delegate.h               | 7 +++++++
+ .../browser/renderer_host/render_widget_host_delegate.cc   | 5 +++++
+ .../browser/renderer_host/render_widget_host_delegate.h    | 5 +++++
+ content/browser/renderer_host/render_widget_host_impl.cc   | 5 +++++
+ content/browser/web_contents/web_contents_impl.cc          | 5 +++++
+ content/browser/web_contents/web_contents_impl.h           | 2 ++
+ content/public/browser/web_contents_delegate.cc            | 6 ++++++
+ content/public/browser/web_contents_delegate.h             | 7 +++++++
  7 files changed, 35 insertions(+)
 
 diff --git a/content/browser/renderer_host/render_widget_host_delegate.cc b/content/browser/renderer_host/render_widget_host_delegate.cc
@@ -57,10 +57,10 @@ index 9d7adba..dd040a0 100644
    // Get the offset for the current touch sequence. e.g. visible top controls or
    // side UI will result in a nonzero offset being added to touch events.
 diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
-index b9b530e..1d12621 100644
+index dac75ae..187461d 100644
 --- a/content/browser/renderer_host/render_widget_host_impl.cc
 +++ b/content/browser/renderer_host/render_widget_host_impl.cc
-@@ -3082,6 +3082,11 @@ void RenderWidgetHostImpl::UpdateTooltipUnderCursor(
+@@ -3058,6 +3058,11 @@ void RenderWidgetHostImpl::UpdateTooltipUnderCursor(
      return;
    }
  
@@ -73,10 +73,10 @@ index b9b530e..1d12621 100644
        GetWrappedTooltipText(tooltip_text, text_direction_hint));
  }
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index cd7b9ec..f241753 100644
+index 9fa62ad..ba8a904 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -5494,6 +5494,11 @@ bool WebContentsImpl::IsFullscreen() {
+@@ -5515,6 +5515,11 @@ bool WebContentsImpl::IsFullscreen() {
    return delegate_ && delegate_->IsFullscreenForTabOrPending(this);
  }
  
@@ -89,10 +89,10 @@ index cd7b9ec..f241753 100644
    if (WasDiscarded()) {
      return false;
 diff --git a/content/browser/web_contents/web_contents_impl.h b/content/browser/web_contents/web_contents_impl.h
-index 8edfecb..894e497 100644
+index 31c5a06..577e0a5 100644
 --- a/content/browser/web_contents/web_contents_impl.h
 +++ b/content/browser/web_contents/web_contents_impl.h
-@@ -1162,6 +1162,8 @@ class CONTENT_EXPORT WebContentsImpl
+@@ -1168,6 +1168,8 @@ class CONTENT_EXPORT WebContentsImpl
                                  float ratio) override;
    void SetTopControlsGestureScrollInProgress(bool in_progress) override;
    void RenderWidgetCreated(RenderWidgetHostImpl* render_widget_host) override;
@@ -136,6 +136,3 @@ index b3c8934..2fadec5 100644
    // Returns true if `web_contents` is, or is transitioning to, tab-fullscreen.
    virtual bool IsFullscreenForTabOrPending(const WebContents* web_contents);
  
--- 
-2.43.0
-

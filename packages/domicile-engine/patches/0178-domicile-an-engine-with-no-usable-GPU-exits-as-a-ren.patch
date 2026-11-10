@@ -19,7 +19,7 @@ job builds it on `crux`.
  1 file changed, 6 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/gpu/gpu_data_manager_impl_private.cc b/content/browser/gpu/gpu_data_manager_impl_private.cc
-index 6a6ab74..1143db9 100644
+index 3f109c6..d47e67d 100644
 --- a/content/browser/gpu/gpu_data_manager_impl_private.cc
 +++ b/content/browser/gpu/gpu_data_manager_impl_private.cc
 @@ -34,6 +34,7 @@
@@ -30,7 +30,7 @@ index 6a6ab74..1143db9 100644
  #include "base/rand_util.h"
  #include "base/strings/string_number_conversions.h"
  #include "base/strings/string_util.h"
-@@ -381,8 +382,12 @@ enum class CompositingMode {
+@@ -383,8 +384,12 @@ enum class CompositingMode {
  };
  
  // Intentionally crash with a very descriptive name.
@@ -44,4 +44,3 @@ index 6a6ab74..1143db9 100644
  }
  
  #if BUILDFLAG(IS_WIN)
-

@@ -21,10 +21,10 @@ draws nothing while a slow module loads.
  2 files changed, 26 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
-index d34dfe5..4e47f80 100644
+index 0406bae..18824fd 100644
 --- a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
 +++ b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
-@@ -245,6 +245,21 @@ void RenderBlockingResourceManager::RemovePendingScript(
+@@ -251,6 +251,21 @@ void RenderBlockingResourceManager::RemovePendingScript(
    RenderBlockingResourceUnblocked();
  }
  

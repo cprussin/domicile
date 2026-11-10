@@ -146,7 +146,7 @@ index a7d8d96..8a276f9 100644
    raw_ptr<RenderWidgetHostViewInput> bubbling_gesture_scroll_origin_ = nullptr;
    // Used to target wheel events for the duration of a scroll.
 diff --git a/content/browser/renderer_host/cross_process_frame_connector.cc b/content/browser/renderer_host/cross_process_frame_connector.cc
-index 52af995..fe0d533 100644
+index 74dcb3d..e8c4b94 100644
 --- a/content/browser/renderer_host/cross_process_frame_connector.cc
 +++ b/content/browser/renderer_host/cross_process_frame_connector.cc
 @@ -472,6 +472,13 @@ CrossProcessFrameConnector::GetRootRenderWidgetHostView() {
@@ -164,10 +164,10 @@ index 52af995..fe0d533 100644
    return parent ? parent->GetPinchZoomTarget() : nullptr;
  }
 diff --git a/content/browser/renderer_host/render_widget_host_view_aura.cc b/content/browser/renderer_host/render_widget_host_view_aura.cc
-index caf30a7..7fd0e14 100644
+index 48d4cce..d0e5fb6 100644
 --- a/content/browser/renderer_host/render_widget_host_view_aura.cc
 +++ b/content/browser/renderer_host/render_widget_host_view_aura.cc
-@@ -1455,7 +1455,10 @@ void RenderWidgetHostViewAura::GestureEventAck(
+@@ -1473,7 +1473,10 @@ void RenderWidgetHostViewAura::GestureEventAck(
  
    event_handler_->GestureEventAck(event, ack_result);
  
@@ -180,7 +180,7 @@ index caf30a7..7fd0e14 100644
  
  void RenderWidgetHostViewAura::ProcessAckedTouchEvent(
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index b225a3c..0fad1e9 100644
+index c7e9210..ed6a5ee 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -391,8 +391,10 @@ void EventFactoryEvdev::DispatchPinchEvent(const PinchEventParams& params) {
@@ -197,10 +197,10 @@ index b225a3c..0fad1e9 100644
      SetPinchMetadata(event, *params.native_pinch);
    }
 diff --git a/ui/ozone/platform/wayland/host/wayland_event_source.cc b/ui/ozone/platform/wayland/host/wayland_event_source.cc
-index a01b607..b706510 100644
+index e6f52f4..d8f8b94 100644
 --- a/ui/ozone/platform/wayland/host/wayland_event_source.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_event_source.cc
-@@ -952,8 +952,10 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
+@@ -956,8 +956,10 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
    }
  
    auto location = pointer_location_ + delta;
@@ -213,6 +213,3 @@ index a01b607..b706510 100644
    event.set_source_device_id(device_id);
    if (native_pinch) {
      SetPinchMetadata(event, *native_pinch);
--- 
-2.43.0
-

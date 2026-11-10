@@ -21,14 +21,14 @@ job builds it on `crux`.
 ---
  chrome/browser/BUILD.gn                       |  1 +
  .../chrome_browser_interface_binders.cc       |  7 +++++++
- .../browser/chrome_content_browser_client.cc  | 21 +++++++++++++++++++
- 3 files changed, 29 insertions(+)
+ .../browser/chrome_content_browser_client.cc  | 19 +++++++++++++++++++
+ 3 files changed, 27 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 4f68683..8cd27c8 100644
+index 38fef1b..b859d97 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2715,6 +2715,7 @@ source_set("browser") {
+@@ -2720,6 +2720,7 @@ source_set("browser") {
      "//components/domicile:color_scheme",
      "//components/domicile:control_channel",
      "//components/domicile:desktop_prefs",
@@ -37,7 +37,7 @@ index 4f68683..8cd27c8 100644
      "//components/domicile:shell_origin",
      "//components/domicile:shell_scheme",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index e4fec7e..abc0016 100644
+index ab9fbfe..3bb3985 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -15,6 +15,7 @@
@@ -48,7 +48,7 @@ index e4fec7e..abc0016 100644
  #include "components/domicile/browser/keyboard_layout.h"
  #include "components/domicile/browser/shell_origin.h"
  #include "components/domicile/browser/web_view_guest.h"
-@@ -582,6 +583,12 @@ void PopulateChromeFrameBinders(
+@@ -595,6 +596,12 @@ void PopulateChromeFrameBinders(
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&ui::SetDeskCursorTheme)),
@@ -62,7 +62,7 @@ index e4fec7e..abc0016 100644
                  // of its <webview>s is told to, and no other page.
                  domicile::Page{frame->GetGlobalId().child_id.value(),
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 788c713..ea92efc 100644
+index d3d2cdb..c068b3d 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,7 @@
@@ -73,7 +73,7 @@ index 788c713..ea92efc 100644
  #include "components/domicile/browser/shell_source.h"
  #include "components/domicile/browser/shell_url_loader_factory.h"
  #include "components/domicile/common/domicile_scheme.h"
-@@ -5062,6 +5063,13 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+@@ -5065,6 +5066,13 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
                                main_frame_site.GetSecurityPrincipal(),
                                web_contents, *profile);
  
@@ -87,16 +87,14 @@ index 788c713..ea92efc 100644
    web_prefs->root_scrollbar_theme_color =
        GetRootScrollbarThemeColor(web_contents);
  
-@@ -5206,6 +5214,19 @@ bool ChromeContentBrowserClient::OverrideWebPreferencesAfterNavigation(
+@@ -5209,6 +5217,17 @@ bool ChromeContentBrowserClient::OverrideWebPreferencesAfterNavigation(
        web_prefs->preferred_root_scrollbar_color_scheme !=
            old_preferred_root_scrollbar_color_scheme;
  
 +  // Domicile's engine fork: the same as OverrideWebPreferences, for the page
 +  // this navigation committed.
 +  const bool force_dark =
-+      Profile::FromBrowserContext(web_contents->GetBrowserContext())
-+          ->GetPrefs()
-+          ->GetBoolean(prefs::kWebKitForceDarkModeEnabled) ||
++      profile->GetPrefs()->GetBoolean(prefs::kWebKitForceDarkModeEnabled) ||
 +      domicile::ForcesDark(
 +          web_contents->GetPrimaryMainFrame()->GetLastCommittedURL(),
 +          web_prefs->preferred_color_scheme ==

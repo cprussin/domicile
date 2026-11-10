@@ -23,10 +23,10 @@ under the shell's:
  3 files changed, 28 insertions(+), 10 deletions(-)
 
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
-index 1499c45..0868e95 100644
+index babe442..bd1da01 100644
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
-@@ -1237,6 +1237,17 @@ void ChromeContentRendererClient::GetInterface(
+@@ -1250,6 +1250,17 @@ void ChromeContentRendererClient::GetInterface(
        mojo::GenericPendingReceiver(interface_name, std::move(interface_pipe)));
  }
  
@@ -44,7 +44,7 @@ index 1499c45..0868e95 100644
  void ChromeContentRendererClient::PrepareErrorPage(
      content::RenderFrame* render_frame,
      const blink::WebURLError& web_error,
-@@ -1244,6 +1255,10 @@ void ChromeContentRendererClient::PrepareErrorPage(
+@@ -1257,6 +1268,10 @@ void ChromeContentRendererClient::PrepareErrorPage(
      content::mojom::AlternativeErrorPageOverrideInfoPtr
          alternative_error_page_info,
      std::string* error_html) {
@@ -55,7 +55,7 @@ index 1499c45..0868e95 100644
    NetErrorHelper::Get(render_frame)
        ->PrepareErrorPage(
            error_page::Error::NetError(
-@@ -1267,6 +1282,10 @@ void ChromeContentRendererClient::PrepareErrorPageForHttpStatusError(
+@@ -1280,6 +1295,10 @@ void ChromeContentRendererClient::PrepareErrorPageForHttpStatusError(
      content::mojom::AlternativeErrorPageOverrideInfoPtr
          alternative_error_page_info,
      std::string* error_html) {
@@ -108,6 +108,3 @@ index 198762d..f123da9 100644
    SSLBlockingPage(
        content::WebContents* web_contents,
        net::Error cert_error,
--- 
-2.43.0
-

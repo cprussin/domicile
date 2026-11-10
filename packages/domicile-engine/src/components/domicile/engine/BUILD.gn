@@ -9,6 +9,8 @@
 #
 #   autoninja -C out/Domicile domicile_engine
 
+import("//build/config/sanitizers/alloc_token.gni")
+
 # The library's event queue to the compositor, split out so it can be tested
 # without a browser.
 source_set("event_queue") {
@@ -203,8 +205,46 @@ source_set("event_queue_unit_tests") {
   ]
 }
 
+# Sends the library's allocations to the process's allocator. See
+# process_allocator.c.
+source_set("process_allocator") {
+  if (use_alloc_token) {
+    sources = [ "process_allocator.c" ]
+  }
+
+  # Otherwise each wrapper's own call would be rewritten back into itself.
+  configs -= [ "//build/config/sanitizers:alloc_token" ]
+}
+
+_alloc_token_functions = [
+  "__alloc_token_aligned_alloc",
+  "__alloc_token_calloc",
+  "__alloc_token_malloc",
+  "__alloc_token_memalign",
+  "__alloc_token_posix_memalign",
+  "__alloc_token_pvalloc",
+  "__alloc_token_realloc",
+  "__alloc_token_reallocarray",
+  "__alloc_token_valloc",
+  "__alloc_token__Znam",
+  "__alloc_token__ZnamRKSt9nothrow_t",
+  "__alloc_token__ZnamSt11align_val_t",
+  "__alloc_token__ZnamSt11align_val_tRKSt9nothrow_t",
+  "__alloc_token__Znwm",
+  "__alloc_token__ZnwmRKSt9nothrow_t",
+  "__alloc_token__ZnwmSt11align_val_t",
+  "__alloc_token__ZnwmSt11align_val_tRKSt9nothrow_t",
+]
+
 shared_library("domicile_engine") {
   output_name = "domicile_engine"
+
+  if (use_alloc_token) {
+    ldflags = []
+    foreach(f, _alloc_token_functions) {
+      ldflags += [ "-Wl,--wrap=$f" ]
+    }
+  }
 
   sources = [
     "domicile_engine.cc",
@@ -215,6 +255,7 @@ shared_library("domicile_engine") {
   deps = [
     ":event_queue",
     ":probe_wait",
+    ":process_allocator",
     ":surface_alpha",
     ":surface_crop",
     ":surface_frames",

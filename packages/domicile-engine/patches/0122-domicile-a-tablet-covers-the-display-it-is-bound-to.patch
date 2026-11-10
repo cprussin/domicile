@@ -31,7 +31,7 @@ job builds it on `crux`.
  4 files changed, 48 insertions(+), 4 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 4e74f1b..16b3d0e 100644
+index a34023a..dc3d666 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -136,6 +136,8 @@ source_set("gbm") {
@@ -43,7 +43,7 @@ index 4e74f1b..16b3d0e 100644
      "domicile/drm_clipboard.cc",
      "domicile/drm_clipboard.h",
      "domicile/drm_screen.cc",
-@@ -271,6 +273,7 @@ source_set("gbm_unittests") {
+@@ -273,6 +275,7 @@ source_set("gbm_unittests") {
      "domicile/drm_master_unittest.cc",
      "domicile/drm_modeset_unittest.cc",
      "domicile/drm_pointer_crossing_unittest.cc",
@@ -52,7 +52,7 @@ index 4e74f1b..16b3d0e 100644
      "domicile/drm_screen_unittest.cc",
      "domicile/drm_sleep_unittest.cc",
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index dae841e..d0eed1e 100644
+index a7eb624..4496ea4 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -389,11 +389,17 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
@@ -90,7 +90,7 @@ index dae841e..d0eed1e 100644
              : located_event->location_f() -
                    gfx::Vector2dF(bounds_.OffsetFromOrigin());
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 724d754..3343075 100644
+index 572e759..13a228e 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -53,6 +53,7 @@
@@ -101,7 +101,7 @@ index 724d754..3343075 100644
  #include "ui/ozone/platform/drm/domicile/drm_screen.h"
  #include "ui/ozone/platform/drm/domicile/drm_sleep.h"
  #include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
-@@ -181,6 +182,21 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -184,6 +185,21 @@ class OzonePlatformDrm : public OzonePlatform {
      }
    }
  
@@ -123,7 +123,7 @@ index 724d754..3343075 100644
    // DOMICILE: the desktop's clipboards, which without this the browser does
    // not have -- `Clipboard::Create` falls back to `ClipboardNonBacked`, an
    // in-process store nothing outside the browser can reach, so a copy made in
-@@ -545,6 +561,8 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -554,6 +570,8 @@ class OzonePlatformDrm : public OzonePlatform {
    // owns it.
    raw_ptr<DrmScreen> screen_ = nullptr;
    std::unique_ptr<DrmModeset> modeset_;
@@ -133,7 +133,7 @@ index 724d754..3343075 100644
    // that event source for as long as it lives. And after modeset_, which it
    // asks to light the screens again when the console comes back.
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index e0dbd22..b0c4c2c 100644
+index 15330b0..2340115 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -96,6 +96,16 @@ struct DomicileDisplayLayout {
@@ -153,7 +153,7 @@ index e0dbd22..b0c4c2c 100644
  // Base class for Ozone platform implementations.
  //
  // Ozone platforms must override this class and implement the virtual
-@@ -375,6 +385,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -396,6 +406,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // (docs/architecture/ONE-PAGE-FOR-THE-DESK.md). `gfx::kNullAcceleratedWidget`
    // gives each window its own events again. DRM only, like the layout above.
    virtual void SetDomicileDeskHost(gfx::AcceleratedWidget host) {}

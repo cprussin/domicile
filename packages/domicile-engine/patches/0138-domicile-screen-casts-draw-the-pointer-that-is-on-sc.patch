@@ -23,10 +23,10 @@ job builds it on `crux`.
  2 files changed, 13 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 5b4cbd7..8d51249 100644
+index 937fbf4..cd282e3 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -184,6 +184,10 @@ source_set("gbm") {
+@@ -186,6 +186,10 @@ source_set("gbm") {
      "//ui/base",
      "//ui/base/cursor",
  
@@ -38,7 +38,7 @@ index 5b4cbd7..8d51249 100644
      # from.
      "//ui/base/cursor/domicile:desk_cursor_theme",
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 411e68a..8d229f6 100644
+index b48a9c4..ade0c05 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -16,6 +16,7 @@

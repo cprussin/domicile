@@ -56,10 +56,10 @@ the shell opens for it -- runs on `crux` with the rest of the engine job.
  3 files changed, 5 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 536b682..f5ef453 100644
+index c5c679e..758a667 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
-@@ -1206,6 +1206,8 @@ generated_interface_sources_in_core = [
+@@ -1208,6 +1208,8 @@ generated_interface_sources_in_core = [
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_app_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_web_view_element.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_web_view_element.h",
@@ -69,10 +69,10 @@ index 536b682..f5ef453 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_head_element.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
-index 455daa1..3c062e9 100644
+index e9bf0ff..eccfa3a 100644
 --- a/third_party/blink/renderer/bindings/idl_in_core.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_core.gni
-@@ -460,6 +460,7 @@ static_idl_files_in_core = [
+@@ -462,6 +462,7 @@ static_idl_files_in_core = [
    "//third_party/blink/renderer/core/html/html_frame_set_element.idl",
    "//third_party/blink/renderer/core/html/domicile/html_app_element.idl",
    "//third_party/blink/renderer/core/html/domicile/html_web_view_element.idl",
@@ -81,10 +81,10 @@ index 455daa1..3c062e9 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index 2382141..04ac144 100644
+index 2942afd..ca668d4 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
-@@ -96,6 +96,8 @@ blink_core_sources_html = [
+@@ -98,6 +98,8 @@ blink_core_sources_html = [
    "document_all_name_collection.h",
    "document_name_collection.cc",
    "document_name_collection.h",
