@@ -1289,6 +1289,10 @@ fn open_a_popup(
     let xdg = wm_base.get_xdg_surface(&surface, handle, PopupRole);
     let popup = xdg.get_popup(Some(parent), &positioner, handle, PopupRole);
     positioner.destroy();
+    // Only traced, under the popup's surface, as the window's is.
+    if let Some(manager) = &client.globals.fractional_scale {
+        manager.get_fractional_scale(&surface, handle, PopupScale(surface.id()));
+    }
     // Grab before the first commit, as xdg-shell requires. The serial
     // should be the press that opened the menu; there is none, and a
     // compositor that validated it would dismiss the popup.
@@ -2343,15 +2347,47 @@ delegate_noop!(Client: ignore xdg_positioner::XdgPositioner);
 
 // Popup surface and buffer events are ignored: it is drawn once, and the
 // window reports outputs.
+/// Traces the displays a popup enters and leaves, under its own surface.
 impl Dispatch<wl_surface::WlSurface, PopupRole> for Client {
     fn event(
         _: &mut Client,
-        _: &wl_surface::WlSurface,
-        _: wl_surface::Event,
+        surface: &wl_surface::WlSurface,
+        event: wl_surface::Event,
         _: &PopupRole,
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
+        match event {
+            wl_surface::Event::Enter { output } => {
+                crate::say!(surface.id(), "enter({})", output.id());
+            }
+            wl_surface::Event::Leave { output } => {
+                crate::say!(surface.id(), "leave({})", output.id());
+            }
+            _ => {}
+        }
+    }
+}
+
+/// User data for a popup's `wp_fractional_scale_v1`: the popup's surface,
+/// which its preferred scale is traced under.
+struct PopupScale(ObjectId);
+
+/// Traces a popup's preferred scale as
+/// `wl_surface@N.preferred_scale(120)`, so a check can tell it from the
+/// window's.
+impl Dispatch<wp_fractional_scale_v1::WpFractionalScaleV1, PopupScale> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wp_fractional_scale_v1::WpFractionalScaleV1,
+        event: wp_fractional_scale_v1::Event,
+        PopupScale(surface): &PopupScale,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event {
+            crate::say!(surface, "preferred_scale({scale})");
+        }
     }
 }
 

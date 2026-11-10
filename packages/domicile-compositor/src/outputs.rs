@@ -395,8 +395,8 @@ impl DomicileCompositor {
     /// the scale to draw at.
     ///
     /// Runs when the displays or their scales change. A window the page moves
-    /// (`ChromeMessage::SetAppBounds`) and a new popup are placed alone with
-    /// [`place_window`](Self::place_window). Smithay only sends
+    /// (`ChromeMessage::SetAppBounds`) is placed alone with its popups, and a
+    /// new or repositioned popup alone, with [`place_window`](Self::place_window). Smithay only sends
     /// `enter`/`leave` and the preferred scale when they change.
     ///
     /// The chrome's own toplevel only gets its scale here. It belongs on every
@@ -406,11 +406,8 @@ impl DomicileCompositor {
         for (app_id, toplevel) in &self.toplevels {
             self.place_window(toplevel.wl_surface(), self.app_bounds.get(app_id).copied());
         }
-        // Known gap: popups are on every display, at the densest scale. The
-        // page reports no bounds for them, and they do not follow their
-        // parent window's.
         for popup in self.xdg_shell_state.popup_surfaces() {
-            self.place_window(popup.wl_surface(), None);
+            self.place_window(popup.wl_surface(), self.popup_bounds(popup));
         }
         // The chrome covers every display, so it draws for the densest.
         if let Some(chrome) = &self.chrome_toplevel {

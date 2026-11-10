@@ -136,8 +136,12 @@ the display holding most of it, as in sway. Other monitors resample its buffer.
   `wl_output.scale` of the displays it entered.
 - A window the shell has not reported, or one in a gap, is on every display at
   the densest scale.
-- Popups are on every display at the densest scale. They do not follow their
-  parent window yet.
+- A popup (a menu, nested or not) takes its window's box moved by where the
+  menu sits over the window, at the size it was configured to. It enters the
+  displays that box overlaps, at the scale of the one with the largest overlap,
+  and is placed again when its window moves or it repositions. A popup over a
+  window the shell has not reported, or a layer surface's, is on every display
+  at the densest scale.
 
 ### Floats across screens (manganese)
 

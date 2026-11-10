@@ -311,6 +311,38 @@ impl DomicileCompositor {
         }
     }
 
+    /// Where `popup` is on the desktop: its window's bounds moved by where the
+    /// menu is over the window, at the size it was configured to.
+    ///
+    /// `None`, like a window the page has not placed, when its window has no
+    /// bounds: it has no parent (a layer surface's popup), or the page has
+    /// not put the window on a screen.
+    pub fn popup_bounds(&self, popup: &PopupSurface) -> Option<domicile_scene::Bounds> {
+        let window = self.bounds_of(&self.window_under_menus(popup.wl_surface()))?;
+        let at = self.menu_offset(popup.wl_surface());
+        let size = popup.with_pending_state(|state| state.geometry.size);
+        let min = domicile_scene::Point {
+            x: window.min.x + f64::from(at.x),
+            y: window.min.y + f64::from(at.y),
+        };
+        Some(domicile_scene::Bounds {
+            min,
+            max: domicile_scene::Point {
+                x: min.x + f64::from(size.w),
+                y: min.y + f64::from(size.h),
+            },
+        })
+    }
+
+    /// Place each popup open over the window `surface` again, after it moved.
+    pub fn place_the_popups_over(&self, surface: &WlSurface) {
+        for popup in self.xdg_shell_state.popup_surfaces() {
+            if self.window_under_menus(popup.wl_surface()) == *surface {
+                self.place_window(popup.wl_surface(), self.popup_bounds(popup));
+            }
+        }
+    }
+
     /// Where `surface` is relative to the window under its menus: the sum of
     /// their positions, or zero for a surface that is not a menu.
     fn menu_offset(&self, surface: &WlSurface) -> Point<i32, Logical> {
