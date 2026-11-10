@@ -20,14 +20,14 @@ Guarded by `guard-animation-main-frames.sh`.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- testing/variations/fieldtrial_testing_config.json | 25 -------------------------
- 1 file changed, 25 deletions(-)
+ .../variations/fieldtrial_testing_config.json | 26 -------------------
+ 1 file changed, 26 deletions(-)
 
 diff --git a/testing/variations/fieldtrial_testing_config.json b/testing/variations/fieldtrial_testing_config.json
-index 9433e1b..ace9980 100644
+index 41ec8bf..89fe17f 100644
 --- a/testing/variations/fieldtrial_testing_config.json
 +++ b/testing/variations/fieldtrial_testing_config.json
-@@ -5009,31 +5009,6 @@
+@@ -5778,32 +5778,6 @@
              ]
          }
      ],
@@ -35,6 +35,7 @@ index 9433e1b..ace9980 100644
 -        {
 -            "platforms": [
 -                "android",
+-                "android_desktop",
 -                "android_webview",
 -                "chromeos",
 -                "fuchsia",
@@ -59,6 +60,3 @@ index 9433e1b..ace9980 100644
      "CompressionDictionaryPreload": [
          {
              "platforms": [
--- 
-2.43.0
-

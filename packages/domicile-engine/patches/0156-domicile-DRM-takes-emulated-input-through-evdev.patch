@@ -19,7 +19,7 @@ repository.
  3 files changed, 20 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 8d51249..a4da309 100644
+index cd282e3..e8ce410 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -124,6 +124,8 @@ source_set("gbm") {
@@ -31,7 +31,7 @@ index 8d51249..a4da309 100644
      "domicile/drm_fullscreen.cc",
      "domicile/drm_fullscreen.h",
      "domicile/drm_input_devices.cc",
-@@ -198,6 +200,7 @@ source_set("gbm") {
+@@ -200,6 +202,7 @@ source_set("gbm") {
      "//ui/display/types",
      "//ui/display/util",
      "//ui/events",
@@ -39,7 +39,7 @@ index 8d51249..a4da309 100644
      "//ui/events/devices",
      "//ui/events/ozone",
      "//ui/events/ozone/evdev",
-@@ -275,6 +278,7 @@ source_set("gbm_unittests") {
+@@ -277,6 +280,7 @@ source_set("gbm_unittests") {
      "domicile/drm_canvas_unittest.cc",
      "domicile/drm_no_gbm_modeset_unittest.cc",
      "domicile/drm_cursor_factory_unittest.cc",
@@ -47,7 +47,7 @@ index 8d51249..a4da309 100644
      "domicile/drm_fullscreen_unittest.cc",
      "domicile/drm_input_controller_unittest.cc",
      "domicile/drm_input_devices_unittest.cc",
-@@ -341,6 +345,7 @@ source_set("gbm_unittests") {
+@@ -343,6 +347,7 @@ source_set("gbm_unittests") {
      # this target includes a `//ui/events` header directly rather than only
      # through `:gbm`, and `gn check` wants the edge said out loud.
      "//ui/events",
@@ -56,7 +56,7 @@ index 8d51249..a4da309 100644
      # `DrmInputControllerTest` builds the evdev input controller this
      # platform's evdev thread reports to, and the stub layout its keyboard
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 92af7cf..f7e0bb7 100644
+index c11d72f..2bd62e5 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -51,6 +51,7 @@
@@ -75,7 +75,7 @@ index 92af7cf..f7e0bb7 100644
  #include "ui/platform_window/platform_window_init_properties.h"
  
  #if BUILDFLAG(USE_XKBCOMMON)
-@@ -268,6 +270,15 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -271,6 +273,15 @@ class OzonePlatformDrm : public OzonePlatform {
      return event_factory_ozone_->CreateSystemInputInjector();
    }
  
@@ -91,20 +91,20 @@ index 92af7cf..f7e0bb7 100644
    // In multi-process mode, this function must be executed in Viz as it sets up
    // the callbacks needed for Mojo receivers. In single process mode, it may be
    // called on any thread. It must follow one of |InitializeUI| or
-@@ -582,6 +593,8 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -590,6 +601,8 @@ class OzonePlatformDrm : public OzonePlatform {
    // devices from it, so it is destroyed after them.
    std::unique_ptr<DrmLogindSession> logind_;
    std::unique_ptr<EventFactoryEvdev> event_factory_ozone_;
 +  // DOMICILE: emulated input's injector, made at its first event.
 +  std::unique_ptr<SystemInputInjector> desk_injector_;
    std::unique_ptr<DrmDisplayHostManager> display_manager_;
+   PlatformProperties platform_properties_;
  
-   // Domicile's engine fork: what drives NativeDisplayDelegate so that
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 7bdde5b..a10a3e0 100644
+index f975437..faabf13 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
-@@ -448,8 +448,8 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -469,8 +469,8 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // the host session's.
    virtual void SetDomicileWhitePoint(const DomicileWhitePoint& white_point) {}
    // DOMICILE: emulated input for the desk host, which it hears as it hears

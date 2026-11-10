@@ -29,10 +29,10 @@ job builds it on `crux`.
  4 files changed, 58 insertions(+)
 
 diff --git a/components/viz/service/BUILD.gn b/components/viz/service/BUILD.gn
-index 8c421bc..f621c1e 100644
+index 9f7515d..1a7396f 100644
 --- a/components/viz/service/BUILD.gn
 +++ b/components/viz/service/BUILD.gn
-@@ -301,6 +301,9 @@ viz_component("service") {
+@@ -303,6 +303,9 @@ viz_component("service") {
      "//components/version_info",
      "//components/viz/client",
      "//components/viz/common",
@@ -43,7 +43,7 @@ index 8c421bc..f621c1e 100644
      "//gpu/config",
      "//gpu/ipc/client",
 diff --git a/components/viz/service/display/surface_aggregator.cc b/components/viz/service/display/surface_aggregator.cc
-index 9e25476..341cc9b 100644
+index 24d5cc7..b12a9bb 100644
 --- a/components/viz/service/display/surface_aggregator.cc
 +++ b/components/viz/service/display/surface_aggregator.cc
 @@ -41,6 +41,8 @@
@@ -55,7 +55,7 @@ index 9e25476..341cc9b 100644
  #include "components/viz/service/display/overlay_candidate.h"
  #include "components/viz/service/display/renderer_utils.h"
  #include "components/viz/service/display/resolved_frame_data.h"
-@@ -1009,6 +1011,12 @@ void SurfaceAggregator::EmitSurfaceContent(
+@@ -1011,6 +1013,12 @@ void SurfaceAggregator::EmitSurfaceContent(
  
      MoveMatchingRequests(source.id, &copy_requests, &copy_pass->copy_requests);
  
@@ -68,7 +68,7 @@ index 9e25476..341cc9b 100644
      // Contributing passes aggregated in to the pass list need to take the
      // transform of the surface quad into account to update their transform to
      // the root surface.
-@@ -1565,6 +1573,12 @@ void SurfaceAggregator::CopyPasses(ResolvedFrameData& resolved_frame) {
+@@ -1567,6 +1575,12 @@ void SurfaceAggregator::CopyPasses(ResolvedFrameData& resolved_frame) {
  
      MoveMatchingRequests(source.id, &copy_requests, &copy_pass->copy_requests);
  
@@ -81,7 +81,7 @@ index 9e25476..341cc9b 100644
      // We add an additional render pass for the transform if the root render
      // pass has any copy requests.
      apply_surface_transform_to_root_pass =
-@@ -2310,6 +2324,25 @@ AggregatedFrame SurfaceAggregator::Aggregate(
+@@ -2312,6 +2326,25 @@ AggregatedFrame SurfaceAggregator::Aggregate(
  
    AddRootReadbackPass();
  
@@ -107,7 +107,7 @@ index 9e25476..341cc9b 100644
    ProcessAddedAndRemovedSurfaces();
    contained_surfaces_.swap(previous_contained_surfaces_);
    contained_frame_sinks_.swap(previous_contained_frame_sinks_);
-@@ -2371,6 +2404,7 @@ void SurfaceAggregator::ResetAfterAggregate() {
+@@ -2373,6 +2406,7 @@ void SurfaceAggregator::ResetAfterAggregate() {
    expected_display_time_ = base::TimeTicks();
    display_trace_id_ = -1;
    has_copy_requests_ = false;

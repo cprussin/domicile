@@ -33,7 +33,7 @@ job builds it on `crux`.
  4 files changed, 50 insertions(+), 48 deletions(-)
 
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 895fa85..a33ef99 100644
+index 04e14e3..7393016 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -576,19 +576,22 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
@@ -68,10 +68,10 @@ index 895fa85..a33ef99 100644
  
  void LibInputEventConverter::CancelFling(base::TimeTicks time) {
 diff --git a/ui/ozone/platform/wayland/host/wayland_event_source.cc b/ui/ozone/platform/wayland/host/wayland_event_source.cc
-index f7dae64..a01b607 100644
+index e6a15f6..e6f52f4 100644
 --- a/ui/ozone/platform/wayland/host/wayland_event_source.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_event_source.cc
-@@ -1228,19 +1228,6 @@ void WaylandEventSource::ProcessPointerScrollData() {
+@@ -1232,19 +1232,6 @@ void WaylandEventSource::ProcessPointerScrollData() {
        pointer_scroll_data_->axis_source == WL_POINTER_AXIS_SOURCE_CONTINUOUS
            ? NativeScrollSource::kContinuous
            : NativeScrollSource::kFinger;
@@ -91,7 +91,7 @@ index f7dae64..a01b607 100644
    // Dispatch Fling event if pointer.axis_stop is notified and the recent
    // pointer.axis events meets the criteria to start fling scroll.
    if (pointer_scroll_data_->dx == 0 && pointer_scroll_data_->dy == 0 &&
-@@ -1256,6 +1243,17 @@ void WaylandEventSource::ProcessPointerScrollData() {
+@@ -1260,6 +1247,17 @@ void WaylandEventSource::ProcessPointerScrollData() {
      is_fling_active_ = true;
      pointer_frames_.push_back(
          std::make_unique<FrameData>(event, base::NullCallback()));
@@ -273,6 +273,3 @@ index 28b62fb..f4d0f11 100644
    // Finally, the hold must cancel the fling with zero offsets.
    ASSERT_TRUE(event4);
    ASSERT_TRUE(event4->IsScrollEvent());
--- 
-2.43.0
-

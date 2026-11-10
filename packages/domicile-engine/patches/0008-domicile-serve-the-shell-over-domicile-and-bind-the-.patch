@@ -87,12 +87,12 @@ protocol members, and shellDocument still lives in TypeScript.
  14 files changed, 209 insertions(+), 2 deletions(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 1b1837b..b4fa8ad 100644
+index 34431ee..dc52d90 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2698,6 +2698,14 @@ source_set("browser") {
+@@ -2703,6 +2703,14 @@ source_set("browser") {
+     "//components/crash/core/app",
      "//components/device_event_log",
-     "//components/dom_distiller/content/browser",
      "//components/domain_reliability",
 +
 +    # Domicile's engine fork: serving the shell over domicile://, the
@@ -106,7 +106,7 @@ index 1b1837b..b4fa8ad 100644
      "//components/embedder_support:user_agent",
      "//components/enterprise/net/content",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index ec0cde4..5a21438 100644
+index 3a62cda..da12a14 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -4,6 +4,11 @@
@@ -121,7 +121,7 @@ index ec0cde4..5a21438 100644
  #include <utility>
  
  #include "base/feature_list.h"
-@@ -479,6 +484,41 @@ void PopulateChromeFrameBinders(
+@@ -492,6 +497,41 @@ void PopulateChromeFrameBinders(
    if (render_frame_host->GetProcess()->IsPrivileged()) {
      map->Add<pwc::mojom::PrivilegedBridge>(&pwc::BindPrivilegedBridge);
    }
@@ -164,7 +164,7 @@ index ec0cde4..5a21438 100644
  
    map->Add<blink::mojom::ScriptToolHost>(
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 03ff0ee..1876d01 100644
+index 41b2874..c50c456 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -4,6 +4,8 @@
@@ -175,8 +175,8 @@ index 03ff0ee..1876d01 100644
 +
  #include <memory>
  #include <string>
- #include <tuple>
-@@ -1746,6 +1748,16 @@ void ChromeBrowserMainParts::PreBrowserStart() {
+ #include <string_view>
+@@ -1759,6 +1761,16 @@ void ChromeBrowserMainParts::PreBrowserStart() {
  
  void ChromeBrowserMainParts::PostBrowserStart() {
    TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostBrowserStart");
@@ -194,7 +194,7 @@ index 03ff0ee..1876d01 100644
      chrome_extra_part->PostBrowserStart();
    }
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 25a19ea..992e5dc 100644
+index 43adf2b..2e51f0b 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,10 @@
@@ -208,7 +208,7 @@ index 25a19ea..992e5dc 100644
  #include <algorithm>
  #include <iterator>
  #include <map>
-@@ -2592,6 +2596,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
+@@ -2600,6 +2604,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
  
    const GURL& site_url =
        site_instance->GetSecurityPrincipal().GetDeprecatedSiteURL();
@@ -234,7 +234,7 @@ index 25a19ea..992e5dc 100644
    if (search::IsNTPURL(site_url)) {
      site_instance->GetProcess()->SetUserData(search::kIsNTPProcessKey,
                                               std::make_unique<NTPUserData>());
-@@ -6392,10 +6415,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
+@@ -6412,10 +6435,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
    return result;
  }
  
@@ -274,7 +274,7 @@ index 25a19ea..992e5dc 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) || BUILDFLAG(IS_CHROMEOS) || \
      !BUILDFLAG(IS_ANDROID)
    content::WebContents* web_contents =
-@@ -6825,6 +6877,18 @@ void ChromeContentBrowserClient::
+@@ -6820,6 +6872,18 @@ void ChromeContentBrowserClient::
          int render_frame_id,
          const std::optional<url::Origin>& request_initiator_origin,
          NonNetworkURLLoaderFactoryMap* factories) {
@@ -294,7 +294,7 @@ index 25a19ea..992e5dc 100644
      !BUILDFLAG(IS_ANDROID)
    content::RenderFrameHost* frame_host =
 diff --git a/chrome/browser/profiles/profile_io_data.cc b/chrome/browser/profiles/profile_io_data.cc
-index 803c106..82f6f4f 100644
+index bc36eda..9d66016 100644
 --- a/chrome/browser/profiles/profile_io_data.cc
 +++ b/chrome/browser/profiles/profile_io_data.cc
 @@ -4,6 +4,8 @@
@@ -320,7 +320,7 @@ index 803c106..82f6f4f 100644
      BUILDFLAG(IS_CHROMEOS)
        webapps::kIsolatedAppScheme,
 diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
-index 1a479bb..0adb485 100644
+index fa99573..7e99762 100644
 --- a/chrome/browser/ui/startup/startup_browser_creator.cc
 +++ b/chrome/browser/ui/startup/startup_browser_creator.cc
 @@ -4,6 +4,8 @@
@@ -332,7 +332,7 @@ index 1a479bb..0adb485 100644
  #include <stddef.h>
  
  #include <optional>
-@@ -398,8 +400,22 @@ bool MaybeLaunchAppShortcutWindow(const base::CommandLine& command_line,
+@@ -399,8 +401,22 @@ bool MaybeLaunchAppShortcutWindow(const base::CommandLine& command_line,
    if (!url.is_empty() && url.is_valid()) {
      content::ChildProcessSecurityPolicy* policy =
          content::ChildProcessSecurityPolicy::GetInstance();
@@ -392,19 +392,19 @@ index 1ea5da4..dff370f 100644
      return true;
    }
 diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
-index e153e95..31b31f5 100644
+index df6966f..f7d6f15 100644
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
-@@ -385,6 +385,7 @@ static_library("common_lib") {
+@@ -384,6 +384,7 @@ static_library("common_lib") {
  
      public_deps += [
-       "//components/dom_distiller/core",  # Needed by chrome_content_client.cc.
+       "//components/web_distiller/core",  # Needed by chrome_content_client.cc.
 +      "//components/domicile:common",  # Needed by chrome_content_client.cc.
        "//third_party/wtl",
      ]
  
 diff --git a/chrome/common/chrome_content_client.cc b/chrome/common/chrome_content_client.cc
-index 601ff3c..2f00bd7 100644
+index c845ef3..93ad2c7 100644
 --- a/chrome/common/chrome_content_client.cc
 +++ b/chrome/common/chrome_content_client.cc
 @@ -4,6 +4,8 @@
@@ -434,9 +434,9 @@ index 601ff3c..2f00bd7 100644
 +
  #if BUILDFLAG(IS_ANDROID)
    schemes->referrer_schemes.push_back(content::kAndroidAppScheme);
-   schemes->referrer_schemes.push_back(dom_distiller::kDomDistillerScheme);
+   schemes->referrer_schemes.push_back(web_distiller::kWebDistillerScheme);
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 24f00ad..3003697 100644
+index b2d4780..57c89b6 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -274,6 +274,8 @@ generated_dictionary_sources_in_modules = [
@@ -448,7 +448,7 @@ index 24f00ad..3003697 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_result.cc",
-@@ -2309,6 +2311,10 @@ generated_interface_sources_in_modules = [
+@@ -2321,6 +2323,10 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
@@ -460,7 +460,7 @@ index 24f00ad..3003697 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_eye_dropper.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_face_detector.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index b0e8a3b..163bee4 100644
+index 3d5d31e..6c3638e 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -276,6 +276,10 @@ static_idl_files_in_modules = [
@@ -488,7 +488,7 @@ index a0e2048..4dbab4b 100644
      "ContainerQueryList",
      "BroadcastChannel",
 diff --git a/third_party/blink/renderer/modules/BUILD.gn b/third_party/blink/renderer/modules/BUILD.gn
-index e79eb02..4fecd38 100644
+index e671a88..eeb36b5 100644
 --- a/third_party/blink/renderer/modules/BUILD.gn
 +++ b/third_party/blink/renderer/modules/BUILD.gn
 @@ -88,6 +88,7 @@ component("modules") {
@@ -500,10 +500,10 @@ index e79eb02..4fecd38 100644
      "//third_party/blink/renderer/modules/deviceboundsessions",
      "//third_party/blink/renderer/modules/dictation",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index 769f79d..9fc611c 100644
+index 55a263d..6e1a78b 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2735,6 +2735,24 @@
+@@ -2770,6 +2770,24 @@
        name: "DomicileExternalSurface",
        status: "stable",
      },

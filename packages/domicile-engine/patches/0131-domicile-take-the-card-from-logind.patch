@@ -26,22 +26,22 @@ session, like every keyboard and mouse.
 `HardwareDisplayControllerTest.AFlipAfterLogindTookMasterIsSkipped`
 covers the skipped flip.
 ---
- base/threading/thread_restrictions.h          |  2 +
- ui/ozone/platform/drm/BUILD.gn                |  5 +-
- ui/ozone/platform/drm/common/drm_wrapper.cc   |  4 +
- ui/ozone/platform/drm/common/drm_wrapper.h    | 22 +++--
- .../drm/gpu/drm_gpu_display_manager.cc        | 33 ++-----
- ui/ozone/platform/drm/gpu/fake_drm_device.cc  |  4 +
- ui/ozone/platform/drm/gpu/fake_drm_device.h   |  5 +
- .../drm/gpu/hardware_display_controller.cc    | 14 +++
- .../hardware_display_controller_unittest.cc   | 22 +++++
- .../drm/host/drm_display_host_manager.cc      | 96 ++++++-------------
- .../drm/host/drm_display_host_manager.h       | 14 +--
- ui/ozone/platform/drm/ozone_platform_drm.cc   | 32 ++++---
- 12 files changed, 123 insertions(+), 130 deletions(-)
+ base/threading/thread_restrictions.h          |   2 +
+ ui/ozone/platform/drm/BUILD.gn                |   5 +-
+ ui/ozone/platform/drm/common/drm_wrapper.cc   |   4 +
+ ui/ozone/platform/drm/common/drm_wrapper.h    |  22 ++--
+ .../drm/gpu/drm_gpu_display_manager.cc        |  33 ++----
+ ui/ozone/platform/drm/gpu/fake_drm_device.cc  |   4 +
+ ui/ozone/platform/drm/gpu/fake_drm_device.h   |   5 +
+ .../drm/gpu/hardware_display_controller.cc    |  14 +++
+ .../hardware_display_controller_unittest.cc   |  22 ++++
+ .../drm/host/drm_display_host_manager.cc      | 102 ++++++------------
+ .../drm/host/drm_display_host_manager.h       |  14 +--
+ ui/ozone/platform/drm/ozone_platform_drm.cc   |  32 +++---
+ 12 files changed, 126 insertions(+), 133 deletions(-)
 
 diff --git a/base/threading/thread_restrictions.h b/base/threading/thread_restrictions.h
-index 95bafac..a02ad74 100644
+index b825a58..40defaa 100644
 --- a/base/threading/thread_restrictions.h
 +++ b/base/threading/thread_restrictions.h
 @@ -445,6 +445,7 @@ class FuchsiaPerfettoProducerConnector;
@@ -52,7 +52,7 @@ index 95bafac..a02ad74 100644
  class ScopedAllowBlockingForGbmSurface;
  class SelectFileDialogLinux;
  class WindowResizeHelperMac;
-@@ -896,6 +897,7 @@ class BASE_EXPORT
+@@ -901,6 +902,7 @@ class BASE_EXPORT
    friend class mojo::core::ipcz_driver::MojoTrap;
    friend class net::NetworkConfigWatcherAppleThread;
    friend class ::tracing::EmergencyTraceFinalisationCoordinator;
@@ -61,7 +61,7 @@ index 95bafac..a02ad74 100644
    friend class vr::VrShell;
  
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 3c6ce6e..18ac594 100644
+index 1b21cc9..69d6831 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -130,8 +130,8 @@ source_set("gbm") {
@@ -75,7 +75,7 @@ index 3c6ce6e..18ac594 100644
      "domicile/drm_modeset.cc",
      "domicile/drm_modeset.h",
      "domicile/drm_pointer_crossing.cc",
-@@ -270,7 +270,6 @@ source_set("gbm_unittests") {
+@@ -272,7 +272,6 @@ source_set("gbm_unittests") {
      "domicile/drm_fullscreen_unittest.cc",
      "domicile/drm_input_controller_unittest.cc",
      "domicile/drm_input_devices_unittest.cc",
@@ -84,10 +84,10 @@ index 3c6ce6e..18ac594 100644
      "domicile/drm_pointer_crossing_unittest.cc",
      "domicile/drm_pointer_targets_unittest.cc",
 diff --git a/ui/ozone/platform/drm/common/drm_wrapper.cc b/ui/ozone/platform/drm/common/drm_wrapper.cc
-index dd243f4..59c3d7d 100644
+index b0c93db..2c3beca 100644
 --- a/ui/ozone/platform/drm/common/drm_wrapper.cc
 +++ b/ui/ozone/platform/drm/common/drm_wrapper.cc
-@@ -227,6 +227,10 @@ bool DrmWrapper::has_master() const {
+@@ -228,6 +228,10 @@ bool DrmWrapper::has_master() const {
    return has_master_;
  }
  
@@ -137,7 +137,7 @@ index 078ee43..bb7486b 100644
     * Dumb Buffers
     **************/
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
-index a46cc0f..f7a9c78 100644
+index ff44869..103aed3 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 @@ -401,19 +401,10 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
@@ -188,7 +188,7 @@ index a46cc0f..f7a9c78 100644
    for (const auto& drm : devices) {
      drm->AssumeMaster(false);
 diff --git a/ui/ozone/platform/drm/gpu/fake_drm_device.cc b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
-index 7d834ca..dff2441 100644
+index 3aeb5ae..ec1ad52 100644
 --- a/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 +++ b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 @@ -990,6 +990,10 @@ bool FakeDrmDevice::has_master() const {
@@ -233,7 +233,7 @@ index 51af3ea..0d70b3d 100644
  
  }  // namespace ui
 diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
-index 1d842e0..759e388 100644
+index 91993cb..27e98e1 100644
 --- a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
 +++ b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
 @@ -254,6 +254,20 @@ void HardwareDisplayController::SchedulePageFlip(
@@ -291,23 +291,23 @@ index 304c7cc..44617dc 100644
         RecreateBuffersOnOldPlanesPageFlipFailure) {
    DrmOverlayPlaneList planes;
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 7854cf9..785e807 100644
+index cbc85f3..6811f97 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-@@ -107,7 +107,8 @@ base::FilePath MapDevPathToSysPath(const base::FilePath& device_path) {
- 
+@@ -111,7 +111,8 @@ base::FilePath MapDevPathToSysPath(const base::FilePath& device_path) {
  std::unique_ptr<DrmWrapper> OpenDrmDevice(const base::FilePath& dev_path,
                                            const base::FilePath& sys_path,
--                                          bool is_primary_device) {
-+                                          bool is_primary_device,
+                                           bool is_primary_device,
+-                                          bool allow_unauthenticated) {
++                                          bool allow_unauthenticated,
 +                                          DrmLogindSession* logind) {
    // Security folks have requested that we assert the graphics device has the
    // expected path, so use a CHECK instead of a DCHECK. The sys_path is only
    // used a label and is otherwise unvalidated.
-@@ -120,13 +121,14 @@ std::unique_ptr<DrmWrapper> OpenDrmDevice(const base::FilePath& dev_path,
-   bool is_authenticated = false;
-   const base::TimeTicks start_time = base::TimeTicks::Now();
-   while (num_auth_attempts < kMaxAuthAttempts) {
+@@ -130,13 +131,14 @@ std::unique_ptr<DrmWrapper> OpenDrmDevice(const base::FilePath& dev_path,
+   // an unauthenticated FD. Otherwise, bound retries to avoid blocking
+   // indefinitely.
+   while (!allow_unauthenticated || num_auth_attempts < kMaxAuthAttempts) {
 -    scoped_fd.reset();
 -    int fd = HANDLE_EINTR(open(dev_path.value().c_str(), O_RDWR | O_CLOEXEC));
 -    if (fd < 0) {
@@ -323,8 +323,8 @@ index 7854cf9..785e807 100644
 +    const int fd = scoped_fd.get();
  
      num_auth_attempts++;
-     // To avoid spamming the logs, hold off before logging a warning (some
-@@ -189,26 +191,18 @@ std::unique_ptr<DrmWrapper> OpenDrmDevice(const base::FilePath& dev_path,
+     // To avoid spamming the logs (especially when `!allow_unauthenticated`
+@@ -205,27 +207,19 @@ std::unique_ptr<DrmWrapper> OpenDrmDevice(const base::FilePath& dev_path,
  }
  
  void OpenDeviceAsync(const base::FilePath& device_path,
@@ -333,10 +333,10 @@ index 7854cf9..785e807 100644
                       OnOpenDeviceReplyCallback callback) {
    base::FilePath sys_path = MapDevPathToSysPath(device_path);
  
--  std::unique_ptr<DrmWrapper> drm =
--      OpenDrmDevice(device_path, sys_path, /*is_primary_device=*/false);
-+  std::unique_ptr<DrmWrapper> drm = OpenDrmDevice(
-+      device_path, sys_path, /*is_primary_device=*/false, logind);
+   std::unique_ptr<DrmWrapper> drm =
+       OpenDrmDevice(device_path, sys_path, /*is_primary_device=*/false,
+-                    /*allow_unauthenticated=*/true);
++                    /*allow_unauthenticated=*/true, logind);
    reply_runner->PostTask(
        FROM_HERE, base::BindOnce(std::move(callback), device_path, sys_path,
                                  std::move(drm)));
@@ -354,7 +354,7 @@ index 7854cf9..785e807 100644
  struct DisplayCard {
    base::FilePath path;
    std::optional<std::string> driver;
-@@ -283,10 +277,12 @@ DrmDisplayHostManager::DrmDisplayHostManager(
+@@ -300,10 +294,12 @@ DrmDisplayHostManager::DrmDisplayHostManager(
      GpuThreadAdapter* proxy,
      DeviceManager* device_manager,
      OzonePlatform::PlatformRuntimeProperties* host_properties,
@@ -368,16 +368,27 @@ index 7854cf9..785e807 100644
        primary_graphics_card_path_(GetPrimaryDisplayCardPath()) {
    {
      // First device needs to be treated specially. We need to open this
-@@ -299,7 +295,7 @@ DrmDisplayHostManager::DrmDisplayHostManager(
+@@ -314,14 +310,14 @@ DrmDisplayHostManager::DrmDisplayHostManager(
+     base::FilePath primary_graphics_card_path_sysfs =
+         MapDevPathToSysPath(primary_graphics_card_path_);
  
+-    // On cold boot, no GPU process exists yet and frecon may still hold DRM
+-    // master during boot splash/hotplug rescans. Require authentication so
+-    // Chrome does not start with an unauthenticated primary FD that can never
+-    // acquire DRM master for modesetting.
++    // DOMICILE: logind, not frecon, hands over DRM master, and only to an
++    // active session. Waiting for it would hang a start on an inactive
++    // console, so bound the retries as for every other open.
      primary_drm_device_ = OpenDrmDevice(primary_graphics_card_path_,
                                          primary_graphics_card_path_sysfs,
--                                        /*is_primary_device=*/true);
-+                                        /*is_primary_device=*/true, logind_);
+                                         /*is_primary_device=*/true,
+-                                        /*allow_unauthenticated=*/false);
++                                        /*allow_unauthenticated=*/true,
++                                        logind_);
      if (!primary_drm_device_) {
        LOG(FATAL) << "Failed to open primary graphics card";
      }
-@@ -403,18 +399,6 @@ void DrmDisplayHostManager::TakeDisplayControl(
+@@ -425,18 +421,6 @@ void DrmDisplayHostManager::TakeDisplayControl(
    take_display_control_callback_ = std::move(callback);
    display_control_change_pending_ = true;
  
@@ -396,7 +407,7 @@ index 7854cf9..785e807 100644
    if (!proxy_->GpuTakeDisplayControl())
      GpuTookDisplayControl(false);
  }
-@@ -492,7 +476,7 @@ void DrmDisplayHostManager::ProcessEvent() {
+@@ -514,7 +498,7 @@ void DrmDisplayHostManager::ProcessEvent() {
                {base::MayBlock(),
                 base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
                base::BindOnce(
@@ -405,7 +416,7 @@ index 7854cf9..785e807 100644
                    base::SingleThreadTaskRunner::GetCurrentDefault(),
                    base::BindOnce(&DrmDisplayHostManager::OnAddGraphicsDevice,
                                   weak_ptr_factory_.GetWeakPtr())));
-@@ -512,6 +496,8 @@ void DrmDisplayHostManager::ProcessEvent() {
+@@ -534,6 +518,8 @@ void DrmDisplayHostManager::ProcessEvent() {
              << "Removing primary graphics card";
          auto it = drm_devices_.find(event.path);
          if (it != drm_devices_.end()) {
@@ -414,7 +425,7 @@ index 7854cf9..785e807 100644
            task_pending_ =
                base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
                    FROM_HERE,
-@@ -530,9 +516,8 @@ void DrmDisplayHostManager::OnAddGraphicsDevice(
+@@ -552,9 +538,8 @@ void DrmDisplayHostManager::OnAddGraphicsDevice(
      std::unique_ptr<DrmWrapper> drm) {
    if (drm) {
      drm_devices_[dev_path] = sys_path;
@@ -426,7 +437,7 @@ index 7854cf9..785e807 100644
      NotifyDisplayDelegate();
    }
  
-@@ -547,7 +532,6 @@ void DrmDisplayHostManager::OnUpdateGraphicsDevice(
+@@ -569,7 +554,6 @@ void DrmDisplayHostManager::OnUpdateGraphicsDevice(
  
  void DrmDisplayHostManager::OnRemoveGraphicsDevice(
      const base::FilePath& sys_path) {
@@ -434,7 +445,7 @@ index 7854cf9..785e807 100644
    proxy_->GpuRemoveGraphicsDevice(sys_path);
    NotifyDisplayDelegate();
    task_pending_ = false;
-@@ -560,14 +544,6 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
+@@ -582,14 +566,6 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
    {
      base::ScopedAllowBlocking scoped_allow_blocking;
  
@@ -449,16 +460,16 @@ index 7854cf9..785e807 100644
      drm_devices_.clear();
      drm_devices_[primary_graphics_card_path_] =
          MapDevPathToSysPath(primary_graphics_card_path_);
-@@ -576,7 +552,7 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
-       primary_drm_device =
+@@ -603,7 +579,7 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
            OpenDrmDevice(primary_graphics_card_path_,
                          drm_devices_[primary_graphics_card_path_],
--                        /*is_primary_device=*/true);
-+                        /*is_primary_device=*/true, logind_);
+                         /*is_primary_device=*/true,
+-                        /*allow_unauthenticated=*/true);
++                        /*allow_unauthenticated=*/true, logind_);
        if (!primary_drm_device) {
          LOG(FATAL) << "Failed to open the primary graphics card";
        }
-@@ -585,11 +561,9 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
+@@ -612,11 +588,9 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
  
    // Send the primary device first since this is used to initialize graphics
    // state.
@@ -473,9 +484,9 @@ index 7854cf9..785e807 100644
  }
  
  void DrmDisplayHostManager::OnGpuThreadReady() {
-@@ -714,30 +688,16 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
-   DCHECK(!display_externally_controlled_);
-   DCHECK(display_control_change_pending_);
+@@ -741,30 +715,16 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
+   CHECK(!display_externally_controlled_, base::NotFatalUntil::M163);
+   CHECK(display_control_change_pending_, base::NotFatalUntil::M163);
  
 -  // OUR DROP LAST, AND ONLY IF THE GPU GOT THERE. `status` says the GPU
 -  // process finished its half -- planes detached, `has_master()` recorded so
@@ -555,7 +566,7 @@ index 184eb2c..a9e2686 100644
    // established.
    std::unique_ptr<DrmWrapper> primary_drm_device_;
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index fede902..646d426 100644
+index f3898d5..a5db686 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -52,6 +52,7 @@
@@ -566,7 +577,7 @@ index fede902..646d426 100644
  #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
  #include "ui/ozone/platform/drm/domicile/drm_pointer_targets.h"
  #include "ui/ozone/platform/drm/domicile/drm_screen.h"
-@@ -122,7 +123,7 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -125,7 +126,7 @@ class OzonePlatformDrm : public OzonePlatform {
      modeset_->Start();
  
      // And the console this is running on, which logind owns. `TakeControl`
@@ -575,7 +586,7 @@ index fede902..646d426 100644
      // keyboard -- already put this VT in `K_OFF`, `KD_GRAPHICS` and
      // `VT_PROCESS` with logind's own signals. So there is no handshake to
      // install here and taking one would steal logind's: what this does instead
-@@ -382,21 +383,21 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -385,21 +386,21 @@ class OzonePlatformDrm : public OzonePlatform {
      KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
          keyboard_layout_engine_.get());
  
@@ -609,7 +620,7 @@ index fede902..646d426 100644
  
      GpuThreadAdapter* adapter;
  
-@@ -407,7 +408,7 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -410,7 +411,7 @@ class OzonePlatformDrm : public OzonePlatform {
  
      display_manager_ = std::make_unique<DrmDisplayHostManager>(
          adapter, device_manager_.get(), &host_properties_,
@@ -618,7 +629,7 @@ index fede902..646d426 100644
      // A CONSOLE'S CURSOR COMES FROM THE ASSETS, AND ONLY A NULL GETS IT
      // THERE. `BitmapCursorFactory` answers every type with a cursor that
      // carries the type and no bitmap -- right for a platform whose
-@@ -558,6 +559,9 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -566,6 +567,9 @@ class OzonePlatformDrm : public OzonePlatform {
    std::unique_ptr<CursorFactory> cursor_factory_;
    std::unique_ptr<DrmWindowHostManager> window_manager_;
    std::unique_ptr<DrmCursor> cursor_;
@@ -627,4 +638,4 @@ index fede902..646d426 100644
 +  std::unique_ptr<DrmLogindSession> logind_;
    std::unique_ptr<EventFactoryEvdev> event_factory_ozone_;
    std::unique_ptr<DrmDisplayHostManager> display_manager_;
- 
+   PlatformProperties platform_properties_;

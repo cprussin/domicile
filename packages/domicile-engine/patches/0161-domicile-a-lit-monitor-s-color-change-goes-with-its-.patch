@@ -36,10 +36,10 @@ Claude-Session: https://claude.ai/code/session_01LWjcAKveDAi7vjVsXpKjcN
  3 files changed, 27 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index a4da309..599e071 100644
+index e8ce410..01827be 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -286,6 +286,7 @@ source_set("gbm_unittests") {
+@@ -288,6 +288,7 @@ source_set("gbm_unittests") {
      "domicile/drm_pointer_crossing_unittest.cc",
      "domicile/drm_pointer_targets_unittest.cc",
      "domicile/drm_clipboard_unittest.cc",
@@ -48,10 +48,10 @@ index a4da309..599e071 100644
      "domicile/drm_sleep_unittest.cc",
      "domicile/drm_vt_switcher_unittest.cc",
 diff --git a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc
-index 75ed3c1..5d3f70f 100644
+index fd451f5..ec19fc0 100644
 --- a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc
 +++ b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.cc
-@@ -352,6 +352,14 @@ void HardwareDisplayPlaneManagerAtomic::SetAtomicPropsForCommit(
+@@ -354,6 +354,14 @@ void HardwareDisplayPlaneManagerAtomic::SetAtomicPropsForCommit(
          AddAllPendingCrtcProperties(atomic_request, crtc_state_[*idx],
                                      pending_blobs);
        }
@@ -66,7 +66,7 @@ index 75ed3c1..5d3f70f 100644
  #endif
      }
  
-@@ -566,6 +574,16 @@ HardwareDisplayPlaneManagerAtomic::CreatePlane(uint32_t plane_id) {
+@@ -568,6 +576,16 @@ HardwareDisplayPlaneManagerAtomic::CreatePlane(uint32_t plane_id) {
  
  bool HardwareDisplayPlaneManagerAtomic::CommitPendingCrtcState(
      CrtcState& crtc_state) {
@@ -83,7 +83,7 @@ index 75ed3c1..5d3f70f 100644
    std::vector<ScopedDrmPropertyBlob> pending_blobs;
    ScopedDrmAtomicReqPtr property_set(drmModeAtomicAlloc());
  
-@@ -591,6 +609,12 @@ bool HardwareDisplayPlaneManagerAtomic::CommitPendingCrtcState(
+@@ -593,6 +611,12 @@ bool HardwareDisplayPlaneManagerAtomic::CommitPendingCrtcState(
    return result;
  }
  

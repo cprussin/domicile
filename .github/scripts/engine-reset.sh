@@ -138,6 +138,21 @@ if [ -n "$folded" ]; then
     done
 fi
 
+# Files an older pin's gclient hooks wrote under a `.gitignore` entry a newer
+# pin dropped, with the hook that wrote them gone too. Nothing regenerates or
+# reads them, but after the reset they show as untracked. Removed only while
+# untracked and not ignored, so a pin that still ignores one keeps it.
+#
+# - buildtools/reclient_cfgs/reproxy.cfg: configure_reclient_cfgs.py stopped
+#   writing it, and its ignore went, by Chromium 160.
+for stale in buildtools/reclient_cfgs/reproxy.cfg; do
+  [ -f "$CHROMIUM/$stale" ] || continue
+  git -C "$CHROMIUM" ls-files --error-unmatch -- "$stale" >/dev/null 2>&1 && continue
+  git -C "$CHROMIUM" check-ignore -q -- "$stale" && continue
+  echo "removing $stale, an older pin's hook output this pin no longer ignores"
+  rm -f "${CHROMIUM:?}/$stale"
+done
+
 laid_down |
   while IFS= read -r file; do
     [ -n "$file" ] || continue

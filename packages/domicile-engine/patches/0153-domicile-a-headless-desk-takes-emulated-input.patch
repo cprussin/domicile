@@ -26,7 +26,7 @@ Domicile repository.
  5 files changed, 127 insertions(+), 3 deletions(-)
 
 diff --git a/ui/ozone/platform/headless/BUILD.gn b/ui/ozone/platform/headless/BUILD.gn
-index c2823a7..ae2aa43 100644
+index 37aa4e0..2202619 100644
 --- a/ui/ozone/platform/headless/BUILD.gn
 +++ b/ui/ozone/platform/headless/BUILD.gn
 @@ -3,6 +3,7 @@
@@ -48,9 +48,9 @@ index c2823a7..ae2aa43 100644
      "headless_screen.cc",
      "headless_screen.h",
      "headless_surface_factory.cc",
-@@ -26,6 +31,10 @@ source_set("headless") {
+@@ -28,6 +33,10 @@ source_set("headless") {
  
-   defines = [ "OZONE_IMPLEMENTATION" ]
+   public_deps = [ "//ui/ozone:platform_headers" ]
  
 +  if (use_xkbcommon) {
 +    configs += [ "//ui/events/ozone/layout:xkbcommon" ]
@@ -59,7 +59,7 @@ index c2823a7..ae2aa43 100644
    deps = [
      "//base",
      "//build:chromecast_buildflags",
-@@ -36,9 +45,11 @@ source_set("headless") {
+@@ -38,9 +47,11 @@ source_set("headless") {
      "//skia",
      "//ui/base",
      "//ui/base/cursor",
@@ -71,7 +71,7 @@ index c2823a7..ae2aa43 100644
      "//ui/events/ozone/layout",
      "//ui/events/platform",
      "//ui/gfx",
-@@ -66,6 +77,8 @@ source_set("headless") {
+@@ -68,6 +79,8 @@ source_set("headless") {
  source_set("headless_unittests") {
    testonly = true
    sources = [
@@ -80,7 +80,7 @@ index c2823a7..ae2aa43 100644
      "domicile/headless_desk_unittest.cc",
      "headless_window_unittest.cc",
    ]
-@@ -73,9 +86,13 @@ source_set("headless_unittests") {
+@@ -75,9 +88,13 @@ source_set("headless_unittests") {
      ":headless",
      "//base",
      "//base/test:test_support",
@@ -95,7 +95,7 @@ index c2823a7..ae2aa43 100644
      "//ui/ozone:platform",
      "//ui/ozone:test_support",
 diff --git a/ui/ozone/platform/headless/headless_window.cc b/ui/ozone/platform/headless/headless_window.cc
-index a0061fa..1be29c8 100644
+index 535975c..69f37a9 100644
 --- a/ui/ozone/platform/headless/headless_window.cc
 +++ b/ui/ozone/platform/headless/headless_window.cc
 @@ -8,10 +8,12 @@
@@ -111,7 +111,7 @@ index a0061fa..1be29c8 100644
  #include "ui/ozone/platform/headless/headless_window_manager.h"
  
  namespace ui {
-@@ -190,7 +192,11 @@ bool HeadlessWindow::ShouldUseNativeFrame() const {
+@@ -191,7 +193,11 @@ bool HeadlessWindow::ShouldUseNativeFrame() const {
    return false;
  }
  
@@ -281,7 +281,7 @@ index 6ac568e..1effbd4 100644
  
  }  // namespace
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 0d911ff..7bdde5b 100644
+index 6fda68e..f975437 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -132,6 +132,27 @@ struct DomicileWhitePoint {
@@ -312,7 +312,7 @@ index 0d911ff..7bdde5b 100644
  // Base class for Ozone platform implementations.
  //
  // Ozone platforms must override this class and implement the virtual
-@@ -426,6 +447,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -447,6 +468,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // CRTC. DRM only, like the layout above: a nested desktop's monitors are
    // the host session's.
    virtual void SetDomicileWhitePoint(const DomicileWhitePoint& white_point) {}
