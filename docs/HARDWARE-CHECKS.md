@@ -353,3 +353,10 @@ QEMU/KVM with virtio-gpu, on a VT. Run with
   ([Tablets and touchscreens](DISPLAYS.md#tablets-and-touchscreens)). A click
   in either head's window lands under the host's cursor on that head. Hover,
   the right and middle buttons and the wheel work there as a mouse's.
+
+## Night light on a still screen
+
+Unverified. On a tty, leave a monitor showing something that does not move
+(no clock, no blinking caret), then change the night light from the shell.
+Expect the monitor to warm at once, not when the pointer next moves over it or
+something on it next redraws.
