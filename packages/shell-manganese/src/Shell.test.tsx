@@ -4076,6 +4076,23 @@ describe("the overview", () => {
     );
   });
 
+  it("has the engine show a hidden workspace's windows as they come in, without waiting for them to draw", async () => {
+    // Out of view, a window's surface is let go; coming back, the engine
+    // would hold the desktop's frame for it to draw again.
+    const { container } = await renderShell();
+    clientAppears("one");
+    press("parenright");
+    clientAppears("two");
+    press("parenleft");
+
+    press("o");
+    expect(appElement(container, "two").hasAttribute("resizing")).toBe(true);
+    expect(appElement(container, "one").hasAttribute("resizing")).toBe(false);
+
+    fireEvent.keyDown(overview() ?? document, { key: "Escape" });
+    expect(appElement(container, "two").hasAttribute("resizing")).toBe(false);
+  });
+
   it("closes on Escape", async () => {
     await renderShell();
     press("o");

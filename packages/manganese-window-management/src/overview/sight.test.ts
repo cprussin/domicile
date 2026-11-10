@@ -56,7 +56,7 @@ describe("sightOf", () => {
     expect(sight.hidden.get("app:kitty")).toMatchObject({
       placement: KITTY,
       screen: "left",
-      seen: { fading: false, view: { scale: 0.1, x: 400, y: 50 } },
+      seen: { fading: false, shut: true, view: { scale: 0.1, x: 400, y: 50 } },
     });
   });
 
@@ -79,12 +79,27 @@ describe("sightOf", () => {
     expect(sight.shown.get("left")).toStrictEqual({
       arriving: undefined,
       fading: false,
+      shut: false,
       view: { scale: 1, x: 0, y: 0 },
     });
     expect(sight.hidden.get("app:kitty")?.seen).toStrictEqual({
       arriving: undefined,
       fading: true,
+      shut: true,
       view: { scale: 1, x: 3000, y: 0 },
     });
+  });
+
+  it("keeps the pointer off the hidden workspaces' windows from the start, so closing restyles none of them", () => {
+    // Under the picker while open, then leaving: they never take a press.
+    // Shut from the start, the leaving windows' every part need not be
+    // restyled in the frame the overview starts closing.
+    expect(sightOf([overviewOf(false)]).shown.get("left")?.shut).toBe(false);
+    expect(
+      sightOf([overviewOf(false)]).hidden.get("app:kitty")?.seen.shut,
+    ).toBe(true);
+    expect(sightOf([overviewOf(true)]).hidden.get("app:kitty")?.seen.shut).toBe(
+      true,
+    );
   });
 });

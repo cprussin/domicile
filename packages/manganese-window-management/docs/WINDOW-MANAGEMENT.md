@@ -345,7 +345,14 @@ with windows, and the shown one.
   does not, keeping windows coming in from beside off the next monitor. The
   wrapper takes its part's depth as its `z-index`, since the transformed box
   is its own stacking context.
-- Hidden workspaces' windows get their placements as if shown.
+- Hidden workspaces' windows get their placements as if shown. Coming in,
+  their `<app>` or `<webview>` is `resizing`, so the engine shows the desk
+  without waiting for them to draw again, as on a workspace switch. They
+  never take the pointer (`shut`), from the start rather than as the
+  overview closes, since that would restyle every part of every window.
+- The box takes the move through `--overview-to`, which its window's parts
+  reset, so setting it restyles the box alone. Not `@property`: registering
+  any custom property slows every restyle.
 - One camera per screen moves every tile, name and window together
   (`cameraOf`): opening, it pulls back from the shown workspace, whose tile
   starts filling the screen, so the others come in from the side they sit

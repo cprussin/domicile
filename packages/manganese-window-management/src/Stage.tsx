@@ -951,6 +951,10 @@ const WindowContents = memo(
     const ended = useCallback(() => {
       onPlayedOut(id, motion, screen, "contents");
     }, [id, motion, onPlayedOut, screen]);
+    // A hidden workspace's window coming into the overview draws again, and
+    // the engine would hold the desk for it as a workspace switch's would.
+    // See `isSlidingIn`.
+    const unheld = resizing || seen?.arriving !== undefined;
     const pageFilled = useCallback(
       (fullscreen: boolean) => {
         onPageFullscreen(id, fullscreen);
@@ -986,7 +990,7 @@ const WindowContents = memo(
             motion={motion}
             onMotionEnded={ended}
             rect={contents?.rect}
-            resizing={resizing}
+            resizing={unheld}
             restack={restack}
             syncedFrame={window.syncedFrame}
             tab={placement?.bar}
@@ -1014,7 +1018,7 @@ const WindowContents = memo(
             onReach={reached}
             popupWindow={window.popupWindow}
             rect={contents?.rect}
-            resizing={resizing}
+            resizing={unheld}
             restack={restack}
             tab={placement?.bar}
             url={window.url}
@@ -1360,7 +1364,7 @@ const Sliding = ({
     <div
       className={seenStyles({
         arriving: seen?.arriving !== undefined,
-        fading: seen?.fading ?? false,
+        shut: seen?.shut ?? false,
       })}
       style={seenAt(seen, on?.geometry.screen)}
     >
