@@ -398,9 +398,12 @@ export const Stage = memo(
                 // grabbable window so it can catch a drag. During a drag it takes
                 // it over every window: one that kept the pointer would swallow
                 // the moves and the release, leaving the dragged window stuck.
+                // An edge drag leaves windows taking the pointer: the edge holds
+                // it, and a window takes it back only at the engine's next
+                // frame, so the moves and clicks just after the release would
+                // reach the desktop instead of the page under them.
                 clickThrough={
                   draggingId !== undefined ||
-                  stretching ||
                   (meta &&
                     (desk.floats.has(window.id) ||
                       desk.targeted.has(window.id)))
