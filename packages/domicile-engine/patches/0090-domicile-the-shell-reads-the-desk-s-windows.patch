@@ -20,10 +20,10 @@ job builds it on `crux`.
  2 files changed, 3 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 7821874..e119ce7 100644
+index a3f4770..3d587b4 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -2412,6 +2412,8 @@ generated_interface_sources_in_modules = [
+@@ -2424,6 +2424,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.h",
@@ -33,7 +33,7 @@ index 7821874..e119ce7 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification_action.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 5b42774..5a363a5 100644
+index 51ad830..57b2b17 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -327,6 +327,7 @@ static_idl_files_in_modules = [

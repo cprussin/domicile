@@ -21,7 +21,7 @@ job builds it on `crux`.
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 9d18d5c..446a369 100644
+index 786c972..3c18fd8 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -337,8 +337,6 @@ static_idl_files_in_modules = [

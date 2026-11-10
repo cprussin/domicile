@@ -43,7 +43,7 @@ index c48df6a..91d42b9 100644
      "domicile/input_settings.h",
      "domicile/scroll_accelerator.cc",
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 40e39d8..895fa85 100644
+index b7fd425..04e14e3 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -27,6 +27,11 @@ namespace ui {
@@ -162,10 +162,10 @@ index 0c2ab6f..9717e38 100644
    std::optional<double> pinch_scale_;
    NativeGestureSequence shell_gesture_;
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 7839d4c..ca20cba 100644
+index e130c57..87dbb0c 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -301,6 +301,7 @@ source_set("gbm_unittests") {
+@@ -303,6 +303,7 @@ source_set("gbm_unittests") {
      # console is the one platform whose touchpad goes through libinput.
      "//ui/events/ozone/evdev/domicile/absolute_mouse_event_converter_evdev_unittest.cc",
      "//ui/events/ozone/evdev/domicile/active_scroll_axes_unittest.cc",
@@ -173,6 +173,3 @@ index 7839d4c..ca20cba 100644
      "//ui/events/ozone/evdev/domicile/input_settings_unittest.cc",
      "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
      "//ui/events/ozone/evdev/domicile/typing_guard_unittest.cc",
--- 
-2.43.0
-

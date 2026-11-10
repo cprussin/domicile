@@ -26,7 +26,7 @@ foreign_allowlist.py is a new file under src/.
  3 files changed, 53 insertions(+)
 
 diff --git a/chrome/chrome_repack_locales.gni b/chrome/chrome_repack_locales.gni
-index 226c91d..7df394a 100644
+index 3a1b238..f1e1a9f 100644
 --- a/chrome/chrome_repack_locales.gni
 +++ b/chrome/chrome_repack_locales.gni
 @@ -20,6 +20,9 @@ template("chrome_repack_locales") {
@@ -102,7 +102,7 @@ index c52e0e5..10e1f6f 100644
            output =
                "$_output_dir/${_output_locale}${_gender_suffix}.lproj/locale.pak"
 diff --git a/ui/base/resource/resource_bundle.cc b/ui/base/resource/resource_bundle.cc
-index 1c25647..41653e2 100644
+index 5c5b144..5e4804d 100644
 --- a/ui/base/resource/resource_bundle.cc
 +++ b/ui/base/resource/resource_bundle.cc
 @@ -563,6 +563,19 @@ std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,

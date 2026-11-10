@@ -37,7 +37,7 @@ job builds it on `crux`.
  11 files changed, 217 insertions(+), 4 deletions(-)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 5e0a9d4..c4b3a7d 100644
+index 220f064..5a15b20 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -278,6 +278,8 @@ generated_dictionary_sources_in_modules = [
@@ -49,7 +49,7 @@ index 5e0a9d4..c4b3a7d 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_header.cc",
-@@ -2337,6 +2339,8 @@ generated_interface_sources_in_modules = [
+@@ -2349,6 +2351,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension_popup_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension_popup_event.h",
@@ -59,7 +59,7 @@ index 5e0a9d4..c4b3a7d 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_browser_window.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cast_sink.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 9f2b8a7..fd7d62b 100644
+index 2154ee5..521172a 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -284,6 +284,8 @@ static_idl_files_in_modules = [
@@ -72,7 +72,7 @@ index 9f2b8a7..fd7d62b 100644
    "//third_party/blink/renderer/modules/domicile/domicile_fetch_header.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_fetch_response.idl",
 diff --git a/ui/events/BUILD.gn b/ui/events/BUILD.gn
-index e362fad..60a0335 100644
+index c6e58f1..ff2fa8f 100644
 --- a/ui/events/BUILD.gn
 +++ b/ui/events/BUILD.gn
 @@ -269,6 +269,8 @@ component("events") {
@@ -85,7 +85,7 @@ index e362fad..60a0335 100644
      "event.cc",
      "event_dispatcher.cc",
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index dc0514f..40e39d8 100644
+index efd77ec..b7fd425 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -351,6 +351,7 @@ void LibInputEventConverter::ApplyDeviceSettings(
@@ -106,7 +106,7 @@ index dc0514f..40e39d8 100644
    const auto type = libinput_event_get_type(native_event);
    if (type == LIBINPUT_EVENT_GESTURE_PINCH_BEGIN ||
        type == LIBINPUT_EVENT_GESTURE_PINCH_UPDATE ||
-@@ -574,6 +578,75 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+@@ -578,6 +582,75 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
    dispatcher_->DispatchMouseWheelEvent(params);
  }
  
@@ -213,7 +213,7 @@ index 9a689b9..0c2ab6f 100644
  
    // DOMICILE: null for a mouse, and until the factory attaches this.
 diff --git a/ui/events/types/BUILD.gn b/ui/events/types/BUILD.gn
-index 461d3df..bfe395a 100644
+index 97de847..3ea611c 100644
 --- a/ui/events/types/BUILD.gn
 +++ b/ui/events/types/BUILD.gn
 @@ -5,6 +5,7 @@
@@ -237,7 +237,7 @@ index 390c605..0ad2467 100644
  IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_manager_v1)
  IMPLEMENT_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_v1)
 diff --git a/ui/ozone/platform/wayland/common/wayland_object.h b/ui/ozone/platform/wayland/common/wayland_object.h
-index d746805..ddbe2d1 100644
+index 1a9ecbe..d53b135 100644
 --- a/ui/ozone/platform/wayland/common/wayland_object.h
 +++ b/ui/ozone/platform/wayland/common/wayland_object.h
 @@ -195,6 +195,7 @@ DECLARE_WAYLAND_OBJECT_TRAITS(zwp_locked_pointer_v1)
@@ -249,7 +249,7 @@ index d746805..ddbe2d1 100644
  DECLARE_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_manager_v1)
  DECLARE_WAYLAND_OBJECT_TRAITS(zwp_primary_selection_device_v1)
 diff --git a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
-index d5a96b2..b437f0e 100644
+index 500bdf4..9523cc8 100644
 --- a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
 @@ -78,6 +78,15 @@ void WaylandZwpPointerGestures::Init() {

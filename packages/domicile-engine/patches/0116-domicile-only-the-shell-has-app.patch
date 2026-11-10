@@ -34,18 +34,18 @@ job builds it on `crux`.
  6 files changed, 30 insertions(+), 33 deletions(-)
 
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index 9be437e..cf71d17 100644
+index 6f52a29..0da9e43 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
-@@ -33,6 +33,7 @@
- #include "content/browser/cookie_store/cookie_store_manager.h"
+@@ -34,6 +34,7 @@
+ #include "content/browser/cross_origin_storage/cross_origin_storage_manager_impl.h"
  #include "content/browser/declarative_performance_observer/declarative_performance_observer.h"
  #include "content/browser/device_posture/device_posture_provider_impl.h"
 +#include "content/browser/domicile/domicile_frame_sink_broker.h"
  #include "content/browser/eye_dropper_chooser_impl.h"
  #include "content/browser/handwriting/handwriting_recognition_service_factory.h"
  #include "content/browser/haptics/haptics_service_impl.h"
-@@ -1547,6 +1548,11 @@ void PopulateBinderMapWithContext(
+@@ -1587,6 +1588,11 @@ void PopulateBinderMapWithContext(
    map->Add<optimization_guide::mojom::ModelBroker>(
        &EmptyBinderForFrame<optimization_guide::mojom::ModelBroker>);
  
@@ -95,10 +95,10 @@ index 781d934..203eded 100644
        registry.get(),
        base::BindRepeating(&RenderProcessHostImpl::BindCompositingModeReporter,
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 4fb5dc7..b49d19f 100644
+index a7858e6..8c0cb49 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-@@ -2128,7 +2128,8 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+@@ -2168,7 +2168,8 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
  
    const bool reconfiguring = !!external_surface_embedder_;
    if (!reconfiguring) {
@@ -146,10 +146,10 @@ index 42a3091..cec25f9 100644
      {
        name: "xmp",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index 9fc611c..e7491aa 100644
+index 6e1a78b..e5d5513 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2718,33 +2718,29 @@
+@@ -2753,33 +2753,29 @@
        name: "DocumentPolicyJSProfilingMode",
        status: "experimental",
      },

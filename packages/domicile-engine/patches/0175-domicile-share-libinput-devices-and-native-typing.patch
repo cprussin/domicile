@@ -1,4 +1,4 @@
-From e42dbd534aee96fdfcebec770153045c9663b605 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mecattaf <thomas@mecattaf.dev>
 Date: Thu, 5 Nov 2026 22:08:49 +0100
 Subject: [PATCH] domicile: share libinput devices and native typing
@@ -147,7 +147,7 @@ index 5c81ab3..30ffa0b 100644
    ui::MockEventConverterEvdevImpl* dev = device();
  
 diff --git a/ui/events/ozone/evdev/event_device_info.cc b/ui/events/ozone/evdev/event_device_info.cc
-index 96c62fc..3bd2ef3 100644
+index 990323d..06d9489 100644
 --- a/ui/events/ozone/evdev/event_device_info.cc
 +++ b/ui/events/ozone/evdev/event_device_info.cc
 @@ -804,10 +804,9 @@ bool EventDeviceInfo::UseLibinput() const {
@@ -220,7 +220,7 @@ index e2bba9e..56ed502 100644
    EXPECT_FALSE(devinfo.HasTouchpad());
    EXPECT_FALSE(devinfo.HasHapticTouchpad());
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-index 0dcbb5a..086e1ba 100644
+index b4c3bc2..8e7b56d 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
 @@ -51,6 +51,7 @@
@@ -335,7 +335,7 @@ index fe69e37..19c46e8 100644
    const std::unique_ptr<ImposterCheckerEvdev> imposter_checker_;
  
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
-index f6ae0c5..38ea201 100644
+index 988027d..b428bf0 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
 @@ -15,6 +15,7 @@
@@ -487,7 +487,7 @@ index f6ae0c5..38ea201 100644
 +
  TEST_F(InputDeviceFactoryEvdevTest,
         AttachSingularKeyboardFakeKeyboardHeuristicEnabled) {
-   scoped_feature_list_.InitAndEnableFeature(kEnableFakeKeyboardHeuristic);
+   std::vector<std::unique_ptr<FakeEventConverterEvdev>> converters;
 diff --git a/ui/events/ozone/evdev/input_device_opener.h b/ui/events/ozone/evdev/input_device_opener.h
 index ce0052b..7c7be27 100644
 --- a/ui/events/ozone/evdev/input_device_opener.h
@@ -592,7 +592,7 @@ index 1102a9e..994e03c 100644
  
  void InputDeviceOpenerEvdev::OpenDeviceFd(const OpenInputDeviceParams& params,
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 52a6c8e..a513d7d 100644
+index efeb7f9..4be440a 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -4,23 +4,19 @@
@@ -663,7 +663,7 @@ index 52a6c8e..a513d7d 100644
 -    libinput* const li,
 -    std::unique_ptr<OpenedDevice> opened)
 -    : li_(li), opened_(std::move(opened)) {
--  DCHECK(li_);
+-  CHECK(li_, base::NotFatalUntil::M163);
 -  libinput_log_set_handler(li_, LogHandler);
 -  libinput_log_set_priority(li_, LIBINPUT_LOG_PRIORITY_DEBUG);
 -}
@@ -976,11 +976,7 @@ index 52a6c8e..a513d7d 100644
  }
  
  void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
-@@ -637,10 +535,12 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
-   params.axis_stop_x = stop_x;
-   params.axis_stop_y = stop_y;
-   // A native client runs its own kinetic scrolling, as on any compositor, so
-   // it gets libinput's linear distance. Accelerated, its fling overshoots.
+@@ -641,6 +539,8 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
    params.native_axis_distance =
        std::array<double, 2>{ScaleScrollAxis(raw_delta.x(), scroll_factor_),
                              ScaleScrollAxis(raw_delta.y(), scroll_factor_)};
@@ -989,7 +985,7 @@ index 52a6c8e..a513d7d 100644
    dispatcher_->DispatchScrollEvent(params);
  }
  
-@@ -680,6 +576,7 @@ std::ostream& LibInputEventConverter::DescribeForLog(std::ostream& os) const {
+@@ -680,6 +580,7 @@ std::ostream& LibInputEventConverter::DescribeForLog(std::ostream& os) const {
    os << "class=ui::LibInputEventConverter id=" << input_device_.id << std::endl
       << " has_keyboard=" << has_keyboard_ << std::endl
       << " has_mouse=" << has_mouse_ << std::endl
@@ -1164,7 +1160,7 @@ index 205942d..6c6a772 100644
    double scroll_factor_ = 1;
    bool typing_applies_ = true;
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 8929825..7839d4c 100644
+index af4ddb5..e130c57 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -39,6 +39,40 @@ source_set("gbm") {
@@ -1247,7 +1243,7 @@ index 8929825..7839d4c 100644
      "host/drm_window_host_manager.h",
      "host/gpu_thread_adapter.h",
      "host/gpu_thread_observer.h",
-@@ -257,6 +259,25 @@ source_set("gbm_unittests") {
+@@ -259,6 +261,25 @@ source_set("gbm_unittests") {
    sources = [
      "common/drm_util_unittest.cc",
      "common/hardware_display_controller_info_unittest.cc",
@@ -1273,7 +1269,7 @@ index 8929825..7839d4c 100644
      "gpu/drm_gpu_display_manager_unittest.cc",
      "gpu/drm_gpu_util_unittest.cc",
      "gpu/drm_overlay_manager_unittest.cc",
-@@ -274,33 +295,22 @@ source_set("gbm_unittests") {
+@@ -276,33 +297,22 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.cc",
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",
@@ -1315,7 +1311,7 @@ index 8929825..7839d4c 100644
    ]
  
    # `ui/display/manager/test/fake_display_snapshot.h` is the one thing this
-@@ -325,6 +335,7 @@ source_set("gbm_unittests") {
+@@ -327,6 +337,7 @@ source_set("gbm_unittests") {
      "//base/test:test_support",
      "//components/viz/common/resources:shared_image_format",
      "//skia",
@@ -1323,6 +1319,3 @@ index 8929825..7839d4c 100644
      "//testing/gtest",
  
      # We're using this instead of the config to ensure that our tests built for
--- 
-2.55.0
-

@@ -19,7 +19,7 @@ job builds it on `crux`.
  1 file changed, 5 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index eb1c729..c3130fc 100644
+index a6e27ef..542d51e 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -9,6 +9,7 @@
@@ -30,7 +30,7 @@ index eb1c729..c3130fc 100644
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/desktop_prefs.h"
  #include "components/domicile/browser/rtkit.h"
-@@ -1814,6 +1815,10 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+@@ -1827,6 +1828,10 @@ void ChromeBrowserMainParts::PostBrowserStart() {
    // casts, which hear the pointer only over a window. Here for the same reason.
    domicile::StartDeskPointer();
  
@@ -41,6 +41,3 @@ index eb1c729..c3130fc 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostBrowserStart();
    }
--- 
-2.43.0
-

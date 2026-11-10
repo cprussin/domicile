@@ -23,7 +23,7 @@ switch.
  5 files changed, 59 insertions(+), 29 deletions(-)
 
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-index 29699ed..03680ab 100644
+index baef478..29c70a1 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
 @@ -16,6 +16,7 @@
@@ -58,7 +58,7 @@ index 29699ed..03680ab 100644
  
  void InputDeviceFactoryEvdev::RemoveInputDevice(const base::FilePath& path) {
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
-index 4cf6b5c..f6ae0c5 100644
+index 66b2c87..988027d 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
 @@ -193,12 +193,12 @@ class FakeInputDeviceOpenerEvdev : public InputDeviceOpener {

@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 10 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: bringing a webview's page to the front fronts its
+ window
+
+At Chromium 160 `Page.bringToFront` activates only the outermost
+WebContents. A <webview>'s page is an inner WebContents, and its own
+delegate, WebViewGuest, is what asks the shell to front the window it is
+in, so bringing that page to the front over DevTools no longer reached the
+shell. Chromium 159 activated the page's own WebContents, and
+guard-webview-activate presses with it.
+
+- `PageHandler::BringToFront`: an inner WebContents is activated too,
+  before the outermost one, and the handler stops if that destroyed it.
+---
+ content/browser/devtools/protocol/page_handler.cc | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/content/browser/devtools/protocol/page_handler.cc b/content/browser/devtools/protocol/page_handler.cc
+index 5a2a450..df2de21 100644
+--- a/content/browser/devtools/protocol/page_handler.cc
++++ b/content/browser/devtools/protocol/page_handler.cc
+@@ -1958,6 +1958,17 @@ Response PageHandler::BringToFront() {
+   }
+ 
+   base::WeakPtr<PageHandler> weak_self = weak_factory_.GetWeakPtr();
++  // Domicile's engine fork: a <webview>'s page is an inner WebContents, whose
++  // delegate fronts the window it is in. Activate it as well as the outermost
++  // one, as Chromium 159 did.
++  WebContentsImpl* web_contents =
++      WebContentsImpl::FromRenderFrameHostImpl(host_);
++  if (web_contents != web_contents->GetOutermostWebContents()) {
++    web_contents->Activate();
++    if (!weak_self || !host_) {
++      return Response::ServerError(kErrorNotAttached);
++    }
++  }
+   WebContentsImpl::FromRenderFrameHostImpl(host_)
+       ->GetOutermostWebContents()
+       ->Activate();

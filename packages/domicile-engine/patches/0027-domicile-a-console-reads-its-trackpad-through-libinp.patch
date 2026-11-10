@@ -165,7 +165,7 @@ index e9b64c7..93c5dd1 100644
  #endif
  
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index cfe335e..160a98c 100644
+index 3ae7c32..047b439 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -4,11 +4,15 @@
@@ -199,7 +199,7 @@ index cfe335e..160a98c 100644
 +    libinput* const li,
 +    std::unique_ptr<OpenedDevice> opened)
 +    : li_(li), opened_(std::move(opened)) {
-   DCHECK(li_);
+   CHECK(li_, base::NotFatalUntil::M163);
    libinput_log_set_handler(li_, LogHandler);
    libinput_log_set_priority(li_, LIBINPUT_LOG_PRIORITY_DEBUG);
 @@ -186,14 +192,22 @@ LibInputEventConverter::LibInputContext::~LibInputContext() {

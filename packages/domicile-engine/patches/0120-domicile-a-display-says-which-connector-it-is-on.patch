@@ -116,7 +116,7 @@ index 3415cf4..0f6e828 100644
  
  }  // namespace display
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 08da04a..c0d823f 100644
+index d5eded9..d9d59df 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -128,7 +128,7 @@ index 08da04a..c0d823f 100644
      "domicile/drm_cursor_factory.cc",
      "domicile/drm_cursor_factory.h",
      "domicile/drm_fullscreen.cc",
-@@ -256,6 +258,7 @@ source_set("gbm_unittests") {
+@@ -258,6 +260,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.cc",
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",
@@ -137,7 +137,7 @@ index 08da04a..c0d823f 100644
      "domicile/drm_fullscreen_unittest.cc",
      "domicile/drm_input_controller_unittest.cc",
 diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
-index f52391d..85e22de 100644
+index c48eadf..b40938b 100644
 --- a/ui/ozone/platform/drm/common/drm_util.cc
 +++ b/ui/ozone/platform/drm/common/drm_util.cc
 @@ -40,6 +40,7 @@
@@ -170,7 +170,7 @@ index f52391d..85e22de 100644
  
  int GetFourCCFormatForOpaqueFramebuffer(viz::SharedImageFormat format) {
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index a4698d0..724d754 100644
+index e3dc6dc..572e759 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -9,12 +9,15 @@
@@ -189,7 +189,7 @@ index a4698d0..724d754 100644
  #include "base/memory/weak_ptr.h"
  #include "base/notreached.h"
  #include "base/task/single_thread_task_runner.h"
-@@ -111,9 +114,10 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -114,9 +117,10 @@ class OzonePlatformDrm : public OzonePlatform {
      // the display list and lights what comes back; until that answer arrives
      // DrmScreen reports the displayless fallback its header describes, which
      // is why this seeds it rather than leaving the list empty.
@@ -203,7 +203,7 @@ index a4698d0..724d754 100644
      modeset_->Start();
  
      // And the console this is running on, which logind owns. `TakeControl`
-@@ -199,6 +203,12 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -202,6 +206,12 @@ class OzonePlatformDrm : public OzonePlatform {
      clipboard_.SetCopiedCallback(std::move(copied));
    }
  
@@ -216,7 +216,7 @@ index a4698d0..724d754 100644
    GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
      return drm_device_connector_.get();
    }
-@@ -531,6 +541,9 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -540,6 +550,9 @@ class OzonePlatformDrm : public OzonePlatform {
    // platform exists, which is what a browser whose compositor has not
    // connected yet should say.
    DrmClipboard clipboard_;
@@ -227,7 +227,7 @@ index a4698d0..724d754 100644
    // And after event_factory_ozone_ for the same kind of reason: it observes
    // that event source for as long as it lives. And after modeset_, which it
 diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
-index 264fadd..581d305 100644
+index 1c49edd..3515f7c 100644
 --- a/ui/ozone/public/ozone_platform.cc
 +++ b/ui/ozone/public/ozone_platform.cc
 @@ -135,6 +135,11 @@ PlatformClipboard* OzonePlatform::GetPlatformClipboard() {
@@ -243,10 +243,10 @@ index 264fadd..581d305 100644
    return nullptr;
  }
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 53def9d..e0dbd22 100644
+index 41f9803..15330b0 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
-@@ -401,6 +401,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -422,6 +422,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    using DomicileCopied = base::RepeatingCallback<
        void(ClipboardBuffer, const DomicileClipboardContents&)>;
    virtual void SetDomicileCopiedCallback(DomicileCopied copied) {}

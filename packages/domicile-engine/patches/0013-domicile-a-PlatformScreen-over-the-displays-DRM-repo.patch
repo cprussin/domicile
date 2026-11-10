@@ -51,7 +51,7 @@ none and the screen answers with the displayless display above.
  4 files changed, 30 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index af8b3b4..36a752b 100644
+index 7821e63..4c87b5c 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -63,7 +63,7 @@ index af8b3b4..36a752b 100644
      "host/drm_window_host_manager.h",
      "host/gpu_thread_adapter.h",
      "host/gpu_thread_observer.h",
-@@ -226,6 +228,7 @@ source_set("gbm_unittests") {
+@@ -228,6 +230,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.cc",
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",
@@ -106,7 +106,7 @@ index ca23c51..32c035b 100644
    DrmWindowHost* GetWindowAt(const gfx::Point& location);
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index fb0426d..662ee09 100644
+index 41d1cf0..49e24f2 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -46,6 +46,7 @@
@@ -117,7 +117,7 @@ index fb0426d..662ee09 100644
  #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
  #include "ui/ozone/platform/drm/host/host_drm_device.h"
  #include "ui/ozone/platform/drm/mojom/drm_device.mojom.h"
-@@ -91,8 +92,20 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -94,8 +95,20 @@ class OzonePlatformDrm : public OzonePlatform {
      return event_factory_ozone_->input_controller();
    }
  

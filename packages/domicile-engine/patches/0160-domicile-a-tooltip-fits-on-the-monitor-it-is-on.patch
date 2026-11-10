@@ -68,7 +68,7 @@ index 0b58687..1596342 100644
  // attention.
  AURA_EXPORT extern const WindowProperty<bool>* const kDrawAttentionKey;
 diff --git a/ui/views/corewm/tooltip_aura.cc b/ui/views/corewm/tooltip_aura.cc
-index 2c7eea4..66c10ca 100644
+index bd11f5f..a5f280c 100644
 --- a/ui/views/corewm/tooltip_aura.cc
 +++ b/ui/views/corewm/tooltip_aura.cc
 @@ -6,6 +6,7 @@

@@ -92,7 +92,7 @@ suite, so it actually executes.
  9 files changed, 119 insertions(+), 66 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 7cf452f..7d1e8ce 100644
+index 80d0e0f..5f2b41b 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -122,6 +122,8 @@ source_set("gbm") {
@@ -104,7 +104,7 @@ index 7cf452f..7d1e8ce 100644
      "domicile/drm_modeset.cc",
      "domicile/drm_modeset.h",
      "domicile/drm_screen.cc",
-@@ -235,6 +237,7 @@ source_set("gbm_unittests") {
+@@ -237,6 +239,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",
      "domicile/drm_fullscreen_unittest.cc",
@@ -113,10 +113,10 @@ index 7cf452f..7d1e8ce 100644
      "domicile/drm_screen_unittest.cc",
      "domicile/drm_vt_switcher_unittest.cc",
 diff --git a/ui/ozone/platform/drm/common/drm_wrapper.cc b/ui/ozone/platform/drm/common/drm_wrapper.cc
-index 5da3eaf..dd243f4 100644
+index 1f0a2ff..b0c93db 100644
 --- a/ui/ozone/platform/drm/common/drm_wrapper.cc
 +++ b/ui/ozone/platform/drm/common/drm_wrapper.cc
-@@ -217,6 +217,12 @@ bool DrmWrapper::DropMaster() {
+@@ -218,6 +218,12 @@ bool DrmWrapper::DropMaster() {
    return drop_master_result;
  }
  
@@ -155,7 +155,7 @@ index 8e8d9ec..078ee43 100644
  
    /**************
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
-index 7a5b07f..a46cc0f 100644
+index b10efb5..ff44869 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 @@ -401,25 +401,33 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
@@ -235,7 +235,7 @@ index 7a5b07f..a46cc0f 100644
  
    // Dissociate controllers from windows so that subsequent pageflips fail
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
-index 8a3dc68..d598c54 100644
+index 5e2d41d..2949217 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
 @@ -2048,46 +2048,6 @@ TEST_F(DrmGpuDisplayManagerTest, RelinquishDisplayControl) {
@@ -286,7 +286,7 @@ index 8a3dc68..d598c54 100644
    base::test::ScopedFeatureList feature_list;
    feature_list.InitAndEnableFeature(display::features::kFastDrmMasterDrop);
 diff --git a/ui/ozone/platform/drm/gpu/fake_drm_device.cc b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
-index 75977ee..7d834ca 100644
+index 1abcc8c..3aeb5ae 100644
 --- a/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 +++ b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 @@ -982,6 +982,10 @@ bool FakeDrmDevice::DropMaster() {
@@ -313,10 +313,10 @@ index 5e8719e..51af3ea 100644
  
    // There is a circular reference between DrmDevice and
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index d3941b3..d6ac3f6 100644
+index 00e7048..269a57a 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-@@ -200,6 +200,15 @@ void OpenDeviceAsync(const base::FilePath& device_path,
+@@ -217,6 +217,15 @@ void OpenDeviceAsync(const base::FilePath& device_path,
                                  std::move(drm)));
  }
  
@@ -332,7 +332,7 @@ index d3941b3..d6ac3f6 100644
  struct DisplayCard {
    base::FilePath path;
    std::optional<std::string> driver;
-@@ -394,6 +403,18 @@ void DrmDisplayHostManager::TakeDisplayControl(
+@@ -416,6 +425,18 @@ void DrmDisplayHostManager::TakeDisplayControl(
    take_display_control_callback_ = std::move(callback);
    display_control_change_pending_ = true;
  
@@ -351,7 +351,7 @@ index d3941b3..d6ac3f6 100644
    if (!proxy_->GpuTakeDisplayControl())
      GpuTookDisplayControl(false);
  }
-@@ -509,8 +530,9 @@ void DrmDisplayHostManager::OnAddGraphicsDevice(
+@@ -531,8 +552,9 @@ void DrmDisplayHostManager::OnAddGraphicsDevice(
      std::unique_ptr<DrmWrapper> drm) {
    if (drm) {
      drm_devices_[dev_path] = sys_path;
@@ -363,7 +363,7 @@ index d3941b3..d6ac3f6 100644
      NotifyDisplayDelegate();
    }
  
-@@ -525,6 +547,7 @@ void DrmDisplayHostManager::OnUpdateGraphicsDevice(
+@@ -547,6 +569,7 @@ void DrmDisplayHostManager::OnUpdateGraphicsDevice(
  
  void DrmDisplayHostManager::OnRemoveGraphicsDevice(
      const base::FilePath& sys_path) {
@@ -371,7 +371,7 @@ index d3941b3..d6ac3f6 100644
    proxy_->GpuRemoveGraphicsDevice(sys_path);
    NotifyDisplayDelegate();
    task_pending_ = false;
-@@ -554,9 +577,11 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
+@@ -581,9 +604,11 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
  
    // Send the primary device first since this is used to initialize graphics
    // state.
@@ -386,9 +386,9 @@ index d3941b3..d6ac3f6 100644
  }
  
  void DrmDisplayHostManager::OnGpuThreadReady() {
-@@ -681,14 +706,29 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
-   DCHECK(!display_externally_controlled_);
-   DCHECK(display_control_change_pending_);
+@@ -708,14 +733,29 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
+   CHECK(!display_externally_controlled_, base::NotFatalUntil::M163);
+   CHECK(display_control_change_pending_, base::NotFatalUntil::M163);
  
 -  if (status) {
 +  // OUR DROP LAST, AND ONLY IF THE GPU GOT THERE. `status` says the GPU

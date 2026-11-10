@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 10 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a browser window opens under a Wayland host
+
+At Chromium 160 every browser window crashed while Ozone/Wayland created
+it. `BrowserDesktopWindowTreeHostLinux::CalculateInsetsInDIP` now asks
+`SupportsClientFrameShadow()` first, which reads `platform_window()`, and
+`WaylandWindow::Initialize` asks for those insets while
+`DesktopWindowTreeHostPlatform::Init` is still creating the window, so the
+host does not hold it yet and the read is a null dereference. The engine
+guards that run the shell nested in a Wayland compositor hit it at once.
+
+- `SupportsClientFrameShadow`: with no platform window yet there are no
+  client-side shadows, so the insets are empty, as they are for a window
+  without a custom frame.
+---
+ .../ui/views/frame/browser_desktop_window_tree_host_linux.cc  | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
+index 1200a60..f3fa512 100644
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
+@@ -148,7 +148,9 @@ void BrowserDesktopWindowTreeHostLinux::TabDraggingKindChanged(
+ }
+ 
+ bool BrowserDesktopWindowTreeHostLinux::SupportsClientFrameShadow() const {
+-  return platform_window()->CanSetDecorationInsets() &&
++  // The Wayland window asks for its insets while it is being created, before
++  // this host holds it.
++  return platform_window() && platform_window()->CanSetDecorationInsets() &&
+          views::Widget::IsWindowCompositingSupported();
+ }
+ 

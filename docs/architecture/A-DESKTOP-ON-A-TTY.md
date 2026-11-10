@@ -13,7 +13,7 @@ On a tty, `domicile` runs the engine with `--ozone-platform=drm`. The engine:
 
 The work has two parts:
 
-- **A build patch** (`0012`, `0014`) lets `gn gen` accept
+- **A build patch** (`0012`) lets `gn gen` accept
   `ozone_platform_drm = true` off ChromeOS.
 - **An embedder** in `ui/ozone/platform/drm/domicile/` does what ash does on
   ChromeOS: a `PlatformScreen`, a modeset driver, DRM master handling, input
@@ -59,7 +59,6 @@ Details live in separate docs:
 
 - Patch `0012` relaxes the `BUILD.gn` assert to `is_linux || is_chromeos` and
   gates the ChromeOS-only deps.
-- Patch `0014` fixes a static initializer.
 - Both build scripts set `ozone_platform_drm = true`;
   `packages/domicile-engine/tests/test-the-builds-agree-on-ozone.sh` checks they agree.
 - Some gaps show up only at link time. `host/drm_cursor.cc` includes

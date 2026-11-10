@@ -29,10 +29,10 @@ windows are <webview> guests, whose delegate is WebViewGuest.
  2 files changed, 22 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 1967872..5d845ba 100644
+index b89a449..2f8a419 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -384,23 +384,29 @@ content::KeyboardEventProcessingResult
+@@ -385,23 +385,29 @@ content::KeyboardEventProcessingResult
  BrowserWebContentsDelegate::PreHandleKeyboardEvent(
      content::WebContents* source,
      const input::NativeWebKeyboardEvent& event) {
@@ -74,7 +74,7 @@ index 1967872..5d845ba 100644
  }
  
  void BrowserWebContentsDelegate::RequestPointerLock(
-@@ -464,11 +470,8 @@ void BrowserWebContentsDelegate::SetTopControlsGestureScrollInProgress(
+@@ -465,11 +471,8 @@ void BrowserWebContentsDelegate::SetTopControlsGestureScrollInProgress(
  }
  
  bool BrowserWebContentsDelegate::CanOverscrollContent() {
@@ -87,7 +87,7 @@ index 1967872..5d845ba 100644
  }
  
  bool BrowserWebContentsDelegate::ShouldPreserveAbortedURLs(
-@@ -910,7 +913,7 @@ void BrowserWebContentsDelegate::ContentsMouseEvent(
+@@ -913,7 +916,7 @@ void BrowserWebContentsDelegate::ContentsMouseEvent(
  }
  
  void BrowserWebContentsDelegate::ContentsZoomChange(bool zoom_in) {
@@ -97,10 +97,10 @@ index 1967872..5d845ba 100644
  
  bool BrowserWebContentsDelegate::TakeFocus(content::WebContents* source,
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
-index cb68c45..b3e4ce5 100644
+index e472bcf..2b71b82 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
-@@ -59,6 +59,8 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {
+@@ -60,6 +60,8 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {
        const input::NativeWebKeyboardEvent& event) override;
    bool HandleKeyboardEvent(content::WebContents* source,
                             const input::NativeWebKeyboardEvent& event) override;

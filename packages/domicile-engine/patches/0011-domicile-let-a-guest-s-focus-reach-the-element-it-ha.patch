@@ -107,7 +107,7 @@ index 4013a15..7008ae6 100644
    bool IsURLAttribute(const Attribute&) const final;
    bool HasLegalLinkAttribute(const QualifiedName&) const final;
 diff --git a/third_party/blink/renderer/core/page/focus_controller.cc b/third_party/blink/renderer/core/page/focus_controller.cc
-index 2b1e74d..3d55f3b 100644
+index 11a26e9..05da124 100644
 --- a/third_party/blink/renderer/core/page/focus_controller.cc
 +++ b/third_party/blink/renderer/core/page/focus_controller.cc
 @@ -30,6 +30,7 @@

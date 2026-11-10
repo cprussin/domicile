@@ -23,11 +23,11 @@ Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`. DeskPagePoint has its unit tests in
 domicile_unittests.
 ---
- .../render_widget_host_view_aura.cc           | 25 +++++++++++++++----
- 1 file changed, 20 insertions(+), 5 deletions(-)
+ .../render_widget_host_view_aura.cc           | 35 ++++++++++++++++---
+ 1 file changed, 30 insertions(+), 5 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_widget_host_view_aura.cc b/content/browser/renderer_host/render_widget_host_view_aura.cc
-index 51d15b3..979aa65 100644
+index 1ca59a9..1a9419f 100644
 --- a/content/browser/renderer_host/render_widget_host_view_aura.cc
 +++ b/content/browser/renderer_host/render_widget_host_view_aura.cc
 @@ -73,6 +73,7 @@
@@ -46,22 +46,23 @@ index 51d15b3..979aa65 100644
  #include "ui/gfx/geometry/rect_conversions.h"
  #include "ui/gfx/geometry/size_conversions.h"
  #include "ui/gfx/geometry/skia_conversions.h"
-@@ -3200,9 +3202,6 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
-   if (!root_window)
+@@ -3260,12 +3262,35 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
      return;
- 
--  if (ShouldSkipCursorUpdate())
--    return;
--
-   display::Screen* screen = display::Screen::Get();
-   CHECK(screen);
-   gfx::Point root_window_point = screen->GetCursorScreenPoint();
-@@ -3213,8 +3212,24 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
-         root_window, &root_window_point);
    }
  
--  if (root_window->GetEventHandlerForPoint(root_window_point) != window_)
+-  if (ShouldSkipCursorUpdate()) {
 -    return;
+-  }
++  display::Screen* screen = display::Screen::Get();
++  CHECK(screen);
++  gfx::Point root_window_point = screen->GetCursorScreenPoint();
++  aura::client::ScreenPositionClient* screen_position_client =
++      aura::client::GetScreenPositionClient(root_window);
++  if (screen_position_client) {
++    screen_position_client->ConvertPointFromScreen(root_window,
++                                                   &root_window_point);
++  }
++
 +  // DOMICILE: on a tty the desk page spans every monitor but sits in the
 +  // host monitor's window, so a pointer on another monitor is outside that
 +  // window. aura finds no window there and the screen finds another
@@ -74,12 +75,15 @@ index 51d15b3..979aa65 100644
 +                          gfx::PointF(root_window_point))
 +          .has_value();
 +  if (!on_another_monitor) {
-+    if (ShouldSkipCursorUpdate())
++    if (ShouldSkipCursorUpdate()) {
 +      return;
-+
-+    if (root_window->GetEventHandlerForPoint(root_window_point) != window_)
++    }
+ 
+-  if (!IsPointerOverSelfOrUnboundedSurface()) {
+-    return;
++    if (!IsPointerOverSelfOrUnboundedSurface()) {
 +      return;
-+  }
++    }
+   }
  
    gfx::NativeCursor cursor = current_cursor_.GetNativeCursor();
-   // Do not show loading cursor when the cursor is currently hidden.
