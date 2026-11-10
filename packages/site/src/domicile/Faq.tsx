@@ -75,8 +75,8 @@ const QUESTIONS: readonly {
   },
   {
     answer:
-      "Wayland apps do, and Electron, SDL and Qt apps start in Wayland mode. There is no Xwayland, so X11-only apps don't run.",
-    link: { href: repoFile("docs/KNOWN-GAPS.md"), label: "Known gaps" },
+      "Wayland apps do, and Electron, SDL and Qt apps start in Wayland mode. X11-only apps run when you start xwayland-satellite.",
+    link: { href: "/docs/manganese/compatibility#x11-apps", label: "X11 apps" },
     question: "Will my apps work?",
   },
 ];

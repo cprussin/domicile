@@ -23,8 +23,48 @@ packaging. Steps: [Install](INSTALL.md).
 ## Apps
 
 - Wayland apps run. Electron, SDL and Qt apps are started in Wayland mode.
-- There is no Xwayland, so apps that only speak X11 don't run.
+- Apps that only speak X11 run through xwayland-satellite: [X11 apps](#x11-apps).
 - Which apps are checked: [Apps we check](FIRST-STEPS.md#apps-we-check).
+
+## X11 apps
+
+Domicile has no Xwayland of its own. Run
+[xwayland-satellite](https://github.com/Supreeeme/xwayland-satellite) to open
+apps that only speak X11. Their windows open like any other.
+
+1. Install `xwayland-satellite` from your distribution's packages. If it isn't
+   packaged, build it from its repository.
+2. Start it when you log in, as in the steps below.
+3. Start each X11 app with `DISPLAY` set to the same display:
+   `env DISPLAY=:12 xeyes`.
+
+<!-- tab: Settings app -->
+
+Open **Settings**, then **Startup**, and add the command
+`xwayland-satellite :12`.
+
+<!-- tab: Config file -->
+
+```json
+{ "startup": { "commands": [["xwayland-satellite", ":12"]] } }
+```
+
+<!-- tab: NixOS -->
+
+In your home configuration:
+
+```nix
+home.packages = [ pkgs.xwayland-satellite ];
+programs.domicile.settings.startup.commands = [ [ "xwayland-satellite" ":12" ] ];
+```
+
+<!-- /tabs -->
+
+- `:12` is any free display number.
+- Domicile starts apps without `DISPLAY`, so apps that speak both choose
+  Wayland. To start an X11 app from the launcher, copy its `.desktop` file to
+  `~/.local/share/applications` and start its `Exec=` line with
+  `env DISPLAY=:12`.
 
 ## GPUs
 

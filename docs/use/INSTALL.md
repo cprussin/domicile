@@ -4,8 +4,9 @@ Manganese comes with Domicile, the desktop it runs on. Install it from your
 distribution's package manager, or with Nix, then log in to the **Domicile**
 session.
 
-Domicile runs on `x86_64` Linux and runs Wayland apps, with no Xwayland. GPUs,
-distributions and what is checked: [What it runs on](COMPATIBILITY.md).
+Domicile runs on `x86_64` Linux and runs Wayland apps. X11 apps run through
+[xwayland-satellite](COMPATIBILITY.md#x11-apps). GPUs, distributions and what is checked:
+[What it runs on](COMPATIBILITY.md).
 
 <!-- tab: Debian and Ubuntu -->
 

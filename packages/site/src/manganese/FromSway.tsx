@@ -39,7 +39,10 @@ const COLUMNS: readonly Column[] = [
         code: "domicile send-shell workspace 2",
         text: "Commands from a terminal:",
       },
-      { text: "Wayland apps only: there's no Xwayland" },
+      {
+        code: "xwayland-satellite :12",
+        text: "No built-in Xwayland. X11 apps run through xwayland-satellite:",
+      },
     ],
     title: "Works differently",
   },
