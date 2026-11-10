@@ -1,5 +1,34 @@
 # @domicile-desktop/manganese-clipboard
 
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [c664ef4]
+- Updated dependencies [1af639c]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [62ccd23]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [c1988f7]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [e81703a]
+- Updated dependencies [8eaae53]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [75708d7]
+- Updated dependencies [9246b97]
+- Updated dependencies [50318b4]
+- Updated dependencies [cdb3534]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/manganese-host@2.0.2
+
 ## 1.1.1
 
 ### Patch Changes

@@ -1,5 +1,31 @@
 # @domicile-desktop/manganese-bar-module-notifications
 
+## 2.0.0
+
+### Major Changes
+
+- 50318b4: The notifications panel's Do not disturb switch is now a Pause button in its header. Pause for 1 hour, until 8 AM tomorrow, or until you resume; the header says until when, and Resume ends it early. Clear all moves beside the Recent label. Do not disturb left on carries over as a pause until resumed.
+  
+  - `useNotifications` returns `pause`, `pauseFor` and `resume` in place of `doNotDisturb` and `setDoNotDisturb`.
+  - `NotificationDrawer` takes `pause`, `onPause` and `onResume` in place of `doNotDisturb` and `onDoNotDisturb`; `NotificationBell` and the drawer context take `paused`.
+  - The component library adds `Menu`, a menu opened from a button, and a `status` line on `PanelHeader`.
+
+### Patch Changes
+
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [bc45b4c]
+- Updated dependencies [62ccd23]
+- Updated dependencies [c1988f7]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [e81703a]
+- Updated dependencies [3d22f74]
+- Updated dependencies [75708d7]
+- Updated dependencies [50318b4]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/manganese-notifications@2.0.0
+  - @domicile-desktop/manganese-bar@1.1.2
+
 ## 1.1.1
 
 ### Patch Changes

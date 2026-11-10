@@ -1,5 +1,50 @@
 # @domicile-desktop/site
 
+## 0.2.0
+
+### Minor Changes
+
+- fe97fd8: Reframe the site around blurring the web and the desktop: a new homepage story (why unify, what becomes possible, build something weird, manganese), a "How it works" docs page, new demo captures, and a "Built with AI" answer in the FAQ.
+
+### Patch Changes
+
+- 7e3f354: Shells can use WebAssembly, so a shell can be written in Rust or another language that compiles to wasm. `examples/dioxus-shell` is one, in Dioxus.
+- b8a88e2: The FAQ and "How a shell works" say a shell can be written in Rust, and point to the Dioxus example.
+- 1bc9dd8: The homepage's "You're already running a browser." diagrams show Electron apps, each with its own Chromium, beside Domicile apps that share the one engine. On phones the diagrams drop their cards and the small boxes show only their titles.
+- b8a88e2: Polish the "You're already running a browser" diagrams, reword the speed FAQ, and drop "Anthropic's AI model" from the AI disclosure.
+- 56bab6c: Add Vercel Web Analytics to the site.
+- c169f08: Fix joining #domicile:domicile-desktop.com: delegate Matrix federation to www, since the bare domain redirects there.
+- 50318b4: The notifications panel's Do not disturb switch is now a Pause button in its header. Pause for 1 hour, until 8 AM tomorrow, or until you resume; the header says until when, and Resume ends it early. Clear all moves beside the Recent label. Do not disturb left on carries over as a pause until resumed.
+  
+  - `useNotifications` returns `pause`, `pauseFor` and `resume` in place of `doNotDisturb` and `setDoNotDisturb`.
+  - `NotificationDrawer` takes `pause`, `onPause` and `onResume` in place of `doNotDisturb` and `onDoNotDisturb`; `NotificationBell` and the drawer context take `paused`.
+  - The component library adds `Menu`, a menu opened from a button, and a `status` line on `PanelHeader`.
+- e8696d9: `domicile load-shell` goes back to the shell you had when the new one fails to run, and prints why.
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [c664ef4]
+- Updated dependencies [1af639c]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [62ccd23]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [c1988f7]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [e81703a]
+- Updated dependencies [8eaae53]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [75708d7]
+- Updated dependencies [9246b97]
+- Updated dependencies [50318b4]
+- Updated dependencies [cdb3534]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/react@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes

@@ -1,5 +1,24 @@
 # @domicile-desktop/manganese-bar-module-launcher-button
 
+## 1.1.0
+
+### Minor Changes
+
+- 62ccd23: Manganese has an overview: each monitor's workspaces at once, with their live windows. Open it with Meta+O, a four-finger pinch in, or the new button before the workspaces in the bar. Click a workspace or a window to go there, or drag a window onto another workspace to move it. A four-finger pinch out opens the launcher, whose button now shows a sparkle that twinkles when pointed at. The component library adds `AnimatedSparkleIcon`.
+
+### Patch Changes
+
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [62ccd23]
+- Updated dependencies [c1988f7]
+- Updated dependencies [e81703a]
+- Updated dependencies [3d22f74]
+- Updated dependencies [75708d7]
+- Updated dependencies [50318b4]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/manganese-launcher@1.1.2
+
 ## 1.0.2
 
 ### Patch Changes

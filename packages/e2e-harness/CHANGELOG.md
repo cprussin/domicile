@@ -1,5 +1,25 @@
 # @domicile-desktop/e2e-harness
 
+## 0.0.4
+
+### Patch Changes
+
+- af7415e: Hide the pointer while typing and after a pause in pointer input, with `theme.cursor_hide_when_typing` and `theme.cursor_hide_after_ms`. The next pointer move, click, scroll or touchpad gesture shows it again.
+- Updated dependencies [c664ef4]
+- Updated dependencies [1af639c]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [8eaae53]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [a354497]
+- Updated dependencies [9246b97]
+- Updated dependencies [cdb3534]
+  - @domicile-desktop/sdk@2.2.0
+
 ## 0.0.3
 
 ### Patch Changes

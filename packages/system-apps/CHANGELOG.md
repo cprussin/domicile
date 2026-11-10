@@ -1,5 +1,28 @@
 # @domicile-desktop/system-apps
 
+## 1.2.0
+
+### Minor Changes
+
+- 18413ff: A link for an app, such as Zoom or Slack, asks "Open Zoom?" over its page in the shell's style, naming the app and showing its icon, instead of Chrome's unstyled "Open xdg-open?" dialog. A secure site can be let open these links without asking. Shells get `domicile-external-app` on `<webview>`.
+
+### Patch Changes
+
+- Updated dependencies [c664ef4]
+- Updated dependencies [1af639c]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [8eaae53]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [a354497]
+- Updated dependencies [9246b97]
+- Updated dependencies [cdb3534]
+  - @domicile-desktop/sdk@2.2.0
+
 ## 1.1.1
 
 ### Patch Changes

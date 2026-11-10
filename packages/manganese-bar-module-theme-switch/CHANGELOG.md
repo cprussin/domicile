@@ -1,5 +1,19 @@
 # @domicile-desktop/manganese-bar-module-theme-switch
 
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [62ccd23]
+- Updated dependencies [c1988f7]
+- Updated dependencies [e81703a]
+- Updated dependencies [3d22f74]
+- Updated dependencies [75708d7]
+- Updated dependencies [50318b4]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+
 ## 1.1.1
 
 ### Patch Changes
