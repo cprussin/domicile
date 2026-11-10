@@ -1985,6 +1985,13 @@ pub enum SystemRequest {
     /// Answered with [`SystemReply::Set`], or [`SystemErrorKind::NotFound`]
     /// for a name the config does not have. Lasts until the desktop restarts.
     SelectKeymap { keymap: KeymapChoice },
+    /// Activate, deactivate or toggle the shortcuts inhibitor of the window
+    /// with the keyboard, as sway's `seat shortcuts_inhibitor` does: the way
+    /// back to the desktop from a VM. Answered with [`SystemReply::Set`]. A
+    /// window holding none changes nothing; a new inhibitor starts active.
+    /// [`HostMessage::AppInhibitsShortcuts`] follows each change. See
+    /// `docs/architecture/KEYBINDINGS.md`.
+    ShortcutsInhibitor { action: InhibitorAction },
     /// Draw `display`, a [`DisplayInfo::name`], or every monitor when
     /// `None`, as if its white were a light of `kelvin`, as a night light
     /// does; `6500` draws colors as they are. Every monitor's replaces each
@@ -1998,6 +2005,15 @@ pub enum SystemRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         display: Option<String>,
     },
+}
+
+/// What [`SystemRequest::ShortcutsInhibitor`] does to the inhibitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InhibitorAction {
+    Activate,
+    Deactivate,
+    Toggle,
 }
 
 /// Which keymap [`SystemRequest::SelectKeymap`] switches to.

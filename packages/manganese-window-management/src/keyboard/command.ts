@@ -13,6 +13,7 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import { InhibitorAction } from "@domicile-desktop/sdk/inhibitor-action";
 import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 
 import { Axis, Direction } from "../direction";
@@ -58,6 +59,18 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["idle-inhibitor", WindowAction.IdleInhibitorToggled()],
   // The brightness popover's switch; a toggle.
   ["night-light", WindowAction.NightLightToggled()],
+  [
+    "shortcuts-inhibitor activate",
+    WindowAction.ShortcutsInhibitorSwitched(InhibitorAction.Activate),
+  ],
+  [
+    "shortcuts-inhibitor deactivate",
+    WindowAction.ShortcutsInhibitorSwitched(InhibitorAction.Deactivate),
+  ],
+  [
+    "shortcuts-inhibitor toggle",
+    WindowAction.ShortcutsInhibitorSwitched(InhibitorAction.Toggle),
+  ],
   ["volume up", WindowAction.MediaKeyPressed(MediaKey.VolumeUp)],
   ["volume down", WindowAction.MediaKeyPressed(MediaKey.VolumeDown)],
   ["volume mute", WindowAction.MediaKeyPressed(MediaKey.VolumeMute)],

@@ -3,6 +3,7 @@ import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import type { SystemHost } from "./desktop/system-calls";
 import { system } from "./desktop/system-calls";
+import { InhibitorAction } from "./inhibitor-action";
 import { KeymapChoice } from "./keymap-choice";
 import { PreviewedWindow } from "./previewed-window";
 import type { SystemError } from "./system";
@@ -1005,6 +1006,30 @@ describe("keymaps", () => {
     expect(await Array.fromAsync(keymaps.items)).toStrictEqual([
       { active: "dvp", keymaps: LISTED },
       { active: "us", keymaps: LISTED },
+    ]);
+  });
+
+  it("switches the keyboard window's shortcuts inhibitor", async () => {
+    const host = new FakeHost();
+    const switched = [
+      InhibitorAction.Activate,
+      InhibitorAction.Deactivate,
+      InhibitorAction.Toggle,
+    ].map((action, index) => {
+      const call = system(host).switchShortcutsInhibitor(action);
+      host.reply(index + 1, { kind: "set" });
+      return call;
+    });
+
+    expect(host.calls).toStrictEqual([
+      [1, { action: "activate", call: "shortcuts_inhibitor" }],
+      [2, { action: "deactivate", call: "shortcuts_inhibitor" }],
+      [3, { action: "toggle", call: "shortcuts_inhibitor" }],
+    ]);
+    expect(await Promise.all(switched)).toStrictEqual([
+      Ok("set"),
+      Ok("set"),
+      Ok("set"),
     ]);
   });
 

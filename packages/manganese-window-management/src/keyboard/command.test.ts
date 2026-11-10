@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
+import { InhibitorAction } from "@domicile-desktop/sdk/inhibitor-action";
 import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 
 import { Axis, Direction } from "../direction";
@@ -25,6 +26,14 @@ describe("parseCommand", () => {
     ["notifications clear", WindowAction.NotificationsCleared()],
     ["idle-inhibitor", WindowAction.IdleInhibitorToggled()],
     ["night-light", WindowAction.NightLightToggled()],
+    [
+      "shortcuts-inhibitor toggle",
+      WindowAction.ShortcutsInhibitorSwitched(InhibitorAction.Toggle),
+    ],
+    [
+      "shortcuts-inhibitor deactivate",
+      WindowAction.ShortcutsInhibitorSwitched(InhibitorAction.Deactivate),
+    ],
     ["volume up", WindowAction.MediaKeyPressed(MediaKey.VolumeUp)],
     ["volume down", WindowAction.MediaKeyPressed(MediaKey.VolumeDown)],
     ["volume mute", WindowAction.MediaKeyPressed(MediaKey.VolumeMute)],

@@ -43,6 +43,14 @@ describe("keyboard", () => {
     ]);
   });
 
+  it("grabs a chord that stays the shell's while a window inhibits", () => {
+    const fake = new FakeDomicileHost();
+    const { keyboard } = desktop(fake.host);
+    keyboard.grab("Meta+Escape", { whileInhibited: true });
+
+    expect(fake.calls).toStrictEqual([["grabShortcut", "Meta+Escape", true]]);
+  });
+
   it("hears a grabbed chord pressed and let go", async () => {
     const fake = new FakeDomicileHost();
     const { keyboard } = desktop(fake.host);
