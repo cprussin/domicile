@@ -32,8 +32,9 @@ use std::thread;
 use std::time::{Instant, UNIX_EPOCH};
 
 use domicile_protocol::{
-    Bus, DirEntry, FileType, HostMessage, KeymapChoice, PreviewedWindow, Scale, Signal, Stream,
-    SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, WindowState,
+    Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice, PreviewedWindow, Scale,
+    Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply,
+    SystemRequest, WindowState,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::blocking::{Connection, MessageIterator};
@@ -101,6 +102,9 @@ pub struct System {
     keymaps: Keymaps,
     /// Switches the keymap; `None` on a system that switches none.
     select_keymap: Option<SelectKeymap>,
+    /// Acts on the keyboard window's shortcuts inhibitor; `None` on a system
+    /// that has none.
+    shortcuts_inhibitor: Option<ShortcutsInhibitor>,
     /// Adds virtual monitors; `None` on a system that adds none.
     add_virtual_monitor: Option<AddVirtualMonitor>,
     /// Sets every monitor's white point; `None` on a system that sets none.
@@ -138,6 +142,10 @@ pub trait MonitorLease: Send {
 
 /// Switches every keyboard to the keymap a page chose.
 pub type SelectKeymap = Arc<dyn Fn(KeymapChoice) -> Result<(), SystemError> + Send + Sync>;
+
+/// Activates, deactivates or toggles the shortcuts inhibitor of the window
+/// with the keyboard.
+pub type ShortcutsInhibitor = Arc<dyn Fn(InhibitorAction) -> Result<(), SystemError> + Send + Sync>;
 
 /// Replaces the states the shell set on a window.
 pub type SetWindowStates =
@@ -274,6 +282,8 @@ pub fn reach(request: &SystemRequest) -> Reach {
             Reach::Arranges
         }
         SystemRequest::SelectKeymap { .. } => Reach::Retypes,
+        // Where keys go, as a focus change is.
+        SystemRequest::ShortcutsInhibitor { .. } => Reach::Arranges,
         SystemRequest::SetColorTemperature { .. } => Reach::Tints,
         SystemRequest::WriteFile { .. }
         | SystemRequest::CreateDir { .. }
@@ -317,7 +327,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Keymaps
-        | SystemRequest::SelectKeymap { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::SelectKeymap { .. }
+        | SystemRequest::ShortcutsInhibitor { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -369,7 +380,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::ResizeVirtualMonitor { .. }
         | SystemRequest::Keymaps
-        | SystemRequest::SelectKeymap { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::SelectKeymap { .. }
+        | SystemRequest::ShortcutsInhibitor { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -416,6 +428,7 @@ impl System {
             add_virtual_monitor: None,
             keymaps: Keymaps::default(),
             select_keymap: None,
+            shortcuts_inhibitor: None,
             set_white_point: None,
         }
     }
@@ -523,6 +536,14 @@ impl System {
     }
 
     /// This system, switching the keymap through `select`.
+    pub fn switching_shortcuts_inhibitors_with(
+        mut self,
+        switch: impl Fn(InhibitorAction) -> Result<(), SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.shortcuts_inhibitor = Some(Arc::new(switch));
+        self
+    }
+
     pub fn selecting_keymaps_with(
         mut self,
         select: impl Fn(KeymapChoice) -> Result<(), SystemError> + Send + Sync + 'static,
@@ -1100,6 +1121,20 @@ impl System {
                     None => failed(SystemError {
                         kind: SystemErrorKind::Other,
                         message: "this desktop switches no keymaps".into(),
+                    }),
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
+            SystemRequest::ShortcutsInhibitor { action } => {
+                let reply = match &self.shortcuts_inhibitor {
+                    Some(switch) => match switch(action) {
+                        Ok(()) => SystemReply::Set,
+                        Err(error) => failed(error),
+                    },
+                    None => failed(SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop has no shortcuts inhibitors".into(),
                     }),
                 };
                 (self.tell)(HostMessage::SystemReply { id, reply });

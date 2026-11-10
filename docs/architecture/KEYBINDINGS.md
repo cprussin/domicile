@@ -111,3 +111,16 @@ domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor �
   `DomicileWindow.inhibitsShortcuts`. `Ctrl+Alt+F<n>` still switches consoles:
   the engine's DRM platform takes it below the page. A `<webview>` has no
   inhibitor, so chords pressed in one are always the shell's.
+- **`--inhibited` keeps a chord the shell's,** as sway's `bindsym
+  --inhibited`: a shell's way back to the desktop from a VM. `bindKeys` grabs
+  a chord written `--inhibited Meta+Escape` with
+  `keyboard.grab(chord, { whileInhibited: true })`, and the engine fires it
+  while the keyboard window inhibits (`DomicileHost::StaysWhileInhibited`).
+  Gestures take no flag; an inhibiting window gets them anyway.
+- **The shell switches the inhibitor.** `keyboard.switchShortcutsInhibitor`
+  (`shortcuts_inhibitor` on the wire) activates, deactivates or toggles the
+  keyboard window's inhibitor, as sway's `seat shortcuts_inhibitor`. The
+  compositor tells the client (`active`/`inactive`) and the chromes
+  (`app_inhibits_shortcuts`), so `inhibitsShortcuts` follows. A new inhibitor
+  starts active; one whose window closes goes with it. Manganese's
+  `shortcuts-inhibitor toggle` command calls it.

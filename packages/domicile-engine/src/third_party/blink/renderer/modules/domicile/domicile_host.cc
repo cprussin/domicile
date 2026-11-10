@@ -831,6 +831,7 @@ void DomicileHost::themeCaptured(ScriptState*, V8DomicileTheme theme,
 
 void DomicileHost::grabShortcut(ScriptState*,
                                 const String& written,
+                                bool while_inhibited,
                                 ExceptionState& exception_state) {
   String error;
   const std::optional<DomicileWrittenChord> chord =
@@ -855,10 +856,12 @@ void DomicileHost::grabShortcut(ScriptState*,
   for (GrabbedChord& grabbed : chords_) {
     if (grabbed.written == written) {
       ++grabbed.holds;
+      grabbed.while_inhibited |= while_inhibited;
       return;
     }
   }
-  chords_.push_back(GrabbedChord{written, *chord, std::nullopt});
+  chords_.push_back(GrabbedChord{written, *chord, std::nullopt, /*holds=*/1,
+                                 while_inhibited});
   if (!key_listener_) {
     key_listener_ = MakeGarbageCollected<PageHeard>(BindRepeating(
         &DomicileHost::PageKeyDown, WrapWeakPersistent(this)));
@@ -996,6 +999,15 @@ bool DomicileHost::KeyboardWindowInhibitsShortcuts() const {
   return false;
 }
 
+bool DomicileHost::StaysWhileInhibited(const DomicilePress& press) const {
+  for (const GrabbedChord& grabbed : chords_) {
+    if (grabbed.press == press) {
+      return grabbed.while_inhibited;
+    }
+  }
+  return false;
+}
+
 String DomicileHost::ChordFor(const DomicilePress& press) const {
   for (const GrabbedChord& grabbed : chords_) {
     if (grabbed.press == press) {
@@ -1017,9 +1029,11 @@ void DomicileHost::PageKeyDown(Event* event) {
   const DomicilePress press{static_cast<uint32_t>(evdev), key->altKey(),
                             key->ctrlKey(), key->shiftKey(), key->metaKey()};
   const String chord = ChordFor(press);
-  // A window holding a shortcuts inhibitor gets the chord as a key. The
+  // A window holding a shortcuts inhibitor gets the chord as a key, unless
+  // the shell grabbed it `whileInhibited`: its way back to the desktop. The
   // console switch is the DRM platform's, below the page, so it still works.
-  if (chord.IsNull() || KeyboardWindowInhibitsShortcuts()) {
+  if (chord.IsNull() ||
+      (KeyboardWindowInhibitsShortcuts() && !StaysWhileInhibited(press))) {
     return;
   }
   // Taken from the page whether or not it fires: the chord is the desktop's

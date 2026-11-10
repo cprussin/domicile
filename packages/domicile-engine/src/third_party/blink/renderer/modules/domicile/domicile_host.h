@@ -203,7 +203,10 @@ class MODULES_EXPORT DomicileHost final
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
   // The chord, `Meta+Shift+l`, resolved here against the keys the compositor
   // says the keyboard has, and again whenever it says so anew.
-  void grabShortcut(ScriptState*, const String& chord, ExceptionState&);
+  void grabShortcut(ScriptState*,
+                    const String& chord,
+                    bool while_inhibited,
+                    ExceptionState&);
   // Answers one grabShortcut of that name. The last one gives the chord back,
   // and its key too unless another name grabbed is on it.
   void ungrabShortcut(ScriptState*, const String& chord, ExceptionState&);
@@ -472,6 +475,8 @@ class MODULES_EXPORT DomicileHost final
   // Whether the window with the keyboard holds a shortcuts inhibitor, so the
   // desktop's chords are its keys.
   bool KeyboardWindowInhibitsShortcuts() const;
+  // Whether `press` is a chord a grab passed `whileInhibited` for.
+  bool StaysWhileInhibited(const DomicilePress& press) const;
   // A key went down on the page. One that is a chord grabbed by name is the
   // desktop's: taken from the page and dispatched as `shortcut`, the same as
   // the browser process does for one pressed in a `<webview>`.
@@ -615,6 +620,9 @@ class MODULES_EXPORT DomicileHost final
     DomicileWrittenChord chord;
     std::optional<DomicilePress> press;
     uint32_t holds = 1;
+    // Whether any grab of it passed `whileInhibited`, so it stays the
+    // desktop's while the keyboard window holds a shortcuts inhibitor.
+    bool while_inhibited = false;
   };
   Vector<GrabbedChord> chords_;
   // A gesture grabbed by name, and how many grabGesture calls no

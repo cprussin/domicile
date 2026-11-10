@@ -6,9 +6,9 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    Bus, ChromeMessage, DirEntry, FileType, HostMessage, KeymapChoice, ListedKeymap,
-    PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
-    SystemReply, SystemRequest, UnlockRefusal, WindowRequest, WindowState,
+    Bus, ChromeMessage, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
+    ListedKeymap, PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
+    SystemEvent, SystemReply, SystemRequest, UnlockRefusal, WindowRequest, WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -797,6 +797,27 @@ fn the_shell_hears_the_keymaps_and_switches_between_them() {
             ChromeMessage::SystemRequest {
                 id: 6,
                 request: SystemRequest::SelectKeymap { keymap },
+            }
+        );
+    }
+}
+
+/// The shell switches the keyboard window's shortcuts inhibitor, as sway's
+/// `seat shortcuts_inhibitor` does.
+#[test]
+fn the_shell_switches_the_shortcuts_inhibitor() {
+    for (wire, action) in [
+        ("activate", InhibitorAction::Activate),
+        ("deactivate", InhibitorAction::Deactivate),
+        ("toggle", InhibitorAction::Toggle),
+    ] {
+        assert_eq!(
+            chrome(&format!(
+                r#"{{"type":"system_request","id":6,"request":{{"call":"shortcuts_inhibitor","action":"{wire}"}}}}"#
+            )),
+            ChromeMessage::SystemRequest {
+                id: 6,
+                request: SystemRequest::ShortcutsInhibitor { action },
             }
         );
     }
