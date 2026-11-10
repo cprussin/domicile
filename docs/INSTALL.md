@@ -9,8 +9,9 @@ One package has all of Domicile:
 
 Install it from your distribution's package manager, or with Nix.
 
-Domicile runs on `x86_64` Linux and runs Wayland apps, with no Xwayland. GPUs,
-distributions and what is checked: [What it runs on](use/COMPATIBILITY.md).
+Domicile runs on `x86_64` Linux and runs Wayland apps. X11 apps run through
+[xwayland-satellite](use/COMPATIBILITY.md#x11-apps). GPUs, distributions and what is checked:
+[What it runs on](use/COMPATIBILITY.md).
 
 <!-- tab: Debian and Ubuntu -->
 

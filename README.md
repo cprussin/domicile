@@ -89,7 +89,7 @@ You can also [start from Manganese](https://www.domicile-desktop.com/docs/shells
 
 ## What works?
 
-Domicile runs on Linux. **Apps need Wayland support; X11-only apps don’t run.**
+Domicile runs on Linux. **Wayland apps run as they are; X11-only apps run through [xwayland-satellite](https://www.domicile-desktop.com/docs/manganese/compatibility#x11-apps).**
 
 The built-in browser supports Manifest V3 Chrome extensions, with [some differences from Chrome](https://www.domicile-desktop.com/docs/manganese/browser#differences-from-chrome). Hardware coverage is still growing.
 

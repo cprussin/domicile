@@ -115,7 +115,8 @@ Worth knowing:
 
 - Electron apps don't share the desktop's Chromium. They bundle their own
   and run as ordinary Wayland apps.
-- X11-only apps don't run: there is no Xwayland.
+- There is no built-in Xwayland. X11-only apps run through xwayland-satellite:
+  [X11 apps](use/COMPATIBILITY.md#x11-apps).
 
 More: [KNOWN-GAPS.md](KNOWN-GAPS.md),
 [What it runs on](use/COMPATIBILITY.md).

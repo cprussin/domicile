@@ -52,7 +52,9 @@ nix shell nixpkgs#weston -c \
   XDG_RUNTIME_DIR=…`.
 - The display is never `wayland-0`. Domicile skips it so clients that ignore
   `WAYLAND_DISPLAY` don't connect by accident.
-- There is no XWayland. X11-only clients open on your own session instead.
+- There is no built-in Xwayland. X11-only clients open on your own session,
+  unless you run xwayland-satellite on this display:
+  [X11 apps](/docs/use/COMPATIBILITY.md#x11-apps).
 
 ## Build and run from a checkout
 
