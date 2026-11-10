@@ -130,6 +130,7 @@ An edit applies to the running desktop, and windows stay open:
 
 | Section | Effect of an edit |
 |---|---|
+| `input.keyboard.repeat` | Native windows and pages repeat held keys at the new delay and rate |
 | `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)). The desktop stays on the active keymap if `keymaps` still names it, else goes to the first |
 | `input.touchpad`, `input.mouse` | Settings applied to attached devices and retained for later attachments |
 | `input.pointers` | Tablets, touchscreens and absolute mice rebound |
@@ -210,6 +211,16 @@ To switch between layouts, list them in `keymaps` instead:
   switches with
   `keyboard.selectKeymap()` ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). Both
   work while locked.
+
+`repeat` sets how a held key repeats, in native windows and in pages:
+
+```json
+{ "input": { "keyboard": { "repeat": { "delay_ms": 300, "rate": 30 } } } }
+```
+
+- `delay_ms` is how long a key is held before it repeats. The default is 500.
+- `rate` is repeats a second. The default is 25; 0 turns repeat off.
+- Pages follow it on a tty. Nested, the host desktop repeats keys for pages.
 
 ## Touchpads and mice
 

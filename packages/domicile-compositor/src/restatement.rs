@@ -10,6 +10,7 @@
 //!
 //! | field | on a reload |
 //! |---|---|
+//! | `input.keyboard.repeat` | sent to every client's keyboard and to the engine (`repeat_keys_at`) |
 //! | `input.keyboard.*` | every keymap recompiled; the active one, or the first if the config dropped it, sent to the seat and chrome (`take_up_the_keymaps`) |
 //! | `input.touchpad`, `input.mouse` | sent to the engine (`configure_input`) |
 //! | `input.pointers` | sent to the engine, resolved against the monitors it last reported (`bind_the_pointers`) |
@@ -48,15 +49,18 @@
 //! restated and an unchanged one is not.
 
 use domicile_config::{
-    Config, ExtensionsConfig, IdleConfig, KeyboardConfig, LockConfig, LockdownConfig, Omit,
-    ThemeConfig, ThemeMode,
+    Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, LockConfig, LockdownConfig,
+    Omit, ThemeConfig, ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Restatement {
-    /// The keyboard to compile a keymap from, or `None` if unchanged.
+    /// The keyboard to compile a keymap from, or `None` if its keymap is
+    /// unchanged.
     pub keyboard: Option<KeyboardConfig>,
+    /// How held keys repeat, or `None` if unchanged.
+    pub key_repeat: Option<KeyRepeat>,
     /// The new cap on the scale advertised to clients, or `None` if
     /// unchanged.
     pub max_scale: Option<u32>,
@@ -95,9 +99,15 @@ pub struct Restatement {
 impl Restatement {
     /// What changed between the config that was live and the one replacing it.
     pub fn between(was: &Config, now: &Config) -> Restatement {
+        // Repeat goes to the seat and the engine without recompiling a keymap.
+        let keymap_moved = KeyboardConfig {
+            repeat: now.input.keyboard.repeat,
+            ..was.input.keyboard.clone()
+        } != now.input.keyboard;
+        let repeat_moved = was.input.keyboard.repeat != now.input.keyboard.repeat;
         Restatement {
-            keyboard: (was.input.keyboard != now.input.keyboard)
-                .then(|| now.input.keyboard.clone()),
+            keyboard: keymap_moved.then(|| now.input.keyboard.clone()),
+            key_repeat: repeat_moved.then_some(now.input.keyboard.repeat),
             max_scale: (was.output.max_scale != now.output.max_scale)
                 .then_some(now.output.max_scale),
             idle: (was.idle != now.idle).then(|| now.idle.clone()),
@@ -114,11 +124,11 @@ impl Restatement {
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             lock: (was.lock != now.lock).then(|| now.lock.clone()),
-            shell_config: was.input.keyboard != now.input.keyboard
-                || was.shell_options != now.shell_options,
+            shell_config: keymap_moved || was.shell_options != now.shell_options,
             pointers: was.input.pointers != now.input.pointers,
             input_devices: was.input.touchpad != now.input.touchpad
-                || was.input.mouse != now.input.mouse,
+                || was.input.mouse != now.input.mouse
+                || repeat_moved,
         }
     }
 }
@@ -149,6 +159,23 @@ mod tests {
             "",
             "the keyboard handed back is the new one, not the one being replaced"
         );
+    }
+
+    #[test]
+    fn a_key_repeat_that_moved_is_restated_without_the_keymap() {
+        let was = parsed(A_DVORAK_DESK);
+        let restated = Restatement::between(&was, &parsed(A_DVORAK_DESK_REPEATING_FAST));
+
+        assert_eq!(
+            restated.key_repeat,
+            Some(KeyRepeat {
+                delay_ms: 200,
+                rate: 40
+            })
+        );
+        assert!(restated.input_devices, "pages repeat through the engine");
+        assert_eq!(restated.keyboard, None, "the keymap is not recompiled");
+        assert!(!restated.shell_config, "no chord moved");
     }
 
     #[test]
@@ -416,6 +443,20 @@ mod tests {
   },
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] },
   "shell_options": { "clock": { "format": "12h" } }
+}
+"#;
+
+    /// [`A_DVORAK_DESK`] with keys repeating sooner and faster.
+    const A_DVORAK_DESK_REPEATING_FAST: &str = r#"
+{
+  "input": {
+    "keyboard": {
+      "xkb_variant": "dvp",
+      "xkb_options": ["caps:swapescape"],
+      "repeat": { "delay_ms": 200, "rate": 40 }
+    }
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;
 

@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, LockdownConfig,
-    ThemeMode,
+    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, KeyRepeat,
+    LockdownConfig, ThemeMode,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -47,6 +47,35 @@ fn a_desk_that_states_a_keyboard_gets_that_one() {
     assert_eq!(keyboard.xkb_layout, "us");
     assert_eq!(keyboard.xkb_variant, "dvp");
     assert_eq!(keyboard.xkb_options, vec!["caps:escape".to_string()]);
+}
+
+#[test]
+fn keys_repeat_after_half_a_second_at_25_a_second_unless_configured() {
+    let keyboard = Config::parse("{}").unwrap().input.keyboard;
+    assert_eq!(
+        keyboard.repeat,
+        KeyRepeat {
+            delay_ms: 500,
+            rate: 25
+        }
+    );
+
+    let text = r#"{ "input": { "keyboard": { "repeat": { "delay_ms": 250, "rate": 0 } } } }"#;
+    let keyboard = Config::parse(text).unwrap().input.keyboard;
+    assert_eq!(
+        keyboard.repeat,
+        KeyRepeat {
+            delay_ms: 250,
+            rate: 0
+        },
+        "a rate of 0 turns repeat off"
+    );
+}
+
+#[test]
+fn a_negative_repeat_is_refused() {
+    let text = r#"{ "input": { "keyboard": { "repeat": { "rate": -1 } } } }"#;
+    assert!(Config::parse(text).is_err());
 }
 
 // ---- keyboard / keymap ------------------------------------------------------

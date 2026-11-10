@@ -854,8 +854,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             variant: &keyboard.xkb_variant,
             options: Some(keyboard.xkb_options_string()),
         },
-        200,
-        25,
+        config.input.keyboard.repeat.delay_ms.into(),
+        config.input.keyboard.repeat.rate.into(),
     )?;
     // The same keymap as text, for the browser process, which has its own
     // layout engine and no fd. Compiled here because Smithay only exposes the

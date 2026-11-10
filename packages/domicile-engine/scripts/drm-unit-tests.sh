@@ -46,7 +46,7 @@ SUITES=(
   DrmFullscreenTest:4
   DrmInputDevicesTest:27
   DrmInputOpensTest:17
-  DrmInputControllerTest:6
+  DrmInputControllerTest:7
   DrmCursorFactoryTest:5
   DrmCursorFactoryThemeTest:5
   DrmClipboardTest:12
@@ -64,7 +64,7 @@ SUITES=(
   InputDeviceOpenCancellationTest:3
   ActiveScrollAxesTest:3
   EventDeviceInfoTest:31
-  InputSettingsTest:6
+  InputSettingsTest:7
   TypingGuardTest:15
   EvdevWarpTest:2
   WheelTicksTest:3
