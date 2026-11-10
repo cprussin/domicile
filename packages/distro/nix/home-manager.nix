@@ -712,15 +712,17 @@ in {
                 {name = "us";}
               ];
             };
-            repeat.delay_ms = lib.mkOption {
-              description = "Milliseconds a key is held before it repeats, in native windows and pages.";
-              type = lib.types.ints.u16;
-              default = 500;
-            };
-            repeat.rate = lib.mkOption {
-              description = "Repeats a second while a key is held. 0 turns repeat off.";
-              type = lib.types.ints.u16;
-              default = 25;
+            repeat = {
+              delay_ms = lib.mkOption {
+                description = "Milliseconds a key is held before it repeats, in native windows and pages.";
+                type = lib.types.ints.u16;
+                default = 500;
+              };
+              rate = lib.mkOption {
+                description = "Repeats a second while a key is held. 0 turns repeat off.";
+                type = lib.types.ints.u16;
+                default = 25;
+              };
             };
           };
 
