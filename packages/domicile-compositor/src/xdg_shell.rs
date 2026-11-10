@@ -290,6 +290,10 @@ impl XdgShellHandler for DomicileCompositor {
         self.pass_on_a_window_request(&surface, WindowRequest::Unfullscreen);
     }
 
+    fn minimize_request(&mut self, surface: ToplevelSurface) {
+        self.pass_on_a_window_request(&surface, WindowRequest::Minimize);
+    }
+
     fn resize_request(
         &mut self,
         _surface: ToplevelSurface,

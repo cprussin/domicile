@@ -473,6 +473,9 @@ await domicile.windows.setStates(appId, [
   own frame then draws no shadow, rounded corners or resize border there.
 - **`Maximized`** and **`Fullscreen`** tell the client it fills its box.
   They do not size the window; the `<app>` box does.
+- **`Resizing`** says the shell is resizing the window, such as during a drag
+  of its edge, so the client may skip work until it ends. Set it when the drag
+  starts and drop it when the drag ends, beside the window's other states.
 - Each call replaces the states the shell set and configures the client. The
   compositor's own states (`activated`, `suspended`) are kept.
 - States outlive a shell reload. Set them again for every window you lay out;
@@ -483,14 +486,18 @@ await domicile.windows.setStates(appId, [
   stays maximized until the shell's states change.
 - An unknown `appId` fails with `SystemErrorKind.NotFound`.
 
-A client asks to be maximized or fullscreen (a terminal's fullscreen key, a
-video player). The compositor answers with a configure of the states it has
-and reports the request. Nothing changes until the shell sets states.
+A client asks to be maximized, fullscreen or minimized (a terminal's
+fullscreen key, a video player, a title bar's minimize button). The compositor
+answers with a configure of the states it has and reports the request. It
+grants nothing: nothing changes until the shell sets states.
 
 - `domicile.windows.requests()` streams each request as a
-  `WindowRequest`: `Maximize`, `Unmaximize`, `Fullscreen` or `Unfullscreen`,
-  with its `appId`. `Fullscreen` carries the `display` the client named, if
-  any.
+  `WindowRequest`: `Maximize`, `Unmaximize`, `Fullscreen`, `Unfullscreen` or
+  `Minimize`, with its `appId`. `Fullscreen` carries the `display` the client
+  named, if any.
+- xdg-shell has no minimized state, so `Minimize` is only a request. What
+  minimized means, such as hiding the window until it is picked again, is the
+  shell's.
 - A shell that does not listen ignores every request.
 
 `shell-manganese` tiles with all four tiled states, sets none on floats, and
