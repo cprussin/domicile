@@ -414,6 +414,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         | ClientRequest::ResizeVirtualMonitor { .. }
         // A key or a click, which already counted.
         | ClientRequest::SelectKeymap { .. }
+        | ClientRequest::SwitchShortcutsInhibitor { .. }
         | ClientRequest::SetWhitePoint { .. }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }

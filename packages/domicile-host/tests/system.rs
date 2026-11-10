@@ -1399,6 +1399,58 @@ mod keymaps {
     }
 }
 
+/// The way back to the desktop from a window holding a shortcuts inhibitor.
+mod shortcuts_inhibitors {
+    use domicile_protocol::InhibitorAction;
+
+    use super::*;
+
+    #[test]
+    fn switching_the_inhibitor_hands_the_action_to_the_compositor() {
+        let (told, asked) = channel();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.switching_shortcuts_inhibitors_with(move |action| {
+            told.send(action).unwrap();
+            Ok(())
+        });
+
+        for (id, action) in [
+            (1, InhibitorAction::Deactivate),
+            (2, InhibitorAction::Activate),
+            (3, InhibitorAction::Toggle),
+        ] {
+            system.handle(id, SystemRequest::ShortcutsInhibitor { action });
+            assert_eq!(reply(&heard, id), SystemReply::Set);
+            assert_eq!(asked.recv().unwrap(), action);
+        }
+    }
+
+    #[test]
+    fn a_system_with_no_inhibitors_says_so() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+
+        system.handle(
+            1,
+            SystemRequest::ShortcutsInhibitor {
+                action: InhibitorAction::Toggle,
+            },
+        );
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+
+    /// It moves where keys go, as a focus change does.
+    #[test]
+    fn switching_the_inhibitor_arranges() {
+        assert_eq!(
+            reach(&SystemRequest::ShortcutsInhibitor {
+                action: InhibitorAction::Toggle
+            }),
+            Reach::Arranges
+        );
+    }
+}
+
 /// The color temperature the shell sets every monitor to, as a night light
 /// does.
 mod color_temperature {
@@ -1555,6 +1607,9 @@ mod locked {
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
             },
+            SystemRequest::ShortcutsInhibitor {
+                action: domicile_protocol::InhibitorAction::Toggle,
+            },
         ] {
             let Some(HostMessage::SystemReply {
                 id: 4,
@@ -1628,6 +1683,9 @@ mod apps {
             SystemRequest::Keymaps,
             SystemRequest::SelectKeymap {
                 keymap: domicile_protocol::KeymapChoice::Next,
+            },
+            SystemRequest::ShortcutsInhibitor {
+                action: domicile_protocol::InhibitorAction::Toggle,
             },
         ] {
             let Some(HostMessage::SystemReply {
