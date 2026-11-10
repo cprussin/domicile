@@ -313,6 +313,7 @@ impl DomicileCompositor {
         // different window.
         if self.pointer_app.as_deref() == Some(app_id) {
             self.pointer_app = None;
+            self.pointer_surface = None;
         }
         debug!(%app_id, "gone -> Host::app_closed");
         broadcast_closed(&self.hub, app_id);

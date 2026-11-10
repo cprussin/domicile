@@ -402,6 +402,58 @@ fn a_bubble_takes_the_pointer_and_goes_when_hidden() {
     assert_eq!(closed, HostMessage::AppClosed { app_id: bubble });
 }
 
+/// A bubble with an empty input region passes the pointer to its window, at
+/// the window's point. Firefox draws everything into such a subsurface and
+/// reads the pointer only on its toplevel, so it heard nothing.
+#[test]
+fn a_bubble_that_takes_no_input_passes_the_pointer_to_its_window() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client_with(
+        "a window under a bubble that takes no input",
+        &["--bubble-without-input"],
+    );
+    let window = window_of(&mut chrome);
+    let HostMessage::PopupPlaced { app_id: bubble, .. } = popup_of(&mut chrome) else {
+        unreachable!("the wait matched on this variant")
+    };
+    let (position, size) = placement(BUBBLE_GROWN);
+    chrome
+        .wait_for(|message| {
+            *message
+                == HostMessage::PopupPlaced {
+                    app_id: bubble.clone(),
+                    parent: window.clone(),
+                    position,
+                    size,
+                    grab: false,
+                    frames: vec![],
+                }
+        })
+        .expect("the grown bubble is placed again");
+    let surface = popup_surface(&mut client);
+
+    chrome
+        .say(&ChromeMessage::PointerMotion {
+            app_id: bubble.clone(),
+            x: 5.0,
+            y: 6.0,
+            moved: true,
+        })
+        .expect("the chrome can move the pointer");
+    let (x, y, _, _) = BUBBLE_GROWN;
+    assert!(
+        client.wait_for_trace(&format!(", {}, {})", x + 5, y + 6), 1),
+        "the pointer entered the window at the bubble's place on it:\n{}",
+        client.trace()
+    );
+    assert!(
+        !client.trace().contains(&format!("{surface}, 5, 6)")),
+        "the pointer entered the bubble:\n{}",
+        client.trace()
+    );
+}
+
 /// A bubble whose surface is destroyed goes, as when Chromium closes an
 /// extension popup or exits.
 #[test]

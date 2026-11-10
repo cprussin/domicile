@@ -443,10 +443,7 @@ impl DomicileCompositor {
             .grab_start_data()
             .and_then(|grab| grab.focus)
             .map(|(surface, _)| surface);
-        let target = self
-            .pointer_app
-            .as_deref()
-            .and_then(|app_id| self.surface_for(app_id));
+        let target = self.pointer_surface.clone();
         if self.held_buttons.is_empty() || holder == target {
             return;
         }

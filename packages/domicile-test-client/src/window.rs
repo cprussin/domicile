@@ -13,8 +13,8 @@ use std::time::Duration;
 use wayland_client::backend::ObjectId;
 use wayland_client::protocol::{
     wl_buffer, wl_callback, wl_compositor, wl_data_device, wl_data_device_manager, wl_data_offer,
-    wl_data_source, wl_keyboard, wl_output, wl_pointer, wl_registry, wl_seat, wl_shm, wl_shm_pool,
-    wl_subcompositor, wl_subsurface, wl_surface, wl_touch,
+    wl_data_source, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry, wl_seat, wl_shm,
+    wl_shm_pool, wl_subcompositor, wl_subsurface, wl_surface, wl_touch,
 };
 use wayland_client::{
     delegate_noop, event_created_child, Connection, Dispatch, Proxy as _, QueueHandle, WEnum,
@@ -274,6 +274,8 @@ struct Client {
     bubble: Option<Bubble>,
     /// See [`crate::arguments::Arguments::scrolling_bubble`].
     scrolls: bool,
+    /// See [`crate::arguments::Arguments::bubble_without_input`].
+    bubble_without_input: bool,
     /// Whether to open a dialog once the window is up. See
     /// [`crate::arguments::Arguments::dialog`].
     wants_dialog: bool,
@@ -541,9 +543,10 @@ impl Client {
             anchor: asked.anchor.clone(),
             sliding_menu: asked.sliding_menu,
             popups: Vec::new(),
-            wants_bubble: asked.bubble || asked.scrolling_bubble,
+            wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
             bubble: None,
             scrolls: asked.scrolling_bubble,
+            bubble_without_input: asked.bubble_without_input,
             wants_dialog: asked.dialog,
             dialog: None,
             pointer_over: None,
@@ -1486,6 +1489,11 @@ fn open_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
         .as_ref()
         .expect("--bubble needs a compositor that advertises wl_subcompositor");
     let surface = compositor.create_surface(handle, BubbleRole);
+    if client.bubble_without_input {
+        let nothing = compositor.create_region(handle, ());
+        surface.set_input_region(Some(&nothing));
+        nothing.destroy();
+    }
     let subsurface = subcompositor.get_subsurface(&surface, &window.surface, handle, ());
     if client.scrolls {
         subsurface.set_sync();
@@ -2214,6 +2222,7 @@ delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
 delegate_noop!(Client: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
 delegate_noop!(Client: ignore wp_viewporter::WpViewporter);
+delegate_noop!(Client: ignore wl_region::WlRegion);
 delegate_noop!(Client: ignore wp_viewport::WpViewport);
 delegate_noop!(Client: ignore zxdg_exporter_v1::ZxdgExporterV1);
 delegate_noop!(Client: ignore domicile_anchor_manager_v1::DomicileAnchorManagerV1);
