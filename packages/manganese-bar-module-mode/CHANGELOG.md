@@ -1,5 +1,47 @@
 # @domicile-desktop/manganese-bar-module-mode
 
+## 1.0.3
+
+### Patch Changes
+
+- 62ccd23: Manganese has an overview: each monitor's workspaces at once, with their live windows. Open it with Meta+O, a four-finger pinch in, or the new button before the workspaces in the bar. Click a workspace or a window to go there, or drag a window onto another workspace to move it. A four-finger pinch out opens the launcher, whose button now shows a sparkle that twinkles when pointed at. The component library adds `AnimatedSparkleIcon`.
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [28e836c]
+- Updated dependencies [76c4390]
+- Updated dependencies [6930e8f]
+- Updated dependencies [c664ef4]
+- Updated dependencies [7371c33]
+- Updated dependencies [1af639c]
+- Updated dependencies [cd7e4ba]
+- Updated dependencies [b3e7457]
+- Updated dependencies [62ccd23]
+- Updated dependencies [55194ce]
+- Updated dependencies [8375015]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [c1988f7]
+- Updated dependencies [f6dc5b2]
+- Updated dependencies [e2a04a5]
+- Updated dependencies [e81703a]
+- Updated dependencies [174918e]
+- Updated dependencies [e2418db]
+- Updated dependencies [1df09a6]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [3d22f74]
+- Updated dependencies [92a4035]
+- Updated dependencies [a354497]
+- Updated dependencies [280ce42]
+- Updated dependencies [75708d7]
+- Updated dependencies [9246b97]
+- Updated dependencies [50318b4]
+- Updated dependencies [f4f993a]
+- Updated dependencies [87ad25a]
+- Updated dependencies [56adc6f]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/manganese-window-management@1.3.0
+
 ## 1.0.2
 
 ### Patch Changes

@@ -1,5 +1,69 @@
 # domicile
 
+## 1.2.0
+
+### Minor Changes
+
+- c664ef4: Shells bind touchscreen swipes in from a screen's edge, written `edge:left`, `edge:right`, `edge:top`, `edge:bottom` or `edge`, beside their keys and touchpad gestures. A finger landing at an edge the shell binds waits until it is clearly coming in; a scroll or tap there still reaches the app underneath. Manganese swipes between a monitor's workspaces from its side edges.
+- 1af639c: File access, client certificate, Bluetooth pairing and extension permission prompts now ask in the shell, over the page, instead of in Chrome's unstyled dialogs drawn over the desktop. Sites in browser windows can now be allowed to edit files they open. `<webview>` fires `domicile-prompt`.
+- eba7d0d: Night-light apps such as gammastep and wl-gammarelay-rs work: Domicile speaks `wlr-gamma-control`, so each can warm, dim or curve each monitor on its own. While an app holds a monitor, the shell's night light leaves it alone, and takes it back when the app lets go. `displays.setColorTemperature(kelvin, display)` warms one monitor by name.
+- af7415e: Hide the pointer while typing and after a pause in pointer input, with `theme.cursor_hide_when_typing` and `theme.cursor_hide_after_ms`. The next pointer move, click, scroll or touchpad gesture shows it again.
+- bb1e4cb: A page's tooltips, the "send the form again?" question on reload and the "page isn't responding" question are now the shell's, instead of Chrome's. `<webview>` reports its tooltip as `tooltip` with `domicile-tooltip-change`, and `domicile-prompt` gains the `resend-form` and `unresponsive` kinds. Reloading a page a form posted to used to do nothing; it now asks.
+- 8eaae53: Configure touchpad tapping, clicking, scrolling and typing suppression, and mouse acceleration and scrolling, through the desktop config. Choose native libinput typing suppression or configurable pauses. Apply settings on reload and device reconnection.
+- 63db244: Chrome never draws a dialog over the desktop. Any Chrome dialog the shell has no answer for is canceled and logged, so a gap fails closed. Payment Request and FedCM ("Sign in with Google"'s account chooser) are off, so sites use their own checkout and sign-in pages, and picture-in-picture video is off since Chrome floats it in a window of its own. Document picture-in-picture still opens, as a shell window.
+- d3bf90b: Touchpad swipes and holds of three or more fingers that the shell doesn't bind now reach the app under the pointer, so apps that use them work: in Manganese, which binds three- and four-finger swipes, holds and five-finger swipes go to the app.
+- f592184: Shells bind touchpad gestures of three fingers or more beside their keys, in sway's `bindgesture` grammar such as `swipe:3:left`, and in the same modes. `DomicileHost.grabGesture()` and the `gesture` event carry every phase; `domicile.gestures` wraps them. Manganese swipes four fingers between a monitor's workspaces, and gains `workspace next_on_output` and `prev_on_output`.
+- 18413ff: A link for an app, such as Zoom or Slack, asks "Open Zoom?" over its page in the shell's style, naming the app and showing its icon, instead of Chrome's unstyled "Open xdg-open?" dialog. A secure site can be let open these links without asking. Shells get `domicile-external-app` on `<webview>`.
+- 69fe0d8: A page that can't load, has a certificate problem, is flagged as unsafe or crashes now shows a shell page with Try again, Go back or Continue anyway, instead of Chrome's own error and warning pages. `<webview>` reports why as `pageFailure` with `domicile-page-failure-change`, and `proceedPastWarning()` passes a warning.
+- a354497: A site or proxy that asks for a username and password now asks in the shell, over the page, instead of in Chrome's unstyled dialog drawn over the desktop. `<webview>` fires `domicile-sign-in`.
+- 71a8c7b: Keep a web page gliding after a two-finger flick, as native apps already do. The glide follows your fingers' own speed, so scroll acceleration doesn't make it overshoot. Resting or moving your fingers on the touchpad stops it.
+- 9246b97: A page's color, date and time pickers and a text box's suggestion list are now drawn by the shell, hung from the control, instead of by Chrome. `<webview>` fires `domicile-picker` with the control's kind, value, suggestions and box, answered with `choose()` or `cancel()`.
+- 411a31d: A finger on a native window reaches it as a touchscreen touch, so apps scroll, select and pinch as they do on any Wayland desktop. An app that reads no touch gets the first finger as the pointer and its left button. A finger on a window no longer pans or zooms the shell around it. A touchscreen with no `input.pointers` entry now covers the only display when there is one, so a laptop's own touchscreen works with no config.
+- b8ccdba: Forward touchpad pinch gestures to native Wayland clients, including Google Chrome page zoom. Preserve the platform gesture phases, absolute scale, rotation and cancellation through the engine and `<app>`.
+
+### Patch Changes
+
+- 952d3ee: Fix web pages not gliding after a two-finger flick, and slow two-finger scrolls going missing soon after a flick.
+- 7e3f354: Shells can use WebAssembly, so a shell can be written in Rust or another language that compiles to wasm. `examples/dioxus-shell` is one, in Dioxus.
+- bc4a277: A closing window animates out with its contents again, instead of its picture vanishing at once. The compositor keeps a closed app window's surface, and the engine a closed browser window's page (muted), for a second while the shell animates it out.
+- 2ec7ecc: A page's tooltips now wait Chrome's delay before showing, and a tooltip in a frame from another site (Bitwarden's autofill menu, a Cloudflare challenge) shows at the pointer instead of far from it.
+- 9a150aa: Brings back the browser engine's speedups that the previous release turned off by mistake, while keeping workspace slides from redrawing the desktop on every frame.
+- 9f763cf: Pinch works as on a Mac. A two-finger pinch magnifies the browser page under the pointer without reflowing it, and a native app gets its own pinch. Meta+pinch or Meta+two-finger scroll magnifies the whole screen around the pointer. A plain pinch over the shell does nothing.
+- 8c2c52e: Fix WebGPU getting no adapter on NixOS: the Vulkan loader beside the engine is now nixpkgs' NixOS-aware one.
+- 56275da: A touchpad pinch works with several monitors. With the pointer on any monitor but the one hosting the desk, a pinch did nothing, with or without Meta.
+- 16f8ff4: App windows no longer flash white while they resize. An app may throw away a frame the screen is still showing, such as one drawn at its old size. The engine now keeps that frame until the screen is done with it, instead of drawing a blank in its place.
+- a542f66: On a console, the pointer keeps the desk's cursor theme when it comes back from hiding over a window that names no cursor, instead of switching to Chromium's own arrow.
+- 9554847: A pointer hidden by typing stays hidden when the shell moves it to follow keyboard focus, such as on switching windows, opening one or closing the focused one. Only a hand on the mouse or touchpad shows it again.
+- a006e48: The GPU process no longer runs without its seccomp filter, at random, when a thread it joined just before its sandbox started is still listed in `/proc`.
+- d69b2f4: A page's notification names its browser window, so only the Gmail inbox's own window has its duplicate notifications cleared; Gmail in another window notifies again.
+- f14ec1c: A tty desktop whose graphics card cannot draw, even on the CPU, no longer restarts its GPU process forever on a black screen. Chromium's GPU crash limit is back on, and when no GPU mode works `domicile` stops with "renderer unavailable" and exit code 69.
+- d83d2d9: Closing kitty, or another app that frees its last frame before it closes, animates with its contents again, in a tab group too. The compositor keeps a frame still on screen until it is replaced or the window's close animation ends.
+- c7973a8: A pinch on a window keeps going when a pinch begins for a window the pointer is not on, instead of ending.
+- 7166899: Show GPU-drawn apps on NVIDIA drivers whose EGL can't list devices, by opening the GPU through GBM instead
+- 27e6e33: A machine whose EGL lists no devices and whose render nodes have no GBM, such as a VM without 3D, renders in software instead of serving `wl_shm` clients only.
+- 4b5b6f7: On a tty, a website's own pointer image (such as the hand over a Google map) turns with a rotated monitor instead of showing on its side.
+- e8696d9: `domicile load-shell` goes back to the shell you had when the new one fails to run, and prints why.
+- cdb3534: Stop touchpad flicks in native apps from scrolling far past where you aimed. Native apps get libinput's scroll distance and run their own momentum; scroll acceleration now applies to pages only.
+- Updated dependencies [76c4390]
+- Updated dependencies [c664ef4]
+- Updated dependencies [7371c33]
+- Updated dependencies [bc45b4c]
+- Updated dependencies [b3e7457]
+- Updated dependencies [62ccd23]
+- Updated dependencies [af7415e]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [174918e]
+- Updated dependencies [e2418db]
+- Updated dependencies [f592184]
+- Updated dependencies [50318b4]
+- Updated dependencies [56adc6f]
+  - @domicile-desktop/manganese@1.2.0
+  - @domicile-desktop/app-settings@0.1.2
+  - @domicile-desktop/app-history@0.0.4
+  - @domicile-desktop/builder@0.1.2
+  - @domicile-desktop/shell-simple@0.0.4
+  - @domicile-desktop/shell-splash@0.0.4
+
 ## 1.1.2
 
 ### Patch Changes

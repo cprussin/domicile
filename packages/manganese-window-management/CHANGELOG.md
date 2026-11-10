@@ -1,5 +1,68 @@
 # @domicile-desktop/manganese-window-management
 
+## 1.3.0
+
+### Minor Changes
+
+- 28e836c: Tab groups nest. A selected group moved with Meta+Shift+arrow goes into the next group as a tab, along its tabs, then out past the last one. The new `group` command (Meta+G) turns the focused tab into a group of its own in the same slot.
+- 6930e8f: Manganese's touchpad gestures: a three-finger swipe moves focus that way, as Meta+H/J/K/L do. Four fingers now switch workspaces (left and right), and pull the scratchpad down or push it back up (down and up). Shells can bind the scratchpad's two directions with the new `scratchpad bring` and `scratchpad hide` commands.
+- c664ef4: Shells bind touchscreen swipes in from a screen's edge, written `edge:left`, `edge:right`, `edge:top`, `edge:bottom` or `edge`, beside their keys and touchpad gestures. A finger landing at an edge the shell binds waits until it is clearly coming in; a scroll or tap there still reaches the app underneath. Manganese swipes between a monitor's workspaces from its side edges.
+- 7371c33: In the overview, Meta+H/J/K/L moves between workspaces and Meta+Shift+H/J/K/L swaps the picked one with its neighbor, windows and all. The arrow keys move the way they point. Other window and workspace keys do nothing while it is open.
+- 1af639c: File access, client certificate, Bluetooth pairing and extension permission prompts now ask in the shell, over the page, instead of in Chrome's unstyled dialogs drawn over the desktop. Sites in browser windows can now be allowed to edit files they open. `<webview>` fires `domicile-prompt`.
+- 62ccd23: Manganese has an overview: each monitor's workspaces at once, with their live windows. Open it with Meta+O, a four-finger pinch in, or the new button before the workspaces in the bar. Click a workspace or a window to go there, or drag a window onto another workspace to move it. A four-finger pinch out opens the launcher, whose button now shows a sparkle that twinkles when pointed at. The component library adds `AnimatedSparkleIcon`.
+- bb1e4cb: A page's tooltips, the "send the form again?" question on reload and the "page isn't responding" question are now the shell's, instead of Chrome's. `<webview>` reports its tooltip as `tooltip` with `domicile-tooltip-change`, and `domicile-prompt` gains the `resend-form` and `unresponsive` kinds. Reloading a page a form posted to used to do nothing; it now asks.
+- f592184: Shells bind touchpad gestures of three fingers or more beside their keys, in sway's `bindgesture` grammar such as `swipe:3:left`, and in the same modes. `DomicileHost.grabGesture()` and the `gesture` event carry every phase; `domicile.gestures` wraps them. Manganese swipes four fingers between a monitor's workspaces, and gains `workspace next_on_output` and `prev_on_output`.
+- 18413ff: A link for an app, such as Zoom or Slack, asks "Open Zoom?" over its page in the shell's style, naming the app and showing its icon, instead of Chrome's unstyled "Open xdg-open?" dialog. A secure site can be let open these links without asking. Shells get `domicile-external-app` on `<webview>`.
+- 69fe0d8: A page that can't load, has a certificate problem, is flagged as unsafe or crashes now shows a shell page with Try again, Go back or Continue anyway, instead of Chrome's own error and warning pages. `<webview>` reports why as `pageFailure` with `domicile-page-failure-change`, and `proceedPastWarning()` passes a warning.
+- 92a4035: Spreading four fingers closes the overview, and pinching in inside it no longer does: `pinch:4:inward` is `overview show` and `pinch:4:outward` is `overview hide`, both new commands. The launcher moves to a three-finger spread (`pinch:3:outward`).
+- a354497: A site or proxy that asks for a username and password now asks in the shell, over the page, instead of in Chrome's unstyled dialog drawn over the desktop. `<webview>` fires `domicile-sign-in`.
+- 9246b97: A page's color, date and time pickers and a text box's suggestion list are now drawn by the shell, hung from the control, instead of by Chrome. `<webview>` fires `domicile-picker` with the control's kind, value, suggestions and box, answered with `choose()` or `cancel()`.
+
+### Patch Changes
+
+- 76c4390: Swapping workspaces in the overview slides each workspace's whole tile with its windows, not just the windows.
+- cd7e4ba: Hovering a tab group's rail focuses the group's open window.
+- b3e7457: Drag a nested group's tab along its strip or out of it, and move other tabs past it. The tab strip above a nested group no longer turns into a resize handle.
+- 55194ce: Switching tabs again before the last switch has faded no longer flashes a tab you left earlier, or the desktop, for a frame or two.
+- 8375015: Closing a tab in a group now shrinks and fades its contents out, as closing a window does, instead of only crossfading them into the next tab.
+- f6dc5b2: Resizing a window by its edge always ends when the mouse button is let go, so the resize cursor no longer sticks and windows take clicks again.
+- e2a04a5: Workspace switches and scratchpad slides no longer stall at the start while a heavy page on the incoming workspace draws again.
+- 174918e: In the overview, Meta+H/J/K/L now shows which workspace it moved to with a white ring and moves on to the next monitor at the edge, and keys other than the overview's own (and lock, screenshot, volume and brightness) do nothing, so Meta+Enter no longer opens a terminal behind it.
+- e2418db: In the overview, the ring round the picked workspace slides with it as it swaps, and Meta+Shift+H/J/K/L swaps with a workspace on the next monitor at the edge. The ring under the pointer is fainter than the picked workspace's, so the two are easy to tell apart.
+- 1df09a6: Honor a native client's requested fullscreen display and keep its window on that display when leaving fullscreen.
+- 280ce42: A window moving to another tab group slides over the tab strips on its way, not under them.
+- f4f993a: A closing window stays under the floating windows over it, instead of flashing above them.
+- 87ad25a: Opening and closing a tab in a group is easier to see. A new tab's contents grow out of its tab in the strip and fade in, and a closing tab's shrink back into it, over twice as long as before. Before, a new tab only crossfaded over the tab it hid, and a closing tab barely shrank.
+- 56adc6f: The overview opens like a camera pulling back from the workspace you're on: every workspace moves together, the others coming in from the side they sit on, and the names settle in as it lands. Closing pushes back into the workspace you picked.
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [c664ef4]
+- Updated dependencies [1af639c]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [62ccd23]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [c1988f7]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [e81703a]
+- Updated dependencies [8eaae53]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [75708d7]
+- Updated dependencies [9246b97]
+- Updated dependencies [50318b4]
+- Updated dependencies [cdb3534]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/manganese-page-requests@1.2.0
+  - @domicile-desktop/system-apps@1.2.0
+  - @domicile-desktop/manganese-bar@1.1.2
+  - @domicile-desktop/manganese-address@1.0.3
+  - @domicile-desktop/manganese-host@2.0.2
+
 ## 1.2.0
 
 ### Minor Changes

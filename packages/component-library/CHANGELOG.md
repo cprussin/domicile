@@ -1,5 +1,41 @@
 # @domicile-desktop/component-library
 
+## 2.1.0
+
+### Minor Changes
+
+- 62ccd23: Manganese has an overview: each monitor's workspaces at once, with their live windows. Open it with Meta+O, a four-finger pinch in, or the new button before the workspaces in the bar. Click a workspace or a window to go there, or drag a window onto another workspace to move it. A four-finger pinch out opens the launcher, whose button now shows a sparkle that twinkles when pointed at. The component library adds `AnimatedSparkleIcon`.
+- c1988f7: - `ListRow`'s `disclosure` drawer slides open and shut.
+  - Wi-Fi's Disconnect sits on the connection's row, as a Bluetooth device's does.
+- 50318b4: The notifications panel's Do not disturb switch is now a Pause button in its header. Pause for 1 hour, until 8 AM tomorrow, or until you resume; the header says until when, and Resume ends it early. Clear all moves beside the Recent label. Do not disturb left on carries over as a pause until resumed.
+  
+  - `useNotifications` returns `pause`, `pauseFor` and `resume` in place of `doNotDisturb` and `setDoNotDisturb`.
+  - `NotificationDrawer` takes `pause`, `onPause` and `onResume` in place of `doNotDisturb` and `onDoNotDisturb`; `NotificationBell` and the drawer context take `paused`.
+  - The component library adds `Menu`, a menu opened from a button, and a `status` line on `PanelHeader`.
+
+### Patch Changes
+
+- f9bbf5d: A `ListRow` drawer has more room above and below its details, and a `PanelFooter` at its foot sits centered between its rule and the tile's edge.
+- e81703a: Wi-Fi's Disconnect sits at the foot of the connection's details, under a rule.
+- 3d22f74: A closing popover no longer closes the one opened in its place, so clicking another extension's action opens its popup.
+- 75708d7: The workspace switcher's chip slides smoothly when a workspace comes or goes at the end of the row: the bar items beside its empty middle no longer clip while they resize (`FluidItem`'s new `overflow` prop), and the chip's clip no longer depends on the row's width.
+- eeb9468: A `PanelFooter` action in a `ListRow` drawer keeps a gap from the tile's right edge instead of hanging past the drawer's padding.
+- Updated dependencies [c664ef4]
+- Updated dependencies [1af639c]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [8eaae53]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [a354497]
+- Updated dependencies [9246b97]
+- Updated dependencies [cdb3534]
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/system-apps@1.2.0
+
 ## 2.0.1
 
 ### Patch Changes

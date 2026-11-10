@@ -1,5 +1,105 @@
 # @domicile-desktop/manganese
 
+## 1.2.0
+
+### Minor Changes
+
+- c664ef4: Shells bind touchscreen swipes in from a screen's edge, written `edge:left`, `edge:right`, `edge:top`, `edge:bottom` or `edge`, beside their keys and touchpad gestures. A finger landing at an edge the shell binds waits until it is clearly coming in; a scroll or tap there still reaches the app underneath. Manganese swipes between a monitor's workspaces from its side edges.
+- 7371c33: In the overview, Meta+H/J/K/L moves between workspaces and Meta+Shift+H/J/K/L swaps the picked one with its neighbor, windows and all. The arrow keys move the way they point. Other window and workspace keys do nothing while it is open.
+- 62ccd23: Manganese has an overview: each monitor's workspaces at once, with their live windows. Open it with Meta+O, a four-finger pinch in, or the new button before the workspaces in the bar. Click a workspace or a window to go there, or drag a window onto another workspace to move it. A four-finger pinch out opens the launcher, whose button now shows a sparkle that twinkles when pointed at. The component library adds `AnimatedSparkleIcon`.
+- f592184: Shells bind touchpad gestures of three fingers or more beside their keys, in sway's `bindgesture` grammar such as `swipe:3:left`, and in the same modes. `DomicileHost.grabGesture()` and the `gesture` event carry every phase; `domicile.gestures` wraps them. Manganese swipes four fingers between a monitor's workspaces, and gains `workspace next_on_output` and `prev_on_output`.
+- 50318b4: The notifications panel's Do not disturb switch is now a Pause button in its header. Pause for 1 hour, until 8 AM tomorrow, or until you resume; the header says until when, and Resume ends it early. Clear all moves beside the Recent label. Do not disturb left on carries over as a pause until resumed.
+  
+  - `useNotifications` returns `pause`, `pauseFor` and `resume` in place of `doNotDisturb` and `setDoNotDisturb`.
+  - `NotificationDrawer` takes `pause`, `onPause` and `onResume` in place of `doNotDisturb` and `onDoNotDisturb`; `NotificationBell` and the drawer context take `paused`.
+  - The component library adds `Menu`, a menu opened from a button, and a `status` line on `PanelHeader`.
+
+### Patch Changes
+
+- 76c4390: Swapping workspaces in the overview slides each workspace's whole tile with its windows, not just the windows.
+- bc45b4c: Gmail's page no longer notifies the same mail again while its window is open.
+- b3e7457: Drag a nested group's tab along its strip or out of it, and move other tabs past it. The tab strip above a nested group no longer turns into a resize handle.
+- d69b2f4: A page's notification names its browser window, so only the Gmail inbox's own window has its duplicate notifications cleared; Gmail in another window notifies again.
+- 174918e: In the overview, Meta+H/J/K/L now shows which workspace it moved to with a white ring and moves on to the next monitor at the edge, and keys other than the overview's own (and lock, screenshot, volume and brightness) do nothing, so Meta+Enter no longer opens a terminal behind it.
+- e2418db: In the overview, the ring round the picked workspace slides with it as it swaps, and Meta+Shift+H/J/K/L swaps with a workspace on the next monitor at the edge. The ring under the pointer is fainter than the picked workspace's, so the two are easy to tell apart.
+- 56adc6f: The overview opens like a camera pulling back from the workspace you're on: every workspace moves together, the others coming in from the side they sit on, and the names settle in as it lands. Closing pushes back into the workspace you picked.
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [e481089]
+- Updated dependencies [28e836c]
+- Updated dependencies [76c4390]
+- Updated dependencies [6930e8f]
+- Updated dependencies [c664ef4]
+- Updated dependencies [7371c33]
+- Updated dependencies [1af639c]
+- Updated dependencies [bc45b4c]
+- Updated dependencies [cd7e4ba]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [b3e7457]
+- Updated dependencies [62ccd23]
+- Updated dependencies [55194ce]
+- Updated dependencies [8375015]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [c1988f7]
+- Updated dependencies [f6dc5b2]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [e2a04a5]
+- Updated dependencies [e81703a]
+- Updated dependencies [8eaae53]
+- Updated dependencies [174918e]
+- Updated dependencies [e2418db]
+- Updated dependencies [1df09a6]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [3d22f74]
+- Updated dependencies [92a4035]
+- Updated dependencies [a354497]
+- Updated dependencies [280ce42]
+- Updated dependencies [75708d7]
+- Updated dependencies [9246b97]
+- Updated dependencies [50318b4]
+- Updated dependencies [f4f993a]
+- Updated dependencies [cdb3534]
+- Updated dependencies [87ad25a]
+- Updated dependencies [56adc6f]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/manganese-bar-module-workspace-switcher@1.2.0
+  - @domicile-desktop/manganese-window-management@1.3.0
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/manganese-notifications@2.0.0
+  - @domicile-desktop/manganese-inbox-gmail@0.1.2
+  - @domicile-desktop/manganese-bar-module-launcher-button@1.1.0
+  - @domicile-desktop/manganese-bar-module-network@1.1.2
+  - @domicile-desktop/system-apps@1.2.0
+  - @domicile-desktop/manganese-bar@1.1.2
+  - @domicile-desktop/manganese-bar-module-notifications@2.0.0
+  - @domicile-desktop/manganese-bar-module-battery@1.1.2
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.2
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.2
+  - @domicile-desktop/manganese-bar-module-cast@0.1.2
+  - @domicile-desktop/manganese-bar-module-clock@1.0.3
+  - @domicile-desktop/manganese-bar-module-downloads@0.1.2
+  - @domicile-desktop/manganese-bar-module-gmail@2.0.2
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.2
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.2
+  - @domicile-desktop/manganese-bar-module-keymap@0.1.2
+  - @domicile-desktop/manganese-bar-module-sharing@1.1.2
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.2
+  - @domicile-desktop/manganese-bar-module-tray@1.1.2
+  - @domicile-desktop/manganese-bar-module-volume@2.0.2
+  - @domicile-desktop/manganese-clipboard@1.1.2
+  - @domicile-desktop/manganese-host@2.0.2
+  - @domicile-desktop/manganese-launcher@1.1.2
+  - @domicile-desktop/manganese-lock@1.0.3
+  - @domicile-desktop/manganese-quick-settings@1.0.2
+  - @domicile-desktop/manganese-wallpaper@1.1.2
+  - @domicile-desktop/react@0.1.2
+  - @domicile-desktop/system-audio@1.1.2
+  - @domicile-desktop/system-backlight@1.1.2
+  - @domicile-desktop/manganese-inbox-google-messages@0.1.2
+
 ## 1.1.1
 
 ### Patch Changes

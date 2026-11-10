@@ -1,5 +1,46 @@
 # @domicile-desktop/manganese-notifications
 
+## 2.0.0
+
+### Major Changes
+
+- 50318b4: The notifications panel's Do not disturb switch is now a Pause button in its header. Pause for 1 hour, until 8 AM tomorrow, or until you resume; the header says until when, and Resume ends it early. Clear all moves beside the Recent label. Do not disturb left on carries over as a pause until resumed.
+  
+  - `useNotifications` returns `pause`, `pauseFor` and `resume` in place of `doNotDisturb` and `setDoNotDisturb`.
+  - `NotificationDrawer` takes `pause`, `onPause` and `onResume` in place of `doNotDisturb` and `onDoNotDisturb`; `NotificationBell` and the drawer context take `paused`.
+  - The component library adds `Menu`, a menu opened from a button, and a `status` line on `PanelHeader`.
+
+### Patch Changes
+
+- bc45b4c: Gmail's page no longer notifies the same mail again while its window is open.
+- d69b2f4: A page's notification names its browser window, so only the Gmail inbox's own window has its duplicate notifications cleared; Gmail in another window notifies again.
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [c664ef4]
+- Updated dependencies [1af639c]
+- Updated dependencies [eba7d0d]
+- Updated dependencies [62ccd23]
+- Updated dependencies [af7415e]
+- Updated dependencies [bb1e4cb]
+- Updated dependencies [c1988f7]
+- Updated dependencies [d69b2f4]
+- Updated dependencies [e81703a]
+- Updated dependencies [8eaae53]
+- Updated dependencies [f592184]
+- Updated dependencies [18413ff]
+- Updated dependencies [69fe0d8]
+- Updated dependencies [3d22f74]
+- Updated dependencies [a354497]
+- Updated dependencies [75708d7]
+- Updated dependencies [9246b97]
+- Updated dependencies [50318b4]
+- Updated dependencies [cdb3534]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/sdk@2.2.0
+  - @domicile-desktop/manganese-bar@1.1.2
+  - @domicile-desktop/manganese-host@2.0.2
+  - @domicile-desktop/react@0.1.2
+
 ## 1.1.1
 
 ### Patch Changes

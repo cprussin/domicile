@@ -1,5 +1,21 @@
 # @domicile-desktop/manganese-bar
 
+## 1.1.2
+
+### Patch Changes
+
+- 75708d7: The workspace switcher's chip slides smoothly when a workspace comes or goes at the end of the row: the bar items beside its empty middle no longer clip while they resize (`FluidItem`'s new `overflow` prop), and the chip's clip no longer depends on the row's width.
+- Updated dependencies [f9bbf5d]
+- Updated dependencies [62ccd23]
+- Updated dependencies [c1988f7]
+- Updated dependencies [e81703a]
+- Updated dependencies [3d22f74]
+- Updated dependencies [75708d7]
+- Updated dependencies [50318b4]
+- Updated dependencies [eeb9468]
+  - @domicile-desktop/component-library@2.1.0
+  - @domicile-desktop/manganese-host@2.0.2
+
 ## 1.1.1
 
 ### Patch Changes
