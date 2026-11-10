@@ -210,6 +210,8 @@ struct DisplayInfo {
   uint32 scale;
   uint32 mode_width;
   uint32 mode_height;
+  // The `wl_output` refresh rate in mHz, or zero when unknown.
+  uint32 refresh_mhz;
   DisplayTransform transform;
 };
 

@@ -111,18 +111,24 @@ pub struct DisplayPlacement {
     /// closed lid.
     #[serde(default = "enabled")]
     pub enabled: bool,
-    /// The mode, in physical pixels, this entry's placement assumes. Absent
-    /// means any mode.
+    /// The mode to scan out, in physical pixels. Absent means the monitor's
+    /// native mode.
     ///
-    /// A check, not a request: the engine holds DRM master and sets each
-    /// connector's native mode, so the compositor cannot modeset. Positions
-    /// often depend on other displays' sizes, so a different mode makes the
-    /// profile wrong, and applying it fails.
-    ///
-    /// No refresh rate: it does not affect layout, cannot be chosen, and some
-    /// monitors report none.
+    /// Applying the profile fails when the monitor offers no mode of this
+    /// size. An engine that reports no modes (an older one, or a desktop in a
+    /// window) cannot set one, so there it is a check: the profile applies
+    /// only while the monitor is at this mode.
     #[serde(default)]
     pub mode: Option<(u32, u32)>,
+    /// The refresh rate to scan out, in Hz, such as `59.94` or `120`. The
+    /// monitor's advertised rate nearest it is used, at `mode` or else the
+    /// native size.
+    ///
+    /// Absent means the native mode's rate when `mode` is absent or the
+    /// native size, and otherwise the highest rate the monitor offers at
+    /// `mode`, as sway picks.
+    #[serde(default)]
+    pub refresh: Option<f64>,
     /// The top-left corner in the profile's coordinate space. May be negative.
     ///
     /// Absent puts the display in a row right of the positioned ones, in
@@ -189,6 +195,16 @@ impl DisplayPlacement {
                 return Err(ConfigError::Validation(format!(
                     "{at} states {} at {width}x{height}, and no connector \
                      scans out a mode with no pixels on an axis",
+                    self.display
+                )));
+            }
+        }
+        // Zero or less is no rate, and NaN passes every comparison.
+        if let Some(refresh) = self.refresh {
+            if !refresh.is_finite() || refresh <= 0.0 || refresh * 1000.0 > f64::from(i32::MAX) {
+                return Err(ConfigError::Validation(format!(
+                    "{at} refresh for {} is {refresh}, which is not a rate a \
+                     monitor scans out at",
                     self.display
                 )));
             }
@@ -264,6 +280,9 @@ pub struct Connected {
     pub spelled_out: String,
     /// The mode the connector is scanning out, in physical pixels.
     pub mode: (u32, u32),
+    /// Every mode size the monitor offers, in physical pixels. Empty when the
+    /// engine reports none, which also means it cannot set one.
+    pub modes: Vec<(u32, u32)>,
 }
 
 impl Connected {
@@ -405,6 +424,12 @@ pub struct Scanout {
     /// Device pixels per logical pixel. The engine draws this connector's
     /// window at this scale so the page lays out in logical pixels.
     pub scale: f64,
+    /// The mode the profile asks for, in physical pixels, or `None` for the
+    /// native one.
+    pub mode: Option<(u32, u32)>,
+    /// The refresh rate the profile asks for, in mHz, or `None` for the
+    /// default described at [`DisplayPlacement::refresh`].
+    pub refresh_mhz: Option<u32>,
     /// Where the profile put this display on the desktop, or `None` if it is
     /// dark.
     ///
@@ -454,7 +479,7 @@ fn placed(
     let display = placement
         .connected_in(connected)
         .expect("a profile is only applied to the displays it matched");
-    let mode = display.mode;
+    let mode = mode_of(placement, display);
     Ok(Placed {
         // The output name, not what the config wrote: clients already have a
         // `wl_output` under this name.
@@ -539,7 +564,7 @@ fn scanout(
         .filter(|placement| !placement.enabled)
         .map(|placement| {
             let display = found(placement, connected);
-            (display.name.as_str(), display.mode.0)
+            (display.name.as_str(), mode_of(placement, display).0)
         });
 
     let mut origins: Vec<(&str, (i32, i32))> = Vec::with_capacity(profile.displays.len());
@@ -570,6 +595,10 @@ fn scanout(
                     .expect("every display the profile names is in the row"),
                 transform: placement.transform,
                 scale: placement.scale,
+                mode: placement.mode,
+                refresh_mhz: placement
+                    .refresh
+                    .map(|hertz| (hertz * 1000.0).round() as u32),
                 desk: placed
                     .iter()
                     .find(|placed| placed.name == display.name)
@@ -582,9 +611,11 @@ fn scanout(
         .collect())
 }
 
-/// The first entry whose monitor is not at the mode it states, or `None`.
+/// The first entry whose mode its monitor cannot scan out, or `None`.
 ///
-/// Checks disabled entries too: their modes set where dark connectors land in
+/// A monitor that reports its modes must offer the size; one that reports
+/// none must already be at it, since the engine then cannot set one. Checks
+/// disabled entries too: their modes set where dark connectors land in
 /// [`scanout`].
 fn misstated<'a>(
     profile: &'a Profile,
@@ -594,7 +625,23 @@ fn misstated<'a>(
         .displays
         .iter()
         .map(|placement| (placement, found(placement, connected)))
-        .find(|(placement, display)| placement.mode.is_some_and(|stated| stated != display.mode))
+        .find(|(placement, display)| {
+            placement.mode.is_some_and(|stated| {
+                if display.modes.is_empty() {
+                    stated != display.mode
+                } else {
+                    !display.modes.contains(&stated)
+                }
+            })
+        })
+}
+
+/// The mode an entry's monitor scans out once the profile applies: the one
+/// it asks for, or the one the monitor is at.
+///
+/// [`misstated`] has already refused a mode the monitor cannot scan out.
+fn mode_of(placement: &DisplayPlacement, display: &Connected) -> (u32, u32) {
+    placement.mode.unwrap_or(display.mode)
 }
 
 /// The connected display an entry of an applied profile names.
@@ -703,10 +750,9 @@ fn unlightable(profile: &Profile, display: &str) -> ConfigError {
     ))
 }
 
-/// The error for a monitor not at the mode its profile states.
+/// The error for a mode a monitor cannot scan out.
 ///
-/// Names both modes, since either may be wrong, and says that this
-/// compositor does not set modes.
+/// Names the modes it can, since either side may be wrong.
 fn unavailable(
     profile: &Profile,
     placement: &DisplayPlacement,
@@ -715,11 +761,27 @@ fn unavailable(
     let (width, height) = placement
         .mode
         .expect("only an entry that states a mode is misstated");
+    if display.modes.is_empty() {
+        return ConfigError::Validation(format!(
+            "output profile {} is written for {} at {}x{} and it is scanning \
+             out {}x{}; this engine reports no modes and cannot set one, so the \
+             profile cannot be applied as written",
+            profile.name, placement.display, width, height, display.mode.0, display.mode.1
+        ));
+    }
+    let offered: Vec<String> = display
+        .modes
+        .iter()
+        .map(|(width, height)| format!("{width}x{height}"))
+        .collect();
     ConfigError::Validation(format!(
-        "output profile {} is written for {} at {}x{} and it is scanning out \
-         {}x{}; this desktop places a monitor at the mode it reports and does \
-         not set one, so the profile cannot be applied as written",
-        profile.name, placement.display, width, height, display.mode.0, display.mode.1
+        "output profile {} asks for {} at {}x{}, which it does not offer; it \
+         offers {}",
+        profile.name,
+        placement.display,
+        width,
+        height,
+        offered.join(", ")
     ))
 }
 

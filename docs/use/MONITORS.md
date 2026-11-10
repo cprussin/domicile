@@ -34,6 +34,9 @@ to it by name, then set its scale, position and rotation, or switch it off.
 - A monitor without a `position` goes to the right of the others.
 - `rotate-270` is for a monitor turned a quarter to the left, `rotate-90` to
   the right.
+- `"mode": [1920, 1080]` lights a monitor at another size it offers, and
+  `"refresh": 120` at another rate, in Hz. Without them, it uses its own best
+  size and rate.
 
 <!-- /tabs -->
 

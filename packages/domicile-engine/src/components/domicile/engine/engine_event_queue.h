@@ -38,6 +38,14 @@ struct EngineDisplay {
   std::string connector;
   // How many entries its gamma ramp has, or 0 for none.
   uint32_t gamma_size = 0;
+  // The modes its connector advertises, or none on a platform that sets no
+  // modes.
+  struct Mode {
+    int32_t width = 0;
+    int32_t height = 0;
+    int32_t refresh_mhz = 0;
+  };
+  std::vector<Mode> modes;
 };
 
 // One frame of a display capture.

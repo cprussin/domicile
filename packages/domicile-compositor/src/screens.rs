@@ -134,6 +134,8 @@ impl Advertised {
             scale: as_measure(self.wl_output_scale()),
             size: [as_measure(self.logical.0), as_measure(self.logical.1)],
             mode: [as_measure(self.mode.0), as_measure(self.mode.1)],
+            // Unknown is zero on both sides of the wire.
+            refresh_mhz: u32::try_from(self.refresh_mhz).unwrap_or(0),
             transform: as_wire_transform(self.transform),
         }
     }
@@ -277,6 +279,8 @@ impl Screens {
                             position: display.position,
                             size: display.size,
                         }),
+                        mode: None,
+                        refresh_mhz: None,
                     })
                     .collect(),
                 ..Screens::as_the_engine_placed(&monitors, vendors)
@@ -385,6 +389,8 @@ impl Screens {
                     transform: display.transform,
                     scale: display.scale,
                     desk: display.desk,
+                    mode: display.mode,
+                    refresh_mhz: display.refresh_mhz,
                 })
                 .collect(),
             outputs: layout
@@ -512,6 +518,8 @@ impl Screens {
                     position,
                     size: logical,
                 }),
+                mode: None,
+                refresh_mhz: None,
             });
             let logical = (as_coordinate(logical.0), as_coordinate(logical.1));
             self.outputs.push(Advertised {
@@ -862,6 +870,14 @@ fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
                 .spelled_out(&display.description)
                 .unwrap_or_default(),
             mode: display.size,
+            modes: display.modes.iter().fold(Vec::new(), |mut sizes, mode| {
+                // One entry per size: a profile picks the size, and the
+                // engine the rate.
+                if !sizes.contains(&mode.size) {
+                    sizes.push(mode.size);
+                }
+                sizes
+            }),
         })
         .collect()
 }
@@ -963,6 +979,7 @@ fn engine_pixel_on(connector: &Connector, (x, y): (f64, f64)) -> Option<(f64, f6
 mod tests {
     use super::*;
 
+    use crate::engine::Mode;
     use domicile_config::{Config, Desk};
 
     fn desktop(text: &str) -> Desktop {
@@ -1092,6 +1109,7 @@ mod tests {
                 // The advertised mode: 2560x1440 at density 2 is 5120x2880,
                 // though no panel scans it out.
                 mode: [5120, 2880],
+                refresh_mhz: 0,
                 transform: DisplayTransform::Normal,
             }
         );
@@ -1450,6 +1468,7 @@ mod tests {
                     size: (2880, 1920),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    modes: Vec::new(),
                 },
                 Display {
                     id: 2,
@@ -1459,6 +1478,7 @@ mod tests {
                     size: (1920, 1080),
                     physical_mm: (0, 0),
                     refresh_mhz: 0,
+                    modes: Vec::new(),
                 },
             ],
             &unspelled(),
@@ -1513,6 +1533,7 @@ mod tests {
             size: (2880, 1920),
             physical_mm: (597, 336),
             refresh_mhz: 59_997,
+            modes: Vec::new(),
         }]
     }
 
@@ -1608,6 +1629,7 @@ mod tests {
                 size: (1920, 1080),
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
+                modes: Vec::new(),
             },
         ]
     }
@@ -1809,6 +1831,8 @@ mod tests {
                         position: (0, 0),
                         size: (900, 1600),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
                 },
                 Connector {
                     id: 1,
@@ -1822,8 +1846,92 @@ mod tests {
                         position: (0, 1920),
                         size: (1920, 1280),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
                 },
             ]
+        );
+    }
+
+    /// The laptop, offering a smaller mode at a faster rate than its native
+    /// one.
+    fn offering_two_modes() -> Vec<Display> {
+        plugged_in()
+            .into_iter()
+            .map(|display| Display {
+                modes: vec![
+                    Mode {
+                        size: (2880, 1920),
+                        refresh_mhz: 59_997,
+                    },
+                    Mode {
+                        size: (1920, 1280),
+                        refresh_mhz: 120_000,
+                    },
+                ],
+                ..display
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_profile_asks_the_engine_for_a_mode_and_advertises_what_it_lit() {
+        let fast = output(
+            r#"{ "output": { "profiles": [{ "name": "fast",
+                  "displays": [{ "display": "drm-1", "mode": [1920, 1280], "refresh": 120 }] }] } }"#,
+        );
+        let asked = Screens::nested()
+            .replugged_into(&offering_two_modes(), &fast, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(
+            asked
+                .scanout()
+                .iter()
+                .map(|connector| (connector.mode, connector.refresh_mhz))
+                .collect::<Vec<_>>(),
+            vec![(Some((1920, 1280)), Some(120_000))],
+            "the engine is asked for the mode and the rate"
+        );
+        assert_eq!(
+            asked
+                .outputs()
+                .map(|output| output.mode)
+                .collect::<Vec<_>>(),
+            vec![(1920, 1280)],
+            "the desktop is laid out at the mode asked for"
+        );
+
+        // The engine reports the same monitor at the new mode and rate.
+        let lit: Vec<Display> = offering_two_modes()
+            .into_iter()
+            .map(|display| Display {
+                size: (1920, 1280),
+                refresh_mhz: 120_000,
+                ..display
+            })
+            .collect();
+        let after = asked
+            .replugged_into(&lit, &fast, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(
+            after
+                .outputs()
+                .map(|output| (output.mode, output.refresh_mhz, output.logical))
+                .collect::<Vec<_>>(),
+            vec![((1920, 1280), 120_000, (1920, 1280))],
+            "wl_output and xdg_output state the mode and rate the engine lit"
+        );
+        assert_eq!(
+            Screens::nested()
+                .replugged_into(&plugged_in(), &output("{}"), &unspelled(), &[])
+                .expect("no profile cannot fail to apply")
+                .expect("the engine defines an undescribed desktop")
+                .rearranged_into(&after)
+                .slots,
+            vec![Slot::Kept(0)],
+            "a monitor that changed mode keeps its wl_output"
         );
     }
 
@@ -2002,6 +2110,7 @@ mod tests {
                 size: (2880, 1920),
                 physical_mm: (597, 336),
                 refresh_mhz: 59_997,
+                modes: Vec::new(),
             },
             Display {
                 id: 2,
@@ -2011,6 +2120,7 @@ mod tests {
                 size: (1920, 1080),
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
+                modes: Vec::new(),
             },
         ]
     }
@@ -2055,6 +2165,7 @@ mod tests {
             size: (1920, 1080),
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: 60_000,
+            modes: Vec::new(),
         }
     }
 
@@ -2117,6 +2228,8 @@ mod tests {
                     position: (0, 0),
                     size: (1920, 1080),
                 }),
+                mode: None,
+                refresh_mhz: None,
             })
         );
     }
@@ -2152,6 +2265,8 @@ mod tests {
                         position: (0, 1080),
                         size: (2880, 1920),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(1),
@@ -2164,6 +2279,8 @@ mod tests {
                         position: (480, 0),
                         size: (1920, 1080),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
                 },
             ]
         );
@@ -2198,6 +2315,7 @@ mod tests {
             size,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: 60_000,
+            modes: Vec::new(),
         }
     }
 
@@ -2254,6 +2372,8 @@ mod tests {
                         position: (0, 0),
                         size: (1920, 1080),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(2),
@@ -2265,6 +2385,8 @@ mod tests {
                         position: (1920, 0),
                         size: (1000, 600),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
                 },
             ]
         );
@@ -2301,6 +2423,8 @@ mod tests {
                 position: (500, 0),
                 size: (960, 540),
             }),
+            mode: None,
+            refresh_mhz: None,
         };
         let near_the_top_left = (500.0 + 10.0, 20.0);
         assert_eq!(
@@ -2365,6 +2489,8 @@ mod tests {
                     position: (monitor.position.0, monitor.position.1 + 600),
                     size: monitor.size,
                 }),
+                mode: None,
+                refresh_mhz: None,
             })
         );
         assert_eq!(
