@@ -107,6 +107,10 @@ pub struct Arguments {
     /// See [`crate::window::BUBBLE`] for its placement.
     pub bubble: bool,
 
+    /// Whether to open a `--bubble` whose input region is empty, as Firefox's
+    /// content subsurface is: the pointer over it belongs to the window.
+    pub bubble_without_input: bool,
+
     /// Whether to scroll a stripe down the window, a step each frame, with a
     /// sync `wl_subsurface` bubble moved onto it in the same commit, as a page
     /// scrolls under an anchored popup.
@@ -251,6 +255,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut anchor = None;
     let mut sliding_menu = None;
     let mut bubble = None;
+    let mut bubble_without_input = None;
     let mut scrolling_bubble = None;
     let mut dialog = None;
     let mut min_size = None;
@@ -346,6 +351,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
+            "--bubble-without-input" => {
+                take(&mut bubble_without_input, &flag, true)?;
+            }
             "--scrolling-bubble" => {
                 take(&mut scrolling_bubble, &flag, true)?;
             }
@@ -407,6 +415,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         anchor,
         sliding_menu: sliding_menu.unwrap_or(false),
         bubble: bubble.unwrap_or(false),
+        bubble_without_input: bubble_without_input.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),
         dialog: dialog.unwrap_or(false),
         min_size,

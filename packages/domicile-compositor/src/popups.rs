@@ -237,6 +237,27 @@ impl DomicileCompositor {
         }
     }
 
+    /// The surface that takes the pointer at `at`, a point on `surface`, and
+    /// the point on it.
+    ///
+    /// A bubble's own element is drawn over its window, so the chrome sends it
+    /// whatever is over it. A bubble whose input region leaves the point out
+    /// passes it down to its parent, as a compositor hit-testing the surface
+    /// tree would. Firefox draws its whole window into a subsurface with an
+    /// empty input region and reads the pointer only on the toplevel.
+    pub fn input_target(&self, surface: WlSurface, at: (f64, f64)) -> (WlSurface, (f64, f64)) {
+        let (mut surface, mut at) = (surface, at);
+        while !takes_input(&surface, at) && self.bubbles.iter().any(|b| b.surface == surface) {
+            let Some(parent) = get_parent(&surface) else {
+                break;
+            };
+            let location = subsurface_location(&surface);
+            at = (at.0 + f64::from(location.x), at.1 + f64::from(location.y));
+            surface = parent;
+        }
+        (surface, at)
+    }
+
     /// The window a popup is over, however many popups deep: the app id of
     /// the toplevel at the bottom of its chain.
     pub fn window_under(&self, popup: &PopupSurface) -> Option<String> {
@@ -364,16 +385,35 @@ fn committed_placement(surface: &WlSurface) -> ((f64, f64), (f64, f64)) {
     )
 }
 
-/// Where a bubble is over `parent`, logical: its subsurface position from
-/// the corner of the parent's window geometry, as a popup's is.
-fn bubble_position(surface: &WlSurface, parent: &WlSurface) -> (f64, f64) {
-    let location = with_states(surface, |states| {
+/// A subsurface's position on its parent, logical.
+fn subsurface_location(surface: &WlSurface) -> Point<i32, Logical> {
+    with_states(surface, |states| {
         states
             .cached_state
             .get::<SubsurfaceCachedState>()
             .current()
             .location
-    });
+    })
+}
+
+/// Whether `surface`'s input region holds `at`, a point on it. No region is
+/// the whole surface.
+fn takes_input(surface: &WlSurface, at: (f64, f64)) -> bool {
+    with_states(surface, |states| {
+        states
+            .cached_state
+            .get::<SurfaceAttributes>()
+            .current()
+            .input_region
+            .as_ref()
+            .is_none_or(|region| region.contains((at.0.floor() as i32, at.1.floor() as i32)))
+    })
+}
+
+/// Where a bubble is over `parent`, logical: its subsurface position from
+/// the corner of the parent's window geometry, as a popup's is.
+fn bubble_position(surface: &WlSurface, parent: &WlSurface) -> (f64, f64) {
+    let location = subsurface_location(surface);
     let (x, y) = with_states(parent, window_geometry).map_or((0, 0), |(x, y, _, _)| (x, y));
     (f64::from(location.x - x), f64::from(location.y - y))
 }

@@ -464,6 +464,10 @@ struct DomicileCompositor {
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
+    /// The surface of `pointer_app` the pointer is over: the window, or a
+    /// bubble over it that takes input. See
+    /// [`DomicileCompositor::input_target`].
+    pointer_surface: Option<WlSurface>,
     /// Pointer buttons the seat was told are down, in the order pressed.
     ///
     /// Smithay keeps this list too but does not expose it. See
@@ -1321,6 +1325,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         bubbles: Vec::new(),
         synced_moves: Default::default(),
         pointer_app: None,
+        pointer_surface: None,
         held_buttons: Vec::new(),
         pinch: None,
         swipe: None,
