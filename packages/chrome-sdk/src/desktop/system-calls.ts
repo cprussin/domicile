@@ -11,6 +11,8 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 import type { DomicileHost } from "../domicile-host";
+import type { InhibitorAction } from "../inhibitor-action";
+import { wireInhibitorAction } from "../inhibitor-action";
 import type { KeymapChoice, Keymaps } from "../keymap-choice";
 import { wireKeymapChoice } from "../keymap-choice";
 import type { PreviewedWindow } from "../previewed-window";
@@ -197,6 +199,14 @@ export type System = {
    * config does not have. Allowed while the desktop is locked.
    */
   selectKeymap: (choice: KeymapChoice) => Promise<Result<"set", SystemError>>;
+  /**
+   * Activate, deactivate or toggle the shortcuts inhibitor of the window with
+   * the keyboard: the way back to the desktop from a VM. A window holding
+   * none changes nothing.
+   */
+  switchShortcutsInhibitor: (
+    action: InhibitorAction,
+  ) => Promise<Result<"set", SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -364,6 +374,12 @@ export const system = (host: SystemHost): System => {
               size: reply.size,
             }
           : unexpected(reply),
+      ),
+    switchShortcutsInhibitor: (action) =>
+      oneShot(
+        calls,
+        { action: wireInhibitorAction(action), call: "shortcuts_inhibitor" },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
     unlockRefusals: () =>
       listening(calls, { call: "unlock_refusals" }, (event) =>

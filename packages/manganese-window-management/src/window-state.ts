@@ -9,6 +9,7 @@
 
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { BrowserWindow as ListedBrowserWindow } from "@domicile-desktop/sdk/desktop/browser";
+import type { InhibitorAction } from "@domicile-desktop/sdk/inhibitor-action";
 import type { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 import type { Axis, Direction } from "./direction";
 import type { Float } from "./floating/float";
@@ -450,6 +451,7 @@ export enum WindowActionKind {
   ScreenHovered,
   ScreenshotTaken,
   ScreensDescribed,
+  ShortcutsInhibitorSwitched,
   SplitToggled,
   TabSubgrouped,
   VirtualMonitorAdded,
@@ -963,6 +965,15 @@ export const WindowAction = {
    */
   ScreenshotTaken: () => ({
     kind: WindowActionKind.ScreenshotTaken as const,
+  }),
+
+  /**
+   * `shortcuts-inhibitor activate|deactivate|toggle`. The shell switches the
+   * keyboard window's shortcuts inhibitor: the way back from a VM.
+   */
+  ShortcutsInhibitorSwitched: (action: InhibitorAction) => ({
+    action,
+    kind: WindowActionKind.ShortcutsInhibitorSwitched as const,
   }),
 
   /** `layout toggle split`. */
@@ -1592,8 +1603,9 @@ const reduceAction = (
       // The shell carries these out; no window changes.
       return state;
     }
-    case WindowActionKind.KeymapSelected: {
-      // The shell switches the keymap; no window changes.
+    case WindowActionKind.KeymapSelected:
+    case WindowActionKind.ShortcutsInhibitorSwitched: {
+      // The shell switches the keymap or the inhibitor; no window changes.
       return state;
     }
     case WindowActionKind.CommandExecuted: {
