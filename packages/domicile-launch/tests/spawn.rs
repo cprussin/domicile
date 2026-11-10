@@ -122,23 +122,6 @@ fn a_tty_desktop_asks_for_the_whole_screen() {
 }
 
 #[test]
-fn a_tty_desktop_redraws_whole_frames() {
-    // Partial swap keeps the undamaged part of a buffer from two frames back,
-    // and fades on a real GPU sometimes flashed an old frame through it.
-    let args = args_of(&engine(
-        Path::new("/l/engine"),
-        &shell(),
-        "drm",
-        &runtime(),
-        None,
-    ));
-    assert!(
-        args.contains(&"--ui-disable-partial-swap".to_string()),
-        "{args:?}"
-    );
-}
-
-#[test]
 fn a_tty_desktop_gives_up_on_a_gpu_process_that_keeps_crashing() {
     // After three crashes Chromium falls back to the CPU, which the
     // compositor follows. When that fails too, the engine exits as a renderer

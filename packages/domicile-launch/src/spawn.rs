@@ -132,13 +132,6 @@ pub fn engine(
     // (`crate::restart::renderer_unavailable`).
     if platform == SCANOUT_PLATFORM {
         args.push("--start-fullscreen".into());
-        // Redraw every monitor's whole frame. With partial swap, viz redraws
-        // only the damaged part of each buffer and keeps the rest from that
-        // buffer's last use, two frames back. Fades on lyra's GPU (a tab
-        // switch, the workspace switcher's chips) sometimes show an old frame
-        // for a frame or two, as if part of them were left out of the damage.
-        // The headless desk composites on the CPU and never shows it.
-        args.push("--ui-disable-partial-swap".into());
     }
     // A headless desk lays its windows out over the compositor's virtual
     // monitors, as drm does over CRTCs. Until one comes, the screen is a

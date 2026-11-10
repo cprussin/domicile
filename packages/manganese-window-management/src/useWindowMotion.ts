@@ -16,7 +16,7 @@ import { contentsOf } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
 import type { Shown } from "./shown";
-import { tabSwitched } from "./tab-switch";
+import { sameBox, tabSwitched } from "./tab-switch";
 import type { StripPlace } from "./tree/frames";
 import type { ShellWindow } from "./window";
 import type { Shuffle, TabFade, WindowMotion } from "./window-motion";
@@ -384,11 +384,42 @@ const advanced = (
     // differs from the current one, so the browser restarts it. A workspace
     // switch slides the tabs switched on the workspace arriving, and cuts
     // short the fades on the one leaving, which never report their end.
+    //
+    // A tab still drawn under the tab it switched to stops being drawn once
+    // another tab is hidden in its box. Otherwise a quick second switch would
+    // fade the next tab in over it rather than over the tab just left.
     tabbing: [
-      ...playing.tabbing.filter(({ id }) => !fading.has(id)),
+      ...playing.tabbing.filter(
+        ({ id, motion }) =>
+          !fading.has(id) &&
+          !(motion === "concealing" && reconcealed(shown, fades, id)),
+      ),
       ...fades,
     ].filter(({ id }) => settled.has(id)),
   };
+};
+
+/**
+ * Whether the hidden tab `id` shares its box with a tab `fades` newly conceal.
+ */
+const reconcealed = (
+  shown: Desk,
+  fades: readonly { id: string; motion: TabFade }[],
+  id: string,
+): boolean => {
+  const placements = Object.values(shown).flatMap(
+    ({ placements }) => placements,
+  );
+  const behind = placements.find((placement) => placement.id === id)?.behind;
+  return fades.some(
+    (fade) =>
+      fade.motion === "concealing" &&
+      fade.id !== id &&
+      sameBox(
+        placements.find((placement) => placement.id === fade.id)?.behind,
+        behind,
+      ),
+  );
 };
 
 /**
