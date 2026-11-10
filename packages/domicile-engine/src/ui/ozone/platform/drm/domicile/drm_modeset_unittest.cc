@@ -5,6 +5,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,13 @@ class SnapshotBuilder {
     native_mode_size_.reset();
     return *this;
   }
+  // Another advertised mode, after the native one.
+  SnapshotBuilder& AlsoOffers(const gfx::Size& size,
+                              float refresh_hz,
+                              bool interlaced = false) {
+    others_.push_back({size, refresh_hz, interlaced});
+    return *this;
+  }
 
   std::unique_ptr<display::DisplaySnapshot> Build() {
     display::DisplaySnapshot::DisplayModeList modes;
@@ -53,6 +61,10 @@ class SnapshotBuilder {
       modes.push_back(std::make_unique<display::DisplayMode>(
           *native_mode_size_, /*interlaced=*/false, native_refresh_hz_));
       native = modes.back().get();
+    }
+    for (const Other& other : others_) {
+      modes.push_back(std::make_unique<display::DisplayMode>(
+          other.size, other.interlaced, other.refresh_hz));
     }
     return std::make_unique<display::DisplaySnapshot>(
         id_, id_, id_, /*connector_index=*/0u, origin_, gfx::Size(520, 320),
@@ -75,6 +87,12 @@ class SnapshotBuilder {
   gfx::Point origin_;
   std::optional<gfx::Size> native_mode_size_ = gfx::Size(1920, 1080);
   float native_refresh_hz_ = 60.f;
+  struct Other {
+    gfx::Size size;
+    float refresh_hz;
+    bool interlaced;
+  };
+  std::vector<Other> others_;
 };
 
 std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> Pointers(
@@ -189,6 +207,116 @@ TEST(DrmModesetTest, ALayoutSaysWhereAConnectorGoes) {
   ASSERT_EQ(params.size(), 1u);
   EXPECT_EQ(params[0].origin, gfx::Point(0, 0))
       << "the layout's corner, not the one the card happened to stack it at";
+}
+
+// A laptop panel offering a smaller size at two rates, and its native size at
+// a faster one.
+std::unique_ptr<display::DisplaySnapshot> APanelOfManyModes() {
+  return SnapshotBuilder()
+      .Id(3)
+      .NativeMode(gfx::Size(2880, 1920), 60.f)
+      .AlsoOffers(gfx::Size(2880, 1920), 120.f)
+      .AlsoOffers(gfx::Size(1920, 1280), 60.f)
+      .AlsoOffers(gfx::Size(1920, 1280), 119.88f)
+      .AlsoOffers(gfx::Size(1920, 1280), 144.f, /*interlaced=*/true)
+      .Build();
+}
+
+TEST(DrmModesetTest, ALayoutWithNoModeKeepsTheNativeOne) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(APanelOfManyModes());
+
+  const auto params =
+      ModesetParamsFromSnapshots(Pointers(owned), {{.id = 3, .enabled = true}});
+
+  ASSERT_EQ(params.size(), 1u);
+  ASSERT_NE(params[0].mode, nullptr);
+  EXPECT_EQ(params[0].mode->size(), gfx::Size(2880, 1920));
+  EXPECT_FLOAT_EQ(params[0].mode->refresh_rate(), 60.f)
+      << "the native mode, not the fastest at its size";
+}
+
+TEST(DrmModesetTest, AModesetAsksForTheModeTheLayoutNames) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(APanelOfManyModes());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned),
+      {{.id = 3, .enabled = true, .mode = gfx::Size(1920, 1280)}});
+
+  ASSERT_EQ(params.size(), 1u);
+  ASSERT_NE(params[0].mode, nullptr);
+  EXPECT_EQ(params[0].mode->size(), gfx::Size(1920, 1280));
+  EXPECT_FLOAT_EQ(params[0].mode->refresh_rate(), 119.88f)
+      << "with no rate asked for, the fastest progressive mode at the size";
+}
+
+TEST(DrmModesetTest, ARateLandsOnTheNearestOneAdvertised) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(APanelOfManyModes());
+
+  const auto at_the_size = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 3,
+                         .enabled = true,
+                         .mode = gfx::Size(1920, 1280),
+                         .refresh_mhz = 75000}});
+  ASSERT_NE(at_the_size[0].mode, nullptr);
+  EXPECT_FLOAT_EQ(at_the_size[0].mode->refresh_rate(), 60.f)
+      << "75 Hz is nearer 60 than 119.88";
+
+  const auto native_size = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 3, .enabled = true, .refresh_mhz = 120000}});
+  ASSERT_NE(native_size[0].mode, nullptr);
+  EXPECT_EQ(native_size[0].mode->size(), gfx::Size(2880, 1920))
+      << "a rate alone keeps the native size";
+  EXPECT_FLOAT_EQ(native_size[0].mode->refresh_rate(), 120.f);
+}
+
+TEST(DrmModesetTest, AModeTheConnectorDoesNotAdvertiseIsTheNativeOne) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(APanelOfManyModes());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned),
+      {{.id = 3, .enabled = true, .mode = gfx::Size(3840, 2160)}});
+
+  ASSERT_NE(params[0].mode, nullptr);
+  EXPECT_EQ(params[0].mode->size(), gfx::Size(2880, 1920))
+      << "the compositor sees the size and refuses the profile";
+}
+
+TEST(DrmModesetTest, TheDisplayListIsSizedAtTheModeTheModesetAsksFor) {
+  // A window binds to its CRTC on an exact rectangle match, so the display
+  // and the modeset must agree, and the next connector must start where the
+  // smaller mode ends.
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(APanelOfManyModes());
+  owned.push_back(SnapshotBuilder().Id(5).Build());
+  const std::vector<DomicileDisplayLayout> layout = {
+      {.id = 3, .enabled = true, .mode = gfx::Size(1920, 1280)}};
+
+  const std::vector<display::Display> displays =
+      DisplaysFromSnapshots(Pointers(owned), layout);
+
+  ASSERT_EQ(displays.size(), 2u);
+  EXPECT_EQ(displays[0].bounds(), gfx::Rect(0, 0, 1920, 1280));
+  EXPECT_FLOAT_EQ(displays[0].display_frequency(), 119.88f);
+  EXPECT_EQ(displays[1].bounds().origin(), gfx::Point(1920, 0));
+}
+
+TEST(DrmModesetTest, APanelSaysWhatItOffersAndTheRateItIsAt) {
+  const std::unique_ptr<display::DisplaySnapshot> panel = APanelOfManyModes();
+
+  const DomicilePanel offered = PanelFromSnapshot(
+      *panel, {{.id = 3, .enabled = true, .mode = gfx::Size(1920, 1280)}});
+
+  ASSERT_EQ(offered.modes.size(), 5u);
+  EXPECT_EQ(offered.modes[2].size, gfx::Size(1920, 1280));
+  EXPECT_EQ(offered.modes[3].refresh_mhz, 119880);
+  EXPECT_EQ(offered.refresh_mhz, 119880)
+      << "the rate of the mode the modeset asks for, which a listed "
+         "display::Display would not update";
+  EXPECT_EQ(offered.physical_size_mm, gfx::Size(520, 320));
 }
 
 TEST(DrmModesetTest, ALayoutCanLeaveAConnectorDark) {

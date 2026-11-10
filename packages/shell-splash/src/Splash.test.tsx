@@ -16,6 +16,7 @@ const display = (name: string, x: number, width: number, height: number) => ({
   modeHeight: height,
   modeWidth: width,
   name,
+  refreshMhz: 60_000,
   scale: 1,
   transform: "normal",
   width,

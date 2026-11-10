@@ -8,6 +8,9 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -90,21 +93,91 @@ void DrawInAFormatThePlanesTake(display::Display& screen,
   screen.SetColorSpaces(color_spaces);
 }
 
-// Returns the snapshot's native mode size, or the displayless bounds if it
-// has no mode.
-gfx::Size SizeOf(const display::DisplaySnapshot& snapshot) {
-  const display::DisplayMode* native_mode = snapshot.native_mode();
-  return native_mode ? native_mode->size() : kDisplaylessBounds;
+// Returns `mode`'s size, or the displayless bounds if there is none.
+gfx::Size SizeOf(const display::DisplayMode* mode) {
+  return mode ? mode->size() : kDisplaylessBounds;
+}
+
+// Returns the size of the mode the layout picks for the snapshot.
+gfx::Size SizeOf(const display::DisplaySnapshot& snapshot,
+                 const std::vector<DomicileDisplayLayout>& layout) {
+  return SizeOf(
+      ModeForLayout(snapshot, WantedFor(layout, snapshot.display_id())));
+}
+
+// A mode's refresh rate in mHz, as wl_output states it.
+int32_t MillihertzOf(const display::DisplayMode& mode) {
+  return static_cast<int32_t>(std::lround(mode.refresh_rate() * 1000.f));
+}
+
+// Whether `mode` beats `chosen`, both of one size, for a profile asking for
+// `refresh_mhz` (zero for none).
+//
+// A progressive mode beats an interlaced one, which halves the vertical
+// resolution each frame. Then the rate nearest the one asked for, or with
+// none the fastest, as sway picks.
+bool Better(const display::DisplayMode& mode,
+            const display::DisplayMode& chosen,
+            int32_t refresh_mhz) {
+  if (mode.is_interlaced() != chosen.is_interlaced()) {
+    return chosen.is_interlaced();
+  }
+  if (refresh_mhz > 0) {
+    return std::abs(MillihertzOf(mode) - refresh_mhz) <
+           std::abs(MillihertzOf(chosen) - refresh_mhz);
+  }
+  return mode.refresh_rate() > chosen.refresh_rate();
 }
 
 }  // namespace
 
-display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
-                                     const gfx::Point& origin) {
-  // A connector with no native mode gets the displayless bounds, since no
-  // window can be placed on empty bounds.
+const display::DisplayMode* ModeForLayout(
+    const display::DisplaySnapshot& snapshot,
+    const DomicileDisplayLayout* wanted) {
   const display::DisplayMode* native_mode = snapshot.native_mode();
-  const gfx::Size size = SizeOf(snapshot);
+  if (!native_mode || !wanted) {
+    return native_mode;
+  }
+  const gfx::Size size = wanted->mode.value_or(native_mode->size());
+  if (size == native_mode->size() && wanted->refresh_mhz <= 0) {
+    return native_mode;
+  }
+  const display::DisplayMode* chosen = nullptr;
+  for (const std::unique_ptr<const display::DisplayMode>& mode :
+       snapshot.modes()) {
+    if (mode->size() != size) {
+      continue;
+    }
+    if (!chosen || Better(*mode, *chosen, wanted->refresh_mhz)) {
+      chosen = mode.get();
+    }
+  }
+  return chosen ? chosen : native_mode;
+}
+
+DomicilePanel PanelFromSnapshot(
+    const display::DisplaySnapshot& snapshot,
+    const std::vector<DomicileDisplayLayout>& layout) {
+  DomicilePanel panel;
+  panel.modes.reserve(snapshot.modes().size());
+  for (const std::unique_ptr<const display::DisplayMode>& mode :
+       snapshot.modes()) {
+    panel.modes.push_back(
+        {.size = mode->size(), .refresh_mhz = MillihertzOf(*mode)});
+  }
+  const display::DisplayMode* lit =
+      ModeForLayout(snapshot, WantedFor(layout, snapshot.display_id()));
+  panel.refresh_mhz = lit ? MillihertzOf(*lit) : 0;
+  panel.physical_size_mm = DisplayPhysicalSizeMm(snapshot);
+  return panel;
+}
+
+display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
+                                     const gfx::Point& origin,
+                                     const display::DisplayMode* mode) {
+  // A connector with no mode gets the displayless bounds, since no window can
+  // be placed on empty bounds.
+  const gfx::Size size = SizeOf(mode);
   // Not named `display`: that would shadow the `display::` namespace used
   // below.
   display::Display screen(snapshot.display_id(), gfx::Rect(origin, size));
@@ -116,18 +189,19 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
   // components/domicile/browser/display_list.cc converts it back. See
   // docs/DISPLAYS.md#physical-size-and-refresh.
   //
-  // DisplayList::UpdateDisplay copies neither field. That is safe because the
-  // id comes from the EDID, so the same id is the same panel.
-  if (native_mode) {
-    screen.set_display_frequency(native_mode->refresh_rate());
+  // DisplayList::UpdateDisplay copies neither field, and a profile can change
+  // a listed display's mode, so `DrmScreen::panels` carries both to the
+  // browser too.
+  if (mode) {
+    screen.set_display_frequency(mode->refresh_rate());
   }
   // Zero millimeters means no physical size (a projector, a virtual output).
   // Leave the density unset rather than divide by zero.
   const gfx::Size millimeters = DisplayPhysicalSizeMm(snapshot);
-  if (native_mode && !millimeters.IsEmpty()) {
+  if (mode && !millimeters.IsEmpty()) {
     screen.set_pixels_per_inch(
-        display::kInchInMm * native_mode->size().width() / millimeters.width(),
-        display::kInchInMm * native_mode->size().height() /
+        display::kInchInMm * mode->size().width() / millimeters.width(),
+        display::kInchInMm * mode->size().height() /
             millimeters.height());
   }
 
@@ -173,9 +247,10 @@ std::vector<display::Display> DisplaysFromSnapshots(
   displays.reserve(snapshots.size());
   for (size_t index = 0; index < snapshots.size(); ++index) {
     const display::DisplaySnapshot* snapshot = snapshots[index];
-    display::Display screen = DisplayFromSnapshot(*snapshot, origins[index]);
     const DomicileDisplayLayout* wanted =
         WantedFor(layout, snapshot->display_id());
+    display::Display screen = DisplayFromSnapshot(
+        *snapshot, origins[index], ModeForLayout(*snapshot, wanted));
     if (wanted) {
       TurnAndScale(screen, *wanted);
     }
@@ -195,7 +270,8 @@ std::vector<gfx::Point> OriginsForLayout(
     const DomicileDisplayLayout* wanted =
         WantedFor(layout, snapshot->display_id());
     if (wanted) {
-      next_x = std::max(next_x, wanted->origin.x() + SizeOf(*snapshot).width());
+      next_x = std::max(next_x,
+                        wanted->origin.x() + SizeOf(*snapshot, layout).width());
     }
   }
 
@@ -208,7 +284,7 @@ std::vector<gfx::Point> OriginsForLayout(
       origins.push_back(wanted->origin);
     } else {
       origins.emplace_back(next_x, 0);
-      next_x += SizeOf(*snapshot).width();
+      next_x += SizeOf(*snapshot, layout).width();
     }
   }
   return origins;
@@ -252,9 +328,11 @@ void DrmScreen::OnDisplaysChanged(
   // Before the list changes, so its observers read the new connectors.
   connectors_.clear();
   gamma_sizes_.clear();
+  panels_.clear();
   for (const display::DisplaySnapshot* snapshot : snapshots) {
     connectors_[snapshot->display_id()] = snapshot->domicile_connector();
     gamma_sizes_[snapshot->display_id()] = snapshot->domicile_gamma_size();
+    panels_[snapshot->display_id()] = PanelFromSnapshot(*snapshot, layout);
   }
 
   // Not always the first snapshot: a profile may turn the laptop panel off.

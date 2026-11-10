@@ -29,6 +29,7 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
                   uint32_t scale,
                   uint32_t mode_width,
                   uint32_t mode_height,
+                  uint32_t refresh_mhz,
                   const String& transform);
   ~DomicileDisplay() override;
 
@@ -40,6 +41,7 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   uint32_t scale() const { return scale_; }
   uint32_t modeWidth() const { return mode_width_; }
   uint32_t modeHeight() const { return mode_height_; }
+  uint32_t refreshMhz() const { return refresh_mhz_; }
   const String& transform() const { return transform_; }
 
   void Trace(Visitor*) const override;
@@ -55,6 +57,8 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   // size.
   uint32_t mode_width_ = 0;
   uint32_t mode_height_ = 0;
+  // Zero means unknown.
+  uint32_t refresh_mhz_ = 0;
   String transform_;
 };
 

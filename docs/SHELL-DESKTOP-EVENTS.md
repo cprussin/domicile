@@ -13,7 +13,7 @@ pixels. Each display is a rectangle in it.
 ```tsx
 import { useDisplays } from "@domicile-desktop/react/displays";
 
-// DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
+// DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, refreshMhz, transform }
 const Bars = () =>
   (useDisplays() ?? []).map((display) => ( // undefined until described
     <Bar display={display} key={display.name} />
@@ -23,7 +23,7 @@ const Bars = () =>
 <!-- tab: JavaScript -->
 
 ```js
-// DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
+// DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, refreshMhz, transform }
 const show = () => layOut(domicile.displays.list); // undefined until described
 show();
 domicile.displays.on("change", show);
@@ -37,6 +37,8 @@ domicile.displays.on("change", show);
 - `modeWidth`×`modeHeight` (the panel's unrotated scanout pixels) and
   `transform` are informational. A 4K panel rotated 90° at scale 1.2 has a
   3840×2160 mode and an 1800×3200 box.
+- `refreshMhz` is the rate the panel scans out at, in mHz (60000 for 60 Hz),
+  or 0 when unknown, as when Domicile runs in a window.
 - Config: [SHELL-CONFIG.md](SHELL-CONFIG.md#displays),
   [`transform`](SHELL-CONFIG.md#transform).
 

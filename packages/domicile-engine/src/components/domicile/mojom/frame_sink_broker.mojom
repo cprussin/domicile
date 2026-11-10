@@ -40,6 +40,14 @@ interface SurfaceObserver {
   OnBufferReleased(uint64 buffer_id);
 };
 
+// A mode a connector advertises.
+struct DisplayMode {
+  // In physical pixels.
+  gfx.mojom.Size size;
+  // In mHz, as wl_output.mode states it.
+  int32 refresh_mhz;
+};
+
 // One display the browser sees, for the producer to advertise.
 //
 // `bounds` is the display's position on the browser's desktop in DIP. On the
@@ -83,6 +91,11 @@ struct Display {
   // DisplayLink dock, a virtual display, any platform but DRM. The producer
   // offers gamma control at this size. Read from the CRTC in the GPU process.
   uint32 gamma_size;
+
+  // Every mode the connector advertises, which a profile can ask for in
+  // `DisplayLayout.mode`. Empty on a platform that sets no modes. `bounds`
+  // and `refresh_mhz` are the one it scans out.
+  array<DisplayMode> modes;
 };
 
 // One display's gamma ramp: each channel 0 to 65535, all the same length.
@@ -124,6 +137,14 @@ struct DisplayLayout {
   // Empty when `enabled` is false. Used to move the pointer between monitors,
   // since `origin` does not encode which monitor is beside which.
   gfx.mojom.Rect desk;
+
+  // The mode to scan out, from the profile, or null for the native one. A
+  // size the connector does not advertise gets the native mode.
+  gfx.mojom.Size? mode;
+
+  // The refresh rate to scan out, in mHz: the advertised one nearest it. Zero
+  // for the native mode's, or the fastest at a non-native `mode`.
+  int32 refresh_mhz;
 };
 
 // A tablet or touchscreen and the display it covers, from the producer's

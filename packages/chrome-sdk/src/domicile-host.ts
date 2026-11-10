@@ -365,6 +365,12 @@ export type DomicileDisplay = {
   readonly modeWidth: number;
   readonly modeHeight: number;
   /**
+   * The rate the panel scans out at, in mHz (60000 for 60 Hz), as
+   * `wl_output.mode` states it. Zero when unknown, such as when running in a
+   * window.
+   */
+  readonly refreshMhz: number;
+  /**
    * The monitor's rotation: `normal`, `rotate-90`, `rotate-180` or
    * `rotate-270`, as the config file spells them.
    *
