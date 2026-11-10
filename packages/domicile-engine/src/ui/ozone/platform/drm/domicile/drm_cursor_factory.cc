@@ -93,7 +93,11 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetTurnedDefaultCursor(
     return nullptr;
   }
 
-  const auto cursor = cursors->second.find(type);
+  // `kNull` is "no cursor named": the default pointer. Answering it with
+  // nothing loaded Chromium's own arrow instead of the theme's, which showed
+  // whenever the pointer came back from hiding over a window naming none.
+  const auto cursor = cursors->second.find(
+      type == mojom::CursorType::kNull ? mojom::CursorType::kPointer : type);
   if (cursor == cursors->second.end()) {
     return nullptr;
   }
