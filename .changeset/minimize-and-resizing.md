@@ -1,6 +1,7 @@
 ---
 "@domicile-desktop/sdk": minor
 "domicile": minor
+"@domicile-desktop/engine": minor
 "@domicile-desktop/manganese-window-management": patch
 ---
 
