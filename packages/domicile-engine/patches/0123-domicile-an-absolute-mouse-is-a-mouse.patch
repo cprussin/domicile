@@ -94,7 +94,7 @@ index 48157a6..85de2a9 100644
    virtual void InitializeOnEvdev() = 0;
  };
 diff --git a/ui/events/ozone/evdev/event_device_info.cc b/ui/events/ozone/evdev/event_device_info.cc
-index c7ba170..96c62fc 100644
+index e37ec0c..990323d 100644
 --- a/ui/events/ozone/evdev/event_device_info.cc
 +++ b/ui/events/ozone/evdev/event_device_info.cc
 @@ -740,6 +740,7 @@ bool EventDeviceInfo::HasDirect() const {
@@ -194,10 +194,10 @@ index 93c5dd1..a2f5076 100644
    if (devinfo.HasTouchscreen()) {
      return TouchEventConverterEvdev::Create(
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 16b3d0e..592bdd0 100644
+index dc3d666..369d0a9 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -284,6 +284,7 @@ source_set("gbm_unittests") {
+@@ -286,6 +286,7 @@ source_set("gbm_unittests") {
      # evdev's, not this platform's: `//ui/events/ozone/evdev:unittests` is
      # linked only into `events_unittests`, which no job here builds, and the
      # console is the one platform whose touchpad goes through libinput.
@@ -205,7 +205,7 @@ index 16b3d0e..592bdd0 100644
      "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
      "//ui/events/ozone/evdev/domicile/wheel_ticks_unittest.cc",
    ]
-@@ -337,6 +338,11 @@ source_set("gbm_unittests") {
+@@ -339,6 +340,11 @@ source_set("gbm_unittests") {
      # platform's evdev thread reports to, and the stub layout its keyboard
      # needs, so it names both directly.
      "//ui/events/ozone/evdev",
@@ -218,7 +218,7 @@ index 16b3d0e..592bdd0 100644
      "//ui/gfx",
      "//ui/gfx/linux:drm",
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 2e49417..411e68a 100644
+index 66ac357..b48a9c4 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -204,6 +204,13 @@ std::optional<PointerHeard> DrmCursor::Heard() {
@@ -254,7 +254,7 @@ index 2e49417..411e68a 100644
    SetCursorLocationLocked(screen_location -
                            display_bounds_in_screen_.OffsetFromOrigin());
  
-@@ -328,6 +343,14 @@ gfx::Rect DrmCursor::GetCursorConfinedBounds() {
+@@ -329,6 +344,14 @@ gfx::Rect DrmCursor::GetCursorConfinedBounds() {
    return confined_bounds_ + display_bounds_in_screen_.OffsetFromOrigin();
  }
  
@@ -309,10 +309,10 @@ index 246cace..390a9f6 100644
    const raw_ptr<DrmWindowHostManager> window_manager_
        GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 3343075..10beb1a 100644
+index 13a228e..a4d8847 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
-@@ -192,7 +192,10 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -195,7 +195,10 @@ class OzonePlatformDrm : public OzonePlatform {
        pointer_targets_ = std::make_unique<DrmPointerTargets>(
            base::BindRepeating(
                [](const DrmScreen* screen) { return screen->GetAllDisplays(); },

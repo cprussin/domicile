@@ -3,8 +3,7 @@
 # plane, and says so once instead of aborting.
 #
 # Such a buffer has no framebuffer. Upstream `GbmPixmap::ScheduleOverlayPlane`
-# only DCHECKs the flag, so the checked engine aborts the GPU process on the
-# first frame:
+# only CHECKs the flag, a crash dump every frame now and fatal from M163:
 #
 #   gbm_pixmap.cc:79] DCHECK failed: buffer_->GetFlags() & GBM_BO_USE_SCANOUT.
 #
@@ -33,7 +32,7 @@ fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 if awk '
   /^diff --git a\// { in_file = ($0 ~ /gpu\/gbm_pixmap\.cc$/); guarded = 0; next }
   !in_file { next }
-  /^- *DCHECK\(buffer_->GetFlags\(\) & GBM_BO_USE_SCANOUT\);$/ { dropped = 1; next }
+  /^- *CHECK\(buffer_->GetFlags\(\) & GBM_BO_USE_SCANOUT, base::NotFatalUntil::M163\);$/ { dropped = 1; next }
   /^\+ *if \(!\(buffer_->GetFlags\(\) & GBM_BO_USE_SCANOUT\)\) \{$/ { guarded = 1; next }
   guarded && /^\+ *if \(FirstSkipOfItsKind\(\*buffer_\)\) \{$/ { once = 1; next }
   once && /^\+ *LOG\(WARNING\) << "Not scanning out a "$/ { logged = 1 }

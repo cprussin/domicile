@@ -30,7 +30,7 @@ job builds it on `crux`.
  4 files changed, 21 insertions(+), 1 deletion(-)
 
 diff --git a/ui/events/BUILD.gn b/ui/events/BUILD.gn
-index 60a0335..e9b53fc 100644
+index ff2fa8f..88edc77 100644
 --- a/ui/events/BUILD.gn
 +++ b/ui/events/BUILD.gn
 @@ -269,6 +269,8 @@ component("events") {
@@ -56,7 +56,7 @@ index 0602b58..c48df6a 100644
      "domicile/typing_guard.h",
      "domicile/wheel_ticks.cc",
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index 782b069..e7b626c 100644
+index 70f4665..fa16886 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -241,7 +241,10 @@ EventFactoryEvdev::EventFactoryEvdev(
@@ -68,7 +68,7 @@ index 782b069..e7b626c 100644
 +      edge_swipes_(
 +          base::BindRepeating(&EventFactoryEvdev::DispatchTouchEventNow,
 +                              base::Unretained(this))) {
-   DCHECK(device_manager_);
+   CHECK(device_manager_, base::NotFatalUntil::M163);
  }
  
 @@ -415,7 +418,11 @@ void EventFactoryEvdev::DispatchScrollEvent(const ScrollEventParams& params) {

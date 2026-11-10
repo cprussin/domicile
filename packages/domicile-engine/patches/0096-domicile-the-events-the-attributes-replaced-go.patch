@@ -19,7 +19,7 @@ job builds it on `crux`.
  2 files changed, 96 deletions(-)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 1b4b917..349eccc 100644
+index c1e98c9..23c01e6 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -274,52 +274,20 @@ generated_dictionary_sources_in_modules = [
@@ -75,7 +75,7 @@ index 1b4b917..349eccc 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_result.cc",
-@@ -2361,49 +2329,26 @@ generated_interface_sources_in_modules = [
+@@ -2373,49 +2341,26 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
@@ -125,7 +125,7 @@ index 1b4b917..349eccc 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_stream.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_stream.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_level.cc",
-@@ -2412,10 +2357,6 @@ generated_interface_sources_in_modules = [
+@@ -2424,10 +2369,6 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_levels_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
@@ -136,7 +136,7 @@ index 1b4b917..349eccc 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_window.cc",
-@@ -2424,11 +2365,6 @@ generated_interface_sources_in_modules = [
+@@ -2436,11 +2377,6 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification_action.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification_action.h",
@@ -149,7 +149,7 @@ index 1b4b917..349eccc 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_eye_dropper.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 446a369..11a14ea 100644
+index 3c18fd8..78c1c8f 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -276,29 +276,11 @@ static_idl_files_in_modules = [

@@ -1,4 +1,4 @@
-From 15e6cc01ddfbc83042f95ba0cb89aa5343b9cd77 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mecattaf <thomas@mecattaf.dev>
 Date: Thu, 5 Nov 2026 21:54:13 +0100
 Subject: [PATCH] domicile: configure touchpads and mice during a session
@@ -62,10 +62,10 @@ index d26aa4c..7746521 100644
    void SetTouchpadScrollSensitivity(std::optional<int> device_id,
                                      int value) override;
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-index 03680ab..0dcbb5a 100644
+index 29c70a1..b4c3bc2 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-@@ -300,6 +300,10 @@ void InputDeviceFactoryEvdev::SetCapsLockLed(bool enabled) {
+@@ -301,6 +301,10 @@ void InputDeviceFactoryEvdev::SetCapsLockLed(bool enabled) {
  
  void InputDeviceFactoryEvdev::UpdateInputDeviceSettings(
      const InputDeviceSettingsEvdev& settings) {
@@ -76,7 +76,7 @@ index 03680ab..0dcbb5a 100644
    input_device_settings_ = settings;
    ApplyInputDeviceSettings();
  }
-@@ -442,6 +446,9 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
+@@ -443,6 +447,9 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
  
    SetBoolPropertyForOneType(DT_TOUCHPAD, "Tap Paused",
                              input_device_settings_.tap_to_click_paused);
@@ -108,7 +108,7 @@ index a242851..6ecff46 100644
    bool enable_internal_keyboard_filter = false;
    std::vector<DomCode> internal_keyboard_allowed_keys;
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 08fef80..821dcca 100644
+index 0fc26ba..f8b87d7 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -14,6 +14,7 @@
@@ -395,10 +395,10 @@ index d5b140d..205942d 100644
    // DOMICILE: null for a mouse, and until the factory attaches this.
    raw_ptr<TypingGuard> typing_guard_ = nullptr;
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 599e071..8929825 100644
+index 01827be..af4ddb5 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -298,6 +298,7 @@ source_set("gbm_unittests") {
+@@ -300,6 +300,7 @@ source_set("gbm_unittests") {
      # console is the one platform whose touchpad goes through libinput.
      "//ui/events/ozone/evdev/domicile/absolute_mouse_event_converter_evdev_unittest.cc",
      "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
@@ -407,7 +407,7 @@ index 599e071..8929825 100644
      "//ui/events/ozone/evdev/domicile/wheel_ticks_unittest.cc",
    ]
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index f7e0bb7..0fb6cbd 100644
+index 2bd62e5..bcf1a98 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -14,8 +14,8 @@
@@ -462,7 +462,7 @@ index f7e0bb7..0fb6cbd 100644
  #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
  #include "ui/ozone/platform/drm/host/host_drm_device.h"
  #include "ui/ozone/platform/drm/mojom/drm_device.mojom.h"
-@@ -195,6 +196,14 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -198,6 +199,14 @@ class OzonePlatformDrm : public OzonePlatform {
  
    // DOMICILE: made on the first targets, which the compositor sends after it
    // has the displays, so `InitScreen` and the device lists come first.
@@ -478,10 +478,10 @@ index f7e0bb7..0fb6cbd 100644
        std::vector<DomicilePointerTarget> targets) override {
      CHECK(screen_) << "domicile: pointer targets before InitScreen";
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index a10a3e0..01752f6 100644
+index faabf13..c2291e4 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
-@@ -435,6 +435,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -456,6 +456,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // DOMICILE: which display each tablet or touchscreen covers, replacing the
    // last list. A device it does not name covers none. DRM only, like the
    // layout above.
@@ -492,6 +492,3 @@ index a10a3e0..01752f6 100644
    virtual void SetDomicilePointerTargets(
        std::vector<DomicilePointerTarget> targets) {}
    // DOMICILE: the monitors with no connector, replacing the last list. Each
--- 
-2.55.0
-

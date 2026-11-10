@@ -108,7 +108,7 @@ index 0f6e828..5c60e32 100644
  
  }  // namespace display
 diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
-index 85e22de..30c2832 100644
+index b40938b..8dac48d 100644
 --- a/ui/ozone/platform/drm/common/drm_util.cc
 +++ b/ui/ozone/platform/drm/common/drm_util.cc
 @@ -630,6 +630,24 @@ bool IsVrrCapable(const DrmWrapper& drm, drmModeConnector* connector) {
@@ -147,10 +147,10 @@ index 85e22de..30c2832 100644
  }
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 0fb6cbd..c819490 100644
+index bcf1a98..2774864 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
-@@ -177,11 +177,11 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -180,11 +180,11 @@ class OzonePlatformDrm : public OzonePlatform {
      }
    }
  
@@ -166,7 +166,7 @@ index 0fb6cbd..c819490 100644
      }
    }
  
-@@ -259,6 +259,12 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -262,6 +262,12 @@ class OzonePlatformDrm : public OzonePlatform {
      return screen_->connectors();
    }
  
@@ -180,7 +180,7 @@ index 0fb6cbd..c819490 100644
    // ui/events/ozone/evdev/domicile/typing_guard.h.
    std::optional<bool> GetDomicileDisableWhileTyping() const override {
 diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
-index c9a2ac5..8853218 100644
+index cb5cab3..35c418d 100644
 --- a/ui/ozone/public/ozone_platform.cc
 +++ b/ui/ozone/public/ozone_platform.cc
 @@ -140,6 +140,11 @@ base::flat_map<int64_t, std::string> OzonePlatform::GetDomicileConnectors()
@@ -196,7 +196,7 @@ index c9a2ac5..8853218 100644
    return std::nullopt;
  }
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 01752f6..cb82181 100644
+index c2291e4..84a77d3 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -123,13 +123,14 @@ struct DomicileVirtualDisplay {
@@ -220,7 +220,7 @@ index 01752f6..cb82181 100644
  };
  
  // DOMICILE: one event of emulated input (EIS) for the desk, as a pointer or
-@@ -447,10 +448,9 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -468,10 +469,9 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    virtual void SetDomicileVirtualDisplays(
        std::vector<DomicileVirtualDisplay> displays) {}
  
@@ -234,7 +234,7 @@ index 01752f6..cb82181 100644
    // DOMICILE: emulated input for the desk host, which it hears as it hears
    // the platform's own devices. A headless desk and DRM: a nested desktop's
    // input is the host session's.
-@@ -486,6 +486,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -507,6 +507,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // names a monitor with no EDID name after it. Empty on every platform but
    // DRM, which alone has connectors.
    virtual base::flat_map<int64_t, std::string> GetDomicileConnectors() const;

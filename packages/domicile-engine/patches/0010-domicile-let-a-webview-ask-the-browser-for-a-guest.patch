@@ -52,10 +52,10 @@ See components/domicile/browser/web_view_guest.h in the Domicile repository.
  5 files changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index b4fa8ad..b1640a3 100644
+index dc52d90..a0e0632 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2705,6 +2705,7 @@ source_set("browser") {
+@@ -2710,6 +2710,7 @@ source_set("browser") {
      "//chrome/browser/domicile",
      "//components/domicile:control_channel",
      "//components/domicile:shell_scheme",
@@ -64,7 +64,7 @@ index b4fa8ad..b1640a3 100644
      "//components/download/content/factory",
      "//components/embedder_support:user_agent",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 5a21438..bbf0632 100644
+index da12a14..3ed96e9 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -75,7 +75,7 @@ index 5a21438..bbf0632 100644
  #include "content/public/browser/browser_thread.h"
  #include "mojo/public/cpp/bindings/message.h"
  #include "components/domicile/common/domicile_scheme.h"
-@@ -519,6 +520,30 @@ void PopulateChromeFrameBinders(
+@@ -532,6 +533,30 @@ void PopulateChromeFrameBinders(
                                        std::move(receiver)));
        }));
  
@@ -107,7 +107,7 @@ index 5a21438..bbf0632 100644
  
    map->Add<blink::mojom::ScriptToolHost>(
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 208f82a..2e8c436 100644
+index bf9c2c4..e82b270 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
 @@ -411,6 +411,11 @@ component("core") {

@@ -30,7 +30,7 @@ job builds it on `crux`.
  4 files changed, 47 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 9a226b5..e4fec7e 100644
+index 100bfe9..ab9fbfe 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -21,6 +21,7 @@
@@ -41,7 +41,7 @@ index 9a226b5..e4fec7e 100644
  
  #include <utility>
  
-@@ -574,6 +575,13 @@ void PopulateChromeFrameBinders(
+@@ -587,6 +588,13 @@ void PopulateChromeFrameBinders(
                          &domicile::InstallExtensionsInto,
                          Profile::FromBrowserContext(frame->GetBrowserContext())
                              ->GetWeakPtr())),
@@ -56,10 +56,10 @@ index 9a226b5..e4fec7e 100644
                  // of its <webview>s is told to, and no other page.
                  domicile::Page{frame->GetGlobalId().child_id.value(),
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index c0d823f..4e74f1b 100644
+index d9d59df..a34023a 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -179,6 +179,11 @@ source_set("gbm") {
+@@ -181,6 +181,11 @@ source_set("gbm") {
      "//third_party/minigbm",
      "//ui/base",
      "//ui/base/cursor",
@@ -71,7 +71,7 @@ index c0d823f..4e74f1b 100644
      "//ui/base/cursor/mojom:cursor_type",
      "//ui/base/ime",
      "//ui/display",
-@@ -336,6 +341,10 @@ source_set("gbm_unittests") {
+@@ -338,6 +343,10 @@ source_set("gbm_unittests") {
      "//ui/gfx/linux:test_support",
      "//ui/ozone:platform",
      "//ui/ozone/common",
@@ -83,7 +83,7 @@ index c0d823f..4e74f1b 100644
  }
  
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
-index f1880f9..53a39eb 100644
+index 8a97d5d..be3b4bc 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 @@ -23,6 +23,7 @@ DesktopNativeCursorManager::DesktopNativeCursorManager() {
@@ -94,7 +94,7 @@ index f1880f9..53a39eb 100644
  }
  
  DesktopNativeCursorManager::~DesktopNativeCursorManager() {
-@@ -124,6 +125,14 @@ void DesktopNativeCursorManager::SetCursorColor(
+@@ -118,6 +119,14 @@ void DesktopNativeCursorManager::SetCursorColor(
  void DesktopNativeCursorManager::SetCursorColors(const CursorColors& colors) {
    cursor_loader_.SetColor(colors.fill);
    cursor_loader_.SetOutlineColor(colors.outline);
@@ -110,10 +110,10 @@ index f1880f9..53a39eb 100644
    // set and so before there is anything on screen to redraw.
    if (delegate_) {
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
-index 11c0425..2108b89 100644
+index fcb66b2..59e423c 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
-@@ -9,6 +9,8 @@
+@@ -10,6 +10,8 @@
  #include <set>
  
  #include "base/memory/raw_ptr.h"
@@ -122,7 +122,7 @@ index 11c0425..2108b89 100644
  #include "ui/views/views_export.h"
  #include "ui/wm/core/cursor_loader.h"
  #include "ui/wm/core/native_cursor_manager.h"
-@@ -29,7 +31,9 @@ struct CursorColors;
+@@ -30,7 +32,9 @@ struct CursorColors;
  // A NativeCursorManager that performs the desktop-specific setting of cursor
  // state. Similar to NativeCursorManagerAsh, it also communicates these changes
  // to all root windows.
@@ -133,7 +133,7 @@ index 11c0425..2108b89 100644
   public:
    DesktopNativeCursorManager();
  
-@@ -77,6 +81,17 @@ class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
+@@ -75,6 +79,17 @@ class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
    // it. See `domicile/cursor_color_scheme.h`.
    void SetCursorColors(const CursorColors& colors);
  
@@ -151,7 +151,7 @@ index 11c0425..2108b89 100644
    wm::CursorLoader cursor_loader_;
  
    // The delegate the last cursor was set through, which is what a recolor
-@@ -87,6 +102,11 @@ class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
+@@ -85,6 +100,11 @@ class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
    // After `cursor_loader_` and `delegate_`, because it colors the one and
    // reads the other before its constructor returns.
    std::unique_ptr<CursorColorScheme> cursor_color_scheme_;

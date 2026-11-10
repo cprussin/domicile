@@ -1,4 +1,4 @@
-From 23b5b5514af785288592b8398ba6b612c3bbb3f8 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mecattaf <thomas@mecattaf.dev>
 Date: Sat, 7 Nov 2026 13:14:44 +0100
 Subject: [PATCH] domicile: preserve native touchpad pinches through app input
@@ -137,7 +137,7 @@ index c5f2c17..c6773d0 100644
    }
  
 diff --git a/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc b/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
-index 7389432..5fa0dfc 100644
+index d7c132d..70feec3 100644
 --- a/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
 +++ b/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
 @@ -20,6 +20,39 @@
@@ -194,7 +194,7 @@ index 7389432..5fa0dfc 100644
      gesture_event->SetPositionInWidget(gesture_data->widget_position);
      gesture_event->SetPositionInScreen(gesture_data->screen_position);
      gesture_event->is_source_touch_event_set_blocking =
-@@ -359,6 +399,13 @@ bool StructTraits<blink::mojom::EventDataView,
+@@ -358,6 +398,13 @@ bool StructTraits<blink::mojom::EventDataView,
              static_cast<blink::WebMouseWheelEvent*>(mouse_event);
          blink::mojom::WheelDataPtr& wheel_data =
              pointer_data->mouse_data->wheel_data;
@@ -208,7 +208,7 @@ index 7389432..5fa0dfc 100644
          if (wheel_data->native_scroll_source >
              static_cast<uint8_t>(ui::NativeScrollSource::kWheelTilt)) {
            return false;
-@@ -459,6 +506,7 @@ StructTraits<blink::mojom::EventDataView,
+@@ -458,6 +505,7 @@ StructTraits<blink::mojom::EventDataView,
      const blink::WebMouseWheelEvent* wheel_event =
          static_cast<const blink::WebMouseWheelEvent*>(mouse_event);
      wheel_data = blink::mojom::WheelData::New(
@@ -216,7 +216,7 @@ index 7389432..5fa0dfc 100644
          static_cast<uint8_t>(wheel_event->native_scroll_source),
          wheel_event->axis_stop_x, wheel_event->axis_stop_y,
          wheel_event->has_native_axis_distance,
-@@ -488,6 +536,8 @@ StructTraits<blink::mojom::EventDataView,
+@@ -487,6 +535,8 @@ StructTraits<blink::mojom::EventDataView,
    const blink::WebGestureEvent* gesture_event =
        static_cast<const blink::WebGestureEvent*>(event->EventPointer());
    auto gesture_data = blink::mojom::GestureData::New();
@@ -284,7 +284,7 @@ index 7de4407..853eda6 100644
      // No phase information is avaiable.
      kPhaseNone = 0,
 diff --git a/third_party/blink/public/mojom/input/input_handler.mojom b/third_party/blink/public/mojom/input/input_handler.mojom
-index 1ca5f0a..fb9188c 100644
+index 13022a9..f68affc 100644
 --- a/third_party/blink/public/mojom/input/input_handler.mojom
 +++ b/third_party/blink/public/mojom/input/input_handler.mojom
 @@ -72,7 +72,20 @@ struct PointerData {
@@ -395,7 +395,7 @@ index 3f11f82..42ef2fa 100644
    // Keeps scrollables that contains a scrollbar deferred fade-out after
    // faded-in at kPhaseMayBegin wheel event.
 diff --git a/ui/events/blink/web_input_event.cc b/ui/events/blink/web_input_event.cc
-index f3046ce..f44cd5b 100644
+index fef0117..d11fe06 100644
 --- a/ui/events/blink/web_input_event.cc
 +++ b/ui/events/blink/web_input_event.cc
 @@ -3,7 +3,6 @@
@@ -447,7 +447,7 @@ index 9236885..abd90ab 100644
  };
  
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index 3393743..782b069 100644
+index d7107e2..70f4665 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -3,7 +3,6 @@
@@ -478,7 +478,7 @@ index 3393743..782b069 100644
    DispatchUiEvent(&event);
  }
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index a513d7d..dc0514f 100644
+index 4be440a..efd77ec 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -350,6 +350,7 @@ void LibInputEventConverter::ApplyDeviceSettings(
@@ -503,7 +503,7 @@ index a513d7d..dc0514f 100644
    const LibInputEvent event(native_event);
    switch (event.Type()) {
      case LIBINPUT_EVENT_POINTER_MOTION:
-@@ -566,6 +574,80 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
+@@ -570,6 +578,80 @@ void LibInputEventConverter::HandleWheel(const LibInputEvent& evt) {
    dispatcher_->DispatchMouseWheelEvent(params);
  }
  
@@ -614,7 +614,7 @@ index 6c6a772..9a689b9 100644
  
    // DOMICILE: null for a mouse, and until the factory attaches this.
 diff --git a/ui/events/types/BUILD.gn b/ui/events/types/BUILD.gn
-index bada315..461d3df 100644
+index 55d1b8f..97de847 100644
 --- a/ui/events/types/BUILD.gn
 +++ b/ui/events/types/BUILD.gn
 @@ -5,6 +5,7 @@
@@ -626,7 +626,7 @@ index bada315..461d3df 100644
      "scroll_input_type.h",
      "scroll_types.h",
 diff --git a/ui/ozone/platform/wayland/host/wayland_event_source.cc b/ui/ozone/platform/wayland/host/wayland_event_source.cc
-index 7d9ce3b..f7dae64 100644
+index e55633f..e6a15f6 100644
 --- a/ui/ozone/platform/wayland/host/wayland_event_source.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_event_source.cc
 @@ -20,6 +20,7 @@
@@ -637,7 +637,7 @@ index 7d9ce3b..f7dae64 100644
  #include "ui/events/domicile/scroll_metadata.h"
  #include "ui/events/event_utils.h"
  #include "ui/events/keycodes/dom/dom_code.h"
-@@ -942,7 +943,8 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
+@@ -946,7 +947,8 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
                                        const gfx::Vector2dF& delta,
                                        base::TimeTicks timestamp,
                                        int device_id,
@@ -647,7 +647,7 @@ index 7d9ce3b..f7dae64 100644
    GestureEventDetails details(event_type);
    details.set_device_type(GestureDeviceType::DEVICE_TOUCHPAD);
    if (scale_delta) {
-@@ -953,6 +955,9 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
+@@ -957,6 +959,9 @@ void WaylandEventSource::OnPinchEvent(EventType event_type,
    GestureEvent event(location.x(), location.y(), 0 /* flags */, timestamp,
                       details);
    event.set_source_device_id(device_id);
@@ -681,7 +681,7 @@ index 76eba10..1fd8ea9 100644
                     uint32_t finger_count,
                     base::TimeTicks timestamp,
 diff --git a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
-index c41e15d..d5a96b2 100644
+index 8823f37..500bdf4 100644
 --- a/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.cc
 @@ -105,7 +105,8 @@ void WaylandZwpPointerGestures::OnPinchBegin(
@@ -819,6 +819,3 @@ index 8cf409a..28b62fb 100644
  }
  
  }  // namespace ui
--- 
-2.54.0
-

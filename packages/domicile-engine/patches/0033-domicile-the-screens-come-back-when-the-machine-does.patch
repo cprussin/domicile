@@ -36,7 +36,7 @@ Co-Authored-By: Connor Prussin <connor@prussin.net>
  2 files changed, 16 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 842f736..0d12f22 100644
+index c481ebc..500e2e4 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -134,6 +134,8 @@ source_set("gbm") {
@@ -48,7 +48,7 @@ index 842f736..0d12f22 100644
      "domicile/drm_vt_switcher.cc",
      "domicile/drm_vt_switcher.h",
      "domicile/edid_name.cc",
-@@ -256,6 +258,7 @@ source_set("gbm_unittests") {
+@@ -258,6 +260,7 @@ source_set("gbm_unittests") {
      "domicile/drm_master_unittest.cc",
      "domicile/drm_modeset_unittest.cc",
      "domicile/drm_screen_unittest.cc",
@@ -57,7 +57,7 @@ index 842f736..0d12f22 100644
      "domicile/edid_name_unittest.cc",
    ]
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 3bac6e5..6a07657 100644
+index d8a854a..125094c 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -50,6 +50,7 @@
@@ -68,7 +68,7 @@ index 3bac6e5..6a07657 100644
  #include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
  #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
  #include "ui/ozone/platform/drm/host/host_drm_device.h"
-@@ -128,6 +129,15 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -131,6 +132,15 @@ class OzonePlatformDrm : public OzonePlatform {
      // platform is.
      vt_switcher_ = std::make_unique<DrmVtSwitcher>(
          CreateNativeDisplayDelegate(), event_factory_ozone_.get());
@@ -84,7 +84,7 @@ index 3bac6e5..6a07657 100644
    }
  
    // DOMICILE: the compositor's answer about what the glass does, on its way to
-@@ -468,6 +478,9 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -477,6 +487,9 @@ class OzonePlatformDrm : public OzonePlatform {
    // And after event_factory_ozone_ for the same kind of reason: it observes
    // that event source for as long as it lives.
    std::unique_ptr<DrmVtSwitcher> vt_switcher_;

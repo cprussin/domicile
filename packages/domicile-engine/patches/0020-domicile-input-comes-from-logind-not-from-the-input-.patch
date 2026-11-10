@@ -159,7 +159,7 @@ index f338774..535a9a3 100644
      "input_device_opener_evdev.cc",
      "input_device_opener_evdev.h",
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index 6b80cf2..193323e 100644
+index 8ab5e34..ac47ef3 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -220,9 +220,11 @@ PointerDetails GetTransformedEventPointerDetails(const T& params) {
@@ -183,7 +183,7 @@ index 6b80cf2..193323e 100644
                          &pointing_stick_button_map_),
 +      opener_factory_(std::move(opener_factory)),
        touch_id_generator_(0) {
-   DCHECK(device_manager_);
+   CHECK(device_manager_, base::NotFatalUntil::M163);
  }
 @@ -598,7 +601,7 @@ void EventFactoryEvdev::StartThread() {
    thread_.Start(std::move(proxy_dispatcher), cursor_,
@@ -329,7 +329,7 @@ index 5be4718..b3bb623 100644
   private:
    std::unique_ptr<base::Thread> thread_;
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-index 5e26d25..7907402 100644
+index 00b193f..abff954 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
 @@ -112,6 +112,24 @@ InputDeviceFactoryEvdev::InputDeviceFactoryEvdev(
@@ -527,7 +527,7 @@ index 7a89eae..4afe766 100644
  
  #endif  // UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_EVDEV_H_
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 7d1e8ce..f973267 100644
+index 5f2b41b..11693e1 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -122,6 +122,10 @@ source_set("gbm") {
@@ -541,7 +541,7 @@ index 7d1e8ce..f973267 100644
      "domicile/drm_master.cc",
      "domicile/drm_master.h",
      "domicile/drm_modeset.cc",
-@@ -145,6 +149,12 @@ source_set("gbm") {
+@@ -147,6 +151,12 @@ source_set("gbm") {
      "//base",
      "//build/config/linux/libdrm",
      "//components/viz/common/resources:shared_image_format",
@@ -554,7 +554,7 @@ index 7d1e8ce..f973267 100644
      "//gpu/vulkan:buildflags",
      "//ipc",
      "//media:media_buildflags",
-@@ -237,6 +247,7 @@ source_set("gbm_unittests") {
+@@ -239,6 +249,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",
      "domicile/drm_fullscreen_unittest.cc",
@@ -573,7 +573,7 @@ index 110e1a7..2652ce9 100644
    "+services/service_manager",
    "+services/viz/public/mojom",
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 3c23bee..aabe8e6 100644
+index 1a9c33c..5483b1b 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -50,6 +50,7 @@
@@ -584,7 +584,7 @@ index 3c23bee..aabe8e6 100644
  #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
  #include "ui/ozone/platform/drm/domicile/drm_screen.h"
  #include "ui/ozone/platform/drm/domicile/drm_vt_switcher.h"
-@@ -264,9 +265,21 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -267,9 +268,21 @@ class OzonePlatformDrm : public OzonePlatform {
      KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
          keyboard_layout_engine_.get());
  

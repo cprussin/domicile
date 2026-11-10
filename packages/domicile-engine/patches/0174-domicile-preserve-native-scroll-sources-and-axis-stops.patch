@@ -1,31 +1,31 @@
-From c527269eb08fc7505036116115e3ca2a44142913 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mecattaf <thomas@mecattaf.dev>
 Date: Thu, 5 Nov 2026 22:08:49 +0100
 Subject: [PATCH] domicile: preserve native scroll distances, sources and stops
 
 ---
- .../web_coalesced_input_event_mojom_traits.cc | 27 ++++++-
- .../common/input/web_mouse_wheel_event.cc     |  9 +++
+ .../web_coalesced_input_event_mojom_traits.cc | 27 +++++-
+ .../common/input/web_mouse_wheel_event.cc     |  9 ++
  .../common/input/web_mouse_wheel_event.h      |  8 ++
  .../public/mojom/input/input_handler.mojom    |  6 ++
  .../core/input/mouse_wheel_event_manager.cc   |  8 ++
  ui/events/BUILD.gn                            |  1 +
- ui/events/blink/web_input_event.cc            | 32 +++++++-
+ ui/events/blink/web_input_event.cc            | 32 ++++++-
  ui/events/ozone/evdev/BUILD.gn                |  1 +
  .../evdev/device_event_dispatcher_evdev.cc    |  4 +
  .../evdev/device_event_dispatcher_evdev.h     | 12 ++-
  ui/events/ozone/evdev/event_factory_evdev.cc  |  5 ++
  .../ozone/evdev/libinput_event_converter.cc   | 84 ++++++++++++++-----
  ui/events/types/BUILD.gn                      |  1 +
- .../wayland/host/wayland_event_source.cc      | 54 +++++++++++++
+ .../wayland/host/wayland_event_source.cc      | 54 ++++++++++++
  .../wayland/host/wayland_event_source.h       |  7 ++
  .../platform/wayland/host/wayland_pointer.cc  |  5 +-
  .../platform/wayland/host/wayland_pointer.h   |  3 +
- .../wayland/host/wayland_pointer_unittest.cc  | 74 ++++++++++++-----
+ .../wayland/host/wayland_pointer_unittest.cc  | 74 ++++++++++++----
  18 files changed, 294 insertions(+), 47 deletions(-)
 
 diff --git a/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc b/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
-index 8527714..7389432 100644
+index 0cd4983..d7c132d 100644
 --- a/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
 +++ b/third_party/blink/common/input/web_coalesced_input_event_mojom_traits.cc
 @@ -5,6 +5,7 @@
@@ -36,7 +36,7 @@ index 8527714..7389432 100644
  #include <memory>
  
  #include "base/strings/string_util.h"
-@@ -358,6 +359,25 @@ bool StructTraits<blink::mojom::EventDataView,
+@@ -357,6 +358,25 @@ bool StructTraits<blink::mojom::EventDataView,
              static_cast<blink::WebMouseWheelEvent*>(mouse_event);
          blink::mojom::WheelDataPtr& wheel_data =
              pointer_data->mouse_data->wheel_data;
@@ -62,7 +62,7 @@ index 8527714..7389432 100644
          wheel_event->delta_x = wheel_data->delta_x;
          wheel_event->delta_y = wheel_data->delta_y;
          wheel_event->wheel_ticks_x = wheel_data->wheel_ticks_x;
-@@ -439,7 +459,12 @@ StructTraits<blink::mojom::EventDataView,
+@@ -438,7 +458,12 @@ StructTraits<blink::mojom::EventDataView,
      const blink::WebMouseWheelEvent* wheel_event =
          static_cast<const blink::WebMouseWheelEvent*>(mouse_event);
      wheel_data = blink::mojom::WheelData::New(
@@ -137,7 +137,7 @@ index 5174190..7de4407 100644
    float acceleration_ratio_y = 1.0f;
  
 diff --git a/third_party/blink/public/mojom/input/input_handler.mojom b/third_party/blink/public/mojom/input/input_handler.mojom
-index 1ff8321..1ca5f0a 100644
+index cf1a0b7..13022a9 100644
 --- a/third_party/blink/public/mojom/input/input_handler.mojom
 +++ b/third_party/blink/public/mojom/input/input_handler.mojom
 @@ -73,6 +73,12 @@ struct PointerData {
@@ -180,7 +180,7 @@ index 3c3ddfd..ea0aa44 100644
      return WebInputEventResult::kNotHandled;
    }
 diff --git a/ui/events/BUILD.gn b/ui/events/BUILD.gn
-index a643410..e362fad 100644
+index cc26741..c6e58f1 100644
 --- a/ui/events/BUILD.gn
 +++ b/ui/events/BUILD.gn
 @@ -269,6 +269,7 @@ component("events") {
@@ -192,7 +192,7 @@ index a643410..e362fad 100644
      "event_dispatcher.cc",
      "event_handler.cc",
 diff --git a/ui/events/blink/web_input_event.cc b/ui/events/blink/web_input_event.cc
-index b79e356..f3046ce 100644
+index 47601b4..fef0117 100644
 --- a/ui/events/blink/web_input_event.cc
 +++ b/ui/events/blink/web_input_event.cc
 @@ -3,6 +3,7 @@
@@ -244,7 +244,7 @@ index b79e356..f3046ce 100644
    return webkit_event;
  }
  
-@@ -474,9 +502,9 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEventFromUiEvent(
+@@ -475,9 +503,9 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEventFromUiEvent(
    }
  
    webkit_event.wheel_ticks_x =
@@ -348,7 +348,7 @@ index f49f9b6..9236885 100644
  };
  
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index 193323e..3393743 100644
+index ac47ef3..d7107e2 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -3,6 +3,7 @@
@@ -378,7 +378,7 @@ index 193323e..3393743 100644
  }
  
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 821dcca..52a6c8e 100644
+index f8b87d7..efeb7f9 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -7,6 +7,7 @@
@@ -526,7 +526,7 @@ index 821dcca..52a6c8e 100644
  
  base::TimeTicks LibInputEventConverter::Timestamp(const LibInputEvent& evt) {
 diff --git a/ui/events/types/BUILD.gn b/ui/events/types/BUILD.gn
-index 0061c74..bada315 100644
+index eb8ca5c..55d1b8f 100644
 --- a/ui/events/types/BUILD.gn
 +++ b/ui/events/types/BUILD.gn
 @@ -5,6 +5,7 @@
@@ -538,7 +538,7 @@ index 0061c74..bada315 100644
      "scroll_types.h",
    ]
 diff --git a/ui/ozone/platform/wayland/host/wayland_event_source.cc b/ui/ozone/platform/wayland/host/wayland_event_source.cc
-index f7f75de..7d9ce3b 100644
+index 916f96f..e55633f 100644
 --- a/ui/ozone/platform/wayland/host/wayland_event_source.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_event_source.cc
 @@ -20,6 +20,7 @@
@@ -549,7 +549,7 @@ index f7f75de..7d9ce3b 100644
  #include "ui/events/event_utils.h"
  #include "ui/events/keycodes/dom/dom_code.h"
  #include "ui/events/keycodes/dom/dom_key.h"
-@@ -483,6 +484,20 @@ void WaylandEventSource::OnPointerMotionEvent(
+@@ -486,6 +487,20 @@ void WaylandEventSource::OnPointerMotionEvent(
    }
  }
  
@@ -570,7 +570,7 @@ index f7f75de..7d9ce3b 100644
  void WaylandEventSource::OnPointerAxisEvent(
      const gfx::Vector2dF& offset,
      std::optional<base::TimeTicks> timestamp,
-@@ -598,8 +613,20 @@ void WaylandEventSource::OnPointerAxisStopEvent(uint32_t axis,
+@@ -601,8 +616,20 @@ void WaylandEventSource::OnPointerAxisStopEvent(uint32_t axis,
    EnsurePointerScrollData(timestamp);
    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
      pointer_scroll_data_->dy = 0;
@@ -591,7 +591,7 @@ index f7f75de..7d9ce3b 100644
    }
    pointer_scroll_data_->is_axis_stop = true;
  }
-@@ -1192,6 +1219,23 @@ void WaylandEventSource::ProcessPointerScrollData() {
+@@ -1196,6 +1223,23 @@ void WaylandEventSource::ProcessPointerScrollData() {
    base::TimeTicks& timestamp = *pointer_scroll_data_->timestamp;
  
    int flags = pointer_flags_ | keyboard_modifiers_;
@@ -615,7 +615,7 @@ index f7f75de..7d9ce3b 100644
    // Dispatch Fling event if pointer.axis_stop is notified and the recent
    // pointer.axis events meets the criteria to start fling scroll.
    if (pointer_scroll_data_->dx == 0 && pointer_scroll_data_->dy == 0 &&
-@@ -1228,6 +1272,13 @@ void WaylandEventSource::ProcessPointerScrollData() {
+@@ -1232,6 +1276,13 @@ void WaylandEventSource::ProcessPointerScrollData() {
        MouseWheelEvent event(
            gfx::ToRoundedVector2d(gfx::Vector2dF(dx, dy)),
            pointer_location_, pointer_location_, timestamp, flags, 0);
@@ -629,7 +629,7 @@ index f7f75de..7d9ce3b 100644
        pointer_frames_.push_back(
            std::make_unique<FrameData>(event, base::NullCallback()));
      } else if (*pointer_scroll_data_->axis_source ==
-@@ -1256,6 +1307,9 @@ void WaylandEventSource::ProcessPointerScrollData() {
+@@ -1260,6 +1311,9 @@ void WaylandEventSource::ProcessPointerScrollData() {
                          pointer_location_, timestamp, flags, dx, dy,
                          dx, dy,
                          kGestureScrollFingerCount);
@@ -930,6 +930,3 @@ index 383221a..8349dbf 100644
        .WillOnce(CloneEvent(&event2));
  
    // Send a single axis event.
--- 
-2.55.0
-

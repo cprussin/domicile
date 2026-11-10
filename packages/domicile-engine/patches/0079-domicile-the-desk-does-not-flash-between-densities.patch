@@ -32,7 +32,7 @@ scripts/test-the-desk-does-not-flash-between-densities.sh.
  6 files changed, 139 insertions(+), 37 deletions(-)
 
 diff --git a/cc/layers/picture_layer_impl.cc b/cc/layers/picture_layer_impl.cc
-index c448070..539d885 100644
+index b2ab517..b17dd80 100644
 --- a/cc/layers/picture_layer_impl.cc
 +++ b/cc/layers/picture_layer_impl.cc
 @@ -134,7 +134,8 @@ void PictureLayerImpl::CopyPropertiesTo(LayerImpl* base_layer) const {
@@ -45,7 +45,7 @@ index c448070..539d885 100644
  
      layer_impl->set_gpu_raster_max_texture_size(gpu_raster_max_texture_size_);
  
-@@ -1554,15 +1555,33 @@ void PictureLayerImpl::CleanUpTilingsOnActiveLayer() {
+@@ -1560,15 +1561,33 @@ void PictureLayerImpl::CleanUpTilingsOnActiveLayer() {
    }
  }
  
@@ -85,7 +85,7 @@ index c448070..539d885 100644
  }
  
  void PictureLayerImpl::UpdateDomicileDisplayTilings() {
-@@ -1570,27 +1589,41 @@ void PictureLayerImpl::UpdateDomicileDisplayTilings() {
+@@ -1576,27 +1595,41 @@ void PictureLayerImpl::UpdateDomicileDisplayTilings() {
        layer_tree_impl()->domicile_display_regions();
    const PictureLayerTiling* high_res =
        tilings_->FindTilingWithResolution(HIGH_RESOLUTION);
@@ -136,7 +136,7 @@ index c448070..539d885 100644
    }
  
    for (const float ratio : ratios) {
-@@ -1609,9 +1642,8 @@ void PictureLayerImpl::UpdateDomicileDisplayTilings() {
+@@ -1615,9 +1648,8 @@ void PictureLayerImpl::UpdateDomicileDisplayTilings() {
        tiling = AddTiling(raster);
        tiling->set_resolution(NON_IDEAL_RESOLUTION);
      }
@@ -149,7 +149,7 @@ index c448070..539d885 100644
  }
  
 diff --git a/cc/layers/picture_layer_impl.h b/cc/layers/picture_layer_impl.h
-index b5cda18..6cd4ba0 100644
+index a6d17ec..aea5cb5 100644
 --- a/cc/layers/picture_layer_impl.h
 +++ b/cc/layers/picture_layer_impl.h
 @@ -20,6 +20,7 @@
@@ -170,7 +170,7 @@ index b5cda18..6cd4ba0 100644
    void UpdateDomicileDisplayTilings();
    float MinimumContentsScale() const;
 diff --git a/cc/tiles/picture_layer_tiling.cc b/cc/tiles/picture_layer_tiling.cc
-index dbd0d30..5302716 100644
+index 529c573..a2c566f 100644
 --- a/cc/tiles/picture_layer_tiling.cc
 +++ b/cc/tiles/picture_layer_tiling.cc
 @@ -143,6 +143,9 @@ void PictureLayerTiling::TakeTilesAndPropertiesFrom(
@@ -181,13 +181,13 @@ index dbd0d30..5302716 100644
 +  domicile_display_ratio_ = pending_twin->domicile_display_ratio_;
 +  domicile_clip_in_layer_space_ = pending_twin->domicile_clip_in_layer_space_;
  
-   while (!pending_twin->tiles_.empty()) {
-     auto pending_iter = pending_twin->tiles_.begin();
+   if (!pending_twin->tiles_.empty()) {
+     if (tiles_.empty()) {
 diff --git a/cc/tiles/picture_layer_tiling.h b/cc/tiles/picture_layer_tiling.h
-index a487d76..7e78f66 100644
+index 7a37744..da596fa 100644
 --- a/cc/tiles/picture_layer_tiling.h
 +++ b/cc/tiles/picture_layer_tiling.h
-@@ -304,8 +304,12 @@ class CC_EXPORT PictureLayerTiling {
+@@ -306,8 +306,12 @@ class CC_EXPORT PictureLayerTiling {
                                     VisibilityChecker is_visible,
                                     bool is_tile_occluded) const {
      if (tree_ == PENDING_TREE) {

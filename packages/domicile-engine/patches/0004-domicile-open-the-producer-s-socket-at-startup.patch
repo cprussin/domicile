@@ -20,10 +20,10 @@ rather than a page written for the guard.
  1 file changed, 13 insertions(+)
 
 diff --git a/content/browser/browser_main_loop.cc b/content/browser/browser_main_loop.cc
-index f6db8a5..b39bcf0 100644
+index 654641b..d3939e5 100644
 --- a/content/browser/browser_main_loop.cc
 +++ b/content/browser/browser_main_loop.cc
-@@ -76,6 +76,7 @@
+@@ -79,6 +79,7 @@
  #include "content/browser/browser_thread_impl.h"
  #include "content/browser/compositor/viz_process_transport_factory.h"
  #include "content/browser/cpu_performance/cpu_performance.h"
@@ -31,7 +31,7 @@ index f6db8a5..b39bcf0 100644
  #include "content/browser/download/save_file_manager.h"
  #include "content/browser/field_trial_synchronizer.h"
  #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
-@@ -1446,6 +1447,18 @@ void BrowserMainLoop::PostCreateThreadsImpl() {
+@@ -1501,6 +1502,18 @@ void BrowserMainLoop::PostCreateThreadsImpl() {
    transport_factory->ConnectHostFrameSinkManager();
    ImageTransportFactory::SetFactory(std::move(transport_factory));
  
