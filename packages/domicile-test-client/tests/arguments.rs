@@ -447,6 +447,7 @@ fn a_client_can_be_asked_to_ask_for_a_window_state() {
         ("unmaximize", AskTo::Unmaximize),
         ("fullscreen", AskTo::Fullscreen),
         ("unfullscreen", AskTo::Unfullscreen),
+        ("minimize", AskTo::Minimize),
     ] {
         assert_eq!(given(&["--ask-to", value]).unwrap().ask_to, Some(ask_to));
     }
@@ -460,9 +461,9 @@ fn a_client_can_be_asked_to_ask_for_a_window_state() {
 #[test]
 fn a_window_request_xdg_toplevel_has_no_name_for_is_refused() {
     assert_eq!(
-        given(&["--ask-to", "minimize"]),
+        given(&["--ask-to", "shade"]),
         Err(ArgumentError::NotAWindowRequest {
-            value: "minimize".to_string(),
+            value: "shade".to_string(),
         })
     );
 }
