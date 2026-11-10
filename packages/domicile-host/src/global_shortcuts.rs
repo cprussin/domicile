@@ -240,6 +240,16 @@ impl GlobalShortcuts {
             .flatten()
     }
 
+    /// Each shortcut still held, by its [`BoundShortcut`] id, session and
+    /// shortcut id, held no longer. A later release of any of them ends
+    /// nothing.
+    pub fn let_go_of_everything(&mut self) -> Vec<(u32, (String, String))> {
+        std::mem::take(&mut self.held)
+            .into_iter()
+            .filter_map(|id| Some((id, self.bound_under(id)?)))
+            .collect()
+    }
+
     fn bound_under(&self, id: u32) -> Option<(String, String)> {
         self.sessions.iter().find_map(|(session, held)| {
             held.shortcuts
@@ -531,6 +541,25 @@ mod tests {
         shortcuts.close(SESSION);
 
         assert_eq!(shortcuts.released(1), None);
+    }
+
+    #[test]
+    fn letting_go_of_everything_ends_each_held_shortcut_once() {
+        let mut shortcuts = two_bound();
+        shortcuts.pressed(1);
+        shortcuts.pressed(2);
+        shortcuts.released(2);
+
+        assert_eq!(
+            shortcuts.let_go_of_everything(),
+            vec![(1, fired("talk").unwrap())]
+        );
+        assert_eq!(
+            shortcuts.released(1),
+            None,
+            "the key-up after it ends nothing"
+        );
+        assert_eq!(shortcuts.let_go_of_everything(), vec![]);
     }
 
     #[test]
