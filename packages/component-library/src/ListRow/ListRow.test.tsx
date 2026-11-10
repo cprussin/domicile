@@ -81,7 +81,7 @@ describe(ListRow, () => {
       expect(screen.getByText("10.42.0.17")).toBeVisible();
     });
 
-    it("pads its drawer, centering a footer between its rule and the tile's edge", async () => {
+    it("pads its drawer, centering a footer between its rule and the tile's edge, inset from its side", async () => {
       render(
         <List>
           <ListRow disclosure="Details" label="Centar">
@@ -99,6 +99,11 @@ describe(ListRow, () => {
       expect(drawer.paddingBlockEnd).toBe(
         globalThis.getComputedStyle(footer).paddingBlockStart,
       );
+      expect(
+        globalThis.getComputedStyle(
+          screen.getByRole("button", { name: "Disconnect" }),
+        ).marginInlineEnd,
+      ).toBe("0rem");
     });
 
     it("is one button when it can be pressed, named for assistive tech", async () => {

@@ -327,10 +327,17 @@ const belowStyles = cva({
   }),
   variants: {
     // Room above and below the folded details. The gap and the bottom match
-    // a `PanelFooter`'s top, so its rule and button sit evenly spaced.
+    // a `PanelFooter`'s top, so its rule and button sit evenly spaced. A
+    // footer's action stays inside the drawer's padding rather than hanging
+    // past it, so it keeps a gap from the tile's edge.
     drawer: {
       false: {},
-      true: { gap: 3, paddingBlockEnd: 3, paddingBlockStart: 1.5 },
+      true: {
+        "& > footer > button:last-child": { marginInlineEnd: 0 },
+        gap: 3,
+        paddingBlockEnd: 3,
+        paddingBlockStart: 1.5,
+      },
     },
     indented: { false: {}, true: { paddingInlineStart: 8.5 } },
   },
