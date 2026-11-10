@@ -84,6 +84,12 @@ Every engine workflow runs three scripts, under the tree lock:
   `gclient`.
 - `engine-reset.sh` deletes the stamp when it finds `DEPS` out of step with the
   pin.
+- devtools-frontend's generated sources are not rebuilt when the pin moves,
+  and its `generated_checked` step fails on another pin's. The first run at a
+  pin deletes `out/*/gen/third_party/devtools-frontend`, and records the pin in
+  `.domicile-gen-pin` beside the checkout. It does this even when the DEPS are
+  already synced, because a tree synced back to a pin can still hold the other
+  pin's outputs.
 
 ## Tree pool
 

@@ -26,6 +26,23 @@ pin="$(grep -v '^#' "$ROOT/packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:spa
 # refuses a dirty tree. Tests override it because they have no /build.
 STAMP="${DOMICILE_SYNCED_PIN:-$(dirname "$CHROMIUM")/.domicile-synced-pin}"
 
+# devtools-frontend's generated sources are not rebuilt when the pin moves
+# under them: a tree that built another pin keeps that pin's outputs, and
+# devtools' `generated_checked` step then fails on them (Deprecation.js, when
+# #2023's roll and the engine PRs on the old pin shared tree-0). So the first
+# run at a pin clears them, and the build makes them again. Before the sync's
+# own stamp check, because a tree can be synced back to this pin and still
+# hold the other pin's outputs.
+GEN_STAMP="${DOMICILE_GEN_PIN:-$(dirname "$CHROMIUM")/.domicile-gen-pin}"
+if [ "$(cat "$GEN_STAMP" 2>/dev/null || true)" != "$pin" ]; then
+  for out in "$CHROMIUM"/out/*/; do
+    [ -d "${out}gen/third_party/devtools-frontend" ] || continue
+    echo "clearing ${out}gen/third_party/devtools-frontend, built at another pin"
+    rm -rf "${out}gen/third_party/devtools-frontend"
+  done
+  printf '%s\n' "$pin" >"$GEN_STAMP"
+fi
+
 if [ "$(cat "$STAMP" 2>/dev/null || true)" = "$pin" ]; then
   echo "DEPS are already at $pin"
   exit 0
