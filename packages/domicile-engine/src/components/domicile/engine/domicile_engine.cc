@@ -755,6 +755,45 @@ class Compositing : public mojom::CompositingObserver {
   mojo::Receiver<mojom::CompositingObserver> receiver_{this};
 };
 
+// Forwards the browser's windows to the compositor, which lists them for
+// capture tools.
+//
+// Separate from Surface because a browser window is not a compositor window.
+class BrowserWindows : public mojom::BrowserWindowListObserver {
+ public:
+  explicit BrowserWindows(EngineEventQueue* queue) : queue_(queue) {}
+
+  BrowserWindows(const BrowserWindows&) = delete;
+  BrowserWindows& operator=(const BrowserWindows&) = delete;
+
+  ~BrowserWindows() override = default;
+
+  mojo::PendingRemote<mojom::BrowserWindowListObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // Reset on the binding thread, like Displays::Unbind.
+  void Unbind() { receiver_.reset(); }
+
+  // mojom::BrowserWindowListObserver implementation.
+  void OnBrowserWindowsChanged(
+      std::vector<mojom::ListedBrowserWindowPtr> windows) override {
+    EngineEvent event{.type = EngineEvent::Type::kBrowserWindows};
+    event.browser_windows.reserve(windows.size());
+    for (mojom::ListedBrowserWindowPtr& window : windows) {
+      event.browser_windows.push_back(
+          EngineBrowserWindow{.id = std::move(window->id),
+                              .title = std::move(window->title),
+                              .app_id = std::move(window->app_id)});
+    }
+    queue_->Push(event);
+  }
+
+ private:
+  const raw_ptr<EngineEventQueue> queue_;
+  mojo::Receiver<mojom::BrowserWindowListObserver> receiver_{this};
+};
+
 // Converts a client's dmabuf for mojo. Duplicates the fds; the caller keeps
 // the originals.
 gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
@@ -1055,6 +1094,23 @@ struct DomicileEngine {
         case domicile::EngineEvent::Type::kCompositing:
           if (callbacks_.compositing) {
             callbacks_.compositing(callbacks_.user_data, event.in_memory);
+          }
+          break;
+        case domicile::EngineEvent::Type::kBrowserWindows:
+          if (callbacks_.browser_windows) {
+            // `event` owns the strings until the loop ends, as for display
+            // names.
+            std::vector<DomicileBrowserWindow> records;
+            records.reserve(event.browser_windows.size());
+            for (const domicile::EngineBrowserWindow& window :
+                 event.browser_windows) {
+              records.push_back(
+                  DomicileBrowserWindow{.id = window.id.c_str(),
+                                        .title = window.title.c_str(),
+                                        .app_id = window.app_id.c_str()});
+            }
+            callbacks_.browser_windows(callbacks_.user_data, records.data(),
+                                       static_cast<uint32_t>(records.size()));
           }
           break;
       }
@@ -1560,6 +1616,9 @@ struct DomicileEngine {
       broker_->ObserveClipboard(copies_.BindRemote());
       // And how the browser composites, which decides how windows reach it.
       broker_->ObserveCompositing(compositing_.BindRemote());
+      // And the browser's windows, which capture tools list beside the
+      // compositor's own.
+      broker_->ObserveBrowserWindows(browser_windows_.BindRemote());
     }
     *connected = broker_.is_bound();
   }
@@ -1845,6 +1904,7 @@ struct DomicileEngine {
     displays_.Unbind();
     copies_.Unbind();
     compositing_.Unbind();
+    browser_windows_.Unbind();
   }
 
   void RunOnThreadAndWait(base::OnceClosure task) {
@@ -1865,6 +1925,7 @@ struct DomicileEngine {
   domicile::Displays displays_{&queue_};
   domicile::Copies copies_{&queue_};
   domicile::Compositing compositing_{&queue_};
+  domicile::BrowserWindows browser_windows_{&queue_};
   base::Thread thread_;
   std::unique_ptr<mojo::core::ScopedIPCSupport> ipc_support_;
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;

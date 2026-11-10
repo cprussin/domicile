@@ -211,6 +211,26 @@ interface DisplayListObserver {
   OnDisplaysChanged(array<Display> displays);
 };
 
+// A browser window, as a capture tool lists it. See
+// components/domicile/browser/browser_window_listing.h.
+struct ListedBrowserWindow {
+  // A `BrowserWindow.id` (browser_windows.mojom), as `CaptureBrowserWindow`
+  // takes it.
+  string id;
+  // The page's title, or empty.
+  string title;
+  // The app window's id, or empty for any other window.
+  string app_id;
+};
+
+// Tells a producer which browser windows are open, so it can list them for
+// capture tools beside its own windows.
+interface BrowserWindowListObserver {
+  // The full list. Sent on observing, and when a window opens, closes or
+  // changes its title.
+  OnBrowserWindowsChanged(array<ListedBrowserWindow> windows);
+};
+
 // Which clipboard: the Ctrl-C clipboard or the primary selection.
 enum Clipboard {
   kCopy,
@@ -436,6 +456,10 @@ interface FrameSinkBroker {
   // Registers `observer` for how the browser composites and sends the current
   // mode, once known.
   ObserveCompositing(pending_remote<CompositingObserver> observer);
+
+  // Registers a producer's browser window list observer. It hears the list
+  // at once, then every change.
+  ObserveBrowserWindows(pending_remote<BrowserWindowListObserver> observer);
 
   // Captures what a display shows, for a screen cast. Viz runs a
   // FrameSinkVideoCapturer on the root frame sink of the browser window on

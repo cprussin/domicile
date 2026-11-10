@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
@@ -19,6 +20,7 @@
 #include "base/process/process_handle.h"
 #include "base/task/thread_pool.h"
 #include "components/domicile/browser/browser_window_capture_target.h"
+#include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/display_capture_target.h"
 #include "components/domicile/browser/display_list.h"
 #include "components/domicile/browser/external_surface_provider.h"
@@ -394,6 +396,12 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
     // change. Never removed: this is a NoDestructor.
     content::GpuDataManagerImpl::GetInstance()->AddObserver(this);
     OnGpuInfoUpdate();
+    // Capture tools list the browser windows beside the producer's own.
+    // Unretained for Copied's reason.
+    browser_windows_ = domicile::WatchBrowserWindowListing(base::BindRepeating(
+        &DomicileBrowserService::BrowserWindowsChanged,
+        base::Unretained(this)));
+    BrowserWindowsChanged();
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();
     // Only on DRM or a headless desk. A nested run's screen is the host's
@@ -442,6 +450,18 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
     if (clipboard.has_value()) {
       broker_.OnCopied(*clipboard, contents);
     }
+  }
+
+  // Forwards the browser windows a capture tool lists to the producer.
+  void BrowserWindowsChanged() {
+    std::vector<domicile::mojom::ListedBrowserWindowPtr> windows;
+    for (domicile::ListedBrowserWindow& window :
+         domicile::ListedBrowserWindows()) {
+      windows.push_back(domicile::mojom::ListedBrowserWindow::New(
+          std::move(window.id), std::move(window.title),
+          std::move(window.app_id)));
+    }
+    broker_.OnBrowserWindowsChanged(std::move(windows));
   }
 
   // Binding the socket does blocking I/O, so it runs off the UI thread.
@@ -496,6 +516,7 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
   domicile::ExternalSurfaceProvider provider_;
   // Null unless on DRM or a headless desk.
   std::unique_ptr<DomicileDisplayWatcher> displays_;
+  base::CallbackListSubscription browser_windows_;
 };
 
 DomicileBrowserService& GetDomicileBrowserService() {
