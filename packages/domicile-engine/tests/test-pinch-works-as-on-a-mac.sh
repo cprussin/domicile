@@ -5,6 +5,8 @@
 # Upstream hands a <webview>'s pinch to the outermost page, the desk, and
 # carries no modifiers on a pinch. A patch keeps a pinch in the page,
 # stops plain pinches reaching the desk, and sends Meta's to the desk.
+# Another sends a pinch to the desk's host window on every monitor, as a
+# mouse or scroll event goes.
 #
 # Reads the patches, not a Chromium tree, so it runs in the shell group.
 set -u
@@ -55,6 +57,14 @@ check "the host's pinches carry the keyboard's modifiers" + \
   ui/ozone/platform/wayland/host/wayland_event_source.cc \
   "GestureEvent event(location.x(), location.y(), keyboard_modifiers_," \
   "WaylandEventSource::OnPinchEvent still sends no modifiers"
+check "a pinch goes to the desk's host on every monitor" + \
+  ui/ozone/platform/drm/host/drm_window_host.cc \
+  "event->IsGestureEvent() || event->IsKeyEvent() || bound_touch)) {" \
+  "CanDispatchEvent sends a pinch to the window whose bounds hold the pointer's row place"
+check "a pinch is placed where the pointer is on the desk" + \
+  ui/ozone/platform/drm/host/drm_window_host.cc \
+  "event->IsGestureEvent() || event->IsTouchEvent()" \
+  "DispatchEvent places a pinch with upstream's row arithmetic"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
