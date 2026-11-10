@@ -355,6 +355,14 @@ describe("Launcher", () => {
     ]);
   });
 
+  it("names a few site codes in the empty box", () => {
+    using panel = launcher();
+
+    expect(panel.box().getAttribute("placeholder")).toBe(
+      "Open an app, a file, a URL, or search. Try !yt, !wiki or !gh.",
+    );
+  });
+
   it("emboldens the letters typed without widening them", async () => {
     // A stroke, not font weight, so matches don't widen letters and shift the
     // row.
