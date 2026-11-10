@@ -79,7 +79,11 @@ const swapped = (
 const paired = (concealed: readonly Placement[], showing: Placement): boolean =>
   concealed.some(({ behind }) => sameBox(behind, showing.surface));
 
-const sameBox = (one: Rect | undefined, other: Rect | undefined): boolean =>
+/** Whether two boxes are the same, neither missing. */
+export const sameBox = (
+  one: Rect | undefined,
+  other: Rect | undefined,
+): boolean =>
   one !== undefined &&
   other !== undefined &&
   one.x === other.x &&

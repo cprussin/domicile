@@ -12,6 +12,7 @@ import { WindowState } from "@domicile-desktop/sdk/window-state";
 import { useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
+import { endsOwnAnimation } from "./own-animation";
 import { CROSSING } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
@@ -322,9 +323,10 @@ export const AppWindow = ({
       hidden={rect === undefined}
       // A leaving window is unreachable by keyboard.
       inert={leaving}
-      // Ignores animations bubbling up from descendants.
+      // Ignores animations bubbling up from descendants, and the end of a
+      // motion this one replaced.
       onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget) {
+        if (endsOwnAnimation(event)) {
           onMotionEnded();
         }
       }}

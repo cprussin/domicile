@@ -13,6 +13,7 @@ import { useRef, useState } from "react";
 import { css, cva, cx } from "../styled-system/css";
 import { hstack, vstack } from "../styled-system/patterns";
 import { grabCursorStyles } from "./grab-cursor-styles";
+import { endsOwnAnimation } from "./own-animation";
 import { CROSSING, raised } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
@@ -235,9 +236,10 @@ export const TitleBar = ({
       data-window={window}
       // A closed window's buttons would do nothing.
       inert={isLeaving(motion)}
-      // Ignore animations bubbling up from the buttons.
+      // Ignore animations bubbling up from the buttons, and the end of a motion
+      // this one replaced.
       onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget) {
+        if (endsOwnAnimation(event)) {
           onMotionEnded();
         }
       }}

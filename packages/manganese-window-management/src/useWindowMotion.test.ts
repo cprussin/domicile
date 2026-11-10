@@ -884,6 +884,36 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("resting");
     });
 
+    // A third tab revealed while the first still fades out under the second
+    // would fade in over the first, which reads as it flashing back.
+    it("stops drawing a hidden tab once another is hidden over it", () => {
+      const MAPS = ShellWindow.App("maps", "maps");
+      const group = (on: ShellWindow): Shown => ({
+        ...desktop("1", [TERMINAL, EDITOR, MAPS]),
+        placements: [TERMINAL, EDITOR, MAPS].map(({ id }) =>
+          id === on.id
+            ? placementOf(id)
+            : {
+                ...placementOf(id),
+                behind: placementOf(id).surface,
+                surface: undefined,
+              },
+        ),
+      });
+      const { rerender, result } = showing(group(MAPS));
+      act(() => {
+        rerender(group(EDITOR));
+      });
+
+      act(() => {
+        rerender(group(TERMINAL));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("revealing");
+      expect(motionOf(result, EDITOR.id)).toBe("concealing");
+      expect(motionOf(result, MAPS.id)).toBe("resting");
+    });
+
     // Each gets the other name so the browser restarts it.
     it("turns back when switched back before it has finished", () => {
       const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));

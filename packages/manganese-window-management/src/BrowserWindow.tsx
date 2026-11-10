@@ -47,6 +47,7 @@ import { useSitePermissions } from "./browser/useSitePermissions";
 import { useZoomPopup } from "./browser/useZoomPopup";
 import { ZoomPanel } from "./browser/ZoomPanel";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
+import { endsOwnAnimation } from "./own-animation";
 import { CROSSING } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
@@ -658,9 +659,9 @@ export const BrowserWindow = ({
       // A leaving window is unreachable by keyboard.
       inert={leaving}
       // Ignores animations bubbling up from descendants, such as the page
-      // notices.
+      // notices, and the end of a motion this one replaced.
       onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget) {
+        if (endsOwnAnimation(event)) {
           onMotionEnded();
         }
       }}
