@@ -7,7 +7,7 @@
 //! the shell grabs them as it grabs its own keys and answers
 //! [`PortalAnswer::Pressed`] when one fires and [`PortalAnswer::Released`]
 //! when it is let go. A locked desk refuses both answers, so nothing fires
-//! while locked. The session state is `domicile_host::global_shortcuts`. See
+//! while locked; locking ends every chord still held. The session state is `domicile_host::global_shortcuts`. See
 //! `docs/PORTALS.md`.
 
 use std::collections::HashMap;
@@ -246,6 +246,15 @@ impl Shortcuts {
     pub fn released(&self, id: u32) {
         let fired = self.held.lock().unwrap().released(id);
         self.signal(id, fired, Signal::Deactivated);
+    }
+
+    /// End every chord still held: `Deactivated` for each, once. Its key-up
+    /// later ends nothing.
+    pub fn let_go_of_everything(&self) {
+        let held = self.held.lock().unwrap().let_go_of_everything();
+        for (id, fired) in held {
+            self.signal(id, Some(fired), Signal::Deactivated);
+        }
     }
 
     /// Send `signal` for `fired`, the session and shortcut id. A chord no
@@ -682,6 +691,25 @@ mod tests {
             released_at >= pressed_at + 50,
             "deactivated at {released_at} ms, held from {pressed_at} ms"
         );
+    }
+
+    #[test]
+    fn letting_go_of_held_chords_deactivates_each_once() {
+        let served = served(None);
+        let mut heard = MessageIterator::from(served.client.clone());
+        create_session(&served.client);
+        let bound = bind_through_the_dialog(&served);
+        served.portals.answer(bound.id, PortalAnswer::Pressed);
+        fired(&mut heard);
+
+        served.portals.let_go_of_held_shortcuts();
+        let (member, id, _) = fired(&mut heard);
+        assert_eq!((member.as_str(), id.as_str()), ("Deactivated", "talk"));
+
+        served.portals.answer(bound.id, PortalAnswer::Released);
+        served.portals.answer(bound.id, PortalAnswer::Pressed);
+        let (member, _, _) = fired(&mut heard);
+        assert_eq!(member, "Activated", "the late release ended nothing");
     }
 
     #[test]

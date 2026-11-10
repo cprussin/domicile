@@ -242,7 +242,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   `pressed` under its id on `shortcut`, and `released` on `shortcutrelease`.
   It gives a chord back with `keyboard.ungrab` once no app holds it.
   The compositor signals `Activated` and `Deactivated` for them. A locked desk
-  refuses both answers.
+  refuses both answers, and locking signals `Deactivated` once for each
+  shortcut still held.
   - The review dialog spells each chord as `bindKeys` does and flags one the
     shell or another app holds.
   - Choices are kept per app id in `global-shortcuts.json`. A `BindShortcuts`

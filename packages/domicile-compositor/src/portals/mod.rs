@@ -260,6 +260,12 @@ impl Portals {
         }
     }
 
+    /// Deactivate every global shortcut still held. Called on locking, which
+    /// refuses the shell's release answers.
+    pub fn let_go_of_held_shortcuts(&self) {
+        self.backends.shortcuts.let_go_of_everything();
+    }
+
     /// Serve RemoteDesktop's and InputCapture's input through `eis`, and the
     /// Clipboard through `selections`. Called once, when the Wayland loop
     /// starts.

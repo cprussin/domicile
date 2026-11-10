@@ -42,6 +42,9 @@ impl DomicileCompositor {
             // modifiers are the common case: they do not repeat, so they do not
             // wake the desktop.
             self.release_pressed_keys();
+            // The lock refuses the shell's release answers, so an
+            // application's held global shortcut would never end.
+            self.hub.portals.let_go_of_held_shortcuts();
             self.cancel_pinch();
             self.cancel_swipe();
             self.cancel_touches();
