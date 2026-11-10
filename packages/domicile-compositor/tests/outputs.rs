@@ -21,7 +21,7 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 use wayland_client::protocol::{wl_output, wl_registry};
 use wayland_client::{Connection, Dispatch, QueueHandle};
 
-use crate::running::Compositor;
+use crate::running::{Client, Compositor};
 
 /// The left display at the origin and the right one beside it, at twice the
 /// density.
@@ -237,6 +237,74 @@ fn a_window_takes_the_scale_of_the_screen_the_page_put_it_on() {
         client.trace()
     );
     assert_eq!(client.on_screens(), vec!["right".to_string()]);
+}
+
+/// A menu is on the screen its window is on, at that screen's scale, and
+/// follows the window to the next screen. A window the page hides keeps its
+/// menu where it was.
+#[test]
+fn a_popup_takes_the_screen_and_scale_of_its_window() {
+    let compositor = Compositor::started_with(TWO_DISPLAYS);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client_with("app", &["--popup"]);
+    let app_id = appeared(&mut chrome);
+    let popup = popup_surface(&mut client);
+
+    placed(&mut chrome, &app_id, [100.0, 100.0], [800.0, 600.0]);
+
+    let scaled = format!("{popup}.preferred_scale(120)");
+    assert!(
+        client.wait_for_trace(&scaled, 1),
+        "a menu over a window on the 1x screen was not given scale 1; it \
+         traced:\n{}",
+        client.trace()
+    );
+    assert_eq!(client.surface_on_screens(&popup), vec!["left".to_string()]);
+
+    placed(&mut chrome, &app_id, [2000.0, 100.0], [800.0, 600.0]);
+
+    let rescaled = format!("{popup}.preferred_scale(240)");
+    assert!(
+        client.wait_for_trace(&rescaled, 1),
+        "a menu over a window moved to the 2x screen kept scale 1; it \
+         traced:\n{}",
+        client.trace()
+    );
+    assert!(
+        // Its first leave was the right screen's, once its window was placed.
+        client.wait_for_trace(&format!("{popup}.leave("), 2),
+        "a menu over a window moved to the right screen never left the left \
+         one; it traced:\n{}",
+        client.trace()
+    );
+    assert_eq!(client.surface_on_screens(&popup), vec!["right".to_string()]);
+
+    placed(&mut chrome, &app_id, [0.0, 0.0], [0.0, 0.0]);
+    placed(&mut chrome, &app_id, [2100.0, 100.0], [800.0, 600.0]);
+    assert!(
+        client.wait_for_trace(&rescaled, 1),
+        "the window came back; it traced:\n{}",
+        client.trace()
+    );
+    assert_eq!(
+        client.surface_on_screens(&popup),
+        vec!["right".to_string()],
+        "hiding the window moved its menu; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// The `wl_surface@N` of the popup a `--popup` client opened.
+fn popup_surface(client: &mut Client) -> String {
+    assert!(
+        client.wait_for_trace(".opened(", 1),
+        "the client never opened its popup; it traced:\n{}",
+        client.trace()
+    );
+    let trace = client.trace();
+    let (_, opened) = trace.split_once(".opened(").expect("the wait found it");
+    let (surface, _) = opened.split_once(')').expect("a whole line");
+    surface.to_string()
 }
 
 /// A client that binds a display just as it goes away is not disconnected.

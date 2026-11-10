@@ -539,8 +539,14 @@ fn decoded(pending: &mut Vec<u8>) -> String {
 /// The compositor sends no `leave` when a display is removed, so a removed
 /// screen stays in this answer. Checks using this only add displays.
 fn screens_entered(trace: &str) -> Vec<String> {
+    screens_entered_by(trace, None)
+}
+
+/// The names of the screens `surface` is on now, as [`screens_entered`], or
+/// those of the client's one surface when `None`.
+fn screens_entered_by(trace: &str, surface: Option<&str>) -> Vec<String> {
     let mut named: Vec<(String, String)> = Vec::new();
-    let mut window: Option<String> = None;
+    let mut window: Option<String> = surface.map(str::to_string);
     let mut on: Vec<String> = Vec::new();
     for line in trace.lines() {
         let Some((object, event)) = line.trim().split_once('.') else {
@@ -566,8 +572,11 @@ fn screens_entered(trace: &str) -> Vec<String> {
         let Some(output) = rest.strip_suffix(')') else {
             continue;
         };
+        if surface.is_some_and(|surface| surface != object) {
+            continue;
+        }
         let window = window.get_or_insert_with(|| object.to_string());
-        // The test client has one surface. A second (such as a popup) would
+        // Unless told which surface, the test client has one surface. A second (such as a popup) would
         // mix its enters and leaves into the window's, so fail loudly.
         assert_eq!(
             window.as_str(),
@@ -616,6 +625,23 @@ wl_surface@13.enter(wl_output@4)";
 
     let back = format!("{left_again}\nwl_surface@13.enter(wl_output@4)");
     assert_eq!(screens_entered(&back), ["left", "right"]);
+}
+
+/// Asked about one surface, a trace with a popup's enters answers for that
+/// surface alone.
+#[test]
+fn the_screens_one_surface_is_on_leave_out_the_others() {
+    let both = "\
+wl_output@3.name(\"left\")
+wl_output@4.name(\"right\")
+wl_surface@13.enter(wl_output@3)
+wl_surface@13.enter(wl_output@4)
+wl_surface@20.enter(wl_output@4)";
+    assert_eq!(
+        screens_entered_by(both, Some("wl_surface@13")),
+        ["left", "right"]
+    );
+    assert_eq!(screens_entered_by(both, Some("wl_surface@20")), ["right"]);
 }
 
 /// A half-written trace line is skipped, not misread.
@@ -780,6 +806,12 @@ impl Client {
     /// [`screens_entered`].
     pub fn on_screens(&self) -> Vec<String> {
         screens_entered(&self.trace())
+    }
+
+    /// The screens `surface` (`wl_surface@N`) is on now, by name, for a
+    /// client with more than one surface. See [`screens_entered`].
+    pub fn surface_on_screens(&self, surface: &str) -> Vec<String> {
+        screens_entered_by(&self.trace(), Some(surface))
     }
 
     /// Whatever the client has traced so far.

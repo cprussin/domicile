@@ -242,10 +242,9 @@ impl XdgShellHandler for DomicileCompositor {
         if let Err(err) = surface.send_configure() {
             tracing::warn!(%err, "could not configure a popup");
         }
-        // Enter displays by the rule
-        // [`enter_the_displays_each_window_is_on`](Self::enter_the_displays_each_window_is_on)
-        // applies to popups. Nothing else moved.
-        self.place_window(surface.wl_surface(), None);
+        // On the displays its window is on, at that window's scale. Nothing
+        // else moved.
+        self.place_window(surface.wl_surface(), self.popup_bounds(&surface));
     }
 
     fn reposition_request(
@@ -260,6 +259,8 @@ impl XdgShellHandler for DomicileCompositor {
             state.positioner = positioner;
         });
         surface.send_repositioned(token);
+        // It, and any menu opened from it, may be on another display now.
+        self.place_the_popups_over(&self.window_under_menus(surface.wl_surface()));
     }
 
     fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {

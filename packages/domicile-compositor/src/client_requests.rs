@@ -577,11 +577,10 @@ impl DomicileCompositor {
                 // its displays and scale for when it is shown.
                 Some(toplevel) if bounds.is_empty() => self.hide(&app_id, &toplevel),
                 Some(toplevel) => {
-                    // Only this window moved. Its popups are on every display
-                    // whatever its bounds; see
-                    // `enter_the_displays_each_window_is_on`.
+                    // Only this window and its menus moved.
                     self.place_window(toplevel.wl_surface(), Some(bounds));
                     self.app_bounds.insert(app_id.clone(), bounds);
+                    self.place_the_popups_over(toplevel.wl_surface());
                     self.show(&app_id, &toplevel);
                 }
                 // Usually the window closed while the message was in flight.
