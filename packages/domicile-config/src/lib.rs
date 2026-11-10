@@ -80,6 +80,27 @@ pub struct KeyboardConfig {
     /// the fields above, which must stay unset. The shell switches with
     /// `keymap next` or `keymap <name>`. See `docs/SHELL-CONFIG.md`.
     pub keymaps: Vec<Keymap>,
+    /// How a held key repeats, in native windows and in pages.
+    pub repeat: KeyRepeat,
+}
+
+/// How a held key repeats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct KeyRepeat {
+    /// Milliseconds a key is held before it repeats.
+    pub delay_ms: u16,
+    /// Repeats a second. 0 turns repeat off.
+    pub rate: u16,
+}
+
+impl Default for KeyRepeat {
+    fn default() -> Self {
+        KeyRepeat {
+            delay_ms: 500,
+            rate: 25,
+        }
+    }
 }
 
 impl Default for KeyboardConfig {
@@ -99,6 +120,7 @@ impl Default for KeyboardConfig {
             xkb_variant,
             xkb_options,
             keymaps: Vec::new(),
+            repeat: KeyRepeat::default(),
         }
     }
 }

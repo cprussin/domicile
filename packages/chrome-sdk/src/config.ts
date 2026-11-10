@@ -253,6 +253,8 @@ export type KeyboardConfig = {
    * `keymap next` or `keymap <name>`. See `docs/SHELL-CONFIG.md`.
    */
   keymaps?: Keymap[];
+  /** How a held key repeats, in native windows and in pages. */
+  repeat?: KeyRepeat;
   xkb_layout?: string;
   xkb_model?: string;
   xkb_options?: string[];
@@ -277,6 +279,14 @@ export type Keymap = {
   xkb_options?: string[];
   xkb_rules?: string;
   xkb_variant?: string;
+};
+
+/** How a held key repeats. */
+export type KeyRepeat = {
+  /** Milliseconds a key is held before it repeats. */
+  delay_ms?: number;
+  /** Repeats a second. 0 turns repeat off. */
+  rate?: number;
 };
 
 /**

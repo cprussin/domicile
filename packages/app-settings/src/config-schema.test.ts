@@ -13,6 +13,7 @@ describe(readSettings, () => {
         input: {
           keyboard: {
             keymaps: [],
+            repeat: { delay_ms: 500, rate: 25 },
             xkb_layout: "us",
             xkb_model: "",
             xkb_options: [],

@@ -2577,6 +2577,9 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                     access
                 );
             }
+            wl_keyboard::Event::RepeatInfo { rate, delay } => {
+                crate::say!(keyboard.id(), "repeat_info({}, {})", rate, delay);
+            }
             wl_keyboard::Event::Modifiers {
                 serial,
                 mods_depressed,

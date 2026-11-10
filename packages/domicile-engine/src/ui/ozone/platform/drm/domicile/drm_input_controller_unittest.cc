@@ -162,5 +162,24 @@ TEST_F(DrmInputControllerTest, InputReloadRestoresDefaultsAndTypingOverride) {
   EXPECT_EQ(settings.domicile_input_generation, 2u);
 }
 
+// The compositor's `input.keyboard.repeat` reaches page key repeat.
+TEST_F(DrmInputControllerTest, KeyRepeatFollowsTheInputSettings) {
+  DomicileInputSettings wanted;
+  wanted.keyboard.repeat_delay = base::Milliseconds(250);
+  wanted.keyboard.repeat_rate = 40;
+  controller_.SetDomicileInputConfig(wanted);
+
+  base::TimeDelta delay;
+  base::TimeDelta interval;
+  controller_.GetAutoRepeatRate(&delay, &interval);
+  EXPECT_TRUE(controller_.IsAutoRepeatEnabled());
+  EXPECT_EQ(delay, base::Milliseconds(250));
+  EXPECT_EQ(interval, base::Milliseconds(25));
+
+  wanted.keyboard.repeat_rate = 0;
+  controller_.SetDomicileInputConfig(wanted);
+  EXPECT_FALSE(controller_.IsAutoRepeatEnabled());
+}
+
 }  // namespace
 }  // namespace ui

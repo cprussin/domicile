@@ -97,6 +97,12 @@ const settingsSchema = z.strictObject({
         .strictObject({
           ...xkbFields,
           keymaps: z.array(keymapSchema).default([]),
+          repeat: z
+            .strictObject({
+              delay_ms: z.number().int().min(0).max(65_535).default(500),
+              rate: z.number().int().min(0).max(65_535).default(25),
+            })
+            .prefault({}),
         })
         .prefault({}),
       pointers: z

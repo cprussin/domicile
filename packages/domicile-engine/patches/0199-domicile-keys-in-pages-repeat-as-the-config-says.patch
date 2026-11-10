@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 10 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: keys in pages repeat as the config says
+
+The compositor tells native windows how held keys repeat from
+`input.keyboard.repeat`. Pages repeat through Chromium's own
+`KeyboardEvdev`, which kept its 500 ms and 20 a second.
+
+- `SetDomicileInputConfig`: sets the auto-repeat delay and interval from
+  the input settings' keyboard, and turns repeat off for a rate of 0.
+
+---
+ ui/events/ozone/evdev/input_controller_evdev.cc | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/ui/events/ozone/evdev/input_controller_evdev.cc b/ui/events/ozone/evdev/input_controller_evdev.cc
+index 4a022b9..c828c70 100644
+--- a/ui/events/ozone/evdev/input_controller_evdev.cc
++++ b/ui/events/ozone/evdev/input_controller_evdev.cc
+@@ -244,6 +244,12 @@ void InputControllerEvdev::SetDomicileInputConfig(
+     DomicileInputSettings settings) {
+   input_device_settings_.domicile_disable_while_typing =
+       settings.touchpad.disable_while_typing != DomicileTypingPolicy::kDisabled;
++  // Page key repeat, matching what the compositor tells native windows.
++  SetAutoRepeatEnabled(settings.keyboard.repeat_rate > 0);
++  if (settings.keyboard.repeat_rate > 0) {
++    SetAutoRepeatRate(settings.keyboard.repeat_delay,
++                      base::Seconds(1) / settings.keyboard.repeat_rate);
++  }
+   input_device_settings_.domicile_input = std::move(settings);
+   ++input_device_settings_.domicile_input_generation;
+   ScheduleUpdateDeviceSettings();
+-- 
+2.43.0
+

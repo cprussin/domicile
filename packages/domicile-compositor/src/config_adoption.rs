@@ -9,7 +9,7 @@ use std::time::Instant;
 use tracing::{debug, error, warn};
 
 use domicile_config::{
-    ExtensionsConfig, IdleConfig, KeyboardConfig, Keymap, LockConfig, Omit, ThemeMode,
+    ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, Keymap, LockConfig, Omit, ThemeMode,
 };
 use domicile_host::keymaps::Listed;
 use domicile_host::Host;
@@ -66,6 +66,9 @@ impl DomicileCompositor {
     pub fn adopt_the_rest_of_the_config(&mut self, restated: &Restatement) {
         if let Some(keyboard) = &restated.keyboard {
             self.take_up_the_keymaps(keyboard);
+        }
+        if let Some(repeat) = restated.key_repeat {
+            self.repeat_keys_at(repeat);
         }
         // After the keyboard, whose layout chords are resolved on.
         if restated.shell_config {
@@ -165,6 +168,15 @@ impl DomicileCompositor {
             active: keymaps[at].name.clone(),
         });
         self.retype_the_desktop(&keymaps[at], compiled[at].clone());
+    }
+
+    /// Tell every client's keyboard how held keys repeat. The engine hears it
+    /// with the input settings.
+    pub fn repeat_keys_at(&mut self, repeat: KeyRepeat) {
+        self.seat
+            .get_keyboard()
+            .expect("the seat has a keyboard from startup")
+            .change_repeat_info(repeat.rate.into(), repeat.delay_ms.into());
     }
 
     /// Switch every keyboard to the keymap `choice` picks, until the desktop
