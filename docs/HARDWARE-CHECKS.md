@@ -294,6 +294,23 @@ behaviors not yet seen on real monitors: a connector no layout names is placed
 after the named ones, and a window belongs to its display while its page
 loads.
 
+## A profile's mode and refresh rate
+
+Needs a monitor that offers more than one rate, such as a 120 Hz laptop panel
+or a 144 Hz desk monitor. List its modes with `domicile` running: the log's
+`DRM reports` line at `--v=1` shows the native one, and `wayland-info` shows
+the current `wl_output` mode.
+
+1. Add a profile entry with `"refresh": 60` and reload. The panel should
+   flicker once and come back at 60 Hz: `wayland-info` shows `refresh: 60…`
+   and the shell's `domicile.displays.list` has `refreshMhz` near 60000.
+2. Change it to a smaller `mode` the monitor offers, such as
+   `[1920, 1080]`, with no `refresh`. The panel should light at that size at
+   its fastest rate, and windows should lay out across the smaller desktop.
+3. Change it to a `mode` the monitor does not offer. The desktop should stay
+   as it was and the log should list the sizes it offers.
+4. Remove `mode` and `refresh`. The panel should go back to its native mode.
+
 ## Monitor cast on a GPU
 
 `guard-display-capture.sh` runs software-composited, so it reads shared

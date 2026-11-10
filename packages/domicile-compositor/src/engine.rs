@@ -225,11 +225,24 @@ pub struct Display {
     pub connector: String,
     /// Its top-left corner, in the desktop the engine laid out.
     pub position: (i32, i32),
-    /// Its native mode, in physical pixels.
+    /// The mode it is scanning out, in physical pixels: its native mode
+    /// unless the layout asked for another.
     pub size: (u32, u32),
     /// The panel's size in millimeters, or `(0, 0)` if unreported.
     pub physical_mm: (i32, i32),
     /// The CRTC's refresh rate in mHz, or zero if unreported.
+    pub refresh_mhz: i32,
+    /// Every mode the monitor offers, or none from an engine without
+    /// `moded_displays`, which cannot set one.
+    pub modes: Vec<Mode>,
+}
+
+/// A mode a monitor offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mode {
+    /// In physical pixels.
+    pub size: (u32, u32),
+    /// In mHz, or zero if unreported.
     pub refresh_mhz: i32,
 }
 
@@ -289,6 +302,13 @@ pub struct Connector {
     /// The display's place on the logical desktop, or `None` if dark. The
     /// engine moves the pointer between monitors by it.
     pub desk: Option<Desk>,
+    /// The mode to scan out, in physical pixels, or `None` for the native
+    /// one.
+    pub mode: Option<(u32, u32)>,
+    /// The refresh rate to scan out, in mHz: the nearest one the monitor
+    /// offers is used. `None` for the native mode's, or the highest at a
+    /// non-native `mode`.
+    pub refresh_mhz: Option<u32>,
 }
 
 /// A tablet or touchscreen and the display it covers: the config's
@@ -456,6 +476,7 @@ struct Callbacks {
     disconnected: Option<extern "C" fn(*mut c_void)>,
     compositing: Option<extern "C" fn(*mut c_void, c_int)>,
     ramped_displays: Option<extern "C" fn(*mut c_void, *const RawRampedDisplay, u32)>,
+    moded_displays: Option<extern "C" fn(*mut c_void, *const RawModedDisplay, u32)>,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -604,6 +625,40 @@ struct RawConnectedDisplay {
 struct RawRampedDisplay {
     connected: RawConnectedDisplay,
     gamma_size: u32,
+}
+
+/// `DomicileDisplayMode`, laid out as in the C header. 12 bytes, no padding.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(C)]
+struct RawMode {
+    width: i32,
+    height: i32,
+    refresh_mhz: i32,
+}
+
+/// `DomicileModedDisplay`, laid out as in the C header. 80 bytes, including 4
+/// of tail padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawModedDisplay {
+    ramped: RawRampedDisplay,
+    /// `mode_count` modes, borrowed for the callback. May be null when
+    /// `mode_count` is zero.
+    modes: *const RawMode,
+    mode_count: u32,
+}
+
+/// `DomicileModedLayout`, laid out as in the C header. 64 bytes, including 4
+/// of tail padding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+struct RawModedLayout {
+    layout: RawLayout,
+    /// Zero for the native mode.
+    mode_width: i32,
+    mode_height: i32,
+    /// Zero for the default rate.
+    refresh_mhz: i32,
 }
 
 /// `DomicileDisplayLayout`, laid out as in the C header. 48 bytes, no
@@ -1312,7 +1367,21 @@ impl Engine {
     /// An empty list means no profile: the engine lights what the hardware
     /// reports, undoing any earlier profile. The result arrives later as an
     /// [`Event::Displays`].
+    ///
+    /// An engine without `domicile_displays_configure_modes` gets the layout
+    /// without its modes, and lights each connector at its native one.
     pub fn configure_displays(&self, connectors: &[Connector]) {
+        type Moded = unsafe extern "C" fn(*mut Handle, *const RawModedLayout, u32);
+        if let Ok(f) = self.symbol::<Moded>(
+            b"domicile_displays_configure_modes\0",
+            "domicile_displays_configure_modes",
+        ) {
+            let raw = moded_layouts_from(connectors);
+            // SAFETY: as above, and `raw` outlives the call; the engine
+            // copies it.
+            unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+            return;
+        }
         let f: Symbol<unsafe extern "C" fn(*mut Handle, *const RawLayout, u32)> = match self.symbol(
             b"domicile_displays_configure\0",
             "domicile_displays_configure",
@@ -1677,6 +1746,7 @@ fn join(
         disconnected: Some(on_disconnected),
         compositing: Some(on_compositing),
         ramped_displays: Some(on_ramped_displays),
+        moded_displays: Some(on_moded_displays),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2017,6 +2087,7 @@ fn display_from(record: &RawDisplay) -> Display {
         size: (as_extent(record.width), as_extent(record.height)),
         physical_mm: (record.physical_width_mm, record.physical_height_mm),
         refresh_mhz: record.refresh_mhz,
+        modes: Vec::new(),
     }
 }
 
@@ -2056,6 +2127,66 @@ extern "C" fn on_ramped_displays(
         user_data,
         Event::Displays(connected_displays_from(&connected)),
     );
+}
+
+/// Queues each display's gamma ramp size, then the display list with each
+/// display's modes. Called instead of [`on_ramped_displays`] by an engine that
+/// reports modes.
+extern "C" fn on_moded_displays(
+    user_data: *mut c_void,
+    displays: *const RawModedDisplay,
+    count: u32,
+) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. Both conversions copy them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    let ramped: Vec<RawRampedDisplay> = records.iter().map(|record| record.ramped).collect();
+    push(user_data, Event::GammaSizes(gamma_sizes_from(&ramped)));
+    push(user_data, Event::Displays(moded_displays_from(records)));
+}
+
+/// Converts the ABI's display records with their modes.
+fn moded_displays_from(records: &[RawModedDisplay]) -> Vec<Display> {
+    let connected: Vec<RawConnectedDisplay> = records
+        .iter()
+        .map(|record| record.ramped.connected)
+        .collect();
+    connected_displays_from(&connected)
+        .into_iter()
+        .zip(records)
+        .map(|(display, record)| Display {
+            modes: modes_of(record),
+            ..display
+        })
+        .collect()
+}
+
+/// Copies one record's modes, dropping any with no pixels.
+fn modes_of(record: &RawModedDisplay) -> Vec<Mode> {
+    if record.mode_count == 0 {
+        return Vec::new();
+    }
+    assert!(
+        !record.modes.is_null(),
+        "the engine points at the modes it counts"
+    );
+    // SAFETY: non-null per the assertion; the ABI says `modes` points at
+    // `mode_count` records, valid for this callback.
+    let modes = unsafe { std::slice::from_raw_parts(record.modes, record.mode_count as usize) };
+    modes
+        .iter()
+        .filter_map(|mode| {
+            Some(Mode {
+                size: (
+                    u32::try_from(mode.width).ok().filter(|width| *width > 0)?,
+                    u32::try_from(mode.height)
+                        .ok()
+                        .filter(|height| *height > 0)?,
+                ),
+                refresh_mhz: mode.refresh_mhz,
+            })
+        })
+        .collect()
 }
 
 /// Each display's gamma ramp size, leaving out those with none.
@@ -2102,6 +2233,22 @@ fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
             desk_y: connector.desk.map_or(0, |desk| desk.position.1),
             desk_width: connector.desk.map_or(0, |desk| logical(desk.size.0)),
             desk_height: connector.desk.map_or(0, |desk| logical(desk.size.1)),
+        })
+        .collect()
+}
+
+/// The ABI's layout records with each connector's mode and rate.
+fn moded_layouts_from(connectors: &[Connector]) -> Vec<RawModedLayout> {
+    layouts_from(connectors)
+        .into_iter()
+        .zip(connectors)
+        .map(|(layout, connector)| RawModedLayout {
+            layout,
+            mode_width: connector.mode.map_or(0, |mode| logical(mode.0)),
+            mode_height: connector.mode.map_or(0, |mode| logical(mode.1)),
+            refresh_mhz: connector.refresh_mhz.map_or(0, |refresh| {
+                i32::try_from(refresh).expect("the config bounds a refresh rate to an int32_t")
+            }),
         })
         .collect()
 }
@@ -2176,10 +2323,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_sixteen_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `ramped_displays` is last, as
+    fn the_callbacks_are_the_user_data_and_seventeen_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `moded_displays` is last, as
         // in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 17 * 8);
+        assert_eq!(std::mem::size_of::<Callbacks>(), 18 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2189,6 +2336,90 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Callbacks, disconnected), 14 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, compositing), 15 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, ramped_displays), 16 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, moded_displays), 17 * 8);
+    }
+
+    #[test]
+    fn a_moded_display_is_a_ramped_display_and_its_modes() {
+        // 64 (`DomicileRampedDisplay`) + 8 (pointer) + 4 (`mode_count`) + 4
+        // tail padding. A mode is three `int32_t`.
+        assert_eq!(std::mem::size_of::<RawMode>(), 12);
+        assert_eq!(std::mem::size_of::<RawModedDisplay>(), 80);
+        assert_eq!(std::mem::offset_of!(RawModedDisplay, modes), 64);
+        assert_eq!(std::mem::offset_of!(RawModedDisplay, mode_count), 72);
+    }
+
+    #[test]
+    fn a_moded_layout_is_a_layout_a_mode_and_a_rate() {
+        // 48 (`DomicileDisplayLayout`) + 12 (three `int32_t`) + 4 tail
+        // padding.
+        assert_eq!(std::mem::size_of::<RawModedLayout>(), 64);
+        assert_eq!(std::mem::offset_of!(RawModedLayout, mode_width), 48);
+        assert_eq!(std::mem::offset_of!(RawModedLayout, refresh_mhz), 56);
+    }
+
+    #[test]
+    fn a_display_carries_the_modes_its_monitor_offers() {
+        let (panel, _name) = named(
+            RawDisplay {
+                id: 7,
+                width: 1920,
+                height: 1080,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("eDP-1").expect("no nul in it");
+        let modes = [
+            RawMode {
+                width: 2880,
+                height: 1920,
+                refresh_mhz: 60_000,
+            },
+            RawMode {
+                width: 1920,
+                height: 1080,
+                refresh_mhz: 120_000,
+            },
+            // A mode with no pixels is dropped rather than offered.
+            RawMode::default(),
+        ];
+        let record = RawModedDisplay {
+            ramped: RawRampedDisplay {
+                connected: RawConnectedDisplay {
+                    display: panel,
+                    connector: connector.as_ptr(),
+                },
+                gamma_size: 0,
+            },
+            modes: modes.as_ptr(),
+            mode_count: modes.len() as u32,
+        };
+        let displays = moded_displays_from(&[record]);
+        assert_eq!(
+            displays[0].size,
+            (1920, 1080),
+            "the size is the mode it is at"
+        );
+        assert_eq!(
+            displays[0].modes,
+            vec![
+                Mode {
+                    size: (2880, 1920),
+                    refresh_mhz: 60_000
+                },
+                Mode {
+                    size: (1920, 1080),
+                    refresh_mhz: 120_000
+                },
+            ]
+        );
+        let none = RawModedDisplay {
+            modes: std::ptr::null(),
+            mode_count: 0,
+            ..record
+        };
+        assert!(moded_displays_from(&[none])[0].modes.is_empty());
     }
 
     #[test]
@@ -2557,6 +2788,7 @@ mod tests {
             size: (1920, 1080),
             physical_mm: (0, 0),
             refresh_mhz: 0,
+            modes: Vec::new(),
         };
         assert!(display(VirtualDisplay::id_of(1)).is_virtual());
         // EDID-derived ids are positive.
@@ -2654,6 +2886,8 @@ mod tests {
             position: (1800, 0),
             size: (1800, 3200),
         }),
+        mode: None,
+        refresh_mhz: None,
     };
 
     #[test]
@@ -2688,6 +2922,8 @@ mod tests {
             transform: Transform::Normal,
             scale: 1.0,
             desk: None,
+            mode: None,
+            refresh_mhz: None,
         }]);
 
         assert_eq!(
@@ -2780,6 +3016,7 @@ mod tests {
                 size: (1920, 1080),
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
+                modes: Vec::new(),
             }]
         );
     }
@@ -2838,6 +3075,7 @@ mod tests {
                     size: (2880, 1920),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    modes: Vec::new(),
                 },
                 Display {
                     id: 9,
@@ -2847,6 +3085,7 @@ mod tests {
                     size: (1920, 1080),
                     physical_mm: (0, 0),
                     refresh_mhz: 0,
+                    modes: Vec::new(),
                 },
             ]
         );

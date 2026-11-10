@@ -55,15 +55,21 @@ all plugged in wins. This is kanshi's model.
   places unnamed connectors (`OriginsForLayout`).
 - `scale` is fractional. `wl_output` sends it rounded up, and `xdg_output`
   reports the real logical size.
-- `mode = [W, H]` asserts the monitor's mode. Positions add up mode sizes, so a
-  different mode would shift every display after it. `Layout::of` rejects a
-  mismatch with `ConfigError::Validation`, and a reload keeps the running
-  desktop.
-- A profile cannot request a mode. Each connector scans out its own
-  `native_mode()`. Supporting this needs a field on `DomicileDisplayLayout` and
-  a mode lookup in `drm_modeset.cc`.
-- `mode` has no refresh rate. A rate changes no layout math, cannot be chosen,
-  and some monitors report none.
+- `mode = [W, H]` asks for a mode, and `refresh` (Hz) for a rate. The layout
+  is made at the requested mode, so positions that add up mode sizes come out
+  as written. `Layout::of` refuses a size the monitor does not advertise with
+  `ConfigError::Validation`, naming the ones it does, and a reload keeps the
+  running desktop.
+- The engine picks the mode in `ModeForLayout` (`drm_screen.cc`), as sway's
+  `output mode` does: among the advertised modes of the size asked for (the
+  native size when only `refresh` is given), the rate nearest `refresh`, or
+  with none the native mode at the native size and the fastest at any other.
+  Progressive modes win over interlaced ones. A size it does not advertise
+  falls back to native. The modeset and the display list both use it, so the
+  window still matches its CRTC.
+- An engine reporting no modes (one older than `moded_displays`, or a nested
+  desktop) cannot set one. There `mode` is a check, as it used to be: the
+  profile applies only while the monitor is at it.
 
 ## Which connectors light
 
@@ -259,9 +265,15 @@ code and the compositor logs one line at startup.
   `display::kInchInMm`.
 - `DomicileDisplay` carries both fields. Zero means unknown, as in
   `wl_output`.
-- `DisplayList::UpdateDisplay` does not copy either field. This is safe: the
-  display id comes from the EDID, so the same id is the same panel, with the
-  same size and native mode.
+- `DisplayList::UpdateDisplay` does not copy either field, and a profile can
+  change a listed monitor's mode. So `DrmScreen::panels`, lent through
+  `OzonePlatform::GetDomicilePanels`, carries each display's advertised modes,
+  the rate it scans out at and its millimeters, and `DisplayListFor` takes
+  them over the `display::Display`'s own.
+- The modes reach the compositor through `moded_displays`
+  (`DomicileModedDisplay`), and a profile's mode and rate go back through
+  `domicile_displays_configure_modes`. The rate reaches `wl_output.mode` and
+  the SDK's `Display.refreshMhz`.
 
 ## Night light and gamma control
 

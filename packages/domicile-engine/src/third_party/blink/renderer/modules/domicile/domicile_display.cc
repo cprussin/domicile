@@ -13,6 +13,7 @@ DomicileDisplay::DomicileDisplay(const String& name,
                                  uint32_t scale,
                                  uint32_t mode_width,
                                  uint32_t mode_height,
+                                 uint32_t refresh_mhz,
                                  const String& transform)
     : name_(name),
       x_(x),
@@ -22,6 +23,7 @@ DomicileDisplay::DomicileDisplay(const String& name,
       scale_(scale),
       mode_width_(mode_width),
       mode_height_(mode_height),
+      refresh_mhz_(refresh_mhz),
       transform_(transform) {}
 
 DomicileDisplay::~DomicileDisplay() = default;

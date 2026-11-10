@@ -2310,6 +2310,10 @@ pub struct DisplayInfo {
     /// `size: [1800, 3200]`.
     #[serde(default)]
     pub mode: [u32; 2],
+    /// The rate the monitor scans out at, in mHz, as `wl_output.mode` states
+    /// it. Zero when unknown.
+    #[serde(default)]
+    pub refresh_mhz: u32,
     /// How the monitor is rotated.
     #[serde(default)]
     pub transform: DisplayTransform,
