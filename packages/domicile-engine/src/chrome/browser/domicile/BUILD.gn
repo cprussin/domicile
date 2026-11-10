@@ -87,6 +87,8 @@ source_set("domicile") {
     "//components/domicile:app_roots",
     # Finds a browser window's page for a capture of it alone.
     "//components/domicile:browser_window_capture_target",
+    # Lists each browser window for capture tools.
+    "//components/domicile:browser_window_listing",
     "//components/domicile:command_protocol",
     "//components/domicile:common",
     # Somebody at the desk, from ui::UserActivityDetector in //ui/base.

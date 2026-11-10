@@ -233,6 +233,19 @@ typedef struct DomicileModedDisplay {
   uint32_t mode_count;
 } DomicileModedDisplay;
 
+// A browser window, for `browser_windows`: a page the browser holds, which a
+// capture tool may pick on ext-foreign-toplevel-list-v1 and capture alone
+// with domicile_browser_window_capture_start.
+typedef struct DomicileBrowserWindow {
+  // Its id, as domicile_browser_window_capture_start takes it. Never reused
+  // while the browser runs.
+  const char* id;
+  // The page's title, or empty.
+  const char* title;
+  // The app window's id, or empty for any other window.
+  const char* app_id;
+} DomicileBrowserWindow;
+
 // How the compositor wants one display's connector driven.
 //
 // The reverse of DomicileDisplay: the compositor's config decides, but the
@@ -479,6 +492,13 @@ typedef struct DomicileEngineCallbacks {
   void (*moded_displays)(void* user_data,
                          const DomicileModedDisplay* displays,
                          uint32_t count);
+  // The browser's windows, in the order they opened. `windows` points at
+  // `count` records, their strings borrowed for the call. Called once the
+  // browser is connected, and when a window opens, closes or changes its
+  // title. An older engine never calls it.
+  void (*browser_windows)(void* user_data,
+                          const DomicileBrowserWindow* windows,
+                          uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls

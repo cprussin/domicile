@@ -368,6 +368,22 @@ void FrameSinkBroker::OnCompositingChanged(bool in_memory) {
   }
 }
 
+void FrameSinkBroker::ObserveBrowserWindows(
+    mojo::PendingRemote<mojom::BrowserWindowListObserver> observer) {
+  const mojo::RemoteSetElementId id =
+      browser_window_observers_.Add(std::move(observer));
+  browser_window_observers_.Get(id)->OnBrowserWindowsChanged(
+      mojo::Clone(browser_windows_));
+}
+
+void FrameSinkBroker::OnBrowserWindowsChanged(
+    std::vector<mojom::ListedBrowserWindowPtr> windows) {
+  browser_windows_ = std::move(windows);
+  for (auto& observer : browser_window_observers_) {
+    observer->OnBrowserWindowsChanged(mojo::Clone(browser_windows_));
+  }
+}
+
 void FrameSinkBroker::CaptureDisplay(
     int64_t display_id,
     const gfx::Size& size,

@@ -63,8 +63,6 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.
-- **Wayland capture lists no browser windows.** The toplevel list names
-  Wayland windows only. [PORTALS.md](/docs/PORTALS.md#wayland-capture).
 
 ## Shell reload
 
