@@ -154,10 +154,21 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
 
  private:
   void Read() {
+    ui::OzonePlatform* const platform = ui::OzonePlatform::GetInstance();
+    base::flat_map<int64_t, domicile::DisplayPanel> panels;
+    for (const auto& [id, panel] : platform->GetDomicilePanels()) {
+      domicile::DisplayPanel& crossing = panels[id];
+      for (const ui::DomicileDisplayMode& mode : panel.modes) {
+        crossing.modes.push_back(
+            {.size = mode.size, .refresh_mhz = mode.refresh_mhz});
+      }
+      crossing.refresh_mhz = panel.refresh_mhz;
+      crossing.physical_size_mm = panel.physical_size_mm;
+    }
     broker_->OnDisplaysChanged(domicile::DisplayListFor(
         display::Screen::Get()->GetAllDisplays(),
-        ui::OzonePlatform::GetInstance()->GetDomicileConnectors(),
-        ui::OzonePlatform::GetInstance()->GetDomicileGammaSizes()));
+        platform->GetDomicileConnectors(), platform->GetDomicileGammaSizes(),
+        panels));
   }
 
   const raw_ptr<domicile::FrameSinkBroker> broker_;
@@ -216,7 +227,9 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
                       .origin = display->origin,
                       .transform = TransformOf(display->transform),
                       .scale = display->scale,
-                      .desk = display->desk});
+                      .desk = display->desk,
+                      .mode = display->mode,
+                      .refresh_mhz = display->refresh_mhz});
   }
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
   // Update the desk after requesting the modeset, so a page moved onto a

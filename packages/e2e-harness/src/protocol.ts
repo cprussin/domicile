@@ -274,6 +274,12 @@ const displayInfoSchema = z.looseObject({
   name: z.string().min(1),
   // Signed, mirroring `xdg_output.logical_position`.
   position: z.tuple([z.int(), z.int()]),
+  // The `wl_output` refresh rate in mHz; zero when unknown.
+  refresh_mhz: z
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((refresh) => refresh ?? 0),
   // The integer `wl_output` scale clients draw at. The chrome renders every
   // display at one `devicePixelRatio`.
   scale: z.int().positive(),

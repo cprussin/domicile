@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 10 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a profile picks a monitor's mode and refresh rate
+
+A display profile could only assert a monitor's mode: every connector
+scanned out its native one, and the rate could not be chosen.
+
+- DomicileDisplayLayout gains `mode` and `refresh_mhz`, which DrmModeset
+  looks up among the connector's advertised modes (drm_screen.h).
+- OzonePlatform::GetDomicilePanels lends DrmScreen's modes, the refresh
+  rate in use and the panel's millimeters to the browser, as
+  GetDomicileGammaSizes does the ramp sizes. display::DisplayList keeps
+  neither the rate nor the density of a display whose id it already
+  lists, so a mode change on the same monitor would report stale ones.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/platform/drm/ozone_platform_drm.cc |  6 ++++
+ ui/ozone/public/ozone_platform.cc           |  5 ++++
+ ui/ozone/public/ozone_platform.h            | 33 +++++++++++++++++++++
+ 3 files changed, 44 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index c819490..ee9d18c 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -265,6 +265,12 @@ class OzonePlatformDrm : public OzonePlatform {
+     return screen_->gamma_sizes();
+   }
+ 
++  // DOMICILE: asked with the connectors, so after `InitScreen`.
++  base::flat_map<int64_t, DomicilePanel> GetDomicilePanels() const override {
++    CHECK(screen_) << "domicile: panels asked for before InitScreen";
++    return screen_->panels();
++  }
++
+   // DOMICILE: the evdev input controller holds the setting; see
+   // ui/events/ozone/evdev/domicile/typing_guard.h.
+   std::optional<bool> GetDomicileDisableWhileTyping() const override {
+diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
+index 8853218..6aa1c03 100644
+--- a/ui/ozone/public/ozone_platform.cc
++++ b/ui/ozone/public/ozone_platform.cc
+@@ -145,6 +145,11 @@ base::flat_map<int64_t, uint32_t> OzonePlatform::GetDomicileGammaSizes()
+   return {};
+ }
+ 
++base::flat_map<int64_t, DomicilePanel> OzonePlatform::GetDomicilePanels()
++    const {
++  return {};
++}
++
+ std::optional<bool> OzonePlatform::GetDomicileDisableWhileTyping() const {
+   return std::nullopt;
+ }
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index cb82181..83b7cc2 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -96,6 +96,35 @@ struct DomicileDisplayLayout {
+   // by -- the row `origin` is in says nothing about which monitor is above or
+   // beside which. See ui/ozone/platform/drm/domicile/drm_pointer_crossing.h.
+   gfx::Rect desk;
++  // The mode to scan out, in physical pixels, from the profile; nothing for
++  // the connector's native mode. A size the connector does not advertise
++  // falls back to native. See ui/ozone/platform/drm/domicile/drm_screen.h.
++  std::optional<gfx::Size> mode;
++  // The refresh rate to scan out, in mHz: the advertised rate nearest it is
++  // used. Zero for the native mode's rate, or the highest at a non-native
++  // `mode`.
++  int32_t refresh_mhz = 0;
++};
++
++// DOMICILE: a mode a connector advertises.
++struct DomicileDisplayMode {
++  // In physical pixels.
++  gfx::Size size;
++  // In mHz.
++  int32_t refresh_mhz = 0;
++};
++
++// DOMICILE: what a connector scans out and what it could, for the
++// compositor. `display::Display` keeps neither once its id is listed: a
++// mode change on the same id would leave its refresh and density stale. See
++// ui/ozone/platform/drm/domicile/drm_screen.h.
++struct DomicilePanel {
++  // Every mode the connector advertises.
++  std::vector<DomicileDisplayMode> modes;
++  // The refresh rate of the mode it scans out, in mHz; zero for none.
++  int32_t refresh_mhz = 0;
++  // The panel's size in millimeters; empty when unreported.
++  gfx::Size physical_size_mm;
+ };
+ 
+ // DOMICILE: a tablet or touchscreen and the display it covers, from the
+@@ -490,6 +519,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   // `display::Display::id()`. A display it does not name has no ramp, as on
+   // every platform but DRM.
+   virtual base::flat_map<int64_t, uint32_t> GetDomicileGammaSizes() const;
++  // DOMICILE: each display's modes and the one it scans out, by
++  // `display::Display::id()`. Empty on every platform but DRM, which alone
++  // sets modes.
++  virtual base::flat_map<int64_t, DomicilePanel> GetDomicilePanels() const;
+   // DOMICILE: whether touchpads rest while a keyboard types, or nothing on a
+   // platform whose touchpads another compositor reads. DRM only, like the
+   // layout above. See ui/events/ozone/evdev/domicile/typing_guard.h.
+-- 
+2.43.0
+

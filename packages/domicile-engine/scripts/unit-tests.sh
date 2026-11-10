@@ -23,7 +23,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 45,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 55,
-# DomicileDisplayList 9, DomicileKeyboardLayout 3, ShellWindows 8,
+# DomicileDisplayList 11, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 28,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
@@ -41,7 +41,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 11,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8.
 #
-# 563, and it was 551 — hiding the pointer while typing and after a pause is
+# 565, and it was 563 — a panel's modes and the rate it scans out at are two
+# DomicileDisplayList cases. Before that 563, and it was 551 — hiding the pointer while typing and after a pause is
 # eight PointerHiding cases, two DeskPointerHiding cases, one DeskGestures case
 # and one ControlChannel case. Before that 551, and it was 547 — keeping a destroyed buffer until viz returns it is
 # four SurfaceHolds cases. Before that 547, and it was 543 — forwarding the
@@ -201,7 +202,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=563
+FLOOR=565
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

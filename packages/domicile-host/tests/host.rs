@@ -1053,6 +1053,7 @@ fn lying_down(name: &str, position: [i32; 2], size: [u32; 2], scale: u32) -> Dis
         size,
         scale,
         mode: size,
+        refresh_mhz: 0,
         transform: DisplayTransform::Normal,
     }
 }

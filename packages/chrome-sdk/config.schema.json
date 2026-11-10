@@ -112,7 +112,7 @@
         },
         "mode": {
           "default": null,
-          "description": "The mode, in physical pixels, this entry's placement assumes. Absent\nmeans any mode.\n\nA check, not a request: the engine holds DRM master and sets each\nconnector's native mode, so the compositor cannot modeset. Positions\noften depend on other displays' sizes, so a different mode makes the\nprofile wrong, and applying it fails.\n\nNo refresh rate: it does not affect layout, cannot be chosen, and some\nmonitors report none.",
+          "description": "The mode to scan out, in physical pixels. Absent means the monitor's\nnative mode.\n\nApplying the profile fails when the monitor offers no mode of this\nsize. An engine that reports no modes (an older one, or a desktop in a\nwindow) cannot set one, so there it is a check: the profile applies\nonly while the monitor is at this mode.",
           "maxItems": 2,
           "minItems": 2,
           "prefixItems": [
@@ -145,6 +145,12 @@
             }
           ],
           "type": ["array", "null"]
+        },
+        "refresh": {
+          "default": null,
+          "description": "The refresh rate to scan out, in Hz, such as `59.94` or `120`. The\nmonitor's advertised rate nearest it is used, at `mode` or else the\nnative size.\n\nAbsent means the native mode's rate when `mode` is absent or the\nnative size, and otherwise the highest rate the monitor offers at\n`mode`, as sway picks.",
+          "format": "double",
+          "type": ["number", "null"]
         },
         "scale": {
           "default": 1.0,

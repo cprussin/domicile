@@ -35,6 +35,7 @@ fn spelled_out(name: &str, description: &str, spelled_out: &str, mode: (u32, u32
         description: description.to_owned(),
         spelled_out: spelled_out.to_owned(),
         mode,
+        modes: Vec::new(),
     }
 }
 
@@ -886,19 +887,21 @@ fn a_scale_that_leaves_a_monitor_no_logical_pixels_is_refused() {
 
 #[test]
 fn a_profile_may_state_the_mode_its_positions_were_written_for() {
-    // `mode` asserts the monitor's mode; it does not set it. The engine holds
-    // DRM master and uses each connector's native mode.
+    // An engine that reports no modes cannot set one, so there `mode` asserts
+    // the monitor's mode.
+    let stated = layout(LAPTOP_AT_ITS_MODE, &[connected(LAPTOP, PANEL_MODE)]);
+    let unstated = layout(ONE_PANEL, &[connected(LAPTOP, PANEL_MODE)]);
     assert_eq!(
-        layout(LAPTOP_AT_ITS_MODE, &[connected(LAPTOP, PANEL_MODE)]),
-        layout(ONE_PANEL, &[connected(LAPTOP, PANEL_MODE)]),
+        (stated.placed().collect::<Vec<_>>(), stated.size()),
+        (unstated.placed().collect::<Vec<_>>(), unstated.size()),
         "a mode the monitor is at changes nothing about where it goes"
     );
 }
 
 #[test]
 fn a_monitor_that_is_not_at_the_mode_its_profile_states_is_refused() {
-    // Positions are written for specific modes. Applying the profile at a
-    // different mode would misplace the other displays.
+    // With no modes reported, the engine cannot set the one asked for, and
+    // applying the profile at another would misplace the other displays.
     let refused = Config::parse(LAPTOP_AT_ITS_MODE)
         .expect("the config should parse")
         .output
@@ -970,6 +973,127 @@ fn a_profile_is_matched_again_on_every_reading_of_the_monitors() {
         applied(&[connected(LAPTOP, PANEL_MODE)]),
         Some(("laptop-only".to_owned(), (1920, 1280)))
     );
+}
+
+/// A monitor that offers `modes` and is scanning out the first.
+fn offering(name: &str, modes: &[(u32, u32)]) -> Connected {
+    Connected {
+        modes: modes.to_vec(),
+        ..connected(name, modes[0])
+    }
+}
+
+/// The modes the laptop panel offers: native first.
+const PANEL_MODES: &[(u32, u32)] = &[PANEL_MODE, (1920, 1280), (1440, 960)];
+
+#[test]
+fn a_profile_asks_for_a_mode_the_monitor_offers() {
+    // The engine sets the mode, so the layout is made at it: the logical size
+    // comes from the mode asked for, not the one the monitor is at.
+    let layout = layout(
+        r#"{ "output": { "profiles": [{ "name": "big-text",
+              "displays": [{ "display": "drm-1", "mode": [1920, 1280], "refresh": 59.94 }] }] } }"#,
+        &[offering(LAPTOP, PANEL_MODES)],
+    );
+    let placed: Vec<_> = layout.placed().collect();
+    assert_eq!(
+        placed[0].mode,
+        (1920, 1280),
+        "it is placed at the mode asked for"
+    );
+    assert_eq!(placed[0].logical, (1920, 1280));
+    assert_eq!(
+        layout
+            .scanout()
+            .iter()
+            .map(|display| (display.mode, display.refresh_mhz))
+            .collect::<Vec<_>>(),
+        vec![(Some((1920, 1280)), Some(59_940))],
+        "the engine is asked for the mode and the rate, in mHz"
+    );
+}
+
+#[test]
+fn a_profile_that_asks_for_nothing_leaves_the_engine_to_choose() {
+    let layout = layout(ONE_PANEL, &[offering(LAPTOP, PANEL_MODES)]);
+    assert_eq!(
+        layout
+            .scanout()
+            .iter()
+            .map(|display| (display.mode, display.refresh_mhz))
+            .collect::<Vec<_>>(),
+        vec![(None, None)],
+        "no mode and no rate means the native mode"
+    );
+}
+
+#[test]
+fn a_rate_alone_keeps_the_monitor_at_its_size() {
+    let layout = layout(
+        r#"{ "output": { "profiles": [{ "name": "fast",
+              "displays": [{ "display": "drm-1", "refresh": 120 }] }] } }"#,
+        &[offering(LAPTOP, PANEL_MODES)],
+    );
+    assert_eq!(
+        layout.placed().next().map(|placed| placed.mode),
+        Some(PANEL_MODE)
+    );
+    assert_eq!(layout.scanout()[0].mode, None);
+    assert_eq!(layout.scanout()[0].refresh_mhz, Some(120_000));
+}
+
+#[test]
+fn a_mode_the_monitor_does_not_offer_is_refused() {
+    let refused = Config::parse(
+        r#"{ "output": { "profiles": [{ "name": "too-wide",
+              "displays": [{ "display": "drm-1", "mode": [3840, 2160] }] }] } }"#,
+    )
+    .expect("the config should parse")
+    .output
+    .layout(&[offering(LAPTOP, PANEL_MODES)])
+    .expect_err("a mode the monitor does not offer should be refused");
+    let said = refused.to_string();
+    assert!(
+        said.contains("too-wide")
+            && said.contains("drm-1")
+            && said.contains("3840x2160")
+            && said.contains("2880x1920, 1920x1280, 1440x960"),
+        "the complaint should name the profile, the display, the mode asked \
+         for and the modes on offer: {said}"
+    );
+}
+
+#[test]
+fn a_dark_monitor_may_ask_for_a_mode_it_offers() {
+    let layout = layout(
+        r#"{ "output": { "profiles": [{ "name": "lid-shut", "displays": [
+              { "display": "drm-1", "enabled": false, "mode": [1440, 960] },
+              { "display": "drm-3" }] }] } }"#,
+        &[offering(LAPTOP, PANEL_MODES), connected(CENTER, DESK_MODE)],
+    );
+    assert_eq!(
+        layout
+            .scanout()
+            .iter()
+            .map(|display| (display.name.as_str(), display.origin))
+            .collect::<Vec<_>>(),
+        vec![(LAPTOP, (3840, 0)), (CENTER, (0, 0))],
+    );
+}
+
+#[test]
+fn a_rate_that_is_no_rate_is_refused() {
+    for refresh in ["0", "-60", "1e300"] {
+        let text = format!(
+            r#"{{ "output": {{ "profiles": [{{ "name": "p",
+                  "displays": [{{ "display": "drm-1", "refresh": {refresh} }}] }}] }} }}"#
+        );
+        let refused = Config::parse(&text).expect_err("a refresh of {refresh} should be refused");
+        assert!(
+            refused.to_string().contains("refresh"),
+            "the complaint should name the refresh: {refused}"
+        );
+    }
 }
 
 /// A single profile for the laptop and one monitor, with no fallback.

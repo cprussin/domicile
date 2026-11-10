@@ -20,6 +20,7 @@ const onADesk = (): FakeDomicileHost => {
         modeHeight: 1080,
         modeWidth: 1920,
         name: "left",
+        refreshMhz: 60_000,
         scale: 1,
         transform: "normal",
         width: 1920,

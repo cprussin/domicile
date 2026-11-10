@@ -74,6 +74,7 @@ const displayOf = (display: DomicileDisplay): Display => ({
   modeHeight: display.modeHeight,
   modeWidth: display.modeWidth,
   name: display.name,
+  refreshMhz: display.refreshMhz,
   scale: display.scale,
   transform: asDisplayTransform(display.transform),
   width: display.width,

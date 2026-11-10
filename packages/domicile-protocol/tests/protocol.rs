@@ -331,6 +331,7 @@ fn the_desktop_is_described_to_the_chrome() {
                 size: [1920, 1080],
                 scale: 1,
                 mode: [1920, 1080],
+                refresh_mhz: 0,
                 transform: DisplayTransform::Normal,
             },
             DisplayInfo {
@@ -339,6 +340,7 @@ fn the_desktop_is_described_to_the_chrome() {
                 size: [2560, 1440],
                 scale: 2,
                 mode: [5120, 2880],
+                refresh_mhz: 0,
                 transform: DisplayTransform::Normal,
             },
         ],
@@ -369,6 +371,7 @@ fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
         size: [1800, 3200],
         scale: 2,
         mode: [3840, 2160],
+        refresh_mhz: 0,
         transform: DisplayTransform::Rotate270,
     })
     .unwrap();

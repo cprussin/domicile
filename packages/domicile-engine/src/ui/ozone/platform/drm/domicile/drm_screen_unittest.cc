@@ -154,7 +154,7 @@ TEST(DrmScreenTest, ADisplayIsNamedByItsPanel) {
                       .Build();
 
   EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "DEL DELL U3219Q 2ZLS413");
-  EXPECT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin()).label(), "DEL DELL U3219Q 2ZLS413");
+  EXPECT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode()).label(), "DEL DELL U3219Q 2ZLS413");
 }
 
 // Identical monitors differ only by serial, which `display::EdidParser` keeps
@@ -198,7 +198,7 @@ TEST(DrmScreenTest, ADisplayThatNamesItselfNothingIsLeftUnnamed) {
   auto snapshot = SnapshotBuilder().Name("").Build();
 
   EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "");
-  EXPECT_TRUE(DisplayFromSnapshot(*snapshot, snapshot->origin()).label().empty());
+  EXPECT_TRUE(DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode()).label().empty());
 }
 
 TEST(DrmScreenTest, ADisplayTakesItsBoundsFromTheSnapshotsNativeMode) {
@@ -208,7 +208,7 @@ TEST(DrmScreenTest, ADisplayTakesItsBoundsFromTheSnapshotsNativeMode) {
                       .NativeMode(gfx::Size(2560, 1440), 144.f)
                       .Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode());
 
   EXPECT_EQ(display.id(), 7);
   EXPECT_EQ(display.bounds(), gfx::Rect(0, 0, 2560, 1440));
@@ -220,7 +220,7 @@ TEST(DrmScreenTest, ADisplayIsPlacedAtTheSnapshotsOrigin) {
                       .NativeMode(gfx::Size(1280, 1024), 60.f)
                       .Build();
 
-  EXPECT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin()).bounds(),
+  EXPECT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode()).bounds(),
             gfx::Rect(1920, 0, 1280, 1024));
 }
 
@@ -228,7 +228,7 @@ TEST(DrmScreenTest, ADisplayIsPlacedAtTheSnapshotsOrigin) {
 TEST(DrmScreenTest, APhysicalSizeInMillimetersSurvivesTheConversion) {
   auto snapshot = SnapshotBuilder().PhysicalSizeMm(gfx::Size(597, 336)).Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode());
 
   EXPECT_EQ(display.native_origin(), gfx::Point());
   EXPECT_EQ(DisplayPhysicalSizeMm(*snapshot), gfx::Size(597, 336));
@@ -243,7 +243,7 @@ TEST(DrmScreenTest, APanelsMillimetersCrossAsTheDpiTheyMakeWithTheMode) {
                       .NativeMode(gfx::Size(1920, 1080), 60.f)
                       .Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode());
 
   // 1920 px over 597 mm is 81.7 DPI; 1080 px over 336 mm is 81.6. Per axis,
   // because pixels need not be square.
@@ -257,7 +257,7 @@ TEST(DrmScreenTest, ADisplayTakesItsRefreshRateFromTheNativeMode) {
   auto snapshot =
       SnapshotBuilder().NativeMode(gfx::Size(2560, 1440), 143.998f).Build();
 
-  EXPECT_FLOAT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin()).display_frequency(), 143.998f);
+  EXPECT_FLOAT_EQ(DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode()).display_frequency(), 143.998f);
 }
 
 // Projectors and virtual outputs report no physical size. Zero density means
@@ -265,7 +265,7 @@ TEST(DrmScreenTest, ADisplayTakesItsRefreshRateFromTheNativeMode) {
 TEST(DrmScreenTest, AConnectorWithNoPhysicalSizeIsGivenNoDensity) {
   auto snapshot = SnapshotBuilder().PhysicalSizeMm(gfx::Size()).Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode());
 
   EXPECT_EQ(display.GetPixelsPerInchX(), 0.f);
   EXPECT_EQ(display.GetPixelsPerInchY(), 0.f);
@@ -279,7 +279,7 @@ TEST(DrmScreenTest, AConnectorWithNoModeHasNeitherARateNorADensity) {
                       .NoNativeMode()
                       .Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode());
 
   EXPECT_EQ(display.display_frequency(), 0.f);
   EXPECT_EQ(display.GetPixelsPerInchX(), 0.f);
@@ -288,7 +288,7 @@ TEST(DrmScreenTest, AConnectorWithNoModeHasNeitherARateNorADensity) {
 TEST(DrmScreenTest, ASnapshotWithNoNativeModeStillProducesAUsableDisplay) {
   auto snapshot = SnapshotBuilder().Id(3).NoNativeMode().Build();
 
-  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin());
+  const display::Display display = DisplayFromSnapshot(*snapshot, snapshot->origin(), snapshot->native_mode());
 
   EXPECT_EQ(display.id(), 3);
   EXPECT_FALSE(display.bounds().IsEmpty())
@@ -310,7 +310,7 @@ TEST(DrmScreenTest, ADisplayWhosePlanesTakeOnlyXrgbDrawsInBgra) {
                       .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_ARGB8888})
                       .Build();
 
-  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(*snapshot, gfx::Point())),
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(*snapshot, gfx::Point(), snapshot->native_mode())),
             viz::SinglePlaneFormat::kBGRA_8888);
 }
 
@@ -319,7 +319,7 @@ TEST(DrmScreenTest, ADisplayWhosePlanesTakeXbgrKeepsTheDefaultFormat) {
                       .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888})
                       .Build();
 
-  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(*snapshot, gfx::Point())),
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(*snapshot, gfx::Point(), snapshot->native_mode())),
             OpaqueFrameFormat(display::Display()));
 }
 

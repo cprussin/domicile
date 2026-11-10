@@ -119,16 +119,13 @@ export type DisplayPlacement = {
    */
   enabled?: boolean;
   /**
-   * The mode, in physical pixels, this entry's placement assumes. Absent
-   * means any mode.
+   * The mode to scan out, in physical pixels. Absent means the monitor's
+   * native mode.
    *
-   * A check, not a request: the engine holds DRM master and sets each
-   * connector's native mode, so the compositor cannot modeset. Positions
-   * often depend on other displays' sizes, so a different mode makes the
-   * profile wrong, and applying it fails.
-   *
-   * No refresh rate: it does not affect layout, cannot be chosen, and some
-   * monitors report none.
+   * Applying the profile fails when the monitor offers no mode of this
+   * size. An engine that reports no modes (an older one, or a desktop in a
+   * window) cannot set one, so there it is a check: the profile applies
+   * only while the monitor is at this mode.
    */
   mode?: [number, number] | null;
   /**
@@ -139,6 +136,16 @@ export type DisplayPlacement = {
    * and follows each monitor's current mode.
    */
   position?: [number, number] | null;
+  /**
+   * The refresh rate to scan out, in Hz, such as `59.94` or `120`. The
+   * monitor's advertised rate nearest it is used, at `mode` or else the
+   * native size.
+   *
+   * Absent means the native mode's rate when `mode` is absent or the
+   * native size, and otherwise the highest rate the monitor offers at
+   * `mode`, as sway picks.
+   */
+  refresh?: number | null;
   /**
    * Device pixels per logical pixel.
    *
