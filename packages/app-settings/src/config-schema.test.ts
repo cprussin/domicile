@@ -79,11 +79,12 @@ describe(readSettings, () => {
       scale: 1,
       transform: "normal" as const,
     };
+    const profiles = [{ displays: [placement], name: "desk" }];
     expect(
-      readSettings({
-        output: { profiles: [{ displays: [placement], name: "desk" }] },
-      }).map((read) => read.output.profiles[0]?.displays[0]),
-    ).toEqual(Ok(placement));
+      readSettings({ output: { profiles } }).map(
+        (read) => read.output.profiles,
+      ),
+    ).toEqual(Ok(profiles));
   });
 
   it("reads an idle warning, which Settings does not edit", () => {
