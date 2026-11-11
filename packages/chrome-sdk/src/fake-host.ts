@@ -98,6 +98,7 @@ export const describedWindow = (
   appId,
   clientFrame: false,
   cursor: "default",
+  cursorImage: null,
   desktopId: "",
   dialog: false,
   frame: 0,

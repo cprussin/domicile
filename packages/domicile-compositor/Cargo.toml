@@ -46,6 +46,9 @@ domicile-test-client = { path = "../domicile-test-client" }
 # For the ScreenCast check's binary above, which answers its source picker as
 # the shell. Adds no crates.
 domicile-test-chrome = { path = "../domicile-test-chrome" }
+# A client's own cursor goes to the chrome as a PNG (see
+# `src/cursor_surface.rs`); tests also read back the portal's screenshots.
+png.workspace = true
 # Raw syscalls, such as reading a peer's credentials (see
 # `src/peer_process.rs`).
 libc = "0.2"
@@ -98,8 +101,6 @@ zbus = { workspace = true, features = ["p2p"] }
 # display.
 serde_json.workspace = true
 tempfile.workspace = true
-# Reads back the screenshots the portal saves.
-png.workspace = true
 # The capture client in `tests/screencopy.rs`. Adds no crates: Smithay and
 # the test client already pull these in.
 wayland-client = "0.31"

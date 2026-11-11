@@ -105,6 +105,11 @@ pub struct Arguments {
     /// first. See [`crate::window::POPUP`] for its placement.
     pub sliding_menu: bool,
 
+    /// Whether the client draws its own cursor: a 4 by 4 surface in
+    /// [`crate::window::POPUP_COLOR`] with its hotspot at 1, 2, set when the
+    /// pointer enters, and redrawn 6 by 6 at each press.
+    pub cursor_surface: bool,
+
     /// Whether to open a bubble over the window once it is up: a desync
     /// `wl_subsurface`, as Chromium draws an extension popup.
     ///
@@ -262,6 +267,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut repositioned_popup = None;
     let mut anchor = None;
     let mut sliding_menu = None;
+    let mut cursor_surface = None;
     let mut bubble = None;
     let mut bubble_without_input = None;
     let mut scrolling_bubble = None;
@@ -359,6 +365,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--sliding-menu" => {
                 take(&mut sliding_menu, &flag, true)?;
             }
+            "--cursor-surface" => {
+                take(&mut cursor_surface, &flag, true)?;
+            }
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
@@ -426,6 +435,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         repositioned_popup: repositioned_popup.unwrap_or(false),
         anchor,
         sliding_menu: sliding_menu.unwrap_or(false),
+        cursor_surface: cursor_surface.unwrap_or(false),
         bubble: bubble.unwrap_or(false),
         bubble_without_input: bubble_without_input.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),
