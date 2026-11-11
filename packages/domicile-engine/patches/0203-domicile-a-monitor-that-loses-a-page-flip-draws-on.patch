@@ -1,0 +1,273 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 10 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a monitor that loses a page flip draws on
+
+- A DisplayLink dock's driver (`evdi`) can drop a page flip's event; the
+  kernel logs `flip_done timed out` 10 s later.
+- `HardwareDisplayController` keeps a flip's `PageFlipRequest` until its
+  event, and `GbmSurfaceless` submits nothing more until the presentation
+  callback runs. Without the event, that display never draws again. When
+  it hosts the desk, the whole desk stops.
+- `SchedulePageFlip` posts a 1 s timeout for each flip. If its callback is
+  still waiting then, `PageFlipRequest::Abandon` answers it as a failed
+  presentation, and the late event, if it ever comes, answers nothing.
+- There is one timeout per flip, because a modeset forgets the pending flip
+  but not its callback, and the next flip does not wait for it. It runs even
+  once the controller is gone, because the window still waits.
+- `OnPageFlipComplete` acts only for the pending flip, so a forgotten flip
+  given up on later leaves the flip after it alone.
+- The kernel refuses a nonblocking commit while it still holds the lost
+  flip. For 15 s after a flip is given up on, until a flip or a modeset goes
+  through, a failed commit of current buffers skips the frame as one without
+  master does, rather than arming `PageFlipWatchdog`. A forgotten flip does
+  not start that window.
+- `RecreateBuffersOnOldPlanesPageFlipFailure` delivers its flip's event
+  before fast-forwarding past the timeout.
+- `DrmPageFlipTimeoutTest` covers a flip given up on, the next flip after
+  it, a refused commit inside and past the 15 s, after a modeset and after a
+  forgotten flip, a flip a modeset forgot, and a flip that finishes in time.
+
+Verified: not built. This repository cannot build Chromium; the engine job
+builds it on `crux`.
+---
+ ui/ozone/platform/drm/BUILD.gn                |  1 +
+ .../drm/gpu/hardware_display_controller.cc    | 63 ++++++++++++++++++-
+ .../drm/gpu/hardware_display_controller.h     | 14 +++++
+ .../hardware_display_controller_unittest.cc   |  4 +-
+ .../platform/drm/gpu/page_flip_request.cc     |  5 ++
+ ui/ozone/platform/drm/gpu/page_flip_request.h |  9 +++
+ 6 files changed, 93 insertions(+), 3 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 0bd25cb..aafbf66 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -273,6 +273,7 @@ source_set("gbm_unittests") {
+     "domicile/drm_input_opens_unittest.cc",
+     "domicile/drm_modeset_unittest.cc",
+     "domicile/drm_no_gbm_modeset_unittest.cc",
++    "domicile/drm_page_flip_timeout_unittest.cc",
+     "domicile/drm_pointer_crossing_unittest.cc",
+     "domicile/drm_pointer_targets_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
+diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
+index 27e98e1..3a9e8d8 100644
+--- a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
++++ b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
+@@ -16,6 +16,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/trace_event/typed_macros.h"
+ #include "components/viz/common/resources/shared_image_format_utils.h"
+ #include "third_party/libdrm/src/include/drm/drm_fourcc.h"
+@@ -43,15 +44,25 @@ namespace ui {
+ 
+ namespace {
+ 
++// DOMICILE: how long a page flip may take before it is given up on. Far above
++// any refresh interval, and far below the kernel's own 10 s `flip_done` wait.
++constexpr base::TimeDelta kPageFlipTimeout = base::Seconds(1);
++
++// DOMICILE: how long after giving up on a flip a failed commit is blamed on
++// the kernel still holding it, past its 10 s `flip_done` wait and cleanup.
++constexpr base::TimeDelta kLostFlipGrace = base::Seconds(15);
++
+ void CompletePageFlip(
+     base::WeakPtr<HardwareDisplayController> hardware_display_controller_,
++    uint64_t flip,
+     int modeset_sequence,
+     PresentationOnceCallback callback,
+     DrmOverlayPlaneList plane_list,
+     const gfx::PresentationFeedback& presentation_feedback) {
+   if (hardware_display_controller_) {
+     hardware_display_controller_->OnPageFlipComplete(
+-        modeset_sequence, std::move(plane_list), presentation_feedback);
++        flip, modeset_sequence, std::move(plane_list),
++        presentation_feedback);
+   }
+   std::move(callback).Run(presentation_feedback);
+ }
+@@ -285,6 +296,19 @@ void HardwareDisplayController::SchedulePageFlip(
+       }
+     }
+ 
++    // DOMICILE: the kernel refuses a commit while it still holds a flip given
++    // up on, until its own wait for that flip runs out. Skip the frame, as
++    // without master, rather than arm the watchdog.
++    if (!lost_flip_at_.is_null() &&
++        base::TimeTicks::Now() - lost_flip_at_ < kLostFlipGrace) {
++      std::move(submission_callback)
++          .Run(gfx::SwapResult::SWAP_ACK,
++               /*release_fence=*/gfx::GpuFenceHandle());
++      std::move(presentation_callback)
++          .Run(gfx::PresentationFeedback::Failure());
++      return;
++    }
++
+     // No outdated buffers detected which makes this a true page flip failure.
+     // Alert the watchdog.
+     watchdog_.ArmForFailedCommit();
+@@ -311,14 +335,44 @@ void HardwareDisplayController::SchedulePageFlip(
+       .Run(gfx::SwapResult::SWAP_ACK, std::move(release_fence));
+ 
+   watchdog_.OnSuccessfulPageFlip();
++  lost_flip_at_ = base::TimeTicks();
+   // Everything was submitted successfully, wait for asynchronous completion.
+   page_flip_request->TakeCallback(
+       base::BindOnce(&CompletePageFlip, weak_ptr_factory_.GetWeakPtr(),
++                     ++page_flips_,
+                      GetDrmDevice()->modeset_sequence_id(),
+                      std::move(presentation_callback), std::move(plane_list)));
++  // DOMICILE: one timeout for each flip, because a modeset forgets the pending
++  // flip but not its callback, and the next flip does not wait for it. It
++  // runs without this controller too, because the window still waits.
++  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE,
++      base::BindOnce(&HardwareDisplayController::OnPageFlipTimedOut,
++                     weak_ptr_factory_.GetWeakPtr(), page_flip_request),
++      kPageFlipTimeout);
+   page_flip_request_ = std::move(page_flip_request);
+ }
+ 
++// static
++void HardwareDisplayController::OnPageFlipTimedOut(
++    base::WeakPtr<HardwareDisplayController> controller,
++    scoped_refptr<PageFlipRequest> request) {
++  if (!request->waiting()) {
++    return;  // Its event came in time.
++  }
++  const base::TimeTicks now = base::TimeTicks::Now();
++  // Not a flip a modeset forgot: the kernel let go of that one.
++  if (controller && controller->page_flip_request_ == request) {
++    LOG(ERROR) << "domicile: CRTC " << controller->crtc_controllers_[0]->crtc()
++               << " never finished a page flip in "
++               << kPageFlipTimeout.InMilliseconds()
++               << " ms; drawing on without it";
++    // Before the callback, which can submit the next frame right away.
++    controller->lost_flip_at_ = now;
++  }
++  request->Abandon(now);
++}
++
+ bool HardwareDisplayController::TestPageFlip(
+     const DrmOverlayPlaneList& plane_list) {
+   TRACE_EVENT0("drm", "HDC::TestPageFlip");
+@@ -583,10 +637,13 @@ scoped_refptr<DrmDevice> HardwareDisplayController::GetDrmDevice() const {
+ }
+ 
+ void HardwareDisplayController::OnPageFlipComplete(
++    uint64_t flip,
+     int modeset_sequence,
+     DrmOverlayPlaneList pending_planes,
+     const gfx::PresentationFeedback& presentation_feedback) {
+-  if (!page_flip_request_)
++  // DOMICILE: not only none, but not this flip. A flip a modeset forgot can
++  // be given up on while a later one is pending.
++  if (!page_flip_request_ || flip != page_flips_)
+     return;  // Modeset occurred during this page flip.
+ 
+   time_of_last_flip_ = presentation_feedback.timestamp;
+@@ -635,6 +692,8 @@ gfx::Size HardwareDisplayController::CurrentCursorSizeForTesting() const {
+ 
+ void HardwareDisplayController::OnModesetComplete(
+     const DrmOverlayPlaneList& modeset_planes) {
++  // DOMICILE: a modeset takes the CRTC back from a flip given up on.
++  lost_flip_at_ = base::TimeTicks();
+   // Modesetting is blocking so it has an immediate effect. We can assume that
+   // the current planes have been updated. However, if a page flip is still
+   // pending, set the pending planes to the same values so that the callback
+diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller.h b/ui/ozone/platform/drm/gpu/hardware_display_controller.h
+index 65b8851..1cdf54e 100644
+--- a/ui/ozone/platform/drm/gpu/hardware_display_controller.h
++++ b/ui/ozone/platform/drm/gpu/hardware_display_controller.h
+@@ -197,6 +197,7 @@ class HardwareDisplayController {
+   scoped_refptr<DrmDevice> GetDrmDevice() const;
+ 
+   void OnPageFlipComplete(
++      uint64_t flip,
+       int modeset_sequence,
+       DrmOverlayPlaneList pending_planes,
+       const gfx::PresentationFeedback& presentation_feedback);
+@@ -249,6 +250,12 @@ class HardwareDisplayController {
+ 
+   std::vector<uint64_t> GetFormatModifiers(uint32_t fourcc_format) const;
+ 
++  // DOMICILE: gives up on a page flip whose event never comes, so one lost
++  // flip does not stop this display, and the desk drawn through it, for good.
++  static void OnPageFlipTimedOut(
++      base::WeakPtr<HardwareDisplayController> controller,
++      scoped_refptr<PageFlipRequest> request);
++
+   HardwareDisplayPlaneList owned_hardware_planes_;
+ 
+   // Stores the CRTC configuration. This is used to identify monitors and
+@@ -261,6 +268,13 @@ class HardwareDisplayController {
+   scoped_refptr<PageFlipRequest> page_flip_request_;
+   DrmOverlayPlaneList current_planes_;
+   base::TimeTicks time_of_last_flip_;
++  // DOMICILE: when a flip was last given up on, until a commit goes through.
++  // The kernel refuses commits while it holds that flip, and those are skipped
++  // rather than arming `watchdog_`; see `kLostFlipGrace`.
++  base::TimeTicks lost_flip_at_;
++  // DOMICILE: how many flips were scheduled, the last of them pending as
++  // `page_flip_request_`.
++  uint64_t page_flips_ = 0;
+ 
+   // Stores all the supported sizes for cursor plane.
+   std::vector<gfx::Size> supported_cursor_sizes_;
+diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc b/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc
+index 44617dc..be2a2d2 100644
+--- a/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc
++++ b/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc
+@@ -1026,11 +1026,13 @@ TEST_F(HardwareDisplayControllerTest,
+   planes.clear();
+   planes.push_back(DrmOverlayPlane::TestPlane(CreateBuffer()));
+   SchedulePageFlip(std::move(planes));
++  // DOMICILE: the flip's event comes before the time runs out, as a flip
++  // still pending after `kPageFlipTimeout` is given up on.
++  drm_->RunCallbacks();
+ 
+   // Ensure self-destruct time runs out without process death.
+   task_environment_.FastForwardBy(kWaitForModesetTimeout);
+ 
+-  drm_->RunCallbacks();
+   EXPECT_EQ(gfx::SwapResult::SWAP_ACK, last_swap_result_);
+   EXPECT_EQ(1, successful_page_flips_count_);
+ }
+diff --git a/ui/ozone/platform/drm/gpu/page_flip_request.cc b/ui/ozone/platform/drm/gpu/page_flip_request.cc
+index e62db82..b3b9a2a 100644
+--- a/ui/ozone/platform/drm/gpu/page_flip_request.cc
++++ b/ui/ozone/platform/drm/gpu/page_flip_request.cc
+@@ -40,4 +40,9 @@ void PageFlipRequest::Signal(unsigned int frame, base::TimeTicks timestamp) {
+   std::move(callback_).Run(feedback);
+ }
+ 
++void PageFlipRequest::Abandon(base::TimeTicks now) {
++  std::move(callback_).Run(gfx::PresentationFeedback(
++      now, refresh_interval_, gfx::PresentationFeedback::Flags::kFailure));
++}
++
+ }  // namespace ui
+diff --git a/ui/ozone/platform/drm/gpu/page_flip_request.h b/ui/ozone/platform/drm/gpu/page_flip_request.h
+index 7818945..6173b13 100644
+--- a/ui/ozone/platform/drm/gpu/page_flip_request.h
++++ b/ui/ozone/platform/drm/gpu/page_flip_request.h
+@@ -39,6 +39,15 @@ class PageFlipRequest : public base::RefCounted<PageFlipRequest> {
+ 
+   int page_flip_count() const { return page_flip_count_; }
+ 
++  // DOMICILE: whether the callback is still to be answered.
++  bool waiting() const { return !callback_.is_null(); }
++
++  // DOMICILE: answers the callback now, as presented at `now` but failed, and
++  // ignores the page flip events still to come. For a flip the driver never
++  // completes, such as one a DisplayLink dock (evdi) drops. Only while
++  // `waiting()`.
++  void Abandon(base::TimeTicks now);
++
+  private:
+   void Signal(unsigned int frame, base::TimeTicks timestamp);
+ 
