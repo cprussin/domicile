@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import { KeyAction } from "./key-action";
-import { ownedChords, ownKeybindings } from "./own-keybindings";
+import {
+  inhibitedChords,
+  ownedChords,
+  ownKeybindings,
+} from "./own-keybindings";
 
 describe("ownKeybindings", () => {
   it("files each binding under its chord, spelled the one way", () => {
@@ -82,6 +86,28 @@ describe("ownKeybindings", () => {
         },
       }),
     ).toThrow("gesture");
+  });
+});
+
+describe("inhibitedChords", () => {
+  it("files an --inhibited chord under its chord, and names it", () => {
+    const own = {
+      keybindings: { "--inhibited super+Escape": KeyAction.Mode("x") },
+      modes: { x: { "Meta+Escape": KeyAction.Mode("default") } },
+    };
+
+    expect(ownKeybindings(own).get("default")?.get("Meta+Escape")).toEqual(
+      KeyAction.Mode("x"),
+    );
+    expect(inhibitedChords(own)).toEqual(new Set(["Meta+Escape"]));
+  });
+
+  it("refuses an --inhibited gesture", () => {
+    expect(() =>
+      ownKeybindings({
+        keybindings: { "--inhibited swipe:3:left": KeyAction.Mode("x") },
+      }),
+    ).toThrow("cannot be --inhibited");
   });
 });
 
