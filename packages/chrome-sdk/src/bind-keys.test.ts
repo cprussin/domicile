@@ -32,13 +32,17 @@ const DESK: ShellKeybindings = {
  */
 class FakeHost extends EventTarget {
   readonly grabbed: string[] = [];
+  readonly grabbedWhileInhibited: string[] = [];
   readonly ungrabbed: string[] = [];
   readonly grabbedGestures: string[] = [];
   readonly ungrabbedGestures: string[] = [];
   readonly calls: [id: number, request: unknown][] = [];
 
-  grabShortcut(chord: string): void {
+  grabShortcut(chord: string, whileInhibited = false): void {
     this.grabbed.push(chord);
+    if (whileInhibited) {
+      this.grabbedWhileInhibited.push(chord);
+    }
   }
 
   ungrabShortcut(chord: string): void {
@@ -158,6 +162,21 @@ describe("bindKeys", () => {
     });
 
     expect(host.grabbed).toStrictEqual(["Meta+Return"]);
+  });
+
+  it("grabs an --inhibited chord to stay the shell's under an inhibitor", () => {
+    const { heard, host } = bound({
+      keybindings: {
+        "--inhibited Meta+Escape": KeyAction.SendShell(["inhibitor"]),
+        "Meta+Return": KeyAction.SendShell(["terminal"]),
+      },
+    });
+
+    host.pressed("Meta+Escape");
+
+    expect(host.grabbed).toStrictEqual(["Meta+Escape", "Meta+Return"]);
+    expect(host.grabbedWhileInhibited).toStrictEqual(["Meta+Escape"]);
+    expect(heard).toStrictEqual([["command", ["inhibitor"]]]);
   });
 
   it("refuses a chord written wrong before grabbing anything", () => {

@@ -787,6 +787,11 @@ bindKeys(
 - A window with `inhibitsShortcuts` gets grabbed chords as keys while it has
   the keyboard; no `shortcut` fires. Let keys through in your own listeners
   too. Design: [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
+- Give the user a way back: write a chord `--inhibited Meta+Escape` and it
+  stays yours under an inhibitor. Bind it to
+  `domicile.keyboard.switchShortcutsInhibitor(InhibitorAction.Toggle)`
+  (`@domicile-desktop/sdk/inhibitor-action`), which turns the keyboard
+  window's inhibitor off and on.
 
 ## The configuration
 

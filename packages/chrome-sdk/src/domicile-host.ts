@@ -763,7 +763,7 @@ export type DomicileHost = {
    * keysym the keyboard cannot type; before any keyboard is described, that
    * one is a console warning once it is.
    */
-  grabShortcut(chord: string): void;
+  grabShortcut(chord: string, whileInhibited?: boolean): void;
   /**
    * Answer one grabShortcut() of that name. Once every grab of it is
    * answered, its key reaches the focused client or site again, so two parts
@@ -772,7 +772,8 @@ export type DomicileHost = {
    *
    * While the window with the keyboard holds a shortcuts inhibitor
    * (`DomicileWindow.inhibitsShortcuts`), a grabbed chord pressed on this
-   * page is its key, not a `shortcut`.
+   * page is its key, not a `shortcut`, unless a grab of it passed
+   * `whileInhibited`, as sway's `bindsym --inhibited` does.
    */
   ungrabShortcut(chord: string): void;
   /**
