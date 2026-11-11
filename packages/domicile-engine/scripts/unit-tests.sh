@@ -20,10 +20,10 @@ require_engine_out
 
 FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:ShellWindowsToFitTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:ForwardedKeysTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:SurfaceHoldsTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:SurfaceBacklogTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*:BrowserWindowCaptureTargetTest.*:ShellWindowWaitTest.*:ShellSwapTest.*:DeskCursorThemeSourceTest.*:XCursorThemeTest.*:XCursorThemeDirectoryTest.*:SyncedFrameTest.*:RenderProcessTest.*:ShellDeathTest.*:ProbeWaitTest.*:ScreenCaptureTest.*:ScreenChoiceTest.*:WebViewPartitionTest.*:WillNavigateTest.*:DeskActivityTest.*:DeskPointerTest.*:PointerWarpTest.*:PageMatchesTest.*:ForceDarkTest.*:HiddenFromCapturesTest.*:LocaleFallbackTest.*:DomicileLcdTextActivationTest.*:RtkitTest.*:DeskGesturesTest.*:NativeGestureSequenceTest.*:EdgeSwipeTest.*:DeskPointerHidingTest.*:PointerHidingTest.*'
 
-# Every suite in the filter, counted rather than estimated: FrameSinkBroker 45,
+# Every suite in the filter, counted rather than estimated: FrameSinkBroker 46,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 55,
-# DomicileDisplayList 9, DomicileKeyboardLayout 3, ShellWindows 8,
+# DomicileDisplayList 11, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 28,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
@@ -38,10 +38,15 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
 # DeskPointer 5, PointerWarp 10, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
-# LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 11,
+# LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8.
 #
-# 563, and it was 551 — hiding the pointer while typing and after a pause is
+# 569, and it was 567 — a panel's modes and the rate it scans out at are two
+# DomicileDisplayList cases. Before that 567, and it was 564 — sending the bound
+# swipes and holds to a window that inhibits shortcuts is three DeskGestures
+# cases. Before that 564, and it was 563 — redrawing a display
+# once its gamma ramp is set is one FrameSinkBroker case. Before that 563, and
+# it was 551 — hiding the pointer while typing and after a pause is
 # eight PointerHiding cases, two DeskPointerHiding cases, one DeskGestures case
 # and one ControlChannel case. Before that 551, and it was 547 — keeping a destroyed buffer until viz returns it is
 # four SurfaceHolds cases. Before that 547, and it was 543 — forwarding the
@@ -201,7 +206,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=567
+FLOOR=569
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

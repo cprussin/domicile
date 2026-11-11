@@ -672,6 +672,12 @@ class Displays : public mojom::DisplayListObserver {
                         .refresh_mhz = one->refresh_mhz,
                         .connector = one->connector,
                         .gamma_size = one->gamma_size});
+      for (const mojom::DisplayModePtr& mode : one->modes) {
+        event.displays.back().modes.push_back(
+            {.width = mode->size.width(),
+             .height = mode->size.height(),
+             .refresh_mhz = mode->refresh_mhz});
+      }
     }
     queue_->Push(event);
   }
@@ -927,7 +933,33 @@ struct DomicileEngine {
           // The strings belong to `event`, which lives in the drained vector
           // until the loop ends, so they outlive the callback as the header
           // promises.
-          if (callbacks_.ramped_displays) {
+          if (callbacks_.moded_displays) {
+            // Every display's modes first, so the records can point into a
+            // vector that no longer grows.
+            std::vector<DomicileDisplayMode> modes;
+            for (const domicile::EngineDisplay& display : event.displays) {
+              for (const domicile::EngineDisplay::Mode& mode : display.modes) {
+                modes.push_back({.width = mode.width,
+                                 .height = mode.height,
+                                 .refresh_mhz = mode.refresh_mhz});
+              }
+            }
+            std::vector<DomicileModedDisplay> records;
+            records.reserve(event.displays.size());
+            size_t first = 0;
+            for (const domicile::EngineDisplay& display : event.displays) {
+              records.push_back(DomicileModedDisplay{
+                  .ramped = {.connected = {.display = RecordOf(display),
+                                           .connector =
+                                               display.connector.c_str()},
+                             .gamma_size = display.gamma_size},
+                  .modes = display.modes.empty() ? nullptr : &modes[first],
+                  .mode_count = static_cast<uint32_t>(display.modes.size())});
+              first += display.modes.size();
+            }
+            callbacks_.moded_displays(callbacks_.user_data, records.data(),
+                                      static_cast<uint32_t>(records.size()));
+          } else if (callbacks_.ramped_displays) {
             std::vector<DomicileRampedDisplay> records;
             records.reserve(event.displays.size());
             for (const domicile::EngineDisplay& display : event.displays) {
@@ -1130,6 +1162,40 @@ struct DomicileEngine {
                        base::Unretained(this), surface, buffer));
   }
 
+  // As ConfigureDisplays, with each connector's mode and rate.
+  void ConfigureModedDisplays(const DomicileModedLayout* layout,
+                              uint32_t count) {
+    std::vector<domicile::mojom::DisplayLayoutPtr> wanted;
+    wanted.reserve(count);
+    // SAFETY: as in ConfigureDisplays; `domicile_displays_configure_modes`
+    // has refused a null pointer with a nonzero count.
+    const auto records =
+        UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
+    for (const DomicileModedLayout& display : records) {
+      domicile::mojom::DisplayLayoutPtr one = LayoutOf(display.layout);
+      if (display.mode_width > 0 && display.mode_height > 0) {
+        one->mode = gfx::Size(display.mode_width, display.mode_height);
+      }
+      one->refresh_mhz = std::max(display.refresh_mhz, 0);
+      wanted.push_back(std::move(one));
+    }
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::ConfigureDisplaysOnThread,
+                       base::Unretained(this), std::move(wanted)));
+  }
+
+  // One layout record as mojom, with no mode: the connector's native one.
+  static domicile::mojom::DisplayLayoutPtr LayoutOf(
+      const DomicileDisplayLayout& display) {
+    return domicile::mojom::DisplayLayout::New(
+        display.id, display.enabled != 0, gfx::Point(display.x, display.y),
+        domicile::TransformOf(display.transform), display.scale,
+        gfx::Rect(display.desk_x, display.desk_y, display.desk_width,
+                  display.desk_height),
+        std::nullopt, 0);
+  }
+
   // Copies the records before posting: the ABI borrows them only for the call,
   // which returns before the mojo thread runs.
   void ConfigureDisplays(const DomicileDisplayLayout* layout, uint32_t count) {
@@ -1143,11 +1209,7 @@ struct DomicileEngine {
     const auto records =
         UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
     for (const DomicileDisplayLayout& display : records) {
-      wanted.push_back(domicile::mojom::DisplayLayout::New(
-          display.id, display.enabled != 0, gfx::Point(display.x, display.y),
-          domicile::TransformOf(display.transform), display.scale,
-          gfx::Rect(display.desk_x, display.desk_y, display.desk_width,
-                    display.desk_height)));
+      wanted.push_back(LayoutOf(display));
     }
     thread_.task_runner()->PostTask(
         FROM_HERE,
@@ -2018,6 +2080,15 @@ void domicile_displays_configure(DomicileEngine* engine,
   // count means "no preference".
   if (engine && (layout || count == 0)) {
     engine->ConfigureDisplays(layout, count);
+  }
+}
+
+void domicile_displays_configure_modes(DomicileEngine* engine,
+                                       const DomicileModedLayout* layout,
+                                       uint32_t count) {
+  // As domicile_displays_configure.
+  if (engine && (layout || count == 0)) {
+    engine->ConfigureModedDisplays(layout, count);
   }
 }
 

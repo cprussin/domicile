@@ -1133,6 +1133,7 @@ mod tests {
             size,
             scale,
             mode: size,
+            refresh_mhz: 0,
             transform: domicile_protocol::DisplayTransform::Normal,
         }
     }

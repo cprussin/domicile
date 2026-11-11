@@ -1378,6 +1378,8 @@ void ControlChannel::DispatchLine(const std::string& line,
       const base::ListValue* mode = display->FindList("mode");
       const bool moded = mode && mode->size() == 2u;
       const std::string* transform = display->FindString("transform");
+      // Optional like the mode, and for the same reason: zero is unknown.
+      const std::optional<double> refresh = display->FindDouble("refresh_mhz");
       displays.push_back(mojom::DisplayInfo::New(
           *name, static_cast<int32_t>(Number((*position)[0])),
           static_cast<int32_t>(Number((*position)[1])),
@@ -1386,6 +1388,7 @@ void ControlChannel::DispatchLine(const std::string& line,
           static_cast<uint32_t>(display->FindInt("scale").value_or(1)),
           moded ? static_cast<uint32_t>(Number((*mode)[0])) : 0u,
           moded ? static_cast<uint32_t>(Number((*mode)[1])) : 0u,
+          refresh && *refresh > 0 ? static_cast<uint32_t>(*refresh) : 0u,
           TransformNamed(transform)));
     }
     // Sent even when every entry was malformed, because an empty desktop is an

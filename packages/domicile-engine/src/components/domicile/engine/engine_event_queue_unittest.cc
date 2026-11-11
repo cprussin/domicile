@@ -99,7 +99,10 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
                                           .physical_height_mm = 336,
                                           .refresh_mhz = 59997,
                                           .connector = "eDP-1",
-                                          .gamma_size = 4096});
+                                          .gamma_size = 4096,
+                                          .modes = {{.width = 2880,
+                                                     .height = 1920,
+                                                     .refresh_mhz = 59997}}});
   pushed.displays.push_back(EngineDisplay{.id = 9,
                                           .x = 2880,
                                           .y = 0,
@@ -115,6 +118,9 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   EXPECT_EQ(drained[0].displays[0].id, 7);
   EXPECT_EQ(drained[0].displays[0].width, 2880);
   EXPECT_EQ(drained[0].displays[0].gamma_size, 4096u);
+  ASSERT_EQ(drained[0].displays[0].modes.size(), 1u);
+  EXPECT_EQ(drained[0].displays[0].modes[0].refresh_mhz, 59997);
+  EXPECT_TRUE(drained[0].displays[1].modes.empty());
   EXPECT_EQ(drained[0].displays[0].physical_width_mm, 597);
   EXPECT_EQ(drained[0].displays[0].physical_height_mm, 336);
   EXPECT_EQ(drained[0].displays[0].refresh_mhz, 59997);

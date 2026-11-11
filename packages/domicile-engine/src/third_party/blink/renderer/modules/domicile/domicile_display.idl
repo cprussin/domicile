@@ -39,6 +39,11 @@
   readonly attribute unsigned long modeWidth;
   readonly attribute unsigned long modeHeight;
 
+  // The rate the panel scans out at, in mHz (60000 for 60 Hz), as
+  // `wl_output.mode` states it. Zero when unknown, such as when running in a
+  // window.
+  readonly attribute unsigned long refreshMhz;
+
   // The monitor's rotation: `normal`, `rotate-90`, `rotate-180` or
   // `rotate-270`, as the config file spells them.
   //

@@ -511,8 +511,8 @@ For sites with no dark theme of their own, such as Gmail:
 ```
 
 Each profile entry sets `enabled`, `position`, a fractional `scale`, a
-`transform`, and optionally `mode`. An entry without `position` goes right of
-the positioned ones, in profile order.
+`transform`, and optionally `mode` and `refresh`. An entry without `position`
+goes right of the positioned ones, in profile order.
 
 ### Naming a display
 
@@ -529,11 +529,30 @@ A monitor with no EDID make, model or serial has an empty description.
 
 ### `mode`
 
-`mode` is a check. Domicile does not modeset: the engine lights every
-connector at its native mode. A profile's `mode` (a size, no refresh rate)
-states the mode its positions assume. If the monitor comes up at a different
-mode, the profile does not apply, the current layout stays, and the log names
-both modes. Omit `mode` to skip the check.
+`mode` is the size to light the monitor at, in physical pixels, and `refresh`
+the rate, in Hz:
+
+```json
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "laptop-fast",
+        "displays": [{ "display": "drm-1", "mode": [1920, 1080], "refresh": 120 }]
+      }
+    ]
+  }
+}
+```
+
+- Without `mode`, the monitor lights at its native mode.
+- `refresh` picks the rate the monitor offers nearest it, at `mode` or the
+  native size. Without it, a native-size monitor keeps its native rate and any
+  other size gets its fastest, as in sway.
+- A `mode` the monitor does not offer refuses the profile: the current layout
+  stays, and the log lists the sizes it does offer.
+- Positions are laid out at the requested mode, so the profile's other
+  displays land where it says.
 
 ### `transform`
 

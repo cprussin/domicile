@@ -213,6 +213,26 @@ typedef struct DomicileRampedDisplay {
   uint32_t gamma_size;
 } DomicileRampedDisplay;
 
+// A mode a display's connector advertises, for `moded_displays`.
+typedef struct DomicileDisplayMode {
+  // In physical pixels.
+  int32_t width;
+  int32_t height;
+  // In mHz, as wl_output.mode states it.
+  int32_t refresh_mhz;
+} DomicileDisplayMode;
+
+// A display, its connector, its gamma ramp's size and the modes it
+// advertises, for `moded_displays`.
+typedef struct DomicileModedDisplay {
+  DomicileRampedDisplay ramped;
+  // `mode_count` modes, borrowed for the call; null when there are none. A
+  // display on a platform that sets no modes advertises none. The display's
+  // own size and `refresh_mhz` are the mode it scans out.
+  const DomicileDisplayMode* modes;
+  uint32_t mode_count;
+} DomicileModedDisplay;
+
 // How the compositor wants one display's connector driven.
 //
 // The reverse of DomicileDisplay: the compositor's config decides, but the
@@ -239,6 +259,19 @@ typedef struct DomicileDisplayLayout {
   int32_t desk_width;
   int32_t desk_height;
 } DomicileDisplayLayout;
+
+// A display layout and the mode to drive it at, for
+// `domicile_displays_configure_modes`.
+typedef struct DomicileModedLayout {
+  DomicileDisplayLayout layout;
+  // The mode to scan out, in physical pixels, or zeros for the native one. A
+  // size the connector does not advertise gets the native mode.
+  int32_t mode_width;
+  int32_t mode_height;
+  // The refresh rate in mHz: the advertised one nearest it is used. Zero for
+  // the native mode's, or the fastest at a non-native mode.
+  int32_t refresh_mhz;
+} DomicileModedLayout;
 
 // A tablet or touchscreen and the display it covers, for
 // `domicile_pointers_configure`.
@@ -438,6 +471,14 @@ typedef struct DomicileEngineCallbacks {
   void (*ramped_displays)(void* user_data,
                           const DomicileRampedDisplay* displays,
                           uint32_t count);
+  // Like `ramped_displays`, plus the modes each display advertises.
+  // `displays` points at `count` records borrowed for the call.
+  //
+  // Called instead of `ramped_displays`, `connected_displays` and `displays`
+  // when set. An older engine ignores it.
+  void (*moded_displays)(void* user_data,
+                         const DomicileModedDisplay* displays,
+                         uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
@@ -631,6 +672,14 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_sync(DomicileEngine* engine,
 DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
     DomicileEngine* engine,
     const DomicileDisplayLayout* layout,
+    uint32_t count);
+
+// Like `domicile_displays_configure`, with the mode and refresh rate to drive
+// each connector at. A compositor that finds no such symbol has an older
+// engine, which lights each connector at its native mode.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure_modes(
+    DomicileEngine* engine,
+    const DomicileModedLayout* layout,
     uint32_t count);
 
 // Tells the browser which display each tablet or touchscreen covers.

@@ -19,6 +19,7 @@ fn connected(name: &str, description: &str) -> Connected {
         description: description.to_owned(),
         spelled_out: String::new(),
         mode: (1920, 1080),
+        modes: Vec::new(),
     }
 }
 
