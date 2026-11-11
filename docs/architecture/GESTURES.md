@@ -24,7 +24,7 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 |---|---|---|
 | Acquisition | engine `libinput_event_converter.cc`, `wayland_zwp_pointer_gestures.cc` (patch `0184`) | Turns libinput or host pinch into a `ui::GestureEvent` carrying `NativePinch`: phase, device, time, fingers, absolute scale, rotation, cancellation |
 | Page | engine `touchpad_pinch_event_queue.cc`, `mouse_wheel_event_manager.cc` | Keeps native pinches out of coalescing and page zoom. A canceled `wheel` claims the gesture for the shell |
-| Page zoom | engine `cross_process_frame_connector.cc`, `render_widget_host_view_aura.cc` (patch `0197`) | A pinch a `<webview>`'s page leaves alone magnifies that page. The desk never takes a plain pinch |
+| Page zoom | engine `cross_process_frame_connector.cc`, `render_widget_host_view_aura.cc` (patch `0197`) | A pinch a `<webview>`'s page leaves alone magnifies that page, unless the page is a PDF: its viewer zooms by re-rendering, and a page scale would pixelate it. The desk never takes a plain pinch |
 | Desk zoom | engine `render_widget_host_input_event_router.cc`, `event_factory_evdev.cc`, `wayland_event_source.cc` (patch `0197`) | A pinch begun with Meta held, or Meta+scroll, goes straight to the desk's page scale: no hit test and no synthetic ctrl+wheel, so no page or `<app>` sees it |
 | `<app>` | `html_app_element.cc` | Forwards the pinch to its client as `pointer_pinch` |
 | Wire | `domicile_protocol::pinch::Pinch` | `begin`, `update`, `end` |
