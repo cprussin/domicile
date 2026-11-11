@@ -167,6 +167,18 @@ export type System = {
     display?: string,
   ) => Promise<Result<"set", SystemError>>;
   /**
+   * Turn every monitor off now, keeping windows and workspaces as they are.
+   * Input more than a second later lights them again, as does
+   * {@link System.wakeDisplays}. Allowed while the desktop is locked. See
+   * docs/IDLE.md#sleeping-on-demand.
+   */
+  sleepDisplays: () => Promise<Result<"set", SystemError>>;
+  /**
+   * Light the monitors again, after {@link System.sleepDisplays} or idle
+   * blanking. Allowed while the desktop is locked.
+   */
+  wakeDisplays: () => Promise<Result<"set", SystemError>>;
+  /**
    * Hear each maximize and fullscreen request a client makes. The compositor
    * grants none; grant one with {@link System.setWindowStates}. Allowed while
    * the desktop is locked.
@@ -363,6 +375,10 @@ export const system = (host: SystemHost): System => {
       listening(calls, { call: "shell_commands" }, (event) =>
         event.kind === "shell_command" ? event.command : unexpected(event),
       ),
+    sleepDisplays: () =>
+      oneShot(calls, { call: "sleep_displays" }, (reply) =>
+        reply.kind === "set" ? "set" : unexpected(reply),
+      ),
     spawn: (argv, options) => spawn(calls, argv, options),
     stat: (path) =>
       oneShot(calls, { call: "stat", path }, (reply) =>
@@ -390,6 +406,10 @@ export const system = (host: SystemHost): System => {
               retryInMs: event.retry_in_ms,
             }
           : unexpected(event),
+      ),
+    wakeDisplays: () =>
+      oneShot(calls, { call: "wake_displays" }, (reply) =>
+        reply.kind === "set" ? "set" : unexpected(reply),
       ),
     watch: (path) =>
       listening<Listened<string>>(
