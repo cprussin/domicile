@@ -29,8 +29,6 @@ the detail, when there is one. Remove a gap when it's fixed.
   (including that viz declines it under `backdrop-filter`), damage and
   presentation latency are unmeasured. Revisit if real hardware shows a
   performance problem. [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#plan).
-- **A monitor profile can require a mode but not set it.** Same for refresh
-  rate. [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md).
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](/docs/architecture/DISPLAY-TILINGS.md#cost).
 - **The night light can't warm a DisplayLink monitor.** Its driver (`evdi`)

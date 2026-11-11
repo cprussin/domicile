@@ -98,13 +98,20 @@
       };
       mode = lib.mkOption {
         description = ''
-          The mode this entry expects, in physical pixels. Domicile does not set
-          modes: the engine lights each connector at its native mode. If the
-          monitor comes up at a different mode, the running desktop is left as
-          is and the mismatch is reported. Size only; the refresh rate cannot be
-          chosen. `null` accepts any mode.
+          The mode to light this monitor at, in physical pixels. If the monitor
+          offers no mode of this size, the running desktop is left as is and
+          the problem is reported. `null` uses the monitor's native mode.
         '';
         type = lib.types.nullOr (pairOf lib.types.ints.positive);
+        default = null;
+      };
+      refresh = lib.mkOption {
+        description = ''
+          The refresh rate to light this monitor at, in Hz, such as `59.94` or
+          `120`. The nearest rate the monitor offers is used. `null` uses the
+          native mode's rate, or the highest one at a non-native `mode`.
+        '';
+        type = lib.types.nullOr lib.types.numbers.positive;
         default = null;
       };
       position =

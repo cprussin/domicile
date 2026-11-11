@@ -120,8 +120,11 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
       continue;
     }
     // Pass the mode borrowed: the params constructor clones it, so cloning
-    // here too would leak a DisplayMode per display on every hotplug.
-    params.emplace_back(snapshot->display_id(), origins[index], native_mode);
+    // here too would leak a DisplayMode per display on every hotplug. The
+    // profile's mode if the connector advertises it, as the display list
+    // sizes the window; see `ModeForLayout`.
+    params.emplace_back(snapshot->display_id(), origins[index],
+                        ModeForLayout(*snapshot, wanted));
   }
   return params;
 }

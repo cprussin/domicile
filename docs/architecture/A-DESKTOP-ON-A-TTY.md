@@ -92,8 +92,9 @@ ozone/drm has two gaps that ash fills on ChromeOS:
 
 `DrmModeset` gets a delegate from `OzonePlatform::CreateNativeDisplayDelegate()`
 and runs `GetDisplays` → `ModesetParamsFromSnapshots` → `Configure`. Each
-connector gets its `native_mode()` unless a layout says otherwise
-([DISPLAYS.md](../DISPLAYS.md#which-connectors-light)).
+connector gets its `native_mode()` unless a layout turns it off or asks for
+another mode ([DISPLAYS.md](../DISPLAYS.md#which-connectors-light),
+[DISPLAYS.md](../DISPLAYS.md#profiles)).
 
 Two guards:
 
