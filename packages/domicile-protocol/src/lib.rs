@@ -1936,6 +1936,10 @@ pub enum SystemRequest {
     /// with [`SystemReply::Started`], then a [`SystemEvent::WindowRequest`]
     /// per request. [`SystemRequest::Unwatch`] ends it.
     WindowRequests,
+    /// Report each time a client rings `xdg_system_bell_v1`. Answered with
+    /// [`SystemReply::Started`], then a [`SystemEvent::Bell`] per ring.
+    /// [`SystemRequest::Unwatch`] ends it.
+    Bells,
     /// Add a monitor with no connector, `width`×`height` pixels at
     /// `refresh_mhz`, which the desk extends onto and only a capture shows:
     /// casting to a TV. `name` becomes its description. Answered with
@@ -2169,6 +2173,9 @@ pub enum SystemEvent {
         app_id: String,
         request: WindowRequest,
     },
+    /// A client rang the bell, from window `app_id`, or from none when it
+    /// named no surface or one that is not a window.
+    Bell { app_id: Option<String> },
     /// The keymaps the desktop switches between, in the config's order, and
     /// the name of the one it types on.
     Keymaps {

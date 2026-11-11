@@ -80,3 +80,6 @@ export const wireWindowState = (state: WindowState): string => {
       return "resizing";
   }
 };
+
+/** A client rang the bell, from window `appId`, or from none. */
+export type Bell = { readonly appId: string | undefined };

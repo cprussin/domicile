@@ -500,6 +500,16 @@ grants nothing: nothing changes until the shell sets states.
   shell's.
 - A shell that does not listen ignores every request.
 
+### Bells
+
+A terminal rings its bell (`xdg-system-bell-v1`), and the compositor tells the
+shell. It plays no sound and marks nothing itself.
+
+- `domicile.windows.bells()` streams each ring as a `Bell`, with the `appId`
+  of the window that rang, or `undefined` when the client named no window.
+- What a bell does is up to the shell: flash the window's tab, play a sound,
+  or mark the window urgent.
+
 `shell-manganese` tiles with all four tiled states, sets none on floats, and
 makes a window fullscreen while its client asks to be.
 

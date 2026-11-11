@@ -4,8 +4,8 @@
 //! answers frame callbacks and flushes clients, so a stall on a socket freezes
 //! input for every client, long enough for a held key to start repeating.
 //!
-//! The queue is unbounded. It carries only lifecycle messages and clients'
-//! window requests, which cannot be dropped. They are small and arrive at the
+//! The queue is unbounded. It carries only lifecycle messages, clients'
+//! window requests and bells, which cannot be dropped. They are small and arrive at the
 //! rate windows open, close and change state.
 
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
@@ -21,6 +21,9 @@ pub enum Outbound {
     /// page is written to under its connection's lock, which may wait on a
     /// chrome that is not reading.
     WindowRequest(AppId, WindowRequest),
+    /// For the pages listening for bells, for the same reason: the window
+    /// that rang, if any.
+    Bell(Option<AppId>),
 }
 
 /// The sending half, held by the Wayland thread.
@@ -48,6 +51,11 @@ impl OutboundSender {
     /// Queue a client's window request. Never waits and never drops.
     pub fn window_request(&self, app_id: AppId, request: WindowRequest) {
         let _ = self.sender.send(Outbound::WindowRequest(app_id, request));
+    }
+
+    /// Queue a bell. Never waits and never drops.
+    pub fn bell(&self, app_id: Option<AppId>) {
+        let _ = self.sender.send(Outbound::Bell(app_id));
     }
 }
 

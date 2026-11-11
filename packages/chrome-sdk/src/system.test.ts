@@ -836,6 +836,28 @@ describe("window states", () => {
   });
 });
 
+describe("bells", () => {
+  it("streams each bell a client rings, with its window or none", async () => {
+    const host = new FakeHost();
+    const listening = system(host).bells();
+    host.reply(1, { kind: "started" });
+    const bells = started(await listening);
+    host.event(1, { app_id: "app-1", kind: "bell" });
+    host.event(1, { app_id: null, kind: "bell" });
+    bells.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "bells" }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(bells.items)).toStrictEqual([
+      { appId: "app-1" },
+      { appId: undefined },
+    ]);
+  });
+});
+
 describe("virtual monitors", () => {
   const aTv = {
     height: 1080,

@@ -49,7 +49,7 @@ import type {
   SystemReplyMessage,
 } from "../system-message";
 import { parseSystemMessage } from "../system-message";
-import type { WindowState } from "../window-state";
+import type { Bell, WindowState } from "../window-state";
 import { WindowRequest, wireWindowState } from "../window-state";
 
 /**
@@ -171,6 +171,11 @@ export type System = {
    */
   windowRequests: () => Promise<Result<Listening<WindowRequest>, SystemError>>;
   /**
+   * Hear each time a client rings the bell, such as a terminal's `\a`. The
+   * compositor makes no sound. Allowed while the desktop is locked.
+   */
+  bells: () => Promise<Result<Listening<Bell>, SystemError>>;
+  /**
    * Add a monitor with no connector, which the desk extends onto and only a
    * capture shows: casting to a TV. A later `displays` lists it. It lasts
    * until removed, or until the page goes away. Fails
@@ -207,6 +212,12 @@ export const system = (host: SystemHost): System => {
   const calls = callsOn(host);
   return {
     addVirtualMonitor: (mode) => addVirtualMonitor(calls, mode),
+    bells: () =>
+      listening(calls, { call: "bells" }, (event) =>
+        event.kind === "bell"
+          ? { appId: event.app_id ?? undefined }
+          : unexpected(event),
+      ),
     createDir: (path) =>
       oneShot(calls, { call: "create_dir", path }, (reply) =>
         reply.kind === "created" ? "created" : unexpected(reply),

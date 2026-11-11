@@ -61,6 +61,8 @@ export const Shell = async (root, domicile) => {
 - `windows.setStates()` and `windows.requests()` set a window's tiled,
   maximized and fullscreen states and hear clients ask for them; see
   [WRITING-A-SHELL.md](WRITING-A-SHELL.md#window-states).
+- `windows.bells()` hears clients ring the bell; see
+  [WRITING-A-SHELL.md](WRITING-A-SHELL.md#bells).
 - `displays.addVirtual()` adds a monitor with no connector, which the desk
   extends onto, until `remove()` or the page goes away. Casting to a TV uses
   it; see [CASTING-TO-TVS.md](CASTING-TO-TVS.md). Manganese's

@@ -69,6 +69,10 @@ pub struct Arguments {
     /// checks can tell a closed window apart from a client disconnecting.
     pub outlive_its_window: bool,
 
+    /// Whether to ring `xdg_system_bell_v1` once mapped: once with its
+    /// surface, then once with none.
+    pub ring_the_bell: bool,
+
     /// Whether to read and trace every offer on either selection.
     ///
     /// Selections are only offered to the focused client, so this only works
@@ -248,6 +252,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut hold_the_screens_on = None;
     let mut inhibit_shortcuts = None;
     let mut outlive_its_window = None;
+    let mut ring_the_bell = None;
     let mut copy = None;
     let mut copy_primary = None;
     let mut notify = None;
@@ -323,6 +328,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             }
             "--outlive-its-window" => {
                 take(&mut outlive_its_window, &flag, true)?;
+            }
+            "--ring-the-bell" => {
+                take(&mut ring_the_bell, &flag, true)?;
             }
             "--copy" => {
                 take(&mut copy, &flag, value(&mut args, &flag)?)?;
@@ -406,6 +414,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         hold_the_screens_on,
         inhibit_shortcuts,
         outlive_its_window: outlive_its_window.unwrap_or(false),
+        ring_the_bell: ring_the_bell.unwrap_or(false),
         copy,
         copy_primary,
         notify,

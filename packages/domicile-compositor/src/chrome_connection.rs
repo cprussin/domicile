@@ -244,6 +244,7 @@ fn read_chrome_messages(
         }
     })
     .sharing_window_requests(hub.window_requests.clone())
+    .sharing_bells(hub.bells.clone())
     .adding_virtual_monitors_with({
         let hub = hub.clone();
         move |wanted| {

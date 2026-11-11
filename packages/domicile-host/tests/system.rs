@@ -1193,6 +1193,46 @@ mod window_states {
     }
 }
 
+/// Clients ringing the bell, which the compositor reports.
+mod bells {
+    use domicile_host::bells::Bells;
+
+    use super::*;
+
+    #[test]
+    fn a_page_listening_hears_each_ring_until_it_stops() {
+        let bells = Bells::default();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let page = system.sharing_bells(bells.clone());
+        page.handle(7, SystemRequest::Bells);
+        assert_eq!(reply(&heard, 7), SystemReply::Started);
+
+        bells.send(&Some("app-1".into()));
+        bells.send(&None);
+        for app_id in [Some("app-1".to_string()), None] {
+            assert_eq!(
+                next(&heard),
+                HostMessage::SystemEvent {
+                    id: 7,
+                    event: SystemEvent::Bell { app_id },
+                }
+            );
+        }
+
+        page.handle(7, SystemRequest::Unwatch);
+        bells.send(&None);
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 7,
+                end: SystemEnd::Stopped,
+            }
+        );
+        assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+        assert_eq!(reach(&SystemRequest::Bells), Reach::Listens);
+    }
+}
+
 /// What holds the desktop awake, which the compositor lists.
 mod idle_holds {
     use domicile_host::idle_holds::IdleHolds;
@@ -1580,6 +1620,7 @@ mod apps {
             SystemRequest::IdleWarnings,
             SystemRequest::UnlockRefusals,
             SystemRequest::WindowRequests,
+            SystemRequest::Bells,
             SystemRequest::SetWindowStates {
                 app_id: "app-1".into(),
                 states: Vec::new(),
