@@ -257,12 +257,14 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
     DomicileDeskLaidOut(std::nullopt);
     return;
   }
+  // A dark display with a place on the desk sleeps: it keeps that place.
   std::vector<DomicileDeskDisplay> lit;
   for (const ui::DomicileDisplayLayout& display : wanted) {
-    if (display.enabled) {
+    if (display.enabled || !display.desk.IsEmpty()) {
       lit.push_back({.id = display.id,
                      .desk = display.desk,
-                     .scale = static_cast<float>(display.scale)});
+                     .scale = static_cast<float>(display.scale),
+                     .lit = display.enabled});
     }
   }
   DomicileDeskLaidOut(std::move(lit));

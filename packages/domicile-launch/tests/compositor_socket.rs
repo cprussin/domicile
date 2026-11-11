@@ -264,9 +264,13 @@ fn the_compositor_is_told_to_send_the_command_and_says_it_did() {
 
 #[test]
 fn the_compositor_is_told_to_sleep_or_wake_the_displays_and_says_it_did() {
-    for (power, call) in [
-        (DisplayPower::Asleep, "sleep_displays"),
-        (DisplayPower::Awake, "wake_displays"),
+    for (power, display, request) in [
+        (DisplayPower::Asleep, None, "{\"call\":\"sleep_displays\"}"),
+        (
+            DisplayPower::Awake,
+            Some("DP-1"),
+            "{\"call\":\"wake_displays\",\"display\":\"DP-1\"}",
+        ),
     ] {
         let (_scratch, path) = scratch();
         let heard = a_compositor(
@@ -275,12 +279,10 @@ fn the_compositor_is_told_to_sleep_or_wake_the_displays_and_says_it_did() {
             Some("{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"set\"}}\n"),
         );
 
-        assert_eq!(power_displays(&path, power, Some(BRIEFLY)), Ok(()));
+        assert_eq!(power_displays(&path, power, display, Some(BRIEFLY)), Ok(()));
         assert_eq!(
             heard.join().expect("the compositor was listening"),
-            format!(
-                "{{\"type\":\"system_request\",\"id\":1,\"request\":{{\"call\":\"{call}\"}}}}\n"
-            )
+            format!("{{\"type\":\"system_request\",\"id\":1,\"request\":{request}}}\n")
         );
     }
 }

@@ -24,9 +24,11 @@ use tracing::debug;
 use domicile_host::system::DisplayPower;
 
 use crate::client_requests::ClientRequest;
+use crate::display_sleep::asleep_in;
 use crate::held_frames::HeldFrames;
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::screen_saver::{self, Change, Hold, BROWSER};
+use crate::screens::name_of;
 use crate::{CalloopData, DomicileCompositor};
 
 /// Routes `zwp_idle_inhibitor_v1` requests to the idle clock.
@@ -171,19 +173,26 @@ impl DomicileCompositor {
         Ok(())
     }
 
-    /// Turn the monitors off or on because somebody asked. See
+    /// Turn the monitor named `output`, or every monitor, off or on because
+    /// somebody asked. See
     /// [`crate::display_sleep`].
     ///
     /// A wake also stirs the idle clock, through
     /// [`keep_the_desktop_awake`](DomicileCompositor::keep_the_desktop_awake),
     /// so it lights screens idle blanking turned off too.
-    pub fn power_the_displays(&mut self, power: DisplayPower) {
-        let changed = match power {
-            DisplayPower::Asleep => self.display_sleep.sleep(Instant::now()),
-            DisplayPower::Awake => self.display_sleep.wake(),
+    pub fn power_the_displays(&mut self, power: DisplayPower, output: Option<&str>) {
+        let changed = match (power, output) {
+            (DisplayPower::Asleep, None) => self.display_sleep.sleep(Instant::now()),
+            (DisplayPower::Awake, None) => self.display_sleep.wake(),
+            (DisplayPower::Asleep, Some(name)) => self.display_sleep.sleep_one(name),
+            (DisplayPower::Awake, Some(name)) => self.display_sleep.wake_one(name),
         };
         if changed {
-            debug!(?power, "somebody asked to turn this desktop's screens");
+            debug!(
+                ?power,
+                ?output,
+                "somebody asked to turn this desktop's screens"
+            );
             self.state_the_connectors();
         }
     }
@@ -191,9 +200,11 @@ impl DomicileCompositor {
     /// Tell the engine which connectors to light.
     ///
     /// Awake: [`Screens::scanout`] (a profile's connectors, or empty for no
-    /// opinion). Dark, from idle blanking or [`crate::display_sleep`]: every
-    /// reported connector, turned off. An empty list would light everything,
-    /// so an empty [`crate::idle::darkened`] is not sent.
+    /// opinion), less the monitors slept by name
+    /// ([`crate::display_sleep::asleep_in`]). Dark, from idle blanking or
+    /// [`crate::display_sleep`]: every reported connector, turned off. An
+    /// empty list would light everything, so an empty
+    /// [`crate::idle::darkened`] is not sent.
     pub fn state_the_connectors(&self) {
         // Every blanking edge passes here.
         self.tell_the_portal_about_the_screensaver();
@@ -205,8 +216,21 @@ impl DomicileCompositor {
             if !dark.is_empty() {
                 session.configure_displays(&dark);
             }
-        } else {
+        } else if self.display_sleep.sleeping().is_empty() {
             session.configure_displays(self.screens.scanout());
+        } else {
+            let names = self.display_sleep.sleeping();
+            let asleep: Vec<i64> = self
+                .engine_displays
+                .iter()
+                .filter(|display| names.contains(&name_of(display)))
+                .map(|display| display.id)
+                .collect();
+            session.configure_displays(&asleep_in(
+                &self.engine_displays,
+                self.screens.scanout(),
+                &asleep,
+            ));
         }
     }
 
@@ -221,7 +245,10 @@ impl DomicileCompositor {
     /// unappliable profile) nothing else sets the connectors. Only acts when
     /// dark, to avoid a needless modeset.
     pub fn keep_the_screens_dark(&self) {
-        if self.the_screens_are_dark() || self.display_sleep.asleep() {
+        if self.the_screens_are_dark()
+            || self.display_sleep.asleep()
+            || !self.display_sleep.sleeping().is_empty()
+        {
             self.state_the_connectors();
         }
     }

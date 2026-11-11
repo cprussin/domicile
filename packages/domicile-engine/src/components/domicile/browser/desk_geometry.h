@@ -17,8 +17,8 @@
 
 namespace domicile {
 
-// One lit display and its position on the desk, from the display profile or
-// the hardware.
+// One display and its position on the desk, from the display profile or the
+// hardware.
 //
 // On a tty the shell is one page spanning every display. See
 // docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
@@ -29,6 +29,9 @@ struct DeskPlace {
   gfx::Rect desk;
   float scale = 1.0f;
   float refresh_hz = 0.0f;
+  // False for a display that sleeps (`domicile sleep-displays <name>`): it
+  // keeps its place on the page, but nothing is shown on it.
+  bool lit = true;
 
   friend bool operator==(const DeskPlace&, const DeskPlace&) = default;
 };
@@ -39,7 +42,7 @@ struct DeskGeometry {
   gfx::Rect box;
   // The largest display scale, which the page lays out and rasters at.
   float scale = 1.0f;
-  // The display whose window loads the page. The fastest one, since its
+  // The display whose window loads the page. The fastest lit one, since its
   // BeginFrames drive the page; ties go to the first (the primary).
   int64_t host = 0;
 };
@@ -49,7 +52,8 @@ struct DeskGeometry {
 // - `lit` is the places the compositor's layout lights, or `std::nullopt` for
 //   an empty layout. An empty layout leaves each display where the hardware
 //   put it: at its CRTC rectangle, unscaled, as the compositor advertises it.
-// - A layout that lights no display is a blank: every screen is off. The desk
+// - A layout that lights no display is a blank: every screen is off, even
+//   when it keeps a sleeping display's place. The desk
 //   stays at `before`, the places it was last laid out on, less any display
 //   not in `displays`. Its windows and presenters then outlive the blank, and
 //   each monitor shows the page's current frame when it lights again.
