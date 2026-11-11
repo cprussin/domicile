@@ -1,3 +1,7 @@
+> "This project is everything the Linux community stands against. It is a disgrace."
+>
+> — XDA Developers commenter, 2026
+
 # Domicile
 
 **You're already running two compositors. Why not make it one? Your desktop lays out websites, native windows are DOM elements, and Chromium *is* the compositor. May God have mercy on our souls.**
