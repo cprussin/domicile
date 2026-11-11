@@ -66,7 +66,7 @@ for _ in range(100):
 else:
     print("never listened")
     sys.exit()
-connection.sendall(b'{"protocol_version":1,"type":"hello"}\n')
+connection.sendall(b'{"checked":false,"protocol_version":1,"type":"hello"}\n')
 connection.settimeout(2)
 types = []
 try:
