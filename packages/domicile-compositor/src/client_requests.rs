@@ -179,6 +179,8 @@ pub enum ClientRequest {
     /// [`DomicileCompositor::power_the_displays`].
     PowerDisplays {
         power: DisplayPower,
+        /// One monitor's `wl_output` name, or `None` for every one.
+        display: Option<String>,
     },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
@@ -648,7 +650,9 @@ impl DomicileCompositor {
                 self.gamma.set_white_point(output.as_deref(), white_point);
                 self.restate_the_gamma();
             }
-            ClientRequest::PowerDisplays { power } => self.power_the_displays(power),
+            ClientRequest::PowerDisplays { power, display } => {
+                self.power_the_displays(power, display.as_deref());
+            }
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
             ClientRequest::Spawn { command } => spawn_client(

@@ -309,23 +309,27 @@ fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
 
 #[test]
 fn a_desktop_told_to_sleep_or_wake_the_displays_tells_the_compositor() {
-    for (line, power) in [
-        ("{\"type\":\"sleep_displays\"}", DisplayPower::Asleep),
-        ("{\"type\":\"wake_displays\"}", DisplayPower::Awake),
+    for (line, power, display) in [
+        ("{\"type\":\"sleep_displays\"}", DisplayPower::Asleep, None),
+        (
+            "{\"type\":\"wake_displays\",\"display\":\"DP-1\"}",
+            DisplayPower::Awake,
+            Some("DP-1".to_string()),
+        ),
     ] {
-        let told = Cell::new(None);
+        let told = RefCell::new(None);
         let answered = reply_to(
             line,
             &Desktop {
-                power_displays: &|power| {
-                    told.set(Some(power));
+                power_displays: &|power, display| {
+                    told.replace(Some((power, display.map(str::to_string))));
                     Ok(())
                 },
                 ..nothing_dialed()
             },
         );
 
-        assert_eq!(told.take(), Some(power));
+        assert_eq!(told.take(), Some((power, display)));
         assert_eq!(answered, Response::Powered);
     }
 }
@@ -336,7 +340,7 @@ fn a_compositor_that_did_not_sleep_the_displays_is_quoted() {
         reply_to(
             "{\"type\":\"sleep_displays\"}",
             &Desktop {
-                power_displays: &|_| Err("no compositor".to_string()),
+                power_displays: &|_, _| Err("no compositor".to_string()),
                 ..nothing_dialed()
             },
         ),
@@ -927,7 +931,7 @@ fn nothing_dialed() -> Desktop<'static> {
         open_app: &|_, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
-        power_displays: &|_| panic!("only sleep_displays and wake_displays power them"),
+        power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),

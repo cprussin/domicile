@@ -156,7 +156,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     open_app: &|_, _, _| panic!("a question about this desktop reaches no engine"),
                     run_app: &|_, _| panic!("a question about this desktop reaches no engine"),
                     send: &|_| panic!("a question about this desktop reaches no compositor"),
-                    power_displays: &|_| {
+                    power_displays: &|_, _| {
                         panic!("a question about this desktop reaches no compositor")
                     },
                     permissions: &|| panic!("a question about this desktop reaches no engine"),

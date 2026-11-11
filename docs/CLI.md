@@ -90,19 +90,23 @@ when no page listens for commands.
 Set the theme until the desktop restarts, or print it. Set `theme.mode` in
 the config to keep one.
 
-## `domicile sleep-displays`
+## `domicile sleep-displays [display]`
 
 Turn every monitor off now. Windows, workspaces and the layout stay as they
 are, and programs keep running. A key, a click or a pointer move lights them
 again, as does `wake-displays`. Input in the first second is ignored, so
 letting go of Enter or of the keybinding that ran it does not undo it. In
-manganese, bind `exec domicile sleep-displays`. See
+manganese, bind `exec domicile sleep-displays`.
+
+With a display, by its output name (`DP-1`, `drm-12345`), turn only that one
+off. It keeps its windows and workspace, the pointer does not enter it, and it
+stays off through input until `wake-displays` names it or names none. See
 [IDLE.md](IDLE.md#sleeping-on-demand).
 
-## `domicile wake-displays`
+## `domicile wake-displays [display]`
 
-Turn the monitors back on, after `sleep-displays` or idle blanking. For a
-script, or over SSH.
+Turn the monitors back on, after `sleep-displays` or idle blanking, or only
+the display named. For a script, or over SSH.
 
 ## `domicile disable-while-typing [on|off|toggle]`
 
