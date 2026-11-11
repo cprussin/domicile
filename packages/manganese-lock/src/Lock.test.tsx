@@ -258,6 +258,38 @@ describe("Lock", () => {
       expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
     });
 
+    it("is taken back from anything else on the page", () => {
+      // The shell draws more than the lock, and any of it could take focus
+      // under the sheet.
+      render(
+        <>
+          <input aria-label="Elsewhere" />
+          <Lock
+            checking={false}
+            locked
+            onUnlock={() => undefined}
+            refusals={0}
+            screen={SCREEN}
+          />
+        </>,
+        { wrapper: OnOneScreen },
+      );
+
+      screen.getByLabelText("Elsewhere").focus();
+
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
+
+    it("types into the field when focus has gone nowhere", async () => {
+      // Focus falls to the page's body when what held it goes away.
+      const { field, user } = lock();
+
+      field().blur();
+      await user.keyboard("hunter2");
+
+      expect(field().value).toBe("hunter2");
+    });
+
     it("comes back to the field after the bar is used", async () => {
       // A slider takes focus on a click, and the next key typed would move it.
       render(
