@@ -157,6 +157,7 @@ class ControlChannel : public mojom::ControlChannel {
   void UngrabShortcut(mojom::ShortcutPtr shortcut) override;
   void GrabGesture(mojom::GestureGrabPtr grab) override;
   void UngrabGesture(mojom::GestureGrabPtr grab) override;
+  void KeyboardWindowInhibitsShortcuts(bool inhibits) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
   void PointerMotion(const std::string& app_id,
                      double x,

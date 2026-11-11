@@ -36,6 +36,12 @@ struct GestureGrab {
 // took its begin: each page grabs the same gestures, and telling every page
 // would run a binding once per monitor.
 //
+// While a channel's keyboard window holds a shortcuts inhibitor (a VM, a
+// remote desktop viewer), that channel grabs nothing, as its chords become the
+// window's keys. A bound swipe or hold then goes the unbound way below, and a
+// bound pinch or edge swipe is not taken. The owner is picked at begin, so an
+// inhibitor that comes or goes mid-gesture changes nothing until it ends.
+//
 // A swipe or hold of three or more fingers the shell did not grab goes to the
 // first channel that forwards them, which hands it to the compositor for the
 // native window under the pointer: what the shell leaves, the apps get. Fewer
@@ -76,6 +82,10 @@ class DeskGestures : public ui::NativeGestureSink {
   // `channel` gives `grab` back.
   void Ungrab(ChannelId channel, GestureGrab grab);
 
+  // Whether `channel`'s keyboard window holds a shortcuts inhibitor, so its
+  // grabs take nothing from the next gesture's begin on.
+  void SetInhibited(ChannelId channel, bool inhibited);
+
   // Calls `touched` on each phase of a touchpad gesture this takes. One
   // listener: the browser's pointer, which a touchpad gesture shows.
   void ListenForTouchpad(base::RepeatingClosure touched);
@@ -90,6 +100,7 @@ class DeskGestures : public ui::NativeGestureSink {
     Performed performed;
     Performed unbound;
     std::vector<GestureGrab> grabs;
+    bool inhibited = false;
   };
 
   struct Owner {
@@ -98,7 +109,7 @@ class DeskGestures : public ui::NativeGestureSink {
     bool unbound = false;
   };
 
-  // The first channel grabbing the gesture `begin` begins.
+  // The first channel not inhibited grabbing the gesture `begin` begins.
   const Channel* Grabbing(const ui::NativeGesture& begin) const
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
   // The channel forwarding `begin`'s gesture, if nobody grabs it.

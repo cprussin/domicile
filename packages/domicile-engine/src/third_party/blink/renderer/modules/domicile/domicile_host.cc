@@ -996,6 +996,15 @@ bool DomicileHost::KeyboardWindowInhibitsShortcuts() const {
   return false;
 }
 
+void DomicileHost::TellWhetherTheKeyboardWindowInhibits() {
+  const bool inhibits = KeyboardWindowInhibitsShortcuts();
+  if (inhibits == told_inhibits_ || !EnsureBound()) {
+    return;
+  }
+  told_inhibits_ = inhibits;
+  channel_->KeyboardWindowInhibitsShortcuts(inhibits);
+}
+
 String DomicileHost::ChordFor(const DomicilePress& press) const {
   for (const GrabbedChord& grabbed : chords_) {
     if (grabbed.press == press) {
@@ -1276,6 +1285,7 @@ void DomicileHost::FocusAppKeyboard(const String& app_id) {
   if (EnsureBound()) {
     channel_->FocusApp(app_id);
   }
+  TellWhetherTheKeyboardWindowInhibits();
 }
 
 void DomicileHost::FocusChromeKeyboard() {
@@ -1283,6 +1293,7 @@ void DomicileHost::FocusChromeKeyboard() {
   if (EnsureBound()) {
     channel_->FocusChrome();
   }
+  TellWhetherTheKeyboardWindowInhibits();
 }
 
 // The window the keyboard was routed to can leave the page without anything
@@ -1580,6 +1591,7 @@ void DomicileHost::AppClosed(const String& app_id) {
   EraseIf(window_states_, [&](const DomicileWindowState& state) {
     return state.app_id == app_id;
   });
+  TellWhetherTheKeyboardWindowInhibits();
   WindowsChanged();
 }
 
@@ -1644,12 +1656,10 @@ void DomicileHost::ShortcutPressed(
 
 void DomicileHost::GesturePerformed(
     domicile::mojom::blink::GesturePtr gesture) {
-  // A window holding a shortcuts inhibitor has the desktop's gestures as well
-  // as its keys. Not held for a late listener, as a shortcut is: a gesture's
-  // updates are a stream, and a stale one moves nothing.
-  if (KeyboardWindowInhibitsShortcuts()) {
-    return;
-  }
+  // Not held for a late listener, as a shortcut is: a gesture's updates are a
+  // stream, and a stale one moves nothing. One begun while the keyboard
+  // window held a shortcuts inhibitor never reaches here: the browser process
+  // sends it to the window (`TellWhetherTheKeyboardWindowInhibits`).
   DispatchEvent(*MakeGarbageCollected<DomicileGestureEvent>(
       domicile_event_names::Gesture(), GestureKindName(gesture->kind),
       GesturePhaseName(gesture->phase), gesture->fingers, gesture->dx,
@@ -1887,6 +1897,7 @@ void DomicileHost::FocusChanged(const String& app_id) {
   // too, and a page that heard only its own asks went on forwarding every key
   // to a client that no longer had it.
   keyboard_app_ = focused_window_;
+  TellWhetherTheKeyboardWindowInhibits();
   DispatchEvent(*Event::Create(domicile_event_names::Focusedwindowchanged()));
 }
 
@@ -2300,6 +2311,7 @@ void DomicileHost::AppDesktopId(const String& app_id,
 
 void DomicileHost::AppInhibitsShortcuts(const String& app_id, bool inhibits) {
   WindowNamed(app_id).inhibits_shortcuts = inhibits;
+  TellWhetherTheKeyboardWindowInhibits();
   WindowsChanged();
 }
 

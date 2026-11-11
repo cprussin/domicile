@@ -110,4 +110,6 @@ domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor �
   grab in `DomicileHost::PageKeyDown`; shells read
   `DomicileWindow.inhibitsShortcuts`. `Ctrl+Alt+F<n>` still switches consoles:
   the engine's DRM platform takes it below the page. A `<webview>` has no
-  inhibitor, so chords pressed in one are always the shell's.
+  inhibitor, so chords pressed in one are always the shell's. The shell's
+  bound swipes and holds go to the window too
+  ([GESTURES.md](GESTURES.md)).

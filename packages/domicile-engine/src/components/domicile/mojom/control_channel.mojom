@@ -479,6 +479,12 @@ interface ControlChannel {
   // This page no longer wants `grab`. See DeskGestures::Ungrab.
   UngrabGesture(GestureGrab grab);
 
+  // Whether the window with this page's keyboard holds a shortcuts
+  // inhibitor. Its grabbed gestures then go to the window, as its grabbed
+  // chords go to it as keys. Sent when it changes. See
+  // DeskGestures::SetInhibited.
+  KeyboardWindowInhibitsShortcuts(bool inhibits);
+
   // Put the cursor where the page says, in the page's own coordinates.
   //
   // THE ONE MESSAGE ABOUT INPUT THAT GOES THE OTHER WAY, and it stops in the
