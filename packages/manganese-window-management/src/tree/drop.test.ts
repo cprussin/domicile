@@ -184,6 +184,33 @@ describe("droppedOn", () => {
       });
     });
 
+    it("takes a nested group's window dropped beside the group out of it", () => {
+      const pair = {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Window("a"),
+          LayoutNode.Container(
+            Layout.Tabbed,
+            [LayoutNode.Window("b"), LayoutNode.Window("c")],
+            1,
+          ),
+        ]),
+      };
+
+      // The group's tab names it by "c", the window leaving it.
+      expect(
+        droppedOn(pair, { id: "c", up: 0 }, { id: "c", up: 1 }, Direction.Right)
+          .root,
+      ).toMatchObject({
+        children: [
+          { id: "a" },
+          { children: [{ id: "b" }], layout: Layout.Tabbed },
+          { id: "c" },
+        ],
+        layout: Layout.Tabbed,
+      });
+    });
+
     it("splits with a window dropped on its edge, which leaves it", () => {
       expect(
         droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 1 }, Direction.Right)

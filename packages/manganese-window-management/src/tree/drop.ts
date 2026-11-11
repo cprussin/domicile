@@ -15,7 +15,6 @@ import {
   NodeKind,
   showsOneChild,
   splitFor,
-  windowsIn,
   withChildAt,
 } from "./node";
 import type { NodeRef, Path } from "./path";
@@ -34,7 +33,7 @@ import {
  * `target` names, or its middle when `edge` is `undefined`. Focus goes to the
  * moved node, and commands stay on it only if it was selected (see `landed`).
  *
- * Unchanged when `target`'s window is inside `moving`. Throws if either is not
+ * Unchanged when `target` is `moving` or inside it. Throws if either is not
  * tiled here.
  */
 export const droppedOn = (
@@ -45,12 +44,13 @@ export const droppedOn = (
 ): Tiling => {
   const root = tiledRoot(tiling);
   const from = pathToRef(root, moving);
+  const to = pathToRef(root, target);
   const node = nodeAt(root, from);
-  if (windowsIn(node).includes(target.id)) {
+  if (startsWith(to, from)) {
     return tiling;
   } else {
     return landed(
-      { ...tiling, root: movedOnto(root, from, target, edge) },
+      { ...tiling, root: movedOnto(root, from, to, target, edge) },
       node,
       selects(tiling, from),
     );
@@ -101,10 +101,10 @@ const landed = (tiling: Tiling, node: LayoutNode, selected: boolean): Tiling =>
 const movedOnto = (
   root: LayoutNode,
   from: Path,
+  to: Path,
   target: NodeRef,
   edge: Direction | undefined,
 ): LayoutNode => {
-  const to = pathToRef(root, target);
   const around = from.slice(0, -1);
   const parent = nodeAt(root, around);
   const fromAt = from.at(-1);
@@ -117,7 +117,7 @@ const movedOnto = (
     showsOneChild(parent.layout) &&
     axisOf(parent.layout) === axisOfDirection(edge) &&
     to.length === from.length &&
-    around.every((step, at) => to[at] === step)
+    startsWith(to, around)
   ) {
     return replacedAt(root, around, () =>
       movedAlong(parent, fromAt, toAt, isForward(edge)),
@@ -128,7 +128,10 @@ const movedOnto = (
       // Unreachable: the target is still in the tree.
       throw new Error(`layout tree: dropping on ${target.id} left nothing`);
     } else {
-      return placed(rest, pathToRef(rest, target), nodeAt(root, from), edge);
+      // A group around the moved node keeps its path, but its ref may name a
+      // window that just left it.
+      const at = startsWith(from, to) ? to : pathToRef(rest, target);
+      return placed(rest, at, nodeAt(root, from), edge);
     }
   }
 };
@@ -284,6 +287,10 @@ const besideNode = (
     );
   }
 };
+
+/** Whether `path` runs through `prefix`, or is it. */
+const startsWith = (path: Path, prefix: Path): boolean =>
+  prefix.length <= path.length && prefix.every((step, at) => path[at] === step);
 
 const tiledRoot = ({ root }: Tiling): LayoutNode => {
   if (root === undefined) {
