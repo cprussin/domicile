@@ -1028,6 +1028,21 @@ fn a_profile_that_asks_for_nothing_leaves_the_engine_to_choose() {
 }
 
 #[test]
+fn adaptive_sync_is_off_unless_a_profile_asks_for_it() {
+    let asked = layout(
+        r#"{ "output": { "profiles": [{ "name": "smooth",
+              "displays": [{ "display": "drm-1", "adaptive_sync": true }] }] } }"#,
+        &[offering(LAPTOP, PANEL_MODES)],
+    );
+    assert!(
+        asked.scanout()[0].adaptive_sync,
+        "the engine is asked for it"
+    );
+    let unasked = layout(ONE_PANEL, &[offering(LAPTOP, PANEL_MODES)]);
+    assert!(!unasked.scanout()[0].adaptive_sync, "off by default");
+}
+
+#[test]
 fn a_rate_alone_keeps_the_monitor_at_its_size() {
     let layout = layout(
         r#"{ "output": { "profiles": [{ "name": "fast",

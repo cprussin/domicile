@@ -70,6 +70,22 @@ describe(readSettings, () => {
     );
   });
 
+  it("reads a profile's refresh rate and adaptive sync, which Settings does not edit", () => {
+    const placement = {
+      adaptive_sync: true,
+      display: "drm-1",
+      enabled: true,
+      refresh: 120,
+      scale: 1,
+      transform: "normal" as const,
+    };
+    expect(
+      readSettings({
+        output: { profiles: [{ displays: [placement], name: "desk" }] },
+      }).map((read) => read.output.profiles[0]?.displays[0]),
+    ).toEqual(Ok(placement));
+  });
+
   it("reads an idle warning, which Settings does not edit", () => {
     const settings = readSettings({
       idle: { blank_after_seconds: 600, warn_before_seconds: 30 },

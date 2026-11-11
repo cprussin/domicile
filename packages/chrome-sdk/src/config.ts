@@ -103,6 +103,16 @@ export type DisplayConfig = {
  */
 export type DisplayPlacement = {
   /**
+   * Whether to scan out with a variable refresh rate (adaptive sync,
+   * FreeSync, G-Sync Compatible), so a frame that runs late is shown as
+   * soon as it is ready instead of at the next fixed refresh.
+   *
+   * Off by default. Asked for only where the monitor, its connector and
+   * its driver report they can; a driver that refuses it gets the same
+   * mode without it. Each display reports whether it took.
+   */
+  adaptive_sync?: boolean;
+  /**
    * The connected display this entry places, matched by exact name.
    *
    * On a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)

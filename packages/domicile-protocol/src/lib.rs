@@ -2343,9 +2343,28 @@ pub struct DisplayInfo {
     /// it. Zero when unknown.
     #[serde(default)]
     pub refresh_mhz: u32,
+    /// Whether the monitor scans out with a variable refresh rate.
+    #[serde(default)]
+    pub adaptive_sync: AdaptiveSync,
     /// How the monitor is rotated.
     #[serde(default)]
     pub transform: DisplayTransform,
+}
+
+/// Whether a monitor scans out with a variable refresh rate (adaptive sync,
+/// FreeSync, G-Sync Compatible). See `docs/DISPLAYS.md#adaptive-sync`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AdaptiveSync {
+    /// The monitor, its connector or its driver cannot, or the desktop runs
+    /// in a window.
+    #[default]
+    Unsupported,
+    /// It can, and is not: its profile does not ask for it, or the driver
+    /// refused it.
+    Off,
+    /// It is.
+    On,
 }
 
 /// How a monitor is rotated, as written in the config file.
