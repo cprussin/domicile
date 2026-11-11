@@ -12,7 +12,7 @@ use smithay::backend::allocator::Format;
 use smithay::backend::egl::native::{EGLNativeDisplay, EGLPlatform, EGLSurfacelessDisplay};
 use smithay::backend::egl::{ffi, EGLContext, EGLDevice, EGLDisplay};
 use smithay::backend::renderer::gles::GlesRenderer;
-use smithay::backend::renderer::ImportDma as _;
+use smithay::backend::renderer::{ImportDma as _, Renderer as _};
 
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
@@ -194,8 +194,15 @@ impl DmabufImporter {
 
     /// Whether a client's buffer imports. Answers the protocol's import
     /// notifier before the client can commit the buffer.
+    ///
+    /// First drops the renderer's imports of buffers clients have destroyed.
+    /// Each import keeps its buffer's memory, and the renderer only drops them
+    /// when it draws, which it never does without a `wl_shm` client or a cast.
     pub fn accepts(renderer: &mut GlesRenderer, dmabuf: &Dmabuf) -> bool {
-        renderer.import_dmabuf(dmabuf, None).is_ok()
+        renderer
+            .cleanup_texture_cache()
+            .and_then(|()| renderer.import_dmabuf(dmabuf, None))
+            .is_ok()
     }
 }
 
@@ -248,9 +255,16 @@ fn preferred_device<D>(
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CStr;
+    use std::fs::File;
+    use std::os::fd::{FromRawFd as _, OwnedFd};
+
+    use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
     use smithay::backend::allocator::{Format, Fourcc, Modifier};
 
-    use super::{advertisable, gbm_or_surfaceless_display, render_nodes};
+    use super::{
+        advertisable, gbm_or_surfaceless_display, headless_renderer, render_nodes, DmabufImporter,
+    };
 
     fn format(code: Fourcc) -> Format {
         Format {
@@ -315,5 +329,62 @@ mod tests {
     #[test]
     fn a_missing_dri_directory_is_an_error() {
         assert!(render_nodes(std::path::Path::new("/nonexistent/dri")).is_err());
+    }
+
+    /// A 2×2 `Argb8888` dmabuf over a new memfd named `name`, which llvmpipe
+    /// imports by mapping it.
+    fn dmabuf(name: &CStr) -> Dmabuf {
+        // SAFETY: a valid name, and flags the kernel defines.
+        let raw = unsafe { libc::memfd_create(name.as_ptr(), libc::MFD_CLOEXEC) };
+        assert!(
+            raw >= 0,
+            "memfd_create: {}",
+            std::io::Error::last_os_error()
+        );
+        // SAFETY: a new fd that nothing else owns.
+        let fd = unsafe { OwnedFd::from_raw_fd(raw) };
+        File::from(fd.try_clone().expect("a memfd clones"))
+            .set_len(4096)
+            .expect("a memfd grows");
+        let mut builder = Dmabuf::builder(
+            (2, 2),
+            Fourcc::Argb8888,
+            Modifier::Linear,
+            DmabufFlags::empty(),
+        );
+        builder.add_plane(fd, 0, 0, 8);
+        builder.build().expect("one plane builds")
+    }
+
+    /// The fds and mappings in this process of the memfd named `name`.
+    fn holds_on(name: &str) -> usize {
+        let fds = std::fs::read_dir("/proc/self/fd")
+            .expect("lists fds")
+            .filter_map(|entry| std::fs::read_link(entry.expect("an fd").path()).ok())
+            .filter(|target| target.to_string_lossy().contains(name))
+            .count();
+        let maps = std::fs::read_to_string("/proc/self/maps")
+            .expect("reads maps")
+            .lines()
+            .filter(|line| line.contains(name))
+            .count();
+        fds + maps
+    }
+
+    // Without a draw to clear the renderer's cache, the validation import
+    // would keep every buffer a client ever made.
+    #[test]
+    fn a_destroyed_buffer_is_let_go_by_the_next_import() {
+        let (mut renderer, _) = headless_renderer().expect("EGL: llvmpipe will do");
+        let destroyed = dmabuf(c"domicile-destroyed-buffer");
+        assert!(DmabufImporter::accepts(&mut renderer, &destroyed));
+        drop(destroyed);
+
+        assert!(DmabufImporter::accepts(
+            &mut renderer,
+            &dmabuf(c"domicile-next-buffer")
+        ));
+
+        assert_eq!(holds_on("domicile-destroyed-buffer"), 0);
     }
 }
