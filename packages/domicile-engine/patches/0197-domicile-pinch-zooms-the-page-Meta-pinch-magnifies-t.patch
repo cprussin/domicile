@@ -11,6 +11,8 @@ the pointer, and Meta+pinch or Meta+scroll magnifies the whole desk.
   browser tab has. Upstream hands it to the outermost page, the desk.
   A page that takes the pinch's ctrl+wheel keeps it, and an `<app>`
   still forwards it to its native client (patch 0184).
+  A PDF's page gets no page scale: its viewer zooms by re-rendering, and
+  a page scale would only magnify the viewer's bitmap, pixelating text.
 - `RenderWidgetHostViewAura::GestureEventAck` no longer forwards an
   unconsumed touchpad pinch to the desk's page scale, so a plain pinch
   over the shell does nothing.
@@ -27,11 +29,11 @@ job builds it on `crux`.
 ---
  .../render_widget_host_input_event_router.cc  | 54 +++++++++++++++++++
  .../render_widget_host_input_event_router.h   | 12 +++++
- .../cross_process_frame_connector.cc          |  7 +++
+ .../cross_process_frame_connector.cc          | 13 ++++++
  .../render_widget_host_view_aura.cc           |  5 +-
  ui/events/ozone/evdev/event_factory_evdev.cc  |  6 ++-
  .../wayland/host/wayland_event_source.cc      |  6 ++-
- 6 files changed, 85 insertions(+), 5 deletions(-)
+ 6 files changed, 91 insertions(+), 5 deletions(-)
 
 diff --git a/components/input/render_widget_host_input_event_router.cc b/components/input/render_widget_host_input_event_router.cc
 index c8e5f07..fb3640f 100644
@@ -146,18 +148,31 @@ index a7d8d96..8a276f9 100644
    raw_ptr<RenderWidgetHostViewInput> bubbling_gesture_scroll_origin_ = nullptr;
    // Used to target wheel events for the duration of a scroll.
 diff --git a/content/browser/renderer_host/cross_process_frame_connector.cc b/content/browser/renderer_host/cross_process_frame_connector.cc
-index 74dcb3d..e8c4b94 100644
+index 74dcb3d..8a8585f 100644
 --- a/content/browser/renderer_host/cross_process_frame_connector.cc
 +++ b/content/browser/renderer_host/cross_process_frame_connector.cc
-@@ -472,6 +472,13 @@ CrossProcessFrameConnector::GetRootRenderWidgetHostView() {
+@@ -12,6 +12,7 @@
+ #include "components/viz/common/features.h"
+ #include "content/browser/renderer_host/frame_tree.h"
+ #include "content/browser/renderer_host/frame_tree_node.h"
++#include "content/browser/renderer_host/page_impl.h"
+ #include "content/browser/renderer_host/render_frame_host_delegate.h"
+ #include "content/browser/renderer_host/render_frame_host_manager.h"
+ #include "content/browser/renderer_host/render_frame_proxy_host.h"
+@@ -472,6 +473,18 @@ CrossProcessFrameConnector::GetRootRenderWidgetHostView() {
  
  input::RenderWidgetHostViewInput*
  CrossProcessFrameConnector::GetPinchZoomTarget() {
 +  // domicile: a <webview>'s page is the main frame of an inner WebContents,
 +  // and magnifies itself, as a browser tab does. Upstream hands its pinch to
 +  // the outermost page, which here is the desk.
++  // A PDF zooms only through its viewer, which re-renders the page. A page
++  // scale would magnify the viewer's bitmap and pixelate its text.
 +  RenderFrameHostImpl* child = current_child_frame_host();
 +  if (child && child->is_main_frame()) {
++    if (child->GetPage().GetContentsMimeType() == "application/pdf") {
++      return nullptr;
++    }
 +    return view_;
 +  }
    input::RenderWidgetHostViewInput* parent = GetParentViewInput();
