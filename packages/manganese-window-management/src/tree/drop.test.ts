@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Direction } from "../direction";
-import { droppedOn } from "./drop";
+import { arrivedOn, Beside, droppedOn } from "./drop";
 import { Layout, LayoutNode } from "./node";
 import {
   focusedIdOf,
@@ -211,6 +211,74 @@ describe("droppedOn", () => {
       });
     });
 
+    it("splits a nested group with a window dropped apart from it", () => {
+      const pair = {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Window("a"),
+          LayoutNode.Container(Layout.Tabbed, [
+            LayoutNode.Window("b"),
+            LayoutNode.Window("c"),
+          ]),
+        ]),
+      };
+
+      expect(
+        droppedOn(
+          pair,
+          { id: "c", up: 0 },
+          { id: "b", up: 1 },
+          Direction.Right,
+          Beside.Apart,
+        ).root,
+      ).toMatchObject({
+        children: [
+          { id: "a" },
+          {
+            children: [
+              { children: [{ id: "b" }], layout: Layout.Tabbed },
+              { id: "c" },
+            ],
+            layout: Layout.SplitH,
+          },
+        ],
+        layout: Layout.Tabbed,
+      });
+    });
+
+    it("splits a nested group with a tab of its strip dropped apart from it", () => {
+      const groups = {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Window("a"),
+          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
+          LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("c")]),
+        ]),
+      };
+
+      expect(
+        droppedOn(
+          groups,
+          { id: "b", up: 1 },
+          { id: "c", up: 1 },
+          Direction.Right,
+          Beside.Apart,
+        ).root,
+      ).toMatchObject({
+        children: [
+          { id: "a" },
+          {
+            children: [
+              { children: [{ id: "c" }] },
+              { children: [{ id: "b" }] },
+            ],
+            layout: Layout.SplitH,
+          },
+        ],
+        layout: Layout.Tabbed,
+      });
+    });
+
     it("splits with a window dropped on its edge, which leaves it", () => {
       expect(
         droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 1 }, Direction.Right)
@@ -318,6 +386,38 @@ describe("droppedOn", () => {
       expect(
         droppedOn(TABS_BESIDE, GROUP, { id: "b", up: 0 }, Direction.Left),
       ).toBe(TABS_BESIDE);
+    });
+  });
+});
+
+describe("arrivedOn", () => {
+  it("splits a nested group with a window dropped apart from it", () => {
+    const nested = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.Tabbed, [
+        LayoutNode.Window("a"),
+        LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("b")]),
+      ]),
+    };
+
+    expect(
+      arrivedOn(
+        nested,
+        LayoutNode.Window("c"),
+        false,
+        { id: "b", up: 1 },
+        Direction.Left,
+        Beside.Apart,
+      ).root,
+    ).toMatchObject({
+      children: [
+        { id: "a" },
+        {
+          children: [{ id: "c" }, { children: [{ id: "b" }] }],
+          layout: Layout.SplitH,
+        },
+      ],
+      layout: Layout.Tabbed,
     });
   });
 });

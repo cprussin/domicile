@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Direction } from "../direction";
+import { Beside } from "../tree/drop";
 import { Layout } from "../tree/node";
 import type { Dragged, TabTarget } from "./aim";
 import { Aim, aimAt, cornerOf, tabAimAt } from "./aim";
@@ -297,6 +298,18 @@ describe("aimAt", () => {
         y: 200,
       }),
     );
+  });
+
+  it("aims apart from a group, and along a strip", () => {
+    expect(aimAt(TABS, alone("a"), 900, 200)).toMatchObject({
+      beside: Beside.Apart,
+    });
+    expect(aimAt(TABS, alone("a"), 450, 10)).toMatchObject({
+      beside: Beside.InStrip,
+    });
+    expect(aimAt(TARGETS, alone("x"), 980, 200)).toMatchObject({
+      beside: Beside.InStrip,
+    });
   });
 
   describe("with a nested group's tab on the strip", () => {

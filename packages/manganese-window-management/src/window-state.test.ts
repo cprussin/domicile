@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
+import { Beside } from "./tree/drop";
 import { Layout, LayoutNode, NodeKind, windowsIn } from "./tree/node";
 import { focusedNodeOf, shownOver, windowsOf } from "./tree/tiling";
 import { appWindowId, browserWindowId } from "./window";
@@ -1666,6 +1667,34 @@ describe("a tiled window dragged across screens", () => {
       APP("kitty"),
       APP("term"),
     ]);
+  });
+
+  it("splits a nested group it is dropped apart from", () => {
+    const state = reduce(
+      desktop("a", "b"),
+      WindowAction.TabSubgrouped(),
+      WindowAction.AppAppeared("c", "c"),
+      WindowAction.WindowDroppedOn(
+        APP("c"),
+        { id: APP("b"), up: 1 },
+        Direction.Right,
+        Beside.Apart,
+      ),
+    );
+
+    expect(workspaceHere(state).tiling.root).toMatchObject({
+      children: [
+        { id: APP("a") },
+        {
+          children: [
+            { children: [{ id: APP("b") }] },
+            { children: [{ id: APP("c") }] },
+          ],
+          layout: Layout.SplitH,
+        },
+      ],
+      layout: Layout.Tabbed,
+    });
   });
 
   it("joins the tab group of the window it is dropped in the middle of", () => {

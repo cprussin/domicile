@@ -1066,7 +1066,7 @@ const stageActionsOf = (
       case AimKind.Strip:
       case AimKind.Tab:
       case AimKind.Window: {
-        act(WindowAction.WindowDroppedOn(id, aim.node, aim.edge));
+        act(WindowAction.WindowDroppedOn(id, aim.node, aim.edge, aim.beside));
         break;
       }
     }
@@ -1096,7 +1096,7 @@ const stageActionsOf = (
       case AimKind.Strip:
       case AimKind.Tab:
       case AimKind.Window: {
-        act(WindowAction.GroupDroppedOn(group, aim.node, aim.edge));
+        act(WindowAction.GroupDroppedOn(group, aim.node, aim.edge, aim.beside));
         break;
       }
     }

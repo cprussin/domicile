@@ -4,6 +4,7 @@
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
 import { sameRect } from "../rect";
+import { Beside } from "../tree/drop";
 import type { TabLayout } from "../tree/frames";
 import { Layout } from "../tree/node";
 import type { NodeRef } from "../tree/path";
@@ -76,8 +77,9 @@ export enum AimKind {
  * drawing.
  */
 export const Aim = {
-  /** Goes on the `edge` of the tab group `node`. */
+  /** Goes on the `edge` of the tab group `node`, out of any strip it is in. */
   Group: (node: NodeRef, edge: Direction, rect: Rect) => ({
+    beside: Beside.Apart as const,
     edge,
     kind: AimKind.Group as const,
     node,
@@ -94,6 +96,7 @@ export const Aim = {
    * `edge` side. Moves at once, with no drop indicator.
    */
   Strip: (node: NodeRef, edge: Direction, rect: Rect) => ({
+    beside: Beside.InStrip as const,
     edge,
     kind: AimKind.Strip as const,
     node,
@@ -104,6 +107,7 @@ export const Aim = {
    * between the two tabs it goes between, and `depth` the depth of the strip.
    */
   Tab: (node: NodeRef, edge: Direction, rect: Rect, depth: number) => ({
+    beside: Beside.InStrip as const,
     depth,
     edge,
     kind: AimKind.Tab as const,
@@ -115,6 +119,7 @@ export const Aim = {
    * is `undefined`.
    */
   Window: (id: string, edge: Direction | undefined, rect: Rect) => ({
+    beside: Beside.InStrip as const,
     edge,
     kind: AimKind.Window as const,
     node: { id, up: 0 },

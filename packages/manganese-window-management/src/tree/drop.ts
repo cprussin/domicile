@@ -28,6 +28,14 @@ import {
   withFocusOn,
 } from "./tiling";
 
+/** Where a drop on the edge of a tab goes. */
+export enum Beside {
+  /** Into the tab's strip, before or after it. */
+  InStrip,
+  /** Out of the strip: the tab's place splits with the dropped node. */
+  Apart,
+}
+
 /**
  * The tiling with the node `moving` names dropped on the `edge` of the node
  * `target` names, or its middle when `edge` is `undefined`. Focus goes to the
@@ -41,6 +49,7 @@ export const droppedOn = (
   moving: NodeRef,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside = Beside.InStrip,
 ): Tiling => {
   const root = tiledRoot(tiling);
   const from = pathToRef(root, moving);
@@ -50,7 +59,7 @@ export const droppedOn = (
     return tiling;
   } else {
     return landed(
-      { ...tiling, root: movedOnto(root, from, to, target, edge) },
+      { ...tiling, root: movedOnto(root, from, to, target, edge, beside) },
       node,
       selects(tiling, from),
     );
@@ -71,10 +80,14 @@ export const arrivedOn = (
   selected: boolean,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside = Beside.InStrip,
 ): Tiling => {
   const root = tiledRoot(tiling);
   return landed(
-    { ...tiling, root: placed(root, pathToRef(root, target), node, edge) },
+    {
+      ...tiling,
+      root: placed(root, pathToRef(root, target), node, edge, beside),
+    },
     node,
     selected,
   );
@@ -104,6 +117,7 @@ const movedOnto = (
   to: Path,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside,
 ): LayoutNode => {
   const around = from.slice(0, -1);
   const parent = nodeAt(root, around);
@@ -111,6 +125,7 @@ const movedOnto = (
   const toAt = to.at(-1);
   if (
     edge !== undefined &&
+    beside === Beside.InStrip &&
     fromAt !== undefined &&
     toAt !== undefined &&
     parent.kind === NodeKind.Container &&
@@ -131,7 +146,7 @@ const movedOnto = (
       // A group around the moved node keeps its path, but its ref may name a
       // window that just left it.
       const at = startsWith(from, to) ? to : pathToRef(rest, target);
-      return placed(rest, at, nodeAt(root, from), edge);
+      return placed(rest, at, nodeAt(root, from), edge, beside);
     }
   }
 };
@@ -170,10 +185,11 @@ const placed = (
   at: Path,
   moving: LayoutNode,
   edge: Direction | undefined,
+  beside: Beside,
 ): LayoutNode =>
   edge === undefined
     ? joined(root, at, moving)
-    : placedBeside(root, at, moving, edge);
+    : placedBeside(root, at, moving, edge, beside);
 
 /**
  * Puts `moving` just after the node at `at` in its tab group. A node alone in
@@ -209,13 +225,14 @@ const joined = (root: LayoutNode, at: Path, moving: LayoutNode): LayoutNode => {
  * Puts `moving` on the `edge` side of the node at `at`: in its parent if the
  * parent runs along that axis, else in a new split with the node (also when
  * there is no parent). A tab group of one becomes that split, unless it is a
- * tab itself.
+ * tab itself. A tab dropped `Apart` from always splits with it.
  */
 const placedBeside = (
   root: LayoutNode,
   at: Path,
   moving: LayoutNode,
   edge: Direction,
+  beside: Beside,
 ): LayoutNode => {
   const target = nodeAt(root, at);
   const [only, ...others] =
@@ -225,17 +242,26 @@ const placedBeside = (
       ? target.children
       : [];
   if (only !== undefined && others.length === 0) {
-    const forward = isForward(edge);
-    return replacedAt(root, at, () =>
-      Node.Container(
-        splitFor(axisOfDirection(edge)),
-        forward ? [only, moving] : [moving, only],
-        forward ? 1 : 0,
-      ),
-    );
+    return replacedAt(root, at, () => splitWith(only, moving, edge));
+  } else if (beside === Beside.Apart && isTab(root, at)) {
+    return replacedAt(root, at, (node) => splitWith(node, moving, edge));
   } else {
     return besideNode(root, at, moving, edge);
   }
+};
+
+/** A split of `node` with `moving` on its `edge` side, focusing `moving`. */
+const splitWith = (
+  node: LayoutNode,
+  moving: LayoutNode,
+  edge: Direction,
+): Container => {
+  const forward = isForward(edge);
+  return Node.Container(
+    splitFor(axisOfDirection(edge)),
+    forward ? [node, moving] : [moving, node],
+    forward ? 1 : 0,
+  );
 };
 
 /** Whether the node at `at` is a tab of a tabbed or stacking container. */
