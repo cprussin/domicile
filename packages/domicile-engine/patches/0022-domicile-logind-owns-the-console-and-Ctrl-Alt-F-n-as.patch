@@ -103,10 +103,10 @@ Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
  3 files changed, 33 insertions(+), 30 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index f973267..9ef4b86 100644
+index 11693e1..64ea516 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -284,6 +284,20 @@ source_set("gbm_unittests") {
+@@ -286,6 +286,20 @@ source_set("gbm_unittests") {
      "//third_party/libdrm",
      "//ui/base/ime",
      "//ui/display:test_support",
@@ -128,10 +128,10 @@ index f973267..9ef4b86 100644
      "//ui/gfx/linux:drm",
      "//ui/gfx/linux:gbm",
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index d6ac3f6..1eb5ea6 100644
+index 269a57a..5f279fe 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-@@ -715,9 +715,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
+@@ -742,9 +742,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
    // arriving by the other door.
    //
    // A DROP THAT FAILS MAKES THE WHOLE RELINQUISH FAIL, even though the GPU
@@ -146,7 +146,7 @@ index d6ac3f6..1eb5ea6 100644
  
    if (relinquished) {
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index aabe8e6..80b99ef 100644
+index 5483b1b..a3f50bc 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -4,7 +4,6 @@
@@ -170,7 +170,7 @@ index aabe8e6..80b99ef 100644
  #include "base/task/single_thread_task_runner.h"
  #include "base/threading/platform_thread.h"
  #include "build/build_config.h"
-@@ -117,30 +113,20 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -120,30 +116,20 @@ class OzonePlatformDrm : public OzonePlatform {
                                              static_cast<DrmScreen*>(screen));
      modeset_->Start();
  
@@ -214,7 +214,7 @@ index aabe8e6..80b99ef 100644
    }
  
    GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
-@@ -438,6 +424,8 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -447,6 +433,8 @@ class OzonePlatformDrm : public OzonePlatform {
    // after display_manager_ so it is destroyed before the manager whose
    // delegate it holds.
    std::unique_ptr<DrmModeset> modeset_;

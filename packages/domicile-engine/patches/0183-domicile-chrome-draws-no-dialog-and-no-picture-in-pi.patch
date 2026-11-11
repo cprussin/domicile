@@ -23,10 +23,10 @@ does not fail closed instead of drawing a Chrome box over the desktop.
  3 files changed, 43 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index ea92efc..ea9a9c0 100644
+index c068b3d..3fbbe3d 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -5070,6 +5070,17 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+@@ -5073,6 +5073,17 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
        web_prefs->preferred_color_scheme ==
            blink::mojom::PreferredColorScheme::kDark);
  
@@ -112,6 +112,3 @@ index 19fe193..d58dd8b 100644
    // Allow clients to supply their own native dialog manager. Suitable for
    // bubble clients.
    void ShowDialogWithManager(
--- 
-2.43.0
-

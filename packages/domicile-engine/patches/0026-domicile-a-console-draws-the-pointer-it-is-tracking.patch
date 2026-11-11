@@ -85,7 +85,7 @@ cursor plane is the next thing to look at and
  2 files changed, 17 insertions(+), 1 deletion(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 9ef4b86..8a5cc2f 100644
+index 64ea516..6e4200e 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -97,7 +97,7 @@ index 9ef4b86..8a5cc2f 100644
      "domicile/drm_fullscreen.cc",
      "domicile/drm_fullscreen.h",
      "domicile/drm_input_devices.cc",
-@@ -246,6 +248,7 @@ source_set("gbm_unittests") {
+@@ -248,6 +250,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.cc",
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",
@@ -106,7 +106,7 @@ index 9ef4b86..8a5cc2f 100644
      "domicile/drm_input_devices_unittest.cc",
      "domicile/drm_master_unittest.cc",
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index dff327e..d4c5eee 100644
+index 9be70ef..8cb01c1 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -46,6 +46,7 @@
@@ -117,7 +117,7 @@ index dff327e..d4c5eee 100644
  #include "ui/ozone/platform/drm/domicile/drm_logind_input.h"
  #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
  #include "ui/ozone/platform/drm/domicile/drm_screen.h"
-@@ -291,7 +292,19 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -294,7 +295,19 @@ class OzonePlatformDrm : public OzonePlatform {
      display_manager_ = std::make_unique<DrmDisplayHostManager>(
          adapter, device_manager_.get(), &host_properties_,
          event_factory_ozone_->input_controller());

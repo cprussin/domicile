@@ -26,10 +26,10 @@ guard-shell-crash.sh crash each kind of page.
  3 files changed, 16 insertions(+)
 
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 7d9ea38..33c139c 100644
+index c52adb7..a3c60dd 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -2268,6 +2268,8 @@ if (toolkit_views) {
+@@ -2294,6 +2294,8 @@ if (toolkit_views) {
        "//chrome/browser/ui/views/frame:browser_view_header",
        "//chrome/browser/ui/views/frame:contents_web_view",
        "//chrome/common",

@@ -95,7 +95,7 @@ index 9f7bcc9..347de4d 100644
    virtual std::vector<uint64_t> GetKeyboardKeyBits() const;
  
 diff --git a/ui/events/ozone/evdev/event_converter_evdev_impl.cc b/ui/events/ozone/evdev/event_converter_evdev_impl.cc
-index 687a0f2..0ff172d 100644
+index 65c319e..83eac8e 100644
 --- a/ui/events/ozone/evdev/event_converter_evdev_impl.cc
 +++ b/ui/events/ozone/evdev/event_converter_evdev_impl.cc
 @@ -18,6 +18,7 @@
@@ -187,10 +187,10 @@ index 5a58a06..d26aa4c 100644
    void SetInternalKeyboardFilter(bool enable_filter,
                                   std::vector<DomCode> allowed_keys) override;
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-index 7907402..29699ed 100644
+index abff954..baef478 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-@@ -214,6 +214,8 @@ void InputDeviceFactoryEvdev::AttachInputDevice(
+@@ -215,6 +215,8 @@ void InputDeviceFactoryEvdev::AttachInputDevice(
            base::Unretained(this)));
      }
  
@@ -199,7 +199,7 @@ index 7907402..29699ed 100644
      // Add initialized device to map.
      converters_[path] = std::move(converter);
      converters_[path]->Start();
-@@ -440,6 +442,8 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
+@@ -441,6 +443,8 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
  
    SetBoolPropertyForOneType(DT_TOUCHPAD, "Tap Paused",
                              input_device_settings_.tap_to_click_paused);
@@ -246,7 +246,7 @@ index 0fd14a7..a242851 100644
    bool enable_internal_keyboard_filter = false;
    std::vector<DomCode> internal_keyboard_allowed_keys;
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 4eda7fd..08fef80 100644
+index 3688182..0fc26ba 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -395,6 +395,12 @@ bool LibInputEventConverter::HasTouchscreen() const {
@@ -330,10 +330,10 @@ index 3122771..d5b140d 100644
  
  }  // namespace ui
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 592bdd0..3c6ce6e 100644
+index 369d0a9..1b21cc9 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -286,6 +286,7 @@ source_set("gbm_unittests") {
+@@ -288,6 +288,7 @@ source_set("gbm_unittests") {
      # console is the one platform whose touchpad goes through libinput.
      "//ui/events/ozone/evdev/domicile/absolute_mouse_event_converter_evdev_unittest.cc",
      "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
@@ -342,10 +342,10 @@ index 592bdd0..3c6ce6e 100644
    ]
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 10beb1a..fede902 100644
+index a4d8847..f3898d5 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
-@@ -228,6 +228,18 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -231,6 +231,18 @@ class OzonePlatformDrm : public OzonePlatform {
      return screen_->connectors();
    }
  
@@ -365,7 +365,7 @@ index 10beb1a..fede902 100644
      return drm_device_connector_.get();
    }
 diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
-index 581d305..c9a2ac5 100644
+index 3515f7c..cb5cab3 100644
 --- a/ui/ozone/public/ozone_platform.cc
 +++ b/ui/ozone/public/ozone_platform.cc
 @@ -140,6 +140,10 @@ base::flat_map<int64_t, std::string> OzonePlatform::GetDomicileConnectors()
@@ -380,7 +380,7 @@ index 581d305..c9a2ac5 100644
    return nullptr;
  }
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index b0c4c2c..7059045 100644
+index 2340115..7bd8506 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -8,6 +8,7 @@
@@ -391,7 +391,7 @@ index b0c4c2c..7059045 100644
  #include <string>
  #include <vector>
  
-@@ -421,6 +422,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -442,6 +443,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // names a monitor with no EDID name after it. Empty on every platform but
    // DRM, which alone has connectors.
    virtual base::flat_map<int64_t, std::string> GetDomicileConnectors() const;

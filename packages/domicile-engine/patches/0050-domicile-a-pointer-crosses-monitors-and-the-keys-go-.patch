@@ -43,7 +43,7 @@ at the page on the screen they are on.
  4 files changed, 86 insertions(+), 6 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 92943ab..2a785f8 100644
+index 6e20eb6..76bd429 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -132,6 +132,8 @@ source_set("gbm") {
@@ -55,7 +55,7 @@ index 92943ab..2a785f8 100644
      "domicile/drm_clipboard.cc",
      "domicile/drm_clipboard.h",
      "domicile/drm_screen.cc",
-@@ -260,6 +262,7 @@ source_set("gbm_unittests") {
+@@ -262,6 +264,7 @@ source_set("gbm_unittests") {
      "domicile/drm_input_devices_unittest.cc",
      "domicile/drm_master_unittest.cc",
      "domicile/drm_modeset_unittest.cc",
@@ -64,7 +64,7 @@ index 92943ab..2a785f8 100644
      "domicile/drm_screen_unittest.cc",
      "domicile/drm_sleep_unittest.cc",
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index b5f65e7..070825a 100644
+index 72136e2..0a07a51 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -4,8 +4,11 @@
@@ -125,7 +125,7 @@ index b5f65e7..070825a 100644
  void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
                               const gfx::PointF& location) {
    TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
-@@ -238,8 +259,18 @@ void DrmCursor::MoveCursor(const gfx::Vector2dF& delta) {
+@@ -239,8 +260,18 @@ void DrmCursor::MoveCursor(const gfx::Vector2dF& delta) {
    gfx::Vector2dF transformed_delta = delta;
    ui::CursorController::GetInstance()->ApplyCursorConfigForWindow(
        window_, &transformed_delta);
@@ -146,7 +146,7 @@ index b5f65e7..070825a 100644
  }
  
  bool DrmCursor::IsCursorVisible() {
-@@ -274,6 +305,28 @@ void DrmCursor::SetCursorLocationLocked(const gfx::PointF& location)
+@@ -275,6 +306,28 @@ void DrmCursor::SetCursorLocationLocked(const gfx::PointF& location)
    location_ = clamped_location;
  }
  
@@ -224,7 +224,7 @@ index 9728701..c683d4a 100644
        GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
  
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 25da446..1d1808c 100644
+index d20c83b..43978ee 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -22,6 +22,7 @@

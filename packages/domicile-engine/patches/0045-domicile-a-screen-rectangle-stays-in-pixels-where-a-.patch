@@ -23,7 +23,7 @@ the turn, as before.
  2 files changed, 34 insertions(+), 6 deletions(-)
 
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
-index 354221c..2af5627 100644
+index dbb8671..9261365 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 @@ -36,6 +36,7 @@
