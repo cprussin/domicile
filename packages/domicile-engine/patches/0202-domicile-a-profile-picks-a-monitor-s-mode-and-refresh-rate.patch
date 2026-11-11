@@ -23,10 +23,10 @@ job builds it on `crux`.
  3 files changed, 44 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index c819490..ee9d18c 100644
+index 2774864..a069f15 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
-@@ -265,6 +265,12 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -268,6 +268,12 @@ class OzonePlatformDrm : public OzonePlatform {
      return screen_->gamma_sizes();
    }
  
@@ -40,7 +40,7 @@ index c819490..ee9d18c 100644
    // ui/events/ozone/evdev/domicile/typing_guard.h.
    std::optional<bool> GetDomicileDisableWhileTyping() const override {
 diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
-index 8853218..6aa1c03 100644
+index 35c418d..a86c32e 100644
 --- a/ui/ozone/public/ozone_platform.cc
 +++ b/ui/ozone/public/ozone_platform.cc
 @@ -145,6 +145,11 @@ base::flat_map<int64_t, uint32_t> OzonePlatform::GetDomicileGammaSizes()
@@ -56,7 +56,7 @@ index 8853218..6aa1c03 100644
    return std::nullopt;
  }
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index cb82181..83b7cc2 100644
+index 84a77d3..9742b24 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -96,6 +96,35 @@ struct DomicileDisplayLayout {
@@ -95,7 +95,7 @@ index cb82181..83b7cc2 100644
  };
  
  // DOMICILE: a tablet or touchscreen and the display it covers, from the
-@@ -490,6 +519,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -511,6 +540,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // `display::Display::id()`. A display it does not name has no ramp, as on
    // every platform but DRM.
    virtual base::flat_map<int64_t, uint32_t> GetDomicileGammaSizes() const;
@@ -106,6 +106,3 @@ index cb82181..83b7cc2 100644
    // DOMICILE: whether touchpads rest while a keyboard types, or nothing on a
    // platform whose touchpads another compositor reads. DRM only, like the
    // layout above. See ui/events/ozone/evdev/domicile/typing_guard.h.
--- 
-2.43.0
-
