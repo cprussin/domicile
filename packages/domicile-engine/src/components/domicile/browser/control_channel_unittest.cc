@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/dcheck_is_on.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
@@ -41,6 +42,13 @@
 
 namespace domicile {
 namespace {
+
+// The handshake. `checked` says whether this engine is a checked build, which
+// the compositor warns about.
+constexpr const char* kHello =
+    DCHECK_IS_ON()
+        ? R"({"checked":true,"protocol_version":1,"type":"hello"})"
+        : R"({"checked":false,"protocol_version":1,"type":"hello"})";
 
 // The page's end, recording the two members the test sends and nothing else.
 class FakeClient : public mojom::ControlChannelClient {
@@ -544,7 +552,7 @@ TEST_F(ControlChannelTest, ACompositorThatHangsUpEndsWhatItHadAndIsReplaced) {
   compositor_.reset();
   AcceptTheNextCompositor();
 
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   EXPECT_TRUE(client_.replaced_.Wait());
   EXPECT_EQ(
       client_.heard_,
@@ -563,14 +571,14 @@ TEST_F(ControlChannelTest, ACompositorThatHangsUpEndsWhatItHadAndIsReplaced) {
 TEST_F(ControlChannelTest, APageLineWithNoCompositorUpReachesTheNextOne) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   compositor_.reset();
   control_->FocusChrome();
   control_.FlushForTesting();
   AcceptTheNextCompositor();
 
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   EXPECT_EQ(Heard(), R"({"type":"focus_chrome"})");
 }
 
@@ -591,7 +599,7 @@ TEST_F(ControlChannelTest, WhetherTheShellRanReachesTheBrowserOnly) {
   heard->clear();
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   control_->ShellFailed("7", "the shell's Shell threw: TypeError");
   control_->ShellRan("7");
@@ -609,7 +617,7 @@ TEST_F(ControlChannelTest, WhetherTheShellRanReachesTheBrowserOnly) {
 TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   ui::DeskCursorImage hand;
   hand.size = gfx::Size(1, 1);
@@ -626,7 +634,7 @@ TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
 
   compositor_.reset();
   AcceptTheNextCompositor();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   EXPECT_EQ(Heard(), R"({"type":"desk_cursor"})");
 
   ui::DeskCursorImageSource::Get().ResetForTesting();
@@ -635,7 +643,7 @@ TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
 TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   for (const auto& [source, name] :
        {std::pair(mojom::PointerAxisSource::kWheel, "wheel"),
         std::pair(mojom::PointerAxisSource::kFinger, "finger"),
@@ -658,7 +666,7 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
 TEST_F(ControlChannelTest, TouchesKeepTheirPointsAndUnsignedTimes) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   for (const auto& [phase, name] :
        {std::pair(mojom::TouchPhase::kDown, "down"),
         std::pair(mojom::TouchPhase::kMotion, "motion"),
@@ -689,7 +697,7 @@ TEST_F(ControlChannelTest, TouchesKeepTheirPointsAndUnsignedTimes) {
 TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   for (const auto phase :
        {mojom::PinchPhase::kBegin, mojom::PinchPhase::kUpdate,
         mojom::PinchPhase::kEnd}) {
@@ -727,7 +735,7 @@ TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
 TEST_F(ControlChannelTest, UnboundSwipesAndHoldsReachTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   DeskGestures& gestures = DeskGestures::Get();
   const auto swipe = [](ui::NativeGesturePhase phase) {
