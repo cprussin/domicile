@@ -170,6 +170,10 @@
       "types": "./dist/key-action.d.ts",
       "default": "./dist/key-action.js"
     },
+    "./inhibitor-action": {
+      "types": "./dist/inhibitor-action.d.ts",
+      "default": "./dist/inhibitor-action.js"
+    },
     "./keymap-choice": {
       "types": "./dist/keymap-choice.d.ts",
       "default": "./dist/keymap-choice.js"

@@ -80,6 +80,7 @@ Manganese-only commands:
 | `virtual-monitor add [<width>x<height>]` | Add a monitor with no connector, 1920x1080 by default, which the desk extends onto. Lasts until removed or the shell reloads. Unbound by default. |
 | `virtual-monitor remove` | Remove the newest virtual monitor `virtual-monitor add` added. Unbound by default. |
 | `keymap next` / `keymap <name>` | Switch every keyboard to the next of `input.keyboard.keymaps`, wrapping, or to the one named. Unbound by default. |
+| `shortcuts-inhibitor toggle/activate/deactivate` | Turn off, or back on, the focused window's hold on your shortcuts, as a VM or remote desktop viewer takes. Bind it with `--inhibited` so it works while the window holds them: `"--inhibited Meta+Escape": KeyAction.SendShell(["shortcuts-inhibitor", "toggle"])`. Unbound by default. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
   own mode. The `Mode` bar item, in no default bar, shows any mode other
