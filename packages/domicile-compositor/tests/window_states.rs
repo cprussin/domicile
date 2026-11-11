@@ -1,5 +1,5 @@
-//! Window states the shell sets, and the maximize and fullscreen requests
-//! clients make, through the page's system calls.
+//! Window states the shell sets, and the maximize, fullscreen and minimize
+//! requests clients make, through the page's system calls.
 //!
 //! The compositor sets only what the shell asks for. A client's request is
 //! reported to the shell and answered with a configure of the current states.
@@ -210,6 +210,59 @@ fn a_client_asking_to_leave_a_state_is_reported() {
             app_id: unfullscreened,
             request: WindowRequest::Unfullscreen,
         }
+    );
+}
+
+/// The shell marks a window resizing for the length of its own drag, as sway
+/// does for an interactive resize, beside whatever else it holds.
+#[test]
+fn a_window_the_shell_resizes_is_told_so() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client("app");
+    let app_id = appeared(&mut chrome);
+
+    set(
+        &mut chrome,
+        1,
+        &app_id,
+        vec![WindowState::TiledLeft, WindowState::Resizing],
+    );
+    assert!(
+        client.wait_for_trace(".states(tiled_left resizing)", 1),
+        "the client was never told it is resizing; it traced:\n{}",
+        client.trace()
+    );
+
+    set(&mut chrome, 2, &app_id, vec![WindowState::TiledLeft]);
+    assert!(
+        client.wait_for_trace(".states(tiled_left)", 1),
+        "the resize never ended for the client; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// xdg-shell has no minimized state, so a minimize is only reported; the
+/// shell decides what minimized means.
+#[test]
+fn a_client_asking_to_minimize_is_reported() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    listen(&mut chrome, 7);
+    let mut client = compositor.client_with("app", &["--ask-to", "minimize"]);
+    let app_id = appeared(&mut chrome);
+
+    assert_eq!(
+        requested(&mut chrome, 7),
+        SystemEvent::WindowRequest {
+            app_id,
+            request: WindowRequest::Minimize,
+        }
+    );
+    assert!(
+        client.wait_for_trace("set_minimized()", 1),
+        "the client never asked; it traced:\n{}",
+        client.trace()
     );
 }
 
