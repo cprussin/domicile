@@ -265,7 +265,8 @@ such as a Slack huddle.
   the pointer, with no overlay.
 - **A nested group's tab** drags and drops like a window's tab, carrying the
   whole group (`GroupTitleBar.tsx`). Other tabs move past it and drop beside
-  it; a group of one stays a group.
+  it; a group of one stays a group. Its own tabs drop beside it too, which
+  takes them out of it, including past it from the strip's empty end.
 - The pointer shows `grabbing` anywhere on the desktop while a window moves
   (`GrabbingSheet.tsx`).
 - A move aims only once the pointer is 8px from the press, so clicking a tab

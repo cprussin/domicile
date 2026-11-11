@@ -148,6 +148,7 @@ const TAB_LINE = 4;
  * tab over its own strip takes the slot nearest the pointer, and over its own
  * window goes beside its group. Strips come before windows, whose frames hold
  * them. A float hides what is behind it, but not from a drag that carries it.
+ * A tab dragged out of a nested group goes beside the group's own tab too.
  */
 export const aimAt = (
   { floats, screens, tabs, windows }: DropTargets,
@@ -167,7 +168,7 @@ export const aimAt = (
       ? windows.find(({ frame }) => contains(frame, x, y))
       : undefined;
   if (tab !== undefined) {
-    return holdsAny(tab, dragged.windows)
+    return tab.windows.every((id) => dragged.windows.includes(id))
       ? undefined
       : aimAtTab(tab, tabOf(tabs, dragged), x, y);
   } else if (cover !== undefined) {
