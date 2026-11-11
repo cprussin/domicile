@@ -54,7 +54,8 @@ FrameSinkBroker::FrameSinkBroker(
     VirtualDisplaysSetter set_virtual_displays,
     GammaSetter set_gamma,
     InputInjector inject_input,
-    InputConfigSetter set_input_config)
+    InputConfigSetter set_input_config,
+    DisplayRedrawer redraw_display)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -69,7 +70,8 @@ FrameSinkBroker::FrameSinkBroker(
       set_virtual_displays_(std::move(set_virtual_displays)),
       set_gamma_(std::move(set_gamma)),
       inject_input_(std::move(inject_input)),
-      set_input_config_(std::move(set_input_config)) {
+      set_input_config_(std::move(set_input_config)),
+      redraw_display_(std::move(redraw_display)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -291,6 +293,10 @@ void FrameSinkBroker::SetGamma(int64_t display_id, mojom::GammaRampPtr ramp) {
     return;
   }
   set_gamma_.Run(display_id, *ramp);
+  // After the ramp, so the frame this asks for is the flip that carries it.
+  if (redraw_display_) {
+    redraw_display_.Run(display_id);
+  }
 }
 
 void FrameSinkBroker::InjectInput(mojom::DeskInputPtr input) {

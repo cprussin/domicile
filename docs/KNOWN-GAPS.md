@@ -40,8 +40,6 @@ the detail, when there is one. Remove a gap when it's fixed.
   [DISPLAY-TILINGS.md](/docs/architecture/DISPLAY-TILINGS.md#cost).
 - **The night light can't warm a DisplayLink monitor.** Its driver (`evdi`)
   has no gamma table.
-- **A night light change waits for the monitor's next frame.** On a screen
-  that isn't redrawing, it shows when something next changes.
 
 ## Browser windows
 

@@ -299,6 +299,10 @@ zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicil
 - A table that isn't three ramps of the advertised size is the
   `invalid_gamma` protocol error. The fd is read without waiting, as wlroots
   does.
+- A lit monitor takes a new ramp with its next page flip (patch 0161). So
+  the broker then redraws the browser window showing that monitor
+  (`RedrawDisplay`), and a still screen warms at once rather than when
+  something next changes.
 - `DrmModeset` sets each monitor's ramp again after each modeset, so a VT
   switch or resume keeps it. The compositor sends every ramp again after each
   display report, which covers a hotplug and an engine restart.
