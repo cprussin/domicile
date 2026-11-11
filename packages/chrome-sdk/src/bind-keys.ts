@@ -29,7 +29,7 @@ import {
 import type { KeyAction, OneKeyAction } from "./key-action";
 import { KeyActionKind } from "./key-action";
 import type { KeybindingsByMode, ShellKeybindings } from "./own-keybindings";
-import { ownKeybindings } from "./own-keybindings";
+import { inhibitedChords, ownKeybindings } from "./own-keybindings";
 import type { Listening, SystemError } from "./system";
 
 /** The initial binding mode. */
@@ -84,6 +84,7 @@ export const bindKeys = (
   { onCommand, onModeChanged, report = reportToConsole }: KeyHandlers,
 ): KeyBinding => {
   const bindings: KeybindingsByMode = ownKeybindings(own);
+  const inhibited = inhibitedChords(own);
   let mode = DEFAULT_MODE;
 
   const enter = (next: string) => {
@@ -155,11 +156,12 @@ export const bindKeys = (
     [...bindings.values()].flatMap((byName) => [...byName.keys()]),
   );
   const grabbed = grabEach(
-    domicile.keyboard,
+    (chord) =>
+      domicile.keyboard.grab(chord, { whileInhibited: inhibited.has(chord) }),
     [...names].filter((name) => !isGesture(name)),
   );
   const grabbedGestures = grabEach(
-    domicile.gestures,
+    (gesture) => domicile.gestures.grab(gesture),
     new Set(
       [...gesturesByMode.values()].flatMap((byGesture) =>
         byGesture.map(([gesture]) => grabOf(gesture)),
@@ -227,12 +229,12 @@ const gestureAction = (written: string, action: KeyAction): OneKeyAction => {
  * such as a keysym the layout cannot type, is logged.
  */
 const grabEach = (
-  grabber: { readonly grab: (name: string) => void },
+  grab: (name: string) => void,
   names: Iterable<string>,
 ): string[] =>
   [...names].filter((name) => {
     try {
-      grabber.grab(name);
+      grab(name);
       return true;
     } catch (error) {
       // biome-ignore lint/suspicious/noConsole: the user fixes a keysym the layout cannot type, so the shell reports it

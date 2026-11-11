@@ -476,6 +476,15 @@ export const Desktop = ({
           deskNightLight(domicile).toggle();
           break;
         }
+        case WindowActionKind.ShortcutsInhibitorSwitched: {
+          domicile.keyboard
+            .switchShortcutsInhibitor(action.action)
+            .then((result) => {
+              result.match({ Err: logInhibitorFailure, Ok: () => undefined });
+            })
+            .catch(logInhibitorFailure);
+          break;
+        }
         case WindowActionKind.VirtualMonitorAdded: {
           deskVirtualMonitors(domicile)
             .add(action.size)
@@ -908,6 +917,11 @@ export const Desktop = ({
 const logKeymapFailure = (error: unknown): void => {
   // biome-ignore lint/suspicious/noConsole: the desktop keeps the keymap it had
   console.error("could not switch the keymap", error);
+};
+
+const logInhibitorFailure = (error: unknown): void => {
+  // biome-ignore lint/suspicious/noConsole: a key has no answer to show, and the window keeps its inhibitor
+  console.error("could not switch the shortcuts inhibitor", error);
 };
 
 const logVirtualMonitorFailure = (error: unknown): void => {

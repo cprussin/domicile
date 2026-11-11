@@ -274,6 +274,13 @@ fn read_chrome_messages(
             Ok(())
         }
     })
+    .switching_shortcuts_inhibitors_with({
+        let hub = hub.clone();
+        move |action| {
+            hub.send_request(ClientRequest::SwitchShortcutsInhibitor { action });
+            Ok(())
+        }
+    })
     .setting_white_points_with({
         let hub = hub.clone();
         move |display, white_point| {

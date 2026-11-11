@@ -391,6 +391,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::SetWindowStates { .. }
             // Changes what the passphrase is typed on, not what is on screen.
             | ClientRequest::SelectKeymap { .. }
+            // The host refuses it to a locked desktop.
+            | ClientRequest::SwitchShortcutsInhibitor { .. }
             | ClientRequest::SetWhitePoint { .. }
             | ClientRequest::ChromeHello { .. }
             | ClientRequest::ClipboardCopied { .. }
