@@ -155,8 +155,8 @@ fn png_of(
     let last = offset + stride * (height as usize - 1) + row;
     let pixels = pool.get(offset..last)?;
     let rgba: Vec<u8> = (0..height as usize)
-        .flat_map(|y| pixels[y * stride..y * stride + row].chunks_exact(4))
-        .flat_map(|bgra| rgba_of([bgra[0], bgra[1], bgra[2], bgra[3]], opaque))
+        .flat_map(|y| pixels[y * stride..y * stride + row].as_chunks::<4>().0)
+        .flat_map(|bgra| rgba_of(*bgra, opaque))
         .collect();
     let mut png = Vec::new();
     let mut encoder = png::Encoder::new(&mut png, width, height);
