@@ -569,7 +569,7 @@ fn a_refused_unlock_goes_to_each_page_that_listens_for_one() {
 fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
     assert_eq!(
         chrome(
-            r#"{"type":"system_request","id":3,"request":{"call":"set_window_states","app_id":"app-1","states":["tiled_left","tiled_right","tiled_top","tiled_bottom","maximized","fullscreen"]}}"#
+            r#"{"type":"system_request","id":3,"request":{"call":"set_window_states","app_id":"app-1","states":["tiled_left","tiled_right","tiled_top","tiled_bottom","maximized","fullscreen","resizing"]}}"#
         ),
         ChromeMessage::SystemRequest {
             id: 3,
@@ -582,6 +582,7 @@ fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
                     WindowState::TiledBottom,
                     WindowState::Maximized,
                     WindowState::Fullscreen,
+                    WindowState::Resizing,
                 ],
             },
         }
@@ -614,6 +615,7 @@ fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
             r#"{"kind":"fullscreen","display":"left"}"#,
         ),
         (WindowRequest::Unfullscreen, r#"{"kind":"unfullscreen"}"#),
+        (WindowRequest::Minimize, r#"{"kind":"minimize"}"#),
     ] {
         assert_eq!(
             host(&HostMessage::SystemEvent {

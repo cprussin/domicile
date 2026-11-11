@@ -821,6 +821,8 @@ const windowRequest = (
       return WindowRequest.Fullscreen(appId, request.display ?? undefined);
     case "unfullscreen":
       return WindowRequest.Unfullscreen(appId);
+    case "minimize":
+      return WindowRequest.Minimize(appId);
   }
 };
 

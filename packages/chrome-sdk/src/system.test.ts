@@ -765,6 +765,7 @@ describe("window states", () => {
       WindowState.TiledBottom,
       WindowState.Maximized,
       WindowState.Fullscreen,
+      WindowState.Resizing,
     ]);
     host.reply(1, { kind: "set" });
 
@@ -781,6 +782,7 @@ describe("window states", () => {
             "tiled_bottom",
             "maximized",
             "fullscreen",
+            "resizing",
           ],
         },
       ],
@@ -801,7 +803,7 @@ describe("window states", () => {
     );
   });
 
-  it("streams each maximize and fullscreen request clients make", async () => {
+  it("streams each maximize, fullscreen and minimize request clients make", async () => {
     const host = new FakeHost();
     const listening = system(host).windowRequests();
     host.reply(1, { kind: "started" });
@@ -812,6 +814,7 @@ describe("window states", () => {
       { display: "left", kind: "fullscreen" },
       { display: null, kind: "fullscreen" },
       { kind: "unfullscreen" },
+      { kind: "minimize" },
     ]) {
       host.event(1, { app_id: "app-1", kind: "window_request", request });
     }
@@ -828,6 +831,7 @@ describe("window states", () => {
       WindowRequest.Fullscreen("app-1", "left"),
       WindowRequest.Fullscreen("app-1", undefined),
       WindowRequest.Unfullscreen("app-1"),
+      WindowRequest.Minimize("app-1"),
     ]);
   });
 });
