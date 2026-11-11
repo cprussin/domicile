@@ -48,6 +48,16 @@ struct EngineDisplay {
   std::vector<Mode> modes;
 };
 
+// One of the browser's windows.
+//
+// Mirrors DomicileBrowserWindow in domicile_engine.h, except the strings, as
+// for EngineDisplay.
+struct EngineBrowserWindow {
+  std::string id;
+  std::string title;
+  std::string app_id;
+};
+
 // One frame of a display capture.
 //
 // Mirrors DomicileCapturedFrame in domicile_engine.h, except the fds: the
@@ -114,6 +124,8 @@ struct EngineEvent {
     kDisconnected,
     // How the browser composites: on the GPU, or in memory.
     kCompositing,
+    // The browser's windows, for capture tools to list.
+    kBrowserWindows,
   };
 
   Type type = Type::kConfigure;
@@ -148,6 +160,8 @@ struct EngineEvent {
   uint32_t flags = 0;
   // kCompositing: whether the browser composites in memory.
   bool in_memory = false;
+  // kBrowserWindows: the whole list, in open order.
+  std::vector<EngineBrowserWindow> browser_windows;
 };
 
 // Queue of engine events with a pollable fd.
