@@ -330,6 +330,23 @@ std::optional<viz::FrameSinkId> DisplayCaptureTarget(int64_t display_id) {
       display_id, display::Screen::Get()->GetAllDisplays(), windows);
 }
 
+// Redraws the browser window showing `display_id`, so its CRTC page flips
+// with the gamma ramp just set even when nothing on it is changing. A display
+// no window shows has no flip to wait for.
+void RedrawDisplay(int64_t display_id) {
+  const std::optional<viz::FrameSinkId> target =
+      DisplayCaptureTarget(display_id);
+  if (!target) {
+    return;
+  }
+  for (aura::WindowTreeHost* host :
+       aura::Env::GetInstance()->window_tree_hosts()) {
+    if (host->compositor()->frame_sink_id() == *target) {
+      host->compositor()->ScheduleFullRedraw();
+    }
+  }
+}
+
 // The browser's frame sink broker and the socket producers reach it over.
 //
 // The socket path is the only access control. A FrameSinkBroker pipe can
@@ -350,7 +367,8 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
                 base::BindRepeating(&SetVirtualDisplays),
                 base::BindRepeating(&SetGamma),
                 base::BindRepeating(&InjectInput),
-                base::BindRepeating(&SetInputConfig)),
+                base::BindRepeating(&SetInputConfig),
+                base::BindRepeating(&RedrawDisplay)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

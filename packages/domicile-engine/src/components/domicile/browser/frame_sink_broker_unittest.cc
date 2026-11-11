@@ -437,6 +437,8 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordInput,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordInputConfig,
+                            base::Unretained(this)),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordRedraw,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
@@ -500,6 +502,12 @@ class FrameSinkBrokerTest : public testing::Test {
     gamma_.emplace_back(display_id, ramp.Clone());
   }
 
+  // Fake for the browser's windows: each redraw, with how many ramps had been
+  // set by then.
+  void RecordRedraw(int64_t display_id) {
+    redraws_.emplace_back(display_id, gamma_.size());
+  }
+
   // Fake for the ozone platform that owns the clipboard.
   void RecordClipboard(mojom::Clipboard clipboard,
                        const FrameSinkBroker::ClipboardContents& contents) {
@@ -527,6 +535,8 @@ class FrameSinkBrokerTest : public testing::Test {
 
   // Every white point the producer sent, in order.
   std::vector<std::pair<int64_t, mojom::GammaRampPtr>> gamma_;
+  // Every display redrawn, in order, with the count of ramps set before it.
+  std::vector<std::pair<int64_t, size_t>> redraws_;
   std::vector<mojom::DeskInputPtr> inputs_;
   std::vector<std::string> input_configs_;
 
@@ -1274,6 +1284,22 @@ TEST_F(FrameSinkBrokerTest, ARampWhoseChannelsDifferIsABadMessage) {
   EXPECT_THAT(bad_message.WaitForBadMessage(),
               testing::HasSubstr("channels differ in length"));
   EXPECT_TRUE(gamma_.empty());
+  EXPECT_TRUE(redraws_.empty());
+}
+
+TEST_F(FrameSinkBrokerTest, ARampRedrawsItsDisplayOnceItIsSet) {
+  // A lit CRTC takes a ramp with its next page flip. On a still screen there
+  // would be none until something changed, so the night light would wait.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->SetGamma(7, mojom::GammaRamp::New(std::vector<uint16_t>{0, 65535},
+                                            std::vector<uint16_t>{0, 32768},
+                                            std::vector<uint16_t>{0, 16384}));
+  RunUntilIdle();
+
+  // After the ramp, so the frame it asks for carries it.
+  EXPECT_EQ(redraws_, (std::vector<std::pair<int64_t, size_t>>{{7, 1u}}));
 }
 
 TEST_F(FrameSinkBrokerTest, AProducersEmulatedInputReachesTheDesk) {

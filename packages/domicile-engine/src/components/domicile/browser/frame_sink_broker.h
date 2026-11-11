@@ -76,6 +76,11 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // when the engine reads no input of its own; the input is then dropped.
   using InputInjector = base::RepeatingCallback<void(const mojom::DeskInput&)>;
   using InputConfigSetter = base::RepeatingCallback<void(const std::string&)>;
+  // Redraws the browser window showing a display, after its gamma ramp is
+  // set. A lit CRTC takes a ramp with its next page flip, so a screen that
+  // is not redrawing would show it only when something next changed.
+  // Injected for the same reason. Empty when the embedder has no CRTC.
+  using DisplayRedrawer = base::RepeatingCallback<void(int64_t)>;
   // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
   // Injected for the same reason. Empty when the embedder runs inside another
   // session; the contents are then dropped.
@@ -117,7 +122,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       VirtualDisplaysSetter set_virtual_displays = VirtualDisplaysSetter(),
       GammaSetter set_gamma = GammaSetter(),
       InputInjector inject_input = InputInjector(),
-      InputConfigSetter set_input_config = InputConfigSetter());
+      InputConfigSetter set_input_config = InputConfigSetter(),
+      DisplayRedrawer redraw_display = DisplayRedrawer());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -305,6 +311,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // See InputInjector.
   const InputInjector inject_input_;
   const InputConfigSetter set_input_config_;
+  // See DisplayRedrawer.
+  const DisplayRedrawer redraw_display_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
   base::RepeatingClosure producer_gone_;
