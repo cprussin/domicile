@@ -38,6 +38,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "components/domicile/browser/browser_window_capture_target.h"
+#include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/notification_window.h"
 #include "components/domicile/browser/private_pages.h"
 #include "components/domicile/browser/web_view_guest.h"
@@ -128,7 +129,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
   }
   DeskWindows(const DeskWindows&) = delete;
   DeskWindows& operator=(const DeskWindows&) = delete;
-  ~DeskWindows() override = default;
+  ~DeskWindows() override { ListBrowserWindows(this, {}); }
 
   // Opens a window at `url` as a tab of the desk's own window, or a private
   // window in the off-the-record profile, in `partition` when there is one.
@@ -479,6 +480,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
     for (Observer& observer : observers_) {
       observer.OnWindowsChanged();
     }
+    ListBrowserWindows(this, Listing());
+  }
+
+  // The windows as a capture tool lists them.
+  std::vector<ListedBrowserWindow> Listing() const {
+    std::vector<ListedBrowserWindow> listing;
+    for (const Window& window : windows_) {
+      listing.push_back(ListedBrowserWindow{
+          .id = window.id,
+          .title = base::UTF16ToUTF8(window.guest->contents().GetTitle()),
+          .app_id = window.app_id});
+    }
+    return listing;
   }
 
   // ProfileObserver:
@@ -500,6 +514,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     private_observation_.Reset();
     windows_.clear();
     closing_.clear();
+    ListBrowserWindows(this, {});
   }
 
   const raw_ptr<Profile> profile_;

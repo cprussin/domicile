@@ -279,6 +279,7 @@ Callbacks (engine → compositor):
 | `presented(surface, frame, time_ns, refresh_ns, flags)` | `wp_presentation_feedback`: from the frame's `FrameTimingDetails`, or discarded |
 | `disconnected()` | none: the browser went away, so the next page's `hello` is a new engine ([THE-DOMICILE-BINARY.md](THE-DOMICILE-BINARY.md#crashes-are-recovered)) |
 | `compositing(in_memory)` | none: the browser composites in memory, or on the GPU. Sent once known and on every change ([Software output](A-DESKTOP-ON-A-TTY.md#software-output)) |
+| `browser_windows(windows, count)` | `ext_foreign_toplevel_list_v1.toplevel`: the browser's windows, each a `DomicileBrowserWindow` (id, title, app id), in open order. Sent on connect and when one opens, closes or is retitled ([Wayland capture](../PORTALS.md#wayland-capture)) |
 
 - Only `crop` fills the `<app>` box, so client-side shadows are not drawn. An
   empty rectangle means the whole buffer or surface. `domicile_surface_submit`

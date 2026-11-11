@@ -271,6 +271,30 @@ class FakeCompositingObserver : public mojom::CompositingObserver {
   mojo::Receiver<mojom::CompositingObserver> receiver_{this};
 };
 
+// Fake producer browser window list observer.
+class FakeBrowserWindowListObserver : public mojom::BrowserWindowListObserver {
+ public:
+  mojo::PendingRemote<mojom::BrowserWindowListObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // mojom::BrowserWindowListObserver implementation.
+  void OnBrowserWindowsChanged(
+      std::vector<mojom::ListedBrowserWindowPtr> windows) override {
+    std::vector<std::string> titles;
+    for (const mojom::ListedBrowserWindowPtr& window : windows) {
+      titles.push_back(window->id + " " + window->title);
+    }
+    lists_.push_back(std::move(titles));
+  }
+
+  // Every list sent, in order, each as "<id> <title>".
+  std::vector<std::vector<std::string>> lists_;
+
+ private:
+  mojo::Receiver<mojom::BrowserWindowListObserver> receiver_{this};
+};
+
 // Fake producer display capture observer. These tests send no frames.
 class FakeDisplayCaptureObserver : public mojom::DisplayCaptureObserver {
  public:
@@ -1493,6 +1517,24 @@ TEST_F(FrameSinkBrokerTest, AnUnchangedCompositingModeIsNotSentAgain) {
   RunUntilIdle();
 
   EXPECT_EQ(observer.modes_, std::vector<bool>{true});
+}
+
+TEST_F(FrameSinkBrokerTest, AnObserverHearsTheBrowserWindowsThenEachChange) {
+  std::vector<mojom::ListedBrowserWindowPtr> windows;
+  windows.push_back(mojom::ListedBrowserWindow::New("1", "Mail", ""));
+  broker()->OnBrowserWindowsChanged(std::move(windows));
+
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeBrowserWindowListObserver observer;
+  remote->ObserveBrowserWindows(observer.BindRemote());
+  RunUntilIdle();
+
+  broker()->OnBrowserWindowsChanged({});
+  RunUntilIdle();
+
+  EXPECT_EQ(observer.lists_, (std::vector<std::vector<std::string>>{
+                                 {"1 Mail"}, {}}));
 }
 
 TEST_F(FrameSinkBrokerTest, ADisplayWithAWindowIsCaptured) {
