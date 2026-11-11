@@ -733,6 +733,11 @@ void ControlChannel::UngrabGesture(mojom::GestureGrabPtr grab) {
   DeskGestures::Get().Ungrab(gestures_, GestureGrabFromMojo(*grab));
 }
 
+void ControlChannel::KeyboardWindowInhibitsShortcuts(bool inhibits) {
+  // Recorded here, for GrabGesture's reason.
+  DeskGestures::Get().SetInhibited(gestures_, inhibits);
+}
+
 void ControlChannel::Key(const std::string& app_id,
                          uint32_t keycode,
                          bool pressed) {

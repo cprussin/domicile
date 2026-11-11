@@ -22,11 +22,6 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#open-questions).
 
-- **A window's shortcuts inhibitor does not get the shell's gestures.** A VM
-  that holds one gets grabbed chords as keys, but a three-finger swipe the
-  shell binds still goes to the shell, which ignores it.
-  [GESTURES.md](/docs/architecture/GESTURES.md).
-
 ## Displays
 
 - **Presentation is unmeasured.** Every measurement reads a

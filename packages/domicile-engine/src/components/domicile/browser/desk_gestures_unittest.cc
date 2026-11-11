@@ -231,5 +231,70 @@ TEST(DeskGesturesTest, EveryPhaseOfATouchpadGestureIsTold) {
   EXPECT_EQ(touched, 3);
 }
 
+// A VM holding a shortcuts inhibitor gets the shell's bound swipes and holds,
+// as it gets its chords: they go the unbound way, to the window.
+TEST(DeskGesturesTest, AnInhibitingWindowGetsTheBoundSwipesAndHolds) {
+  DeskGestures gestures;
+  Heard bound;
+  Heard unbound;
+  const auto channel = gestures.AddChannel(Into(&bound), Into(&unbound));
+  gestures.Grab(channel, {NativeGestureKind::kSwipe, 3});
+  gestures.Grab(channel, {NativeGestureKind::kHold, 3});
+
+  gestures.SetInhibited(channel, true);
+  gestures.Take(Swipe(NativeGesturePhase::kBegin));
+  gestures.Take(Swipe(NativeGesturePhase::kEnd));
+  gestures.Take(Hold(NativeGesturePhase::kBegin));
+  gestures.Take(Hold(NativeGesturePhase::kEnd));
+
+  EXPECT_EQ(unbound,
+            (Heard{NativeGesturePhase::kBegin, NativeGesturePhase::kEnd,
+                   NativeGesturePhase::kBegin, NativeGesturePhase::kEnd}));
+  EXPECT_TRUE(bound.empty());
+}
+
+// A pinch and an edge swipe are never forwarded, so while the window inhibits
+// the shell does not take them either.
+TEST(DeskGesturesTest, AnInhibitingWindowLeavesBoundPinchesAndEdgesUntaken) {
+  DeskGestures gestures;
+  Heard bound;
+  Heard unbound;
+  const auto channel = gestures.AddChannel(Into(&bound), Into(&unbound));
+  gestures.Grab(channel, {NativeGestureKind::kPinch, 3});
+  gestures.Grab(channel, {NativeGestureKind::kEdge, 1, std::nullopt});
+
+  gestures.SetInhibited(channel, true);
+
+  EXPECT_FALSE(gestures.Takes(Begin(NativeGestureKind::kPinch, 3)));
+  EXPECT_FALSE(gestures.Takes(Edge(ui::NativeGestureEdge::kLeft)));
+
+  gestures.SetInhibited(channel, false);
+
+  EXPECT_TRUE(gestures.Takes(Begin(NativeGestureKind::kPinch, 3)));
+  EXPECT_TRUE(gestures.Takes(Edge(ui::NativeGestureEdge::kLeft)));
+}
+
+// The owner is picked at begin: an inhibitor taken or let go mid-gesture
+// moves the rest of it nowhere else.
+TEST(DeskGesturesTest, AnInhibitorChangeMidGestureLeavesItsOwner) {
+  DeskGestures gestures;
+  Heard bound;
+  Heard unbound;
+  const auto channel = gestures.AddChannel(Into(&bound), Into(&unbound));
+  gestures.Grab(channel, {NativeGestureKind::kSwipe, 3});
+
+  gestures.Take(Swipe(NativeGesturePhase::kBegin));
+  gestures.SetInhibited(channel, true);
+  gestures.Take(Swipe(NativeGesturePhase::kEnd));
+  gestures.Take(Swipe(NativeGesturePhase::kBegin));
+  gestures.SetInhibited(channel, false);
+  gestures.Take(Swipe(NativeGesturePhase::kEnd));
+
+  EXPECT_EQ(bound,
+            (Heard{NativeGesturePhase::kBegin, NativeGesturePhase::kEnd}));
+  EXPECT_EQ(unbound,
+            (Heard{NativeGesturePhase::kBegin, NativeGesturePhase::kEnd}));
+}
+
 }  // namespace
 }  // namespace domicile
