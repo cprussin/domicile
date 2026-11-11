@@ -45,6 +45,7 @@ import {
   answerSystemCalls,
   THINKPAD_BACKLIGHT,
 } from "@domicile-desktop/system-backlight/fixture";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import {
   act,
@@ -508,6 +509,19 @@ const windowsOnScreen = (container: HTMLElement): string[] =>
       element.getAttribute("aria-label") ??
       "",
   );
+
+/**
+ * Whether `at` or an ancestor inside `container` turns `pointer-events` off.
+ * happy-dom does not inherit it.
+ */
+const passesPointer = (
+  at: HTMLElement | null,
+  container: HTMLElement,
+): boolean =>
+  at !== null &&
+  at !== container &&
+  (globalThis.getComputedStyle(at).pointerEvents === "none" ||
+    passesPointer(at.parentElement, container));
 
 /** Every window's title bar, in opening order. */
 const titleBars = (container: HTMLElement): HTMLElement[] => [
@@ -3369,6 +3383,41 @@ describe("Shell", () => {
       expect(appElement(container, "term").hasAttribute("resizing")).toBe(
         false,
       );
+    });
+
+    describe("while an edge is dragged", () => {
+      // Click-through is a style, so these read the shell's stylesheet.
+      loadEmittedStylesheet(
+        document,
+        new URL("../styled-system/styles.css", import.meta.url),
+      );
+
+      it("keeps windows taking the pointer", async () => {
+        // The edge holds the pointer, so the drag needs no click-through. A
+        // window made click-through takes the pointer back only at the
+        // engine's next frame, so moves and clicks just after the release
+        // would go to the desktop instead of the page under them.
+        const { container } = await renderShell();
+        clientAppears("term");
+        press("Tab", true);
+        pageHolds({});
+
+        fireEvent.pointerDown(rightBorder(container), {
+          clientX: 100,
+          clientY: 100,
+        });
+        fireEvent.pointerMove(window, {
+          buttons: 1,
+          clientX: 140,
+          clientY: 130,
+        });
+
+        expect(passesPointer(appElement(container, "term"), container)).toBe(
+          false,
+        );
+
+        fireEvent.pointerUp(window, { clientX: 140, clientY: 130 });
+      });
     });
 
     it("does not mark a window resizing while it is moved", async () => {

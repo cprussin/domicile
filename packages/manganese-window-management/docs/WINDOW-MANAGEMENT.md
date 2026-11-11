@@ -281,6 +281,9 @@ such as a Slack huddle.
   never hears also ends it, at the first move with no button held or when the
   edge loses the pointer, so the edge never keeps the pointer
   (`follow-press.ts`).
+- During an edge drag, windows keep taking the pointer: the edge holds it. A webview made click-through takes the pointer back only at the
+  engine's next frame, so the moves and clicks just after the release would
+  reach the desktop instead of the page.
 - Fullscreen windows cannot be dragged, nor can a fullscreen group by its
   strip.
 
