@@ -7,8 +7,13 @@
 
 import { PROTOCOL_VERSION } from "./protocol";
 
+/** A hello from an official engine, so the compositor posts no warning. */
 export const helloMessage = (protocolVersion: number = PROTOCOL_VERSION) =>
-  ({ protocol_version: protocolVersion, type: "hello" }) as const;
+  ({
+    checked: false,
+    protocol_version: protocolVersion,
+    type: "hello",
+  }) as const;
 
 /**
  * Report the chrome's device pixel ratio. The compositor uses it as the output
