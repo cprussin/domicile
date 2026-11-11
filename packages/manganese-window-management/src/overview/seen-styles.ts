@@ -23,6 +23,11 @@ import { matrixOf } from "./tiles";
  */
 export const seenStyles = cva({
   base: {
+    // Custom properties are inherited, so setting the move as the overview
+    // opens or closes would restyle every element in the window. Reset under
+    // the box, the window's parts keep their style and the restyle stops
+    // there. Not by `@property`: registering any slows every restyle.
+    "& > *": { "--overview-from": "initial", "--overview-to": "initial" },
     insetBlockStart: 0,
     insetInlineStart: 0,
     position: "absolute",
@@ -42,18 +47,20 @@ export const seenStyles = cva({
       false: {},
       true: { _starting: { transform: "var(--overview-from)" } },
     },
-    // Its workspace is not under the pointer once the picker is gone. The
-    // tab strips turn their own buttons' `pointer-events` back on, so this
-    // reaches every part.
-    fading: {
-      false: {},
-      true: { "& *": { pointerEvents: "none!" }, pointerEvents: "none" },
-    },
     // Out of view, as its parts are, so it comes into view with them and
     // takes its starting style. See `arriving`.
     placed: {
       false: { display: "none" },
       true: {},
+    },
+    // A hidden workspace's window, which never takes the pointer: it is
+    // under the picker, then leaving once the picker is gone. The tab strips
+    // turn their own buttons' `pointer-events` back on, so this reaches every
+    // part. Set from the start, not as the overview closes: changing it
+    // restyles every element in the window.
+    shut: {
+      false: {},
+      true: { "& *": { pointerEvents: "none!" }, pointerEvents: "none" },
     },
   },
 });

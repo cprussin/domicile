@@ -147,6 +147,7 @@ describe("WindowFrame", () => {
       const { moved, wrapper } = styleOf("resting", {
         arriving: undefined,
         fading: false,
+        shut: false,
         view: { scale: 0.5, x: 10, y: 20 },
       });
 
@@ -160,6 +161,7 @@ describe("WindowFrame", () => {
       const { moved, wrapper } = styleOf("resting", {
         arriving: { scale: 1, x: 1280, y: 0 },
         fading: false,
+        shut: false,
         view: { scale: 0.5, x: 10, y: 20 },
       });
 

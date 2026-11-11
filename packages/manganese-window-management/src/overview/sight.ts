@@ -10,11 +10,13 @@ import { composed, viewOf } from "./tiles";
 /**
  * A window seen through a tile. A hidden workspace's windows arrive, as the
  * overview opens, from where they sat beside the shown workspace
- * (`arriving`), and fade as it closes (`fading`).
+ * (`arriving`), and fade as it closes (`fading`). They never take the
+ * pointer (`shut`): under the picker while it is open, then leaving.
  */
 export type Seen = {
   arriving: View | undefined;
   fading: boolean;
+  shut: boolean;
   view: View;
 };
 
@@ -56,6 +58,7 @@ export const sightOf = (
           const seen = {
             arriving: closing ? undefined : beside,
             fading: closing,
+            shut: true,
             view: closing ? beside : view,
           };
           return placements.map(
@@ -75,6 +78,7 @@ export const sightOf = (
       {
         arriving: undefined,
         fading: false,
+        shut: false,
         view: overview.closing ? FULL : shownViewOf(overview),
       },
     ]),
