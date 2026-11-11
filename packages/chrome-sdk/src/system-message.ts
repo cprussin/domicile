@@ -102,6 +102,10 @@ const systemEventSchema = z.looseObject({
       retry_in_ms: z.number(),
     }),
     z.looseObject({
+      app_id: z.string().nullable(),
+      kind: z.literal("bell"),
+    }),
+    z.looseObject({
       app_id: z.string(),
       kind: z.literal("window_request"),
       request: z.discriminatedUnion("kind", [

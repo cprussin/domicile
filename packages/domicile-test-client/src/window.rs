@@ -49,6 +49,7 @@ use wayland_protocols::xdg::foreign::zv2::client::{zxdg_exported_v2, zxdg_export
 use wayland_protocols::xdg::shell::client::{
     xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base,
 };
+use wayland_protocols::xdg::system_bell::v1::client::xdg_system_bell_v1;
 
 use wayland_protocols_misc::server_decoration::client::{
     org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
@@ -320,6 +321,8 @@ struct Client {
     inhibit_shortcuts: Option<TakeTheShortcuts>,
     /// See [`crate::arguments::Arguments::outlive_its_window`].
     outlive_its_window: bool,
+    /// See [`crate::arguments::Arguments::ring_the_bell`].
+    ring_the_bell: bool,
     /// Whether the toplevel was destroyed under `--outlive-its-window`.
     ///
     /// Stops drawing: the surface remains but has no role to commit frames
@@ -504,6 +507,7 @@ struct Globals {
     wm_base: Option<xdg_wm_base::XdgWmBase>,
     cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
     activation: Option<xdg_activation_v1::XdgActivationV1>,
+    bell: Option<xdg_system_bell_v1::XdgSystemBellV1>,
     /// For `--hold-the-screens-on`.
     inhibit: Option<zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1>,
     /// For `--inhibit-shortcuts`.
@@ -568,6 +572,7 @@ impl Client {
             hold_the_screens_on: asked.hold_the_screens_on,
             inhibit_shortcuts: asked.inhibit_shortcuts,
             outlive_its_window: asked.outlive_its_window,
+            ring_the_bell: asked.ring_the_bell,
             window_is_gone: false,
             copy: asked.copy.clone(),
             copy_primary: asked.copy_primary.clone(),
@@ -621,6 +626,9 @@ impl Client {
                 }
                 "xdg_activation_v1" => {
                     self.globals.activation = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "xdg_system_bell_v1" => {
+                    self.globals.bell = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 "zwp_idle_inhibit_manager_v1" => {
                     self.globals.inhibit = Some(registry.bind(name, version.min(1), handle, ()));
@@ -1233,6 +1241,25 @@ fn ask_for_focus_or_stop(
     }
 }
 
+/// Ring the bell for `--ring-the-bell`, once: with the window, then without.
+fn ring_the_bell(client: &mut Client) {
+    if !client.ring_the_bell {
+        return;
+    }
+    client.ring_the_bell = false;
+    let bell = client
+        .globals
+        .bell
+        .as_ref()
+        .expect("--ring-the-bell needs xdg_system_bell_v1");
+    let window = client
+        .window
+        .as_ref()
+        .expect("the bell rings once the window is mapped");
+    bell.ring(Some(&window.surface));
+    bell.ring(None);
+}
+
 /// Open the `--popup` over the window, once.
 fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     if !client.wants_popup {
@@ -1702,6 +1729,7 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
                 draw_or_stop(client, handle);
                 // After mapping, since activation names a surface.
                 ask_for_focus_or_stop(client, handle, AskForFocus::OnceMapped, None);
+                ring_the_bell(client);
                 // A popup needs a mapped parent.
                 open_popup(client, handle);
                 open_bubble(client, handle);
@@ -2227,6 +2255,7 @@ fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
 }
 
 delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
+delegate_noop!(Client: ignore xdg_system_bell_v1::XdgSystemBellV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
 delegate_noop!(Client: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);

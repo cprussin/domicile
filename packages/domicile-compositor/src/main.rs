@@ -63,6 +63,7 @@ use tracing::{debug, error, info, warn};
 mod activation;
 mod anchors;
 mod app_scope;
+mod bell;
 mod blanking;
 mod buffer_transform;
 mod bus_names;
@@ -807,6 +808,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Always advertised, even without an idle timeout, so a reload never
     // removes a global a client has bound.
     IdleInhibitManagerState::new::<DomicileCompositor>(&dh);
+    // Terminal bells, for the shell. See `bell`.
+    smithay::wayland::xdg_system_bell::XdgSystemBellState::new::<DomicileCompositor>(&dh);
     // `parent_window` handles for portal dialogs.
     xdg_foreign::advertise(&dh);
     // Screenshot and recording tools such as `grim` and `wf-recorder`, and
