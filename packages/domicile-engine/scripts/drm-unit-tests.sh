@@ -77,6 +77,7 @@ SUITES=(
   HeadlessDeskInputTest:10
   HeadlessDeskCursorsTest:4
   DrmColorCommitTest:3
+  DrmDamageClipsTest:3
 )
 
 cd "$ENGINE_OUT"
