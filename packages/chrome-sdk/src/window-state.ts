@@ -25,6 +25,22 @@ export enum WindowRequestKind {
   Fullscreen,
   Unfullscreen,
   Minimize,
+  /** The client's title bar was pressed; the drag is the shell's to run. */
+  Move,
+  /** The client's resize border was pressed; the drag is the shell's to run. */
+  Resize,
+}
+
+/** The edges a client's resize drag pulls. */
+export enum ResizeEdge {
+  Top,
+  Bottom,
+  Left,
+  Right,
+  TopLeft,
+  TopRight,
+  BottomLeft,
+  BottomRight,
 }
 
 /**
@@ -46,6 +62,20 @@ export const WindowRequest = {
   Minimize: (appId: string) => ({
     appId,
     kind: WindowRequestKind.Minimize as const,
+  }),
+  /**
+   * The button is still down and the client no longer sees the pointer, so
+   * the shell drags the window until it comes up, or the press is lost.
+   */
+  Move: (appId: string) => ({
+    appId,
+    kind: WindowRequestKind.Move as const,
+  }),
+  /** As `Move`, resizing from `edges`. */
+  Resize: (appId: string, edges: ResizeEdge) => ({
+    appId,
+    edges,
+    kind: WindowRequestKind.Resize as const,
   }),
   Unfullscreen: (appId: string) => ({
     appId,
