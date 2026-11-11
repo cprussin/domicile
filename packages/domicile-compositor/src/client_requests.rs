@@ -15,8 +15,8 @@ use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_host::white_point::WhitePoint;
 use domicile_protocol::{
-    KeymapChoice, Passphrase, PointerAxisSource, PortalAnswer, Scale, Theme, TrayAction,
-    WindowState,
+    InhibitorAction, KeymapChoice, Passphrase, PointerAxisSource, PortalAnswer, Scale, Theme,
+    TrayAction, WindowState,
 };
 
 use crate::activation;
@@ -162,6 +162,11 @@ pub enum ClientRequest {
     /// [`DomicileCompositor::switch_the_keymap`].
     SelectKeymap {
         keymap: KeymapChoice,
+    },
+    /// The page switched the keyboard window's shortcuts inhibitor. See
+    /// [`DomicileCompositor::switch_the_shortcuts_inhibitor`].
+    SwitchShortcutsInhibitor {
+        action: InhibitorAction,
     },
     /// The page set the white point of `output`, or of every monitor. See
     /// [`crate::gamma`].
@@ -622,6 +627,9 @@ impl DomicileCompositor {
                 Resized::Gone => debug!(id, "resize: a virtual monitor that is gone"),
             },
             ClientRequest::SelectKeymap { keymap } => self.switch_the_keymap(&keymap),
+            ClientRequest::SwitchShortcutsInhibitor { action } => {
+                self.switch_the_shortcuts_inhibitor(action);
+            }
             ClientRequest::SetWhitePoint {
                 output,
                 white_point,
