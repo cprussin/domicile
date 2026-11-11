@@ -424,6 +424,23 @@ fn theme_refuses_anything_else() {
 }
 
 #[test]
+fn sleep_and_wake_displays_take_nothing() {
+    for (verb, request) in [
+        ("sleep-displays", Request::SleepDisplays),
+        ("wake-displays", Request::WakeDisplays),
+    ] {
+        assert_eq!(run(&[verb]), Ok(Invocation::Ask { request }));
+        assert_eq!(
+            run(&[verb, "DP-1"]),
+            Err(CliError::Extra {
+                verb: verb.to_string(),
+                extra: "DP-1".to_string()
+            })
+        );
+    }
+}
+
+#[test]
 fn help_is_asked_for_by_flag_word_or_after_a_verb() {
     for line in [
         &["--help"][..],
@@ -480,6 +497,8 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "check-config",
         "disable-while-typing",
         "theme",
+        "sleep-displays",
+        "wake-displays",
         "power-off",
         "reboot",
         "log-out",

@@ -1,5 +1,6 @@
 //! Asks the compositor for a screenshot, to send the shell a command, for its
-//! theme, or for a virtual monitor, over its chrome socket.
+//! theme, to turn the monitors off or on, or for a virtual monitor, over its
+//! chrome socket.
 //!
 //! Each request is the message a page sends for it (`SystemRequest::Screenshot`,
 //! `SystemRequest::SendShell`, `ChromeMessage::SetTheme`), so the compositor
@@ -11,6 +12,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
 };
@@ -110,6 +112,23 @@ pub fn send_shell(
     let answer = called(socket, request, patience)?;
     match answer.reply {
         SystemReply::Sent => Ok(()),
+        reply => Err(not_done(socket, reply, answer.said)),
+    }
+}
+
+/// Tells the compositor at `socket` to turn the monitors `power`.
+pub fn power_displays(
+    socket: &Path,
+    power: DisplayPower,
+    patience: Option<Duration>,
+) -> Result<(), CompositorError> {
+    let request = match power {
+        DisplayPower::Asleep => SystemRequest::SleepDisplays,
+        DisplayPower::Awake => SystemRequest::WakeDisplays,
+    };
+    let answer = called(socket, request, patience)?;
+    match answer.reply {
+        SystemReply::Set => Ok(()),
         reply => Err(not_done(socket, reply, answer.said)),
     }
 }
