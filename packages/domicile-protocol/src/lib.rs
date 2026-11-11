@@ -2029,6 +2029,9 @@ pub enum WindowState {
     TiledBottom,
     Maximized,
     Fullscreen,
+    /// The window is being resized, so the client may skip work such as
+    /// reflowing until the resize ends.
+    Resizing,
 }
 
 /// What a client asked of its window. The compositor only reports it; the
@@ -2043,6 +2046,9 @@ pub enum WindowRequest {
         display: Option<String>,
     },
     Unfullscreen,
+    /// `xdg_toplevel.set_minimized`. A minimized window is the shell's own
+    /// idea; xdg-shell has no state for it.
+    Minimize,
 }
 
 /// The `app_id` of a portal dialog the shell asked for itself, such as

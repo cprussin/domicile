@@ -1864,6 +1864,7 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
                 (xdg_toplevel::State::TiledBottom, "tiled_bottom"),
                 (xdg_toplevel::State::Maximized, "maximized"),
                 (xdg_toplevel::State::Fullscreen, "fullscreen"),
+                (xdg_toplevel::State::Resizing, "resizing"),
             ]
             .into_iter()
             .filter(|(state, _)| {
@@ -1928,6 +1929,10 @@ fn ask(client: &Client, toplevel: &xdg_toplevel::XdgToplevel, ask_to: AskTo) {
         AskTo::Unfullscreen => {
             toplevel.unset_fullscreen();
             crate::say!(toplevel.id(), "unset_fullscreen()");
+        }
+        AskTo::Minimize => {
+            toplevel.set_minimized();
+            crate::say!(toplevel.id(), "set_minimized()");
         }
     }
 }

@@ -15,6 +15,8 @@ export enum WindowState {
   TiledBottom,
   Maximized,
   Fullscreen,
+  /** The shell is resizing the window, so the client may skip reflowing. */
+  Resizing,
 }
 
 export enum WindowRequestKind {
@@ -22,6 +24,7 @@ export enum WindowRequestKind {
   Unmaximize,
   Fullscreen,
   Unfullscreen,
+  Minimize,
 }
 
 /**
@@ -38,6 +41,11 @@ export const WindowRequest = {
   Maximize: (appId: string) => ({
     appId,
     kind: WindowRequestKind.Maximize as const,
+  }),
+  /** xdg-shell has no minimized state; what minimized means is the shell's. */
+  Minimize: (appId: string) => ({
+    appId,
+    kind: WindowRequestKind.Minimize as const,
   }),
   Unfullscreen: (appId: string) => ({
     appId,
@@ -68,5 +76,7 @@ export const wireWindowState = (state: WindowState): string => {
       return "maximized";
     case WindowState.Fullscreen:
       return "fullscreen";
+    case WindowState.Resizing:
+      return "resizing";
   }
 };
