@@ -195,6 +195,11 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // the browser composites in software.
   void OnCompositingChanged(bool in_memory);
 
+  // Forwards the browser windows a capture tool lists to observers, and
+  // stores them for observers that connect later.
+  void OnBrowserWindowsChanged(
+      std::vector<mojom::ListedBrowserWindowPtr> windows);
+
   // mojom::FrameSinkBroker implementation.
   void CreateFrameSink(
       mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
@@ -234,6 +239,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       mojo::PendingRemote<mojom::DisplayListObserver> observer) override;
   void ObserveCompositing(
       mojo::PendingRemote<mojom::CompositingObserver> observer) override;
+  void ObserveBrowserWindows(
+      mojo::PendingRemote<mojom::BrowserWindowListObserver> observer) override;
   void CaptureDisplay(
       int64_t display_id,
       const gfx::Size& size,
@@ -361,6 +368,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // Whether the browser composites in memory, or nullopt until the embedder
   // says. See OnCompositingChanged.
   std::optional<bool> in_memory_;
+
+  mojo::RemoteSet<mojom::BrowserWindowListObserver> browser_window_observers_;
+  // The last browser window list. See OnBrowserWindowsChanged.
+  std::vector<mojom::ListedBrowserWindowPtr> browser_windows_;
 };
 
 }  // namespace domicile

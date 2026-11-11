@@ -223,11 +223,16 @@ impl DomicileCompositor {
                     captured,
                 } => self.cast_captured(capture, frame, captured),
                 engine::Event::Compositing { in_memory } => self.engine_composites(in_memory),
+                engine::Event::BrowserWindows(windows) => {
+                    self.foreign_toplevels.browser_windows(&windows);
+                }
                 engine::Event::GammaSizes(sizes) => self.gamma_sizes_reported(sizes),
                 // Acted on at the next hello, which is the new engine's.
                 engine::Event::Disconnected => {
                     warn!("the engine this desktop was drawing through went away");
                     self.engine_disconnected = true;
+                    // Its windows went with it.
+                    self.foreign_toplevels.browser_windows(&[]);
                 }
                 engine::Event::CaptureEnded { capture } => {
                     let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
