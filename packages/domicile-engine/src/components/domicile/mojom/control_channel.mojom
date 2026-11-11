@@ -519,6 +519,10 @@ interface ControlChannel {
   // after a window changes, which the compositor does not count as somebody
   // at the desk.
   PointerMotion(string app_id, double x, double y, bool moved);
+  // How far a hand moved the pointer over `app_id`, in its surface-local
+  // units, after the PointerMotion that took it there. Not sent for a still
+  // pointer or a shell's warp. For zwp_relative_pointer_v1.
+  PointerRelative(string app_id, double dx, double dy);
   PointerLeave(string app_id);
   PointerButton(string app_id, uint32 button, bool pressed);
   PointerPinch(string app_id, Pinch pinch);

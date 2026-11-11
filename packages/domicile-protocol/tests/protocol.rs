@@ -84,6 +84,23 @@ fn chrome_messages_round_trip() {
         y: 3.0,
         moved: true,
     });
+    chrome_round_trip(&ChromeMessage::PointerRelative {
+        app_id: "term".into(),
+        dx: 3.5,
+        dy: -2.0,
+    });
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(
+            r#"{"type":"pointer_relative","app_id":"term","dx":3.5,"dy":-2.0}"#
+        )
+        .unwrap(),
+        ChromeMessage::PointerRelative {
+            app_id: "term".into(),
+            dx: 3.5,
+            dy: -2.0,
+        },
+        "the engine's line parses"
+    );
     chrome_round_trip(&ChromeMessage::PointerLeave {
         app_id: "term".into(),
     });
