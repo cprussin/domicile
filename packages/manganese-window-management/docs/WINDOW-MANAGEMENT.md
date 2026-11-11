@@ -254,7 +254,8 @@ such as a Slack huddle.
   to a line would stretch its border and rounding into a blob.
 - The overlay is drawn over the open tabs of the windows it aims at.
 - **Dropping on the edge of a window in a tab group** puts the window beside
-  the group, as in sway, in a group of its own.
+  the group, as in sway, in a group of its own. A nested group splits its
+  place in the outer strip with it, as the overlay shows (`Beside.Apart`).
 - **Dragging a tab over its own group** breaks it out of the group: it goes
   beside the group, on the half under the pointer.
 - **Dragging the empty end of a tab strip**, past its last tab, picks up the

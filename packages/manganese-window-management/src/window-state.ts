@@ -19,6 +19,7 @@ import type { Rect } from "./rect";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import type { PlacedScreen } from "./screens/screen-toward";
 import { screenToward } from "./screens/screen-toward";
+import { Beside } from "./tree/drop";
 import type { Layout } from "./tree/node";
 import { windowsIn } from "./tree/node";
 import type { NodeRef } from "./tree/path";
@@ -736,7 +737,9 @@ export const WindowAction = {
     group: NodeRef,
     target: NodeRef,
     edge: Direction | undefined,
+    beside: Beside = Beside.InStrip,
   ) => ({
+    beside,
     edge,
     group,
     kind: WindowActionKind.GroupDroppedOn as const,
@@ -1003,7 +1006,7 @@ export const WindowAction = {
 
   /**
    * The user dropped a tiled window on the `edge` of the node `target` names,
-   * or its middle when `edge` is `undefined`.
+   * or its middle when `edge` is `undefined`, in or `beside` its strip.
    *
    * Sent alongside {@link WindowAction.WindowDropped}, which ends the drag.
    */
@@ -1011,7 +1014,9 @@ export const WindowAction = {
     id: string,
     target: NodeRef,
     edge: Direction | undefined,
+    beside: Beside = Beside.InStrip,
   ) => ({
+    beside,
     edge,
     id,
     kind: WindowActionKind.WindowDroppedOn as const,
@@ -1429,7 +1434,13 @@ const reduceAction = (
       return hideBackground(state, windowsInGroup(state, action.group));
     }
     case WindowActionKind.GroupDroppedOn: {
-      return dropNode(state, action.group, action.target, action.edge);
+      return dropNode(
+        state,
+        action.group,
+        action.target,
+        action.edge,
+        action.beside,
+      );
     }
     case WindowActionKind.GroupDroppedOnScreen: {
       return dropOnScreen(state, action.group, action.screen);
@@ -1606,6 +1617,7 @@ const reduceAction = (
         { id: action.id, up: 0 },
         action.target,
         action.edge,
+        action.beside,
       );
     }
     case WindowActionKind.WindowDroppedOnScreen: {
@@ -2344,6 +2356,7 @@ const dropNode = (
   moving: NodeRef,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside,
 ): WindowState => {
   const from = workspaceHolding(state, moving.id);
   const to = workspaceHolding(state, target.id);
@@ -2352,13 +2365,13 @@ const dropNode = (
     return state;
   } else if (from.name === to.name) {
     return onWorkspace(state, from.name, (workspace) =>
-      nodeDropped(workspace, moving, target, edge),
+      nodeDropped(workspace, moving, target, edge, beside),
     );
   } else {
     const { node, rest, selected } = nodeLifted(from, moving);
     const left = onWorkspace(state, from.name, () => rest);
     return onWorkspace({ ...left, focused: screen }, to.name, (workspace) =>
-      nodeArrived(workspace, node, selected, target, edge),
+      nodeArrived(workspace, node, selected, target, edge, beside),
     );
   }
 };
