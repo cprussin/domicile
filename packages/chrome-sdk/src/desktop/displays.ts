@@ -58,10 +58,14 @@ export type Displays = {
   /**
    * Turn every monitor off now, keeping windows and workspaces as they are.
    * Input more than a second later lights them again, as does
-   * {@link Displays.wake}. See docs/IDLE.md#sleeping-on-demand.
+   * {@link Displays.wake}. With `display` (a {@link Display.name}), turn only
+   * that one off until it is woken. See docs/IDLE.md#sleeping-on-demand.
    */
   sleep: System["sleepDisplays"];
-  /** Light the monitors again, after {@link Displays.sleep} or idle blanking. */
+  /**
+   * Light the monitors again, after {@link Displays.sleep} or idle blanking,
+   * or only `display`.
+   */
   wake: System["wakeDisplays"];
   on: On<DisplaysListeners>;
 };
@@ -95,8 +99,8 @@ export const displays = (
     }),
     setColorTemperature: (kelvin, display) =>
       calls.setColorTemperature(kelvin, display),
-    sleep: () => calls.sleepDisplays(),
-    wake: () => calls.wakeDisplays(),
+    sleep: (display) => calls.sleepDisplays(display),
+    wake: (display) => calls.wakeDisplays(display),
   };
 };
 

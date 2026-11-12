@@ -424,17 +424,34 @@ fn theme_refuses_anything_else() {
 }
 
 #[test]
-fn sleep_and_wake_displays_take_nothing() {
+fn sleep_and_wake_displays_take_a_display_or_nothing() {
+    let sleep = |display: Option<&str>| Request::SleepDisplays {
+        display: display.map(str::to_string),
+    };
+    let wake = |display: Option<&str>| Request::WakeDisplays {
+        display: display.map(str::to_string),
+    };
     for (verb, request) in [
-        ("sleep-displays", Request::SleepDisplays),
-        ("wake-displays", Request::WakeDisplays),
+        ("sleep-displays", &sleep as &dyn Fn(Option<&str>) -> Request),
+        ("wake-displays", &wake),
     ] {
-        assert_eq!(run(&[verb]), Ok(Invocation::Ask { request }));
+        assert_eq!(
+            run(&[verb]),
+            Ok(Invocation::Ask {
+                request: request(None)
+            })
+        );
         assert_eq!(
             run(&[verb, "DP-1"]),
+            Ok(Invocation::Ask {
+                request: request(Some("DP-1"))
+            })
+        );
+        assert_eq!(
+            run(&[verb, "DP-1", "eDP-1"]),
             Err(CliError::Extra {
-                verb: verb.to_string(),
-                extra: "DP-1".to_string()
+                verb: format!("{verb} DP-1"),
+                extra: "eDP-1".to_string()
             })
         );
     }
