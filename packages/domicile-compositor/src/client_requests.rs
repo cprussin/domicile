@@ -12,6 +12,7 @@ use smithay::wayland::shell::xdg::ToplevelSurface;
 use tracing::{debug, warn};
 
 use domicile_host::clipboard::Contents;
+use domicile_host::system::DisplayPower;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_host::white_point::WhitePoint;
 use domicile_protocol::{
@@ -184,6 +185,11 @@ pub enum ClientRequest {
     SetWhitePoint {
         output: Option<String>,
         white_point: WhitePoint,
+    },
+    /// Somebody asked to turn the monitors off or on. See
+    /// [`DomicileCompositor::power_the_displays`].
+    PowerDisplays {
+        power: DisplayPower,
     },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
@@ -666,6 +672,7 @@ impl DomicileCompositor {
                 self.gamma.set_white_point(output.as_deref(), white_point);
                 self.restate_the_gamma();
             }
+            ClientRequest::PowerDisplays { power } => self.power_the_displays(power),
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
             ClientRequest::Spawn { command } => spawn_client(

@@ -2047,6 +2047,15 @@ pub enum SystemRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         display: Option<String>,
     },
+    /// Turn every monitor off now, keeping the desktop as it is. Input more
+    /// than a second later, or [`SystemRequest::WakeDisplays`], lights them
+    /// again. Answered with [`SystemReply::Set`]. See
+    /// `docs/IDLE.md#sleeping-on-demand`.
+    SleepDisplays,
+    /// Light the monitors again, as input would: after
+    /// [`SystemRequest::SleepDisplays`] or idle blanking. Answered with
+    /// [`SystemReply::Set`].
+    WakeDisplays,
 }
 
 /// What [`SystemRequest::ShortcutsInhibitor`] does to the inhibitor.

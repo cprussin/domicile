@@ -37,6 +37,8 @@ Ask the running desktop:
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does
   domicile theme [light|dark|toggle]    Set the theme, or print it
+  domicile sleep-displays               Turn every monitor off until input
+  domicile wake-displays                Turn the monitors back on
   domicile disable-while-typing [on|off|toggle]
                                         Set the touchpad setting, or print it
   domicile monitor <name> <W>x<H>[@Hz] [scale]
@@ -509,6 +511,8 @@ fn verb(word: &str) -> Option<Verb> {
         "check-config" => Some(Verb::Checking),
         "disable-while-typing" => Some(Verb::Switching),
         "theme" => Some(Verb::Theming),
+        "sleep-displays" => Some(Verb::Asking(Request::SleepDisplays)),
+        "wake-displays" => Some(Verb::Asking(Request::WakeDisplays)),
         "power-off" => Some(Verb::Powering(Power::Off)),
         "reboot" => Some(Verb::Powering(Power::Reboot)),
         "log-out" => Some(Verb::Powering(Power::LogOut)),
