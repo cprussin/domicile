@@ -4,6 +4,7 @@
 #ifndef CHROME_BROWSER_DOMICILE_DOMICILE_WINDOW_CONTROLLER_H_
 #define CHROME_BROWSER_DOMICILE_DOMICILE_WINDOW_CONTROLLER_H_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -15,9 +16,11 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/supports_user_data.h"
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/extensions/window_controller.h"
+#include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "components/domicile/browser/desk_tabs.h"
 #include "components/sessions/core/session_id.h"
@@ -78,8 +81,14 @@ extensions::api::tabs::ZoomSettings DeskZoomSettings();
 // - A windows.create popup: type `popup`, owned by the desk's window, with one
 //   browser-window tab. Closed when that tab goes, or by windows.remove before
 //   it has one.
+//
+// A private profile's desk goes on OnProfileWillBeDestroyed, not with the
+// user data: removing a window tells the original profile's
+// WindowsEventRouter, which asks the window's profile, and an
+// off-the-record profile clears its user data only once half destroyed.
 class DomicileWindowController final : public extensions::WindowController,
-                                       public base::SupportsUserData::Data {
+                                       public base::SupportsUserData::Data,
+                                       public ProfileObserver {
  public:
   // `profile`'s desk, created on first use.
   static DomicileWindowController& For(Profile* profile);
@@ -89,6 +98,22 @@ class DomicileWindowController final : public extensions::WindowController,
 
   // Every desk and popup window, for ForEachTab.
   static std::vector<DomicileWindowController*> All();
+
+  // The desks an extension calling from `context` sees: `context`'s, then,
+  // with `include_private`, its private profile's, as Chrome shows incognito
+  // windows to an extension allowed in them. `include_private` is
+  // ExtensionFunction::include_incognito_information(), or
+  // util::IsIncognitoEnabled. Empty with no desk.
+  static std::vector<DomicileWindowController*> Visible(
+      content::BrowserContext* context,
+      bool include_private);
+
+  // Of Visible(), the desk whose tab last took focus, as Chrome's current
+  // window is the last active browser; `context`'s desk before any has. Null
+  // with no desk.
+  static DomicileWindowController* LastFocusedDesk(
+      content::BrowserContext* context,
+      bool include_private);
 
   // A desk's own window.
   explicit DomicileWindowController(Profile* profile);
@@ -178,10 +203,21 @@ class DomicileWindowController final : public extensions::WindowController,
   // A popup window of `desk`.
   DomicileWindowController(Profile* profile, DomicileWindowController& desk);
 
+  // ProfileObserver, for a private profile's desk: deletes it.
+  void OnProfileWillBeDestroyed(Profile* profile) override;
+
   // Popup-to-desk notifications: its tab took focus, or its tab closed.
   // PopupEmptied deletes the popup.
   void PopupFocused(int window_id);
   void PopupEmptied(int window_id);
+
+  // Desk window only: one of its windows took focus. Notifies observers when
+  // another desk had it.
+  void TookFocus();
+
+  // Tells observers, and for a private profile's desk the profile's desk's
+  // observers, that the active tab may have changed.
+  void NotifyActiveTabChanged();
 
   // Fires windows.onCreated or onRemoved for `window`.
   void BroadcastWindowEvent(DomicileWindowController& window, bool created);
@@ -211,6 +247,12 @@ class DomicileWindowController final : public extensions::WindowController,
   // SessionIDs increase) and the last focused window.
   std::map<int, std::unique_ptr<DomicileWindowController>> popups_;
   int last_focused_ = -1;
+  // When one of this desk's windows last took focus, in a count shared by
+  // every desk; 0 before any has. Orders a profile's desk and its private
+  // profile's for LastFocusedDesk.
+  uint64_t focused_at_ = 0;
+  // A private profile's desk only: its profile, until it is destroyed.
+  base::ScopedObservation<Profile, ProfileObserver> private_profile_{this};
 };
 
 }  // namespace domicile

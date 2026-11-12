@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, KeyRepeat,
-    LockdownConfig, ThemeMode,
+    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, ExtensionSettings,
+    KeyRepeat, LockdownConfig, SiteAccess, SiteAccessMode, ThemeMode,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -886,6 +886,101 @@ fn rejects_a_web_store_id_that_is_not_one() {
         };
         assert!(message.contains(id), "{id}: {message}");
     }
+}
+
+#[test]
+fn a_desk_sets_its_extensions_settings() {
+    let extensions = Config::parse(
+        r#"
+{
+  "extensions": {
+    "settings": {
+      "ddkjiahejlhfcafbddmgiahcphecmpfh": {
+        "private": true,
+        "file_access": false,
+        "site_access": ["github.com", "*.example.com"]
+      },
+      "eimadpbcbfnmbkopoojfekhnkhdbieeh": { "user_scripts": true, "site_access": "on_click" }
+    }
+  }
+}
+"#,
+    )
+    .unwrap()
+    .extensions;
+    assert_eq!(
+        extensions.settings["ddkjiahejlhfcafbddmgiahcphecmpfh"],
+        ExtensionSettings {
+            in_private: Some(true),
+            file_access: Some(false),
+            user_scripts: None,
+            site_access: Some(SiteAccess::Sites(vec![
+                "github.com".into(),
+                "*.example.com".into()
+            ])),
+        }
+    );
+    assert_eq!(
+        extensions.settings["eimadpbcbfnmbkopoojfekhnkhdbieeh"],
+        ExtensionSettings {
+            user_scripts: Some(true),
+            site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
+            ..ExtensionSettings::default()
+        }
+    );
+}
+
+#[test]
+fn rejects_settings_for_an_id_that_is_not_one() {
+    let message = refusal(r#"{ "extensions": { "settings": { "ublock": { "private": true } } } }"#);
+    assert!(message.contains("ublock"), "{message}");
+}
+
+#[test]
+fn rejects_a_site_that_is_not_a_host() {
+    // Chrome grants a host on http and https, so a scheme or a path has no
+    // meaning here.
+    // Nor does one Chrome cannot parse as a host, which the engine would
+    // refuse: empty labels, an edge hyphen, a number that is not an address.
+    for site in [
+        "https://github.com",
+        "github.com/login",
+        "",
+        ".",
+        "*..",
+        "github.com.",
+        "-github.com",
+        "foo.123",
+        "1.2.3.999",
+        "*.10.0.0.1",
+        "010.0.0.1",
+        "foo.0x1f",
+        "0x7f",
+    ] {
+        let message = refusal(&format!(
+            r#"{{ "extensions": {{ "settings": {{ "ddkjiahejlhfcafbddmgiahcphecmpfh": {{ "site_access": [{site:?}] }} }} }} }}"#
+        ));
+        assert!(message.contains(&format!("{site:?}")), "{site}: {message}");
+    }
+}
+
+#[test]
+fn a_site_may_be_a_dotted_address_or_a_single_name() {
+    for site in ["10.0.0.1", "localhost", "*.github.io"] {
+        Config::parse(&format!(
+            r#"{{ "extensions": {{ "settings": {{ "ddkjiahejlhfcafbddmgiahcphecmpfh": {{ "site_access": [{site:?}] }} }} }} }}"#
+        ))
+        .unwrap_or_else(|err| panic!("{site}: {err:?}"));
+    }
+}
+
+#[test]
+fn rejects_an_extension_setting_it_does_not_know() {
+    let err = Config::parse(
+        r#"{ "extensions": { "settings": { "ddkjiahejlhfcafbddmgiahcphecmpfh": { "pinned": true } } } }"#,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
 #[test]

@@ -7,7 +7,7 @@ describe(readSettings, () => {
   it("fills in what a config leaves out as the compositor does", () => {
     expect(readSettings({})).toEqual(
       Ok({
-        extensions: { unpacked: [], web_store: [] },
+        extensions: { settings: {}, unpacked: [], web_store: [] },
         files: { omit: ["**/.*"] },
         idle: {},
         input: {

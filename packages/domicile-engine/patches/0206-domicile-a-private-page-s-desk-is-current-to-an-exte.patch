@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a private page's desk is current to an extension
+ allowed in private windows
+
+A private page is a tab of its profile's private desk, as an incognito
+tab is of an incognito window. Chrome's current window for an extension
+allowed in incognito is the last active browser of either profile, so
+ChromeExtensionFunctionDetails::GetCurrentWindowController asks the
+desk's hook with the function's include_incognito_information
+(chrome/browser/extensions/domicile_desk_hooks.h, CurrentWindowFor).
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/extensions/chrome_extension_function_details.cc | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/chrome/browser/extensions/chrome_extension_function_details.cc b/chrome/browser/extensions/chrome_extension_function_details.cc
+index dfedf25..98475c1 100644
+--- a/chrome/browser/extensions/chrome_extension_function_details.cc
++++ b/chrome/browser/extensions/chrome_extension_function_details.cc
+@@ -39,9 +39,12 @@ ChromeExtensionFunctionDetails::~ChromeExtensionFunctionDetails() = default;
+ WindowController* ChromeExtensionFunctionDetails::GetCurrentWindowController()
+     const {
+   // Domicile's engine fork: on a desk, the desk is the window. The shell's own
+-  // window is not one, and its active tab is the shell.
+-  if (WindowController* desk =
+-          domicile_desk::WindowFor(function_->browser_context())) {
++  // window is not one, and its active tab is the shell. With a private page
++  // last focused, it is the private profile's desk, for an extension allowed
++  // in private windows.
++  if (WindowController* desk = domicile_desk::CurrentWindowFor(
++          function_->browser_context(),
++          function_->include_incognito_information())) {
+     return desk;
+   }
+ 

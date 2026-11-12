@@ -38,6 +38,12 @@ class DeskHooks final : public extensions::domicile_desk::Desk {
     return DomicileWindowController::Find(context);
   }
 
+  extensions::WindowController* CurrentWindowFor(
+      content::BrowserContext* context,
+      bool include_private) override {
+    return DomicileWindowController::LastFocusedDesk(context, include_private);
+  }
+
   bool FindTab(int tab_id,
                content::BrowserContext* context,
                extensions::WindowController** window,
@@ -152,9 +158,17 @@ void AddToDesk(content::WebContents& guest) {
   popup->Add(guest);
 }
 
-content::WebContents* ActiveDeskTab(content::BrowserContext* context) {
-  DomicileWindowController* desk = DomicileWindowController::Find(context);
-  return desk == nullptr ? nullptr : desk->GetActiveTab();
+content::WebContents* ActiveDeskTab(content::BrowserContext* context,
+                                    bool include_private) {
+  DomicileWindowController* focused =
+      DomicileWindowController::LastFocusedDesk(context,
+                                                /*include_private=*/true);
+  const bool hidden =
+      !include_private && focused != DomicileWindowController::Find(context);
+  if (focused == nullptr || hidden) {
+    return nullptr;
+  }
+  return focused->GetActiveTab();
 }
 
 bool AddDeskObserver(content::BrowserContext* context, DeskObserver* observer) {

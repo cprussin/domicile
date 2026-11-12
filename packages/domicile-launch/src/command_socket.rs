@@ -12,14 +12,15 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::command::{
-    clear_browsing_data_line, clear_site_data_line, config_extensions_line, delete_history_line,
-    disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
-    media_devices_line, open_app_line, open_url_line, reply, run_app_line,
-    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
-    site_permissions_line, uninstall_extension_line, visits_line, Reply, NO_SHELL_WINDOW,
+    clear_browsing_data_line, clear_site_data_line, config_extensions_line,
+    configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
+    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
+    open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
+    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
+    visits_line, Reply, NO_SHELL_WINDOW,
 };
 use crate::control::AppReuse;
-use crate::extensions::InstalledExtension;
+use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_data::SiteData;
@@ -220,6 +221,22 @@ pub fn set_extension_enabled(
     carry_out(
         socket,
         &set_extension_enabled_line(id, enabled),
+        Reply::Set,
+        patience,
+    )
+}
+
+/// Tells the engine at `socket` to change each of `settings` that is set on
+/// extension `id`.
+pub fn configure_extension(
+    socket: &Path,
+    id: &str,
+    settings: &ExtensionSettings,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &configure_extension_line(id, settings),
         Reply::Set,
         patience,
     )
