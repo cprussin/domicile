@@ -147,7 +147,21 @@ class DrmModeset : public display::NativeDisplayObserver {
   void OnDisplaySnapshotsInvalidated() override;
 
  private:
+  // Asks the delegate for the displays, one reading at a time.
+  //
+  // `DrmDisplayHostManager` keeps one pending `GetDisplays` callback: a second
+  // request before the GPU answers replaces the first and sends another
+  // refresh. The answer without a callback still invalidates the snapshots,
+  // which empties `display_ids_` with nothing to fill it, and every ramp after
+  // that was stored and never applied. So a request made while a reading is in
+  // flight is remembered, and made once that reading arrives.
+  void Read();
   void OnDisplaysReceived(
+      const std::vector<raw_ptr<display::DisplaySnapshot,
+                                VectorExperimental>>& snapshots);
+  // What one reading does: lays the screen out, notes the connectors, applies
+  // their ramps and modesets if anything changed.
+  void TakeReading(
       const std::vector<raw_ptr<display::DisplaySnapshot,
                                 VectorExperimental>>& snapshots);
   // Sends each display in `display_ids_` its ramp in `ramps_`, if it has one.
@@ -177,6 +191,10 @@ class DrmModeset : public display::NativeDisplayObserver {
   // answered on a later task, so an answer that arrives while this is true
   // came from this process, not the hardware. See `OnDisplaysReceived`.
   bool inside_configure_ = false;
+  // Whether a `GetDisplays` is waiting for its answer, and whether another
+  // was asked for meanwhile. See `Read`.
+  bool reading_ = false;
+  bool read_again_ = false;
   base::WeakPtrFactory<DrmModeset> weak_factory_{this};
 };
 
