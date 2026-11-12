@@ -12,8 +12,11 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import type { FloatingRules } from "./floating/floating-rules";
+import type { HandedDrag } from "./handed-drag";
+import { followPresses } from "./handed-drag";
 import { openCommand } from "./open-command";
 import type { PlacedScreen } from "./screens/screen-toward";
 import { appIdOf, appWindowId, browserIdOf } from "./window";
@@ -43,6 +46,11 @@ export type Windows = WindowState & {
   act: (action: WindowAction) => void;
   /** The active window, floating or tiled. */
   activeId: string | undefined;
+  /**
+   * A client's move or resize of its window, from the press still held on
+   * it, for the window's grab to run. Cleared when that press ends.
+   */
+  handed: HandedDrag | undefined;
 };
 
 /** No app runs in the background. One array, so the default never changes. */
@@ -195,15 +203,31 @@ export const useWindows = (
     };
   }, [backgroundApps, domicile, floating]);
 
+  const [handed, setHanded] = useState<HandedDrag | undefined>(undefined);
   // Clients' requests, which the compositor reports without granting.
   useEffect(() => {
+    const presses = followPresses(() => {
+      setHanded(undefined);
+    });
     const hearing = hearWindowRequests(domicile, (request) => {
       const action = actionFor(request);
       if (action !== undefined) {
         dispatch(action);
       }
+      const press = presses.held();
+      // A move asked for after the press ended has nothing left to drag.
+      if (isADrag(request) && press !== undefined) {
+        setHanded({
+          press,
+          resizes: request.kind === WindowRequestKind.Resize,
+          window: appWindowId(request.appId),
+        });
+      }
     });
-    return hearing.stop;
+    return () => {
+      hearing.stop();
+      presses.stop();
+    };
   }, [domicile]);
 
   // The desk the host described, which bounds where windows can go.
@@ -218,15 +242,16 @@ export const useWindows = (
       ...state,
       act,
       activeId: activeIdOf(state),
+      handed,
     }),
-    [act, state],
+    [act, handed, state],
   );
 };
 
 /**
  * What a client's request does. Fullscreen uses the requested display when
  * named. Windows tile, so maximizing changes nothing, and nothing is ever
- * minimized.
+ * minimized. A move or resize is the window's grab's to run; see `handed`.
  */
 const actionFor = (request: WindowRequest): WindowAction | undefined => {
   switch (request.kind) {
@@ -241,9 +266,16 @@ const actionFor = (request: WindowRequest): WindowAction | undefined => {
     case WindowRequestKind.Maximize:
     case WindowRequestKind.Unmaximize:
     case WindowRequestKind.Minimize:
+    case WindowRequestKind.Move:
+    case WindowRequestKind.Resize:
       return undefined;
   }
 };
+
+/** Whether a client asked the shell to drag its window from its press. */
+const isADrag = (request: WindowRequest): boolean =>
+  request.kind === WindowRequestKind.Move ||
+  request.kind === WindowRequestKind.Resize;
 
 /** The desk's displays as the screens the desktop is told of. */
 const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>

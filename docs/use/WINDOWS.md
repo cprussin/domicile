@@ -28,6 +28,8 @@ float and close the same way.
 - Drag a window by its title bar, or anywhere with Meta held, to move it. A
   highlight shows where it will land: a side of a window, or the middle to
   join its tabs. Drag the border between windows to resize them.
+- Apps that draw their own title bar, such as GNOME apps and Firefox, move
+  the same way when you drag theirs, and resize from their own edges.
 
 ## Title bars and tabs
 

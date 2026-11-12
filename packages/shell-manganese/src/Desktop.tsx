@@ -765,6 +765,7 @@ export const Desktop = ({
           domicile={domicile}
           draggingId={windows.draggingId}
           focusedId={windows.focusedId}
+          handed={windows.handed}
           modifiers={modifiers}
           {...stageActions}
           overview={sight}

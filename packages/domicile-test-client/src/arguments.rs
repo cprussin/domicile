@@ -105,6 +105,12 @@ pub struct Arguments {
     /// first. See [`crate::window::POPUP`] for its placement.
     pub sliding_menu: bool,
 
+    /// What a press on the window asks the desktop to start, as a client that
+    /// draws its own title bar and edges does: a move, or a resize by an edge.
+    /// `move-after-release` asks only once the button is up, as a slow client
+    /// can, with a press the desktop must not honor.
+    pub ask_to_drag: Option<AskToDrag>,
+
     /// Whether to open a bubble over the window once it is up: a desync
     /// `wl_subsurface`, as Chromium draws an extension popup.
     ///
@@ -181,6 +187,15 @@ pub enum AskTo {
     Minimize,
 }
 
+/// The interactive drag a press asks for. See
+/// [`Arguments::ask_to_drag`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskToDrag {
+    Move,
+    ResizeBottomRight,
+    MoveAfterRelease,
+}
+
 /// When the client takes its idle inhibitor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HoldTheScreensOn {
@@ -238,6 +253,9 @@ pub enum ArgumentError {
     )]
     NotAWindowRequest { value: String },
 
+    #[error("--ask-to-drag wants move, bottom-right or move-after-release, not {value}")]
+    NotADrag { value: String },
+
     #[error("unknown argument {argument}")]
     Unknown { argument: String },
 }
@@ -262,6 +280,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut repositioned_popup = None;
     let mut anchor = None;
     let mut sliding_menu = None;
+    let mut ask_to_drag = None;
     let mut bubble = None;
     let mut bubble_without_input = None;
     let mut scrolling_bubble = None;
@@ -359,6 +378,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--sliding-menu" => {
                 take(&mut sliding_menu, &flag, true)?;
             }
+            "--ask-to-drag" => {
+                take(&mut ask_to_drag, &flag, drag(&mut args, &flag)?)?;
+            }
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
@@ -426,6 +448,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         repositioned_popup: repositioned_popup.unwrap_or(false),
         anchor,
         sliding_menu: sliding_menu.unwrap_or(false),
+        ask_to_drag,
         bubble: bubble.unwrap_or(false),
         bubble_without_input: bubble_without_input.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),
@@ -508,6 +531,17 @@ fn window_request(
         "unfullscreen" => Ok(AskTo::Unfullscreen),
         "minimize" => Ok(AskTo::Minimize),
         _ => Err(ArgumentError::NotAWindowRequest { value: stated }),
+    }
+}
+
+/// Parse `--ask-to-drag`'s value.
+fn drag(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<AskToDrag, ArgumentError> {
+    let stated = value(args, flag)?;
+    match stated.as_str() {
+        "move" => Ok(AskToDrag::Move),
+        "bottom-right" => Ok(AskToDrag::ResizeBottomRight),
+        "move-after-release" => Ok(AskToDrag::MoveAfterRelease),
+        _ => Err(ArgumentError::NotADrag { value: stated }),
     }
 }
 
