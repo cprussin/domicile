@@ -301,6 +301,13 @@ fn read_chrome_messages(
             });
             Ok(())
         }
+    })
+    .powering_displays_with({
+        let hub = hub.clone();
+        move |power| {
+            hub.send_request(ClientRequest::PowerDisplays { power });
+            Ok(())
+        }
     });
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`

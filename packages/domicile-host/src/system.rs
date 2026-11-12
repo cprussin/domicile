@@ -109,6 +109,8 @@ pub struct System {
     add_virtual_monitor: Option<AddVirtualMonitor>,
     /// Sets every monitor's white point; `None` on a system that sets none.
     set_white_point: Option<SetWhitePoint>,
+    /// Turns the monitors off and on; `None` on a system that powers none.
+    power_displays: Option<PowerDisplays>,
 }
 
 /// Adds a virtual monitor. See [`SystemRequest::VirtualMonitor`].
@@ -155,6 +157,16 @@ pub type SetWindowStates =
 /// with `None`.
 pub type SetWhitePoint =
     Arc<dyn Fn(Option<String>, WhitePoint) -> Result<(), SystemError> + Send + Sync>;
+
+/// Whether the monitors sleep or light. See [`SystemRequest::SleepDisplays`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayPower {
+    Asleep,
+    Awake,
+}
+
+/// Turns the monitors off or on.
+pub type PowerDisplays = Arc<dyn Fn(DisplayPower) -> Result<(), SystemError> + Send + Sync>;
 
 /// Takes a screenshot, into the file if one is given, and returns where it
 /// went. Blocks until it is kept, the dialog included.
@@ -232,6 +244,8 @@ pub enum Reach {
     Retypes,
     /// It changes the colors every monitor draws, as a night light does.
     Tints,
+    /// It turns the monitors off or on.
+    Powers,
     /// Anything else.
     Acts,
 }
@@ -285,6 +299,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         // Where keys go, as a focus change is.
         SystemRequest::ShortcutsInhibitor { .. } => Reach::Arranges,
         SystemRequest::SetColorTemperature { .. } => Reach::Tints,
+        SystemRequest::SleepDisplays | SystemRequest::WakeDisplays => Reach::Powers,
         SystemRequest::WriteFile { .. }
         | SystemRequest::CreateDir { .. }
         | SystemRequest::Stdin { .. }
@@ -323,6 +338,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::SendShell { .. }
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
+        | SystemRequest::SleepDisplays
+        | SystemRequest::WakeDisplays
         | SystemRequest::WindowRequests
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
@@ -375,6 +392,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::UnlockRefusals
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
+        | SystemRequest::SleepDisplays
+        | SystemRequest::WakeDisplays
         | SystemRequest::WindowRequests
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
@@ -430,6 +449,7 @@ impl System {
             select_keymap: None,
             shortcuts_inhibitor: None,
             set_white_point: None,
+            power_displays: None,
         }
     }
 
@@ -559,6 +579,15 @@ impl System {
         set: impl Fn(Option<String>, WhitePoint) -> Result<(), SystemError> + Send + Sync + 'static,
     ) -> System {
         self.set_white_point = Some(Arc::new(set));
+        self
+    }
+
+    /// This system, turning the monitors off and on through `power`.
+    pub fn powering_displays_with(
+        mut self,
+        power: impl Fn(DisplayPower) -> Result<(), SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.power_displays = Some(Arc::new(power));
         self
     }
 
@@ -1019,6 +1048,8 @@ impl System {
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
+            SystemRequest::SleepDisplays => self.powering(id, DisplayPower::Asleep),
+            SystemRequest::WakeDisplays => self.powering(id, DisplayPower::Awake),
             SystemRequest::Bells => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system.bells.listen(Arc::new(move |app_id| {
@@ -1161,6 +1192,22 @@ impl System {
                 reply: call(&home).unwrap_or_else(|failure| failed(Failure::from(failure).into())),
             })
         });
+        Handled::Done
+    }
+
+    /// Turn the monitors `power`, and reply under `id`.
+    fn powering(&self, id: u32, power: DisplayPower) -> Handled {
+        let reply = match &self.power_displays {
+            None => failed(SystemError {
+                kind: SystemErrorKind::Other,
+                message: "this desktop turns no monitors off".into(),
+            }),
+            Some(set) => match set(power) {
+                Ok(()) => SystemReply::Set,
+                Err(error) => failed(error),
+            },
+        };
+        (self.tell)(HostMessage::SystemReply { id, reply });
         Handled::Done
     }
 
