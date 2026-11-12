@@ -1,7 +1,7 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 
 import type { Direction } from "../direction";
+import type { PressOn } from "../handed-drag";
 import type { Rect } from "../rect";
 import { sameRect } from "../rect";
 import type { Aim, Corner, Dragged, DropTargets } from "./aim";
@@ -49,7 +49,8 @@ export type TileDrag = {
   drag: Held | undefined;
   /** Suppresses the context menu, since the right button resizes. */
   onContextMenu: (event: { preventDefault: () => void }) => void;
-  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  /** Takes the press, from the element or handed from a client. */
+  onPointerDown: (event: PressOn) => void;
 };
 
 type Options = {

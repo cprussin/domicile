@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import { act, renderHook } from "@testing-library/react";
+import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import type { FloatingOptions } from "./floating/floating-rules";
 import { floatingRulesSchema } from "./floating/floating-rules";
@@ -264,6 +264,50 @@ describe("a client's window requests", () => {
     await asks(host, id, "gedit", { kind: "maximize" });
 
     expect(result.current.workspaces).toBe(before.workspaces);
+  });
+
+  const PRESS = { button: 0, clientX: 40, clientY: 12, pointerId: 3 };
+
+  it("hand a move to the window's grab with the press still held", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("gedit");
+    const id = listening(host);
+    fireEvent.pointerDown(window, PRESS);
+
+    await asks(host, id, "gedit", { kind: "move" });
+    expect(result.current.handed).toEqual({
+      press: PRESS,
+      resizes: false,
+      window: appWindowId("gedit"),
+    });
+
+    act(() => {
+      fireEvent.pointerUp(window, { pointerId: 3 });
+    });
+    expect(result.current.handed).toBeUndefined();
+  });
+
+  it("hand a resize as a resize", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("gedit");
+    const id = listening(host);
+    fireEvent.pointerDown(window, PRESS);
+
+    await asks(host, id, "gedit", { edges: "bottom_right", kind: "resize" });
+
+    expect(result.current.handed?.resizes).toBe(true);
+  });
+
+  it("drop a move asked for after the press ended", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("gedit");
+    const id = listening(host);
+    fireEvent.pointerDown(window, PRESS);
+    fireEvent.pointerUp(window, { pointerId: 3 });
+
+    await asks(host, id, "gedit", { kind: "move" });
+
+    expect(result.current.handed).toBeUndefined();
   });
 });
 

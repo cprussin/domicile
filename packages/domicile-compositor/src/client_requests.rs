@@ -374,9 +374,14 @@ impl DomicileCompositor {
                     self.let_go_of_lost_presses();
                     self.held_buttons.push(button);
                     ButtonState::Pressed
-                } else {
+                } else if self.held_buttons.contains(&button) {
                     self.held_buttons.retain(|held| *held != button);
                     ButtonState::Released
+                } else {
+                    // Its press was let go of already, or handed to the shell
+                    // by a move or resize request; the client was told.
+                    tracing::debug!(button, "a release of a button no client holds -> dropped");
+                    return;
                 };
                 self.pointer_button(button, state);
             }

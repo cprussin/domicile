@@ -52,7 +52,7 @@ import type {
 } from "../system-message";
 import { parseSystemMessage } from "../system-message";
 import type { Bell, WindowState } from "../window-state";
-import { WindowRequest, wireWindowState } from "../window-state";
+import { ResizeEdge, WindowRequest, wireWindowState } from "../window-state";
 
 /**
  * The calls. A relative path starts at the home. The compositor runs each in
@@ -850,6 +850,33 @@ const windowRequest = (
       return WindowRequest.Unfullscreen(appId);
     case "minimize":
       return WindowRequest.Minimize(appId);
+    case "move":
+      return WindowRequest.Move(appId);
+    case "resize":
+      return WindowRequest.Resize(appId, resizeEdgeOf(request.edges));
+  }
+};
+
+const resizeEdgeOf = (
+  edges: Extract<WireWindowRequest, { kind: "resize" }>["edges"],
+): ResizeEdge => {
+  switch (edges) {
+    case "top":
+      return ResizeEdge.Top;
+    case "bottom":
+      return ResizeEdge.Bottom;
+    case "left":
+      return ResizeEdge.Left;
+    case "right":
+      return ResizeEdge.Right;
+    case "top_left":
+      return ResizeEdge.TopLeft;
+    case "top_right":
+      return ResizeEdge.TopRight;
+    case "bottom_left":
+      return ResizeEdge.BottomLeft;
+    case "bottom_right":
+      return ResizeEdge.BottomRight;
   }
 };
 

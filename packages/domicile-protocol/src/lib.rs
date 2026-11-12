@@ -2083,6 +2083,31 @@ pub enum WindowRequest {
     /// `xdg_toplevel.set_minimized`. A minimized window is the shell's own
     /// idea; xdg-shell has no state for it.
     Minimize,
+    /// `xdg_toplevel.move`: the client's title bar was pressed and dragged.
+    /// The button is still down, and the client has been told the pointer
+    /// left, so the drag is the shell's to run until the button comes up.
+    Move,
+    /// `xdg_toplevel.resize`: the client's resize border was pressed and
+    /// dragged, from `edges`. The press is the shell's, as for
+    /// [`WindowRequest::Move`].
+    Resize {
+        edges: ResizeEdges,
+    },
+}
+
+/// The edges a client's resize drag pulls, as `xdg_toplevel.resize_edge`
+/// names them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResizeEdges {
+    Top,
+    Bottom,
+    Left,
+    Right,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
 }
 
 /// The `app_id` of a portal dialog the shell asked for itself, such as
