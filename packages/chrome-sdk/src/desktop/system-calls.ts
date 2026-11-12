@@ -169,15 +169,18 @@ export type System = {
   /**
    * Turn every monitor off now, keeping windows and workspaces as they are.
    * Input more than a second later lights them again, as does
-   * {@link System.wakeDisplays}. Allowed while the desktop is locked. See
+   * {@link System.wakeDisplays}. With `display` (a display's `name`), turn
+   * only that one off: it keeps its place and windows, and sleeps through
+   * input until woken. Fails {@link SystemErrorKind.NotFound} for a display
+   * the desktop does not have. Allowed while the desktop is locked. See
    * docs/IDLE.md#sleeping-on-demand.
    */
-  sleepDisplays: () => Promise<Result<"set", SystemError>>;
+  sleepDisplays: (display?: string) => Promise<Result<"set", SystemError>>;
   /**
    * Light the monitors again, after {@link System.sleepDisplays} or idle
-   * blanking. Allowed while the desktop is locked.
+   * blanking, or only `display`. Allowed while the desktop is locked.
    */
-  wakeDisplays: () => Promise<Result<"set", SystemError>>;
+  wakeDisplays: (display?: string) => Promise<Result<"set", SystemError>>;
   /**
    * Hear each maximize and fullscreen request a client makes. The compositor
    * grants none; grant one with {@link System.setWindowStates}. Allowed while
@@ -375,9 +378,15 @@ export const system = (host: SystemHost): System => {
       listening(calls, { call: "shell_commands" }, (event) =>
         event.kind === "shell_command" ? event.command : unexpected(event),
       ),
-    sleepDisplays: () =>
-      oneShot(calls, { call: "sleep_displays" }, (reply) =>
-        reply.kind === "set" ? "set" : unexpected(reply),
+    sleepDisplays: (display) =>
+      oneShot(
+        calls,
+        {
+          call: "sleep_displays",
+          // Left out for every monitor.
+          ...(display === undefined ? {} : { display }),
+        },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
     spawn: (argv, options) => spawn(calls, argv, options),
     stat: (path) =>
@@ -407,9 +416,15 @@ export const system = (host: SystemHost): System => {
             }
           : unexpected(event),
       ),
-    wakeDisplays: () =>
-      oneShot(calls, { call: "wake_displays" }, (reply) =>
-        reply.kind === "set" ? "set" : unexpected(reply),
+    wakeDisplays: (display) =>
+      oneShot(
+        calls,
+        {
+          call: "wake_displays",
+          // Left out for every monitor.
+          ...(display === undefined ? {} : { display }),
+        },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
     watch: (path) =>
       listening<Listened<string>>(

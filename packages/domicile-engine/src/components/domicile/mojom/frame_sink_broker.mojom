@@ -148,8 +148,9 @@ struct DisplayLayout {
   double scale;
 
   // The display's rectangle in the shell's logical desktop, from the profile.
-  // Empty when `enabled` is false. Used to move the pointer between monitors,
-  // since `origin` does not encode which monitor is beside which.
+  // Used to move the pointer between monitors, since `origin` does not encode
+  // which monitor is beside which. Empty when `enabled` is false, except for a
+  // sleeping display, which keeps its place on the desk page.
   gfx.mojom.Rect desk;
 
   // The mode to scan out, from the profile, or null for the native one. A

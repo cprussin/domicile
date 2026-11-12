@@ -420,6 +420,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         // Turning the screens off is not a hand stirring.
         | ClientRequest::PowerDisplays {
             power: DisplayPower::Asleep,
+            ..
         }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }
@@ -457,6 +458,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         // Somebody asked for the screens, as a key would light them.
         ClientRequest::PowerDisplays {
             power: DisplayPower::Awake,
+            ..
         } => Some("a wake"),
         // A theme change is the shell redrawing itself.
         ClientRequest::TurnTheWindows { .. } | ClientRequest::ThemeCaptured { .. } => None,
@@ -1289,6 +1291,7 @@ mod tests {
                 "a wake",
                 ClientRequest::PowerDisplays {
                     power: DisplayPower::Awake,
+                    display: None,
                 },
             ),
             (
@@ -1392,6 +1395,7 @@ mod tests {
                 "the screens being put to sleep",
                 ClientRequest::PowerDisplays {
                     power: DisplayPower::Asleep,
+                    display: None,
                 },
             ),
             (

@@ -99,7 +99,12 @@ describe("sleep and wake", () => {
   it("asks the compositor to turn the monitors off, then on", async () => {
     const fake = new FakeDomicileHost();
     const { displays } = desktop(fake.host);
-    for (const asked of [displays.sleep(), displays.wake()]) {
+    for (const asked of [
+      displays.sleep(),
+      displays.wake(),
+      displays.sleep("DP-1"),
+      displays.wake("DP-1"),
+    ]) {
       asked.catch(() => {
         /* never answered */
       });
@@ -114,6 +119,8 @@ describe("sleep and wake", () => {
     ).toStrictEqual([
       ["callSystem", { call: "sleep_displays" }],
       ["callSystem", { call: "wake_displays" }],
+      ["callSystem", { call: "sleep_displays", display: "DP-1" }],
+      ["callSystem", { call: "wake_displays", display: "DP-1" }],
     ]);
   });
 });
