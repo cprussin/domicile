@@ -30,7 +30,9 @@ use domicile_launch::command_socket::{
     uninstall_extension, visits,
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
-use domicile_launch::compositor_socket::{screen_record, screenshot, send_shell, theme};
+use domicile_launch::compositor_socket::{
+    power_displays, screen_record, screenshot, send_shell, theme,
+};
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
@@ -506,7 +508,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             println!("{}", module.display());
             Ok(ExitCode::SUCCESS)
         }
-        Response::Opened | Response::Sent => Ok(ExitCode::SUCCESS),
+        Response::Opened | Response::Sent | Response::Powered => Ok(ExitCode::SUCCESS),
         Response::DisableWhileTyping { enabled } => {
             println!("{}", if enabled { "on" } else { "off" });
             Ok(ExitCode::SUCCESS)
@@ -1244,6 +1246,10 @@ fn answer_a_command(
                     },
                     theme: &|to| {
                         theme(chrome, to, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
+                    power_displays: &|power| {
+                        power_displays(chrome, power, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
                     },
                 },
             )

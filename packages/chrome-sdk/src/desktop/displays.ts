@@ -40,6 +40,14 @@ export type Displays = {
    * holds.
    */
   setColorTemperature: System["setColorTemperature"];
+  /**
+   * Turn every monitor off now, keeping windows and workspaces as they are.
+   * Input more than a second later lights them again, as does
+   * {@link Displays.wake}. See docs/IDLE.md#sleeping-on-demand.
+   */
+  sleep: System["sleepDisplays"];
+  /** Light the monitors again, after {@link Displays.sleep} or idle blanking. */
+  wake: System["wakeDisplays"];
   on: On<DisplaysListeners>;
 };
 
@@ -50,7 +58,13 @@ export type DisplaysHost = Pick<
 
 export const displays = (
   host: DisplaysHost,
-  calls: Pick<System, "addVirtualMonitor" | "setColorTemperature">,
+  calls: Pick<
+    System,
+    | "addVirtualMonitor"
+    | "setColorTemperature"
+    | "sleepDisplays"
+    | "wakeDisplays"
+  >,
 ): Displays => {
   const listOf = memoizeLast((list: readonly DomicileDisplay[] | null) =>
     list?.map(displayOf),
@@ -66,6 +80,8 @@ export const displays = (
     }),
     setColorTemperature: (kelvin, display) =>
       calls.setColorTemperature(kelvin, display),
+    sleep: () => calls.sleepDisplays(),
+    wake: () => calls.wakeDisplays(),
   };
 };
 
