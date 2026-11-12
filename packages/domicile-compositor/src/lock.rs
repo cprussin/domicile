@@ -353,7 +353,9 @@ pub enum Asked<'a> {
 ///   states (`Reach::Arranges`), like `SetAppBounds`, switching the keymap
 ///   (`Reach::Retypes`), so the passphrase is typed on the right one, and the
 ///   monitors' color temperature (`Reach::Tints`), so a night light follows
-///   the clock. Sending a command is refused.
+///   the clock, and turning the monitors off and on (`Reach::Powers`), since a
+///   locked desk is often left with its screens off. Sending a command is
+///   refused.
 ///   Processes and watches started before the lock keep running.
 pub fn refused(asked: Asked) -> Option<Refusal> {
     match asked {
@@ -414,7 +416,10 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // judged, or by its end.
             | ClientRequest::AddVirtualMonitor { .. }
             | ClientRequest::RemoveVirtualMonitor { .. }
-        | ClientRequest::ResizeVirtualMonitor { .. },
+            | ClientRequest::ResizeVirtualMonitor { .. }
+            // Queued by a `SystemRequest::SleepDisplays` or `WakeDisplays`
+            // the lock already judged.
+            | ClientRequest::PowerDisplays { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SetTheme { .. } | ConnectionRequest::WhichTheme,
@@ -426,7 +431,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | Reach::Listens
             | Reach::Arranges
             | Reach::Retypes
-            | Reach::Tints,
+            | Reach::Tints
+            | Reach::Powers,
         ) => None,
     }
 }
@@ -969,6 +975,12 @@ mod tests {
             "a night light turns on at sunset whether or not anybody is at the desk"
         );
         assert_eq!(
+            refused(Asked::System(Reach::Powers)),
+            None,
+            "turning the screens off is how a locked desk is left, and lighting \
+             them shows only the lock screen"
+        );
+        assert_eq!(
             refused(Asked::System(Reach::Acts)),
             Some(Refusal::Command),
             "a file read, a write or a process is the desktop acting for \
@@ -1026,6 +1038,12 @@ mod tests {
                 ClientRequest::SetWhitePoint {
                     output: None,
                     white_point: domicile_host::white_point::white_point(3400),
+                },
+            ),
+            (
+                "the screens being put to sleep, which the lock already judged",
+                ClientRequest::PowerDisplays {
+                    power: domicile_host::system::DisplayPower::Asleep,
                 },
             ),
             (

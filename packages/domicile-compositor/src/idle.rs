@@ -24,6 +24,7 @@
 
 use std::time::{Duration, Instant};
 
+use domicile_host::system::DisplayPower;
 use domicile_protocol::HostMessage;
 
 use crate::client_requests::ClientRequest;
@@ -416,6 +417,10 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         | ClientRequest::SelectKeymap { .. }
         | ClientRequest::SwitchShortcutsInhibitor { .. }
         | ClientRequest::SetWhitePoint { .. }
+        // Turning the screens off is not a hand stirring.
+        | ClientRequest::PowerDisplays {
+            power: DisplayPower::Asleep,
+        }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }
         | ClientRequest::ChromeHello { .. }
@@ -449,6 +454,10 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         // is the only sign someone is typing. Lighting on any attempt lets the
         // user see a rejection.
         ClientRequest::Unlock { .. } => Some("an unlock attempt"),
+        // Somebody asked for the screens, as a key would light them.
+        ClientRequest::PowerDisplays {
+            power: DisplayPower::Awake,
+        } => Some("a wake"),
         // A theme change is the shell redrawing itself.
         ClientRequest::TurnTheWindows { .. } | ClientRequest::ThemeCaptured { .. } => None,
     }
@@ -504,6 +513,7 @@ mod tests {
     use std::rc::Rc;
     use std::time::{Duration, Instant};
 
+    use domicile_host::system::DisplayPower;
     use domicile_protocol::{HostMessage, PortalAnswer, TrayAction};
 
     use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
@@ -1284,6 +1294,13 @@ mod tests {
                 },
             ),
             (
+                "somebody waking the screens from a terminal",
+                "a wake",
+                ClientRequest::PowerDisplays {
+                    power: DisplayPower::Awake,
+                },
+            ),
+            (
                 "a key typed into a browser window",
                 "input the browser saw",
                 ClientRequest::Activity {
@@ -1377,6 +1394,13 @@ mod tests {
                 ClientRequest::SetWhitePoint {
                     output: None,
                     white_point: domicile_host::white_point::white_point(3400),
+                },
+            ),
+            (
+                // The screens go dark; nobody's hand stirred.
+                "the screens being put to sleep",
+                ClientRequest::PowerDisplays {
+                    power: DisplayPower::Asleep,
                 },
             ),
             (
