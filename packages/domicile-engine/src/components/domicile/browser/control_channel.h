@@ -163,6 +163,9 @@ class ControlChannel : public mojom::ControlChannel {
                      double x,
                      double y,
                      bool moved) override;
+  void PointerRelative(const std::string& app_id,
+                       double dx,
+                       double dy) override;
   void PointerLeave(const std::string& app_id) override;
   void PointerButton(const std::string& app_id,
                      uint32_t button,

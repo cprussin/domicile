@@ -39,6 +39,9 @@ use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
 };
+use wayland_protocols::wp::relative_pointer::zv1::client::{
+    zwp_relative_pointer_manager_v1, zwp_relative_pointer_v1,
+};
 use wayland_protocols::wp::text_input::zv3::client::{
     zwp_text_input_manager_v3, zwp_text_input_v3,
 };
@@ -509,6 +512,7 @@ struct Pixels {
 #[derive(Default)]
 struct Globals {
     gestures: Option<zwp_pointer_gestures_v1::ZwpPointerGesturesV1>,
+    relative: Option<zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1>,
     compositor: Option<wl_compositor::WlCompositor>,
     shm: Option<wl_shm::WlShm>,
     /// For `--bubble`.
@@ -633,6 +637,9 @@ impl Client {
                 }
                 "wp_cursor_shape_manager_v1" => {
                     self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zwp_relative_pointer_manager_v1" => {
+                    self.globals.relative = Some(registry.bind(name, 1, handle, ()));
                 }
                 "zwp_pointer_gestures_v1" => {
                     self.globals.gestures = Some(registry.bind(name, version.min(3), handle, ()));
@@ -2140,6 +2147,9 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
                         manager.get_hold_gesture(&pointer, handle, ());
                     }
                 }
+                if let Some(manager) = &client.globals.relative {
+                    manager.get_relative_pointer(&pointer, handle, ());
+                }
                 // Created now, because `set_shape` on pointer enter needs the
                 // device to exist.
                 client.cursor = client
@@ -3259,3 +3269,33 @@ impl Dispatch<zwp_pointer_gesture_hold_v1::ZwpPointerGestureHoldV1, ()> for Clie
 }
 
 delegate_noop!(Client: ignore zwp_pointer_gestures_v1::ZwpPointerGesturesV1);
+delegate_noop!(Client: ignore zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1);
+
+impl Dispatch<zwp_relative_pointer_v1::ZwpRelativePointerV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        relative: &zwp_relative_pointer_v1::ZwpRelativePointerV1,
+        event: zwp_relative_pointer_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let zwp_relative_pointer_v1::Event::RelativeMotion {
+            dx,
+            dy,
+            dx_unaccel,
+            dy_unaccel,
+            ..
+        } = event
+        {
+            crate::say!(
+                relative.id(),
+                "relative_motion({}, {}, {}, {})",
+                dx,
+                dy,
+                dx_unaccel,
+                dy_unaccel
+            );
+        }
+    }
+}
