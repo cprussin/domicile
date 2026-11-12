@@ -117,6 +117,20 @@ const systemEventSchema = z.looseObject({
         }),
         z.looseObject({ kind: z.literal("unfullscreen") }),
         z.looseObject({ kind: z.literal("minimize") }),
+        z.looseObject({ kind: z.literal("move") }),
+        z.looseObject({
+          edges: z.enum([
+            "top",
+            "bottom",
+            "left",
+            "right",
+            "top_left",
+            "top_right",
+            "bottom_left",
+            "bottom_right",
+          ]),
+          kind: z.literal("resize"),
+        }),
       ]),
     }),
     z.looseObject({

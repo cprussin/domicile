@@ -1,6 +1,7 @@
 //! xdg-shell and xdg-activation: the windows and popups clients create, and what
 //! they ask of them.
 
+use smithay::input::pointer::MotionEvent;
 use smithay::output::Output;
 use smithay::reexports::{
     wayland_protocols::xdg::shell::server::xdg_toplevel,
@@ -23,7 +24,7 @@ use smithay::wayland::{
 use smithay::{delegate_xdg_activation, delegate_xdg_shell};
 use tracing::debug;
 
-use domicile_protocol::WindowRequest;
+use domicile_protocol::{ResizeEdges, WindowRequest};
 
 use crate::activation;
 use crate::chrome_hub::broadcast_focus_request;
@@ -263,7 +264,10 @@ impl XdgShellHandler for DomicileCompositor {
         self.place_the_popups_over(&self.window_under_menus(surface.wl_surface()));
     }
 
-    fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
+    fn move_request(&mut self, surface: ToplevelSurface, _seat: wl_seat::WlSeat, serial: Serial) {
+        if self.hand_the_press_to_the_shell(&surface, serial) {
+            self.pass_on_a_window_request(&surface, WindowRequest::Move);
+        }
     }
 
     fn maximize_request(&mut self, surface: ToplevelSurface) {
@@ -296,11 +300,19 @@ impl XdgShellHandler for DomicileCompositor {
 
     fn resize_request(
         &mut self,
-        _surface: ToplevelSurface,
+        surface: ToplevelSurface,
         _seat: wl_seat::WlSeat,
-        _serial: Serial,
-        _edges: xdg_toplevel::ResizeEdge,
+        serial: Serial,
+        edges: xdg_toplevel::ResizeEdge,
     ) {
+        // `None` pulls no edge, so there is nothing to resize.
+        let Some(edges) = resize_edges_of(edges) else {
+            debug!(?edges, "a resize request pulling no edge -> dropped");
+            return;
+        };
+        if self.hand_the_press_to_the_shell(&surface, serial) {
+            self.pass_on_a_window_request(&surface, WindowRequest::Resize { edges });
+        }
     }
 
     /// A menu grabbing the keyboard and pointer until dismissed.
@@ -397,6 +409,49 @@ impl DomicileCompositor {
     /// The shell decides and sets states with `set_window_states`. xdg-shell
     /// requires the configure even when nothing changed. Before the first
     /// configure, that configure is the answer.
+    /// Whether `serial` is the press `surface`'s client still holds, as
+    /// `xdg_toplevel.move` and `resize` must name. If it is, the client loses
+    /// the pointer: it is told the pointer left and gets no release, as sway
+    /// hands its seat to the move, and the shell runs the drag. See
+    /// `docs/WRITING-A-SHELL.md#window-requests`.
+    ///
+    /// The shell takes the drag by capturing the pointer, so the window's
+    /// element stops forwarding motion. A shell that ignores the request leaves
+    /// the element forwarding it, and the client gets the pointer back with no
+    /// button down. Either way the release is dropped; see
+    /// `ClientRequest::PointerButton`.
+    fn hand_the_press_to_the_shell(&mut self, surface: &ToplevelSurface, serial: Serial) -> bool {
+        let pointer = self.seat.get_pointer().unwrap();
+        let held_by_this_client = pointer
+            .grab_start_data()
+            .and_then(|grab| grab.focus)
+            .is_some_and(|(focus, _)| focus.id().same_client_as(&surface.wl_surface().id()));
+        if !pointer.has_grab(serial) || !held_by_this_client || self.held_buttons.is_empty() {
+            debug!(
+                ?serial,
+                "a move or resize with no press of its own held -> dropped"
+            );
+            return false;
+        }
+        self.held_buttons.clear();
+        self.pointer_app = None;
+        self.pointer_surface = None;
+        let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+        pointer.unset_grab(self, serial, time);
+        let location = pointer.current_location();
+        pointer.motion(
+            self,
+            None,
+            &MotionEvent {
+                location,
+                serial: SERIAL_COUNTER.next_serial(),
+                time,
+            },
+        );
+        pointer.frame(self);
+        true
+    }
+
     fn pass_on_a_window_request(&self, surface: &ToplevelSurface, request: WindowRequest) {
         // `None` for the chrome's own window, which is never announced.
         if let Some(app_id) = self.app_id_of(surface.wl_surface()) {
@@ -406,5 +461,21 @@ impl DomicileCompositor {
         if surface.is_initial_configure_sent() {
             surface.send_configure();
         }
+    }
+}
+
+/// `edges` as the protocol names them, or `None` for an edge that pulls
+/// nothing.
+fn resize_edges_of(edges: xdg_toplevel::ResizeEdge) -> Option<ResizeEdges> {
+    match edges {
+        xdg_toplevel::ResizeEdge::Top => Some(ResizeEdges::Top),
+        xdg_toplevel::ResizeEdge::Bottom => Some(ResizeEdges::Bottom),
+        xdg_toplevel::ResizeEdge::Left => Some(ResizeEdges::Left),
+        xdg_toplevel::ResizeEdge::Right => Some(ResizeEdges::Right),
+        xdg_toplevel::ResizeEdge::TopLeft => Some(ResizeEdges::TopLeft),
+        xdg_toplevel::ResizeEdge::TopRight => Some(ResizeEdges::TopRight),
+        xdg_toplevel::ResizeEdge::BottomLeft => Some(ResizeEdges::BottomLeft),
+        xdg_toplevel::ResizeEdge::BottomRight => Some(ResizeEdges::BottomRight),
+        _ => None,
     }
 }
