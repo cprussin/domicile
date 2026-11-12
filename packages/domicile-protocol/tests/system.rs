@@ -849,8 +849,14 @@ fn a_screen_recording_is_answered_with_where_it_was_saved() {
 #[test]
 fn the_displays_sleep_and_wake_on_demand() {
     for (call, request) in [
-        ("sleep_displays", SystemRequest::SleepDisplays),
-        ("wake_displays", SystemRequest::WakeDisplays),
+        (
+            "sleep_displays",
+            SystemRequest::SleepDisplays { display: None },
+        ),
+        (
+            "wake_displays",
+            SystemRequest::WakeDisplays { display: None },
+        ),
     ] {
         assert_eq!(
             chrome(&format!(
@@ -859,6 +865,33 @@ fn the_displays_sleep_and_wake_on_demand() {
             ChromeMessage::SystemRequest { id: 5, request }
         );
     }
+}
+
+/// `domicile sleep-displays DP-1` turns one monitor off, leaving the others.
+#[test]
+fn one_display_sleeps_and_wakes_by_name() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"sleep_displays","display":"DP-1"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::SleepDisplays {
+                display: Some("DP-1".into())
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"wake_displays","display":"DP-1"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::WakeDisplays {
+                display: Some("DP-1".into())
+            },
+        }
+    );
 }
 
 /// The shell warms every monitor, as a night light does.

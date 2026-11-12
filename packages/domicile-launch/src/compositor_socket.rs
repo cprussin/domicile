@@ -116,15 +116,18 @@ pub fn send_shell(
     }
 }
 
-/// Tells the compositor at `socket` to turn the monitors `power`.
+/// Tells the compositor at `socket` to turn the monitor named `display`, or
+/// every monitor, `power`.
 pub fn power_displays(
     socket: &Path,
     power: DisplayPower,
+    display: Option<&str>,
     patience: Option<Duration>,
 ) -> Result<(), CompositorError> {
+    let display = display.map(str::to_owned);
     let request = match power {
-        DisplayPower::Asleep => SystemRequest::SleepDisplays,
-        DisplayPower::Awake => SystemRequest::WakeDisplays,
+        DisplayPower::Asleep => SystemRequest::SleepDisplays { display },
+        DisplayPower::Awake => SystemRequest::WakeDisplays { display },
     };
     let answer = called(socket, request, patience)?;
     match answer.reply {

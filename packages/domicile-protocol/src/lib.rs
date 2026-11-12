@@ -500,8 +500,9 @@ pub enum HostMessage {
     /// `wl_pointer` uses), not buffer pixels.
     AppResized { app_id: String, size: [f64; 2] },
 
-    /// A client opened or moved a popup, such as a menu, a tooltip or a
-    /// bubble drawn as a subsurface (Chromium's extension popups).
+    /// A client opened or moved a popup, such as a menu, a tooltip, a
+    /// bubble drawn as a subsurface (Chromium's extension popups) or an input
+    /// method's candidate list (over the window being typed in).
     ///
     /// The popup is its own `<app>`, positioned rather than laid out:
     /// `position` is its top-left relative to `parent`, and `size` its box,
@@ -2021,13 +2022,22 @@ pub enum SystemRequest {
     },
     /// Turn every monitor off now, keeping the desktop as it is. Input more
     /// than a second later, or [`SystemRequest::WakeDisplays`], lights them
-    /// again. Answered with [`SystemReply::Set`]. See
-    /// `docs/IDLE.md#sleeping-on-demand`.
-    SleepDisplays,
+    /// again. With `display`, a [`DisplayInfo::name`], turn only that one
+    /// off; it keeps its place and windows, and sleeps through input until
+    /// woken. Answered with [`SystemReply::Set`], or
+    /// [`SystemErrorKind::NotFound`] for a display the desktop does not have.
+    /// See `docs/IDLE.md#sleeping-on-demand`.
+    SleepDisplays {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        display: Option<String>,
+    },
     /// Light the monitors again, as input would: after
-    /// [`SystemRequest::SleepDisplays`] or idle blanking. Answered with
-    /// [`SystemReply::Set`].
-    WakeDisplays,
+    /// [`SystemRequest::SleepDisplays`] or idle blanking. With `display`,
+    /// light only that one. Answered as `SleepDisplays` is.
+    WakeDisplays {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        display: Option<String>,
+    },
 }
 
 /// What [`SystemRequest::ShortcutsInhibitor`] does to the inhibitor.

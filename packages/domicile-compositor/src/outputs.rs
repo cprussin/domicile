@@ -409,6 +409,7 @@ impl DomicileCompositor {
         for popup in self.xdg_shell_state.popup_surfaces() {
             self.place_window(popup.wl_surface(), self.popup_bounds(popup));
         }
+        self.put_the_candidates_on_their_display();
         // The chrome covers every display, so it draws for the densest.
         if let Some(chrome) = &self.chrome_toplevel {
             self.prefer_scale(chrome.wl_surface(), None);

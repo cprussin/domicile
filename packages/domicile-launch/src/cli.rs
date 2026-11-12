@@ -10,6 +10,7 @@ use domicile_protocol::Scale;
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
+use domicile_host::system::DisplayPower;
 
 /// What `domicile --help` prints.
 ///
@@ -37,8 +38,9 @@ Ask the running desktop:
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does
   domicile theme [light|dark|toggle]    Set the theme, or print it
-  domicile sleep-displays               Turn every monitor off until input
-  domicile wake-displays                Turn the monitors back on
+  domicile sleep-displays [display]     Turn every monitor off until input,
+                                        or one until it is woken
+  domicile wake-displays [display]      Turn the monitors, or one, back on
   domicile disable-while-typing [on|off|toggle]
                                         Set the touchpad setting, or print it
   domicile monitor <name> <W>x<H>[@Hz] [scale]
@@ -342,6 +344,18 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     }),
                 },
             },
+            Verb::Sleeping(power) => match (args.next(), args.next()) {
+                (Some(display), Some(extra)) => Err(CliError::Extra {
+                    verb: format!("{first} {display}"),
+                    extra,
+                }),
+                (display, _) => Ok(Invocation::Ask {
+                    request: match power {
+                        DisplayPower::Asleep => Request::SleepDisplays { display },
+                        DisplayPower::Awake => Request::WakeDisplays { display },
+                    },
+                }),
+            },
             Verb::Theming => match (args.next(), args.next()) {
                 (None, _) => Ok(Invocation::Ask {
                     request: Request::Theme { to: None },
@@ -493,6 +507,8 @@ enum Verb {
     Powering(Power),
     /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
+    /// `sleep-displays` or `wake-displays`, which take a display or nothing.
+    Sleeping(DisplayPower),
 }
 
 /// The verb `word` names, if any.
@@ -511,8 +527,8 @@ fn verb(word: &str) -> Option<Verb> {
         "check-config" => Some(Verb::Checking),
         "disable-while-typing" => Some(Verb::Switching),
         "theme" => Some(Verb::Theming),
-        "sleep-displays" => Some(Verb::Asking(Request::SleepDisplays)),
-        "wake-displays" => Some(Verb::Asking(Request::WakeDisplays)),
+        "sleep-displays" => Some(Verb::Sleeping(DisplayPower::Asleep)),
+        "wake-displays" => Some(Verb::Sleeping(DisplayPower::Awake)),
         "power-off" => Some(Verb::Powering(Power::Off)),
         "reboot" => Some(Verb::Powering(Power::Reboot)),
         "log-out" => Some(Verb::Powering(Power::LogOut)),
