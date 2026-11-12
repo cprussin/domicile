@@ -5,7 +5,6 @@ import {
   APP_FOCUS_RELEASE_REQUESTED_EVENT,
   APP_FOCUS_REQUESTED_EVENT,
 } from "@domicile-desktop/sdk/app-element";
-import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { WindowState } from "@domicile-desktop/sdk/window-state";
@@ -74,9 +73,10 @@ type Props = {
   /** The host's id for this window's client. */
   appId: string;
   /**
-   * The cursor the client requested. `undefined` uses the page's cursor.
+   * The CSS cursor the client requested: a shape's keyword, or an image it
+   * drew. `undefined` uses the page's cursor.
    */
-  cursor: CursorShape | undefined;
+  cursor: string | undefined;
   /**
    * Whether it just moved to another tab group, so it eases there over the
    * strips it passes. See `crossing.ts`.

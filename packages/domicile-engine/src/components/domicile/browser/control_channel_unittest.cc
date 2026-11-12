@@ -123,7 +123,16 @@ class FakeClient : public mojom::ControlChannelClient {
   void AppClosed(const std::string& app_id) override {
     heard_.push_back("closed " + app_id);
   }
-  void AppCursor(const std::string&, mojom::CursorShape) override {}
+  void AppCursor(const std::string& app_id,
+                 mojom::CursorShape,
+                 mojom::AppCursorImagePtr image) override {
+    heard_.push_back(
+        image ? base::StringPrintf("cursor %s image %s at %d,%d x%d",
+                                   app_id.c_str(), image->png.c_str(),
+                                   image->hotspot_x, image->hotspot_y,
+                                   image->scale)
+              : "cursor " + app_id);
+  }
   void AppPresented(const std::string& app_id) override {
     heard_.push_back("presented " + app_id);
   }
@@ -438,6 +447,27 @@ TEST_F(ControlChannelTest, AWindowsAnchorReachesThePage) {
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{"anchored app-4 at bar",
                                       "anchored app-4 at ", "locked false"}));
+}
+
+// A cursor a client drew reaches the page with its PNG, hotspot and scale. A
+// named one, or an image missing a part, reaches it as the shape alone.
+TEST_F(ControlChannelTest, ACursorAClientDrewReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_cursor\",\"app_id\":\"app-1\","
+      "\"cursor\":\"default\",\"image\":{\"png\":\"iVBO\","
+      "\"hotspot\":[3,4],\"scale\":2}}\n"
+      "{\"type\":\"app_cursor\",\"app_id\":\"app-1\","
+      "\"cursor\":\"pointer\"}\n"
+      "{\"type\":\"app_cursor\",\"app_id\":\"app-1\","
+      "\"cursor\":\"default\",\"image\":{\"png\":\"iVBO\"}}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"cursor app-1 image iVBO at 3,4 x2",
+                                      "cursor app-1", "cursor app-1",
+                                      "locked false"}));
 }
 
 // A window taking and giving back a shortcuts inhibitor reaches the page,

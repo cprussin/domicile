@@ -426,6 +426,24 @@ mojom::WindowOwnerPtr OwnerOf(const base::DictValue* owner) {
                                  SandboxOf(owner->FindDict("sandbox")));
 }
 
+// A client's own cursor image from `app_cursor`'s `image`, or null for none or
+// one missing a part. A PNG is passed on as the compositor encoded it; the
+// page's cursor decodes it, as it does any CSS cursor image.
+mojom::AppCursorImagePtr CursorImageOf(const base::DictValue* image) {
+  if (!image) {
+    return nullptr;
+  }
+  const std::string* png = image->FindString("png");
+  const base::ListValue* hotspot = image->FindList("hotspot");
+  const std::optional<int> scale = image->FindInt("scale");
+  if (!png || !hotspot || hotspot->size() != 2 || !(*hotspot)[0].is_int() ||
+      !(*hotspot)[1].is_int() || !scale || *scale < 1) {
+    return nullptr;
+  }
+  return mojom::AppCursorImage::New(*png, (*hotspot)[0].GetInt(),
+                                    (*hotspot)[1].GetInt(), *scale);
+}
+
 // A message's synced `frame`, 0 when absent. A whole number from base::Value
 // is a signed int, which a frame counted at 60 a second fills in a year.
 uint32_t FrameOf(const base::DictValue& message) {
@@ -1334,7 +1352,8 @@ void ControlChannel::DispatchLine(const std::string& line,
                       "the request was dropped.";
       return;
     }
-    client_->AppCursor(*app_id, *shape);
+    client_->AppCursor(*app_id, *shape,
+                       CursorImageOf(message.FindDict("image")));
     return;
   }
 
