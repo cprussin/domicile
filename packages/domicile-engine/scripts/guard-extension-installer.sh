@@ -154,7 +154,7 @@ rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
-  --app="domicile://shell/?witness=$WITNESS&src=$PAGE" \
+  --app="domicile://shell/?witness=$WITNESS&private=0&src=$PAGE" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-extension-installer.js" \
   --domicile-control-socket="$CONTROL" \

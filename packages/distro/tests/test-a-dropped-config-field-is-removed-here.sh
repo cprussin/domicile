@@ -8,8 +8,8 @@
 # that into a home-manager assertion that says where the setting went.
 #
 # Fields are named by dotted path from `Config`, with `[]` for a list's
-# elements: `output.profiles[].displays[].mode`, as `removedSettings` names
-# them. A field's lone `#[serde(rename = "...")]` names its path. In a struct
+# elements and `*` for a map's values: `output.profiles[].displays[].mode`,
+# `extensions.settings.*.private`, as `removedSettings` names them. A field's lone `#[serde(rename = "...")]` names its path. In a struct
 # reached from `Config`, anything it cannot read fails rather than hiding the
 # fields below it: any other `#[serde(...)]` that renames, flattens or skips, a field that is not `pub`, a type over several lines, a type it cannot
 # name (`Box<T>`, `crate::T`).
@@ -126,6 +126,7 @@ paths() { # records file, struct, prefix, structs above
       case "$inner" in
         Option\<*\>) inner="${inner#Option<}"; inner="${inner%>}" ;;
         Vec\<*\>) inner="${inner#Vec<}"; inner="${inner%>}"; path="$path[]" ;;
+        BTreeMap\<String,\ *\>) inner="${inner#BTreeMap<String, }"; inner="${inner%>}"; path="$path.*" ;;
         *) break ;;
       esac
     done

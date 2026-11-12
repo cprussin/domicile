@@ -101,10 +101,16 @@ const arrayOf = (schema: JsonSchema, indent: string): string => {
   }
 };
 
-const objectOf = (schema: JsonSchema, indent: string): string =>
-  schema.additionalProperties === true
-    ? "Record<string, unknown>"
-    : closedObjectOf(schema, indent);
+const objectOf = (schema: JsonSchema, indent: string): string => {
+  if (schema.additionalProperties === undefined) {
+    return closedObjectOf(schema, indent);
+  } else if (schema.additionalProperties === true) {
+    return "Record<string, unknown>";
+  } else {
+    const value = alternatives(schema.additionalProperties, indent);
+    return `Record<string, ${value.join(" | ")}>`;
+  }
+};
 
 const closedObjectOf = (schema: JsonSchema, indent: string): string => {
   const inner = `${indent}  `;

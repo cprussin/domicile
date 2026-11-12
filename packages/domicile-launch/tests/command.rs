@@ -4,14 +4,17 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    clear_browsing_data_line, clear_site_data_line, config_extensions_line, delete_history_line,
-    disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
-    media_devices_line, open_app_line, open_url_line, reply, run_app_line,
-    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
-    site_permissions_line, uninstall_extension_line, visits_line, Reply,
+    clear_browsing_data_line, clear_site_data_line, config_extensions_line,
+    configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
+    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
+    open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
+    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
+    visits_line, Reply,
 };
 use domicile_launch::control::AppReuse;
-use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::extensions::{
+    ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
+};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
@@ -204,8 +207,8 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
     assert_eq!(
         reply(
             "{\"type\":\"extensions\",\"extensions\":[\
-             {\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Dark Reader\",\"description\":\"Dark mode\",\"version\":\"4.9\",\"enabled\":true,\"options_url\":\"chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html\"},\
-             {\"id\":\"bcdefghijklmnopabcdefghijklmnopa\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":false}]}"
+             {\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Dark Reader\",\"description\":\"Dark mode\",\"version\":\"4.9\",\"enabled\":true,\"options_url\":\"chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html\",\"settings\":{\"private\":true,\"site_access\":[\"github.com\"]}},\
+             {\"id\":\"bcdefghijklmnopabcdefghijklmnopa\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":false,\"settings\":{}}]}"
         )
         .unwrap(),
         Reply::Extensions {
@@ -220,6 +223,11 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
                         "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html"
                             .to_string()
                     ),
+                    settings: ExtensionSettings {
+                        in_private: Some(true),
+                        site_access: Some(SiteAccess::Sites(vec!["github.com".to_string()])),
+                        ..ExtensionSettings::default()
+                    },
                 },
                 InstalledExtension {
                     id: "bcdefghijklmnopabcdefghijklmnopa".to_string(),
@@ -228,9 +236,25 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
                     version: "1.0".to_string(),
                     enabled: false,
                     options_url: None,
+                    settings: ExtensionSettings::default(),
                 },
             ]
         }
+    );
+}
+
+#[test]
+fn an_extension_s_settings_are_changed_by_id_naming_only_those_that_change() {
+    assert_eq!(
+        configure_extension_line(
+            "abcdefghijklmnopabcdefghijklmnop",
+            &ExtensionSettings {
+                in_private: Some(true),
+                site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
+                ..ExtensionSettings::default()
+            }
+        ),
+        "{\"type\":\"configure_extension\",\"version\":1,\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"settings\":{\"private\":true,\"site_access\":\"on_click\"}}\n"
     );
 }
 

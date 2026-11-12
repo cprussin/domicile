@@ -25,6 +25,7 @@
 #include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
+#include "chrome/browser/domicile/domicile_extension_settings.h"
 #include "chrome/browser/domicile/domicile_history.h"
 #include "chrome/browser/domicile/domicile_media_devices.h"
 #include "chrome/browser/domicile/domicile_site_data.h"
@@ -409,6 +410,17 @@ base::expected<void, std::string> SetShellExtensionEnabled(
   return SetExtensionEnabledIn(*profile, id, enabled);
 }
 
+base::expected<void, std::string> ConfigureShellExtension(
+    const std::string& id,
+    const ExtensionSettings& settings) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    return base::unexpected(kNoProfile);
+  }
+  return ConfigureExtensionIn(*profile, id, settings);
+}
+
 // The cameras and microphones, ranked by the shell profile's preference.
 std::optional<MediaDeviceList> ListShellMediaDevices() {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -540,6 +552,7 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                      &ListTheShellProfilesConfigExtensions,
                  .list_extensions = &ListShellExtensions,
                  .set_extension_enabled = &SetShellExtensionEnabled,
+                 .configure_extension = &ConfigureShellExtension,
                  .list_media_devices = &ListShellMediaDevices,
                  .set_media_device = &PreferShellMediaDevice,
                  .search_history = &SearchShellHistory,
