@@ -6,9 +6,10 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    screen_record, screenshot, send_shell, theme, virtual_monitor, CompositorError,
+    power_displays, screen_record, screenshot, send_shell, theme, virtual_monitor, CompositorError,
 };
 use domicile_launch::control::Shot;
 use domicile_protocol::{Scale, Theme};
@@ -259,6 +260,29 @@ fn the_compositor_is_told_to_send_the_command_and_says_it_did() {
         "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"send_shell\",\
          \"command\":[\"focus\",\"right\"]}}\n"
     );
+}
+
+#[test]
+fn the_compositor_is_told_to_sleep_or_wake_the_displays_and_says_it_did() {
+    for (power, call) in [
+        (DisplayPower::Asleep, "sleep_displays"),
+        (DisplayPower::Awake, "wake_displays"),
+    ] {
+        let (_scratch, path) = scratch();
+        let heard = a_compositor(
+            &path,
+            Duration::ZERO,
+            Some("{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"set\"}}\n"),
+        );
+
+        assert_eq!(power_displays(&path, power, Some(BRIEFLY)), Ok(()));
+        assert_eq!(
+            heard.join().expect("the compositor was listening"),
+            format!(
+                "{{\"type\":\"system_request\",\"id\":1,\"request\":{{\"call\":\"{call}\"}}}}\n"
+            )
+        );
+    }
 }
 
 #[test]
