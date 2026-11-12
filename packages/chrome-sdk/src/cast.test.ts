@@ -27,6 +27,7 @@ const TV: CastTarget = {
 };
 
 const display = (name: string): DomicileDisplay => ({
+  adaptiveSync: "unsupported",
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,

@@ -12,6 +12,7 @@ import { Progress } from "./progress";
 import { Splash } from "./Splash";
 
 const display = (name: string, x: number, width: number, height: number) => ({
+  adaptiveSync: "unsupported",
   height,
   modeHeight: height,
   modeWidth: width,

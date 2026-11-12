@@ -16,6 +16,7 @@ const onADesk = (): FakeDomicileHost => {
   fake.set({
     displays: [
       {
+        adaptiveSync: "unsupported",
         height: 1080,
         modeHeight: 1080,
         modeWidth: 1920,

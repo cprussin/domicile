@@ -53,8 +53,10 @@ std::vector<mojom::DisplayPtr> DisplayListFor(
         base::ClampRound(screen.display_frequency() * kMillihertzPerHertz);
     gfx::Size physical_size_mm = PhysicalSizeMm(screen);
     std::vector<mojom::DisplayModePtr> modes;
+    mojom::AdaptiveSync adaptive_sync = mojom::AdaptiveSync::kUnsupported;
     if (panel != panels.end()) {
       refresh_mhz = panel->second.refresh_mhz;
+      adaptive_sync = panel->second.adaptive_sync;
       physical_size_mm = panel->second.physical_size_mm;
       modes.reserve(panel->second.modes.size());
       for (const DisplayPanelMode& mode : panel->second.modes) {
@@ -66,7 +68,7 @@ std::vector<mojom::DisplayPtr> DisplayListFor(
         refresh_mhz,
         connector == connectors.end() ? std::string() : connector->second,
         gamma_size == gamma_sizes.end() ? 0u : gamma_size->second,
-        std::move(modes)));
+        std::move(modes), adaptive_sync));
   }
   return list;
 }

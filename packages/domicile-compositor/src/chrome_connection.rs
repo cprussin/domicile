@@ -1159,6 +1159,7 @@ mod tests {
             scale,
             mode: size,
             refresh_mhz: 0,
+            adaptive_sync: domicile_protocol::AdaptiveSync::Unsupported,
             transform: domicile_protocol::DisplayTransform::Normal,
         }
     }
