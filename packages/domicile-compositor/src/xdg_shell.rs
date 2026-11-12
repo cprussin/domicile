@@ -436,6 +436,7 @@ impl DomicileCompositor {
         self.held_buttons.clear();
         self.pointer_app = None;
         self.pointer_surface = None;
+        self.offer_pointer_constraint();
         let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
         pointer.unset_grab(self, serial, time);
         let location = pointer.current_location();

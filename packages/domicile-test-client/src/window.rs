@@ -31,6 +31,9 @@ use wayland_protocols::wp::idle_inhibit::zv1::client::{
 use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1, zwp_keyboard_shortcuts_inhibitor_v1,
 };
+use wayland_protocols::wp::pointer_constraints::zv1::client::{
+    zwp_confined_pointer_v1, zwp_locked_pointer_v1, zwp_pointer_constraints_v1,
+};
 use wayland_protocols::wp::pointer_gestures::zv1::client::{
     zwp_pointer_gesture_hold_v1, zwp_pointer_gesture_pinch_v1, zwp_pointer_gesture_swipe_v1,
     zwp_pointer_gestures_v1,
@@ -38,6 +41,9 @@ use wayland_protocols::wp::pointer_gestures::zv1::client::{
 use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
+};
+use wayland_protocols::wp::relative_pointer::zv1::client::{
+    zwp_relative_pointer_manager_v1, zwp_relative_pointer_v1,
 };
 use wayland_protocols::wp::text_input::zv3::client::{
     zwp_text_input_manager_v3, zwp_text_input_v3,
@@ -60,7 +66,7 @@ use wayland_protocols_misc::server_decoration::client::{
 
 use crate::anchor_protocol::{domicile_anchor_manager_v1, domicile_toplevel_anchor_v1};
 use crate::arguments::{
-    Arguments, AskForFocus, AskTo, AskToDrag, HoldTheScreensOn, TakeTheShortcuts,
+    Arguments, AskForFocus, AskTo, AskToDrag, ConstrainPointer, HoldTheScreensOn, TakeTheShortcuts,
 };
 
 /// Why the client stopped.
@@ -274,6 +280,9 @@ struct Client {
     sliding_menu: bool,
     /// See [`crate::arguments::Arguments::ask_to_drag`].
     ask_to_drag: Option<AskToDrag>,
+    /// See [`crate::arguments::Arguments::constrain_pointer`]. Taken once
+    /// asked.
+    constrain_pointer: Option<ConstrainPointer>,
     /// The open popups, each over the one before it or the window.
     popups: Vec<Popup>,
     /// Whether to open a bubble once the window is up. See
@@ -512,6 +521,8 @@ struct Pixels {
 #[derive(Default)]
 struct Globals {
     gestures: Option<zwp_pointer_gestures_v1::ZwpPointerGesturesV1>,
+    relative: Option<zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1>,
+    constraints: Option<zwp_pointer_constraints_v1::ZwpPointerConstraintsV1>,
     compositor: Option<wl_compositor::WlCompositor>,
     shm: Option<wl_shm::WlShm>,
     /// For `--bubble`.
@@ -561,6 +572,7 @@ impl Client {
             anchor: asked.anchor.clone(),
             sliding_menu: asked.sliding_menu,
             ask_to_drag: asked.ask_to_drag,
+            constrain_pointer: asked.constrain_pointer,
             popups: Vec::new(),
             wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
             bubble: None,
@@ -637,6 +649,12 @@ impl Client {
                 }
                 "wp_cursor_shape_manager_v1" => {
                     self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zwp_pointer_constraints_v1" => {
+                    self.globals.constraints = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zwp_relative_pointer_manager_v1" => {
+                    self.globals.relative = Some(registry.bind(name, 1, handle, ()));
                 }
                 "zwp_pointer_gestures_v1" => {
                     self.globals.gestures = Some(registry.bind(name, version.min(3), handle, ()));
@@ -1335,6 +1353,42 @@ fn open_a_sliding_menu(client: &mut Client, handle: &QueueHandle<Client>) {
         .map(|(_, xdg)| xdg.clone())
         .expect("a press is over the window or one of its menus");
     open_a_popup(client, handle, &parent, true);
+}
+
+/// Ask, once, for `--constrain-pointer`'s lock or confinement over the window
+/// the pointer entered.
+fn constrain_the_pointer(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    pointer: &wl_pointer::WlPointer,
+    entered: &wl_surface::WlSurface,
+) {
+    let Some(window) = client
+        .window
+        .as_ref()
+        .filter(|window| window.surface == *entered)
+    else {
+        return;
+    };
+    let (Some(constraint), Some(constraints)) = (
+        client.constrain_pointer.take(),
+        client.globals.constraints.as_ref(),
+    ) else {
+        return;
+    };
+    let lifetime = zwp_pointer_constraints_v1::Lifetime::Persistent;
+    match constraint {
+        ConstrainPointer::Lock => {
+            let locked =
+                constraints.lock_pointer(&window.surface, pointer, None, lifetime, handle, ());
+            crate::say!(locked.id(), "lock_pointer()");
+        }
+        ConstrainPointer::Confine => {
+            let confined =
+                constraints.confine_pointer(&window.surface, pointer, None, lifetime, handle, ());
+            crate::say!(confined.id(), "confine_pointer()");
+        }
+    }
 }
 
 /// Ask the desktop to move or resize the window from the button event
@@ -2144,6 +2198,9 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
                         manager.get_hold_gesture(&pointer, handle, ());
                     }
                 }
+                if let Some(manager) = &client.globals.relative {
+                    manager.get_relative_pointer(&pointer, handle, ());
+                }
                 // Created now, because `set_shape` on pointer enter needs the
                 // device to exist.
                 client.cursor = client
@@ -2865,6 +2922,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     surface_x,
                     surface_y
                 );
+                constrain_the_pointer(client, handle, pointer, &surface);
                 client.pointer_over = Some(surface);
                 // The cursor shape request is how the compositor learns which
                 // cursor to pass to the chrome.
@@ -3293,3 +3351,70 @@ impl Dispatch<zwp_pointer_gesture_hold_v1::ZwpPointerGestureHoldV1, ()> for Clie
 }
 
 delegate_noop!(Client: ignore zwp_pointer_gestures_v1::ZwpPointerGesturesV1);
+delegate_noop!(Client: ignore zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1);
+delegate_noop!(Client: ignore zwp_pointer_constraints_v1::ZwpPointerConstraintsV1);
+
+impl Dispatch<zwp_locked_pointer_v1::ZwpLockedPointerV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        locked: &zwp_locked_pointer_v1::ZwpLockedPointerV1,
+        event: zwp_locked_pointer_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_locked_pointer_v1::Event::Locked => crate::say!(locked.id(), "locked()"),
+            zwp_locked_pointer_v1::Event::Unlocked => crate::say!(locked.id(), "unlocked()"),
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<zwp_confined_pointer_v1::ZwpConfinedPointerV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        confined: &zwp_confined_pointer_v1::ZwpConfinedPointerV1,
+        event: zwp_confined_pointer_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_confined_pointer_v1::Event::Confined => crate::say!(confined.id(), "confined()"),
+            zwp_confined_pointer_v1::Event::Unconfined => {
+                crate::say!(confined.id(), "unconfined()");
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<zwp_relative_pointer_v1::ZwpRelativePointerV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        relative: &zwp_relative_pointer_v1::ZwpRelativePointerV1,
+        event: zwp_relative_pointer_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let zwp_relative_pointer_v1::Event::RelativeMotion {
+            dx,
+            dy,
+            dx_unaccel,
+            dy_unaccel,
+            ..
+        } = event
+        {
+            crate::say!(
+                relative.id(),
+                "relative_motion({}, {}, {}, {})",
+                dx,
+                dy,
+                dx_unaccel,
+                dy_unaccel
+            );
+        }
+    }
+}

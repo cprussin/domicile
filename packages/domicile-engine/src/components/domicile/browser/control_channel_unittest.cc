@@ -127,6 +127,16 @@ class FakeClient : public mojom::ControlChannelClient {
   void AppPresented(const std::string& app_id) override {
     heard_.push_back("presented " + app_id);
   }
+  void AppPointerConstraint(
+      const std::string& app_id,
+      std::optional<mojom::PointerConstraint> constraint) override {
+    const char* name = "none";
+    if (constraint) {
+      name =
+          *constraint == mojom::PointerConstraint::kLock ? "lock" : "confine";
+    }
+    heard_.push_back("constraint " + app_id + " " + name);
+  }
   void AppSuspended(const std::string& app_id, bool suspended) override {
     heard_.push_back((suspended ? "suspended " : "resumed ") + app_id);
   }
@@ -661,6 +671,50 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
     EXPECT_EQ(frame->FindDouble("dy"), 4.5);
     EXPECT_EQ(frame->FindInt("v120_y"), 0);
   }
+}
+
+// A hand's relative motion reaches the compositor as its deltas.
+TEST_F(ControlChannelTest, RelativeMotionReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->PointerRelative("app", 3.5, -2);
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(),
+            R"({"app_id":"app","dx":3.5,"dy":-2.0,"type":"pointer_relative"})");
+}
+
+// A window's ask to lock or confine the pointer reaches the page, `null`
+// withdraws it, and a kind this engine does not know is dropped.
+TEST_F(ControlChannelTest, APointerConstraintReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"lock\"}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"wiggle\"}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"confine\"}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":null}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"constraint game lock",
+                                      "constraint game confine",
+                                      "constraint game none", "locked false"}));
+}
+
+// The page taking and letting go of the pointer reaches the compositor.
+TEST_F(ControlChannelTest, ThePageTakingThePointerReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->PointerConstrained("game", true);
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(),
+            R"({"active":true,"app_id":"game","type":"pointer_constrained"})");
 }
 
 TEST_F(ControlChannelTest, TouchesKeepTheirPointsAndUnsignedTimes) {
