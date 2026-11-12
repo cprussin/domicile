@@ -14,16 +14,17 @@
 namespace domicile {
 namespace {
 
-std::string Written(const base::DictValue& message) {
+std::string ImeLineWritten(const base::DictValue& message) {
   std::string line;
   EXPECT_TRUE(base::JSONWriter::Write(message, &line));
   return line;
 }
 
-base::DictValue Read(const std::string& line) {
-  std::optional<base::Value> parsed = base::JSONReader::Read(line);
-  EXPECT_TRUE(parsed && parsed->is_dict()) << line;
-  return parsed ? std::move(parsed->GetDict()) : base::DictValue();
+base::DictValue ImeLineRead(const std::string& line) {
+  std::optional<base::DictValue> parsed =
+      base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
+  EXPECT_TRUE(parsed) << line;
+  return parsed ? std::move(*parsed) : base::DictValue();
 }
 
 // What the compositor's serde reads: an enabled field with its text, kind and
@@ -38,7 +39,7 @@ TEST(InputMethodLinesTest, AFieldIsWrittenAsTheCompositorReadsIt) {
   field.purpose = 8;
   field.caret = gfx::Rect(10, 20, 1, 16);
 
-  EXPECT_EQ(Written(TextInputMessage(field)),
+  EXPECT_EQ(ImeLineWritten(TextInputMessage(field)),
             "{\"field\":{\"cursor\":[10,20,1,16],\"enabled\":true,"
             "\"hint\":192,\"purpose\":8,\"surrounding\":{\"anchor\":0,"
             "\"cursor\":2,\"text\":\"ni hao\"}},\"type\":\"text_input\"}");
@@ -46,13 +47,13 @@ TEST(InputMethodLinesTest, AFieldIsWrittenAsTheCompositorReadsIt) {
 
 // A field that takes no text says only that.
 TEST(InputMethodLinesTest, NoFieldIsWrittenBare) {
-  EXPECT_EQ(Written(TextInputMessage(ui::DeskTextField())),
+  EXPECT_EQ(ImeLineWritten(TextInputMessage(ui::DeskTextField())),
             "{\"field\":{\"enabled\":false,\"hint\":0,\"purpose\":0},"
             "\"type\":\"text_input\"}");
 }
 
 TEST(InputMethodLinesTest, AKeyIsWrittenWithItsEvdevCode) {
-  EXPECT_EQ(Written(KeyForInputMethodMessage(31, true)),
+  EXPECT_EQ(ImeLineWritten(KeyForInputMethodMessage(31, true)),
             "{\"keycode\":31,\"pressed\":true,"
             "\"type\":\"key_for_input_method\"}");
 }
@@ -60,9 +61,9 @@ TEST(InputMethodLinesTest, AKeyIsWrittenWithItsEvdevCode) {
 // A serial past int32, as the compositor's are: microseconds since the epoch.
 TEST(InputMethodLinesTest, ACompositionIsReadWithEveryPart) {
   const std::optional<HeardComposition> heard = ReadComposition(
-      Read("{\"type\":\"composition\",\"serial\":1794500000000001,"
-           "\"preedit\":{\"text\":\"ni\",\"cursor_begin\":2,"
-           "\"cursor_end\":2},\"commit\":\"x\",\"delete\":[1,0]}"));
+      ImeLineRead("{\"type\":\"composition\",\"serial\":1794500000000001,"
+                  "\"preedit\":{\"text\":\"ni\",\"cursor_begin\":2,"
+                  "\"cursor_end\":2},\"commit\":\"x\",\"delete\":[1,0]}"));
   ASSERT_TRUE(heard);
   EXPECT_EQ(heard->serial, 1794500000000001u);
   ASSERT_TRUE(heard->composition.preedit);
@@ -78,7 +79,7 @@ TEST(InputMethodLinesTest, ACompositionIsReadWithEveryPart) {
 // No preedit is the one that ends what is shown, so it reads as none.
 TEST(InputMethodLinesTest, ACompositionWithOnlyACommitHasNoPreedit) {
   const std::optional<HeardComposition> heard = ReadComposition(
-      Read("{\"type\":\"composition\",\"serial\":7,\"commit\":\"ok\"}"));
+      ImeLineRead("{\"type\":\"composition\",\"serial\":7,\"commit\":\"ok\"}"));
   ASSERT_TRUE(heard);
   EXPECT_FALSE(heard->composition.preedit);
   EXPECT_FALSE(heard->composition.deleted);
@@ -86,28 +87,28 @@ TEST(InputMethodLinesTest, ACompositionWithOnlyACommitHasNoPreedit) {
 }
 
 TEST(InputMethodLinesTest, AMalformedCompositionIsDropped) {
-  EXPECT_FALSE(ReadComposition(Read("{\"type\":\"composition\"}")));
+  EXPECT_FALSE(ReadComposition(ImeLineRead("{\"type\":\"composition\"}")));
+  EXPECT_FALSE(ReadComposition(ImeLineRead(
+      "{\"type\":\"composition\",\"serial\":-1,\"commit\":\"x\"}")));
   EXPECT_FALSE(ReadComposition(
-      Read("{\"type\":\"composition\",\"serial\":-1,\"commit\":\"x\"}")));
+      ImeLineRead("{\"type\":\"composition\",\"serial\":1,\"commit\":3}")));
   EXPECT_FALSE(ReadComposition(
-      Read("{\"type\":\"composition\",\"serial\":1,\"commit\":3}")));
-  EXPECT_FALSE(ReadComposition(
-      Read("{\"type\":\"composition\",\"serial\":1,\"delete\":[1]}")));
-  EXPECT_FALSE(ReadComposition(Read(
+      ImeLineRead("{\"type\":\"composition\",\"serial\":1,\"delete\":[1]}")));
+  EXPECT_FALSE(ReadComposition(ImeLineRead(
       "{\"type\":\"composition\",\"serial\":1,\"preedit\":{\"text\":\"a\"}}")));
 }
 
 TEST(InputMethodLinesTest, APassedKeyIsRead) {
-  const std::optional<PassedKey> passed =
-      ReadPassedKey(Read("{\"type\":\"key_passed\",\"serial\":1794500000000002,"
-                         "\"keycode\":31,\"pressed\":false}"));
+  const std::optional<PassedKey> passed = ReadPassedKey(
+      ImeLineRead("{\"type\":\"key_passed\",\"serial\":1794500000000002,"
+                  "\"keycode\":31,\"pressed\":false}"));
   ASSERT_TRUE(passed);
   EXPECT_EQ(passed->serial, 1794500000000002u);
   EXPECT_EQ(passed->evdev_code, 31u);
   EXPECT_FALSE(passed->pressed);
 
   EXPECT_FALSE(ReadPassedKey(
-      Read("{\"type\":\"key_passed\",\"serial\":1,\"keycode\":31}")));
+      ImeLineRead("{\"type\":\"key_passed\",\"serial\":1,\"keycode\":31}")));
 }
 
 }  // namespace
