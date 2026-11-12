@@ -129,6 +129,8 @@ pub enum Role {
     Toplevel(ToplevelSurface),
     Popup(PopupSurface),
     Bubble,
+    /// An input method's candidate list. See `text_input.rs`.
+    Candidates,
 }
 
 /// Which of the two kinds of client committed a buffer.
@@ -172,8 +174,10 @@ impl CompositorHandler for DomicileCompositor {
         self.tell_the_held_moves(surface);
     }
 
-    /// A destroyed bubble goes at once: no commit will come to notice it.
+    /// A destroyed bubble or candidate list goes at once: no commit will come
+    /// to notice it.
     fn destroyed(&mut self, surface: &WlSurface) {
+        self.candidates_destroyed(surface);
         if let Some(at) = self
             .bubbles
             .iter()
@@ -193,6 +197,7 @@ impl DomicileCompositor {
         self.announce_a_new_popup(surface);
         self.place_a_repositioned_popup(surface);
         self.place_the_bubbles(surface);
+        self.place_the_candidates(surface);
         let Some((committer, role)) = self.committer(surface) else {
             return;
         };
@@ -551,7 +556,7 @@ impl DomicileCompositor {
                 box_size: None,
             },
             // Sized by its own buffer.
-            Role::Bubble => Answered {
+            Role::Bubble | Role::Candidates => Answered {
                 configured: None,
                 at_box: NEWEST_BOX,
                 box_size: None,

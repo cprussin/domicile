@@ -13,6 +13,10 @@
 //! - Nothing reaches an editor while the desk is locked. Keys go to the lock
 //!   page then, but a native window keeps the seat's focus, so an input
 //!   method's text or a virtual keyboard's presses would land behind the lock.
+//! - The candidate list. Smithay hands over the input method's popup surface
+//!   while an editor has the keyboard; here it is announced to the shell as a
+//!   popup of the editor's window, under the editor's text cursor, and moved
+//!   when the cursor moves. See [`Candidates`].
 
 use smithay::delegate_text_input_manager;
 use smithay::reexports::wayland_protocols_misc::{
@@ -27,13 +31,15 @@ use smithay::reexports::wayland_protocols_misc::{
         zwp_virtual_keyboard_v1::{self, ZwpVirtualKeyboardV1},
     },
 };
+use smithay::reexports::wayland_server::Resource as _;
 use smithay::reexports::wayland_server::{
     backend::ClientId, protocol::wl_surface::WlSurface, Client, DataInit, Dispatch, DisplayHandle,
 };
 use smithay::utils::{Logical, Rectangle};
+use smithay::wayland::compositor::{with_states, BufferAssignment, SurfaceAttributes};
 use smithay::wayland::input_method::{
-    InputMethodHandler, InputMethodManagerGlobalData, InputMethodManagerState, InputMethodUserData,
-    PopupSurface,
+    InputMethodHandler, InputMethodManagerGlobalData, InputMethodManagerState,
+    InputMethodPopupSurfaceUserData, InputMethodUserData, PopupSurface,
 };
 use smithay::wayland::text_input::TextInputManagerState;
 use smithay::wayland::virtual_keyboard::{
@@ -41,6 +47,7 @@ use smithay::wayland::virtual_keyboard::{
 };
 use tracing::debug;
 
+use crate::surface_commit::Role;
 use crate::DomicileCompositor;
 
 /// The three managers' globals. Kept so they live as long as the display.
@@ -50,6 +57,23 @@ pub struct TextInput {
     _virtual_keyboard: VirtualKeyboardManagerState,
     /// Whether an input method is bound to the seat. Domicile has one seat.
     input_method_bound: bool,
+    /// The input method's candidate list, while an editor has the keyboard.
+    candidates: Option<Candidates>,
+}
+
+/// An input method's candidate list: its `zwp_input_popup_surface_v2`, over
+/// the editor that has the keyboard.
+///
+/// It is announced as a popup of the editor's window once it draws, under the
+/// editor's text cursor rectangle (above it when below would leave the
+/// screen), and closed when it draws nothing, when the editor loses the
+/// keyboard and when the input method goes.
+pub struct Candidates {
+    popup: PopupSurface,
+    /// The app id it was announced as, while it shows.
+    shown: Option<String>,
+    /// Its size as last drawn, logical.
+    size: (f64, f64),
 }
 
 impl TextInput {
@@ -68,24 +92,259 @@ impl TextInput {
                 crate::clients::sees_privileged_globals,
             ),
             input_method_bound: false,
+            candidates: None,
         }
     }
 }
 
-/// The input method's candidate popup is not shown yet: see `KNOWN-GAPS.md`.
-/// Its surface is kept by Smithay and drawn nowhere.
+/// Smithay calls these as the editor with the keyboard changes and as it moves
+/// its text cursor. See [`Candidates`].
 impl InputMethodHandler for DomicileCompositor {
-    fn new_popup(&mut self, _: PopupSurface) {
-        debug!("input method: a candidate popup, which is not shown yet");
+    fn new_popup(&mut self, popup: PopupSurface) {
+        debug!("input method: a candidate list over the editor");
+        self.hide_the_candidates();
+        self.text_input.candidates = Some(Candidates {
+            popup,
+            shown: None,
+            size: (0.0, 0.0),
+        });
+        self.put_the_candidates_on_their_display();
     }
 
-    fn dismiss_popup(&mut self, _: PopupSurface) {}
+    fn dismiss_popup(&mut self, _: PopupSurface) {
+        debug!("input method: the editor lost the keyboard; its candidate list goes");
+        self.hide_the_candidates();
+        self.text_input.candidates = None;
+    }
 
-    fn popup_repositioned(&mut self, _: PopupSurface) {}
+    fn popup_repositioned(&mut self, _: PopupSurface) {
+        self.move_the_candidates();
+    }
 
+    /// Not used: the candidate list is placed from the editor's window
+    /// geometry when it shows.
     fn parent_geometry(&self, _: &WlSurface) -> Rectangle<i32, Logical> {
         Rectangle::default()
     }
+}
+
+impl DomicileCompositor {
+    /// The surface the candidate list is over: the editor with the keyboard.
+    pub fn candidates_editor(&self) -> Option<WlSurface> {
+        let candidates = self.text_input.candidates.as_ref()?;
+        Some(candidates.popup.get_parent()?.surface.clone())
+    }
+
+    /// Announce the candidate list once it draws, resize it as it draws again,
+    /// and close it when it attaches no buffer. Runs on every commit.
+    pub fn place_the_candidates(&mut self, surface: &WlSurface) {
+        let Some(candidates) = &self.text_input.candidates else {
+            return;
+        };
+        if candidates.popup.wl_surface() != surface {
+            return;
+        }
+        let drawn = with_states(surface, |states| {
+            let mut attributes = states.cached_state.get::<SurfaceAttributes>();
+            match attributes.current().buffer {
+                Some(BufferAssignment::NewBuffer(_)) => Some(true),
+                Some(BufferAssignment::Removed) => Some(false),
+                None => None,
+            }
+        });
+        match drawn {
+            Some(true) => {}
+            Some(false) => return self.hide_the_candidates(),
+            None => return,
+        }
+        let Some(size) = crate::popups::drawn_size(surface) else {
+            return;
+        };
+        let candidates = self.text_input.candidates.as_mut().expect("checked above");
+        candidates.size = size;
+        if candidates.shown.is_some() {
+            self.move_the_candidates();
+            return;
+        }
+        let Some((parent, position, bounds)) = self.where_the_candidates_go() else {
+            return;
+        };
+        let placed = self
+            .hub
+            .host
+            .lock()
+            .unwrap()
+            .popup_placed(&parent, position, size, false);
+        let Some((app_id, message)) = placed else {
+            return;
+        };
+        debug!(%app_id, %parent, "candidate list drawn -> Host::popup_placed");
+        self.place_window(surface, bounds);
+        self.presentations.appeared(&app_id);
+        self.by_surface
+            .insert(surface.clone(), (app_id.clone(), Role::Candidates));
+        self.text_input
+            .candidates
+            .as_mut()
+            .expect("checked above")
+            .shown = Some(app_id);
+        self.hub.broadcast(message);
+    }
+
+    /// Place the shown candidate list again, after the editor's text cursor
+    /// or window moved.
+    pub fn move_the_candidates(&self) {
+        let Some(app_id) = self
+            .text_input
+            .candidates
+            .as_ref()
+            .and_then(|candidates| candidates.shown.clone())
+        else {
+            return self.put_the_candidates_on_their_display();
+        };
+        let Some((_, position, bounds)) = self.where_the_candidates_go() else {
+            return;
+        };
+        let size = self.text_input.candidates.as_ref().expect("shown").size;
+        let moved = self
+            .hub
+            .host
+            .lock()
+            .unwrap()
+            .popup_moved(&app_id, position, size);
+        if let Some(message) = moved {
+            debug!(%app_id, "the editor's text cursor moved -> Host::popup_moved");
+            self.hub.broadcast(message);
+        }
+        if let Some(candidates) = &self.text_input.candidates {
+            self.place_window(candidates.popup.wl_surface(), bounds);
+        }
+    }
+
+    /// Put the candidate list on the display it will show on, so the input
+    /// method draws it at that display's scale.
+    pub fn put_the_candidates_on_their_display(&self) {
+        let Some(candidates) = &self.text_input.candidates else {
+            return;
+        };
+        if let Some((_, _, bounds)) = self.where_the_candidates_go() {
+            self.place_window(candidates.popup.wl_surface(), bounds);
+        }
+    }
+
+    /// The editor's app id, where the candidate list goes relative to its
+    /// window geometry, and where that is on the desktop if the page has
+    /// placed the window. `None` while it is over no announced window.
+    fn where_the_candidates_go(
+        &self,
+    ) -> Option<(String, (f64, f64), Option<domicile_scene::Bounds>)> {
+        let candidates = self.text_input.candidates.as_ref()?;
+        let editor = candidates.popup.get_parent()?.surface.clone();
+        let app_id = self.app_id_of(&editor)?;
+        let geometry = with_states(&editor, crate::surface_commit::window_geometry)
+            .map_or((0, 0), |(x, y, _, _)| (x, y));
+        let window = self.bounds_of(&editor);
+        let screen = window.and_then(|window| self.screens.screen_of(window));
+        let position = under_the_cursor(
+            candidates.popup.text_input_rectangle(),
+            geometry,
+            candidates.size,
+            window.zip(screen),
+        );
+        let bounds = window.map(|window| {
+            let min = domicile_scene::Point {
+                x: window.min.x + position.0,
+                y: window.min.y + position.1,
+            };
+            domicile_scene::Bounds {
+                min,
+                max: domicile_scene::Point {
+                    x: min.x + candidates.size.0,
+                    y: min.y + candidates.size.1,
+                },
+            }
+        });
+        Some((app_id, position, bounds))
+    }
+
+    /// Close the candidate list if it shows. The input method keeps it, and it
+    /// shows again at its next frame.
+    fn hide_the_candidates(&mut self) {
+        let Some(app_id) = self
+            .text_input
+            .candidates
+            .as_mut()
+            .and_then(|candidates| candidates.shown.take())
+        else {
+            return;
+        };
+        let surface = self
+            .text_input
+            .candidates
+            .as_ref()
+            .expect("it was shown")
+            .popup
+            .wl_surface()
+            .clone();
+        self.by_surface.remove(&surface);
+        debug!(%app_id, "candidate list hidden -> Host::app_closed");
+        self.forget(&app_id);
+    }
+
+    /// Forget the candidate list once its surface is destroyed.
+    pub fn candidates_destroyed(&mut self, surface: &WlSurface) {
+        let ours = self
+            .text_input
+            .candidates
+            .as_ref()
+            .is_some_and(|candidates| candidates.popup.wl_surface() == surface);
+        if ours {
+            self.hide_the_candidates();
+            self.text_input.candidates = None;
+        }
+    }
+
+    /// Forget the candidate list once its popup role or its input method is
+    /// destroyed: the editor sees no more of it.
+    fn candidates_gone(&mut self, why: &str) {
+        if self.text_input.candidates.is_some() {
+            debug!("input method: {why}; its candidate list goes");
+            self.hide_the_candidates();
+            self.text_input.candidates = None;
+        }
+    }
+}
+
+/// Where a candidate list of `size` goes relative to the editor's window
+/// geometry: under the text cursor `cursor` (surface-local, as text-input-v3
+/// gives it), with `geometry` the window geometry's corner on the surface.
+///
+/// With the window's and its screen's bounds, it goes above the cursor when
+/// under it would leave the screen's bottom, and is kept from the screen's
+/// sides, as sway does.
+fn under_the_cursor(
+    cursor: Rectangle<i32, Logical>,
+    geometry: (i32, i32),
+    size: (f64, f64),
+    on_screen: Option<(domicile_scene::Bounds, domicile_scene::Bounds)>,
+) -> (f64, f64) {
+    let x = f64::from(cursor.loc.x - geometry.0);
+    let top = f64::from(cursor.loc.y - geometry.1);
+    let under = top + f64::from(cursor.size.h);
+    let Some((window, screen)) = on_screen else {
+        return (x, under);
+    };
+    let y = if window.min.y + under + size.1 > screen.max.y
+        && window.min.y + top - size.1 >= screen.min.y
+    {
+        top - size.1
+    } else {
+        under
+    };
+    let x = x
+        .min(screen.max.x - window.min.x - size.0)
+        .max(screen.min.x - window.min.x);
+    (x, y)
 }
 
 delegate_text_input_manager!(DomicileCompositor);
@@ -97,9 +356,6 @@ smithay::reexports::wayland_server::delegate_global_dispatch!(DomicileCompositor
 ] => InputMethodManagerState);
 smithay::reexports::wayland_server::delegate_dispatch!(DomicileCompositor: [
     ZwpInputMethodKeyboardGrabV2: smithay::wayland::input_method::InputMethodKeyboardUserData<DomicileCompositor>
-] => InputMethodManagerState);
-smithay::reexports::wayland_server::delegate_dispatch!(DomicileCompositor: [
-    ZwpInputPopupSurfaceV2: smithay::wayland::input_method::InputMethodPopupSurfaceUserData
 ] => InputMethodManagerState);
 
 // Smithay's `delegate_virtual_keyboard_manager!`, but with each virtual
@@ -190,6 +446,42 @@ impl Dispatch<ZwpInputMethodV2, InputMethodUserData<DomicileCompositor>> for Dom
         );
         debug!("input method: gone; the seat takes another");
         state.text_input.input_method_bound = false;
+        state.candidates_gone("gone");
+    }
+}
+
+impl Dispatch<ZwpInputPopupSurfaceV2, InputMethodPopupSurfaceUserData> for DomicileCompositor {
+    fn request(
+        state: &mut Self,
+        client: &Client,
+        popup: &ZwpInputPopupSurfaceV2,
+        request: zwp_input_popup_surface_v2::Request,
+        data: &InputMethodPopupSurfaceUserData,
+        display: &DisplayHandle,
+        init: &mut DataInit<'_, Self>,
+    ) {
+        <InputMethodManagerState as Dispatch<ZwpInputPopupSurfaceV2, _, Self>>::request(
+            state, client, popup, request, data, display, init,
+        );
+    }
+
+    fn destroyed(
+        state: &mut Self,
+        client: ClientId,
+        popup: &ZwpInputPopupSurfaceV2,
+        data: &InputMethodPopupSurfaceUserData,
+    ) {
+        <InputMethodManagerState as Dispatch<ZwpInputPopupSurfaceV2, _, Self>>::destroyed(
+            state, client, popup, data,
+        );
+        let ours = state
+            .text_input
+            .candidates
+            .as_ref()
+            .is_some_and(|candidates| candidates.popup.surface_role.id() == popup.id());
+        if ours {
+            state.candidates_gone("its popup was destroyed");
+        }
     }
 }
 
@@ -280,6 +572,93 @@ impl Dispatch<ZwpVirtualKeyboardV1, VirtualKeyboardUserData<DomicileCompositor>>
     ) {
         <VirtualKeyboardManagerState as Dispatch<ZwpVirtualKeyboardV1, _, Self>>::destroyed(
             state, client, keyboard, data,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use domicile_scene::{Bounds, Point};
+    use smithay::utils::Rectangle;
+
+    use super::under_the_cursor;
+
+    fn bounds(min: (f64, f64), max: (f64, f64)) -> Bounds {
+        Bounds {
+            min: Point { x: min.0, y: min.1 },
+            max: Point { x: max.0, y: max.1 },
+        }
+    }
+
+    /// A screen 1920 by 1080 at the desktop's corner.
+    fn a_screen() -> Bounds {
+        bounds((0.0, 0.0), (1920.0, 1080.0))
+    }
+
+    fn a_cursor(x: i32, y: i32) -> Rectangle<i32, smithay::utils::Logical> {
+        Rectangle::new((x, y).into(), (2, 18).into())
+    }
+
+    #[test]
+    fn the_list_goes_under_the_cursor_from_the_window_geometrys_corner() {
+        assert_eq!(
+            under_the_cursor(a_cursor(40, 30), (10, 5), (120.0, 30.0), None),
+            (30.0, 43.0)
+        );
+    }
+
+    #[test]
+    fn the_list_goes_above_a_cursor_near_the_screens_bottom() {
+        let window = bounds((100.0, 900.0), (900.0, 1080.0));
+        assert_eq!(
+            under_the_cursor(
+                a_cursor(40, 150),
+                (0, 0),
+                (120.0, 30.0),
+                Some((window, a_screen()))
+            ),
+            (40.0, 120.0),
+            "under the cursor its bottom would be at 1098"
+        );
+    }
+
+    #[test]
+    fn the_list_stays_under_a_cursor_with_no_room_above_either() {
+        let window = bounds((0.0, 0.0), (1920.0, 1080.0));
+        assert_eq!(
+            under_the_cursor(
+                a_cursor(40, 10),
+                (0, 0),
+                (120.0, 1075.0),
+                Some((window, a_screen()))
+            ),
+            (40.0, 28.0)
+        );
+    }
+
+    #[test]
+    fn the_list_is_kept_from_the_screens_sides() {
+        let window = bounds((1800.0, 100.0), (2400.0, 600.0));
+        assert_eq!(
+            under_the_cursor(
+                a_cursor(100, 30),
+                (0, 0),
+                (120.0, 30.0),
+                Some((window, a_screen()))
+            ),
+            (0.0, 48.0),
+            "its right edge stops at the screen's"
+        );
+        let window = bounds((-50.0, 100.0), (600.0, 600.0));
+        assert_eq!(
+            under_the_cursor(
+                a_cursor(10, 30),
+                (0, 0),
+                (120.0, 30.0),
+                Some((window, a_screen()))
+            ),
+            (50.0, 48.0),
+            "its left edge stops at the screen's"
         );
     }
 }

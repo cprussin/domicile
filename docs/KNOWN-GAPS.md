@@ -15,8 +15,8 @@ the detail, when there is one. Remove a gap when it's fixed.
   the fullscreen window back to its box.
 - **Browser window context menus have only Chrome's core items.** No spelling
   suggestions, page or extension items.
-- **An input method's candidate list is not shown,** and pages and the shell
-  do not compose from it yet: only native windows do, with inline preedit.
+- **Pages and the shell do not compose from an input method yet:** only
+  native windows do.
   [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).
 - **A GL client that started before the engine fell back to software stays
   blank.** Its dmabufs are not copied into memory.

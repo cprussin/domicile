@@ -181,7 +181,8 @@ pub struct Arguments {
     pub no_touch: bool,
 
     /// Whether to be a text editor: a `zwp_text_input_v3` that enables on
-    /// each enter and traces what an input method sends it.
+    /// each enter, traces what an input method sends it, and moves its text
+    /// cursor ([`crate::CARET`]) as text is committed.
     pub text_input: bool,
 }
 
