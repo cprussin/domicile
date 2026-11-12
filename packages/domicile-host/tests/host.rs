@@ -912,6 +912,7 @@ fn the_displays_are_answered_after_the_welcome() {
         &mut ready,
         ChromeMessage::Hello {
             protocol_version: PROTOCOL_VERSION,
+            checked: false,
         },
     );
     assert_eq!(

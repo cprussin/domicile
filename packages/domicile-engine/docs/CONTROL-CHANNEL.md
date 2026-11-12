@@ -29,7 +29,8 @@ The engine has two channels to the rest of Domicile:
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`,
   `pointer_pinch`, `touch`.
-  The browser also sends `hello` on connect, `activity` for its own
+  The browser also sends `hello` on connect, with `checked` saying whether
+  it is a checked build (DCHECKs on), `activity` for its own
   input, at most every 200 ms, for the idle clock, `desk_pointer` for
   each pointer move, `desk_cursor` for each change of the pointer's
   image, for screen casts, and `pointer_swipe` and `pointer_hold` for each

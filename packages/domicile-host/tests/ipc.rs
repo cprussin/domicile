@@ -63,6 +63,7 @@ fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
     assert!(session.is_ready());
     assert_eq!(
@@ -89,6 +90,7 @@ fn version_mismatch_is_refused_out_loud() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: 999,
+        checked: false,
     }));
 
     assert!(!session.is_ready());
@@ -109,11 +111,13 @@ fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
     let mut session = Session::new();
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
     assert!(session.is_ready(), "the first hello agreed");
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: 999,
+        checked: false,
     }));
 
     assert!(!session.is_ready(), "the second took the agreement back");
@@ -144,6 +148,7 @@ fn a_message_after_the_handshake_reaches_the_host() {
     let id = session.host_mut().app_created(OWNER);
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     session.ingest(&to_line(&ChromeMessage::FocusApp { app_id: id.clone() }));
@@ -158,6 +163,7 @@ fn malformed_lines_are_ignored() {
     let mut session = Session::new();
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
     // Should not panic.
     let out = session.ingest("{ this is not valid json");
@@ -201,6 +207,7 @@ fn handshake_works_over_a_real_unix_socket() {
         .write_all(
             to_line(&ChromeMessage::Hello {
                 protocol_version: PROTOCOL_VERSION,
+                checked: false,
             })
             .as_bytes(),
         )
@@ -234,6 +241,7 @@ fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert_eq!(
@@ -268,6 +276,7 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert_eq!(
@@ -291,6 +300,7 @@ fn the_sites_to_force_dark_ride_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert!(
@@ -314,6 +324,7 @@ fn the_keyboard_and_the_shell_s_options_ride_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     let keymap_at = out
@@ -352,6 +363,7 @@ fn the_tray_rides_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert_eq!(out.last(), Some(&HostMessage::Tray { items: vec![icon] }));
@@ -375,6 +387,7 @@ fn a_host_nobody_gave_a_tray_says_nothing_about_one() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert!(!out
@@ -413,6 +426,7 @@ fn the_notifications_ride_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert_eq!(
@@ -438,6 +452,7 @@ fn a_host_nobody_gave_notifications_says_nothing_about_them() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert!(!out
@@ -499,6 +514,7 @@ fn the_portal_requests_ride_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert!(out.contains(&HostMessage::PortalRequests {
@@ -547,6 +563,7 @@ fn bound_shortcuts_ride_with_the_dialogs_and_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
     assert!(out.contains(&expected));
 }
@@ -585,6 +602,7 @@ fn a_portal_wallpaper_rides_with_the_requests() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert!(out.contains(&told));
@@ -618,6 +636,7 @@ fn the_configs_appearance_rides_with_the_handshake() {
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: false,
     }));
 
     assert!(out.contains(&HostMessage::Appearance(appearance)));

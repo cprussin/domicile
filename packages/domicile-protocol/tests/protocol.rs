@@ -38,6 +38,7 @@ fn scroll_source_and_axis_stops_survive_the_wire() {
 fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
+        checked: true,
     });
     chrome_round_trip(&ChromeMessage::AppHello {
         protocol_version: PROTOCOL_VERSION,

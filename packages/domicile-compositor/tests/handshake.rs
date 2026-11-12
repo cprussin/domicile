@@ -204,6 +204,26 @@ fn a_chrome_that_agrees_again_after_a_refusal_is_let_back_in_once() {
     );
 }
 
+/// A checked engine is slow, so the desk tells the person to move off it. See
+/// `docs/RUNNING-A-DESKTOP.md`.
+#[test]
+fn a_checked_engine_says_it_is_a_development_build() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+
+    let mut checked = Raw::connected(&compositor);
+    checked.say_hello_from(PROTOCOL_VERSION, true);
+
+    compositor
+        .chrome()
+        .wait_for(|message| match message {
+            HostMessage::Notifications { items } => items
+                .iter()
+                .any(|shown| shown.summary == "This is a development build"),
+            _ => false,
+        })
+        .expect("the desk warns that its engine is a checked build");
+}
+
 /// A raw chrome socket, since `Chrome` always completes the handshake.
 struct Raw {
     reader: BufReader<UnixStream>,
@@ -225,8 +245,18 @@ impl Raw {
     }
 
     fn say_hello(&mut self, protocol_version: u32) {
-        say(&mut self.writer, &ChromeMessage::Hello { protocol_version })
-            .expect("the socket takes a hello");
+        self.say_hello_from(protocol_version, false);
+    }
+
+    fn say_hello_from(&mut self, protocol_version: u32, checked: bool) {
+        say(
+            &mut self.writer,
+            &ChromeMessage::Hello {
+                protocol_version,
+                checked,
+            },
+        )
+        .expect("the socket takes a hello");
     }
 
     /// The next message, or `None` on timeout, end of stream or reset.

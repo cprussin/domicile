@@ -303,6 +303,16 @@ default.
 - The browser still draws at the monitor's nominal rate. Adaptive sync helps
   when a frame is late, not by drawing at a lower rate when nothing moves.
 
+## DisplayLink docks
+
+- `evdi` hands DisplayLinkManager each page flip's `FB_DAMAGE_CLIPS`, and it
+  compresses that rect on the CPU. Its load follows how much of the screen
+  changes.
+- Each flip names its own frame's damage, on its plane's own device (patch
+  `0204`). Upstream sent no clip without ChromeOS's PSR2 flag, so evdi marked
+  the whole screen changed on every flip.
+- No gamma table, so no night light ([below](#night-light-and-gamma-control)).
+
 ## Night light and gamma control
 
 Each monitor draws with its own gamma ramp. Two things set one:
