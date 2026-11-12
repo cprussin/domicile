@@ -173,6 +173,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     set_extension_enabled: &|_, _| {
                         panic!("a question about this desktop reaches no engine")
                     },
+                    configure_extension: &|_, _| {
+                        panic!("a question about this desktop reaches no engine")
+                    },
                     history: &|_| panic!("a question about this desktop reaches no engine"),
                     visits: &|_| panic!("a question about this desktop reaches no engine"),
                     delete_history: &|_| panic!("a question about this desktop reaches no engine"),

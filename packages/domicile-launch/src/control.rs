@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use domicile_protocol::{Scale, Theme};
 use serde::{Deserialize, Serialize};
 
-use crate::extensions::InstalledExtension;
+use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_data::SiteData;
@@ -90,6 +90,11 @@ pub enum Request {
     Extensions,
     /// Enable or disable an extension.
     SetExtensionEnabled { id: String, enabled: bool },
+    /// Change each of `settings` that is set on an extension.
+    ConfigureExtension {
+        id: String,
+        settings: ExtensionSettings,
+    },
     /// Search the engine's history.
     History(HistoryQuery),
     /// Report when a page was visited.
@@ -371,6 +376,12 @@ pub type ListExtensions<'a> = &'a dyn Fn() -> Result<Vec<InstalledExtension>, St
 /// tests.
 pub type SetExtensionEnabled<'a> = &'a dyn Fn(&str, bool) -> Result<(), String>;
 
+/// Tells the engine to change an extension's settings.
+///
+/// [`crate::command_socket::configure_extension`] in a desktop; a closure in
+/// tests.
+pub type ConfigureExtension<'a> = &'a dyn Fn(&str, &ExtensionSettings) -> Result<(), String>;
+
 /// Asks the engine for the history rows a search finds.
 ///
 /// [`crate::command_socket::history`] in a desktop; a closure in tests.
@@ -439,6 +450,7 @@ pub struct Desktop<'a> {
     pub set_media_device: SetMediaDevice<'a>,
     pub extensions: ListExtensions<'a>,
     pub set_extension_enabled: SetExtensionEnabled<'a>,
+    pub configure_extension: ConfigureExtension<'a>,
     pub history: SearchHistory<'a>,
     pub visits: ListVisits<'a>,
     pub delete_history: DeleteHistory<'a>,
@@ -563,6 +575,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::SetExtensionEnabled { id, enabled }) => {
             to_line(&match (desktop.set_extension_enabled)(&id, enabled) {
+                Ok(()) => Response::Stored,
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::ConfigureExtension { id, settings }) => {
+            to_line(&match (desktop.configure_extension)(&id, &settings) {
                 Ok(()) => Response::Stored,
                 Err(why) => Response::Refused { why },
             })

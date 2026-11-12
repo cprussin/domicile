@@ -8,7 +8,9 @@ use domicile_launch::control::{
     answer, parse_response, AppReuse, Desktop, LoadShell, OpenUrl, Response, Screenshot, SendShell,
     SettingsFiles, Shot,
 };
-use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::extensions::{
+    ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
+};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
@@ -512,6 +514,36 @@ fn a_desktop_asked_for_its_extensions_asks_the_engine() {
 }
 
 #[test]
+fn a_desktop_told_an_extension_s_settings_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"configure_extension\",\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"settings\":{\"site_access\":[\"github.com\",\"*.example.com\"]}}",
+        &Desktop {
+            configure_extension: &|id, settings| {
+                told.replace(Some((id.to_string(), settings.clone())));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some((
+            "abcdefghijklmnopabcdefghijklmnop".to_string(),
+            ExtensionSettings {
+                site_access: Some(SiteAccess::Sites(vec![
+                    "github.com".to_string(),
+                    "*.example.com".to_string()
+                ])),
+                ..ExtensionSettings::default()
+            }
+        ))
+    );
+    assert_eq!(answered, Response::Stored);
+}
+
+#[test]
 fn a_desktop_told_to_disable_an_extension_tells_the_engine() {
     let told = RefCell::new(None);
     let answered = reply_to(
@@ -831,6 +863,11 @@ fn an_extension() -> InstalledExtension {
         options_url: Some(
             "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html".to_string(),
         ),
+        settings: ExtensionSettings {
+            in_private: Some(false),
+            site_access: Some(SiteAccess::Mode(SiteAccessMode::AllSites)),
+            ..ExtensionSettings::default()
+        },
     }
 }
 
@@ -892,6 +929,7 @@ fn nothing_dialed() -> Desktop<'static> {
         site_data: &|| panic!("only site_data lists site data"),
         theme: &|_| panic!("only theme reads or sets the theme"),
         set_extension_enabled: &|_, _| panic!("only set_extension_enabled enables one"),
+        configure_extension: &|_, _| panic!("only configure_extension configures one"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),
         uninstall_extension: &|_| panic!("only uninstall_extension uninstalls one"),

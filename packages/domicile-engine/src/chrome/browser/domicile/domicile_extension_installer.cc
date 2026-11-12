@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
+#include "chrome/browser/domicile/domicile_extension_settings.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -190,6 +191,8 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
         base::BindOnce(&OnUnpackedLoaded, profile));
     installer->Load(base::FilePath(directory));
   }
+
+  ApplyConfigSettings(*profile, wanted.settings);
 }
 
 // Waits for the extension system to load; until then the registry is empty
@@ -268,6 +271,7 @@ std::vector<InstalledExtension> ExtensionsOf(Profile& profile) {
         extensions::DescriptionInfo::GetDescription(*extension);
     entry.version = extension->VersionString();
     entry.enabled = registry->enabled_extensions().Contains(extension->id());
+    entry.settings = SettingsOf(profile, *extension);
     entry.options_url =
         extensions::OptionsPageInfo::GetOptionsPage(extension.get());
     listed.push_back(std::move(entry));
@@ -296,6 +300,7 @@ base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
 
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(kAddedPref);
+  RegisterExtensionSettingsPrefs(registry);
 }
 
 void InstallExtensionsInto(base::WeakPtr<Profile> profile,
