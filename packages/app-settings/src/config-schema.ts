@@ -50,10 +50,12 @@ const displaySchema = z.strictObject({
 });
 
 const placementSchema = z.strictObject({
+  adaptive_sync: z.boolean().optional(),
   display: z.string(),
   enabled: z.boolean().default(true),
   mode: size.optional(),
   position: point.optional(),
+  refresh: z.number().positive().optional(),
   scale: z.number().positive().default(1),
   transform: z.enum(TRANSFORMS).default("normal"),
 });

@@ -143,12 +143,24 @@ TEST(DomicileDisplayListTest, APanelsModesAndRateCrossWithIt) {
   EXPECT_EQ(list[0]->modes[1]->refresh_mhz, 120000);
 }
 
+TEST(DomicileDisplayListTest, APanelsAdaptiveSyncCrossesWithIt) {
+  DisplayPanel panel;
+  panel.adaptive_sync = mojom::AdaptiveSync::kOff;
+
+  const std::vector<mojom::DisplayPtr> list =
+      DisplayListFor({Panel()}, {}, {}, {{7, panel}});
+
+  ASSERT_EQ(list.size(), 1u);
+  EXPECT_EQ(list[0]->adaptive_sync, mojom::AdaptiveSync::kOff);
+}
+
 TEST(DomicileDisplayListTest, ADisplayNoPanelNamesCrossesWithNoModes) {
   const std::vector<mojom::DisplayPtr> list =
       DisplayListFor({Panel()}, {}, {}, {});
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_TRUE(list[0]->modes.empty());
+  EXPECT_EQ(list[0]->adaptive_sync, mojom::AdaptiveSync::kUnsupported);
 }
 
 }  // namespace

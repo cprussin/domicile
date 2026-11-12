@@ -235,6 +235,21 @@ pub struct Display {
     /// Every mode the monitor offers, or none from an engine without
     /// `moded_displays`, which cannot set one.
     pub modes: Vec<Mode>,
+    /// Whether it scans out with a variable refresh rate, as the hardware
+    /// says. Unsupported from an engine without `adaptive_displays`.
+    pub adaptive_sync: AdaptiveSync,
+}
+
+/// Whether a monitor scans out with a variable refresh rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AdaptiveSync {
+    /// The monitor, its connector or its driver cannot.
+    #[default]
+    Unsupported,
+    /// It can, and is not: not asked for, or the driver refused it.
+    Off,
+    /// It is.
+    On,
 }
 
 /// A mode a monitor offers.
@@ -309,6 +324,9 @@ pub struct Connector {
     /// offers is used. `None` for the native mode's, or the highest at a
     /// non-native `mode`.
     pub refresh_mhz: Option<u32>,
+    /// Whether to scan out with a variable refresh rate where the monitor
+    /// can. The engine tries again without it if the driver refuses.
+    pub adaptive_sync: bool,
 }
 
 /// A tablet or touchscreen and the display it covers: the config's
@@ -496,6 +514,7 @@ struct Callbacks {
     ramped_displays: Option<extern "C" fn(*mut c_void, *const RawRampedDisplay, u32)>,
     moded_displays: Option<extern "C" fn(*mut c_void, *const RawModedDisplay, u32)>,
     browser_windows: Option<extern "C" fn(*mut c_void, *const RawBrowserWindow, u32)>,
+    adaptive_displays: Option<extern "C" fn(*mut c_void, *const RawAdaptiveDisplay, u32)>,
 }
 
 /// `DomicileBrowserWindow`, laid out as in the C header. Its strings are
@@ -687,6 +706,26 @@ struct RawModedLayout {
     mode_height: i32,
     /// Zero for the default rate.
     refresh_mhz: i32,
+}
+
+/// `DomicileAdaptiveDisplay`, laid out as in the C header. 88 bytes,
+/// including 4 of tail padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawAdaptiveDisplay {
+    moded: RawModedDisplay,
+    /// A `DOMICILE_ADAPTIVE_SYNC_*` value.
+    adaptive_sync: i32,
+}
+
+/// `DomicileAdaptiveLayout`, laid out as in the C header. 72 bytes, including
+/// 4 of tail padding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+struct RawAdaptiveLayout {
+    moded: RawModedLayout,
+    /// Nonzero to ask for a variable refresh rate.
+    adaptive_sync: i32,
 }
 
 /// `DomicileDisplayLayout`, laid out as in the C header. 48 bytes, no
@@ -1399,6 +1438,17 @@ impl Engine {
     /// An engine without `domicile_displays_configure_modes` gets the layout
     /// without its modes, and lights each connector at its native one.
     pub fn configure_displays(&self, connectors: &[Connector]) {
+        type Adaptive = unsafe extern "C" fn(*mut Handle, *const RawAdaptiveLayout, u32);
+        if let Ok(f) = self.symbol::<Adaptive>(
+            b"domicile_displays_configure_adaptive\0",
+            "domicile_displays_configure_adaptive",
+        ) {
+            let raw = adaptive_layouts_from(connectors);
+            // SAFETY: as above, and `raw` outlives the call; the engine
+            // copies it.
+            unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+            return;
+        }
         type Moded = unsafe extern "C" fn(*mut Handle, *const RawModedLayout, u32);
         if let Ok(f) = self.symbol::<Moded>(
             b"domicile_displays_configure_modes\0",
@@ -1776,6 +1826,7 @@ fn join(
         ramped_displays: Some(on_ramped_displays),
         moded_displays: Some(on_moded_displays),
         browser_windows: Some(on_browser_windows),
+        adaptive_displays: Some(on_adaptive_displays),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2150,6 +2201,7 @@ fn display_from(record: &RawDisplay) -> Display {
         physical_mm: (record.physical_width_mm, record.physical_height_mm),
         refresh_mhz: record.refresh_mhz,
         modes: Vec::new(),
+        adaptive_sync: AdaptiveSync::Unsupported,
     }
 }
 
@@ -2205,6 +2257,45 @@ extern "C" fn on_moded_displays(
     let ramped: Vec<RawRampedDisplay> = records.iter().map(|record| record.ramped).collect();
     push(user_data, Event::GammaSizes(gamma_sizes_from(&ramped)));
     push(user_data, Event::Displays(moded_displays_from(records)));
+}
+
+/// Queues each display's gamma ramp size, then the display list with each
+/// display's modes and adaptive sync. Called instead of [`on_moded_displays`]
+/// by an engine that reports adaptive sync.
+extern "C" fn on_adaptive_displays(
+    user_data: *mut c_void,
+    displays: *const RawAdaptiveDisplay,
+    count: u32,
+) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. Both conversions copy them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    let ramped: Vec<RawRampedDisplay> = records.iter().map(|record| record.moded.ramped).collect();
+    push(user_data, Event::GammaSizes(gamma_sizes_from(&ramped)));
+    push(user_data, Event::Displays(adaptive_displays_from(records)));
+}
+
+/// Converts the ABI's display records with their modes and adaptive sync.
+fn adaptive_displays_from(records: &[RawAdaptiveDisplay]) -> Vec<Display> {
+    let moded: Vec<RawModedDisplay> = records.iter().map(|record| record.moded).collect();
+    moded_displays_from(&moded)
+        .into_iter()
+        .zip(records)
+        .map(|(display, record)| Display {
+            adaptive_sync: adaptive_sync_from(record.adaptive_sync),
+            ..display
+        })
+        .collect()
+}
+
+/// A `DOMICILE_ADAPTIVE_SYNC_*` value. One this compositor has no name for is
+/// unsupported, the state that asks nothing of it.
+fn adaptive_sync_from(raw: i32) -> AdaptiveSync {
+    match raw {
+        1 => AdaptiveSync::Off,
+        2 => AdaptiveSync::On,
+        _ => AdaptiveSync::Unsupported,
+    }
 }
 
 /// Converts the ABI's display records with their modes.
@@ -2315,6 +2406,19 @@ fn moded_layouts_from(connectors: &[Connector]) -> Vec<RawModedLayout> {
         .collect()
 }
 
+/// The ABI's layout records with each connector's mode, rate and adaptive
+/// sync.
+fn adaptive_layouts_from(connectors: &[Connector]) -> Vec<RawAdaptiveLayout> {
+    moded_layouts_from(connectors)
+        .into_iter()
+        .zip(connectors)
+        .map(|(moded, connector)| RawAdaptiveLayout {
+            moded,
+            adaptive_sync: i32::from(connector.adaptive_sync),
+        })
+        .collect()
+}
+
 /// A logical size as an `int32_t`. Profiles that do not fit are refused
 /// earlier, so this cannot fail.
 fn logical(size: u32) -> i32 {
@@ -2385,10 +2489,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_eighteen_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `browser_windows` is last, as
+    fn the_callbacks_are_the_user_data_and_nineteen_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `adaptive_displays` is last, as
         // in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 19 * 8);
+        assert_eq!(std::mem::size_of::<Callbacks>(), 20 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2400,6 +2504,80 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Callbacks, ramped_displays), 16 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, moded_displays), 17 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, browser_windows), 18 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, adaptive_displays), 19 * 8);
+    }
+
+    #[test]
+    fn an_adaptive_display_is_a_moded_display_and_its_state() {
+        // 80 (`DomicileModedDisplay`) + 4 + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawAdaptiveDisplay>(), 88);
+        assert_eq!(std::mem::offset_of!(RawAdaptiveDisplay, adaptive_sync), 80);
+    }
+
+    #[test]
+    fn an_adaptive_layout_is_a_moded_layout_and_a_flag() {
+        // 64 (`DomicileModedLayout`) + 4 + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawAdaptiveLayout>(), 72);
+        assert_eq!(std::mem::offset_of!(RawAdaptiveLayout, adaptive_sync), 64);
+    }
+
+    #[test]
+    fn a_display_says_whether_it_scans_out_with_adaptive_sync() {
+        let (panel, _name) = named(
+            RawDisplay {
+                id: 7,
+                width: 2560,
+                height: 1440,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("DP-1").expect("no nul in it");
+        let record = |adaptive_sync| RawAdaptiveDisplay {
+            moded: RawModedDisplay {
+                ramped: RawRampedDisplay {
+                    connected: RawConnectedDisplay {
+                        display: panel,
+                        connector: connector.as_ptr(),
+                    },
+                    gamma_size: 0,
+                },
+                modes: std::ptr::null(),
+                mode_count: 0,
+            },
+            adaptive_sync,
+        };
+        let states: Vec<AdaptiveSync> = adaptive_displays_from(&[
+            record(0),
+            record(1),
+            record(2),
+            // A state from a newer engine asks nothing of this compositor.
+            record(7),
+        ])
+        .iter()
+        .map(|display| display.adaptive_sync)
+        .collect();
+        assert_eq!(
+            states,
+            vec![
+                AdaptiveSync::Unsupported,
+                AdaptiveSync::Off,
+                AdaptiveSync::On,
+                AdaptiveSync::Unsupported,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_connector_asks_for_adaptive_sync_in_its_layout() {
+        let asking = Connector {
+            adaptive_sync: true,
+            ..LIT
+        };
+        let raw = adaptive_layouts_from(&[asking, LIT]);
+        assert_eq!(raw[0].adaptive_sync, 1);
+        assert_eq!(raw[1].adaptive_sync, 0);
+        assert_eq!(raw[0].moded, moded_layouts_from(&[asking])[0]);
     }
 
     #[test]
@@ -2898,6 +3076,7 @@ mod tests {
             physical_mm: (0, 0),
             refresh_mhz: 0,
             modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
         };
         assert!(display(VirtualDisplay::id_of(1)).is_virtual());
         // EDID-derived ids are positive.
@@ -2997,6 +3176,7 @@ mod tests {
         }),
         mode: None,
         refresh_mhz: None,
+        adaptive_sync: false,
     };
 
     #[test]
@@ -3033,6 +3213,7 @@ mod tests {
             desk: None,
             mode: None,
             refresh_mhz: None,
+            adaptive_sync: false,
         }]);
 
         assert_eq!(
@@ -3126,6 +3307,7 @@ mod tests {
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
                 modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
             }]
         );
     }
@@ -3185,6 +3367,7 @@ mod tests {
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
                     modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
                 Display {
                     id: 9,
@@ -3195,6 +3378,7 @@ mod tests {
                     physical_mm: (0, 0),
                     refresh_mhz: 0,
                     modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
             ]
         );

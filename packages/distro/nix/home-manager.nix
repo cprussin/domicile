@@ -114,6 +114,15 @@
         type = lib.types.nullOr lib.types.numbers.positive;
         default = null;
       };
+      adaptive_sync = lib.mkOption {
+        description = ''
+          Whether to scan out with a variable refresh rate (adaptive sync,
+          FreeSync, G-Sync Compatible). Used only where the monitor and its
+          driver support it; the display reports whether it took.
+        '';
+        type = lib.types.bool;
+        default = false;
+      };
       position =
         (pair lib.types.int "The top-left corner, in the desktop's logical units.")
         // {default = [0 0];};

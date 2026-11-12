@@ -166,11 +166,25 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
       }
       crossing.refresh_mhz = panel.refresh_mhz;
       crossing.physical_size_mm = panel.physical_size_mm;
+      crossing.adaptive_sync = AdaptiveSyncOf(panel.adaptive_sync);
     }
     broker_->OnDisplaysChanged(domicile::DisplayListFor(
         display::Screen::Get()->GetAllDisplays(),
         platform->GetDomicileConnectors(), platform->GetDomicileGammaSizes(),
         panels));
+  }
+
+  // A switch rather than a cast, so a new state is a compile error here.
+  static domicile::mojom::AdaptiveSync AdaptiveSyncOf(
+      ui::DomicileAdaptiveSync adaptive_sync) {
+    switch (adaptive_sync) {
+      case ui::DomicileAdaptiveSync::kUnsupported:
+        return domicile::mojom::AdaptiveSync::kUnsupported;
+      case ui::DomicileAdaptiveSync::kOff:
+        return domicile::mojom::AdaptiveSync::kOff;
+      case ui::DomicileAdaptiveSync::kOn:
+        return domicile::mojom::AdaptiveSync::kOn;
+    }
   }
 
   const raw_ptr<domicile::FrameSinkBroker> broker_;
@@ -231,7 +245,8 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
                       .scale = display->scale,
                       .desk = display->desk,
                       .mode = display->mode,
-                      .refresh_mhz = display->refresh_mhz});
+                      .refresh_mhz = display->refresh_mhz,
+                      .adaptive_sync = display->adaptive_sync});
   }
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
   // Update the desk after requesting the modeset, so a page moved onto a
