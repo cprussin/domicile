@@ -844,6 +844,23 @@ fn a_screen_recording_is_answered_with_where_it_was_saved() {
     );
 }
 
+/// `domicile sleep-displays` turns every monitor off, and `wake-displays`
+/// lights them again.
+#[test]
+fn the_displays_sleep_and_wake_on_demand() {
+    for (call, request) in [
+        ("sleep_displays", SystemRequest::SleepDisplays),
+        ("wake_displays", SystemRequest::WakeDisplays),
+    ] {
+        assert_eq!(
+            chrome(&format!(
+                r#"{{"type":"system_request","id":5,"request":{{"call":"{call}"}}}}"#
+            )),
+            ChromeMessage::SystemRequest { id: 5, request }
+        );
+    }
+}
+
 /// The shell warms every monitor, as a night light does.
 #[test]
 fn the_shell_sets_the_color_temperature() {

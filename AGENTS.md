@@ -214,7 +214,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/SHELL-PACKAGING.md](/docs/SHELL-PACKAGING.md) | Packaging a shell: required Vite settings, inlined CSS, avoiding a theme flash, distributing, building with `domicile`. |
 | [/docs/DISPLAYS.md](/docs/DISPLAYS.md) | Displays on a tty: display-list sources, profiles, which connectors light, pointer crossing, tablets, rotation, shell windows per CRTC, monitor names. |
 | [/docs/CASTING-TO-TVS.md](/docs/CASTING-TO-TVS.md) | Casting to TVs: Google Cast in the engine, `domicile-miracast` for Miracast, Extend onto a virtual monitor or Cast… through the share picker. |
-| [/docs/IDLE.md](/docs/IDLE.md) | Idle blanking, `HostMessage::Idle`, idle inhibitors, and log lines to check on hardware. |
+| [/docs/IDLE.md](/docs/IDLE.md) | Idle blanking, `HostMessage::Idle`, idle inhibitors, sleeping the monitors on demand, and log lines to check on hardware. |
 | [/docs/LOCK.md](/docs/LOCK.md) | The screen lock: where it is enforced, request categories, ordering, verifiers, passphrase checks, fail-closed PAM, log lines. |
 | [/docs/TTY-SESSION.md](/docs/TTY-SESSION.md) | DRM master, console switching through logind, suspend, and input from logind. |
 | [/docs/TTY-DEBUGGING.md](/docs/TTY-DEBUGGING.md) | Seeing a modeset in logs, black screens with a clean log, and hosts where scanout and render cards differ. |
