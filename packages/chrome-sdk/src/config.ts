@@ -169,6 +169,21 @@ export type DisplayPlacement = {
   transform?: Transform;
 };
 
+/** One extension's settings. See [`ExtensionsConfig::settings`]. */
+export type ExtensionSettings = {
+  /** Runs on local files (`file://` pages). Chrome's default is no. */
+  file_access?: boolean | null;
+  /** Runs in private windows. Chrome's default is no. */
+  private?: boolean | null;
+  /** Which of the sites it asks for it runs on. Chrome's default is all. */
+  site_access?: SiteAccess | null;
+  /**
+   * May run the user scripts you add to it (`chrome.userScripts`), as
+   * userscript managers do. Chrome's default is no.
+   */
+  user_scripts?: boolean | null;
+};
+
 /**
  * Chrome extensions the engine installs into the browser windows' profile.
  * See `docs/architecture/EXTENSIONS.md`.
@@ -177,6 +192,12 @@ export type DisplayPlacement = {
  * from the list uninstalls it.
  */
 export type ExtensionsConfig = {
+  /**
+   * Each extension's settings, by id, as chrome://extensions has them. A
+   * setting left out is the user's to change in the Settings app; one
+   * removed from here goes back to Chrome's default.
+   */
+  settings?: Record<string, ExtensionSettings>;
   /** Directories holding an unpacked extension, loaded as they are. */
   unpacked?: string[];
   /** Chrome Web Store ids, installed from the Store and updated from it. */
@@ -414,6 +435,15 @@ export type Profile = {
 
 /** How a touchpad generates scrolling. */
 export type ScrollMethod = "default" | "two_finger" | "edge" | "on_button_down";
+
+/**
+ * Which sites an extension runs on: `"on_click"`, `"all_sites"`, or a list
+ * of hosts, each also as `*.host` for its subdomains.
+ */
+export type SiteAccess = SiteAccessMode | string[];
+
+/** [`SiteAccess`] other than a list of hosts. */
+export type SiteAccessMode = "on_click" | "all_sites";
 
 /**
  * The commands a desk starts with.

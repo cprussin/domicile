@@ -47,7 +47,32 @@ pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) 
             .iter()
             .map(|path| path.display().to_string())
             .collect(),
+        extensions
+            .settings
+            .iter()
+            .map(|(id, settings)| (id.clone(), settings_on_the_wire(settings)))
+            .collect(),
     );
+}
+
+/// One extension's config settings, as [`HostMessage::Extensions`] carries
+/// them.
+fn settings_on_the_wire(
+    settings: &domicile_config::ExtensionSettings,
+) -> domicile_protocol::ExtensionSettings {
+    use domicile_config::{SiteAccess, SiteAccessMode};
+    use domicile_protocol::SiteAccess as WireAccess;
+    use domicile_protocol::SiteAccessMode as WireMode;
+    domicile_protocol::ExtensionSettings {
+        in_private: settings.in_private,
+        file_access: settings.file_access,
+        user_scripts: settings.user_scripts,
+        site_access: settings.site_access.as_ref().map(|access| match access {
+            SiteAccess::Mode(SiteAccessMode::OnClick) => WireAccess::Mode(WireMode::OnClick),
+            SiteAccess::Mode(SiteAccessMode::AllSites) => WireAccess::Mode(WireMode::AllSites),
+            SiteAccess::Sites(sites) => WireAccess::Sites(sites.clone()),
+        }),
+    }
 }
 
 /// Give the host the resolved shell keybindings and the shell's options, for
@@ -388,9 +413,13 @@ impl DomicileCompositor {
 
 #[cfg(test)]
 mod tests {
-    use domicile_protocol::HostMessage;
+    use domicile_config::{SiteAccess, SiteAccessMode};
+    use domicile_protocol::{ExtensionSettings, HostMessage};
 
     use super::hand_over_the_extensions;
+
+    const DARK_READER: &str = "eimadpbcbfnmbkopoojfekhnkhdbieeh";
+    const TAMPERMONKEY: &str = "dhdgffkkebhmkfjojejmpbldmpobfkfo";
 
     #[test]
     fn the_configs_extensions_go_to_the_host() {
@@ -398,15 +427,59 @@ mod tests {
         hand_over_the_extensions(
             &mut host,
             &domicile_config::ExtensionsConfig {
-                web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
+                web_store: vec![DARK_READER.to_string(), TAMPERMONKEY.to_string()],
                 unpacked: vec![std::path::PathBuf::from("/home/u/my-extension")],
+                settings: [
+                    (
+                        DARK_READER.to_string(),
+                        domicile_config::ExtensionSettings {
+                            in_private: Some(true),
+                            site_access: Some(SiteAccess::Sites(vec!["github.com".into()])),
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        TAMPERMONKEY.to_string(),
+                        domicile_config::ExtensionSettings {
+                            file_access: Some(false),
+                            user_scripts: Some(true),
+                            site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
+                            ..Default::default()
+                        },
+                    ),
+                ]
+                .into(),
             },
         );
         assert_eq!(
             host.describe_extensions(),
             Some(HostMessage::Extensions {
-                web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
+                web_store: vec![DARK_READER.to_string(), TAMPERMONKEY.to_string()],
                 unpacked: vec!["/home/u/my-extension".to_string()],
+                settings: [
+                    (
+                        DARK_READER.to_string(),
+                        ExtensionSettings {
+                            in_private: Some(true),
+                            site_access: Some(domicile_protocol::SiteAccess::Sites(vec![
+                                "github.com".into()
+                            ])),
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        TAMPERMONKEY.to_string(),
+                        ExtensionSettings {
+                            file_access: Some(false),
+                            user_scripts: Some(true),
+                            site_access: Some(domicile_protocol::SiteAccess::Mode(
+                                domicile_protocol::SiteAccessMode::OnClick
+                            )),
+                            ..Default::default()
+                        },
+                    ),
+                ]
+                .into(),
             })
         );
     }

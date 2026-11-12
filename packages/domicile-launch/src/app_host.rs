@@ -32,8 +32,10 @@
 //! {"id":9,"type":"set_media_device","kind":"camera","device":"…"}
 //!   {"id":9,"type":"stored"}
 //! {"id":10,"type":"extensions"}
-//!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…}]}   (options_url null if none)
+//!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…,"settings":{…}}]}   (options_url null if none)
 //! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false}
+//!   {"id":11,"type":"stored"}
+//! {"id":11,"type":"configure_extension","extension":"…","settings":{"private":true}}
 //!   {"id":11,"type":"stored"}
 //! {"id":12,"type":"open_url","url":"chrome-extension://…/options.html"}
 //!   {"id":12,"type":"opened"}
@@ -64,6 +66,7 @@ use serde_json::{json, Value};
 
 use crate::config_path::is_module;
 use crate::control::{Request, Response, SettingsFiles};
+use crate::extensions::ExtensionSettings;
 use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
 use crate::shell_options::problems;
@@ -141,27 +144,55 @@ pub fn write_message(output: &mut impl Write, message: &Value) -> std::io::Resul
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AppRequest {
     Read,
-    Write { file: Target, text: String },
+    Write {
+        file: Target,
+        text: String,
+    },
     SitePermissions,
-    SetSitePermission { site: SitePermission },
-    LoadUnpacked { directory: PathBuf },
+    SetSitePermission {
+        site: SitePermission,
+    },
+    LoadUnpacked {
+        directory: PathBuf,
+    },
     // `extension`, since the message's own `id` is the request's.
-    UninstallExtension { extension: String },
+    UninstallExtension {
+        extension: String,
+    },
     ConfigExtensions,
     ChooseFolder,
     MediaDevices,
     // `device`, since the message's own `id` is the request's.
-    SetMediaDevice { kind: MediaKind, device: String },
+    SetMediaDevice {
+        kind: MediaKind,
+        device: String,
+    },
     Extensions,
     // `extension`, since the message's own `id` is the request's.
-    SetExtensionEnabled { extension: String, enabled: bool },
-    OpenUrl { url: String },
+    SetExtensionEnabled {
+        extension: String,
+        enabled: bool,
+    },
+    // `extension`, since the message's own `id` is the request's.
+    ConfigureExtension {
+        extension: String,
+        settings: ExtensionSettings,
+    },
+    OpenUrl {
+        url: String,
+    },
     History(HistoryQuery),
-    Visits { url: String },
-    DeleteHistory { visits: Vec<f64> },
+    Visits {
+        url: String,
+    },
+    DeleteHistory {
+        visits: Vec<f64>,
+    },
     ClearBrowsingData(BrowsingData),
     SiteData,
-    ClearSiteData { host: String },
+    ClearSiteData {
+        host: String,
+    },
 }
 
 /// Which file a write replaces.
@@ -273,6 +304,16 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                 other => Err(refusal_or_surprise(other)),
             }
         }
+        AppRequest::ConfigureExtension {
+            extension,
+            settings,
+        } => match (host.ask)(&Request::ConfigureExtension {
+            id: extension,
+            settings,
+        })? {
+            Response::Stored => Ok(json!({"type": "stored"})),
+            other => Err(refusal_or_surprise(other)),
+        },
         AppRequest::OpenUrl { url } => match (host.ask)(&Request::OpenUrl { url })? {
             Response::Opened => Ok(json!({"type": "opened"})),
             other => Err(refusal_or_surprise(other)),
