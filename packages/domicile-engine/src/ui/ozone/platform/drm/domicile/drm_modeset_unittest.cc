@@ -462,6 +462,11 @@ class FakeDelegate : public display::NativeDisplayDelegate {
  public:
   // display::NativeDisplayDelegate, the parts these tests drive:
   void GetDisplays(display::GetDisplaysCallback callback) override {
+    ++readings_asked_;
+    if (defers_readings_) {
+      readings_.push_back(std::move(callback));
+      return;
+    }
     std::move(callback).Run(snapshots_);
   }
   void Configure(
@@ -487,6 +492,19 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   // Drops the pending `Configure`, as when the GPU process has no DRM device
   // yet.
   void NeverAnswers() { pending_.Reset(); }
+
+  // Holds each `GetDisplays` until `AnswerReading`, as the GPU process does
+  // while it reads the connectors.
+  void DefersReadings() { defers_readings_ = true; }
+  // Answers the oldest held `GetDisplays` with the current snapshots.
+  void AnswerReading() {
+    ASSERT_FALSE(readings_.empty()) << "no reading was asked for";
+    display::GetDisplaysCallback callback = std::move(readings_.front());
+    readings_.erase(readings_.begin());
+    std::move(callback).Run(snapshots_);
+  }
+  size_t readings_asked() const { return readings_asked_; }
+  size_t readings_held() const { return readings_.size(); }
 
   bool was_asked() const { return !pending_.is_null(); }
   size_t asks() const { return asked_.size(); }
@@ -559,6 +577,9 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   display::ConfigureCallback pending_;
   std::optional<bool> inline_answer_;
   std::vector<std::pair<int64_t, display::GammaCurve>> gamma_;
+  bool defers_readings_ = false;
+  std::vector<display::GetDisplaysCallback> readings_;
+  size_t readings_asked_ = 0;
 };
 
 // The first `Configure` goes out before the GPU process has a DRM device, so
@@ -905,6 +926,63 @@ TEST(DrmModesetTest, AGammaRampForAVirtualDisplayReachesNothing) {
   modeset.SetGamma(kVirtualId, WarmRamp());
 
   EXPECT_TRUE(fake->gamma().empty());
+}
+
+// A hotplug while a reading is in flight waits for it, so the two answers
+// cannot interleave, and the displays they name can take a ramp.
+TEST(DrmModesetTest, OverlappingReadingsLeaveEveryDisplayRampable) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  fake->DefersReadings();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  snapshots.push_back(SnapshotBuilder().Id(12).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+  modeset.Start();
+  modeset.OnConfigurationChanged();
+  EXPECT_EQ(fake->readings_held(), 1u);
+
+  fake->AnswerReading();
+  ASSERT_EQ(fake->readings_held(), 1u);
+  fake->AnswerReading();
+  EXPECT_EQ(fake->readings_asked(), 2u);
+
+  modeset.SetGamma(11, WarmRamp());
+  modeset.SetGamma(12, WarmRamp());
+  ASSERT_EQ(fake->gamma().size(), 2u);
+  EXPECT_EQ(fake->gamma()[0].first, 11);
+  EXPECT_EQ(fake->gamma()[1].first, 12);
+}
+
+// A ramp sent while the displays were unread reaches them on the next
+// reading, even one that reads the same and so modesets nothing.
+TEST(DrmModesetTest, AReadingThatChangesNothingAppliesTheStoredRamps) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+  modeset.Start();
+  fake->Answer(true);
+  modeset.OnDisplaySnapshotsInvalidated();
+  modeset.SetGamma(11, WarmRamp());
+  ASSERT_TRUE(fake->gamma().empty());
+
+  modeset.OnConfigurationChanged();
+
+  EXPECT_FALSE(fake->was_asked());
+  ASSERT_EQ(fake->gamma().size(), 1u);
+  EXPECT_EQ(fake->gamma()[0].first, 11);
+  EXPECT_EQ(WhiteOf(fake->gamma()[0].second),
+            (std::vector<uint16_t>{65535, 32768, 16384}));
 }
 
 }  // namespace

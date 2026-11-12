@@ -40,7 +40,7 @@ esac
 
 SUITES=(
   DrmScreenTest:37
-  DrmModesetTest:28
+  DrmModesetTest:30
   DrmVtSwitcherTest:20
   DrmSleepTest:2
   DrmFullscreenTest:4
