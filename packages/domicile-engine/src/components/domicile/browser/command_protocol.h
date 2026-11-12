@@ -16,6 +16,7 @@
 #include "base/functional/function_ref.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "components/domicile/browser/extension_settings.h"
 #include "components/domicile/mojom/browser_windows.mojom-shared.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
@@ -67,10 +68,16 @@ namespace domicile {
 //   {"type":"extensions","version":1}
 //   -> {"type":"extensions","extensions":[{"id":"...","name":"...",
 //       "description":"...","version":"1.0","enabled":true,
+//       "settings":{"private":false,"site_access":"all_sites"},
 //       "options_url":"chrome-extension://.../options.html"}]}
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"set_extension_enabled","version":1,"id":"...","enabled":false}
+//   -> {"type":"set"}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"configure_extension","version":1,"id":"...",
+//    "settings":{"private":true,"site_access":["github.com"]}}
 //   -> {"type":"set"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -250,6 +257,11 @@ struct InstalledExtension {
   std::string description;
   std::string version;
   bool enabled = false;
+  // Its chrome://extensions settings, each unset where it cannot use it: in
+  // private windows where its manifest keeps it out, file access and site
+  // access where it asks for no sites, user scripts where it asks for no
+  // chrome.userScripts.
+  ExtensionSettings settings;
   // Empty when the extension has no options page.
   GURL options_url;
 };
@@ -264,6 +276,13 @@ using ListExtensions =
 using SetExtensionEnabled =
     base::FunctionRef<base::expected<void, std::string>(const std::string& id,
                                                        bool enabled)>;
+
+// Carries out `configure_extension`: sets each of `settings` that is set, or
+// says why it did not.
+using ConfigureExtension =
+    base::FunctionRef<base::expected<void, std::string>(
+        const std::string& id,
+        const ExtensionSettings& settings)>;
 
 // A camera or a microphone.
 struct MediaDevice {
@@ -424,6 +443,7 @@ struct CommandActions {
   ListConfigExtensions list_config_extensions;
   ListExtensions list_extensions;
   SetExtensionEnabled set_extension_enabled;
+  ConfigureExtension configure_extension;
   ListMediaDevices list_media_devices;
   SetMediaDevice set_media_device;
   SearchHistory search_history;
