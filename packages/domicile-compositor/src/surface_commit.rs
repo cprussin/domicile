@@ -165,6 +165,9 @@ impl CompositorHandler for DomicileCompositor {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        if self.take_a_cursor_commit(surface) {
+            return;
+        }
         self.apply_the_commit(surface);
         self.tell_the_held_moves(surface);
     }

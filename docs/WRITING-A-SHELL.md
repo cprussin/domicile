@@ -403,6 +403,10 @@ Each entry in `domicile.windows.list` describes one client window.
     `pidfdInode`.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
+  A client that draws its own cursor (a game, an image editor, a VM viewer)
+  also has `cursorImage`: a CSS `cursor` value holding its image and hotspot,
+  to set in place of `cursor`. The engine draws it like any page cursor, so it
+  turns with a rotated monitor, hides with the pointer and shows in captures.
 - **Size:** the `<app>` element's layout box is the window size. The engine
   sends it to the client. Resize a window by styling its element. Set
   `resizing` on the element while the user drags an edge; see

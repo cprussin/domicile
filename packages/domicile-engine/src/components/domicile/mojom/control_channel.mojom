@@ -215,6 +215,16 @@ struct DisplayInfo {
   DisplayTransform transform;
 };
 
+// A cursor a client drew on its own surface: a PNG of its buffer, in padded
+// base64, with the point that clicks in logical pixels from the top left and
+// the buffer pixels per logical pixel.
+struct AppCursorImage {
+  string png;
+  int32 hotspot_x;
+  int32 hotspot_y;
+  int32 scale;
+};
+
 // The process that connected a window's client, as the kernel recorded it at
 // connect(2). The client cannot forge it.
 struct WindowOwner {
@@ -562,8 +572,9 @@ interface ControlChannelClient {
               array<AppFrame> frames);
   AppClosed(string app_id);
 
-  // The cursor a client asked for over its own surface.
-  AppCursor(string app_id, CursorShape cursor);
+  // The cursor a client asked for over its own surface. `image` is one it
+  // drew itself, shown instead of `cursor`.
+  AppCursor(string app_id, CursorShape cursor, AppCursorImage? image);
 
   // A window or popup reached the screen: its first frame, or the first frame
   // its client drew after a configure changed its size.
