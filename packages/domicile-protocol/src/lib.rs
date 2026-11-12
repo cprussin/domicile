@@ -98,7 +98,13 @@ pub struct CursorImage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChromeMessage {
     /// First message after connecting; declares the version the chrome speaks.
-    Hello { protocol_version: u32 },
+    ///
+    /// `checked` is whether the engine is a checked build (DCHECKs on), which
+    /// runs slower and uses more memory than the official build.
+    Hello {
+        protocol_version: u32,
+        checked: bool,
+    },
 
     /// First message from an app's connection, in place of `Hello`.
     ///

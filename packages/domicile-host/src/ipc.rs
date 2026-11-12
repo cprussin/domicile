@@ -31,7 +31,9 @@ pub fn apply_chrome_message(
     message: ChromeMessage,
 ) -> Vec<HostMessage> {
     match message {
-        ChromeMessage::Hello { protocol_version } => match negotiate(protocol_version) {
+        ChromeMessage::Hello {
+            protocol_version, ..
+        } => match negotiate(protocol_version) {
             Ok(agreed) => {
                 *ready = true;
                 // Send the current state after `Welcome`. State messages are
