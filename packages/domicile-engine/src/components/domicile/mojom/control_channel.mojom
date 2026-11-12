@@ -212,6 +212,10 @@ struct DisplayInfo {
   uint32 mode_height;
   // The `wl_output` refresh rate in mHz, or zero when unknown.
   uint32 refresh_mhz;
+  // Whether the monitor scans out with a variable refresh rate:
+  // `unsupported`, `off` or `on`, as the wire spells it. The browser maps any
+  // other value to `unsupported`.
+  string adaptive_sync;
   DisplayTransform transform;
 };
 

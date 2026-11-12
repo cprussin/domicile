@@ -488,6 +488,15 @@ mojom::DisplayTransform TransformNamed(const std::string* named) {
       mojom::DisplayTransform::kNormal);
 }
 
+// The wire's adaptive sync state, or `unsupported` for one this browser has
+// no name for, which asks nothing of a shell.
+std::string AdaptiveSyncNamed(const std::string* named) {
+  if (named && (*named == "off" || *named == "on")) {
+    return *named;
+  }
+  return "unsupported";
+}
+
 // `key` in `message`, if it is a list of strings and nothing else. One entry
 // that is not a string refuses the whole list: a list with an entry quietly
 // missing is a desk whose installer uninstalls what that entry named.
@@ -1383,6 +1392,8 @@ void ControlChannel::DispatchLine(const std::string& line,
       const std::string* transform = display->FindString("transform");
       // Optional like the mode, and for the same reason: zero is unknown.
       const std::optional<double> refresh = display->FindDouble("refresh_mhz");
+      // Optional too: a host that predates it has no adaptive sync.
+      const std::string* adaptive_sync = display->FindString("adaptive_sync");
       displays.push_back(mojom::DisplayInfo::New(
           *name, static_cast<int32_t>(Number((*position)[0])),
           static_cast<int32_t>(Number((*position)[1])),
@@ -1392,7 +1403,7 @@ void ControlChannel::DispatchLine(const std::string& line,
           moded ? static_cast<uint32_t>(Number((*mode)[0])) : 0u,
           moded ? static_cast<uint32_t>(Number((*mode)[1])) : 0u,
           refresh && *refresh > 0 ? static_cast<uint32_t>(*refresh) : 0u,
-          TransformNamed(transform)));
+          AdaptiveSyncNamed(adaptive_sync), TransformNamed(transform)));
     }
     // Sent even when every entry was malformed, because an empty desktop is an
     // answer: a page told nothing and a page told there are no screens are

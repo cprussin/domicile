@@ -63,6 +63,7 @@ import { Shell } from "./Shell";
 // Displays in the engine's shape, so every render exercises the mapping in
 // `screens/host-displays.ts`. Two landscape monitors side by side.
 const LEFT: DomicileDisplay = {
+  adaptiveSync: "unsupported",
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,
@@ -76,6 +77,7 @@ const LEFT: DomicileDisplay = {
 };
 
 const RIGHT: DomicileDisplay = {
+  adaptiveSync: "unsupported",
   height: 1024,
   modeHeight: 1024,
   modeWidth: 1280,

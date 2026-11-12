@@ -46,6 +46,9 @@ struct EngineDisplay {
     int32_t refresh_mhz = 0;
   };
   std::vector<Mode> modes;
+  // Whether it scans out with a variable refresh rate: one of the
+  // `DOMICILE_ADAPTIVE_SYNC_*` values in domicile_engine.h.
+  int32_t adaptive_sync = 0;
 };
 
 // One of the browser's windows.

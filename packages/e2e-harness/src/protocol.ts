@@ -262,6 +262,11 @@ const focusRequestedSchema = z.looseObject({
 // One display, in logical (CSS) pixels except `mode`. `position` is relative
 // to the top-left of all displays' bounding box. See `docs/DISPLAYS.md`.
 const displayInfoSchema = z.looseObject({
+  // Whether the monitor scans out with a variable refresh rate.
+  adaptive_sync: z
+    .enum(["unsupported", "off", "on"])
+    .nullish()
+    .transform((adaptiveSync) => adaptiveSync ?? "unsupported"),
   // The scanout mode in physical pixels, before rotation. It cannot be derived
   // from `size` and `scale`, since `scale` is rounded to an integer.
   // Informational only; `[0, 0]` when unknown.

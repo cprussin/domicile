@@ -37,6 +37,9 @@ to it by name, then set its scale, position and rotation, or switch it off.
 - `"mode": [1920, 1080]` lights a monitor at another size it offers, and
   `"refresh": 120` at another rate, in Hz. Without them, it uses its own best
   size and rate.
+- `"adaptive_sync": true` turns on variable refresh (FreeSync or G-Sync
+  Compatible) on a monitor that supports it, which smooths out games and
+  video when the computer can't keep up with the monitor.
 
 <!-- /tabs -->
 

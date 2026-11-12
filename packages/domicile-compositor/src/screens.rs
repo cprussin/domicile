@@ -15,10 +15,10 @@
 use domicile_config::{
     ConfigError, Connected, Desk, Desktop, InputConfig, Layout, OutputConfig, Transform,
 };
-use domicile_protocol::{DisplayInfo, DisplayTransform, Scale};
+use domicile_protocol::{AdaptiveSync as WireAdaptiveSync, DisplayInfo, DisplayTransform, Scale};
 use domicile_scene::{Bounds, Point};
 
-use crate::engine::{Connector, Display, Pointer, VirtualDisplay};
+use crate::engine::{AdaptiveSync, Connector, Display, Pointer, VirtualDisplay};
 use crate::pnp_ids::Vendors;
 
 /// The `wl_output` physical size for an output with no known size.
@@ -78,6 +78,9 @@ pub struct Advertised {
     /// The refresh rate in mHz, or [`UNKNOWN_REFRESH_MHZ`]. Only the engine's
     /// displays report one.
     pub refresh_mhz: i32,
+    /// Whether it scans out with a variable refresh rate. Only the engine's
+    /// displays can.
+    pub adaptive_sync: AdaptiveSync,
 }
 
 impl Advertised {
@@ -136,8 +139,18 @@ impl Advertised {
             mode: [as_measure(self.mode.0), as_measure(self.mode.1)],
             // Unknown is zero on both sides of the wire.
             refresh_mhz: u32::try_from(self.refresh_mhz).unwrap_or(0),
+            adaptive_sync: as_wire_adaptive_sync(self.adaptive_sync),
             transform: as_wire_transform(self.transform),
         }
+    }
+}
+
+/// Adaptive sync as the protocol spells it.
+fn as_wire_adaptive_sync(adaptive_sync: AdaptiveSync) -> WireAdaptiveSync {
+    match adaptive_sync {
+        AdaptiveSync::Unsupported => WireAdaptiveSync::Unsupported,
+        AdaptiveSync::Off => WireAdaptiveSync::Off,
+        AdaptiveSync::On => WireAdaptiveSync::On,
     }
 }
 
@@ -217,6 +230,7 @@ impl Screens {
                         display: None,
                         physical_mm: UNKNOWN_PHYSICAL_MM,
                         refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                        adaptive_sync: AdaptiveSync::Unsupported,
                     }
                 })
                 .collect(),
@@ -281,6 +295,7 @@ impl Screens {
                         }),
                         mode: None,
                         refresh_mhz: None,
+                        adaptive_sync: false,
                     })
                     .collect(),
                 ..Screens::as_the_engine_placed(&monitors, vendors)
@@ -307,6 +322,7 @@ impl Screens {
                     display: Some(display.id),
                     physical_mm: display.physical_mm,
                     refresh_mhz: display.refresh_mhz,
+                    adaptive_sync: display.adaptive_sync,
                 }
             })
             .collect();
@@ -359,6 +375,7 @@ impl Screens {
                 display: None,
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                adaptive_sync: AdaptiveSync::Unsupported,
             }],
             size: logical,
         }
@@ -391,6 +408,7 @@ impl Screens {
                     desk: display.desk,
                     mode: display.mode,
                     refresh_mhz: display.refresh_mhz,
+                    adaptive_sync: display.adaptive_sync,
                 })
                 .collect(),
             outputs: layout
@@ -415,6 +433,7 @@ impl Screens {
                         display: Some(display.id),
                         physical_mm: display.physical_mm,
                         refresh_mhz: display.refresh_mhz,
+                        adaptive_sync: display.adaptive_sync,
                     }
                 })
                 .collect(),
@@ -520,6 +539,7 @@ impl Screens {
                 }),
                 mode: None,
                 refresh_mhz: None,
+                adaptive_sync: false,
             });
             let logical = (as_coordinate(logical.0), as_coordinate(logical.1));
             self.outputs.push(Advertised {
@@ -533,6 +553,7 @@ impl Screens {
                 display: Some(display.id),
                 physical_mm: display.physical_mm,
                 refresh_mhz: display.refresh_mhz,
+                adaptive_sync: display.adaptive_sync,
             });
             row_end += mode.0;
             next_left += logical.0;
@@ -1025,6 +1046,7 @@ mod tests {
                     // known.
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
                 Advertised {
                     logical: (2560, 1440),
@@ -1037,6 +1059,7 @@ mod tests {
                     display: None,
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
             ]
         );
@@ -1110,6 +1133,7 @@ mod tests {
                 // though no panel scans it out.
                 mode: [5120, 2880],
                 refresh_mhz: 0,
+                adaptive_sync: WireAdaptiveSync::Unsupported,
                 transform: DisplayTransform::Normal,
             }
         );
@@ -1130,6 +1154,7 @@ mod tests {
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
         };
         let panicked = std::panic::catch_unwind({
             let bogus = bogus.clone();
@@ -1159,6 +1184,7 @@ mod tests {
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
         };
         let panicked = std::panic::catch_unwind(move || squashed.described())
             .expect_err("a negative height must not be described to the chrome");
@@ -1182,6 +1208,7 @@ mod tests {
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
         };
         let panicked = std::panic::catch_unwind(move || inverted.described())
             .expect_err("a negative density must not be described to the chrome");
@@ -1360,6 +1387,7 @@ mod tests {
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
         };
 
         let panicked = std::panic::catch_unwind(move || past_the_end.bounds())
@@ -1469,6 +1497,7 @@ mod tests {
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
                     modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
                 Display {
                     id: 2,
@@ -1479,6 +1508,7 @@ mod tests {
                     physical_mm: (0, 0),
                     refresh_mhz: 0,
                     modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
             ],
             &unspelled(),
@@ -1501,6 +1531,7 @@ mod tests {
                     // display's zeros.
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
                 Advertised {
                     logical: (1920, 1080),
@@ -1513,6 +1544,7 @@ mod tests {
                     display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
             ]
         );
@@ -1534,6 +1566,7 @@ mod tests {
             physical_mm: (597, 336),
             refresh_mhz: 59_997,
             modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
         }]
     }
 
@@ -1630,6 +1663,7 @@ mod tests {
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
                 modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
             },
         ]
     }
@@ -1787,6 +1821,7 @@ mod tests {
                     display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
                 Advertised {
                     logical: (1920, 1280),
@@ -1799,6 +1834,7 @@ mod tests {
                     display: Some(1),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    adaptive_sync: AdaptiveSync::Unsupported,
                 },
             ]
         );
@@ -1833,6 +1869,7 @@ mod tests {
                     }),
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
                 Connector {
                     id: 1,
@@ -1848,6 +1885,7 @@ mod tests {
                     }),
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
             ]
         );
@@ -1932,6 +1970,43 @@ mod tests {
                 .slots,
             vec![Slot::Kept(0)],
             "a monitor that changed mode keeps its wl_output"
+        );
+    }
+
+    #[test]
+    fn a_profile_asks_for_adaptive_sync_and_the_desktop_says_whether_it_took() {
+        let smooth = output(
+            r#"{ "output": { "profiles": [{ "name": "smooth",
+                  "displays": [{ "display": "drm-1", "adaptive_sync": true }] }] } }"#,
+        );
+        let asked = Screens::nested()
+            .replugged_into(&plugged_in(), &smooth, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert!(
+            asked.scanout()[0].adaptive_sync,
+            "the engine is asked for it"
+        );
+
+        // The engine reports whether the hardware took it.
+        let lit: Vec<Display> = plugged_in()
+            .into_iter()
+            .map(|display| Display {
+                adaptive_sync: AdaptiveSync::On,
+                ..display
+            })
+            .collect();
+        let after = asked
+            .replugged_into(&lit, &smooth, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        let output = after.outputs().next().expect("the laptop's output");
+        assert_eq!(output.adaptive_sync, AdaptiveSync::On);
+        assert_eq!(output.described().adaptive_sync, WireAdaptiveSync::On);
+        assert_ne!(
+            asked.outputs().next().map(|output| output.adaptive_sync),
+            Some(AdaptiveSync::On),
+            "the desktop changed, so the chrome is told"
         );
     }
 
@@ -2111,6 +2186,7 @@ mod tests {
                 physical_mm: (597, 336),
                 refresh_mhz: 59_997,
                 modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
             },
             Display {
                 id: 2,
@@ -2121,6 +2197,7 @@ mod tests {
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
                 modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
             },
         ]
     }
@@ -2166,6 +2243,7 @@ mod tests {
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: 60_000,
             modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
         }
     }
 
@@ -2207,6 +2285,7 @@ mod tests {
                 display: Some(VirtualDisplay::id_of(1)),
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
+                adaptive_sync: AdaptiveSync::Unsupported,
             })
         );
         assert_eq!(
@@ -2230,6 +2309,7 @@ mod tests {
                 }),
                 mode: None,
                 refresh_mhz: None,
+                adaptive_sync: false,
             })
         );
     }
@@ -2267,6 +2347,7 @@ mod tests {
                     }),
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(1),
@@ -2281,6 +2362,7 @@ mod tests {
                     }),
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
             ]
         );
@@ -2316,6 +2398,7 @@ mod tests {
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: 60_000,
             modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
         }
     }
 
@@ -2356,6 +2439,7 @@ mod tests {
                 display: Some(VirtualDisplay::id_of(2)),
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
+                adaptive_sync: AdaptiveSync::Unsupported,
             })
         );
         assert_eq!(screens.size(), (2920, 1080));
@@ -2374,6 +2458,7 @@ mod tests {
                     }),
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(2),
@@ -2387,6 +2472,7 @@ mod tests {
                     }),
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
             ]
         );
@@ -2425,6 +2511,7 @@ mod tests {
             }),
             mode: None,
             refresh_mhz: None,
+            adaptive_sync: false,
         };
         let near_the_top_left = (500.0 + 10.0, 20.0);
         assert_eq!(
@@ -2491,6 +2578,7 @@ mod tests {
                 }),
                 mode: None,
                 refresh_mhz: None,
+                adaptive_sync: false,
             })
         );
         assert_eq!(
@@ -2582,6 +2670,7 @@ mod tests {
                 // A window has no physical size or refresh rate.
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                adaptive_sync: AdaptiveSync::Unsupported,
             }]
         );
         assert_eq!(screens.size(), (1280, 800));
