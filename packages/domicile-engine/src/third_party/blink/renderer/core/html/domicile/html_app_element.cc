@@ -613,8 +613,13 @@ void HTMLAppElement::ForwardMotion(AppInputClient& client,
   gfx::PointF point;
   gfx::SizeF size;
   if (MapToContent(event, point, size)) {
-    client.AppPointerMotion(app_id, point, size,
-                            event.movementX() != 0 || event.movementY() != 0);
+    const bool moved = event.movementX() != 0 || event.movementY() != 0;
+    client.AppPointerMotion(app_id, point, size, moved);
+    if (moved) {
+      client.AppPointerRelative(
+          app_id, gfx::Vector2dF(event.movementX(), event.movementY()),
+          gfx::PointF(event.clientX(), event.clientY()), size);
+    }
   }
 }
 
