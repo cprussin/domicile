@@ -131,4 +131,124 @@
       "default": "./dist/desktop/theme.js"
     },
     "./desktop/tray": {
-      "types": "./dist/desktop/tray.d.ts
+      "types": "./dist/desktop/tray.d.ts",
+      "default": "./dist/desktop/tray.js"
+    },
+    "./desktop/windows": {
+      "types": "./dist/desktop/windows.d.ts",
+      "default": "./dist/desktop/windows.js"
+    },
+    "./display-transform": {
+      "types": "./dist/display-transform.d.ts",
+      "default": "./dist/display-transform.js"
+    },
+    "./domicile-host": {
+      "types": "./dist/domicile-host.d.ts",
+      "default": "./dist/domicile-host.js"
+    },
+    "./extension": {
+      "types": "./dist/extension.d.ts",
+      "default": "./dist/extension.js"
+    },
+    "./fake-host": {
+      "types": "./dist/fake-host.d.ts",
+      "default": "./dist/fake-host.js"
+    },
+    "./file-preview": {
+      "types": "./dist/file-preview.d.ts",
+      "default": "./dist/file-preview.js"
+    },
+    "./global-shortcuts": {
+      "types": "./dist/global-shortcuts.d.ts",
+      "default": "./dist/global-shortcuts.js"
+    },
+    "./icon-theme": {
+      "types": "./dist/icon-theme.d.ts",
+      "default": "./dist/icon-theme.js"
+    },
+    "./key-action": {
+      "types": "./dist/key-action.d.ts",
+      "default": "./dist/key-action.js"
+    },
+    "./inhibitor-action": {
+      "types": "./dist/inhibitor-action.d.ts",
+      "default": "./dist/inhibitor-action.js"
+    },
+    "./keymap-choice": {
+      "types": "./dist/keymap-choice.d.ts",
+      "default": "./dist/keymap-choice.js"
+    },
+    "./miracast": {
+      "types": "./dist/miracast.d.ts",
+      "default": "./dist/miracast.js"
+    },
+    "./notification": {
+      "types": "./dist/notification.d.ts",
+      "default": "./dist/notification.js"
+    },
+    "./options": {
+      "types": "./dist/options.d.ts",
+      "default": "./dist/options.js"
+    },
+    "./own-keybindings": {
+      "types": "./dist/own-keybindings.d.ts",
+      "default": "./dist/own-keybindings.js"
+    },
+    "./portal": {
+      "types": "./dist/portal.d.ts",
+      "default": "./dist/portal.js"
+    },
+    "./shell": {
+      "types": "./dist/shell.d.ts",
+      "default": "./dist/shell.js"
+    },
+    "./system": {
+      "types": "./dist/system.d.ts",
+      "default": "./dist/system.js"
+    },
+    "./theme": {
+      "types": "./dist/theme.d.ts",
+      "default": "./dist/theme.js"
+    },
+    "./tray": {
+      "types": "./dist/tray.d.ts",
+      "default": "./dist/tray.js"
+    },
+    "./webview-element": {
+      "types": "./dist/webview-element.d.ts",
+      "default": "./dist/webview-element.js"
+    },
+    "./previewed-window": {
+      "types": "./dist/previewed-window.d.ts",
+      "default": "./dist/previewed-window.js"
+    },
+    "./window-state": {
+      "types": "./dist/window-state.d.ts",
+      "default": "./dist/window-state.js"
+    }
+  },
+  "files": [
+    "config.schema.json",
+    "dist/**"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/sdk",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "generate": "bun codegen/generate-domicile-host.ts && bun codegen/generate-config.ts && bun codegen/generate-engine-layer.ts",
+    "test:shell": "check-runner tests/*.sh",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "2.2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git",
+    "directory": "packages/chrome-sdk"
+  }
+}
