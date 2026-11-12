@@ -18,9 +18,9 @@ for it.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- ui/ozone/platform/drm/BUILD.gn              | 25 +++++++++++++++++++
- ui/ozone/platform/drm/ozone_platform_drm.cc | 38 +++++++++++++++++++++++++----
- 2 files changed, 58 insertions(+), 5 deletions(-)
+ ui/ozone/platform/drm/BUILD.gn              | 25 ++++++++++++++++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 39 +++++++++++++++++++++++++----
+ 2 files changed, 59 insertions(+), 5 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
 index 6116e45..6157c98 100644
@@ -73,10 +73,10 @@ index 6116e45..6157c98 100644
  
  source_set("drm_integration_tests") {
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index a069f15..88f648d 100644
+index a069f15..4ebcb53 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
-@@ -77,12 +77,16 @@
+@@ -77,12 +77,17 @@
  #endif
  
  // The other of this platform's two references to ChromeOS, and the whole of
@@ -91,12 +91,13 @@ index a069f15..88f648d 100644
 -#include "ui/base/ime/input_method_minimal.h"
 +#include "ui/base/ime/linux/input_method_auralinux.h"
 +#include "ui/events/event.h"
++#include "ui/base/ime/linux/linux_input_method_context.h"
 +#include "ui/base/ime/linux/linux_input_method_context_factory.h"
 +#include "ui/ozone/platform/drm/domicile/drm_input_method.h"
  #endif
  
  namespace ui {
-@@ -378,11 +382,12 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -378,11 +383,12 @@ class OzonePlatformDrm : public OzonePlatform {
    }
    std::unique_ptr<InputMethod> CreateInputMethod(
        ImeKeyEventDispatcher* ime_key_event_dispatcher,
@@ -111,7 +112,7 @@ index a069f15..88f648d 100644
  #endif
    }
  
-@@ -428,6 +433,25 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -428,6 +434,25 @@ class OzonePlatformDrm : public OzonePlatform {
      window_manager_ = std::make_unique<DrmWindowHostManager>();
      cursor_ = std::make_unique<DrmCursor>(window_manager_.get());
  
@@ -137,7 +138,7 @@ index a069f15..88f648d 100644
  #if BUILDFLAG(USE_XKBCOMMON)
      keyboard_layout_engine_ =
          std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_);
-@@ -617,6 +641,10 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -617,6 +642,10 @@ class OzonePlatformDrm : public OzonePlatform {
    std::unique_ptr<DeviceManager> device_manager_;
    std::unique_ptr<CursorFactory> cursor_factory_;
    std::unique_ptr<DrmWindowHostManager> window_manager_;
