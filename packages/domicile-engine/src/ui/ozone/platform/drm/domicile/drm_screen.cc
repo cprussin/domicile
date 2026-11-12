@@ -15,9 +15,11 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/notreached.h"
 #include "base/containers/flat_set.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "ui/display/display_finder.h"
+#include "ui/display/display_observer.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/util/edid_parser.h"
@@ -169,7 +171,28 @@ DomicilePanel PanelFromSnapshot(
       ModeForLayout(snapshot, WantedFor(layout, snapshot.display_id()));
   panel.refresh_mhz = lit ? MillihertzOf(*lit) : 0;
   panel.physical_size_mm = DisplayPhysicalSizeMm(snapshot);
+  panel.adaptive_sync = AdaptiveSyncOf(snapshot);
   return panel;
+}
+
+bool PanelChangedUnseen(const DomicilePanel& before,
+                        const DomicilePanel& after) {
+  return before.refresh_mhz != after.refresh_mhz ||
+         before.adaptive_sync != after.adaptive_sync;
+}
+
+DomicileAdaptiveSync AdaptiveSyncOf(const display::DisplaySnapshot& snapshot) {
+  // Read off the connector and CRTC when the snapshot was taken, so it says
+  // what the hardware does, not what was asked for.
+  switch (snapshot.variable_refresh_rate_state()) {
+    case display::VariableRefreshRateState::kVrrNotCapable:
+      return DomicileAdaptiveSync::kUnsupported;
+    case display::VariableRefreshRateState::kVrrDisabled:
+      return DomicileAdaptiveSync::kOff;
+    case display::VariableRefreshRateState::kVrrEnabled:
+      return DomicileAdaptiveSync::kOn;
+  }
+  NOTREACHED();
 }
 
 display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
@@ -328,6 +351,7 @@ void DrmScreen::OnDisplaysChanged(
   // Before the list changes, so its observers read the new connectors.
   connectors_.clear();
   gamma_sizes_.clear();
+  const base::flat_map<int64_t, DomicilePanel> before = std::move(panels_);
   panels_.clear();
   for (const display::DisplaySnapshot* snapshot : snapshots) {
     connectors_[snapshot->display_id()] = snapshot->domicile_connector();
@@ -364,6 +388,21 @@ void DrmScreen::OnDisplaysChanged(
   }
   for (const int64_t id : unplugged) {
     display_list_.RemoveDisplay(id);
+  }
+
+  // DisplayList compares neither the refresh rate nor adaptive sync, so a
+  // modeset that changed only those would reach no observer, and the
+  // compositor would keep advertising the old ones.
+  for (const display::Display& display : display_list_.displays()) {
+    const auto was = before.find(display.id());
+    const auto is = panels_.find(display.id());
+    if (was != before.end() && is != panels_.end() &&
+        PanelChangedUnseen(was->second, is->second)) {
+      for (display::DisplayObserver& observer :
+           *display_list_.observers()) {
+        observer.OnDisplayMetricsChanged(display, /*changed_metrics=*/0);
+      }
+    }
   }
 
   // A profile reload can rotate a display without moving its window, so

@@ -364,6 +364,7 @@ mod tests {
                 display: None,
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
+                adaptive_sync: crate::engine::AdaptiveSync::Unsupported,
             }],
             vec![Window {
                 app_id: "1".into(),

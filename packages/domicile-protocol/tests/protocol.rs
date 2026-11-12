@@ -4,9 +4,9 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorHiding, CursorImage,
-    CursorShape, CursorTheme, DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase,
-    PointerOverWindow, PROTOCOL_VERSION,
+    negotiate, AdaptiveSync, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorHiding,
+    CursorImage, CursorShape, CursorTheme, DisplayInfo, DisplayTransform, HostMessage, Owner,
+    Passphrase, PointerOverWindow, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -333,6 +333,7 @@ fn the_desktop_is_described_to_the_chrome() {
                 scale: 1,
                 mode: [1920, 1080],
                 refresh_mhz: 0,
+                adaptive_sync: AdaptiveSync::Unsupported,
                 transform: DisplayTransform::Normal,
             },
             DisplayInfo {
@@ -342,6 +343,7 @@ fn the_desktop_is_described_to_the_chrome() {
                 scale: 2,
                 mode: [5120, 2880],
                 refresh_mhz: 0,
+                adaptive_sync: AdaptiveSync::On,
                 transform: DisplayTransform::Normal,
             },
         ],
@@ -358,6 +360,8 @@ fn the_desktop_is_described_to_the_chrome() {
     assert_eq!(v["displays"][1]["scale"], 2);
     assert_eq!(v["displays"][1]["mode"], serde_json::json!([5120, 2880]));
     assert_eq!(v["displays"][1]["transform"], "normal");
+    assert_eq!(v["displays"][0]["adaptive_sync"], "unsupported");
+    assert_eq!(v["displays"][1]["adaptive_sync"], "on");
 }
 
 #[test]
@@ -373,6 +377,7 @@ fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
         scale: 2,
         mode: [3840, 2160],
         refresh_mhz: 0,
+        adaptive_sync: AdaptiveSync::Unsupported,
         transform: DisplayTransform::Rotate270,
     })
     .unwrap();
@@ -389,6 +394,7 @@ fn a_display_that_predates_these_fields_still_reads() {
         serde_json::from_str(r#"{"name":"left","position":[0,0],"size":[1920,1080],"scale":1}"#)
             .expect("it reads");
     assert_eq!(old.transform, DisplayTransform::Normal);
+    assert_eq!(old.adaptive_sync, AdaptiveSync::Unsupported);
     // `[0, 0]`, not the size: an unstated mode stays unstated.
     assert_eq!(old.mode, [0, 0]);
 }

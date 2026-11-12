@@ -233,6 +233,22 @@ typedef struct DomicileModedDisplay {
   uint32_t mode_count;
 } DomicileModedDisplay;
 
+// Whether a display's connector scans out with a variable refresh rate.
+// The connector, its panel or its driver cannot.
+#define DOMICILE_ADAPTIVE_SYNC_UNSUPPORTED 0
+// It can, and is not: not asked for, or the modeset asking for it was refused.
+#define DOMICILE_ADAPTIVE_SYNC_OFF 1
+// It is.
+#define DOMICILE_ADAPTIVE_SYNC_ON 2
+
+// A display with its modes and whether it scans out with a variable refresh
+// rate, for `adaptive_displays`.
+typedef struct DomicileAdaptiveDisplay {
+  DomicileModedDisplay moded;
+  // One of the `DOMICILE_ADAPTIVE_SYNC_*` values, as the hardware says.
+  int32_t adaptive_sync;
+} DomicileAdaptiveDisplay;
+
 // A browser window, for `browser_windows`: a page the browser holds, which a
 // capture tool may pick on ext-foreign-toplevel-list-v1 and capture alone
 // with domicile_browser_window_capture_start.
@@ -285,6 +301,16 @@ typedef struct DomicileModedLayout {
   // the native mode's, or the fastest at a non-native mode.
   int32_t refresh_mhz;
 } DomicileModedLayout;
+
+// A moded layout and whether to drive it with a variable refresh rate, for
+// `domicile_displays_configure_adaptive`.
+typedef struct DomicileAdaptiveLayout {
+  DomicileModedLayout moded;
+  // Nonzero to scan out with a variable refresh rate where the connector can.
+  // A modeset the driver refuses with it is tried again without it, and the
+  // display then reports `DOMICILE_ADAPTIVE_SYNC_OFF`.
+  int32_t adaptive_sync;
+} DomicileAdaptiveLayout;
 
 // A tablet or touchscreen and the display it covers, for
 // `domicile_pointers_configure`.
@@ -499,6 +525,15 @@ typedef struct DomicileEngineCallbacks {
   void (*browser_windows)(void* user_data,
                           const DomicileBrowserWindow* windows,
                           uint32_t count);
+  // Like `moded_displays`, plus whether each display scans out with a
+  // variable refresh rate. `displays` points at `count` records borrowed for
+  // the call.
+  //
+  // Called instead of `moded_displays` and the older display callbacks when
+  // set. An older engine ignores it.
+  void (*adaptive_displays)(void* user_data,
+                            const DomicileAdaptiveDisplay* displays,
+                            uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
@@ -700,6 +735,14 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
 DOMICILE_ENGINE_EXPORT void domicile_displays_configure_modes(
     DomicileEngine* engine,
     const DomicileModedLayout* layout,
+    uint32_t count);
+
+// Like `domicile_displays_configure_modes`, with whether to drive each
+// connector with a variable refresh rate. A compositor that finds no such
+// symbol has an older engine, which drives every connector at a fixed rate.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure_adaptive(
+    DomicileEngine* engine,
+    const DomicileAdaptiveLayout* layout,
     uint32_t count);
 
 // Tells the browser which display each tablet or touchscreen covers.

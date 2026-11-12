@@ -274,6 +274,34 @@ code and the compositor logs one line at startup.
   (`DomicileModedDisplay`), and a profile's mode and rate go back through
   `domicile_displays_configure_modes`. The rate reaches `wl_output.mode` and
   the SDK's `Display.refreshMhz`.
+- `DisplayList` notices neither a new rate nor a new adaptive sync state, so
+  `DrmScreen` tells the display observers itself when a panel's changed
+  (`PanelChangedUnseen`). Otherwise a modeset that changed only those would
+  never reach the compositor.
+
+## Adaptive sync
+
+A profile entry with `"adaptive_sync": true` asks for a variable refresh rate
+(adaptive sync, FreeSync, G-Sync Compatible): a frame that runs late is shown
+as soon as it is ready rather than at the next fixed refresh. It is off by
+default.
+
+- `DrmModeset` asks for it, as `DisplayConfigurationParams::enable_vrr`, only
+  where the snapshot says the connector can: the connector has `vrr_capable`
+  and the EDID gives a minimum rate. Chromium's DRM platform then sets the
+  CRTC's `VRR_ENABLED` in the modeset commit.
+- A modeset that asked for it and was refused is asked again without it, as
+  sway does. That monitor is not asked again until it is unplugged
+  (`DrmModeset::adaptive_sync_refused_`).
+- What a display reports is what the hardware says, read off the CRTC when
+  the displays are read, not what was asked for. A modeset that turns it on
+  or off reads the displays again so the report follows.
+- It reaches the compositor through `adaptive_displays`
+  (`DomicileAdaptiveDisplay`), and the request goes back through
+  `domicile_displays_configure_adaptive`. The shell sees it as
+  `Display.adaptiveSync`: `unsupported`, `off` or `on`.
+- The browser still draws at the monitor's nominal rate. Adaptive sync helps
+  when a frame is late, not by drawing at a lower rate when nothing moves.
 
 ## DisplayLink docks
 
