@@ -123,6 +123,22 @@ the cursor client did not apply logs `kept the pointer shown`. Each input that
 brings the pointer back logs its event name, device and flags. A held button
 that blocks hiding logs `no pause while buttons ... are held`.
 
+## Pointer lock in a game
+
+Run a game or VM viewer that locks the pointer: a first-person game under
+Wayland (for example with SDL's `SDL_VIDEODRIVER=wayland`), or a VM viewer
+such as GNOME Boxes after clicking into the guest. Expect:
+
+- The pointer disappears and the camera or guest mouse follows the mouse
+  without stopping at the window's or the screen's edge.
+- Switching windows with a keyboard chord brings the pointer back, and the
+  game stops turning.
+- Coming back to the window locks it again.
+
+With the compositor at `--log-level debug`, a lock logs `pointer constraint
+offered -> Host` then `pointer constrained`, and letting go logs `pointer let
+go`.
+
 ## Dead GPU process
 
 ```sh

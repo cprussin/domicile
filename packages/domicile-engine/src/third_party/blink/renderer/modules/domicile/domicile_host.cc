@@ -704,6 +704,15 @@ void DomicileHost::closeApp(ScriptState*, const String& app_id,
   }
 }
 
+void DomicileHost::pointerConstrained(ScriptState*,
+                                      const String& app_id,
+                                      bool active,
+                                      ExceptionState& exception_state) {
+  if (ReadyForApp(app_id, exception_state)) {
+    channel_->PointerConstrained(app_id, active);
+  }
+}
+
 void DomicileHost::setAppBounds(ScriptState*, const String& app_id, double x,
                                 double y, double width, double height,
                                 ExceptionState& exception_state) {
@@ -1661,6 +1670,19 @@ void DomicileHost::AppCursor(const String& app_id,
 
 void DomicileHost::AppPresented(const String& app_id) {
   Tell(app_id, kPresented);
+}
+
+void DomicileHost::AppPointerConstraint(
+    const String& app_id,
+    std::optional<domicile::mojom::blink::PointerConstraint> constraint) {
+  String named;
+  if (constraint) {
+    named = *constraint == domicile::mojom::blink::PointerConstraint::kLock
+                ? "lock"
+                : "confine";
+  }
+  WindowNamed(app_id).pointer_constraint = named;
+  WindowsChanged();
 }
 
 void DomicileHost::AppSuspended(const String& app_id, bool suspended) {

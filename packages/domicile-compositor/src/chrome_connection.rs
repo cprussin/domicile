@@ -493,6 +493,10 @@ fn read_chrome_messages(
                 });
                 Vec::new()
             }
+            Ok(ChromeMessage::PointerConstrained { app_id, active }) => {
+                hub.send_request(ClientRequest::PointerConstrained { app_id, active });
+                Vec::new()
+            }
             Ok(ChromeMessage::PointerRelative { app_id, dx, dy }) => {
                 hub.send_request(ClientRequest::PointerRelative { app_id, dx, dy });
                 Vec::new()

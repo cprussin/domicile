@@ -111,6 +111,11 @@ pub struct Arguments {
     /// can, with a press the desktop must not honor.
     pub ask_to_drag: Option<AskToDrag>,
 
+    /// Whether the client asks, when the pointer first enters its window, to
+    /// lock the pointer there or confine it to the window, as a game does. A
+    /// persistent ask over the whole window.
+    pub constrain_pointer: Option<ConstrainPointer>,
+
     /// Whether to open a bubble over the window once it is up: a desync
     /// `wl_subsurface`, as Chromium draws an extension popup.
     ///
@@ -196,6 +201,14 @@ pub enum AskToDrag {
     MoveAfterRelease,
 }
 
+/// What the client asks the pointer to do. See
+/// [`Arguments::constrain_pointer`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstrainPointer {
+    Lock,
+    Confine,
+}
+
 /// When the client takes its idle inhibitor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HoldTheScreensOn {
@@ -256,6 +269,9 @@ pub enum ArgumentError {
     #[error("--ask-to-drag wants move, bottom-right or move-after-release, not {value}")]
     NotADrag { value: String },
 
+    #[error("--constrain-pointer wants lock or confine, not {value}")]
+    NotAConstraint { value: String },
+
     #[error("unknown argument {argument}")]
     Unknown { argument: String },
 }
@@ -281,6 +297,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut anchor = None;
     let mut sliding_menu = None;
     let mut ask_to_drag = None;
+    let mut constrain_pointer = None;
     let mut bubble = None;
     let mut bubble_without_input = None;
     let mut scrolling_bubble = None;
@@ -381,6 +398,15 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--ask-to-drag" => {
                 take(&mut ask_to_drag, &flag, drag(&mut args, &flag)?)?;
             }
+            "--constrain-pointer" => {
+                let stated = value(&mut args, &flag)?;
+                let constraint = match stated.as_str() {
+                    "lock" => ConstrainPointer::Lock,
+                    "confine" => ConstrainPointer::Confine,
+                    _ => return Err(ArgumentError::NotAConstraint { value: stated }),
+                };
+                take(&mut constrain_pointer, &flag, constraint)?;
+            }
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
@@ -449,6 +475,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         anchor,
         sliding_menu: sliding_menu.unwrap_or(false),
         ask_to_drag,
+        constrain_pointer,
         bubble: bubble.unwrap_or(false),
         bubble_without_input: bubble_without_input.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),

@@ -6,7 +6,7 @@
 use domicile_protocol::{
     negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorHiding, CursorImage,
     CursorShape, CursorTheme, DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase,
-    PointerOverWindow, PROTOCOL_VERSION,
+    PointerConstraint, PointerOverWindow, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -99,6 +99,21 @@ fn chrome_messages_round_trip() {
             app_id: "term".into(),
             dx: 3.5,
             dy: -2.0,
+        },
+        "the engine's line parses"
+    );
+    chrome_round_trip(&ChromeMessage::PointerConstrained {
+        app_id: "game".into(),
+        active: true,
+    });
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(
+            r#"{"type":"pointer_constrained","app_id":"game","active":false}"#
+        )
+        .unwrap(),
+        ChromeMessage::PointerConstrained {
+            app_id: "game".into(),
+            active: false,
         },
         "the engine's line parses"
     );
@@ -462,6 +477,28 @@ fn wire_shape_is_pinned() {
     .unwrap();
     assert_eq!(v["type"], "app_cursor");
     assert_eq!(v["cursor"], "pointer");
+}
+
+/// The engine reads a pointer constraint by these names, and `null` for none.
+#[test]
+fn a_pointer_constraint_goes_out_by_name() {
+    for (constraint, wire) in [
+        (Some(PointerConstraint::Lock), serde_json::json!("lock")),
+        (
+            Some(PointerConstraint::Confine),
+            serde_json::json!("confine"),
+        ),
+        (None, serde_json::Value::Null),
+    ] {
+        let message = HostMessage::AppPointerConstraint {
+            app_id: "game".into(),
+            constraint,
+        };
+        host_round_trip(&message);
+        let v = serde_json::to_value(&message).unwrap();
+        assert_eq!(v["type"], "app_pointer_constraint");
+        assert_eq!(v["constraint"], wire);
+    }
 }
 
 /// The browser process reads `cursor` off `appearance` by these names.

@@ -523,12 +523,24 @@ interface ControlChannel {
   // units, after the PointerMotion that took it there. Not sent for a still
   // pointer or a shell's warp. For zwp_relative_pointer_v1.
   PointerRelative(string app_id, double dx, double dy);
+  // The page took (`active`) or let go of the pointer for `app_id`'s ask to
+  // lock or confine it (AppPointerConstraint). Only then is the client told.
+  PointerConstrained(string app_id, bool active);
   PointerLeave(string app_id);
   PointerButton(string app_id, uint32 button, bool pressed);
   PointerPinch(string app_id, Pinch pinch);
   Touch(string app_id, Touch touch);
   PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y,
               PointerAxisSource source, bool stop_x, bool stop_y);
+};
+
+// What a client asked the pointer to do over its window
+// (zwp_pointer_constraints_v1).
+enum PointerConstraint {
+  // Keep it where it is; the client reads relative motion.
+  kLock,
+  // Keep it inside the window.
+  kConfine,
 };
 
 // Compositor -> browser -> page. One method, not a callback on Spawn: these
@@ -572,6 +584,11 @@ interface ControlChannelClient {
   // A window or popup reached the screen: its first frame, or the first frame
   // its client drew after a configure changed its size.
   AppPresented(string app_id);
+
+  // The window under the pointer asked to lock or confine it, or null once
+  // that ask ended: the client withdrew it or the pointer left the window.
+  // The page answers with PointerConstrained.
+  AppPointerConstraint(string app_id, PointerConstraint? constraint);
 
   // The compositor marked a window `suspended`, or cleared it.
   AppSuspended(string app_id, bool suspended);

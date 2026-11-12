@@ -361,6 +361,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             ClientRequest::Key { .. }
             | ClientRequest::PointerMotion { .. }
             | ClientRequest::PointerRelative { .. }
+            | ClientRequest::PointerConstrained { .. }
             | ClientRequest::PointerLeave
             | ClientRequest::PointerPinch { .. }
             | ClientRequest::PointerSwipe { .. }
@@ -830,6 +831,13 @@ mod tests {
                     app_id: "app-1".into(),
                     dx: 2.0,
                     dy: 1.0,
+                },
+            ),
+            (
+                "the page taking the pointer for a game",
+                ClientRequest::PointerConstrained {
+                    app_id: "app-1".into(),
+                    active: true,
                 },
             ),
             ("the pointer leaving a window", ClientRequest::PointerLeave),
