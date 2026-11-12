@@ -870,7 +870,7 @@ fn overlap_area(a: &Bounds, b: &Bounds) -> f64 {
 /// none is named after its connector, as sway names it. `drm-<id>` again from
 /// an engine that reports no connector. A virtual display is named after its
 /// connector, `virtual-<n>`, since its description is a TV's name.
-fn name_of(display: &Display) -> String {
+pub fn name_of(display: &Display) -> String {
     if display.is_virtual() || (display.description.is_empty() && !display.connector.is_empty()) {
         display.connector.clone()
     } else {

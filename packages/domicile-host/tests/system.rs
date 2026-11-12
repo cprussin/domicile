@@ -1602,25 +1602,33 @@ mod display_power {
     fn sleeping_and_waking_ask_the_compositor() {
         let (told, asked) = channel();
         let (system, heard) = system_in(&std::env::temp_dir());
-        let system = system.powering_displays_with(move |power| {
-            told.send(power).unwrap();
+        let system = system.powering_displays_with(move |power, display| {
+            told.send((power, display)).unwrap();
             Ok(())
         });
 
-        system.handle(1, SystemRequest::SleepDisplays);
-        system.handle(2, SystemRequest::WakeDisplays);
+        system.handle(1, SystemRequest::SleepDisplays { display: None });
+        system.handle(
+            2,
+            SystemRequest::WakeDisplays {
+                display: Some("DP-1".into()),
+            },
+        );
 
         assert_eq!(reply(&heard, 1), SystemReply::Set);
         assert_eq!(reply(&heard, 2), SystemReply::Set);
-        assert_eq!(asked.recv().unwrap(), DisplayPower::Asleep);
-        assert_eq!(asked.recv().unwrap(), DisplayPower::Awake);
+        assert_eq!(asked.recv().unwrap(), (DisplayPower::Asleep, None));
+        assert_eq!(
+            asked.recv().unwrap(),
+            (DisplayPower::Awake, Some("DP-1".into()))
+        );
     }
 
     #[test]
     fn a_system_that_powers_no_displays_says_so() {
         let (system, heard) = system_in(&std::env::temp_dir());
 
-        system.handle(1, SystemRequest::SleepDisplays);
+        system.handle(1, SystemRequest::SleepDisplays { display: None });
 
         assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
     }
@@ -1629,13 +1637,22 @@ mod display_power {
     /// them shows only the lock screen.
     #[test]
     fn sleeping_and_waking_power() {
-        assert_eq!(reach(&SystemRequest::SleepDisplays), Reach::Powers);
-        assert_eq!(reach(&SystemRequest::WakeDisplays), Reach::Powers);
+        assert_eq!(
+            reach(&SystemRequest::SleepDisplays { display: None }),
+            Reach::Powers
+        );
+        assert_eq!(
+            reach(&SystemRequest::WakeDisplays { display: None }),
+            Reach::Powers
+        );
     }
 
     #[test]
     fn an_app_may_not_sleep_or_wake_the_displays() {
-        for asked in [SystemRequest::SleepDisplays, SystemRequest::WakeDisplays] {
+        for asked in [
+            SystemRequest::SleepDisplays { display: None },
+            SystemRequest::WakeDisplays { display: None },
+        ] {
             let Some(HostMessage::SystemReply {
                 id: 4,
                 reply: SystemReply::Failed { error },
