@@ -311,6 +311,14 @@ const displaysSchema = z.looseObject({
 const appCursorSchema = z.looseObject({
   app_id: z.string(),
   cursor: cursorShapeSchema,
+  // A cursor the client drew itself, which the engine shows instead.
+  image: z
+    .looseObject({
+      hotspot: z.tuple([z.number(), z.number()]),
+      png: z.string(),
+      scale: z.number(),
+    })
+    .optional(),
   type: z.literal("app_cursor"),
 });
 

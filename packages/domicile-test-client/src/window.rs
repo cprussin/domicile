@@ -272,6 +272,10 @@ struct Client {
     anchor: Option<String>,
     /// See [`crate::arguments::Arguments::sliding_menu`].
     sliding_menu: bool,
+    /// See [`crate::arguments::Arguments::cursor_surface`]. `drawn` keeps
+    /// the cursor surface and its buffers' backing files.
+    cursor_surface: bool,
+    cursor_drawn: Option<(wl_surface::WlSurface, Vec<std::fs::File>)>,
     /// See [`crate::arguments::Arguments::ask_to_drag`].
     ask_to_drag: Option<AskToDrag>,
     /// The open popups, each over the one before it or the window.
@@ -441,6 +445,9 @@ struct Bubble {
     drawn: Vec<(wl_buffer::WlBuffer, std::fs::File)>,
 }
 
+/// User data for `--cursor-surface`'s objects. See [`PopupRole`].
+struct CursorRole;
+
 /// User data for a dialog's objects. See [`PopupRole`].
 struct DialogRole;
 
@@ -557,6 +564,8 @@ impl Client {
             repositions: asked.repositioned_popup,
             anchor: asked.anchor.clone(),
             sliding_menu: asked.sliding_menu,
+            cursor_surface: asked.cursor_surface,
+            cursor_drawn: None,
             ask_to_drag: asked.ask_to_drag,
             popups: Vec::new(),
             wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
@@ -1331,6 +1340,40 @@ fn open_a_sliding_menu(client: &mut Client, handle: &QueueHandle<Client>) {
         .map(|(_, xdg)| xdg.clone())
         .expect("a press is over the window or one of its menus");
     open_a_popup(client, handle, &parent, true);
+}
+
+/// Draw `--cursor-surface`'s cursor at `size`, setting it as the pointer's
+/// cursor on `entered`, the pointer and its enter serial.
+fn draw_the_cursor(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    entered: Option<(&wl_pointer::WlPointer, u32)>,
+    size: (i32, i32),
+) {
+    let (Some(compositor), Some(shm)) = (
+        client.globals.compositor.as_ref(),
+        client.globals.shm.as_ref(),
+    ) else {
+        unreachable!("open() refuses a compositor without these");
+    };
+    let (surface, files) = client
+        .cursor_drawn
+        .get_or_insert_with(|| (compositor.create_surface(handle, CursorRole), Vec::new()));
+    if let Some((pointer, serial)) = entered {
+        pointer.set_cursor(serial, Some(surface), 1, 2);
+        crate::say!(
+            pointer.id(),
+            "set_cursor({}, {}, 1, 2)",
+            serial,
+            surface.id()
+        );
+    }
+    let (buffer, file) = solid_or_stop(shm, handle, size, CursorRole);
+    surface.attach(Some(&buffer), 0, 0);
+    surface.damage_buffer(0, 0, size.0, size.1);
+    surface.commit();
+    crate::say!(surface.id(), "cursor_drawn({}, {})", size.0, size.1);
+    files.push(file);
 }
 
 /// Ask the desktop to move or resize the window from the button event
@@ -2573,6 +2616,31 @@ impl Dispatch<wl_buffer::WlBuffer, PopupRole> for Client {
 delegate_noop!(Client: ignore wl_subcompositor::WlSubcompositor);
 delegate_noop!(Client: ignore wl_subsurface::WlSubsurface);
 
+// Cursor surface and buffer events are ignored, as a bubble's are.
+impl Dispatch<wl_surface::WlSurface, CursorRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_surface::WlSurface,
+        _: wl_surface::Event,
+        _: &CursorRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
+impl Dispatch<wl_buffer::WlBuffer, CursorRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_buffer::WlBuffer,
+        _: wl_buffer::Event,
+        _: &CursorRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
 // Bubble surface and buffer events are ignored, as a popup's are.
 impl Dispatch<wl_surface::WlSurface, BubbleRole> for Client {
     fn event(
@@ -2832,13 +2900,17 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     surface_y
                 );
                 client.pointer_over = Some(surface);
-                // The cursor shape request is how the compositor learns which
-                // cursor to pass to the chrome.
-                client
-                    .cursor
-                    .as_ref()
-                    .expect("the pointer that entered is the one the device names")
-                    .set_shape(serial, wp_cursor_shape_device_v1::Shape::Default);
+                if client.cursor_surface {
+                    draw_the_cursor(client, handle, Some((pointer, serial)), (4, 4));
+                } else {
+                    // The cursor shape request is how the compositor learns
+                    // which cursor to pass to the chrome.
+                    client
+                        .cursor
+                        .as_ref()
+                        .expect("the pointer that entered is the one the device names")
+                        .set_shape(serial, wp_cursor_shape_device_v1::Shape::Default);
+                }
             }
             wl_pointer::Event::Leave { serial, surface } => {
                 crate::say!(pointer.id(), "leave({}, {})", serial, surface.id());
@@ -2883,6 +2955,9 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                 }
                 if client.sliding_menu && pressed {
                     open_a_sliding_menu(client, handle);
+                }
+                if client.cursor_surface && pressed {
+                    draw_the_cursor(client, handle, None, (6, 6));
                 }
                 if let Some(drag) = client
                     .ask_to_drag

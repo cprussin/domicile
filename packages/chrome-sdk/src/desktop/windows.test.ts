@@ -14,6 +14,7 @@ describe("windows", () => {
         appId: "1",
         clientFrame: false,
         cursor: "default",
+        cursorImage: undefined,
         desktopId: "",
         dialog: false,
         frame: 0,

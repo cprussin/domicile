@@ -4,9 +4,9 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AdaptiveSync, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorHiding,
-    CursorImage, CursorShape, CursorTheme, DisplayInfo, DisplayTransform, HostMessage, Owner,
-    Passphrase, PointerOverWindow, PROTOCOL_VERSION,
+    negotiate, AdaptiveSync, AppCursorImage, AppFrame, Appearance, ChromeMessage, ClipboardEntry,
+    CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayInfo, DisplayTransform,
+    HostMessage, Owner, Passphrase, PointerOverWindow, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -447,10 +447,28 @@ fn wire_shape_is_pinned() {
     let v = serde_json::to_value(HostMessage::AppCursor {
         app_id: "term".into(),
         cursor: CursorShape::Pointer,
+        image: None,
     })
     .unwrap();
     assert_eq!(v["type"], "app_cursor");
     assert_eq!(v["cursor"], "pointer");
+    assert!(v.get("image").is_none(), "a named cursor carries no image");
+
+    let drawn = HostMessage::AppCursor {
+        app_id: "gimp".into(),
+        cursor: CursorShape::Default,
+        image: Some(AppCursorImage {
+            png: "iVBORw0KGgo=".into(),
+            hotspot: (3, 4),
+            scale: 2,
+        }),
+    };
+    host_round_trip(&drawn);
+    let v = serde_json::to_value(drawn).unwrap();
+    assert_eq!(
+        v["image"],
+        serde_json::json!({ "png": "iVBORw0KGgo=", "hotspot": [3, 4], "scale": 2 })
+    );
 }
 
 /// The browser process reads `cursor` off `appearance` by these names.
