@@ -95,6 +95,29 @@ describe("addVirtual", () => {
   });
 });
 
+describe("sleep and wake", () => {
+  it("asks the compositor to turn the monitors off, then on", async () => {
+    const fake = new FakeDomicileHost();
+    const { displays } = desktop(fake.host);
+    for (const asked of [displays.sleep(), displays.wake()]) {
+      asked.catch(() => {
+        /* never answered */
+      });
+    }
+    await Promise.resolve();
+
+    expect(
+      fake.calls.map(([method, , request]) => [
+        method,
+        JSON.parse(String(request)),
+      ]),
+    ).toStrictEqual([
+      ["callSystem", { call: "sleep_displays" }],
+      ["callSystem", { call: "wake_displays" }],
+    ]);
+  });
+});
+
 describe("setColorTemperature", () => {
   it("asks the compositor to warm every monitor", async () => {
     const fake = new FakeDomicileHost();

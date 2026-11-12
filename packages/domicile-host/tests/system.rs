@@ -1591,6 +1591,63 @@ mod color_temperature {
     }
 }
 
+/// Turning the monitors off and on again on demand, as
+/// `domicile sleep-displays` does.
+mod display_power {
+    use domicile_host::system::DisplayPower;
+
+    use super::*;
+
+    #[test]
+    fn sleeping_and_waking_ask_the_compositor() {
+        let (told, asked) = channel();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.powering_displays_with(move |power| {
+            told.send(power).unwrap();
+            Ok(())
+        });
+
+        system.handle(1, SystemRequest::SleepDisplays);
+        system.handle(2, SystemRequest::WakeDisplays);
+
+        assert_eq!(reply(&heard, 1), SystemReply::Set);
+        assert_eq!(reply(&heard, 2), SystemReply::Set);
+        assert_eq!(asked.recv().unwrap(), DisplayPower::Asleep);
+        assert_eq!(asked.recv().unwrap(), DisplayPower::Awake);
+    }
+
+    #[test]
+    fn a_system_that_powers_no_displays_says_so() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+
+        system.handle(1, SystemRequest::SleepDisplays);
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+
+    /// Turning the screens off is how a locked desktop is left, and lighting
+    /// them shows only the lock screen.
+    #[test]
+    fn sleeping_and_waking_power() {
+        assert_eq!(reach(&SystemRequest::SleepDisplays), Reach::Powers);
+        assert_eq!(reach(&SystemRequest::WakeDisplays), Reach::Powers);
+    }
+
+    #[test]
+    fn an_app_may_not_sleep_or_wake_the_displays() {
+        for asked in [SystemRequest::SleepDisplays, SystemRequest::WakeDisplays] {
+            let Some(HostMessage::SystemReply {
+                id: 4,
+                reply: SystemReply::Failed { error },
+            }) = refused_to_an_app(4, &asked)
+            else {
+                panic!("expected a failure for {asked:?}");
+            };
+            assert_eq!(error.kind, SystemErrorKind::PermissionDenied);
+        }
+    }
+}
+
 /// What a refused request gets while the desktop is locked.
 mod locked {
     use super::*;

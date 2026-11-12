@@ -174,3 +174,26 @@ somebody is at this desktop again; its screens come back on
 ```
 
 and, with `--vmodule=drm*=1`, `configuring N display(s)`.
+
+## Sleeping on demand
+
+`domicile sleep-displays`, or a shell's `displays.sleep()`, turns every
+monitor off at once. `SystemRequest::SleepDisplays` carries both.
+
+- **It is the blanking path.** `state_the_connectors` sends
+  `crate::idle::darkened`, so the desk, its windows and its presenters stay
+  in place.
+- **Input lights the monitors**, the same input that resets the idle clock
+  (`crate::idle::somebody_is_here`), as do `domicile wake-displays` and
+  `displays.wake()`. A wake also lights screens idle blanking turned off.
+- **Input in the first second is ignored** (`crate::display_sleep::GRACE`).
+  Letting go of Enter or of the keybinding that asked must not wake them.
+- **It needs no idle timeout**, and holds through idle inhibitors: somebody
+  asked for it.
+- **It does not tell the shell** (`HostMessage::Idle`) and does not lock.
+- **A locked desktop allows both** (`Reach::Powers`).
+- A monitor plugged in while asleep stays off, as while blanked.
+
+On hardware, with `RUST_LOG=warn,domicile_compositor=debug`, look for
+`somebody asked to turn this desktop's screens` and, after input,
+`somebody is at this desktop again; its screens wake`.

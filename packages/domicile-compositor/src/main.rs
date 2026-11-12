@@ -79,6 +79,7 @@ mod config_adoption;
 mod configure_answers;
 mod cursor_surface;
 mod decorations;
+mod display_sleep;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod eis;
@@ -627,6 +628,9 @@ struct DomicileCompositor {
     /// surface is [`StillThere`] and among
     /// [`surfaces_on_the_desktop`](DomicileCompositor::surfaces_on_the_desktop).
     idle: Option<Idle<WlSurface>>,
+    /// Whether somebody put the screens to sleep. Independent of `idle`,
+    /// so it works on a desktop with no timeout.
+    display_sleep: crate::display_sleep::DisplaySleep,
     /// The applications holding the portal's idle inhibitors, one name per
     /// inhibitor, which the shell is told along with the Wayland ones. See
     /// [`DomicileCompositor::tell_the_shells_what_holds_the_desktop_awake`].
@@ -1385,6 +1389,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         engine_process: None,
         engine_disconnected: false,
         idle: Idle::after(&config.idle, Instant::now()),
+        display_sleep: crate::display_sleep::DisplaySleep::default(),
         held_by_portal_apps: Vec::new(),
         held_by_screen_saver: Vec::new(),
         // Started below, after the event loop's sources.
