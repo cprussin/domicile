@@ -327,6 +327,24 @@ the current `wl_output` mode.
    as it was and the log should list the sizes it offers.
 4. Remove `mode` and `refresh`. The panel should go back to its native mode.
 
+## Adaptive sync on a VRR panel
+
+Needs a FreeSync or G-Sync Compatible monitor with adaptive sync turned on in
+its own menu, on DisplayPort or HDMI 2.1, and a driver that supports it
+(amdgpu, i915 or xe).
+
+1. With no `adaptive_sync` in the profile, the shell's
+   `domicile.displays.list` should say `adaptiveSync: "off"` for that monitor,
+   and `"unsupported"` for a monitor without VRR.
+2. Add `"adaptive_sync": true` to its profile entry and reload. The panel
+   should flicker once and come back, and `adaptiveSync` should read `"on"`.
+   The monitor's own OSD (often a FreeSync or refresh counter) should show the
+   rate moving with what is drawn, for example while a video plays at 24 fps.
+3. If it reads `"off"` instead, the log at `--v=1` should say the DRM thread
+   refused a modeset with adaptive sync and tried again without it, and the
+   panel should still be lit.
+4. Remove `adaptive_sync` and reload. It should read `"off"` again.
+
 ## Monitor cast on a GPU
 
 `guard-display-capture.sh` runs software-composited, so it reads shared

@@ -30,6 +30,8 @@ struct DisplayPanel {
   int32_t refresh_mhz = 0;
   // Empty when unreported.
   gfx::Size physical_size_mm;
+  // Whether it scans out with a variable refresh rate.
+  mojom::AdaptiveSync adaptive_sync = mojom::AdaptiveSync::kUnsupported;
 };
 
 // Converts ozone's displays into the list the compositor advertises as
@@ -51,7 +53,7 @@ struct DisplayPanel {
 // its millimeters. Where it names a display, its rate and millimeters win
 // over the display's own: `display::DisplayList` keeps the first ones it
 // lists, so a mode change on the same monitor would cross stale. A display
-// it does not name crosses with no modes.
+// it does not name crosses with no modes and no adaptive sync.
 std::vector<mojom::DisplayPtr> DisplayListFor(
     const std::vector<display::Display>& displays,
     const base::flat_map<int64_t, std::string>& connectors,

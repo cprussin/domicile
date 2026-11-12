@@ -483,6 +483,7 @@ pub fn darkened(displays: &[Display], scanout: &[Connector]) -> Vec<Connector> {
                 desk: None,
                 mode: None,
                 refresh_mhz: None,
+                adaptive_sync: false,
             }
         })
         .collect()
@@ -509,7 +510,7 @@ mod tests {
 
     use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
     use crate::client_requests::ClientRequest;
-    use crate::engine::{Clipboard, Connector, Display};
+    use crate::engine::{AdaptiveSync, Clipboard, Connector, Display};
     use crate::lock::LOCK_SCREEN_DRAWS_WITHIN;
     use domicile_config::{IdleConfig, Transform};
 
@@ -612,6 +613,7 @@ mod tests {
             physical_mm: (600, 340),
             refresh_mhz: 60_000,
             modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
         }
     }
 
@@ -1191,6 +1193,7 @@ mod tests {
                     desk: None,
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
                 Connector {
                     id: 7,
@@ -1201,6 +1204,7 @@ mod tests {
                     desk: None,
                     mode: None,
                     refresh_mhz: None,
+                    adaptive_sync: false,
                 },
             ]
         );
@@ -1218,6 +1222,7 @@ mod tests {
             desk: None,
             mode: None,
             refresh_mhz: None,
+            adaptive_sync: false,
         };
         assert_eq!(
             darkened(&[monitor(7, (1920, 0))], &[lit]),

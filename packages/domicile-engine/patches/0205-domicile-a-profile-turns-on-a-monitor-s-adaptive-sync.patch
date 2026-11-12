@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a profile turns on a monitor's adaptive sync
+
+A monitor could only scan out at a fixed refresh rate.
+
+- DomicileDisplayLayout gains `adaptive_sync`, which DrmModeset passes
+  as DisplayConfigurationParams::enable_vrr where the connector reports
+  it can (drm_modeset.h). Chromium's DRM platform already commits the
+  CRTC's VRR_ENABLED property from it.
+- DomicilePanel gains whether the connector scans out with it, so the
+  compositor can tell a profile that asked for it whether it took.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/public/ozone_platform.h | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index 9742b24..5fbac18 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -104,6 +104,20 @@ struct DomicileDisplayLayout {
+   // used. Zero for the native mode's rate, or the highest at a non-native
+   // `mode`.
+   int32_t refresh_mhz = 0;
++  // Whether to scan out with a variable refresh rate. Asked for only where
++  // the connector can; see ui/ozone/platform/drm/domicile/drm_modeset.h.
++  bool adaptive_sync = false;
++};
++
++// DOMICILE: whether a connector scans out with a variable refresh rate.
++enum class DomicileAdaptiveSync {
++  // The connector, its panel or its driver cannot.
++  kUnsupported,
++  // It can, and is not: not asked for, or the modeset asking for it was
++  // refused.
++  kOff,
++  // It is.
++  kOn,
+ };
+ 
+ // DOMICILE: a mode a connector advertises.
+@@ -125,6 +139,8 @@ struct DomicilePanel {
+   int32_t refresh_mhz = 0;
+   // The panel's size in millimeters; empty when unreported.
+   gfx::Size physical_size_mm;
++  // Whether it scans out with a variable refresh rate.
++  DomicileAdaptiveSync adaptive_sync = DomicileAdaptiveSync::kUnsupported;
+ };
+ 
+ // DOMICILE: a tablet or touchscreen and the display it covers, from the

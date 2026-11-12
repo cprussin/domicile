@@ -129,6 +129,15 @@ pub struct DisplayPlacement {
     /// `mode`, as sway picks.
     #[serde(default)]
     pub refresh: Option<f64>,
+    /// Whether to scan out with a variable refresh rate (adaptive sync,
+    /// FreeSync, G-Sync Compatible), so a frame that runs late is shown as
+    /// soon as it is ready instead of at the next fixed refresh.
+    ///
+    /// Off by default. Asked for only where the monitor, its connector and
+    /// its driver report they can; a driver that refuses it gets the same
+    /// mode without it. Each display reports whether it took.
+    #[serde(default)]
+    pub adaptive_sync: bool,
     /// The top-left corner in the profile's coordinate space. May be negative.
     ///
     /// Absent puts the display in a row right of the positioned ones, in
@@ -430,6 +439,8 @@ pub struct Scanout {
     /// The refresh rate the profile asks for, in mHz, or `None` for the
     /// default described at [`DisplayPlacement::refresh`].
     pub refresh_mhz: Option<u32>,
+    /// Whether the profile asks for a variable refresh rate.
+    pub adaptive_sync: bool,
     /// Where the profile put this display on the desktop, or `None` if it is
     /// dark.
     ///
@@ -599,6 +610,7 @@ fn scanout(
                 refresh_mhz: placement
                     .refresh
                     .map(|hertz| (hertz * 1000.0).round() as u32),
+                adaptive_sync: placement.adaptive_sync,
                 desk: placed
                     .iter()
                     .find(|placed| placed.name == display.name)

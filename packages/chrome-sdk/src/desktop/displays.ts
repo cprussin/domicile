@@ -8,10 +8,25 @@ import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
 import type { System } from "./system-calls";
 
+/**
+ * Whether a screen scans out with a variable refresh rate. `unsupported` when
+ * its panel, connector or driver cannot, or when Domicile runs in a window.
+ * `off` when it can and its display profile does not ask for it, or the
+ * driver refused it.
+ */
+export type AdaptiveSync = "unsupported" | "off" | "on";
+
 /** One screen. Sizes are whole CSS pixels; see `DomicileDisplay`. */
-export type Display = Omit<DomicileDisplay, "transform"> & {
+export type Display = Omit<DomicileDisplay, "adaptiveSync" | "transform"> & {
+  readonly adaptiveSync: AdaptiveSync;
   readonly transform: DisplayTransform;
 };
+
+// A state this SDK has no name for asks nothing of a shell.
+const asAdaptiveSync = (adaptiveSync: string): AdaptiveSync =>
+  adaptiveSync === "off" || adaptiveSync === "on"
+    ? adaptiveSync
+    : "unsupported";
 
 export type DisplaysListeners = {
   /** A screen arrived or left, or one was resized or rescaled. */
@@ -70,6 +85,7 @@ export const displays = (
 };
 
 const displayOf = (display: DomicileDisplay): Display => ({
+  adaptiveSync: asAdaptiveSync(display.adaptiveSync),
   height: display.height,
   modeHeight: display.modeHeight,
   modeWidth: display.modeWidth,

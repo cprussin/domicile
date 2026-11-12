@@ -7,6 +7,7 @@ import { hostDisplays } from "./host-displays";
 
 /** One screen, as the engine describes it. */
 const LEFT: DomicileDisplay = {
+  adaptiveSync: "unsupported",
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,

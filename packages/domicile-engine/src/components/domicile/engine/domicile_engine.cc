@@ -655,6 +655,18 @@ class Displays : public mojom::DisplayListObserver {
   // Mojo receivers must be reset on the thread that bound them.
   void Unbind() { receiver_.reset(); }
 
+  // A switch rather than a cast, so a new state is a compile error here.
+  static int32_t AdaptiveSyncOf(mojom::AdaptiveSync adaptive_sync) {
+    switch (adaptive_sync) {
+      case mojom::AdaptiveSync::kUnsupported:
+        return DOMICILE_ADAPTIVE_SYNC_UNSUPPORTED;
+      case mojom::AdaptiveSync::kOff:
+        return DOMICILE_ADAPTIVE_SYNC_OFF;
+      case mojom::AdaptiveSync::kOn:
+        return DOMICILE_ADAPTIVE_SYNC_ON;
+    }
+  }
+
   // mojom::DisplayListObserver implementation.
   void OnDisplaysChanged(std::vector<mojom::DisplayPtr> displays) override {
     EngineEvent event{.type = EngineEvent::Type::kDisplays};
@@ -671,7 +683,8 @@ class Displays : public mojom::DisplayListObserver {
                         .physical_height_mm = one->physical_size_mm.height(),
                         .refresh_mhz = one->refresh_mhz,
                         .connector = one->connector,
-                        .gamma_size = one->gamma_size});
+                        .gamma_size = one->gamma_size,
+                        .adaptive_sync = AdaptiveSyncOf(one->adaptive_sync)});
       for (const mojom::DisplayModePtr& mode : one->modes) {
         event.displays.back().modes.push_back(
             {.width = mode->size.width(),
@@ -972,7 +985,7 @@ struct DomicileEngine {
           // The strings belong to `event`, which lives in the drained vector
           // until the loop ends, so they outlive the callback as the header
           // promises.
-          if (callbacks_.moded_displays) {
+          if (callbacks_.adaptive_displays || callbacks_.moded_displays) {
             // Every display's modes first, so the records can point into a
             // vector that no longer grows.
             std::vector<DomicileDisplayMode> modes;
@@ -996,8 +1009,21 @@ struct DomicileEngine {
                   .mode_count = static_cast<uint32_t>(display.modes.size())});
               first += display.modes.size();
             }
-            callbacks_.moded_displays(callbacks_.user_data, records.data(),
-                                      static_cast<uint32_t>(records.size()));
+            if (callbacks_.adaptive_displays) {
+              std::vector<DomicileAdaptiveDisplay> adaptive;
+              adaptive.reserve(records.size());
+              for (size_t index = 0; index < records.size(); ++index) {
+                adaptive.push_back(DomicileAdaptiveDisplay{
+                    .moded = records[index],
+                    .adaptive_sync = event.displays[index].adaptive_sync});
+              }
+              callbacks_.adaptive_displays(
+                  callbacks_.user_data, adaptive.data(),
+                  static_cast<uint32_t>(adaptive.size()));
+            } else {
+              callbacks_.moded_displays(callbacks_.user_data, records.data(),
+                                        static_cast<uint32_t>(records.size()));
+            }
           } else if (callbacks_.ramped_displays) {
             std::vector<DomicileRampedDisplay> records;
             records.reserve(event.displays.size());
@@ -1228,17 +1254,44 @@ struct DomicileEngine {
     const auto records =
         UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
     for (const DomicileModedLayout& display : records) {
-      domicile::mojom::DisplayLayoutPtr one = LayoutOf(display.layout);
-      if (display.mode_width > 0 && display.mode_height > 0) {
-        one->mode = gfx::Size(display.mode_width, display.mode_height);
-      }
-      one->refresh_mhz = std::max(display.refresh_mhz, 0);
+      wanted.push_back(ModedLayoutOf(display));
+    }
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::ConfigureDisplaysOnThread,
+                       base::Unretained(this), std::move(wanted)));
+  }
+
+  // As ConfigureModedDisplays, with whether each wants adaptive sync.
+  void ConfigureAdaptiveDisplays(const DomicileAdaptiveLayout* layout,
+                                 uint32_t count) {
+    std::vector<domicile::mojom::DisplayLayoutPtr> wanted;
+    wanted.reserve(count);
+    // SAFETY: as in ConfigureDisplays;
+    // `domicile_displays_configure_adaptive` has refused a null pointer with
+    // a nonzero count.
+    const auto records =
+        UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
+    for (const DomicileAdaptiveLayout& display : records) {
+      domicile::mojom::DisplayLayoutPtr one = ModedLayoutOf(display.moded);
+      one->adaptive_sync = display.adaptive_sync != 0;
       wanted.push_back(std::move(one));
     }
     thread_.task_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(&DomicileEngine::ConfigureDisplaysOnThread,
                        base::Unretained(this), std::move(wanted)));
+  }
+
+  // One moded layout record as mojom, with adaptive sync off.
+  static domicile::mojom::DisplayLayoutPtr ModedLayoutOf(
+      const DomicileModedLayout& display) {
+    domicile::mojom::DisplayLayoutPtr one = LayoutOf(display.layout);
+    if (display.mode_width > 0 && display.mode_height > 0) {
+      one->mode = gfx::Size(display.mode_width, display.mode_height);
+    }
+    one->refresh_mhz = std::max(display.refresh_mhz, 0);
+    return one;
   }
 
   // One layout record as mojom, with no mode: the connector's native one.
@@ -1249,7 +1302,7 @@ struct DomicileEngine {
         domicile::TransformOf(display.transform), display.scale,
         gfx::Rect(display.desk_x, display.desk_y, display.desk_width,
                   display.desk_height),
-        std::nullopt, 0);
+        std::nullopt, 0, /*adaptive_sync=*/false);
   }
 
   // Copies the records before posting: the ABI borrows them only for the call,
@@ -2150,6 +2203,15 @@ void domicile_displays_configure_modes(DomicileEngine* engine,
   // As domicile_displays_configure.
   if (engine && (layout || count == 0)) {
     engine->ConfigureModedDisplays(layout, count);
+  }
+}
+
+void domicile_displays_configure_adaptive(DomicileEngine* engine,
+                                          const DomicileAdaptiveLayout* layout,
+                                          uint32_t count) {
+  // As domicile_displays_configure.
+  if (engine && (layout || count == 0)) {
+    engine->ConfigureAdaptiveDisplays(layout, count);
   }
 }
 
