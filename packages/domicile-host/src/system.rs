@@ -165,8 +165,9 @@ pub enum DisplayPower {
     Awake,
 }
 
-/// Turns the monitors off or on.
-pub type PowerDisplays = Arc<dyn Fn(DisplayPower) -> Result<(), SystemError> + Send + Sync>;
+/// Turns one monitor, by name, or every monitor with `None`, off or on.
+pub type PowerDisplays =
+    Arc<dyn Fn(DisplayPower, Option<String>) -> Result<(), SystemError> + Send + Sync>;
 
 /// Takes a screenshot, into the file if one is given, and returns where it
 /// went. Blocks until it is kept, the dialog included.
@@ -299,7 +300,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         // Where keys go, as a focus change is.
         SystemRequest::ShortcutsInhibitor { .. } => Reach::Arranges,
         SystemRequest::SetColorTemperature { .. } => Reach::Tints,
-        SystemRequest::SleepDisplays | SystemRequest::WakeDisplays => Reach::Powers,
+        SystemRequest::SleepDisplays { .. } | SystemRequest::WakeDisplays { .. } => Reach::Powers,
         SystemRequest::WriteFile { .. }
         | SystemRequest::CreateDir { .. }
         | SystemRequest::Stdin { .. }
@@ -338,8 +339,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::SendShell { .. }
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
-        | SystemRequest::SleepDisplays
-        | SystemRequest::WakeDisplays
+        | SystemRequest::SleepDisplays { .. }
+        | SystemRequest::WakeDisplays { .. }
         | SystemRequest::WindowRequests
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
@@ -392,8 +393,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::UnlockRefusals
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
-        | SystemRequest::SleepDisplays
-        | SystemRequest::WakeDisplays
+        | SystemRequest::SleepDisplays { .. }
+        | SystemRequest::WakeDisplays { .. }
         | SystemRequest::WindowRequests
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
@@ -585,7 +586,7 @@ impl System {
     /// This system, turning the monitors off and on through `power`.
     pub fn powering_displays_with(
         mut self,
-        power: impl Fn(DisplayPower) -> Result<(), SystemError> + Send + Sync + 'static,
+        power: impl Fn(DisplayPower, Option<String>) -> Result<(), SystemError> + Send + Sync + 'static,
     ) -> System {
         self.power_displays = Some(Arc::new(power));
         self
@@ -1048,8 +1049,12 @@ impl System {
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
-            SystemRequest::SleepDisplays => self.powering(id, DisplayPower::Asleep),
-            SystemRequest::WakeDisplays => self.powering(id, DisplayPower::Awake),
+            SystemRequest::SleepDisplays { display } => {
+                self.powering(id, DisplayPower::Asleep, display)
+            }
+            SystemRequest::WakeDisplays { display } => {
+                self.powering(id, DisplayPower::Awake, display)
+            }
             SystemRequest::Bells => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system.bells.listen(Arc::new(move |app_id| {
@@ -1195,14 +1200,15 @@ impl System {
         Handled::Done
     }
 
-    /// Turn the monitors `power`, and reply under `id`.
-    fn powering(&self, id: u32, power: DisplayPower) -> Handled {
+    /// Turn the monitor named `display`, or every one, `power`, and reply
+    /// under `id`.
+    fn powering(&self, id: u32, power: DisplayPower, display: Option<String>) -> Handled {
         let reply = match &self.power_displays {
             None => failed(SystemError {
                 kind: SystemErrorKind::Other,
                 message: "this desktop turns no monitors off".into(),
             }),
-            Some(set) => match set(power) {
+            Some(set) => match set(power, display) {
                 Ok(()) => SystemReply::Set,
                 Err(error) => failed(error),
             },

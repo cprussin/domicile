@@ -71,6 +71,39 @@ TEST(DeskGeometryTest, OfEquallyFastDisplaysTheFirstHosts) {
   EXPECT_EQ(DeskGeometryOf({kRight, kLaptop})->host, kRight.id);
 }
 
+TEST(DeskGeometryTest, ASleepingDisplayKeepsItsPlaceOnThePage) {
+  // `domicile sleep-displays <name>`: its windows stay where they were.
+  DeskPlace asleep = kRight;
+  asleep.lit = false;
+  EXPECT_EQ(DeskGeometryOf({kLaptop, kCenter, asleep})->box,
+            gfx::Rect(0, 0, 5520, 3200));
+}
+
+TEST(DeskGeometryTest, ASleepingDisplayDoesNotHostThePage) {
+  // A CRTC that is off sends no BeginFrames, so the page would stop.
+  DeskPlace asleep = kCenter;
+  asleep.lit = false;
+  EXPECT_EQ(DeskGeometryOf({kLaptop, asleep, kRight})->host, kLaptop.id);
+}
+
+TEST(DeskGeometryTest, ALayoutThatKeepsASleepingDisplayIsTheDesk) {
+  DeskPlace asleep = kRight;
+  asleep.lit = false;
+  EXPECT_EQ(DeskPlacesKept(std::vector<DeskPlace>({kLaptop, kCenter, asleep}),
+                           {kLaptop, kCenter, kRight},
+                           PluggedIn({kLaptop.id, kCenter.id, kRight.id})),
+            std::vector<DeskPlace>({kLaptop, kCenter, asleep}));
+}
+
+TEST(DeskGeometryTest, ALayoutWhereEveryDisplaySleepsKeepsTheDesk) {
+  // As a blank does.
+  DeskPlace asleep = kRight;
+  asleep.lit = false;
+  EXPECT_EQ(DeskPlacesKept(std::vector<DeskPlace>({asleep}), {kLaptop, kRight},
+                           PluggedIn({kLaptop.id, kRight.id})),
+            std::vector<DeskPlace>({kLaptop, kRight}));
+}
+
 TEST(DeskGeometryTest, NoDisplaysIsNoDesk) {
   EXPECT_EQ(DeskGeometryOf({}), std::nullopt);
 }

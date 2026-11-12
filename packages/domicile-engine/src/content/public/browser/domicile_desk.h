@@ -25,7 +25,7 @@ namespace content {
 
 class WebContents;
 
-// A lit display and its place on the desk, from the compositor's profile.
+// A display and its place on the desk, from the compositor's layout.
 //
 // With --domicile-one-page, //chrome/browser/domicile lays out the single desk
 // page from these. See docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
@@ -34,13 +34,16 @@ struct DomicileDeskDisplay {
   // In the desk's logical pixels.
   gfx::Rect desk;
   float scale = 1.0f;
+  // False for a display that sleeps: dark, but keeping its place.
+  bool lit = true;
 
   friend bool operator==(const DomicileDeskDisplay&,
                          const DomicileDeskDisplay&) = default;
 };
 
-// Returns the lit displays from the compositor's last layout. Empty before
-// the first layout and on a blank. `std::nullopt` after an empty layout, which
+// Returns the displays on the desk from the compositor's last layout: the lit
+// ones, and the sleeping ones that keep their place. Empty before the first
+// layout and on a blank. `std::nullopt` after an empty layout, which
 // leaves every display where the hardware puts it (see docs/DISPLAYS.md).
 // Nested runs send an empty layout too.
 CONTENT_EXPORT std::optional<std::vector<DomicileDeskDisplay>>
