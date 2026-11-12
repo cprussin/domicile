@@ -341,6 +341,9 @@ impl DomicileCompositor {
                 self.place_window(popup.wl_surface(), self.popup_bounds(popup));
             }
         }
+        if self.candidates_editor().as_ref() == Some(surface) {
+            self.move_the_candidates();
+        }
     }
 
     /// Where `surface` is relative to the window under its menus: the sum of
@@ -378,7 +381,7 @@ impl DomicileCompositor {
 
 /// The logical size of the buffer `surface` is committing, or `None` if it
 /// commits none.
-fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
+pub fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
     with_states(surface, |states| {
         let viewport = Viewport::from(&*states.cached_state.get::<ViewportCachedState>().current());
         let mut attributes = states.cached_state.get::<SurfaceAttributes>();

@@ -115,13 +115,20 @@ pub enum Request {
         #[serde(default)]
         to: Option<ThemeChange>,
     },
-    /// Turn every monitor off until input or [`Request::WakeDisplays`]. The
+    /// Turn every monitor off until input or [`Request::WakeDisplays`], or
+    /// only `display`, by its `wl_output` name, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
     /// `docs/IDLE.md#sleeping-on-demand`.
-    SleepDisplays,
+    SleepDisplays {
+        #[serde(default)]
+        display: Option<String>,
+    },
     /// Light the monitors again, after [`Request::SleepDisplays`] or idle
-    /// blanking.
-    WakeDisplays,
+    /// blanking, or only `display`.
+    WakeDisplays {
+        #[serde(default)]
+        display: Option<String>,
+    },
     /// Add a virtual monitor for as long as the connection is open. Answered
     /// with [`Response::VirtualMonitor`]; each later line is a
     /// [`Request::ResizeVirtualMonitor`]. See `domicile monitor`.
@@ -430,7 +437,7 @@ pub type Theming<'a> = &'a dyn Fn(Option<Theme>) -> Result<Theme, String>;
 ///
 /// [`crate::compositor_socket::power_displays`] in a desktop; a closure in
 /// tests.
-pub type PowerDisplays<'a> = &'a dyn Fn(DisplayPower) -> Result<(), String>;
+pub type PowerDisplays<'a> = &'a dyn Fn(DisplayPower, Option<&str>) -> Result<(), String>;
 
 /// What a request can learn about or do to the running desktop.
 ///
@@ -623,8 +630,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(theme) => Response::Theme { theme },
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::SleepDisplays) => powered(DisplayPower::Asleep, desktop.power_displays),
-        Ok(Request::WakeDisplays) => powered(DisplayPower::Awake, desktop.power_displays),
+        Ok(Request::SleepDisplays { display }) => {
+            powered(DisplayPower::Asleep, display, desktop.power_displays)
+        }
+        Ok(Request::WakeDisplays { display }) => {
+            powered(DisplayPower::Awake, display, desktop.power_displays)
+        }
         // Lent the connection by `serve_one` instead; a lone line would
         // remove the monitor as it answered.
         Ok(Request::VirtualMonitor { .. }) => to_line(&Response::Refused {
@@ -644,9 +655,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
     }
 }
 
-/// Turns the monitors `power` with `set`, as a response line.
-fn powered(power: DisplayPower, set: PowerDisplays) -> String {
-    to_line(&match set(power) {
+/// Turns the monitor named `display`, or every one, `power` with `set`, as a
+/// response line.
+fn powered(power: DisplayPower, display: Option<String>, set: PowerDisplays) -> String {
+    to_line(&match set(power, display.as_deref()) {
         Ok(()) => Response::Powered,
         Err(why) => Response::Refused { why },
     })

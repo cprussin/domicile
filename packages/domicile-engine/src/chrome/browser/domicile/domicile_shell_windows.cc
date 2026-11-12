@@ -102,7 +102,8 @@ std::optional<std::vector<DeskPlace>> LitPlacesOf(
     places.push_back(DeskPlace{.id = lit.id,
                                .desk = lit.desk,
                                .scale = lit.scale,
-                               .refresh_hz = found->display_frequency()});
+                               .refresh_hz = found->display_frequency(),
+                               .lit = lit.lit});
   }
   return places;
 }
@@ -462,7 +463,8 @@ class ShellWindows : public display::DisplayObserver {
 
     std::vector<Presented> presented;
     for (const DeskPlace& place : desk->places) {
-      if (place.id == desk->geometry.host) {
+      // A sleeping display shows nothing until it wakes.
+      if (place.id == desk->geometry.host || !place.lit) {
         continue;
       }
       const auto found =

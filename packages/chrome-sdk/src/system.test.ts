@@ -766,6 +766,18 @@ describe("display power", () => {
     expect(await sleeping).toStrictEqual(Ok("set"));
   });
 
+  it("puts one monitor to sleep, and wakes it, by name", () => {
+    const host = new FakeHost();
+    const calls = system(host);
+    calls.sleepDisplays("DP-1").catch(() => undefined);
+    calls.wakeDisplays("DP-1").catch(() => undefined);
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "sleep_displays", display: "DP-1" }],
+      [2, { call: "wake_displays", display: "DP-1" }],
+    ]);
+  });
+
   it("wakes the monitors", async () => {
     const host = new FakeHost();
     const waking = system(host).wakeDisplays();

@@ -321,6 +321,9 @@ struct Client {
     no_touch: bool,
     /// See [`crate::arguments::Arguments::text_input`].
     text_input: bool,
+    /// Where `--text-input`'s text cursor is across its field, logical. It
+    /// moves right as text is committed.
+    caret_x: i32,
     /// The serial of the keyboard's last `enter`, for
     /// [`AskForFocus::WhenLeft`].
     entered_at: Option<u32>,
@@ -581,6 +584,7 @@ impl Client {
             wl_seat_v7: asked.wl_seat_v7,
             no_touch: asked.no_touch,
             text_input: asked.text_input,
+            caret_x: CARET.0,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             inhibit_shortcuts: asked.inhibit_shortcuts,
@@ -2321,10 +2325,12 @@ delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
 delegate_noop!(Client: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
 
 /// Traces what an input method sends the editor of `--text-input`, and
-/// enables it on each enter, as an editor with a focused field does.
+/// enables it on each enter, as an editor with a focused field does. Its text
+/// cursor starts at [`CARET`] and moves [`CARET_ADVANCE`] right for each
+/// character committed, traced as `cursor_rectangle(x, y, width, height)`.
 impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Client {
     fn event(
-        _: &mut Client,
+        client: &mut Client,
         text_input: &zwp_text_input_v3::ZwpTextInputV3,
         event: zwp_text_input_v3::Event,
         (): &(),
@@ -2340,6 +2346,7 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Client {
                     SURROUNDING_TEXT.len() as i32,
                     SURROUNDING_TEXT.len() as i32,
                 );
+                client.place_the_caret(text_input);
                 text_input.commit();
             }
             zwp_text_input_v3::Event::Leave { surface } => {
@@ -2361,11 +2368,14 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Client {
                 );
             }
             zwp_text_input_v3::Event::CommitString { text } => {
-                crate::say!(
-                    text_input.id(),
-                    "commit_string({:?})",
-                    text.unwrap_or_default()
-                );
+                let text = text.unwrap_or_default();
+                crate::say!(text_input.id(), "commit_string({:?})", text);
+                let typed = i32::try_from(text.chars().count()).unwrap_or(i32::MAX);
+                client.caret_x = client
+                    .caret_x
+                    .saturating_add(typed.saturating_mul(CARET_ADVANCE));
+                client.place_the_caret(text_input);
+                text_input.commit();
             }
             zwp_text_input_v3::Event::DeleteSurroundingText {
                 before_length,
@@ -2389,6 +2399,30 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Client {
 /// The text before the cursor of `--text-input`'s field, which an input
 /// method reads as `surrounding_text`.
 pub const SURROUNDING_TEXT: &str = "typed so far";
+
+/// Where `--text-input`'s text cursor starts on its surface, and its size:
+/// `x, y, width, height`, logical.
+pub const CARET: (i32, i32, i32, i32) = (40, 30, 2, 18);
+
+/// How far `--text-input`'s text cursor moves for each character committed.
+pub const CARET_ADVANCE: i32 = 8;
+
+impl Client {
+    /// Tell the compositor where `--text-input`'s text cursor is. Sent with
+    /// the caller's next commit.
+    fn place_the_caret(&self, text_input: &zwp_text_input_v3::ZwpTextInputV3) {
+        let (_, y, width, height) = CARET;
+        text_input.set_cursor_rectangle(self.caret_x, y, width, height);
+        crate::say!(
+            text_input.id(),
+            "cursor_rectangle({}, {}, {}, {})",
+            self.caret_x,
+            y,
+            width,
+            height
+        );
+    }
+}
 delegate_noop!(Client: ignore xdg_system_bell_v1::XdgSystemBellV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);

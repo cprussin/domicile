@@ -194,6 +194,25 @@ monitor off at once. `SystemRequest::SleepDisplays` carries both.
 - **A locked desktop allows both** (`Reach::Powers`).
 - A monitor plugged in while asleep stays off, as while blanked.
 
+### One monitor
+
+`sleep-displays <name>` turns one monitor off and leaves the rest lit.
+
+- **It sleeps through input.** Only a wake that names it, or names none,
+  lights it (`crate::display_sleep::DisplaySleep::sleeping`).
+- **It keeps its place.** `crate::display_sleep::asleep_in` sends it dark
+  with its `desk`. The engine keeps a dark connector with a desk on the desk
+  page (`DeskPlace::lit`), so its windows and workspace stay, and the shell's
+  display list does not change.
+- **Without a profile** the list names every monitor at its place in the
+  engine's row, unscaled, as the empty list would light them. A non-empty
+  list turns off any connector it leaves out.
+- **Nothing is shown on it.** It gets no presenter, and the pointer does not
+  cross onto it.
+- **It does not host the page.** A CRTC that is off sends no BeginFrames, so
+  the fastest lit monitor hosts it. Sleeping the host moves the page to
+  another monitor's window, as unplugging it does.
+
 On hardware, with `RUST_LOG=warn,domicile_compositor=debug`, look for
 `somebody asked to turn this desktop's screens` and, after input,
 `somebody is at this desktop again; its screens wake`.
