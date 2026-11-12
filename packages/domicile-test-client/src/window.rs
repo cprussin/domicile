@@ -45,6 +45,9 @@ use wayland_protocols::wp::primary_selection::zv1::client::{
 use wayland_protocols::wp::relative_pointer::zv1::client::{
     zwp_relative_pointer_manager_v1, zwp_relative_pointer_v1,
 };
+use wayland_protocols::wp::text_input::zv3::client::{
+    zwp_text_input_manager_v3, zwp_text_input_v3,
+};
 use wayland_protocols::wp::viewporter::client::{wp_viewport, wp_viewporter};
 use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xdg_activation_v1};
 use wayland_protocols::xdg::decoration::zv1::client::{
@@ -325,6 +328,8 @@ struct Client {
     wl_seat_v7: bool,
     /// See [`crate::arguments::Arguments::no_touch`].
     no_touch: bool,
+    /// See [`crate::arguments::Arguments::text_input`].
+    text_input: bool,
     /// The serial of the keyboard's last `enter`, for
     /// [`AskForFocus::WhenLeft`].
     entered_at: Option<u32>,
@@ -530,6 +535,8 @@ struct Globals {
         Option<zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1>,
     /// Kept because the selection devices are created from the seat.
     seat: Option<wl_seat::WlSeat>,
+    /// For `--text-input`.
+    text_input: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
     clipboard: Option<wl_data_device_manager::WlDataDeviceManager>,
     /// The primary selection manager, a separate global from the clipboard's.
     primary: Option<zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1>,
@@ -585,6 +592,7 @@ impl Client {
             xdg_wm_base_v1: asked.xdg_wm_base_v1,
             wl_seat_v7: asked.wl_seat_v7,
             no_touch: asked.no_touch,
+            text_input: asked.text_input,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             inhibit_shortcuts: asked.inhibit_shortcuts,
@@ -658,6 +666,9 @@ impl Client {
                 }
                 "domicile_anchor_manager_v1" => {
                     self.globals.anchors = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zwp_text_input_manager_v3" => {
+                    self.globals.text_input = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 "zwp_keyboard_shortcuts_inhibit_manager_v1" => {
                     self.globals.shortcuts_inhibit =
@@ -822,6 +833,9 @@ impl Client {
         if self.inhibit_shortcuts == Some(TakeTheShortcuts::OnItsWindow) {
             self.take_the_shortcuts(&surface, handle)?;
         }
+        if self.text_input {
+            self.edit_text(handle)?;
+        }
         self.window = Some(Window {
             surface,
             xdg,
@@ -847,6 +861,25 @@ impl Client {
         })?;
         let inhibitor = inhibit.create_inhibitor(surface, handle, ());
         crate::say!(inhibitor.id(), "create_inhibitor({})", surface.id());
+        Ok(())
+    }
+    /// Become a text editor for `--text-input`: a `zwp_text_input_v3` on the
+    /// seat, enabled each time the keyboard enters.
+    fn edit_text(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+        let manager = self
+            .globals
+            .text_input
+            .as_ref()
+            .ok_or(ClientError::Missing {
+                global: "zwp_text_input_manager_v3",
+            })?;
+        let seat = self
+            .globals
+            .seat
+            .as_ref()
+            .ok_or(ClientError::Missing { global: "wl_seat" })?;
+        let text_input = manager.get_text_input(seat, handle, ());
+        crate::say!(text_input.id(), "get_text_input()");
         Ok(())
     }
 
@@ -2342,6 +2375,77 @@ fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
 }
 
 delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
+delegate_noop!(Client: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
+
+/// Traces what an input method sends the editor of `--text-input`, and
+/// enables it on each enter, as an editor with a focused field does.
+impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Client {
+    fn event(
+        _: &mut Client,
+        text_input: &zwp_text_input_v3::ZwpTextInputV3,
+        event: zwp_text_input_v3::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_text_input_v3::Event::Enter { surface } => {
+                crate::say!(text_input.id(), "text_input_enter({})", surface.id());
+                text_input.enable();
+                text_input.set_surrounding_text(
+                    SURROUNDING_TEXT.to_string(),
+                    SURROUNDING_TEXT.len() as i32,
+                    SURROUNDING_TEXT.len() as i32,
+                );
+                text_input.commit();
+            }
+            zwp_text_input_v3::Event::Leave { surface } => {
+                crate::say!(text_input.id(), "text_input_leave({})", surface.id());
+                text_input.disable();
+                text_input.commit();
+            }
+            zwp_text_input_v3::Event::PreeditString {
+                text,
+                cursor_begin,
+                cursor_end,
+            } => {
+                crate::say!(
+                    text_input.id(),
+                    "preedit({:?}, {}, {})",
+                    text.unwrap_or_default(),
+                    cursor_begin,
+                    cursor_end
+                );
+            }
+            zwp_text_input_v3::Event::CommitString { text } => {
+                crate::say!(
+                    text_input.id(),
+                    "commit_string({:?})",
+                    text.unwrap_or_default()
+                );
+            }
+            zwp_text_input_v3::Event::DeleteSurroundingText {
+                before_length,
+                after_length,
+            } => {
+                crate::say!(
+                    text_input.id(),
+                    "delete_surrounding({}, {})",
+                    before_length,
+                    after_length
+                );
+            }
+            zwp_text_input_v3::Event::Done { serial } => {
+                crate::say!(text_input.id(), "text_input_done({})", serial);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The text before the cursor of `--text-input`'s field, which an input
+/// method reads as `surrounding_text`.
+pub const SURROUNDING_TEXT: &str = "typed so far";
 delegate_noop!(Client: ignore xdg_system_bell_v1::XdgSystemBellV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);

@@ -411,3 +411,10 @@ Unverified. On a tty, leave a monitor showing something that does not move
 (no clock, no blinking caret), then change the night light from the shell.
 Expect the monitor to warm at once, not when the pointer next moves over it or
 something on it next redraws.
+
+## An input method in a native window
+
+Unverified. On a tty, start fcitx5 with its Wayland input method frontend and
+a pinyin input method, open foot, and type `nihao`. Expect the pinyin to show
+underlined in foot as you type, and Chinese text once you pick it with Space.
+The candidate list does not show yet, so Space takes the first candidate.

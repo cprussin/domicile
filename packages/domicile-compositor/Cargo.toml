@@ -105,3 +105,6 @@ png.workspace = true
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+# The input method and virtual keyboard in `tests/text_input.rs`. Adds no
+# crates: the test client already pulls it in.
+wayland-protocols-misc = { version = "0.3", features = ["client"] }
