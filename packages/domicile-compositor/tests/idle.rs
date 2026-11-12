@@ -326,6 +326,7 @@ fn a_page_hears_a_browser_window_hold_the_desktop_awake_as_the_browser() {
     chrome
         .say(&ChromeMessage::Hello {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
+            checked: false,
         })
         .expect("the chrome socket takes a hello");
     chrome

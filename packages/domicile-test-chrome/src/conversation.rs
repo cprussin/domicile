@@ -50,6 +50,7 @@ pub fn greet(
         said,
         &ChromeMessage::Hello {
             protocol_version: PROTOCOL_VERSION,
+            checked: false,
         },
     )?;
     let mut early = Vec::new();

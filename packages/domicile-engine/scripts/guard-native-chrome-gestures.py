@@ -111,7 +111,7 @@ def main():
                 if message["type"] == kind:
                     return message
             raise AssertionError("host never sent " + kind)
-        say({"type": "hello", "protocol_version": 1})
+        say({"type": "hello", "protocol_version": 1, "checked": False})
         wait_message("welcome")
         env["WAYLAND_DISPLAY"] = session["wayland_display"]
         profile = out / "profile"
@@ -150,7 +150,7 @@ def main():
             outer_control.connect(str(outer_runtime / "control"))
             def outer_say(message):
                 outer_control.sendall((json.dumps(message) + "\n").encode())
-            outer_say({"type": "hello", "protocol_version": 1})
+            outer_say({"type": "hello", "protocol_version": 1, "checked": False})
             shell = out / "shell"
             shell.mkdir()
             (shell / "pinch.js").write_text('''

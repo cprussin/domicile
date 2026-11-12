@@ -90,6 +90,7 @@ fn a_key_held_when_the_page_reloads_is_let_go_of_for_the_client() {
     chrome
         .say(&ChromeMessage::Hello {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
+            checked: false,
         })
         .expect("the chrome socket takes a second hello");
 

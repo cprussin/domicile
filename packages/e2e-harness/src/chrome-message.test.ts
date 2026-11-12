@@ -5,7 +5,11 @@ import { PROTOCOL_VERSION } from "./protocol";
 
 describe("the chrome->host messages the harness still writes", () => {
   it("match the domicile-protocol wire shape", () => {
-    expect(helloMessage(2)).toEqual({ protocol_version: 2, type: "hello" });
+    expect(helloMessage(2)).toEqual({
+      checked: false,
+      protocol_version: 2,
+      type: "hello",
+    });
     expect(setDevicePixelRatioMessage(2)).toEqual({
       ratio: 2,
       type: "set_device_pixel_ratio",
@@ -16,6 +20,7 @@ describe("the chrome->host messages the harness still writes", () => {
     // `negotiate` requires equal versions. A wrong default would make harness
     // failures look like compositor bugs.
     expect(helloMessage()).toEqual({
+      checked: false,
       protocol_version: PROTOCOL_VERSION,
       type: "hello",
     });
