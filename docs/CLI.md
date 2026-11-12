@@ -90,6 +90,20 @@ when no page listens for commands.
 Set the theme until the desktop restarts, or print it. Set `theme.mode` in
 the config to keep one.
 
+## `domicile sleep-displays`
+
+Turn every monitor off now. Windows, workspaces and the layout stay as they
+are, and programs keep running. A key, a click or a pointer move lights them
+again, as does `wake-displays`. Input in the first second is ignored, so
+letting go of Enter or of the keybinding that ran it does not undo it. In
+manganese, bind `exec domicile sleep-displays`. See
+[IDLE.md](IDLE.md#sleeping-on-demand).
+
+## `domicile wake-displays`
+
+Turn the monitors back on, after `sleep-displays` or idle blanking. For a
+script, or over SSH.
+
 ## `domicile disable-while-typing [on|off|toggle]`
 
 Set whether a touchpad ignores the pointer while you type, or print it. On by
@@ -130,8 +144,8 @@ Print the commands. `--help` and `-h` do the same, also after a verb.
 ## While locked
 
 `screenshot`, `screen-record` and `send-shell` are refused while the desktop
-is locked, as is adding a `monitor`. `theme` works, and a `monitor` added
-before keeps resizing.
+is locked, as is adding a `monitor`. `theme`, `sleep-displays` and
+`wake-displays` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

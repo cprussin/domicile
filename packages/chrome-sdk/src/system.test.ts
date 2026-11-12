@@ -756,6 +756,26 @@ describe("color temperature", () => {
   });
 });
 
+describe("display power", () => {
+  it("puts every monitor to sleep", async () => {
+    const host = new FakeHost();
+    const sleeping = system(host).sleepDisplays();
+    host.reply(1, { kind: "set" });
+
+    expect(host.calls).toStrictEqual([[1, { call: "sleep_displays" }]]);
+    expect(await sleeping).toStrictEqual(Ok("set"));
+  });
+
+  it("wakes the monitors", async () => {
+    const host = new FakeHost();
+    const waking = system(host).wakeDisplays();
+    host.reply(1, { kind: "set" });
+
+    expect(host.calls).toStrictEqual([[1, { call: "wake_displays" }]]);
+    expect(await waking).toStrictEqual(Ok("set"));
+  });
+});
+
 describe("window states", () => {
   it("replaces the states the shell set on a window", async () => {
     const host = new FakeHost();

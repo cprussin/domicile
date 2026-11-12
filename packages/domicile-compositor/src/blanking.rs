@@ -21,6 +21,8 @@ use smithay::wayland::{
 };
 use tracing::debug;
 
+use domicile_host::system::DisplayPower;
+
 use crate::client_requests::ClientRequest;
 use crate::held_frames::HeldFrames;
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
@@ -65,6 +67,10 @@ impl DomicileCompositor {
         let Some(input) = somebody_is_here(request) else {
             return;
         };
+        if self.display_sleep.stirred(Instant::now()) {
+            debug!(input, "somebody is at this desktop again; its screens wake");
+            self.state_the_connectors();
+        }
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
@@ -165,19 +171,36 @@ impl DomicileCompositor {
         Ok(())
     }
 
+    /// Turn the monitors off or on because somebody asked. See
+    /// [`crate::display_sleep`].
+    ///
+    /// A wake also stirs the idle clock, through
+    /// [`keep_the_desktop_awake`](DomicileCompositor::keep_the_desktop_awake),
+    /// so it lights screens idle blanking turned off too.
+    pub fn power_the_displays(&mut self, power: DisplayPower) {
+        let changed = match power {
+            DisplayPower::Asleep => self.display_sleep.sleep(Instant::now()),
+            DisplayPower::Awake => self.display_sleep.wake(),
+        };
+        if changed {
+            debug!(?power, "somebody asked to turn this desktop's screens");
+            self.state_the_connectors();
+        }
+    }
+
     /// Tell the engine which connectors to light.
     ///
     /// Awake: [`Screens::scanout`] (a profile's connectors, or empty for no
-    /// opinion). Dark: every reported connector, turned off. An empty list
-    /// would light everything, so an empty [`crate::idle::darkened`] is not
-    /// sent.
+    /// opinion). Dark, from idle blanking or [`crate::display_sleep`]: every
+    /// reported connector, turned off. An empty list would light everything,
+    /// so an empty [`crate::idle::darkened`] is not sent.
     pub fn state_the_connectors(&self) {
         // Every blanking edge passes here.
         self.tell_the_portal_about_the_screensaver();
         let Some(session) = self.engine.as_ref() else {
             return;
         };
-        if self.the_screens_are_dark() {
+        if self.the_screens_are_dark() || self.display_sleep.asleep() {
             let dark = darkened(&self.engine_displays, self.screens.scanout());
             if !dark.is_empty() {
                 session.configure_displays(&dark);
@@ -192,13 +215,13 @@ impl DomicileCompositor {
         self.idle.as_ref().is_some_and(Idle::dark)
     }
 
-    /// Keep a blanked desktop dark after a hotplug.
+    /// Keep a blanked or sleeping desktop dark after a hotplug.
     ///
     /// A hotplugged monitor arrives lit, and on a described desktop (or an
     /// unappliable profile) nothing else sets the connectors. Only acts when
     /// dark, to avoid a needless modeset.
     pub fn keep_the_screens_dark(&self) {
-        if self.the_screens_are_dark() {
+        if self.the_screens_are_dark() || self.display_sleep.asleep() {
             self.state_the_connectors();
         }
     }
