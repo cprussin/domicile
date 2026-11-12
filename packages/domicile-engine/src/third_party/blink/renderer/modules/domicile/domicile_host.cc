@@ -685,6 +685,7 @@ void DomicileHost::warpPointer(ScriptState*,
     return;
   }
   if (Ready(exception_state)) {
+    warped_to_ = gfx::PointF(x, y);
     channel_->WarpPointer(
         x, y,
         unless_over == nullptr
@@ -700,6 +701,15 @@ void DomicileHost::closeApp(ScriptState*, const String& app_id,
                             ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
     channel_->CloseApp(app_id);
+  }
+}
+
+void DomicileHost::pointerConstrained(ScriptState*,
+                                      const String& app_id,
+                                      bool active,
+                                      ExceptionState& exception_state) {
+  if (ReadyForApp(app_id, exception_state)) {
+    channel_->PointerConstrained(app_id, active);
   }
 }
 
@@ -1197,6 +1207,29 @@ void DomicileHost::AppPointerMotion(const String& app_id,
   }
 }
 
+// A WARP MOVES THE POINTER TOO, AND NOBODY MOVED IT. The browser reports a
+// warp as a move (synthesized, which Blink does not see), and Blink measures
+// its `movementX/Y` from where the pointer was, so it would reach a game as a
+// flick of the mouse. The move that lands where the page last warped is taken
+// as the warp. A warp the browser skipped or clamped leaves its target
+// waiting, which costs at most one later move that lands exactly there.
+void DomicileHost::AppPointerRelative(const String& app_id,
+                                      const gfx::Vector2dF& movement,
+                                      const gfx::PointF& on_page,
+                                      const gfx::SizeF& size) {
+  if (warped_to_ && std::abs(warped_to_->x() - on_page.x()) < 1 &&
+      std::abs(warped_to_->y() - on_page.y()) < 1) {
+    warped_to_.reset();
+    return;
+  }
+  // Scaled as a point is, from the element's CSS pixels into the client's.
+  const gfx::PointF scaled = IntoClient(
+      app_id, gfx::PointF(movement.x(), movement.y()), size);
+  if (EnsureBound()) {
+    channel_->PointerRelative(app_id, scaled.x(), scaled.y());
+  }
+}
+
 void DomicileHost::AppTouch(const String& app_id,
                             AppTouchPhase phase,
                             int32_t id,
@@ -1637,6 +1670,19 @@ void DomicileHost::AppCursor(const String& app_id,
 
 void DomicileHost::AppPresented(const String& app_id) {
   Tell(app_id, kPresented);
+}
+
+void DomicileHost::AppPointerConstraint(
+    const String& app_id,
+    std::optional<domicile::mojom::blink::PointerConstraint> constraint) {
+  String named;
+  if (constraint) {
+    named = *constraint == domicile::mojom::blink::PointerConstraint::kLock
+                ? "lock"
+                : "confine";
+  }
+  WindowNamed(app_id).pointer_constraint = named;
+  WindowsChanged();
 }
 
 void DomicileHost::AppSuspended(const String& app_id, bool suspended) {
