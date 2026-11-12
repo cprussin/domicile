@@ -7,8 +7,9 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     Bus, ChromeMessage, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
-    ListedKeymap, PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
-    SystemEvent, SystemReply, SystemRequest, UnlockRefusal, WindowRequest, WindowState,
+    ListedKeymap, PreviewedWindow, ResizeEdges, Scale, Signal, Stream, SystemEnd, SystemError,
+    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal, WindowRequest,
+    WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -616,6 +617,13 @@ fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
         ),
         (WindowRequest::Unfullscreen, r#"{"kind":"unfullscreen"}"#),
         (WindowRequest::Minimize, r#"{"kind":"minimize"}"#),
+        (WindowRequest::Move, r#"{"kind":"move"}"#),
+        (
+            WindowRequest::Resize {
+                edges: ResizeEdges::BottomRight,
+            },
+            r#"{"kind":"resize","edges":"bottom_right"}"#,
+        ),
     ] {
         assert_eq!(
             host(&HostMessage::SystemEvent {

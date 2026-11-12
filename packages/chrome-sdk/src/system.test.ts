@@ -16,7 +16,7 @@ import {
   SystemErrorKind,
   UnlockRefusal,
 } from "./system";
-import { WindowRequest, WindowState } from "./window-state";
+import { ResizeEdge, WindowRequest, WindowState } from "./window-state";
 
 /**
  * A desktop that records system calls and answers them as the
@@ -804,7 +804,7 @@ describe("window states", () => {
     );
   });
 
-  it("streams each maximize, fullscreen and minimize request clients make", async () => {
+  it("streams each maximize, fullscreen, minimize, move and resize request clients make", async () => {
     const host = new FakeHost();
     const listening = system(host).windowRequests();
     host.reply(1, { kind: "started" });
@@ -816,6 +816,9 @@ describe("window states", () => {
       { display: null, kind: "fullscreen" },
       { kind: "unfullscreen" },
       { kind: "minimize" },
+      { kind: "move" },
+      { edges: "top", kind: "resize" },
+      { edges: "bottom_right", kind: "resize" },
     ]) {
       host.event(1, { app_id: "app-1", kind: "window_request", request });
     }
@@ -833,6 +836,9 @@ describe("window states", () => {
       WindowRequest.Fullscreen("app-1", undefined),
       WindowRequest.Unfullscreen("app-1"),
       WindowRequest.Minimize("app-1"),
+      WindowRequest.Move("app-1"),
+      WindowRequest.Resize("app-1", ResizeEdge.Top),
+      WindowRequest.Resize("app-1", ResizeEdge.BottomRight),
     ]);
   });
 });
