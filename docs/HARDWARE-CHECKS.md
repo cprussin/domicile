@@ -401,4 +401,12 @@ something on it next redraws.
 Unverified. On a tty, start fcitx5 with its Wayland input method frontend and
 a pinyin input method, open foot, and type `nihao`. Expect the pinyin to show
 underlined in foot as you type, and Chinese text once you pick it with Space.
-The candidate list does not show yet, so Space takes the first candidate.
+
+## Input method candidates under the caret
+
+Unverified. With fcitx5 set up as in the check above, set a monitor to scale
+1.5 and rotate it a quarter turn. Open foot on it and type `nihao`. Expect
+fcitx5's candidate list just under the text cursor, crisp, and moving along
+with the cursor as you type. Type on the last line of a maximized foot: expect
+the list above the cursor instead. Then click another window: expect the list
+to go.

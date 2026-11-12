@@ -7,17 +7,21 @@
 
 mod running;
 
-use std::os::fd::{AsFd as _, OwnedFd};
+use std::fs::File;
+use std::os::fd::{AsFd as _, FromRawFd as _, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
 use domicile_protocol::{ChromeMessage, HostMessage};
-use wayland_client::protocol::{wl_keyboard, wl_registry, wl_seat};
+use wayland_client::protocol::{
+    wl_buffer, wl_compositor, wl_keyboard, wl_registry, wl_seat, wl_shm, wl_shm_pool, wl_surface,
+};
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, WEnum};
 use wayland_protocols_misc::zwp_input_method_v2::client::{
     zwp_input_method_keyboard_grab_v2::{self, ZwpInputMethodKeyboardGrabV2},
     zwp_input_method_manager_v2::ZwpInputMethodManagerV2,
     zwp_input_method_v2::{self, ZwpInputMethodV2},
+    zwp_input_popup_surface_v2::{self, ZwpInputPopupSurfaceV2},
 };
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
@@ -58,6 +62,10 @@ struct Heard {
     input_methods: Option<ZwpInputMethodManagerV2>,
     virtual_keyboards: Option<ZwpVirtualKeyboardManagerV1>,
     input_method: Option<ZwpInputMethodV2>,
+    compositor: Option<wl_compositor::WlCompositor>,
+    shm: Option<wl_shm::WlShm>,
+    /// The memory behind the buffers the peer drew.
+    drawn: Vec<OwnedFd>,
     /// What the input method heard, in order: `activate`, `deactivate`,
     /// `surrounding_text(..)`, `done`, `unavailable`, and its grab's keys.
     said: Vec<String>,
@@ -137,6 +145,64 @@ impl Peer {
     fn said(&self) -> String {
         format!("{:?}", self.heard.said)
     }
+
+    /// Opens the input method's candidate list, which draws nothing yet.
+    fn a_candidate_list(&mut self) -> (wl_surface::WlSurface, ZwpInputPopupSurfaceV2) {
+        let handle = self.queue.handle();
+        let surface = self
+            .heard
+            .compositor
+            .as_ref()
+            .expect("a wl_compositor")
+            .create_surface(&handle, ());
+        let popup = self
+            .input_method()
+            .get_input_popup_surface(&surface, &handle, ());
+        self.roundtrip();
+        (surface, popup)
+    }
+
+    /// Draws `surface` blank at `size`, logical, and commits it.
+    fn draw(&mut self, surface: &wl_surface::WlSurface, size: (i32, i32)) {
+        let handle = self.queue.handle();
+        let (width, height) = size;
+        let length = width * 4 * height;
+        let memory = memory(u64::try_from(length).expect("a positive size"));
+        let pool = self.heard.shm.as_ref().expect("a wl_shm").create_pool(
+            memory.as_fd(),
+            length,
+            &handle,
+            (),
+        );
+        let buffer = pool.create_buffer(
+            0,
+            width,
+            height,
+            width * 4,
+            wl_shm::Format::Argb8888,
+            &handle,
+            (),
+        );
+        pool.destroy();
+        surface.attach(Some(&buffer), 0, 0);
+        surface.damage_buffer(0, 0, width, height);
+        surface.commit();
+        self.heard.drawn.push(memory);
+        self.roundtrip();
+    }
+}
+
+/// Shared memory `length` bytes long.
+fn memory(length: u64) -> OwnedFd {
+    // SAFETY: a fresh memfd, owned here.
+    let fd = unsafe { libc::memfd_create(c"candidates".as_ptr(), 0) };
+    assert!(fd >= 0, "a memfd");
+    // SAFETY: `fd` is open and owned by nothing else.
+    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    File::from(fd.try_clone().expect("a duplicate"))
+        .set_len(length)
+        .expect("sized");
+    fd
 }
 
 /// Starts an editor and gives it the keyboard. Returns it and its app id.
@@ -437,6 +503,212 @@ fn nothing_reaches_an_editor_on_a_locked_desk() {
     );
 }
 
+/// The test client's text cursor rectangle, from `--text-input`.
+const CARET: (i32, i32, i32, i32) = domicile_test_client::CARET;
+
+/// The candidate list's size as the input method draws it.
+const CANDIDATES: (i32, i32) = (120, 30);
+
+/// An input method with a candidate list drawn over a focused editor, as the
+/// chrome was told it: the list's app id and placement, and the editor's app
+/// id.
+struct Shown {
+    compositor: Compositor,
+    chrome: domicile_test_chrome::Chrome,
+    ime: Peer,
+    editor: Client,
+    editor_id: String,
+    surface: wl_surface::WlSurface,
+    app_id: String,
+    parent: String,
+    position: [f64; 2],
+    size: [f64; 2],
+    grab: bool,
+}
+
+fn a_shown_candidate_list() -> Shown {
+    let compositor = Compositor::started_with(A_DESK);
+    let mut chrome = compositor.chrome();
+    let mut ime = Peer::an_input_method(&compositor);
+    let (mut editor, editor_id) = a_focused_editor(&compositor, &mut chrome, "editor");
+    assert!(
+        ime.waits_for("activate", 1) && editor.wait_for_trace("cursor_rectangle(", 1),
+        "the editor took the keyboard and placed its text cursor; the input method heard {}\n{}",
+        ime.said(),
+        editor.trace()
+    );
+    let (surface, _popup) = ime.a_candidate_list();
+    ime.draw(&surface, CANDIDATES);
+    let placed = chrome
+        .wait_for(|message| matches!(message, HostMessage::PopupPlaced { .. }))
+        .unwrap_or_else(|_| {
+            panic!(
+                "a drawn candidate list is announced\n{}",
+                compositor.complaint()
+            )
+        });
+    let HostMessage::PopupPlaced {
+        app_id,
+        parent,
+        position,
+        size,
+        grab,
+        ..
+    } = placed
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    Shown {
+        compositor,
+        chrome,
+        ime,
+        editor,
+        editor_id,
+        surface,
+        app_id,
+        parent,
+        position,
+        size,
+        grab,
+    }
+}
+
+/// Where the candidate list goes under a text cursor at `caret_x`: the test
+/// client sets no window geometry, so its surface and window corners match.
+fn under_a_caret_at(caret_x: i32) -> [f64; 2] {
+    let (_, y, _, height) = CARET;
+    [f64::from(caret_x), f64::from(y + height)]
+}
+
+/// The input method's candidate list is a popup of the editor's window, under
+/// its text cursor, at the size the input method drew it.
+#[test]
+fn a_candidate_list_shows_under_the_editors_text_cursor() {
+    let shown = a_shown_candidate_list();
+    assert_eq!(
+        shown.parent, shown.editor_id,
+        "it is over the editor's window"
+    );
+    assert_eq!(
+        shown.position,
+        under_a_caret_at(CARET.0),
+        "it is under the text cursor"
+    );
+    assert_eq!(
+        shown.size,
+        [f64::from(CANDIDATES.0), f64::from(CANDIDATES.1)],
+        "it is the size the input method drew"
+    );
+    assert!(
+        !shown.grab,
+        "it takes no grab: typing goes on in the editor"
+    );
+}
+
+/// The candidate list moves with the editor's text cursor: committed text
+/// moves the cursor right, and the list follows.
+#[test]
+fn the_candidate_list_follows_the_text_cursor() {
+    let mut shown = a_shown_candidate_list();
+    shown.ime.input_method().commit_string("你好".to_string());
+    shown.ime.commit();
+    assert!(
+        shown.editor.wait_for_trace("commit_string(\"你好\")", 1),
+        "the editor took the text; it traced:\n{}",
+        shown.editor.trace()
+    );
+
+    let moved_to = under_a_caret_at(CARET.0 + 2 * domicile_test_client::CARET_ADVANCE);
+    let app_id = shown.app_id.clone();
+    let moved = shown.chrome.wait_for(|message| {
+        matches!(
+            message,
+            HostMessage::PopupPlaced { app_id: moved, position, .. }
+                if *moved == app_id && *position == moved_to
+        )
+    });
+    assert!(
+        moved.is_ok(),
+        "the candidate list moved to {moved_to:?} with the text cursor\n{}",
+        shown.compositor.complaint()
+    );
+}
+
+/// The candidate list closes when its editor loses the keyboard.
+#[test]
+fn the_candidate_list_closes_when_the_editor_loses_the_keyboard() {
+    let mut shown = a_shown_candidate_list();
+    let _other = shown.compositor.client("other");
+    let other_id = appeared(&mut shown.chrome);
+    shown
+        .chrome
+        .say(&ChromeMessage::FocusApp { app_id: other_id })
+        .expect("the chrome socket takes a focus");
+
+    let app_id = shown.app_id.clone();
+    let closed = shown.chrome.wait_for(
+        |message| matches!(message, HostMessage::AppClosed { app_id: closed } if *closed == app_id),
+    );
+    assert!(
+        closed.is_ok(),
+        "the candidate list closed with its editor's focus\n{}",
+        shown.compositor.complaint()
+    );
+}
+
+/// The candidate list closes when its input method goes.
+#[test]
+fn the_candidate_list_closes_with_its_input_method() {
+    let mut shown = a_shown_candidate_list();
+    drop(shown.ime);
+
+    let app_id = shown.app_id.clone();
+    let closed = shown.chrome.wait_for(
+        |message| matches!(message, HostMessage::AppClosed { app_id: closed } if *closed == app_id),
+    );
+    assert!(
+        closed.is_ok(),
+        "the candidate list closed with its input method\n{}",
+        shown.compositor.complaint()
+    );
+}
+
+/// A candidate list that draws nothing closes, and shows again, as a new
+/// popup, at its next frame. Input methods hide the list between words so.
+#[test]
+fn an_emptied_candidate_list_closes_until_it_draws_again() {
+    let mut shown = a_shown_candidate_list();
+    shown.surface.attach(None, 0, 0);
+    shown.surface.commit();
+    shown.ime.roundtrip();
+
+    let app_id = shown.app_id.clone();
+    let closed = shown.chrome.wait_for(
+        |message| matches!(message, HostMessage::AppClosed { app_id: closed } if *closed == app_id),
+    );
+    assert!(
+        closed.is_ok(),
+        "the emptied candidate list closed\n{}",
+        shown.compositor.complaint()
+    );
+
+    let surface = shown.surface.clone();
+    shown.ime.draw(&surface, CANDIDATES);
+    let editor_id = shown.editor_id.clone();
+    let again = shown.chrome.wait_for(|message| {
+        matches!(
+            message,
+            HostMessage::PopupPlaced { app_id: again, parent, .. }
+                if *again != app_id && *parent == editor_id
+        )
+    });
+    assert!(
+        again.is_ok(),
+        "the candidate list showed again when it drew\n{}",
+        shown.compositor.complaint()
+    );
+}
+
 impl Dispatch<wl_registry::WlRegistry, ()> for Heard {
     fn event(
         heard: &mut Self,
@@ -452,6 +724,8 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Heard {
         {
             match interface.as_str() {
                 "wl_seat" => heard.seat = Some(registry.bind(name, 5, handle, ())),
+                "wl_compositor" => heard.compositor = Some(registry.bind(name, 4, handle, ())),
+                "wl_shm" => heard.shm = Some(registry.bind(name, 1, handle, ())),
                 "zwp_input_method_manager_v2" => {
                     heard.input_methods = Some(registry.bind(name, 1, handle, ()));
                 }
@@ -525,3 +799,31 @@ wayland_client::delegate_noop!(Heard: ignore wl_seat::WlSeat);
 wayland_client::delegate_noop!(Heard: ignore ZwpInputMethodManagerV2);
 wayland_client::delegate_noop!(Heard: ignore ZwpVirtualKeyboardManagerV1);
 wayland_client::delegate_noop!(Heard: ignore ZwpVirtualKeyboardV1);
+wayland_client::delegate_noop!(Heard: ignore wl_compositor::WlCompositor);
+wayland_client::delegate_noop!(Heard: ignore wl_surface::WlSurface);
+wayland_client::delegate_noop!(Heard: ignore wl_shm::WlShm);
+wayland_client::delegate_noop!(Heard: ignore wl_shm_pool::WlShmPool);
+wayland_client::delegate_noop!(Heard: ignore wl_buffer::WlBuffer);
+
+impl Dispatch<ZwpInputPopupSurfaceV2, ()> for Heard {
+    fn event(
+        heard: &mut Self,
+        _: &ZwpInputPopupSurfaceV2,
+        event: zwp_input_popup_surface_v2::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zwp_input_popup_surface_v2::Event::TextInputRectangle {
+            x,
+            y,
+            width,
+            height,
+        } = event
+        {
+            heard
+                .said
+                .push(format!("text_input_rectangle({x}, {y}, {width}, {height})"));
+        }
+    }
+}
