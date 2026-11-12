@@ -29,6 +29,7 @@ pub use pointers::{PointerConfig, PointerTarget};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
 pub use startup::StartupConfig;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -841,20 +842,115 @@ pub struct ExtensionsConfig {
     pub web_store: Vec<String>,
     /// Directories holding an unpacked extension, loaded as they are.
     pub unpacked: Vec<PathBuf>,
+    /// Each extension's settings, by id, as chrome://extensions has them. A
+    /// setting left out is the user's to change in the Settings app; one
+    /// removed from here goes back to Chrome's default.
+    pub settings: BTreeMap<String, ExtensionSettings>,
+}
+
+/// One extension's settings. See [`ExtensionsConfig::settings`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ExtensionSettings {
+    /// Runs in private windows. Chrome's default is no.
+    #[serde(rename = "private")]
+    pub in_private: Option<bool>,
+    /// Runs on local files (`file://` pages). Chrome's default is no.
+    pub file_access: Option<bool>,
+    /// May run the user scripts you add to it (`chrome.userScripts`), as
+    /// userscript managers do. Chrome's default is no.
+    pub user_scripts: Option<bool>,
+    /// Which of the sites it asks for it runs on. Chrome's default is all.
+    pub site_access: Option<SiteAccess>,
+}
+
+/// Which sites an extension runs on: `"on_click"`, `"all_sites"`, or a list
+/// of hosts, each also as `*.host` for its subdomains.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum SiteAccess {
+    Mode(SiteAccessMode),
+    /// Only these hosts, on http and https.
+    Sites(Vec<String>),
+}
+
+/// [`SiteAccess`] other than a list of hosts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteAccessMode {
+    /// Only on a page where you click its button.
+    OnClick,
+    /// On every site it asks for.
+    AllSites,
+}
+
+/// Whether `id` is a Chrome extension id: 32 letters from `a` to `p`.
+fn is_extension_id(id: &str) -> bool {
+    id.len() == 32 && id.bytes().all(|b| (b'a'..=b'p').contains(&b))
+}
+
+/// Whether `site` is a host, or `*.host` for its subdomains, as the engine
+/// grants one: dot-separated labels of letters, digits and inner hyphens, the
+/// last with a letter and not a hex number such as `0x1f`, or a dotted IPv4
+/// address (without `*.`). The engine's
+/// `SitePattern` checks the same rule.
+fn is_site(site: &str) -> bool {
+    match site.strip_prefix("*.") {
+        Some(host) => is_host_name(host),
+        None => is_host_name(site) || site.parse::<std::net::Ipv4Addr>().is_ok(),
+    }
+}
+
+/// Whether `host` is labels, the last with a letter and not a hex number: a
+/// name rather than a number, which Chrome would read as an address.
+fn is_host_name(host: &str) -> bool {
+    let is_label = |label: &str| {
+        (1..=63).contains(&label.len())
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    };
+    host.split('.').all(is_label)
+        && host.rsplit('.').next().is_some_and(|last| {
+            let hex = last
+                .get(..2)
+                .is_some_and(|start| start.eq_ignore_ascii_case("0x"))
+                && last[2..].bytes().all(|b| b.is_ascii_hexdigit());
+            last.bytes().any(|b| b.is_ascii_alphabetic()) && !hex
+        })
 }
 
 impl ExtensionsConfig {
     fn validate(&self) -> Result<(), ConfigError> {
         // Store ids are 32 letters from `a` to `p`. Checking here names the
         // config file; the Store would fail later, in a log.
-        if let Some(id) = self
-            .web_store
-            .iter()
-            .find(|id| id.len() != 32 || !id.bytes().all(|b| (b'a'..=b'p').contains(&b)))
-        {
+        if let Some(id) = self.web_store.iter().find(|id| !is_extension_id(id)) {
             return Err(ConfigError::Validation(format!(
                 "extensions.web_store {id:?} is not a Chrome Web Store id, which is \
                  32 letters from `a` to `p`"
+            )));
+        }
+        if let Some(id) = self.settings.keys().find(|id| !is_extension_id(id)) {
+            return Err(ConfigError::Validation(format!(
+                "extensions.settings {id:?} is not an extension id, which is 32 \
+                 letters from `a` to `p`"
+            )));
+        }
+        let site = self
+            .settings
+            .values()
+            .filter_map(|settings| match &settings.site_access {
+                Some(SiteAccess::Sites(sites)) => Some(sites),
+                _ => None,
+            })
+            .flatten()
+            .find(|site| !is_site(site));
+        if let Some(site) = site {
+            return Err(ConfigError::Validation(format!(
+                "extensions.settings' site {site:?} is not a host such as \
+                 `github.com`, or `*.github.com` for its subdomains"
             )));
         }
         // A relative path would depend on the compositor's working directory.

@@ -24,10 +24,10 @@ use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, MonitorMode, USAGE};
 use domicile_launch::command_socket::{
-    clear_browsing_data, clear_site_data, config_extensions, delete_history, disable_while_typing,
-    extensions, history, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
-    set_extension_enabled, set_media_device, set_site_permission, site_data, site_permissions,
-    uninstall_extension, visits,
+    clear_browsing_data, clear_site_data, config_extensions, configure_extension, delete_history,
+    disable_while_typing, extensions, history, load_shell, load_unpacked, media_devices, open_app,
+    open_url, run_app, set_extension_enabled, set_media_device, set_site_permission, site_data,
+    site_permissions, uninstall_extension, visits,
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screen_record, screenshot, send_shell, theme};
@@ -1218,6 +1218,10 @@ fn answer_a_command(
                     },
                     set_extension_enabled: &|id, enabled| {
                         set_extension_enabled(engine, id, enabled, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    configure_extension: &|id, settings| {
+                        configure_extension(engine, id, settings, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
                     history: &|query| {

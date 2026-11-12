@@ -39,6 +39,7 @@ constexpr char kUninstallExtension[] = "uninstall_extension";
 constexpr char kConfigExtensions[] = "config_extensions";
 constexpr char kExtensions[] = "extensions";
 constexpr char kSetExtensionEnabled[] = "set_extension_enabled";
+constexpr char kConfigureExtension[] = "configure_extension";
 constexpr char kMediaDevices[] = "media_devices";
 constexpr char kSetMediaDevice[] = "set_media_device";
 constexpr char kHistory[] = "history";
@@ -87,6 +88,8 @@ std::string AnswerConfigExtensions(
 std::string AnswerExtensions(ListExtensions list_extensions);
 std::string AnswerSetExtensionEnabled(const base::DictValue& request,
                                       SetExtensionEnabled set_extension_enabled);
+std::string AnswerConfigureExtension(const base::DictValue& request,
+                                     ConfigureExtension configure_extension);
 std::string AnswerMediaDevices(ListMediaDevices list_media_devices);
 std::string AnswerSetMediaDevice(const base::DictValue& request,
                                  SetMediaDevice set_media_device);
@@ -222,6 +225,11 @@ void AnswerCommand(std::string_view line,
         AnswerSetExtensionEnabled(*request, actions.set_extension_enabled));
     return;
   }
+  if (*type == kConfigureExtension) {
+    std::move(reply).Run(
+        AnswerConfigureExtension(*request, actions.configure_extension));
+    return;
+  }
   if (*type == kMediaDevices) {
     std::move(reply).Run(AnswerMediaDevices(actions.list_media_devices));
     return;
@@ -268,6 +276,7 @@ void AnswerCommand(std::string_view line,
        "\", \"", kSetSitePermissionCommand, "\", \"", kLoadUnpacked, "\", \"",
        kUninstallExtension, "\", \"", kConfigExtensions, "\", \"",
        kExtensions, "\", \"", kSetExtensionEnabled, "\", \"",
+       kConfigureExtension, "\", \"",
        kMediaDevices, "\", \"", kSetMediaDevice, "\", \"", kHistory, "\", \"",
        kVisits, "\", \"", kDeleteHistory, "\", \"", kClearBrowsingData,
        "\", \"", kSiteData, "\", \"", kClearSiteData, "\" and \"",
@@ -595,6 +604,7 @@ std::string AnswerExtensions(ListExtensions list_extensions) {
     entry.Set("description", extension.description);
     entry.Set("version", extension.version);
     entry.Set("enabled", extension.enabled);
+    entry.Set("settings", OneExtensionSettingsValue(extension.settings));
     if (extension.options_url.is_valid()) {
       entry.Set("options_url", extension.options_url.spec());
     }
@@ -618,6 +628,31 @@ std::string AnswerSetExtensionEnabled(
   }
   const base::expected<void, std::string> set =
       set_extension_enabled(*id, *enabled);
+  if (!set.has_value()) {
+    return RefusedCommand(set.error());
+  }
+  return Done("set");
+}
+
+std::string AnswerConfigureExtension(const base::DictValue& request,
+                                     ConfigureExtension configure_extension) {
+  const std::string* id = request.FindString("id");
+  const base::DictValue* settings = request.FindDict("settings");
+  if (id == nullptr || settings == nullptr) {
+    return RefusedCommand(
+        "configure_extension needs an \"id\" and the \"settings\" to set");
+  }
+  const std::optional<ExtensionSettings> read =
+      ParseOneExtensionSettings(*settings);
+  if (!read) {
+    return RefusedCommand(
+        "configure_extension's \"settings\" takes \"private\", "
+        "\"file_access\" and \"user_scripts\" as booleans, and "
+        "\"site_access\" as \"on_click\", \"all_sites\" or a list of "
+        "hosts");
+  }
+  const base::expected<void, std::string> set =
+      configure_extension(*id, *read);
   if (!set.has_value()) {
     return RefusedCommand(set.error());
   }

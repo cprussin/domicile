@@ -42,7 +42,7 @@ in. Three things are missing:
 | Step | Where |
 |---|---|
 | Parse, expand `~`, keep the last good config on a bad edit | `domicile-config`, `ExtensionsConfig` |
-| Send the list with the handshake and on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked }` |
+| Send the list with the handshake and on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked, settings }` |
 | Receive it in the browser process | `components/domicile/browser/control_channel.cc` |
 | Decide what to add and remove | `components/domicile/browser/extension_installer.{h,cc}`, `ReconcileExtensions` |
 | Install and uninstall in the profile | `chrome/browser/domicile/domicile_extension_installer.{h,cc}` (patch 0055) |
@@ -85,6 +85,71 @@ Chromium disables unpacked extensions outside developer mode
 (`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). The installer sets
 `prefs::kExtensionsUIDeveloperMode` before loading a directory and leaves it
 on.
+
+### Settings
+
+A desk has no chrome://extensions, so its per-extension settings come from the
+config and the Settings app:
+
+```json
+{
+  "extensions": {
+    "settings": {
+      "eimadpbcbfnmbkopoojfekhnkhdbieeh": {
+        "private": true,
+        "file_access": false,
+        "site_access": ["github.com", "*.example.com"]
+      },
+      "jinjaccalgkegednnccohejagnlnfdag": {
+        "user_scripts": true,
+        "site_access": "on_click"
+      }
+    }
+  }
+}
+```
+
+| Setting | Chrome's call | Chrome's default |
+|---|---|---|
+| `private` | `util::SetIsIncognitoEnabled` | off |
+| `file_access` | `util::SetAllowFileAccess` | off |
+| `user_scripts` | `UserScriptManager::SetUserScriptPrefEnabled` | off |
+| `site_access` | `ScriptingPermissionsModifier`: `"all_sites"` grants every host it asks for, `"on_click"` withholds them, a list grants `*://host/*` for each | `"all_sites"` |
+
+- An extension that cannot use a setting is refused it: one whose manifest
+  says `"incognito": "not_allowed"`, one that asks for no `file://` access,
+  no `userScripts` permission, or no hosts. The listing leaves those out.
+- A setting the config leaves out is the user's, changed in the Settings app
+  through the command socket's `configure_extension`.
+- One the config drops goes back to Chrome's default. The pref
+  `domicile.extensions.settings` records what the config last set
+  (`ReconcileSettings`).
+- A Web Store id is still pending when the config arrives, so its settings are
+  applied once it installs (`InstallWatch`).
+- `private` and `file_access` reload the extension, as on chrome://extensions.
+
+Code: `components/domicile/browser/extension_settings.{h,cc}` (parse, write,
+reconcile) and `chrome/browser/domicile/domicile_extension_settings.{h,cc}`
+(read and set in the profile).
+
+### Private windows
+
+A private page is a `<webview private>`, a guest of the off-the-record
+profile. Its desk is that profile's own `DomicileWindowController`, made the
+first time a private page opens. Chrome's `EventRouter` and
+`ExtensionTabUtil` already hide an off-the-record window from an extension not
+allowed in private windows, so the desk only has to treat the private desk as
+one more window:
+
+- Private guests get the same tab helpers as others, except history and
+  favicons (`domicile_tab_helpers.cc`).
+- `tabs.query`, `windows.getAll` and the window lookups walk every desk the
+  extension may see (`domicile_desk_functions.cc`).
+- The current and last focused window is the desk whose tab last took focus
+  (`LastFocusedDesk`). For an extension not allowed in private windows, it is
+  the ordinary desk (patch 0206, `CurrentWindowFor`).
+- The tray's active tab is a private page only for an extension allowed in
+  private windows.
 
 ### The tray
 
@@ -195,7 +260,7 @@ call to each of these, declared in
 | `ExtensionTabUtil::GetTabById` | the guest, the desk's controller, its index |
 | `ExtensionTabUtil::CreateTabObject` | its index and `active` |
 | `ExtensionTabUtil::ForEachTab` | every guest too |
-| `ChromeExtensionFunctionDetails::GetCurrentWindowController` | the desk, since the shell's own window is not a desk window |
+| `ChromeExtensionFunctionDetails::GetCurrentWindowController` | the last focused desk the extension may see, since the shell's own window is not a desk window (patch 0206) |
 | `SendExecuteMimeTypeHandlerEvent` (patch 0154) | no tab id for a stream outside a guest, so the PDF viewer in the shell asks `chrome.tabs` nothing |
 
 - `tabs.query` and the mutations below are the desk's own
@@ -303,6 +368,7 @@ relative to the source window and passes `NaN` without them.
 Engine guards in `packages/domicile-engine/scripts/`:
 
 - `guard-extension-installer.sh`
+- `guard-extension-in-private.sh`
 - `guard-extension-tray.sh`
 - `guard-extension-open-popup.sh`
 - `guard-extension-side-panel.sh`

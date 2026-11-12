@@ -10,7 +10,11 @@ not in the Extensions page or any extension list.
   ([SHELL-CONFIG.md](SHELL-CONFIG.md)). A change is written to the file as soon
   as it is made, and the desktop reloads it.
 - **Extensions:** switch an extension on or off and open its options through
-  the engine. Load an unpacked folder, picked in the desktop's file
+  the engine. While one is on, change the settings it can use: site access,
+  private windows, local files and user scripts. A setting the config sets
+  changes in the config, and is locked when the config is read-only; the rest
+  change through the engine
+  ([EXTENSIONS.md](architecture/EXTENSIONS.md#settings)). Load an unpacked folder, picked in the desktop's file
   chooser, or uninstall an extension the config did not install, through the
   engine; this works with a read-only config. The config's own uninstall by
   editing its `extensions` lists
@@ -64,6 +68,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
                                                                      site_data                      config_extensions,
                                                                                                     extensions,
                                                                                                     set_extension_enabled,
+                                                                                                    configure_extension,
                                                                                                     media_devices,
                                                                                                     set_media_device,
                                                                                                     site_data,
@@ -78,7 +83,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 | Which files | The host asks the desktop (`settings_files` on the control socket) on every request. The page never names a path. |
 | Writable | `access(W_OK)` on the file, following links. |
 | Shell options | `settings_files` names the shell's `options.json`, beside its module. The host reads it with the config and checks `shell_options` writes against it. |
-| Extensions | The engine's `extensions`, `set_extension_enabled`, `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
+| Extensions | The engine's `extensions`, `set_extension_enabled`, `configure_extension`, `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
 | Picking a folder | The host calls the `FileChooser` portal's `OpenFile` with `directory`, which the shell draws ([PORTALS.md](PORTALS.md)). A page cannot learn the path of a folder from `<input type="file">`. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
 | Site data | The engine's `site_data` and `clear_site_data` commands. They read and remove the shell profile's data through Chrome's `BrowsingDataModel`, as `chrome://settings/content/all` does. |

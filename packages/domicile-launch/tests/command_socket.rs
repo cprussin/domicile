@@ -7,19 +7,19 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::command::{
-    clear_browsing_data_line, clear_site_data_line, config_extensions_line, delete_history_line,
-    disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
-    media_devices_line, open_url_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
-    visits_line,
+    clear_browsing_data_line, clear_site_data_line, config_extensions_line,
+    configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
+    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_url_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
+    site_permissions_line, uninstall_extension_line, visits_line,
 };
 use domicile_launch::command_socket::{
-    clear_browsing_data, clear_site_data, config_extensions, delete_history, disable_while_typing,
-    extensions, history, load_shell, load_unpacked, media_devices, open_url, set_extension_enabled,
-    set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
-    visits, CommandError,
+    clear_browsing_data, clear_site_data, config_extensions, configure_extension, delete_history,
+    disable_while_typing, extensions, history, load_shell, load_unpacked, media_devices, open_url,
+    set_extension_enabled, set_media_device, set_site_permission, site_data, site_permissions,
+    uninstall_extension, visits, CommandError,
 };
-use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::extensions::{ExtensionSettings, InstalledExtension};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
@@ -330,7 +330,7 @@ fn the_engine_lists_every_installed_extension() {
     let (_scratch, path) = scratch();
     let heard = an_engine(
         &path,
-        Some("{\"type\":\"extensions\",\"extensions\":[{\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":true}]}\n"),
+        Some("{\"type\":\"extensions\",\"extensions\":[{\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":true,\"settings\":{}}]}\n"),
     );
 
     assert_eq!(
@@ -342,6 +342,7 @@ fn the_engine_lists_every_installed_extension() {
             version: "1.0".to_string(),
             enabled: true,
             options_url: None,
+            settings: ExtensionSettings::default(),
         }]
     );
     assert_eq!(
@@ -361,6 +362,29 @@ fn the_engine_is_told_to_disable_an_extension_and_says_it_stored_it() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false)
+    );
+}
+
+#[test]
+fn the_engine_is_told_an_extension_s_settings_and_says_it_stored_them() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
+    let settings = ExtensionSettings {
+        file_access: Some(true),
+        ..ExtensionSettings::default()
+    };
+
+    configure_extension(
+        &path,
+        "abcdefghijklmnopabcdefghijklmnop",
+        &settings,
+        BRIEFLY,
+    )
+    .expect("the engine stored them");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        configure_extension_line("abcdefghijklmnopabcdefghijklmnop", &settings)
     );
 }
 

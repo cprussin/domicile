@@ -51,6 +51,7 @@ TOGETHER=(
   guard-headless-desk
   guard-webview-content-script
   guard-extension-installer
+  guard-extension-in-private
   guard-extension-tray
   guard-extension-open-popup
   guard-extension-side-panel

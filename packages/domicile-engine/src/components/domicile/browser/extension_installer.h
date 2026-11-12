@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "components/domicile/browser/extension_settings.h"
+
 namespace domicile {
 
 // The extensions named in the config, from the compositor's `extensions`
@@ -18,6 +20,8 @@ struct ExtensionList {
   std::vector<std::string> web_store;
   // Absolute directories holding an unpacked extension.
   std::vector<std::string> unpacked;
+  // Settings by id, for these extensions or any other.
+  ExtensionSettingsMap settings;
 };
 
 // The changes that bring a profile in line with an `ExtensionList`.
