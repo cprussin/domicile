@@ -667,7 +667,7 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
 TEST_F(ControlChannelTest, RelativeMotionReachesTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   control_->PointerRelative("app", 3.5, -2);
   control_.FlushForTesting();
   EXPECT_EQ(Heard(),
