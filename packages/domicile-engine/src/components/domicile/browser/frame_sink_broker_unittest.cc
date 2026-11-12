@@ -321,7 +321,8 @@ std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
   displays.push_back(mojom::Display::New(id, gfx::Rect(size),
                                          gfx::Size(597, 336),
                                          "DEL DELL U3219Q 2ZLS413", 59997,
-                                         "eDP-1", 4096, std::move(modes)));
+                                         "eDP-1", 4096, std::move(modes),
+                                         mojom::AdaptiveSync::kOn));
   return displays;
 }
 
@@ -1189,6 +1190,7 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
   EXPECT_EQ(observer.lists_[0][0]->gamma_size, 4096u);
   ASSERT_EQ(observer.lists_[0][0]->modes.size(), 1u);
   EXPECT_EQ(observer.lists_[0][0]->modes[0]->refresh_mhz, 59997);
+  EXPECT_EQ(observer.lists_[0][0]->adaptive_sync, mojom::AdaptiveSync::kOn);
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
@@ -1200,10 +1202,10 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
   std::vector<mojom::DisplayLayoutPtr> layout;
   layout.push_back(mojom::DisplayLayout::New(
       7, true, gfx::Point(1920, 0), mojom::DisplayTransform::kRotate270, 1.2,
-      gfx::Rect(1920, 0, 1800, 3200), gfx::Size(3840, 2160), 120000));
+      gfx::Rect(1920, 0, 1800, 3200), gfx::Size(3840, 2160), 120000, true));
   layout.push_back(mojom::DisplayLayout::New(
       9, false, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0,
-      gfx::Rect(), std::nullopt, 0));
+      gfx::Rect(), std::nullopt, 0, false));
   remote->ConfigureDisplays(std::move(layout));
   RunUntilIdle();
 
@@ -1220,6 +1222,7 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
   // The mode and rate the profile asks for.
   EXPECT_EQ(layouts_[0][0]->mode, gfx::Size(3840, 2160));
   EXPECT_EQ(layouts_[0][0]->refresh_mhz, 120000);
+  EXPECT_TRUE(layouts_[0][0]->adaptive_sync);
   EXPECT_EQ(layouts_[0][1]->id, 9);
   EXPECT_FALSE(layouts_[0][1]->enabled);
   EXPECT_FALSE(layouts_[0][1]->mode.has_value());
@@ -1253,7 +1256,7 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
   std::vector<mojom::DisplayLayoutPtr> layout;
   layout.push_back(mojom::DisplayLayout::New(
       7, true, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0,
-      gfx::Rect(), std::nullopt, 0));
+      gfx::Rect(), std::nullopt, 0, false));
   remote->ConfigureDisplays(std::move(layout));
   RunUntilIdle();
 

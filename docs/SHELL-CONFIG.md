@@ -511,8 +511,8 @@ For sites with no dark theme of their own, such as Gmail:
 ```
 
 Each profile entry sets `enabled`, `position`, a fractional `scale`, a
-`transform`, and optionally `mode` and `refresh`. An entry without `position`
-goes right of the positioned ones, in profile order.
+`transform`, and optionally `mode`, `refresh` and `adaptive_sync`. An entry
+without `position` goes right of the positioned ones, in profile order.
 
 ### Naming a display
 
@@ -553,6 +553,18 @@ the rate, in Hz:
   stays, and the log lists the sizes it does offer.
 - Positions are laid out at the requested mode, so the profile's other
   displays land where it says.
+
+### `adaptive_sync`
+
+`"adaptive_sync": true` turns on a variable refresh rate (adaptive sync,
+FreeSync, G-Sync Compatible) for that monitor, so a frame that runs late shows
+as soon as it is ready instead of waiting for the next refresh. It is off by
+default.
+
+- It is used only where the monitor, its cable and its driver support it.
+- If the driver refuses it, the monitor lights the same way without it.
+- The shell's `displays.list` says whether it took: `adaptiveSync` is `on`,
+  `off` or `unsupported`.
 
 ### `transform`
 

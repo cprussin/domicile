@@ -265,6 +265,7 @@ describe("parseHostMessage", () => {
         JSON.stringify({
           displays: [
             {
+              adaptive_sync: "unsupported",
               mode: [1920, 1080],
               name: "left",
               position: [0, 0],
@@ -273,6 +274,7 @@ describe("parseHostMessage", () => {
               transform: "normal",
             },
             {
+              adaptive_sync: "unsupported",
               mode: [5120, 2880],
               name: "right",
               position: [1920, 0],
@@ -287,6 +289,7 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({
       displays: [
         {
+          adaptive_sync: "unsupported",
           mode: [1920, 1080],
           name: "left",
           position: [0, 0],
@@ -296,6 +299,7 @@ describe("parseHostMessage", () => {
           transform: "normal",
         },
         {
+          adaptive_sync: "unsupported",
           mode: [5120, 2880],
           name: "right",
           position: [1920, 0],
@@ -317,6 +321,7 @@ describe("parseHostMessage", () => {
         JSON.stringify({
           displays: [
             {
+              adaptive_sync: "unsupported",
               mode: [3840, 2160],
               name: "drm-3",
               position: [0, 0],
@@ -331,6 +336,7 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({
       displays: [
         {
+          adaptive_sync: "unsupported",
           mode: [3840, 2160],
           name: "drm-3",
           position: [0, 0],
@@ -359,6 +365,7 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({
       displays: [
         {
+          adaptive_sync: "unsupported",
           mode: [0, 0],
           name: "left",
           position: [0, 0],

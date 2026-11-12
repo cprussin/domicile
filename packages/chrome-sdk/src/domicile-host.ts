@@ -371,6 +371,12 @@ export type DomicileDisplay = {
    */
   readonly refreshMhz: number;
   /**
+   * Whether the panel scans out with a variable refresh rate: `unsupported`
+   * (the panel, its connector or its driver cannot, or Domicile runs in a
+   * window), `off` or `on`. A DOMString for the reason `transform` is.
+   */
+  readonly adaptiveSync: string;
+  /**
    * The monitor's rotation: `normal`, `rotate-90`, `rotate-180` or
    * `rotate-270`, as the config file spells them.
    *

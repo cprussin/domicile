@@ -23,7 +23,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 47,
 # WindowDiff 7, EngineEventQueue 8, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 55,
-# DomicileDisplayList 11, DomicileKeyboardLayout 3, ShellWindows 8,
+# DomicileDisplayList 12, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 28,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
@@ -41,8 +41,9 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8.
 #
-# 575, and it was 574 — a cursor a client drew reaching the page is one
-# ControlChannel case. Before that 574, and it was 569 — listing the browser windows for capture tools is three
+# 576, and it was 575 — a cursor a client drew reaching the page is one
+# ControlChannel case. Before that 575, and it was 574 — a panel's adaptive sync is one DomicileDisplayList
+# case. Before that 574, and it was 569 — listing the browser windows for capture tools is three
 # BrowserWindowListing cases, one FrameSinkBroker case and one EngineEventQueue
 # case. Before that 569, and it was 567 — a panel's modes and the rate it scans out at are two
 # DomicileDisplayList cases. Before that 567, and it was 564 — sending the bound
@@ -209,7 +210,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=575
+FLOOR=576
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

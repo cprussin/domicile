@@ -191,6 +191,14 @@ class DrmScreen : public PlatformScreen {
 DomicilePanel PanelFromSnapshot(const display::DisplaySnapshot& snapshot,
                                 const std::vector<DomicileDisplayLayout>& layout);
 
+// Whether `after` differs from `before` in what `display::DisplayList` does
+// not compare, so `DrmScreen` must tell the observers itself.
+bool PanelChangedUnseen(const DomicilePanel& before, const DomicilePanel& after);
+
+// Whether `snapshot`'s connector scans out with a variable refresh rate, as
+// the hardware said when it was read.
+DomicileAdaptiveSync AdaptiveSyncOf(const display::DisplaySnapshot& snapshot);
+
 }  // namespace ui
 
 #endif  // UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_SCREEN_H_
