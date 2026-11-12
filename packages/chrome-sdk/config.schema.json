@@ -171,10 +171,50 @@
       "required": ["display"],
       "type": "object"
     },
+    "ExtensionSettings": {
+      "additionalProperties": false,
+      "description": "One extension's settings. See [`ExtensionsConfig::settings`].",
+      "properties": {
+        "file_access": {
+          "default": null,
+          "description": "Runs on local files (`file://` pages). Chrome's default is no.",
+          "type": ["boolean", "null"]
+        },
+        "private": {
+          "default": null,
+          "description": "Runs in private windows. Chrome's default is no.",
+          "type": ["boolean", "null"]
+        },
+        "site_access": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SiteAccess"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which of the sites it asks for it runs on. Chrome's default is all."
+        },
+        "user_scripts": {
+          "default": null,
+          "description": "May run the user scripts you add to it (`chrome.userScripts`), as\nuserscript managers do. Chrome's default is no.",
+          "type": ["boolean", "null"]
+        }
+      },
+      "type": "object"
+    },
     "ExtensionsConfig": {
       "additionalProperties": false,
       "description": "Chrome extensions the engine installs into the browser windows' profile.\nSee `docs/architecture/EXTENSIONS.md`.\n\nListing an extension is consent: there is no install prompt. Removing one\nfrom the list uninstalls it.",
       "properties": {
+        "settings": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ExtensionSettings"
+          },
+          "description": "Each extension's settings, by id, as chrome://extensions has them. A\nsetting left out is the user's to change in the Settings app; one\nremoved from here goes back to Chrome's default.",
+          "type": "object"
+        },
         "unpacked": {
           "default": [],
           "description": "Directories holding an unpacked extension, loaded as they are.",
@@ -548,6 +588,36 @@
       "description": "How a touchpad generates scrolling.",
       "enum": ["default", "two_finger", "edge", "on_button_down"],
       "type": "string"
+    },
+    "SiteAccess": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SiteAccessMode"
+        },
+        {
+          "description": "Only these hosts, on http and https.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "Which sites an extension runs on: `\"on_click\"`, `\"all_sites\"`, or a list\nof hosts, each also as `*.host` for its subdomains."
+    },
+    "SiteAccessMode": {
+      "description": "[`SiteAccess`] other than a list of hosts.",
+      "oneOf": [
+        {
+          "const": "on_click",
+          "description": "Only on a page where you click its button.",
+          "type": "string"
+        },
+        {
+          "const": "all_sites",
+          "description": "On every site it asks for.",
+          "type": "string"
+        }
+      ]
     },
     "StartupConfig": {
       "additionalProperties": false,

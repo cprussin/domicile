@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""The compositor's end of the control socket, for guard-extension-installer.sh.
+"""The compositor's end of the control socket, for guard-extension-installer.sh
+and guard-extension-in-private.sh.
 
 It answers the browser's `hello` with a `welcome` and one `extensions`
 message naming the directories it was given as `unpacked` -- none, for the
-guard's control. That is what the real compositor sends at the
+installer guard's control -- and the `settings` it was given, as JSON. That is what the real compositor sends at the
 handshake from a desk's `[extensions]`, spelled as `domicile-protocol` spells
 it (`wire/host-messages.jsonl`).
 
@@ -26,12 +27,17 @@ def send(connection, message):
     print("sent: %s" % line.strip(), flush=True)
 
 
-def greet(connection, unpacked):
+def greet(connection, unpacked, settings):
     """Send the welcome and the list."""
     send(connection, {"type": "welcome", "protocol_version": 1})
     send(
         connection,
-        {"type": "extensions", "web_store": [], "unpacked": unpacked},
+        {
+            "type": "extensions",
+            "web_store": [],
+            "unpacked": unpacked,
+            "settings": settings,
+        },
     )
     print("sent the extensions", flush=True)
 
@@ -45,7 +51,7 @@ def is_hello(line):
     return json.loads(line).get("type") == "hello"
 
 
-def serve(path, unpacked):
+def serve(path, unpacked, settings):
     """Accept on `path`, send the welcome and the list on `hello`, and read
     until EOF."""
     if os.path.exists(path):
@@ -71,7 +77,7 @@ def serve(path, unpacked):
                     line, remainder = remainder.split(b"\n", 1)
                     print("said: %s" % line.decode("utf-8", "replace"), flush=True)
                     if is_hello(line):
-                        greet(connection, unpacked)
+                        greet(connection, unpacked, settings)
         print("the channel went away", flush=True)
 
 
@@ -84,9 +90,14 @@ def main():
         default=[],
         help="an absolute directory to name as unpacked; repeatable, or none",
     )
+    parser.add_argument(
+        "--settings",
+        default="{}",
+        help="each extension's settings by id, as JSON; none by default",
+    )
     arguments = parser.parse_args()
     try:
-        serve(arguments.socket, arguments.unpacked)
+        serve(arguments.socket, arguments.unpacked, json.loads(arguments.settings))
     except KeyboardInterrupt:
         return 0
     return 0
