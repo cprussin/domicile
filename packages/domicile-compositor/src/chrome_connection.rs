@@ -304,8 +304,18 @@ fn read_chrome_messages(
     })
     .powering_displays_with({
         let hub = hub.clone();
-        move |power| {
-            hub.send_request(ClientRequest::PowerDisplays { power });
+        move |power, display| {
+            // Checked here so the page hears of a bad name, as for a white
+            // point.
+            if let Some(name) = &display {
+                if hub.host.lock().unwrap().display(name).is_none() {
+                    return Err(SystemError {
+                        kind: SystemErrorKind::NotFound,
+                        message: format!("no display {name}"),
+                    });
+                }
+            }
+            hub.send_request(ClientRequest::PowerDisplays { power, display });
             Ok(())
         }
     });

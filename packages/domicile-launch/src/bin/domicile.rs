@@ -1247,8 +1247,8 @@ fn answer_a_command(
                     theme: &|to| {
                         theme(chrome, to, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
-                    power_displays: &|power| {
-                        power_displays(chrome, power, Some(ANSWER_WITHIN))
+                    power_displays: &|power, display| {
+                        power_displays(chrome, power, display, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())
                     },
                 },

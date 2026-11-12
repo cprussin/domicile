@@ -351,13 +351,14 @@ This is a working desktop: every window full-screen, newest on top.
 ### Popups
 
 A client's menus and tooltips are entries in `windows.list` with `parent`
-set:
+set. So is an input method's candidate list (fcitx5, IBus), over the window
+being typed in, just under its text cursor:
 
 - `appId`: the popup's own id
 - `parent`: the window or popup (for a submenu) it belongs to
 - `x`, `y`: CSS pixels from the top-left of the parent's box; `width`,
   `height`: its size
-- `grab`: `true` for a menu, `false` for a tooltip
+- `grab`: `true` for a menu, `false` for a tooltip or a candidate list
 
 To show one:
 
@@ -366,7 +367,9 @@ To show one:
 - Remove it when `windows.list` drops it.
 - The engine routes a click on it to its window's keyboard.
 - The compositor closes a menu when the keyboard leaves its window.
-- A popup placed near a screen edge is not moved back on screen.
+- A menu placed near a screen edge is not moved back on screen. A candidate
+  list is: the compositor puts it above the text cursor near the screen's
+  bottom.
 
 ## Windows
 

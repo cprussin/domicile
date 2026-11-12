@@ -282,7 +282,8 @@ typedef struct DomicileDisplayLayout {
   DomicileDisplayTransform transform;
   double scale;
   // Position on the compositor's logical desktop, used to move the pointer
-  // between monitors. Zero when `enabled` is zero.
+  // between monitors. Zero when `enabled` is zero, except for a sleeping
+  // display, which keeps its place on the desk page.
   int32_t desk_x;
   int32_t desk_y;
   int32_t desk_width;

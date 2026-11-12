@@ -1052,6 +1052,7 @@ mod tests {
                 "the screens being put to sleep, which the lock already judged",
                 ClientRequest::PowerDisplays {
                     power: domicile_host::system::DisplayPower::Asleep,
+                    display: None,
                 },
             ),
             (

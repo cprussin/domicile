@@ -68,7 +68,8 @@ export const Shell = async (root, domicile) => {
   it; see [CASTING-TO-TVS.md](CASTING-TO-TVS.md). Manganese's
   `virtual-monitor add` command adds one from a key or a terminal.
 - `displays.sleep()` turns every monitor off until input or
-  `displays.wake()`; see [IDLE.md](IDLE.md#sleeping-on-demand).
+  `displays.wake()`, or one by name until it is woken; see
+  [IDLE.md](IDLE.md#sleeping-on-demand).
 - `keyboard.keymaps()` streams the config's keymaps and the active one;
   `keyboard.selectKeymap()` switches to another
   ([SHELL-CONFIG.md](SHELL-CONFIG.md#keyboard)).

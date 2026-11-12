@@ -89,12 +89,13 @@ impl DomicileCompositor {
                 .iter()
                 .find(|bubble| bubble.surface == *surface)
                 .and_then(|bubble| self.window_of(&bubble.parent)),
+            Some((_, Role::Candidates)) => self.window_of(&self.candidates_editor()?),
             // A popup, announced or not, or a surface with no role yet.
             Some((_, Role::Popup(_))) | None => {
                 let window = self.window_under_menus(surface);
                 match self.by_surface.get(&window) {
                     Some((app_id, Role::Toplevel(_))) => Some(app_id.clone()),
-                    Some((_, Role::Popup(_) | Role::Bubble)) | None => None,
+                    Some((_, Role::Popup(_) | Role::Bubble | Role::Candidates)) | None => None,
                 }
             }
         }
@@ -104,7 +105,7 @@ impl DomicileCompositor {
     pub fn bounds_of(&self, surface: &WlSurface) -> Option<domicile_scene::Bounds> {
         match self.by_surface.get(surface) {
             Some((app_id, Role::Toplevel(_))) => self.app_bounds.get(app_id).copied(),
-            Some((_, Role::Popup(_) | Role::Bubble)) | None => None,
+            Some((_, Role::Popup(_) | Role::Bubble | Role::Candidates)) | None => None,
         }
     }
 

@@ -25,7 +25,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 55,
 # DomicileDisplayList 12, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
-# SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 28,
+# SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 32,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
@@ -41,10 +41,11 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8.
 #
-# 578, and it was 576 — a window's pointer lock or confinement reaching the page,
+# 582, and it was 580 — a window's pointer lock or confinement reaching the page,
 # and the page's answer reaching the compositor, are two ControlChannel cases.
-# Before that 576, and it was 575 — a hand's relative motion reaching the compositor is one
-# ControlChannel case. Before that 575, and it was 574 — a panel's adaptive sync is one DomicileDisplayList
+# Before that 580, and it was 579 — a hand's relative motion reaching the compositor is one
+# ControlChannel case. Before that 579, and it was 575 — a monitor sleeping by name is four DeskGeometry
+# cases. Before that 575, and it was 574 — a panel's adaptive sync is one DomicileDisplayList
 # case. Before that 574, and it was 569 — listing the browser windows for capture tools is three
 # BrowserWindowListing cases, one FrameSinkBroker case and one EngineEventQueue
 # case. Before that 569, and it was 567 — a panel's modes and the rate it scans out at are two
@@ -212,7 +213,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=578
+FLOOR=582
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
