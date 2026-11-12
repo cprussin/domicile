@@ -55,6 +55,8 @@ struct DomicileWindowState {
   std::optional<double> x;
   std::optional<double> y;
   bool grab = false;
+  // "lock", "confine" or null. See domicile_window.idl.
+  String pointer_constraint;
 };
 
 class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
@@ -95,6 +97,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   std::optional<double> x() const { return state_.x; }
   std::optional<double> y() const { return state_.y; }
   bool grab() const { return state_.grab; }
+  const String& pointerConstraint() const { return state_.pointer_constraint; }
 
   void Trace(Visitor*) const override;
 

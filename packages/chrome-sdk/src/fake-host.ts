@@ -112,6 +112,7 @@ export const describedWindow = (
   parent: null,
   pid: null,
   pidfdInode: null,
+  pointerConstraint: null,
   sandboxAppId: null,
   sandboxEngine: null,
   sandboxed: null,

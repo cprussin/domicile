@@ -7,7 +7,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, HostMessage, PointerConstraint};
 use smithay::input::keyboard::xkb;
 
 use crate::running::Compositor;
@@ -504,6 +504,223 @@ fn a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor() {
             |message| matches!(message, HostMessage::AppCursor { app_id, .. } if *app_id == app),
         )
         .expect("a client the pointer entered asks the chrome for a cursor");
+}
+
+/// A hand on the mouse over a window reaches a client holding a relative
+/// pointer as relative motion, the same deltas given as unaccelerated. A
+/// delta for a window the pointer has left is dropped.
+#[test]
+fn relative_motion_reaches_the_window_under_the_pointer() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+
+    chrome
+        .say(&ChromeMessage::PointerRelative {
+            app_id: app.clone(),
+            dx: 3.5,
+            dy: -2.0,
+        })
+        .expect("the chrome can move the pointer");
+    assert!(
+        client.wait_for_trace(".relative_motion(3.5, -2, 3.5, -2)", 1),
+        "the client heard no relative motion; it traced:\n{}",
+        client.trace()
+    );
+
+    chrome
+        .say(&ChromeMessage::PointerRelative {
+            app_id: "app-elsewhere".into(),
+            dx: 9.0,
+            dy: 9.0,
+        })
+        .expect("the chrome can move the pointer");
+    compositor.wait_for_log("relative motion off the app under the pointer -> dropped");
+    assert!(
+        !client.trace().contains(".relative_motion(9"),
+        "a delta for another window reached this one"
+    );
+}
+
+/// A window asking to lock the pointer is offered to the page, and its client
+/// is told it is locked only once the page took the pointer. While locked,
+/// only relative motion reaches it; the page letting go unlocks it, and the
+/// pointer leaving withdraws the offer.
+#[test]
+fn a_lock_the_page_takes_holds_the_pointer_for_the_client() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client_with("app", &["--constrain-pointer", "lock"]);
+    let app = an_app_under_the_pointer(&mut chrome);
+    assert!(
+        client.wait_for_trace(".lock_pointer()", 1),
+        "the client never asked for a lock; it traced:\n{}",
+        client.trace()
+    );
+    chrome
+        .wait_for(|message| {
+            *message
+                == HostMessage::AppPointerConstraint {
+                    app_id: app.clone(),
+                    constraint: Some(PointerConstraint::Lock),
+                }
+        })
+        .expect("the lock is offered to the page");
+    assert!(
+        !client.trace().contains(".locked()"),
+        "the client was told it is locked before the page took the pointer"
+    );
+
+    say(
+        &mut chrome,
+        ChromeMessage::PointerConstrained {
+            app_id: app.clone(),
+            active: true,
+        },
+    );
+    assert!(
+        client.wait_for_trace(".locked()", 1),
+        "the page took the pointer and the client was never told; it traced:\n{}",
+        client.trace()
+    );
+
+    say(
+        &mut chrome,
+        ChromeMessage::PointerMotion {
+            app_id: app.clone(),
+            x: 31.0,
+            y: 31.0,
+            moved: true,
+        },
+    );
+    say(
+        &mut chrome,
+        ChromeMessage::PointerRelative {
+            app_id: app.clone(),
+            dx: 4.0,
+            dy: 2.0,
+        },
+    );
+    assert!(
+        client.wait_for_trace(".relative_motion(4, 2, 4, 2)", 1),
+        "a locked client heard no relative motion; it traced:\n{}",
+        client.trace()
+    );
+    assert!(
+        !client.trace().contains(", 31, 31)"),
+        "the pointer moved for a locked client:\n{}",
+        client.trace()
+    );
+
+    say(
+        &mut chrome,
+        ChromeMessage::PointerConstrained {
+            app_id: app.clone(),
+            active: false,
+        },
+    );
+    assert!(
+        client.wait_for_trace(".unlocked()", 1),
+        "the page let go and the client was never told; it traced:\n{}",
+        client.trace()
+    );
+
+    say(
+        &mut chrome,
+        ChromeMessage::PointerLeave {
+            app_id: app.clone(),
+        },
+    );
+    chrome
+        .wait_for(|message| {
+            *message
+                == HostMessage::AppPointerConstraint {
+                    app_id: app.clone(),
+                    constraint: None,
+                }
+        })
+        .expect("the pointer leaving withdraws the offer");
+}
+
+/// A confinement is offered and told the same way, and the pointer still
+/// moves for its client. The page answering for a window it was not offered
+/// is dropped.
+#[test]
+fn a_confinement_the_page_takes_is_told_to_the_client() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client_with("app", &["--constrain-pointer", "confine"]);
+    let app = an_app_under_the_pointer(&mut chrome);
+    chrome
+        .wait_for(|message| {
+            *message
+                == HostMessage::AppPointerConstraint {
+                    app_id: app.clone(),
+                    constraint: Some(PointerConstraint::Confine),
+                }
+        })
+        .expect("the confinement is offered to the page");
+
+    say(
+        &mut chrome,
+        ChromeMessage::PointerConstrained {
+            app_id: "app-elsewhere".into(),
+            active: true,
+        },
+    );
+    compositor.wait_for_log("pointer constraint not offered -> dropped");
+
+    say(
+        &mut chrome,
+        ChromeMessage::PointerConstrained {
+            app_id: app.clone(),
+            active: true,
+        },
+    );
+    assert!(
+        client.wait_for_trace(".confined()", 1),
+        "the page took the pointer and the client was never told; it traced:\n{}",
+        client.trace()
+    );
+    say(
+        &mut chrome,
+        ChromeMessage::PointerMotion {
+            app_id: app,
+            x: 31.0,
+            y: 31.0,
+            moved: true,
+        },
+    );
+    assert!(
+        client.wait_for_trace(", 31, 31)", 1),
+        "a confined pointer stopped moving for its client:\n{}",
+        client.trace()
+    );
+}
+
+/// Wait for the one window to appear and move the pointer over it.
+fn an_app_under_the_pointer(chrome: &mut domicile_test_chrome::Chrome) -> String {
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    say(
+        chrome,
+        ChromeMessage::PointerMotion {
+            app_id: app_id.clone(),
+            x: 10.0,
+            y: 10.0,
+            moved: true,
+        },
+    );
+    app_id
+}
+
+fn say(chrome: &mut domicile_test_chrome::Chrome, message: ChromeMessage) {
+    chrome
+        .say(&message)
+        .expect("the chrome can talk to the compositor");
 }
 
 /// The chrome receives the keymap compiled from the config.

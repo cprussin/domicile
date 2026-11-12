@@ -360,6 +360,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
         Asked::OnTheWaylandThread(
             ClientRequest::Key { .. }
             | ClientRequest::PointerMotion { .. }
+            | ClientRequest::PointerRelative { .. }
+            | ClientRequest::PointerConstrained { .. }
             | ClientRequest::PointerLeave
             | ClientRequest::PointerPinch { .. }
             | ClientRequest::PointerSwipe { .. }
@@ -821,6 +823,21 @@ mod tests {
                     x: 4.0,
                     y: 8.0,
                     moved: true,
+                },
+            ),
+            (
+                "the pointer moving a game's camera",
+                ClientRequest::PointerRelative {
+                    app_id: "app-1".into(),
+                    dx: 2.0,
+                    dy: 1.0,
+                },
+            ),
+            (
+                "the page taking the pointer for a game",
+                ClientRequest::PointerConstrained {
+                    app_id: "app-1".into(),
+                    active: true,
                 },
             ),
             ("the pointer leaving a window", ClientRequest::PointerLeave),
