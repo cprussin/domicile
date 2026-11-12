@@ -41,6 +41,16 @@ interface SurfaceObserver {
 };
 
 // A mode a connector advertises.
+// Whether a connector scans out with a variable refresh rate.
+enum AdaptiveSync {
+  // The connector, its panel or its driver cannot.
+  kUnsupported,
+  // It can, and is not.
+  kOff,
+  // It is.
+  kOn,
+};
+
 struct DisplayMode {
   // In physical pixels.
   gfx.mojom.Size size;
@@ -96,6 +106,10 @@ struct Display {
   // `DisplayLayout.mode`. Empty on a platform that sets no modes. `bounds`
   // and `refresh_mhz` are the one it scans out.
   array<DisplayMode> modes;
+
+  // Whether it scans out with a variable refresh rate, as the hardware says:
+  // a profile asking for it gets `kOff` where the driver refused it.
+  AdaptiveSync adaptive_sync;
 };
 
 // One display's gamma ramp: each channel 0 to 65535, all the same length.
@@ -145,6 +159,9 @@ struct DisplayLayout {
   // The refresh rate to scan out, in mHz: the advertised one nearest it. Zero
   // for the native mode's, or the fastest at a non-native `mode`.
   int32 refresh_mhz;
+
+  // Whether to scan out with a variable refresh rate where the connector can.
+  bool adaptive_sync;
 };
 
 // A tablet or touchscreen and the display it covers, from the producer's

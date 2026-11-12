@@ -46,6 +46,12 @@ class SnapshotBuilder {
     native_mode_size_.reset();
     return *this;
   }
+  // Whether the connector can scan out with a variable refresh rate, and
+  // does.
+  SnapshotBuilder& AdaptiveSync(display::VariableRefreshRateState state) {
+    adaptive_sync_ = state;
+    return *this;
+  }
   // Another advertised mode, after the native one.
   SnapshotBuilder& AlsoOffers(const gfx::Size& size,
                               float refresh_hz,
@@ -77,14 +83,15 @@ class SnapshotBuilder {
         std::move(modes), display::PanelOrientation::kNormal,
         /*edid=*/std::vector<uint8_t>(),
         /*current_mode=*/native, native, /*product_code=*/0,
-        /*year_of_manufacture=*/0, gfx::Size(),
-        display::VariableRefreshRateState::kVrrNotCapable,
+        /*year_of_manufacture=*/0, gfx::Size(), adaptive_sync_,
         display::DrmFormatsAndModifiers());
   }
 
  private:
   int64_t id_ = 1;
   gfx::Point origin_;
+  display::VariableRefreshRateState adaptive_sync_ =
+      display::VariableRefreshRateState::kVrrNotCapable;
   std::optional<gfx::Size> native_mode_size_ = gfx::Size(1920, 1080);
   float native_refresh_hz_ = 60.f;
   struct Other {
@@ -317,6 +324,86 @@ TEST(DrmModesetTest, APanelSaysWhatItOffersAndTheRateItIsAt) {
       << "the rate of the mode the modeset asks for, which a listed "
          "display::Display would not update";
   EXPECT_EQ(offered.physical_size_mm, gfx::Size(520, 320));
+}
+
+// A panel that can scan out with a variable refresh rate and is not.
+std::unique_ptr<display::DisplaySnapshot> AnAdaptivePanel() {
+  return SnapshotBuilder()
+      .Id(5)
+      .NativeMode(gfx::Size(2560, 1440), 144.f)
+      .AdaptiveSync(display::VariableRefreshRateState::kVrrDisabled)
+      .Build();
+}
+
+TEST(DrmModesetTest, AProfileAsksACapablePanelForAdaptiveSync) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(AnAdaptivePanel());
+
+  const auto asked = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 5, .enabled = true, .adaptive_sync = true}});
+  const auto unasked =
+      ModesetParamsFromSnapshots(Pointers(owned), {{.id = 5, .enabled = true}});
+
+  ASSERT_EQ(asked.size(), 1u);
+  EXPECT_TRUE(asked[0].enable_vrr);
+  ASSERT_EQ(unasked.size(), 1u);
+  EXPECT_FALSE(unasked[0].enable_vrr) << "adaptive sync is off by default";
+  EXPECT_FALSE(ModesetParamsFromSnapshots(Pointers(owned), {})[0].enable_vrr)
+      << "with no profile, every connector is at the hardware's defaults";
+}
+
+TEST(DrmModesetTest, AnIncapablePanelIsNotAskedForAdaptiveSync) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder().Id(5).Build());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 5, .enabled = true, .adaptive_sync = true}});
+
+  ASSERT_EQ(params.size(), 1u);
+  EXPECT_FALSE(params[0].enable_vrr)
+      << "a connector with no vrr_capable must not be asked for it";
+  EXPECT_EQ(PanelFromSnapshot(*owned[0], {}).adaptive_sync,
+            DomicileAdaptiveSync::kUnsupported);
+}
+
+TEST(DrmModesetTest, APanelWhoseAdaptiveSyncWasRefusedIsNotAskedAgain) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(AnAdaptivePanel());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 5, .enabled = true, .adaptive_sync = true}},
+      /*refused=*/{5});
+
+  ASSERT_EQ(params.size(), 1u);
+  EXPECT_FALSE(params[0].enable_vrr);
+  ASSERT_NE(params[0].mode, nullptr) << "it still lights";
+}
+
+TEST(DrmModesetTest, APanelSaysWhetherItsAdaptiveSyncIsOn) {
+  const std::unique_ptr<display::DisplaySnapshot> off = AnAdaptivePanel();
+  const std::unique_ptr<display::DisplaySnapshot> on =
+      SnapshotBuilder()
+          .Id(5)
+          .AdaptiveSync(display::VariableRefreshRateState::kVrrEnabled)
+          .Build();
+
+  EXPECT_EQ(PanelFromSnapshot(*off, {}).adaptive_sync,
+            DomicileAdaptiveSync::kOff);
+  EXPECT_EQ(PanelFromSnapshot(*on, {}).adaptive_sync,
+            DomicileAdaptiveSync::kOn);
+}
+
+// display::DisplayList compares neither, so DrmScreen tells its observers.
+TEST(DrmModesetTest, ARateOrAdaptiveSyncChangingIsWorthTellingTheList) {
+  const DomicilePanel off = PanelFromSnapshot(*AnAdaptivePanel(), {});
+  DomicilePanel on = off;
+  on.adaptive_sync = DomicileAdaptiveSync::kOn;
+  DomicilePanel faster = off;
+  faster.refresh_mhz = 165000;
+
+  EXPECT_FALSE(PanelChangedUnseen(off, off));
+  EXPECT_TRUE(PanelChangedUnseen(off, on));
+  EXPECT_TRUE(PanelChangedUnseen(off, faster));
 }
 
 TEST(DrmModesetTest, ALayoutCanLeaveAConnectorDark) {
@@ -905,6 +992,77 @@ TEST(DrmModesetTest, AGammaRampForAVirtualDisplayReachesNothing) {
   modeset.SetGamma(kVirtualId, WarmRamp());
 
   EXPECT_TRUE(fake->gamma().empty());
+}
+
+// sway's fallback: a driver that refuses a modeset with adaptive sync gets
+// the same one without it, and the panel reports it off.
+TEST(DrmModesetTest, ARefusedModesetWithAdaptiveSyncIsAskedAgainWithout) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(AnAdaptivePanel());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+
+  modeset.SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
+  ASSERT_EQ(fake->asks(), 1u);
+  ASSERT_TRUE(fake->last_ask()[0].enable_vrr);
+  fake->Answer(false);
+
+  ASSERT_EQ(fake->asks(), 2u) << "a refusal with adaptive sync is retried";
+  EXPECT_FALSE(fake->last_ask()[0].enable_vrr);
+  ASSERT_NE(fake->last_ask()[0].mode, nullptr) << "the retry still lights it";
+  fake->Answer(true);
+  EXPECT_EQ(screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOff);
+
+  modeset.SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
+  EXPECT_EQ(fake->asks(), 2u)
+      << "a panel that refused it is not asked again while plugged in";
+}
+
+// A refusal of a modeset that asked for no adaptive sync is not about it.
+TEST(DrmModesetTest, ARefusedModesetWithoutAdaptiveSyncIsNotRetried) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(AnAdaptivePanel());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+
+  modeset.SetLayout({{.id = 5, .enabled = true}});
+  fake->Answer(false);
+  EXPECT_EQ(fake->asks(), 1u);
+}
+
+// A snapshot reads adaptive sync off the CRTC, so the reading a modeset went
+// out with predates it. The display list must not keep saying it is off.
+TEST(DrmModesetTest, AModesetTurningOnAdaptiveSyncReadsTheDisplaysAgain) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(AnAdaptivePanel());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+
+  modeset.SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
+  ASSERT_EQ(screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOff);
+  // The CRTC now has VRR_ENABLED set.
+  snapshots[0]->set_variable_refresh_rate_state(
+      display::VariableRefreshRateState::kVrrEnabled);
+  fake->Answer(true);
+
+  EXPECT_EQ(screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOn);
+  EXPECT_EQ(fake->asks(), 1u)
+      << "the reading after asks for the modeset already confirmed";
 }
 
 }  // namespace

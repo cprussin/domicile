@@ -94,7 +94,8 @@ std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,
-    const std::vector<DomicileDisplayLayout>& layout) {
+    const std::vector<DomicileDisplayLayout>& layout,
+    const base::flat_set<int64_t>& refused) {
   // Shared with the display list so both agree on each display's origin.
   const std::vector<gfx::Point> origins = OriginsForLayout(snapshots, layout);
   std::vector<display::DisplayConfigurationParams> params;
@@ -123,10 +124,24 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     // here too would leak a DisplayMode per display on every hotplug. The
     // profile's mode if the connector advertises it, as the display list
     // sizes the window; see `ModeForLayout`.
+    const bool adaptive_sync = wanted && wanted->adaptive_sync &&
+                               snapshot->IsVrrCapable() &&
+                               !refused.contains(snapshot->display_id());
     params.emplace_back(snapshot->display_id(), origins[index],
-                        ModeForLayout(*snapshot, wanted));
+                        ModeForLayout(*snapshot, wanted), adaptive_sync);
   }
   return params;
+}
+
+base::flat_set<int64_t> AdaptiveSyncAskedIn(
+    const std::vector<display::DisplayConfigurationParams>& params) {
+  base::flat_set<int64_t> asked;
+  for (const display::DisplayConfigurationParams& param : params) {
+    if (param.enable_vrr) {
+      asked.insert(param.id);
+    }
+  }
+  return asked;
 }
 
 std::string DescribeSnapshots(
@@ -265,9 +280,14 @@ void DrmModeset::OnDisplaysReceived(
   for (const display::DisplaySnapshot* snapshot : connectors) {
     display_ids_.push_back(snapshot->display_id());
   }
+  // A monitor unplugged since its adaptive sync was refused may come back on
+  // another port or driver, so it is asked again.
+  base::EraseIf(adaptive_sync_refused_, [this](int64_t id) {
+    return std::ranges::find(display_ids_, id) == display_ids_.end();
+  });
 
   std::vector<display::DisplayConfigurationParams> params =
-      ModesetParamsFromSnapshots(snapshots, layout_);
+      ModesetParamsFromSnapshots(snapshots, layout_, adaptive_sync_refused_);
   if (params.empty()) {
     // Not an error: a machine with no panel reports this.
     VLOG(1) << "domicile: nothing readable is plugged in; not modesetting";
@@ -291,15 +311,34 @@ void DrmModeset::OnDisplaysReceived(
              std::vector<display::DisplayConfigurationParams> asked,
              const std::vector<display::DisplayConfigurationParams>&,
              bool status) {
+            if (!self) {
+              return;
+            }
+            const base::flat_set<int64_t> adaptive_sync =
+                AdaptiveSyncAskedIn(asked);
+            if (!status && !adaptive_sync.empty() &&
+                !self->inside_configure_) {
+              // Adaptive sync may be what the driver refused, so ask again
+              // without it, as sway does. The reading after reports it off.
+              // Not for an answer from inside `Configure`, which no hardware
+              // gave; see below.
+              LOG(WARNING) << "domicile: the DRM thread refused a modeset "
+                              "with adaptive sync on "
+                           << adaptive_sync.size()
+                           << " display(s); trying again without it";
+              self->adaptive_sync_refused_.insert(adaptive_sync.begin(),
+                                                  adaptive_sync.end());
+              self->delegate_->GetDisplays(
+                  base::BindOnce(&DrmModeset::OnDisplaysReceived,
+                                 base::Unretained(self.get())));
+              return;
+            }
             if (!status) {
               // Not recorded: only a confirmed modeset is compared against.
               // See `ModesetWouldChangeAnything`.
               LOG(ERROR) << "domicile: the DRM thread refused the modeset; the "
                             "displays it reported are connected but nothing is "
                             "lit";
-              return;
-            }
-            if (!self) {
               return;
             }
             if (self->inside_configure_) {
@@ -315,8 +354,19 @@ void DrmModeset::OnDisplaysReceived(
               return;
             }
             VLOG(1) << "domicile: the DRM thread confirmed the modeset";
+            const bool adaptive_sync_changed =
+                adaptive_sync != AdaptiveSyncAskedIn(self->confirmed_);
             self->confirmed_ = std::move(asked);
             self->ApplyGamma();
+            if (adaptive_sync_changed) {
+              // A snapshot reads adaptive sync off the CRTC, so the reading
+              // that went with this modeset predates it. Read again so the
+              // display list says whether it took; the modeset it would ask
+              // for is this one, so it asks for none.
+              self->delegate_->GetDisplays(
+                  base::BindOnce(&DrmModeset::OnDisplaysReceived,
+                                 base::Unretained(self.get())));
+            }
           },
           weak_factory_.GetWeakPtr(), params),
       {display::ModesetFlag::kCommitModeset});

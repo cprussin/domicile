@@ -3,6 +3,7 @@ import { FakeDomicileHost } from "../fake-host";
 import { desktop } from "./desktop";
 
 const display = {
+  adaptiveSync: "unsupported" as const,
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,
@@ -28,6 +29,21 @@ describe("displays", () => {
       display,
       { ...display, transform: "normal" },
     ]);
+  });
+
+  it("says whether each screen's adaptive sync is on, with an unknown state read as unsupported", () => {
+    const fake = new FakeDomicileHost();
+    fake.set({
+      displays: [
+        { ...display, adaptiveSync: "on" },
+        { ...display, adaptiveSync: "off" },
+        { ...display, adaptiveSync: "variable" },
+      ],
+    });
+
+    expect(
+      desktop(fake.host).displays.list?.map(({ adaptiveSync }) => adaptiveSync),
+    ).toStrictEqual(["on", "off", "unsupported"]);
   });
 
   it("says the screens changed", async () => {

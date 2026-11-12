@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/display/types/display_color_management.h"
@@ -57,10 +58,20 @@ display::GammaCurve GammaCurveOf(const DomicileGammaRamp& ramp);
 // which turns its CRTC off; a newly plugged monitor lights once the compositor
 // answers the hotplug this modeset triggers. An idle blank turns every
 // connector off this way. See docs/DISPLAYS.md#which-connectors-light.
+//
+// A lit connector is asked for adaptive sync when its layout entry wants it,
+// its snapshot says it can, and `refused` does not name it: a modeset asking
+// for it there was refused, as sway retries without it. See
+// docs/DISPLAYS.md#adaptive-sync.
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,
-    const std::vector<DomicileDisplayLayout>& layout);
+    const std::vector<DomicileDisplayLayout>& layout,
+    const base::flat_set<int64_t>& refused = {});
+
+// The displays `params` asks for adaptive sync on.
+base::flat_set<int64_t> AdaptiveSyncAskedIn(
+    const std::vector<display::DisplayConfigurationParams>& params);
 
 // Describes a display reading in one log line, including each native mode.
 //
@@ -149,6 +160,9 @@ class DrmModeset : public display::NativeDisplayObserver {
   // The last modeset the hardware confirmed. See
   // `ModesetWouldChangeAnything`.
   std::vector<display::DisplayConfigurationParams> confirmed_;
+  // The connectors a refused modeset asked for adaptive sync on. Not asked
+  // for it again until unplugged; see `ModesetParamsFromSnapshots`.
+  base::flat_set<int64_t> adaptive_sync_refused_;
   // The compositor's last layout; empty until it sends one.
   std::vector<DomicileDisplayLayout> layout_;
   // The compositor's virtual displays, as snapshots. See `VirtualSnapshot`.
