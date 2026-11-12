@@ -500,6 +500,10 @@ fn read_chrome_messages(
                 });
                 Vec::new()
             }
+            Ok(ChromeMessage::PointerRelative { app_id, dx, dy }) => {
+                hub.send_request(ClientRequest::PointerRelative { app_id, dx, dy });
+                Vec::new()
+            }
             Ok(ChromeMessage::PointerLeave { .. }) => {
                 hub.send_request(ClientRequest::PointerLeave);
                 Vec::new()

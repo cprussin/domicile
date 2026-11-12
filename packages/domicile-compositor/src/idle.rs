@@ -448,6 +448,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         // The browser restates a still pointer after a window changes, and
         // turning the screens off changes them.
         ClientRequest::PointerMotion { moved, .. } => moved.then_some("the pointer moving"),
+        // Sent only for a hand on the mouse, never for a still pointer.
+        ClientRequest::PointerRelative { .. } => Some("the pointer moving"),
         // The lock screen's own field forwards no `Key`s, so an unlock attempt
         // is the only sign someone is typing. Lighting on any attempt lets the
         // user see a rejection.
@@ -1272,6 +1274,15 @@ mod tests {
                     x: 4.0,
                     y: 8.0,
                     moved: true,
+                },
+            ),
+            (
+                "the pointer turning a game's camera",
+                "the pointer moving",
+                ClientRequest::PointerRelative {
+                    app_id: "app-1".into(),
+                    dx: 2.0,
+                    dy: 1.0,
                 },
             ),
             (
