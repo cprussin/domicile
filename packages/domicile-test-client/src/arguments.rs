@@ -179,6 +179,10 @@ pub struct Arguments {
     /// Whether to leave `wl_touch` unbound, as a client with no touch support
     /// does, so the compositor gives it a finger as the pointer.
     pub no_touch: bool,
+
+    /// Whether to be a text editor: a `zwp_text_input_v3` that enables on
+    /// each enter and traces what an input method sends it.
+    pub text_input: bool,
 }
 
 /// An `xdg_toplevel` request about the window's state.
@@ -300,6 +304,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut xdg_wm_base_v1 = None;
     let mut wl_seat_v7 = None;
     let mut no_touch = None;
+    let mut text_input = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -431,6 +436,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--no-touch" => {
                 take(&mut no_touch, &flag, true)?;
             }
+            "--text-input" => {
+                take(&mut text_input, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -472,6 +480,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         xdg_wm_base_v1: xdg_wm_base_v1.unwrap_or(false),
         wl_seat_v7: wl_seat_v7.unwrap_or(false),
         no_touch: no_touch.unwrap_or(false),
+        text_input: text_input.unwrap_or(false),
     })
 }
 

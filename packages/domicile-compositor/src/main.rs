@@ -141,6 +141,7 @@ mod spike_probes;
 mod surface_commit;
 mod swipe;
 mod synced_moves;
+mod text_input;
 mod theme_turnover;
 mod thread_priority;
 mod timing_window;
@@ -396,6 +397,8 @@ struct DomicileCompositor {
     /// Kept alive so the wp_cursor_shape_v1 global persists.
     #[allow(dead_code)]
     cursor_shape_state: CursorShapeManagerState,
+    /// Composition from an input method. See [`text_input`].
+    text_input: text_input::TextInput,
     dmabuf_state: DmabufState,
     /// Kept alive so the zwp_linux_dmabuf_v1 global persists. `None` where EGL
     /// gave us no renderer, in which case the global was never advertised.
@@ -822,6 +825,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Night-light tools such as gammastep and wl-gammarelay-rs.
     gamma_control::advertise(&dh);
     let foreign_toplevels = foreign_toplevels::ForeignToplevels::new(&dh);
+    // Input methods compose text into native windows.
+    let text_input = text_input::TextInput::advertise(&dh);
     // Windows laid out at a named place in the page.
     anchors::advertise(&dh);
 
@@ -1312,6 +1317,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Toolkits request cursors by name here, which map onto CSS cursor
         // keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
+        text_input,
         dmabuf_state,
         dmabuf_global,
         gpu,
