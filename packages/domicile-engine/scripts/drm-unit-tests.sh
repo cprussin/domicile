@@ -79,6 +79,8 @@ SUITES=(
   DrmColorCommitTest:3
   DrmPageFlipTimeoutTest:8
   DrmDamageClipsTest:3
+  DrmInputMethodTest:13
+  DeskInputMethodTest:4
 )
 
 cd "$ENGINE_OUT"

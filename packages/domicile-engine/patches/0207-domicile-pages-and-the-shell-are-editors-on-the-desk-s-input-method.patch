@@ -1,0 +1,149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 12 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: pages and the shell are editors on the desk's input
+ method
+
+The DRM platform built InputMethodMinimal, so a page's or the shell's
+field was no editor and an input method (fcitx5, IBus) never composed
+for it.
+
+- CreateInputMethod builds Chromium's InputMethodAuraLinux off ChromeOS.
+- InitializeUI makes a DrmInputMethod (domicile/drm_input_method.h) and
+  sets it as the Ozone input method context factory, which is the one
+  CreateLinuxInputMethodContext reaches with no LinuxUi. A key the input
+  method passes on is dispatched to its window again.
+- BUILD.gn builds it and its tests, off ChromeOS only.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/platform/drm/BUILD.gn              | 25 +++++++++++++++++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 37 +++++++++++++++++++++++++----
+ 2 files changed, 57 insertions(+), 5 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 6116e45..6157c98 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -231,6 +231,18 @@ source_set("gbm") {
+       "//ash/constants",
+       "//ui/base/ime/ash",
+     ]
++  } else {
++    # `CreateInputMethod`'s other arm: Chromium's Linux input method, with a
++    # context that is an editor on the desk's input method through the
++    # control channel.
++    sources += [
++      "domicile/drm_input_method.cc",
++      "domicile/drm_input_method.h",
++    ]
++    deps += [
++      "//ui/base/ime/domicile:desk_input_method",
++      "//ui/base/ime/linux",
++    ]
+   }
+ 
+   if (!use_static_angle || is_chromeos) {
+@@ -336,6 +348,10 @@ source_set("gbm_unittests") {
+     ]
+   }
+ 
++  if (!is_chromeos) {
++    sources += [ "domicile/drm_input_method_unittest.cc" ]
++  }
++
+   deps = [
+     ":gbm",
+     "//base/test:test_support",
+@@ -393,6 +409,15 @@ source_set("gbm_unittests") {
+     "//ui/base/cursor/domicile:desk_cursor_theme",
+     "//ui/base/cursor/domicile:xcursor_theme",
+   ]
++
++  # `DrmInputMethodTest` drives the contexts Chromium's Linux input method
++  # makes, and the desk's process-wide input method.
++  if (!is_chromeos) {
++    deps += [
++      "//ui/base/ime/domicile:desk_input_method",
++      "//ui/base/ime/linux",
++    ]
++  }
+ }
+ 
+ source_set("drm_integration_tests") {
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index a069f15..9108db9 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -77,12 +77,15 @@
+ #endif
+ 
+ // The other of this platform's two references to ChromeOS, and the whole of
+-// its //ui/base/ime/ash dep. InputMethodMinimal is what
+-// ozone_platform_headless.cc already returns on Linux.
++// its //ui/base/ime/ash dep. Elsewhere it is Chromium's Linux input method,
++// with a context that is an editor on the desk's input method. See
++// domicile/drm_input_method.h.
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "ui/base/ime/ash/input_method_ash.h"
+ #else
+-#include "ui/base/ime/input_method_minimal.h"
++#include "ui/base/ime/linux/input_method_auralinux.h"
++#include "ui/base/ime/linux/linux_input_method_context_factory.h"
++#include "ui/ozone/platform/drm/domicile/drm_input_method.h"
+ #endif
+ 
+ namespace ui {
+@@ -378,11 +381,12 @@ class OzonePlatformDrm : public OzonePlatform {
+   }
+   std::unique_ptr<InputMethod> CreateInputMethod(
+       ImeKeyEventDispatcher* ime_key_event_dispatcher,
+-      gfx::AcceleratedWidget) override {
++      gfx::AcceleratedWidget widget) override {
+ #if BUILDFLAG(IS_CHROMEOS)
+     return std::make_unique<ash::InputMethodAsh>(ime_key_event_dispatcher);
+ #else
+-    return std::make_unique<InputMethodMinimal>(ime_key_event_dispatcher);
++    return std::make_unique<InputMethodAuraLinux>(ime_key_event_dispatcher,
++                                                  widget);
+ #endif
+   }
+ 
+@@ -428,6 +432,25 @@ class OzonePlatformDrm : public OzonePlatform {
+     window_manager_ = std::make_unique<DrmWindowHostManager>();
+     cursor_ = std::make_unique<DrmCursor>(window_manager_.get());
+ 
++#if !BUILDFLAG(IS_CHROMEOS)
++    // DOMICILE: every window's input method context is one of this, which
++    // the control channel connects to the compositor's input method relay.
++    // A key the input method passes on is dispatched to its window again.
++    // There is no LinuxUi on this platform, so the Ozone factory is the one
++    // `CreateLinuxInputMethodContext` reaches.
++    input_method_ = DrmInputMethod::ForTheDesk(base::BindRepeating(
++        [](DrmWindowHostManager* windows, gfx::AcceleratedWidget widget,
++           KeyEvent* event) {
++          if (DrmWindowHost* window = windows->GetWindow(widget)) {
++            window->DispatchEvent(event);
++          }
++        },
++        base::Unretained(window_manager_.get())));
++    GetInputMethodContextFactoryForOzone() =
++        base::BindRepeating(&DrmInputMethod::CreateContext,
++                            base::Unretained(input_method_.get()));
++#endif
++
+ #if BUILDFLAG(USE_XKBCOMMON)
+     keyboard_layout_engine_ =
+         std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_);
+@@ -617,6 +640,10 @@ class OzonePlatformDrm : public OzonePlatform {
+   std::unique_ptr<DeviceManager> device_manager_;
+   std::unique_ptr<CursorFactory> cursor_factory_;
+   std::unique_ptr<DrmWindowHostManager> window_manager_;
++#if !BUILDFLAG(IS_CHROMEOS)
++  // DOMICILE: after window_manager_, which it dispatches passed keys to.
++  std::unique_ptr<DrmInputMethod> input_method_;
++#endif
+   std::unique_ptr<DrmCursor> cursor_;
+   // DOMICILE: before the event factory and the display manager, which take
+   // devices from it, so it is destroyed after them.
