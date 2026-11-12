@@ -21,6 +21,8 @@ nix run github:cprussin/domicile/release#simple
   with the production engine (PGO, ThinLTO, no DCHECKs); drop the branch to
   run `main`, which uses a slower checked engine after an engine change until
   the nightly build is pinned.
+  A checked engine posts a "This is a development build" notification whose
+  "How to switch" button opens the install docs.
 - With Nix, each desktop is its own app. Install one with
   `nix profile install`.
 - In a Wayland session the desktop opens in a window. On a console login it

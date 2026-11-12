@@ -15,6 +15,7 @@
 #include "base/base64.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/dcheck_is_on.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -241,6 +242,8 @@ void ControlChannel::OnConnect(int result) {
   base::DictValue hello;
   hello.Set("type", "hello");
   hello.Set("protocol_version", kProtocolVersion);
+  // A checked build is much slower; the compositor tells the person.
+  hello.Set("checked", DCHECK_IS_ON());
   std::vector<std::string> greeting;
   std::string line;
   if (base::JSONWriter::Write(hello, &line)) {

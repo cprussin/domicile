@@ -21,7 +21,9 @@ fn a_greeting_says_which_version_it_speaks() {
     let line = String::from_utf8(said).expect("what we said is text");
     assert_eq!(
         line,
-        format!("{{\"type\":\"hello\",\"protocol_version\":{PROTOCOL_VERSION}}}\n")
+        format!(
+            "{{\"type\":\"hello\",\"protocol_version\":{PROTOCOL_VERSION},\"checked\":false}}\n"
+        )
     );
 }
 

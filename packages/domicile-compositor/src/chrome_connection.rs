@@ -337,7 +337,10 @@ fn read_chrome_messages(
             // so it resets what the compositor records the chrome as holding. A
             // stale record would leave a hole in the page where an idle
             // client's window should be.
-            Ok(ChromeMessage::Hello { protocol_version }) => {
+            Ok(ChromeMessage::Hello {
+                protocol_version,
+                checked,
+            }) => {
                 // Scoped so the `host` guard drops before `chromes` is locked
                 // below. Otherwise this can deadlock: `serve_outbound` locks
                 // `chromes` then a `writer`, and `write_responses` locks a
@@ -349,9 +352,20 @@ fn read_chrome_messages(
                     apply_chrome_message(
                         &mut host,
                         &mut ready,
-                        ChromeMessage::Hello { protocol_version },
+                        ChromeMessage::Hello {
+                            protocol_version,
+                            checked,
+                        },
                     )
                 };
+                if checked {
+                    hub.notifications
+                        .get()
+                        .expect(
+                            "the notification server is handed to the hub before chromes connect",
+                        )
+                        .warn_that_the_engine_is_checked();
+                }
                 if ready {
                     // Counted so the handshake watchdog can tell "no page came"
                     // from "a page came and its version was refused".
@@ -1180,7 +1194,7 @@ mod tests {
             let version = domicile_protocol::PROTOCOL_VERSION;
             let mut writing = &page;
             for message in [
-                format!("{{\"type\":\"hello\",\"protocol_version\":{version}}}"),
+                format!("{{\"type\":\"hello\",\"protocol_version\":{version},\"checked\":false}}"),
                 format!("{{\"type\":\"focus_app\",\"app_id\":\"{app_id}\"}}"),
             ] {
                 writeln!(writing, "{message}").expect("the page can write");
@@ -1231,7 +1245,7 @@ mod tests {
             writeln!(writing, "{message}").expect("the page can write");
         };
         let hello = format!(
-            "{{\"type\":\"hello\",\"protocol_version\":{}}}",
+            "{{\"type\":\"hello\",\"protocol_version\":{},\"checked\":false}}",
             domicile_protocol::PROTOCOL_VERSION
         );
         // Poll, since the connection thread reads these.
@@ -1280,7 +1294,7 @@ mod tests {
             let mut writing = &page;
             // Handshake first, as a real page does.
             for message in [
-                format!("{{\"type\":\"hello\",\"protocol_version\":{version}}}"),
+                format!("{{\"type\":\"hello\",\"protocol_version\":{version},\"checked\":false}}"),
                 "{\"type\":\"close_app\",\"app_id\":\"term\"}".to_string(),
             ] {
                 writeln!(writing, "{message}").expect("the page can write");
