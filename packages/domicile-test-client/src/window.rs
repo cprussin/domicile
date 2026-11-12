@@ -56,7 +56,9 @@ use wayland_protocols_misc::server_decoration::client::{
 };
 
 use crate::anchor_protocol::{domicile_anchor_manager_v1, domicile_toplevel_anchor_v1};
-use crate::arguments::{Arguments, AskForFocus, AskTo, HoldTheScreensOn, TakeTheShortcuts};
+use crate::arguments::{
+    Arguments, AskForFocus, AskTo, AskToDrag, HoldTheScreensOn, TakeTheShortcuts,
+};
 
 /// Why the client stopped.
 #[derive(Debug, thiserror::Error)]
@@ -271,6 +273,8 @@ struct Client {
     /// the cursor surface and its buffers' backing files.
     cursor_surface: bool,
     cursor_drawn: Option<(wl_surface::WlSurface, Vec<std::fs::File>)>,
+    /// See [`crate::arguments::Arguments::ask_to_drag`].
+    ask_to_drag: Option<AskToDrag>,
     /// The open popups, each over the one before it or the window.
     popups: Vec<Popup>,
     /// Whether to open a bubble once the window is up. See
@@ -555,6 +559,7 @@ impl Client {
             sliding_menu: asked.sliding_menu,
             cursor_surface: asked.cursor_surface,
             cursor_drawn: None,
+            ask_to_drag: asked.ask_to_drag,
             popups: Vec::new(),
             wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
             bubble: None,
@@ -1336,6 +1341,31 @@ fn draw_the_cursor(
     surface.commit();
     crate::say!(surface.id(), "cursor_drawn({}, {})", size.0, size.1);
     files.push(file);
+}
+
+/// Ask the desktop to move or resize the window from the button event
+/// `serial`.
+fn ask_to_drag(client: &Client, drag: AskToDrag, serial: u32) {
+    let toplevel = &client
+        .window
+        .as_ref()
+        .expect("a press reaches only a client with a window")
+        .toplevel;
+    let seat = client
+        .globals
+        .seat
+        .as_ref()
+        .expect("a press comes from the seat");
+    match drag {
+        AskToDrag::Move | AskToDrag::MoveAfterRelease => {
+            toplevel._move(seat, serial);
+            crate::say!(toplevel.id(), "move({})", serial);
+        }
+        AskToDrag::ResizeBottomRight => {
+            toplevel.resize(seat, serial, xdg_toplevel::ResizeEdge::BottomRight);
+            crate::say!(toplevel.id(), "resize({}, bottom_right)", serial);
+        }
+    }
 }
 
 /// Open a [`POPUP`] over `parent`, sliding on both axes if `slides`.
@@ -2778,6 +2808,10 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                         .set_shape(serial, wp_cursor_shape_device_v1::Shape::Default);
                 }
             }
+            wl_pointer::Event::Leave { serial, surface } => {
+                crate::say!(pointer.id(), "leave({}, {})", serial, surface.id());
+                client.pointer_over = None;
+            }
             wl_pointer::Event::Motion {
                 time,
                 surface_x,
@@ -2820,6 +2854,12 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                 }
                 if client.cursor_surface && pressed {
                     draw_the_cursor(client, handle, None, (6, 6));
+                }
+                if let Some(drag) = client
+                    .ask_to_drag
+                    .filter(|drag| pressed != (*drag == AskToDrag::MoveAfterRelease))
+                {
+                    ask_to_drag(client, drag, serial);
                 }
             }
             wl_pointer::Event::Axis { time, axis, value } => {

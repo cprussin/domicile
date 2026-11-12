@@ -18,6 +18,7 @@ import { ScratchpadBackdrop } from "./floating/ScratchpadBackdrop";
 import { GrabbingSheet } from "./GrabbingSheet";
 import { GroupTitleBar } from "./GroupTitleBar";
 import { GroupWell } from "./GroupWell";
+import type { HandedDrag } from "./handed-drag";
 import type { Modifiers } from "./keyboard/useModifiers";
 import { seenAt, seenClip, seenStyles } from "./overview/seen-styles";
 import type { OverviewSight, Seen } from "./overview/sight";
@@ -74,6 +75,8 @@ type Props = {
   domicile: Domicile;
   /** The floating window being dragged, if any. */
   draggingId: string | undefined;
+  /** A client's move or resize, for its window's grab to run. */
+  handed?: HandedDrag | undefined;
   /**
    * The window with compositor keyboard focus, or `undefined` when the shell
    * has it. Can differ from `activeId`: see `AppWindow`.
@@ -167,6 +170,7 @@ export const Stage = memo(
     domicile,
     draggingId,
     focusedId,
+    handed,
     modifiers: { meta, shift },
     onBarPress,
     onClose,
@@ -251,12 +255,22 @@ export const Stage = memo(
     const pull = useCallback(() => {
       setPulled(true);
     }, []);
+    // The handed drag its grab already started, so a grab remounted mid-drag,
+    // such as on another screen, does not start it over.
+    const [taken, setTaken] = useState<HandedDrag | undefined>(undefined);
+    const handing =
+      handed !== taken &&
+      handed !== undefined &&
+      !desk.fullscreen.has(handed.window)
+        ? handed
+        : undefined;
     const grabbed = useCallback(
       (id: string) => {
         setPulled(false);
+        setTaken(handing);
         onGrab(id);
       },
-      [onGrab],
+      [handing, onGrab],
     );
     const groupGrabbed = useCallback(
       (group: NodeRef) => {
@@ -668,6 +682,9 @@ export const Stage = memo(
             const onGrabThis = () => {
               grabbed(window.id);
             };
+            const handedHere =
+              handing?.window === window.id ? handing : undefined;
+            const resizes = handedHere?.resizes ?? shift;
             const onHoverThis = (at: Spot) => {
               onHover(window.id, at);
             };
@@ -678,9 +695,12 @@ export const Stage = memo(
                 <Fragment key={window.id}>
                   {floating === undefined &&
                     desk.targeted.has(window.id) &&
-                    (meta || window.id === draggingId) && (
+                    (meta ||
+                      window.id === draggingId ||
+                      handedHere !== undefined) && (
                       <TileGrab
                         frame={placement.frame}
+                        handed={handedHere?.press}
                         id={window.id}
                         onAim={setAim}
                         onDrop={() => {
@@ -699,7 +719,7 @@ export const Stage = memo(
                         onStretch={(edge, by) => {
                           onStretch(window.id, edge, by, on.geometry);
                         }}
-                        resizes={shift}
+                        resizes={resizes}
                         targets={targets}
                       />
                     )}
@@ -708,10 +728,13 @@ export const Stage = memo(
                 */}
                   {floating !== undefined &&
                     focusedWindowIn(floating.root) === window.id &&
-                    (meta || window.id === draggingId) && (
+                    (meta ||
+                      window.id === draggingId ||
+                      handedHere !== undefined) && (
                       <FloatGrab
                         depth={placement.depth}
                         float={floating}
+                        handed={handedHere?.press}
                         onDrop={() => {
                           setStretching(false);
                           onDrop();
@@ -728,7 +751,7 @@ export const Stage = memo(
                         onResize={(box) => {
                           onResize(window.id, box, on.geometry);
                         }}
-                        resizes={shift}
+                        resizes={resizes}
                         window={window.id}
                       />
                     )}

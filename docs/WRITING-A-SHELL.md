@@ -496,13 +496,29 @@ answers with a configure of the states it has and reports the request. It
 grants nothing: nothing changes until the shell sets states.
 
 - `domicile.windows.requests()` streams each request as a
-  `WindowRequest`: `Maximize`, `Unmaximize`, `Fullscreen`, `Unfullscreen` or
-  `Minimize`, with its `appId`. `Fullscreen` carries the `display` the client
-  named, if any.
+  `WindowRequest`: `Maximize`, `Unmaximize`, `Fullscreen`, `Unfullscreen`,
+  `Minimize`, `Move` or `Resize`, with its `appId`. `Fullscreen` carries the
+  `display` the client named, if any; `Resize` its `edges`. Moves and resizes
+  are below.
 - xdg-shell has no minimized state, so `Minimize` is only a request. What
   minimized means, such as hiding the window until it is picked again, is the
   shell's.
 - A shell that does not listen ignores every request.
+
+A client that draws its own title bar and borders (GTK and libadwaita apps,
+Firefox, Chrome without its system title bar) asks the desktop to move or
+resize its window when one is pressed and dragged. The compositor checks the
+press is still held, ends it for the client (the pointer leaves, with no
+release), and reports `Move`, or `Resize` with the `edges` (a `ResizeEdge`)
+the client pulls.
+
+- The button is still down, so the drag is the shell's to run from the page's
+  own `pointerdown`: take pointer capture on an element of the shell's, and
+  follow the moves until the release. The `<app>` element then stops passing
+  the pointer to the client.
+- A request that comes after the release has nothing to drag; drop it. A shell
+  that ignores the request leaves the window where it is, and the client gets
+  the pointer back at the next move over it.
 
 ### Bells
 

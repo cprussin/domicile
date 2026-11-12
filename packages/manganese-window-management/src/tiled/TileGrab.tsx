@@ -1,15 +1,22 @@
 import { css, cx } from "../../styled-system/css";
 import type { Direction } from "../direction";
 import { grabCursorStyles } from "../grab-cursor-styles";
+import type { Press } from "../handed-drag";
 import { TILED } from "../placement";
 import type { Spot } from "../pointer-warp";
 import type { Rect } from "../rect";
 import { useGrabCursor } from "../useGrabCursor";
+import { useHandedPress } from "../useHandedPress";
 import { placedAt } from "../window-styles";
 import type { Aim, DropTargets } from "./aim";
 import { useTileDrag } from "./useTileDrag";
 
 type Props = {
+  /**
+   * A press a client handed over, to start the drag from as though it had
+   * landed here. See `HandedDrag`.
+   */
+  handed?: Press | undefined;
   /** The box of the tiled window it covers. */
   frame: Rect;
   id: string;
@@ -36,6 +43,7 @@ type Props = {
  */
 export const TileGrab = ({
   frame,
+  handed,
   id,
   onHover,
   resizes,
@@ -48,6 +56,7 @@ export const TileGrab = ({
     ...handlers,
   });
   const { cursor, onPointerMove } = useGrabCursor({ drag, frame, resizes });
+  const sheet = useHandedPress(handed, events.onPointerDown);
   return (
     // `aria-hidden`: the keyboard offers everything this does.
     <div
@@ -60,6 +69,7 @@ export const TileGrab = ({
       onPointerOver={(event) => {
         onHover([event.clientX, event.clientY]);
       }}
+      ref={sheet}
       style={placedAt(frame, TILED)}
       {...events}
     />
