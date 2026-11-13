@@ -1,19 +1,29 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Card } from "@domicile-desktop/component-library/Card";
+import { IconButton } from "@domicile-desktop/component-library/IconButton";
+import { Select } from "@domicile-desktop/component-library/Select";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
-import { useId } from "react";
+import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
+import { useId, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { circle, flex } from "../../styled-system/patterns";
+import { AddRow } from "../AddRow";
 import type { ConfigEditor, Report } from "../config-editor";
 import type { Extensions } from "../extensions";
-import type { InstalledExtension, SettingsHost } from "../host";
+import type {
+  ExtensionSettings,
+  InstalledExtension,
+  SettingsHost,
+} from "../host";
 import { ListSetting } from "../ListSetting";
 import { Notice } from "../Notice";
 import { Page } from "../Page";
+import { SettingRow } from "../SettingRow";
+import { isSite } from "../sites";
 import { useInstalled } from "../useInstalled";
 
 type Props = {
@@ -32,6 +42,8 @@ type Props = {
  * The extensions in browser windows: switched on and off and configured
  * through the browser. The config's are installed and uninstalled through the
  * config; unpacked folders load, and others uninstall, through the engine.
+ * A setting the config sets changes in the config, and the rest through the
+ * engine.
  */
 export const ExtensionsPage = ({
   description,
@@ -68,8 +80,25 @@ export const ExtensionsPage = ({
         <ul className={listStyles}>
           {listed?.installed.map((extension) => (
             <ExtensionRow
+              configurable={configurable}
+              configured={
+                editor?.settings.extensions.settings[extension.id] ?? {}
+              }
               extension={extension}
               key={extension.id}
+              onConfigure={(settings) => {
+                configure({
+                  configurable,
+                  configured:
+                    editor?.settings.extensions.settings[extension.id] ?? {},
+                  editor,
+                  extension,
+                  extensions,
+                  reload,
+                  report,
+                  settings,
+                });
+              }}
               onEnabled={(enabled) => {
                 extensions
                   .setEnabled(extension.id, enabled)
@@ -88,6 +117,7 @@ export const ExtensionsPage = ({
                 store,
                 uninstall: host.uninstallExtension,
               })}
+              report={report}
             />
           ))}
         </ul>
@@ -188,68 +218,318 @@ const uninstaller = ({
   }
 };
 
+/** Every setting an extension may have. */
+const SETTINGS = [
+  "private",
+  "file_access",
+  "user_scripts",
+  "site_access",
+] as const satisfies (keyof ExtensionSettings)[];
+
+type ConfigureOptions = {
+  extension: InstalledExtension;
+  /** The changes. */
+  settings: ExtensionSettings;
+  /** What the config sets for `extension`. */
+  configured: ExtensionSettings;
+  editor: ConfigEditor | undefined;
+  configurable: boolean;
+  extensions: Extensions;
+  reload: () => void;
+  report: Report;
+};
+
+/**
+ * Changes `extension`'s `settings`: in the config for each it sets, through
+ * the engine for the rest. One a config that cannot change sets is locked, so
+ * it never gets here.
+ */
+const configure = ({
+  configurable,
+  configured,
+  editor,
+  extension,
+  extensions,
+  reload,
+  report,
+  settings,
+}: ConfigureOptions) => {
+  const keys = SETTINGS.filter((key) => settings[key] !== undefined);
+  const inConfig = keys.filter((key) => configured[key] !== undefined);
+  const inEngine = keys.filter((key) => configured[key] === undefined);
+  if (inConfig.length > 0) {
+    if (editor === undefined || !configurable) {
+      throw new Error(
+        `${extension.name}'s ${inConfig.join(", ")} is the config's, which cannot change`,
+      );
+    }
+    for (const key of inConfig) {
+      editor.set(["extensions", "settings", extension.id, key], settings[key]);
+    }
+  }
+  if (inEngine.length > 0) {
+    extensions
+      .configure(
+        extension.id,
+        Object.fromEntries(inEngine.map((key) => [key, settings[key]])),
+      )
+      .then(reload, report(`Couldn't change ${extension.name}'s settings`));
+  }
+};
+
 type ExtensionRowProps = {
   extension: InstalledExtension;
+  /** What the config sets for it, which shows over what the engine says. */
+  configured: ExtensionSettings;
+  /** Whether the config can change. */
+  configurable: boolean;
   onEnabled: (enabled: boolean) => void;
+  onConfigure: (settings: ExtensionSettings) => void;
   onOptions: (url: string) => void;
   /** Uninstalls it, or `undefined` if the page cannot. */
   onUninstall: (() => void) | undefined;
+  report: Report;
 };
 
-/** One extension, with its switch, options and uninstall button. */
+/**
+ * One extension: its switch, the settings it can use while it is on, and its
+ * options and uninstall buttons.
+ */
 const ExtensionRow = ({
+  configurable,
+  configured,
   extension,
+  onConfigure,
   onEnabled,
   onOptions,
   onUninstall,
+  report,
 }: ExtensionRowProps) => {
   const { description, enabled, name, optionsUrl, version } = extension;
+  // The config's, where it sets one, over the engine's.
+  const settings = {
+    ...extension.settings,
+    ...Object.fromEntries(
+      Object.entries(configured).filter(([, value]) => value !== undefined),
+    ),
+  };
+  /** Whether the page cannot change `key`: a config that cannot change sets it. */
+  const locked = (key: keyof ExtensionSettings) =>
+    !configurable && configured[key] !== undefined;
   const nameId = useId();
   return (
     <li className={rowStyles}>
-      <span aria-hidden className={avatarStyles}>
-        {name.slice(0, 1).toUpperCase()}
-      </span>
-      <div className={textStyles}>
-        <span className={nameStyles}>
-          <span id={nameId}>{name}</span>{" "}
-          <span className={versionStyles}>{version}</span>
-        </span>
-        {description !== "" && (
-          <span className={descriptionStyles}>{description}</span>
-        )}
-      </div>
-      <div className={actionsStyles}>
-        {optionsUrl !== undefined && (
-          <Button
-            label={`Options for ${name}`}
-            onClick={() => {
-              onOptions(optionsUrl);
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            <GearIcon size={16} />
-          </Button>
-        )}
-        {onUninstall !== undefined && (
-          <Button
-            label={`Uninstall ${name}`}
-            onClick={onUninstall}
-            size="sm"
-            variant="ghost"
-          >
-            <TrashIcon size={16} />
-          </Button>
-        )}
-        <Switch
-          aria-labelledby={nameId}
-          checked={enabled}
-          label={enabled ? "On" : "Off"}
-          onCheckedChange={onEnabled}
-        />
+      <div aria-labelledby={nameId} className={groupStyles} role="group">
+        <div className={headStyles}>
+          <span aria-hidden className={avatarStyles}>
+            {name.slice(0, 1).toUpperCase()}
+          </span>
+          <div className={textStyles}>
+            <span className={nameStyles}>
+              <span id={nameId}>{name}</span>{" "}
+              <span className={versionStyles}>{version}</span>
+            </span>
+            {description !== "" && (
+              <span className={descriptionStyles}>{description}</span>
+            )}
+          </div>
+          <Switch
+            aria-labelledby={nameId}
+            checked={enabled}
+            label={enabled ? "On" : "Off"}
+            onCheckedChange={onEnabled}
+          />
+        </div>
+        <div className={bodyStyles}>
+          {enabled && settings.site_access !== undefined && (
+            <SiteAccessSetting
+              disabled={locked("site_access")}
+              onChange={(siteAccess) => {
+                onConfigure({ site_access: siteAccess });
+              }}
+              report={report}
+              value={settings.site_access}
+            />
+          )}
+          {enabled && settings.private !== undefined && (
+            <SettingRow title="Allow in private windows">
+              <Switch
+                checked={settings.private}
+                disabled={locked("private")}
+                hideLabel
+                label="Allow in private windows"
+                onCheckedChange={(allowed) => {
+                  onConfigure({ private: allowed });
+                }}
+              />
+            </SettingRow>
+          )}
+          {enabled && settings.file_access !== undefined && (
+            <SettingRow title="Allow on local files">
+              <Switch
+                checked={settings.file_access}
+                disabled={locked("file_access")}
+                hideLabel
+                label="Allow on local files"
+                onCheckedChange={(allowed) => {
+                  onConfigure({ file_access: allowed });
+                }}
+              />
+            </SettingRow>
+          )}
+          {enabled && settings.user_scripts !== undefined && (
+            <SettingRow
+              hint="Lets it run scripts you add to it"
+              title="Allow user scripts"
+            >
+              <Switch
+                checked={settings.user_scripts}
+                disabled={locked("user_scripts")}
+                hideLabel
+                label="Allow user scripts"
+                onCheckedChange={(allowed) => {
+                  onConfigure({ user_scripts: allowed });
+                }}
+              />
+            </SettingRow>
+          )}
+          {(optionsUrl !== undefined || onUninstall !== undefined) && (
+            <div className={actionsStyles}>
+              {optionsUrl !== undefined && (
+                <Button
+                  beforeIcon={<GearIcon size={14} />}
+                  onClick={() => {
+                    onOptions(optionsUrl);
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  Options
+                </Button>
+              )}
+              {onUninstall !== undefined && (
+                <Button
+                  beforeIcon={<TrashIcon size={14} />}
+                  onClick={onUninstall}
+                  size="sm"
+                  variant="danger"
+                >
+                  Uninstall
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </li>
+  );
+};
+
+/** The value the site access menu shows for a list of sites. */
+const SPECIFIC = "specific";
+
+const SITE_ACCESS = [
+  { label: "When you click it", value: "on_click" },
+  { label: "On specific sites", value: SPECIFIC },
+  { label: "On all sites", value: "all_sites" },
+] as const;
+
+type SiteAccess = NonNullable<ExtensionSettings["site_access"]>;
+
+type SiteAccessProps = {
+  value: SiteAccess;
+  disabled: boolean;
+  onChange: (value: SiteAccess) => void;
+  report: Report;
+};
+
+/**
+ * Which sites an extension runs on, and the sites themselves when it is
+ * specific ones. Picking specific sites changes nothing until one is added:
+ * an empty list is "When you click it".
+ */
+const SiteAccessSetting = ({
+  disabled,
+  onChange,
+  report,
+  value,
+}: SiteAccessProps) => {
+  const [picking, setPicking] = useState(false);
+  const sites = Array.isArray(value) ? value : [];
+  const specific = Array.isArray(value) || picking;
+  return (
+    <>
+      <SettingRow title="Site access">
+        <Select
+          aria-label="Site access"
+          disabled={disabled}
+          onValueChange={(mode) => {
+            switch (mode) {
+              case SPECIFIC: {
+                setPicking(true);
+                break;
+              }
+              case "on_click":
+              case "all_sites": {
+                setPicking(false);
+                onChange(mode);
+                break;
+              }
+              default: {
+                throw new Error(`No site access ${String(mode)}`);
+              }
+            }
+          }}
+          options={SITE_ACCESS}
+          size="sm"
+          value={specific || Array.isArray(value) ? SPECIFIC : value}
+          width={44}
+        />
+      </SettingRow>
+      {specific && (
+        <div className={sitesStyles}>
+          {sites.length > 0 && (
+            <ul className={chipsStyles}>
+              {sites.map((site, index) => (
+                <li className={chipStyles} key={site}>
+                  {site}
+                  {!disabled && (
+                    <IconButton
+                      label={`Remove ${site}`}
+                      onClick={() => {
+                        onChange(sites.toSpliced(index, 1));
+                      }}
+                      size="sm"
+                    >
+                      <XIcon size={12} />
+                    </IconButton>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!disabled && (
+            <AddRow
+              button="Add site"
+              label="Add a site"
+              onAdd={(typed) => {
+                const site = typed.toLowerCase();
+                if (!isSite(site)) {
+                  report("Couldn't add the site")(
+                    new Error(
+                      `${typed} is not a site, such as example.com or *.example.com`,
+                    ),
+                  );
+                } else if (!sites.includes(site)) {
+                  onChange([...sites, site]);
+                }
+              }}
+              placeholder="example.com"
+            />
+          )}
+        </div>
+      )}
+    </>
   );
 };
 
@@ -261,13 +541,22 @@ const listStyles = flex({
   padding: 0,
 });
 
-const rowStyles = flex({
+const rowStyles = css({
   "&:first-of-type": { borderBlockStart: "none", paddingBlockStart: 0 },
   "&:last-of-type": { paddingBlockEnd: 0 },
-  align: "center",
   borderBlockStart: "1px solid {colors.border}",
-  gap: 3,
   paddingBlock: 3,
+});
+
+const groupStyles = flex({ direction: "column", gap: 2 });
+
+const headStyles = flex({ align: "center", gap: 3 });
+
+// Under the name, past the avatar.
+const bodyStyles = flex({
+  _empty: { display: "none" },
+  direction: "column",
+  paddingInlineStart: 12,
 });
 
 const avatarStyles = circle({
@@ -298,6 +587,36 @@ const descriptionStyles = css({
   whiteSpace: "nowrap",
 });
 
-const actionsStyles = flex({ align: "center", flexShrink: 0, gap: 1 });
+const actionsStyles = flex({
+  align: "center",
+  gap: 2,
+  justify: "flex-end",
+  paddingBlockStart: 2,
+});
+
+const sitesStyles = flex({
+  direction: "column",
+  gap: 2,
+  paddingBlockEnd: 3,
+});
+
+const chipsStyles = flex({
+  gap: 2,
+  listStyle: "none",
+  margin: 0,
+  padding: 0,
+  wrap: "wrap",
+});
+
+const chipStyles = flex({
+  align: "center",
+  border: "1px solid {colors.border}",
+  borderRadius: "full",
+  fontSize: "xs",
+  gap: 1,
+  paddingBlock: 0.5,
+  paddingInlineEnd: 1,
+  paddingInlineStart: 3,
+});
 
 const hintStyles = css({ color: "muted", fontSize: "xs", margin: 0 });

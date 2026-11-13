@@ -1,6 +1,7 @@
 // An in-memory stand-in for the settings host, for the app's tests.
 
 import type {
+  ExtensionSettings,
   InstalledExtension,
   MediaDevices,
   SettingsFiles,
@@ -37,6 +38,8 @@ export const fakeHost = (state: FakeHostState) => {
   const loaded: string[] = [];
   const uninstalled: string[] = [];
   const opened: string[] = [];
+  /** Each change to an extension's settings. */
+  const configured: { id: string; settings: ExtensionSettings }[] = [];
   /** Each folder the picker returned. */
   const chosen: (string | undefined)[] = [];
   const host: SettingsHost = {
@@ -49,6 +52,16 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve();
     },
     configExtensions: () => Promise.resolve([...state.configExtensions]),
+    configureExtension: (id, settings) => {
+      const found = state.installed.find((extension) => extension.id === id);
+      if (found === undefined) {
+        throw new Error(`No extension ${id}`);
+      } else {
+        configured.push({ id, settings: structuredClone(settings) });
+        found.settings = { ...found.settings, ...structuredClone(settings) };
+        return Promise.resolve();
+      }
+    },
     extensions: () => Promise.resolve(structuredClone(state.installed)),
     loadUnpacked: (directory) => {
       loaded.push(directory);
@@ -127,6 +140,7 @@ export const fakeHost = (state: FakeHostState) => {
   return {
     change,
     chosen,
+    configured,
     host,
     loaded,
     opened,

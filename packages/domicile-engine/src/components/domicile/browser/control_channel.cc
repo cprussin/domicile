@@ -1143,13 +1143,20 @@ void ControlChannel::DispatchLine(const std::string& line,
         Strings(message, "web_store");
     std::optional<std::vector<std::string>> unpacked =
         Strings(message, "unpacked");
-    if (web_store && unpacked) {
+    const base::DictValue* settings_value = message.FindDict("settings");
+    std::optional<ExtensionSettingsMap> settings =
+        settings_value == nullptr
+            ? std::nullopt
+            : ParseExtensionSettings(*settings_value);
+    if (web_store && unpacked && settings) {
       extensions_sink_.Run(ExtensionList{.web_store = std::move(*web_store),
-                                         .unpacked = std::move(*unpacked)});
+                                         .unpacked = std::move(*unpacked),
+                                         .settings = std::move(*settings)});
     } else {
       LOG(ERROR) << "domicile: the compositor sent an `extensions` message "
-                    "whose `web_store` or `unpacked` is not a list of "
-                    "strings. The profile keeps the extensions it had.";
+                    "whose `web_store` or `unpacked` is not a list of strings, "
+                    "or whose `settings` are not extensions' settings. The "
+                    "profile keeps the extensions it had.";
     }
     return;
   }

@@ -1,0 +1,14 @@
+{
+  "content_scripts": [
+    {
+      "js": ["content.js"],
+      "matches": ["http://127.0.0.1/*"],
+      "run_at": "document_end"
+    }
+  ],
+  "description": "Paints every page on 127.0.0.1 one flat color, for guard-extension-in-private.sh. The key fixes its id, which the config's settings name.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvAfZ3k69WyTh8iDoMO53920Y8B5Rs3aoStTMe1nkacZTXsbXtrNUq0aQrXUcEcZYV2DvTM0yo0NWSt7zfHlUmmK6AK60XkC/3UxsGSFpwgKHVHqvqRxRiwtQoygZpwt1ZCu+XC1zpenob86zeHYpdckqTtwxSS7T3sHGG1WhLjh6mR3YSz3HsL8g1+cB5UBn16r/zBa1RzH6T9qjdC7v17+2bTZp6ofGTVSEBmKfBklL/+LGX3g9auMSJdugtTdgoB1RY/g5qjvhpzQLqxNwRvF6Y+7sRvghOpanSaDW3TmsLlVkbN9qie/uo7DjRsXf2BeeoUrWi74a4KRKeDeyXwIDAQAB",
+  "manifest_version": 3,
+  "name": "Domicile private-window guard",
+  "version": "1"
+}

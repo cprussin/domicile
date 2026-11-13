@@ -23,6 +23,7 @@
 #include "base/scoped_observation.h"
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/extensions/extension_action_dispatcher.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/domicile/browser/extension_tray_entry.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_context.h"
@@ -35,6 +36,7 @@
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/permissions/active_tab_permission_granter.h"
 #include "extensions/browser/ui_util.h"
 #include "extensions/common/api/extension_action/action_info.h"
@@ -219,8 +221,10 @@ class ExtensionTray final
       return;
     }
 
-    // The click applies to the active tab: the <webview> last focused.
-    content::WebContents* tab = ActiveDeskTab(context_);
+    // The click applies to the active tab: the <webview> last focused, unless
+    // that is a private page the extension is not allowed in.
+    content::WebContents* tab = ActiveDeskTab(
+        context_, extensions::util::IsIncognitoEnabled(extension, context_));
 
     // Chrome sends no onClicked for an action with a popup; the shell opens
     // the popup.
@@ -274,12 +278,15 @@ class ExtensionTray final
 
   // extensions::ExtensionActionDispatcher::Observer:
   //
-  // The dispatcher is shared with the incognito profile; ignore its changes.
+  // The dispatcher is shared with the incognito profile, whose changes are
+  // private pages' state. Only another profile's are ignored.
   void OnExtensionActionUpdated(
       ExtensionAction* extension_action,
       content::WebContents* web_contents,
       content::BrowserContext* browser_context) override {
-    if (browser_context == context_) {
+    if (browser_context == context_ ||
+        Profile::FromBrowserContext(browser_context)->GetOriginalProfile() ==
+            context_) {
       Send();
     }
   }
@@ -306,9 +313,6 @@ class ExtensionTray final
     content::RenderWidgetHostView* view = render_frame_host().GetView();
     const float scale = view == nullptr ? 1.0f : view->GetDeviceScaleFactor();
 
-    // Show the active tab's state, as Chrome's toolbar does.
-    const int tab = TabIdOf(ActiveDeskTab(context_));
-
     extensions::ExtensionActionManager* actions =
         extensions::ExtensionActionManager::Get(context_);
     std::vector<mojom::TrayExtensionPtr> tray;
@@ -329,6 +333,10 @@ class ExtensionTray final
         continue;
       }
       Watch(*action);
+      // Show the active tab's state, as Chrome's toolbar does.
+      const int tab = TabIdOf(ActiveDeskTab(
+          context_,
+          extensions::util::IsIncognitoEnabled(extension.get(), context_)));
       tray.push_back(EntryFor(*extension, *action, tab, scale));
     }
     client_->ExtensionsChanged(std::move(tray));
