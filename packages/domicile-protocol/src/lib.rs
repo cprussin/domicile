@@ -117,6 +117,43 @@ pub struct PointerOverWindow {
     pub at: (f64, f64),
 }
 
+/// The browser's focused text field, in [`ChromeMessage::TextInput`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextField {
+    /// Whether a field that takes text has focus. The rest is unset when not.
+    pub enabled: bool,
+    /// The text around the cursor, with the cursor and the selection's other
+    /// end as byte offsets into it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surrounding: Option<Surrounding>,
+    /// `text-input-v3`'s `content_hint` bits and `content_purpose`.
+    #[serde(default)]
+    pub hint: u32,
+    #[serde(default)]
+    pub purpose: u32,
+    /// The text cursor, `[x, y, width, height]` in desk logical pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<[i32; 4]>,
+}
+
+/// The text around a field's cursor, in [`TextField`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Surrounding {
+    pub text: String,
+    pub cursor: u32,
+    pub anchor: u32,
+}
+
+/// Text being composed, in [`HostMessage::Composition`]: shown in place,
+/// with the cursor from `cursor_begin` to `cursor_end`, byte offsets into
+/// `text`. Both `-1` hides the cursor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Preedit {
+    pub text: String,
+    pub cursor_begin: i32,
+    pub cursor_end: i32,
+}
+
 /// The pointer the engine draws, in [`ChromeMessage::DeskCursor`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CursorImage {
@@ -383,6 +420,18 @@ pub enum ChromeMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         image: Option<CursorImage>,
     },
+
+    /// The browser's focused text field, as an editor for the desk's input
+    /// method (`text-input-v3`'s state). Sent whole on every change, and with
+    /// `enabled: false` when no field has focus. The browser's own, never the
+    /// page's. See `docs/architecture/TEXT-INPUT.md`.
+    TextInput { field: TextField },
+
+    /// A key typed into a browser field while the input method composes
+    /// ([`HostMessage::InputMethod`]), for the input method to read first.
+    /// What it does not take comes back as [`HostMessage::KeyPassed`]. An
+    /// evdev code.
+    KeyForInputMethod { keycode: u32, pressed: bool },
 
     /// The page renders `<app frame>`, so the compositor may sync frames
     /// ([`HostMessage::PopupPlaced`]'s `frames`) until the next `Hello`.
@@ -678,6 +727,41 @@ pub enum HostMessage {
     /// the XKB config, keeps one source for the layout. Sent with the
     /// handshake so a reloaded page gets it again.
     Keymap { keymap: String },
+
+    /// Whether the browser's keys go to the input method first
+    /// ([`ChromeMessage::KeyForInputMethod`]): an input method holds the
+    /// keyboard, a browser field is the editor, and the desk is unlocked.
+    /// Read by the browser process and never forwarded to the page. Sent on
+    /// every change. See `docs/architecture/TEXT-INPUT.md`.
+    InputMethod { composing: bool },
+
+    /// What the input method did to the browser's focused field, applied
+    /// together: delete around the cursor, then commit, then show the preedit
+    /// (`text-input-v3`'s `done`). Read by the browser process and never
+    /// forwarded to the page.
+    ///
+    /// `serial` grows with each composition or passed key, across compositor
+    /// restarts, so a browser hearing it on several connections applies it
+    /// once.
+    Composition {
+        serial: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preedit: Option<Preedit>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        commit: Option<String>,
+        /// Bytes before and after the cursor, in the field's UTF-8 text.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delete: Option<[u32; 2]>,
+    },
+
+    /// A key from [`ChromeMessage::KeyForInputMethod`] the input method passed
+    /// on uncomposed, for the browser to type as it would have. `serial` as in
+    /// [`HostMessage::Composition`].
+    KeyPassed {
+        serial: u64,
+        keycode: u32,
+        pressed: bool,
+    },
 
     /// The Chrome extensions to install into the browser windows' profile. See
     /// `docs/architecture/EXTENSIONS.md`.

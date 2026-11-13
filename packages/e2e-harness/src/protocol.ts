@@ -373,6 +373,42 @@ const forceDarkSchema = z.looseObject({
   type: z.literal("force_dark"),
 });
 
+// Whether the desk's input method composes for the browser's focused field.
+// While it does, the browser sends it each key (`key_for_input_method`). The
+// browser process reads these three; see `docs/architecture/TEXT-INPUT.md`.
+const inputMethodSchema = z.looseObject({
+  composing: z.boolean(),
+  type: z.literal("input_method"),
+});
+
+// What the input method composed for the browser's field, applied together:
+// delete `[before, after]` bytes around the cursor, commit, then show the
+// preedit. `serial` lets each page's channel apply it once.
+const compositionSchema = z.looseObject({
+  commit: z.string().optional(),
+  delete: z
+    .tuple([z.number().int().nonnegative(), z.number().int().nonnegative()])
+    .optional(),
+  preedit: z
+    .looseObject({
+      cursor_begin: z.number().int(),
+      cursor_end: z.number().int(),
+      text: z.string(),
+    })
+    .optional(),
+  serial: z.number().int().nonnegative(),
+  type: z.literal("composition"),
+});
+
+// A key from `key_for_input_method` the input method did not take, for the
+// browser to dispatch past it.
+const keyPassedSchema = z.looseObject({
+  keycode: z.number().int().nonnegative(),
+  pressed: z.boolean(),
+  serial: z.number().int().nonnegative(),
+  type: z.literal("key_passed"),
+});
+
 // The reply to `search_files`. `files` holds the first matches, relative to
 // home, in byte order, with directories ending in `/`. `matched` is the total
 // count. `indexing` is true while the home directory is still being indexed.
@@ -723,6 +759,9 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   keymapSchema,
   extensionsSchema,
   forceDarkSchema,
+  inputMethodSchema,
+  compositionSchema,
+  keyPassedSchema,
   focusChangedSchema,
   focusRequestedSchema,
   modifiersSchema,
