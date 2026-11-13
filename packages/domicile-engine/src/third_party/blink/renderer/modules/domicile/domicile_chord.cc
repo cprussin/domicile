@@ -44,7 +44,9 @@ std::optional<DomicileWrittenChord> ParseDomicileChord(const String& written,
   DomicileWrittenChord chord;
   chord.keysym = parts.back();
   if (chord.keysym.empty() || Modifier(chord, chord.keysym)) {
-    *error = "chord " + quoted + " names no key; its last part is the keysym";
+    *error = "chord " + quoted +
+             " names no key; its last part is the keysym, unless it is one "
+             "modifier alone, for a tap of it";
     return std::nullopt;
   }
   for (wtf_size_t at = 0; at + 1 < parts.size(); ++at) {
@@ -61,6 +63,26 @@ std::optional<DomicileWrittenChord> ParseDomicileChord(const String& written,
     *held = true;
   }
   return chord;
+}
+
+std::optional<domicile::mojom::blink::TapModifier> ParseDomicileTap(
+    const String& written) {
+  using domicile::mojom::blink::TapModifier;
+  DomicileWrittenChord chord;
+  const bool* held = Modifier(chord, written);
+  if (held == &chord.alt) {
+    return TapModifier::kAlt;
+  }
+  if (held == &chord.ctrl) {
+    return TapModifier::kCtrl;
+  }
+  if (held == &chord.shift) {
+    return TapModifier::kShift;
+  }
+  if (held == &chord.meta) {
+    return TapModifier::kMeta;
+  }
+  return std::nullopt;
 }
 
 std::optional<DomicilePress> ResolveDomicileChord(

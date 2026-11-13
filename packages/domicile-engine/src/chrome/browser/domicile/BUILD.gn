@@ -50,6 +50,8 @@ source_set("domicile") {
     "domicile_history.h",
     "domicile_media_devices.cc",
     "domicile_media_devices.h",
+    "domicile_modifier_taps.cc",
+    "domicile_modifier_taps.h",
     "domicile_permissions.cc",
     "domicile_permissions.h",
     "domicile_pointer_hiding.cc",
@@ -103,6 +105,8 @@ source_set("domicile") {
     # and the touchpad gestures the shell and applications take.
     "//components/domicile:desk_gestures",
     "//components/domicile:desk_pointer_hiding",
+    # Hears a tap of Super alone for the shell, from aura's own events.
+    "//components/domicile:desk_modifier_taps",
     "//components/domicile:pointer_hiding",
     "//components/domicile:notification_window",
     "//components/domicile:pointer_warp",

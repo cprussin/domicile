@@ -210,7 +210,9 @@ class MODULES_EXPORT DomicileHost final
   // Answered with `windowsthemechanged` once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
   // The chord, `Meta+Shift+l`, resolved here against the keys the compositor
-  // says the keyboard has, and again whenever it says so anew.
+  // says the keyboard has, and again whenever it says so anew. A modifier
+  // alone, `Meta`, is a tap of it, matched in the browser process: see
+  // DeskModifierTaps.
   void grabShortcut(ScriptState*,
                     const String& chord,
                     bool while_inhibited,
@@ -372,6 +374,7 @@ class MODULES_EXPORT DomicileHost final
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void GesturePerformed(domicile::mojom::blink::GesturePtr gesture) override;
+  void ModifierTapped(domicile::mojom::blink::TapModifier modifier) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void Files(const String& query,
              const Vector<String>& files,
@@ -494,6 +497,9 @@ class MODULES_EXPORT DomicileHost final
   void TellWhetherTheKeyboardWindowInhibits();
   // Whether `press` is a chord a grab passed `whileInhibited` for.
   bool StaysWhileInhibited(const DomicilePress& press) const;
+  // Tells the browser process whether this page takes taps of `modifier`,
+  // and whether under an inhibitor, from every name grabbed on it.
+  void RegrabTap(domicile::mojom::blink::TapModifier modifier);
   // A key went down on the page. One that is a chord grabbed by name is the
   // desktop's: taken from the page and dispatched as `shortcut`, the same as
   // the browser process does for one pressed in a `<webview>`.
@@ -646,6 +652,14 @@ class MODULES_EXPORT DomicileHost final
     bool while_inhibited = false;
   };
   Vector<GrabbedChord> chords_;
+  // A modifier tap grabbed by name, `Meta` or `Super`, counted like a chord.
+  struct GrabbedTap {
+    String written;
+    domicile::mojom::blink::TapModifier modifier;
+    uint32_t holds = 1;
+    bool while_inhibited = false;
+  };
+  Vector<GrabbedTap> taps_;
   // A gesture grabbed by name, and how many grabGesture calls no
   // ungrabGesture has answered yet.
   struct GrabbedGesture {

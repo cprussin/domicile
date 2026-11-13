@@ -136,7 +136,8 @@ const everyWorkspace = (
   );
 
 /**
- * Default bindings for mode `default`: sway's, on Meta; touchpad swipes,
+ * Default bindings for mode `default`: sway's, on Meta, and a tap of Meta alone
+ * toggling the overview; touchpad swipes,
  * three fingers moving focus and four going sideways between workspaces and
  * down and up for the scratchpad; four fingers pinching in to open the
  * overview and spreading to close it; three spreading for the launcher; and touchscreen swipes in from the sides
@@ -147,6 +148,9 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   // four-finger swipes below go.
   "edge:left": stepWorkspace("prev"),
   "edge:right": stepWorkspace("next"),
+  // Super tapped alone, as on GNOME and KDE. Held for a chord, dragging or
+  // scrolling, it is no tap.
+  Meta: overview(),
   "Meta+a": focus("parent"),
   "Meta+b": split("h"),
   "Meta+d": launcher(),

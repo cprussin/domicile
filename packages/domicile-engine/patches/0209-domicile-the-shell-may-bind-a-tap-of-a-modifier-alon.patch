@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 13 Nov 2026 07:51:40 +0000
+Subject: [PATCH] domicile: the shell may bind a tap of a modifier alone
+
+A shell could bind chords only, so tapping Super could not open an
+overview the way it does on GNOME and KDE (mecattaf, #2007).
+
+- `StartModifierTaps` (`chrome/browser/domicile/domicile_modifier_taps.cc`)
+  observes aura's keys, clicks, scrolls, pinches and touches and tells
+  `DeskModifierTaps` (`components/domicile/browser/desk_modifier_taps.h`),
+  which hands a tap to the shell page that grabbed it.
+- Started in `PostBrowserStart`, beside `StartPointerHiding`.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/chrome_browser_main.cc | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index 542d51e..9940644 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -9,6 +9,7 @@
+ #include "chrome/browser/domicile/domicile_desk_activity.h"
+ #include "chrome/browser/domicile/domicile_desk_pointer.h"
+ #include "chrome/browser/domicile/domicile_file_dialogs.h"
++#include "chrome/browser/domicile/domicile_modifier_taps.h"
+ #include "chrome/browser/domicile/domicile_pointer_hiding.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/desktop_prefs.h"
+@@ -1832,6 +1833,10 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+   // as the desk's config says. Here for the same reason.
+   domicile::StartPointerHiding();
+ 
++  // Domicile's engine fork: hears a tap of Super alone, which the shell can
++  // bind, as it hears every key. Here for the same reason.
++  domicile::StartModifierTaps();
++
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostBrowserStart();
+   }

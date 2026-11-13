@@ -86,6 +86,10 @@ enum GestureEdge { kLeft, kRight, kTop, kBottom };
 
 enum GesturePhase { kBegin, kUpdate, kEnd };
 
+// A modifier the shell can bind a tap of: pressed and let go with nothing
+// else. Either side's key taps it. See DeskModifierTaps.
+enum TapModifier { kAlt, kCtrl, kShift, kMeta };
+
 // A gesture the shell grabs: its kind, and its finger count or 0 for any. An
 // edge swipe's names its edge, or none for any. See DomicileHost::grabGesture.
 struct GestureGrab {
@@ -495,10 +499,20 @@ interface ControlChannel {
   // This page no longer wants `grab`. See DeskGestures::Ungrab.
   UngrabGesture(GestureGrab grab);
 
+  // A tap of `modifier` alone to hand the page, as `Meta` for a tap of
+  // Super. Under a shortcuts inhibitor it is the window's unless
+  // `while_inhibited`. It stops in the browser process, in DeskModifierTaps,
+  // which hears every key aura does. A second grab sets `while_inhibited`
+  // anew: the page counts its own grabs and sends what they add up to.
+  GrabModifierTap(TapModifier modifier, bool while_inhibited);
+
+  // This page no longer wants taps of `modifier`.
+  UngrabModifierTap(TapModifier modifier);
+
   // Whether the window with this page's keyboard holds a shortcuts
-  // inhibitor. Its grabbed gestures then go to the window, as its grabbed
-  // chords go to it as keys. Sent when it changes. See
-  // DeskGestures::SetInhibited.
+  // inhibitor. Its grabbed gestures and modifier taps then go to the window,
+  // as its grabbed chords go to it as keys. Sent when it changes. See
+  // DeskGestures::SetInhibited and DeskModifierTaps::SetInhibited.
   KeyboardWindowInhibitsShortcuts(bool inhibits);
 
   // Put the cursor where the page says, in the page's own coordinates.
@@ -640,6 +654,10 @@ interface ControlChannelClient {
   // in the browser process (DeskGestures) and never on the compositor's
   // socket.
   GesturePerformed(Gesture gesture);
+
+  // `modifier` was tapped alone, and this page grabbed it. Matched in the
+  // browser process (DeskModifierTaps), like a gesture.
+  ModifierTapped(TapModifier modifier);
 
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.

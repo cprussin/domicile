@@ -157,8 +157,9 @@ describe("manganese's default keys", () => {
     });
   });
 
-  it("open the overview on Meta+O or a four-finger pinch in", () => {
+  it("open the overview on Meta+O, a tap of Super or a four-finger pinch in", () => {
     expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      Meta: overview(),
       "Meta+o": overview(),
       "pinch:4:inward": overview("show"),
     });
