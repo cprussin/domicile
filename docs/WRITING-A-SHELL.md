@@ -406,6 +406,18 @@ Each entry in `domicile.windows.list` describes one client window.
     `pidfdInode`.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
+- **Pointer lock:** `pointerConstraint` is `"lock"` while a game or VM viewer
+  under the pointer asks to lock it in place, and `"confine"` while one asks
+  to keep it inside the window. It is offered only for the window under the
+  pointer. To grant a lock, call `requestPointerLock()` on the window's
+  `<app>`: the engine grants it with no click first and draws no bubble, and
+  the element then forwards only relative motion. Once `pointerlockchange`
+  says the page holds it, call `windows.pointerConstrained(appId, true)`; only
+  then is the client told. Call it with `false` once the lock ends, and end it
+  (`document.exitPointerLock()`) when the window loses the keyboard or the
+  ask goes away. Escape does not end a lock, since games use it; leaving the
+  user a way out, such as a chord that moves the keyboard, is the shell's job.
+  Manganese's `followPointerLock` does all of this.
 - **Size:** the `<app>` element's layout box is the window size. The engine
   sends it to the client. Resize a window by styling its element. Set
   `resizing` on the element while the user drags an edge; see
