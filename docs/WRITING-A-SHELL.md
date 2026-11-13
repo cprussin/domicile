@@ -380,6 +380,11 @@ Each entry in `domicile.windows.list` describes one client window.
   names its desktop entry, for example `org.gnome.Nautilus` for
   `org.gnome.Nautilus.desktop`. It is `""` until the client sets one. Look up
   the entry's `Icon=` to draw the app's icon.
+- **Capture handle:** `toplevelId` is the window's identifier on
+  `ext-foreign-toplevel-list-v1`. Hand it to a capture tool to name the
+  window, for example `grim -T <id>`. It is fixed for the window's life, and
+  `undefined` for a popup. Browser windows have their own
+  ([SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md#basics)).
 - **Owner:** `pid`, `uid` and `gid` name the process that connected the
   window's client, as the kernel recorded it (`SO_PEERCRED`). The client
   cannot forge them; `title` and `desktopId` are its own claims.

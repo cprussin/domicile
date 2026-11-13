@@ -35,6 +35,7 @@ describe("windows", () => {
         sandboxed: undefined,
         sandboxInstanceId: undefined,
         title: "Terminal",
+        toplevelId: undefined,
         transientFor: undefined,
         uid: undefined,
         urgent: false,

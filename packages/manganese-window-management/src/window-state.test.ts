@@ -59,6 +59,7 @@ const listed = (
   partition: "",
   popupWindow: popup.popupWindow === 0 ? undefined : popup.popupWindow,
   title: "",
+  toplevelId: undefined,
   url,
   width: popup.width,
 });

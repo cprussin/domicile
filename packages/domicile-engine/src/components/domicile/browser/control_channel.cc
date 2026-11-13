@@ -14,6 +14,7 @@
 
 #include "base/base64.h"
 #include "base/check.h"
+#include "base/containers/flat_map.h"
 #include "base/command_line.h"
 #include "base/dcheck_is_on.h"
 #include "base/functional/bind.h"
@@ -1370,13 +1371,30 @@ void ControlChannel::DispatchLine(const std::string& line,
     const base::ListValue* size = message.FindList("size");
     const std::optional<bool> dialog = message.FindBool("dialog");
     const std::optional<bool> client_frame = message.FindBool("client_frame");
-    if (size && size->size() == 2u && dialog && client_frame) {
+    const std::string* toplevel_id = message.FindString("toplevel_id");
+    if (size && size->size() == 2u && dialog && client_frame && toplevel_id) {
       client_->AppAppeared(*app_id, title ? *title : std::string(),
                            desktop_id ? *desktop_id : std::string(),
                            Number((*size)[0]), Number((*size)[1]), *dialog,
                            *client_frame, OwnerOf(message.FindDict("owner")),
-                           FrameOf(message));
+                           *toplevel_id, FrameOf(message));
     }
+    return;
+  }
+
+  if (*type == "browser_toplevel_ids") {
+    const base::DictValue* listed = message.FindDict("toplevel_ids");
+    if (!listed) {
+      return;
+    }
+    base::flat_map<std::string, std::string> toplevel_ids;
+    for (const auto [window, toplevel_id] : *listed) {
+      if (!toplevel_id.is_string()) {
+        return;
+      }
+      toplevel_ids.emplace(window, toplevel_id.GetString());
+    }
+    client_->BrowserToplevelIds(toplevel_ids);
     return;
   }
 

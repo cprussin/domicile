@@ -101,6 +101,7 @@ const host = {
   addEventListener: (name, fn) => {
     listeners[name] = [...(listeners[name] ?? []), fn];
   },
+  browserWindows: [],
   callSystem: () => undefined,
   dispatchEvent: (event) => {
     for (const fn of listeners[event.type] ?? []) {
@@ -109,6 +110,7 @@ const host = {
   },
   focusedWindow: null,
   highContrast: false,
+  openBrowserWindow: () => undefined,
   reducedMotion: false,
   removeEventListener: () => undefined,
   syncFrames: () => undefined,

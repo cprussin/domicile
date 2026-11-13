@@ -5,7 +5,7 @@
 //! The native windows are listed as their clients map them, and the browser's
 //! windows as the engine reports them ([`crate::engine::Event::BrowserWindows`]).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use smithay::delegate_foreign_toplevel_list;
 use smithay::reexports::wayland_server::DisplayHandle;
@@ -123,9 +123,15 @@ impl ForeignToplevels {
         }
     }
 
-    /// Lists window `app_id`, which has no title or desktop id yet.
-    pub fn opened(&mut self, app_id: &str) {
-        let handle = self.state.new_toplevel::<DomicileCompositor>("", "");
+    /// A handle for a window with no title or desktop id yet. [`Self::opened`]
+    /// names the window, once the host has given it an id; the handle's
+    /// identifier is what the host tells the chromes.
+    pub fn listing(&mut self) -> ForeignToplevelHandle {
+        self.state.new_toplevel::<DomicileCompositor>("", "")
+    }
+
+    /// Window `app_id` is listed as `handle`, from [`Self::listing`].
+    pub fn opened(&mut self, app_id: &str, handle: ForeignToplevelHandle) {
         handle
             .user_data()
             .insert_if_missing_threadsafe(|| Listed::Window(app_id.to_string()));
@@ -159,7 +165,9 @@ impl ForeignToplevels {
     /// the new ones, retitles the rest, and takes away the ones gone. An app
     /// window's handle carries the app's id; any other has none, since every
     /// browser window is the same browser's.
-    pub fn browser_windows(&mut self, windows: &[BrowserWindow]) {
+    ///
+    /// Returns each listed window's identifier, by its id.
+    pub fn browser_windows(&mut self, windows: &[BrowserWindow]) -> BTreeMap<String, String> {
         for change in self.browser_windows.listed(windows) {
             match change {
                 Change::Opened { id, title, app_id } => {
@@ -184,6 +192,10 @@ impl ForeignToplevels {
                 }
             }
         }
+        self.browser_handles
+            .iter()
+            .map(|(id, handle)| (id.clone(), handle.identifier()))
+            .collect()
     }
 }
 
@@ -197,6 +209,8 @@ delegate_foreign_toplevel_list!(DomicileCompositor);
 
 #[cfg(test)]
 mod tests {
+    use smithay::reexports::wayland_server::Display;
+
     use super::*;
 
     fn window(id: &str, title: &str) -> BrowserWindow {
@@ -231,6 +245,22 @@ mod tests {
             }]
         );
         assert_eq!(listing.listed(&[]), vec![Change::Closed { id: "3".into() }]);
+    }
+
+    #[test]
+    fn each_browser_window_keeps_its_identifier_while_it_is_listed() {
+        // A shell hands a capture tool the identifier, so a retitle must not
+        // change it.
+        let display = Display::<DomicileCompositor>::new().expect("a display");
+        let mut toplevels = ForeignToplevels::new(&display.handle());
+
+        let first = toplevels.browser_windows(&[window("3", "Inbox")]);
+        let again = toplevels.browser_windows(&[window("3", "Inbox (2)"), window("5", "News")]);
+
+        assert_eq!(first.keys().collect::<Vec<_>>(), ["3"]);
+        assert_eq!(again["3"], first["3"]);
+        assert_ne!(again["5"], again["3"]);
+        assert_eq!(toplevels.browser_windows(&[]), BTreeMap::new());
     }
 
     #[test]
