@@ -1613,7 +1613,7 @@
         # A tty desktop on the GPU whose engine falls back to the CPU: 2D
         # virtio-gpu with GPU compositing forced, so the engine finds no GBM,
         # as on a card the launcher took for 3D. App windows still reach the
-        # screen. See
+        # screen, and the fallback is logged as an error. See
         # docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output.
         #
         # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
@@ -1680,6 +1680,9 @@
                 def window_is_up(_):
                     return colors_on_the_screen("window").get((0x33, 0x66, 0xCC), 0) > 0.04
                 retry(window_is_up, timeout=dt.timedelta(seconds=300))
+
+                # Falling back is a bug, so it is loud.
+                machine.succeed("grep -qE 'ERROR.*fell back to software compositing' /tmp/domicile.log")
 
             machine.wait_for_unit("multi-user.target")
             try:

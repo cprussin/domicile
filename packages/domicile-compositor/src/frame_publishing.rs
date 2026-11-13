@@ -11,7 +11,7 @@ use smithay::reexports::wayland_server::protocol::{wl_buffer, wl_surface::WlSurf
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::shm::with_buffer_contents;
-use tracing::warn;
+use tracing::{error, warn};
 
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::descriptor_from;
@@ -330,16 +330,30 @@ impl DomicileCompositor {
     /// composites in software, as after its GPU process falls back.
     ///
     /// Going to memory withdraws `zwp_linux_dmabuf_v1`, so clients that
-    /// connect later draw in memory too. Chromium never returns to GPU
+    /// connect later draw in memory too. A client already drawing in dmabufs
+    /// stays blank. Falling back is a bug, so it is logged as an error and the
+    /// person is told. Chromium never returns to GPU
     /// compositing, so the global is not put back.
     pub fn engine_composites(&mut self, in_memory: bool) {
         if in_memory == self.software_compositing {
             return;
         }
-        warn!(
-            in_memory,
-            "the engine changed how it composites; windows follow it"
-        );
+        if in_memory {
+            error!(
+                "the engine's GPU process fell back to software compositing, a bug in Domicile, \
+                 Chromium or the graphics driver; windows already drawing on the GPU stay blank"
+            );
+            self.hub
+                .notifications
+                .get()
+                .expect("the notification server is handed to the hub before the engine starts")
+                .warn_that_graphics_failed();
+        } else {
+            error!(
+                "the engine went back to GPU compositing, which Chromium never does; \
+                 zwp_linux_dmabuf_v1 stays withdrawn"
+            );
+        }
         self.software_compositing = in_memory;
         if let (true, Some(global)) = (in_memory, &self.dmabuf_global) {
             self.dmabuf_state

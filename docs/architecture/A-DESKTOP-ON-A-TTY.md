@@ -239,9 +239,12 @@ vkms) gives the GPU process no GL. The desktop is composited on the CPU instead.
   took for 3D) composites in software too. The browser says so
   (`compositing` in the C ABI, from `GpuDataManagerObserver`). The compositor
   then hands windows over in memory and withdraws `zwp_linux_dmabuf_v1`, so
-  clients that connect later draw in memory. A client already drawing in
-  dmabufs stays blank. The VM check `tty-with-an-engine-that-fell-back-to-the-cpu`
-  covers it.
+  clients that connect later draw in memory. Falling back is a bug, so it is
+  loud: the compositor logs an error and posts an urgent "Graphics aren't
+  working" notification with a "Report it" button. A client already drawing
+  in dmabufs stays blank until it restarts; its dmabufs are not copied into
+  memory (#1972, won't fix). The VM check
+  `tty-with-an-engine-that-fell-back-to-the-cpu` covers it.
 - **Mesa in the GPU sandbox:** every card reaches the GPU process after its
   sandbox is up, so `gbm_create_device` runs inside it. Desktop Linux's broker
   allows only `/dev/dri/card*` and refuses the rest with `EACCES` (`no GBM for

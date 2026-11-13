@@ -272,6 +272,35 @@ impl NotificationServer {
         }
     }
 
+    /// Warn that the engine draws on the CPU although the desktop started on
+    /// the GPU: its GPU process gave up, or never could. That is a bug (in Domicile, Chromium or the graphics driver),
+    /// so it is loud: urgent, with a button to report it. Windows that were
+    /// drawing on the GPU stay blank.
+    pub fn warn_that_graphics_failed(&self) {
+        self.add_from_portal(
+            OWN_APP.into(),
+            "graphics-failed".into(),
+            PortalNotification {
+                title: "Graphics aren't working".into(),
+                body: "Domicile is drawing without the graphics card, so it's slower, and some \
+                       open windows may stay blank until you restart them. This is a bug; \
+                       please report it."
+                    .into(),
+                icon: None,
+                priority: Priority::Urgent,
+                default_action: None,
+                buttons: vec![Button {
+                    label: "Report it".into(),
+                    action: Action {
+                        name: REPORT_A_BUG.into(),
+                        target: None,
+                    },
+                }],
+                display_hint: Vec::new(),
+            },
+        );
+    }
+
     /// Remove `app_id`'s notification `id`, if held.
     pub fn remove_from_portal(&self, app_id: &str, id: &str) {
         self.store
@@ -547,6 +576,9 @@ const OWN_APP: &str = "domicile";
 /// The checked engine's warning's button.
 const HOW_TO_SWITCH: &str = "how-to-switch";
 
+/// The failed graphics warning's button.
+const REPORT_A_BUG: &str = "report-a-bug";
+
 /// What pressing `action` on one of Domicile's own notifications runs.
 /// Domicile offers only the actions listed here, so any other is a bug.
 fn own_command(action: &str) -> Vec<String> {
@@ -555,6 +587,13 @@ fn own_command(action: &str) -> Vec<String> {
             "domicile",
             "open",
             "https://domicile-desktop.com/docs/install",
+        ]
+        .map(String::from)
+        .to_vec(),
+        REPORT_A_BUG => [
+            "domicile",
+            "open",
+            "https://github.com/cprussin/domicile/issues",
         ]
         .map(String::from)
         .to_vec(),
@@ -1102,6 +1141,45 @@ mod tests {
                     "domicile",
                     "open",
                     "https://domicile-desktop.com/docs/install"
+                ]
+            ),
+            _ => panic!("Domicile's own button went elsewhere"),
+        }
+    }
+
+    /// Falling back to software is a bug, so it says so, from Domicile, kept
+    /// until read, and "Report it" opens the issue tracker.
+    #[test]
+    fn failed_graphics_warn_and_offer_a_report() {
+        let server = NotificationServer::unserved(Vec::new());
+        server.warn_that_graphics_failed();
+        let shown = server
+            .store
+            .change(|held| held.notifications.items().remove(0));
+        assert_eq!(
+            (
+                shown.app_name.as_str(),
+                shown.summary.as_str(),
+                shown.urgency
+            ),
+            ("Domicile", "Graphics aren't working", Urgency::Critical),
+            "from Domicile, and kept until read"
+        );
+        assert_eq!(
+            shown
+                .actions
+                .iter()
+                .map(|action| (action.key.as_str(), action.label.as_str()))
+                .collect::<Vec<_>>(),
+            [("0", "Report it")]
+        );
+        match server.store.press(shown.id, "0") {
+            Pressed::Launches(command) => assert_eq!(
+                command,
+                [
+                    "domicile",
+                    "open",
+                    "https://github.com/cprussin/domicile/issues"
                 ]
             ),
             _ => panic!("Domicile's own button went elsewhere"),
