@@ -20,6 +20,8 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/hdr_static_metadata.h"
+#include "ui/ozone/platform/drm/domicile/hdr_output.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
 
 namespace ui {
@@ -86,6 +88,12 @@ class SnapshotBuilder {
     return *this;
   }
 
+  // The HDR static metadata block of the EDID.
+  SnapshotBuilder& HdrMetadata(const gfx::HDRStaticMetadata& metadata) {
+    hdr_metadata_ = metadata;
+    return *this;
+  }
+
   // The formats the device's planes scan out.
   SnapshotBuilder& PlaneFormats(const std::vector<uint32_t>& formats) {
     plane_formats_.clear();
@@ -100,6 +108,7 @@ class SnapshotBuilder {
     const display::DisplayMode* native = nullptr;
     display::DisplaySnapshot::ColorInfo color_info;
     color_info.bits_per_channel = bits_per_channel_;
+    color_info.hdr_static_metadata = hdr_metadata_;
     if (native_mode_size_.has_value()) {
       modes.push_back(std::make_unique<display::DisplayMode>(
           *native_mode_size_, /*interlaced=*/false, native_refresh_hz_));
@@ -134,6 +143,7 @@ class SnapshotBuilder {
   std::string connector_ = "DP-1";
   uint32_t gamma_size_ = 0;
   uint32_t bits_per_channel_ = 8;
+  std::optional<gfx::HDRStaticMetadata> hdr_metadata_;
   display::DrmFormatsAndModifiers plane_formats_;
 };
 
@@ -384,6 +394,92 @@ TEST(DrmScreenTest, ATenBitPanelOnEightBitPlanesDrawsInEightBits) {
             viz::SinglePlaneFormat::kBGRA_8888);
 }
 
+// An EDID HDR block that takes PQ and peaks at `peak_nits`.
+gfx::HDRStaticMetadata TakesPq(double peak_nits) {
+  return gfx::HDRStaticMetadata(
+      peak_nits, peak_nits / 2, 0.05,
+      gfx::HDRStaticMetadata::EotfMask(
+          {gfx::HDRStaticMetadata::Eotf::kGammaSdrRange,
+           gfx::HDRStaticMetadata::Eotf::kPq}));
+}
+
+// A 10-bit panel on 10-bit planes whose EDID takes PQ.
+SnapshotBuilder AnHdrPanel(double peak_nits) {
+  SnapshotBuilder builder;
+  builder.Id(11)
+      .BitsPerChannel(10)
+      .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888,
+                     DRM_FORMAT_XBGR2101010})
+      .HdrMetadata(TakesPq(peak_nits));
+  return builder;
+}
+
+TEST(DrmScreenTest, AnHdrPanelAskedForHdrDrawsInHdr10) {
+  auto snapshot = AnHdrPanel(800).Build();
+  const DomicileDisplayLayout wanted{
+      .id = 11, .enabled = true, .hdr = true, .sdr_white_nits = 200.f};
+
+  ASSERT_TRUE(DrivesHdr(*snapshot, &wanted));
+  const gfx::DisplayColorSpaces drawn =
+      HdrColorSpaces(*snapshot, 200.f, viz::SinglePlaneFormat::kRGBA_1010102);
+
+  EXPECT_EQ(drawn.GetOutputColorSpace(gfx::ContentColorUsage::kHDR, false),
+            gfx::ColorSpace::CreateHDR10());
+  EXPECT_EQ(drawn.GetOutputFormat(gfx::ContentColorUsage::kHDR, false),
+            viz::SinglePlaneFormat::kRGBA_1010102);
+  EXPECT_FLOAT_EQ(drawn.GetSDRMaxLuminanceNits(), 200.f);
+  EXPECT_FLOAT_EQ(drawn.GetHDRMaxLuminanceRelative(), 4.f)
+      << "800 cd/m² over a 200 cd/m² white";
+}
+
+TEST(DrmScreenTest, AnHdrPanelReportingNoPeakIsTakenToReachAThousandNits) {
+  auto snapshot = AnHdrPanel(0).Build();
+
+  EXPECT_FLOAT_EQ(
+      HdrColorSpaces(*snapshot, 250.f, viz::SinglePlaneFormat::kRGBA_1010102)
+          .GetHDRMaxLuminanceRelative(),
+      kUnreportedPeakNits / 250.f);
+}
+
+TEST(DrmScreenTest, AWhiteBrighterThanThePanelsPeakGetsNoHeadroom) {
+  auto snapshot = AnHdrPanel(300).Build();
+
+  EXPECT_FLOAT_EQ(
+      HdrColorSpaces(*snapshot, 400.f, viz::SinglePlaneFormat::kRGBA_1010102)
+          .GetHDRMaxLuminanceRelative(),
+      1.f);
+}
+
+TEST(DrmScreenTest, APanelWithoutPqOrTenBitsIsNotDrivenInHdr) {
+  const DomicileDisplayLayout wanted{.id = 11, .enabled = true, .hdr = true};
+  auto no_pq = AnHdrPanel(800)
+                   .HdrMetadata(gfx::HDRStaticMetadata(
+                       800, 400, 0.05,
+                       gfx::HDRStaticMetadata::EotfMask(
+                           {gfx::HDRStaticMetadata::Eotf::kGammaSdrRange})))
+                   .Build();
+  auto eight_bit = AnHdrPanel(800).BitsPerChannel(8).Build();
+  auto eight_bit_planes =
+      AnHdrPanel(800).PlaneFormats({DRM_FORMAT_XRGB8888}).Build();
+
+  for (const auto* snapshot :
+       {no_pq.get(), eight_bit.get(), eight_bit_planes.get()}) {
+    EXPECT_FALSE(DrivesHdr(*snapshot, &wanted));
+    EXPECT_EQ(HdrOf(*snapshot, &wanted), DomicileHdr::kUnsupported);
+  }
+}
+
+TEST(DrmScreenTest, AnHdrPanelNotAskedForHdrStaysSdr) {
+  auto snapshot = AnHdrPanel(800).Build();
+  const DomicileDisplayLayout unasked{.id = 11, .enabled = true};
+  const DomicileDisplayLayout dark{.id = 11, .enabled = false, .hdr = true};
+
+  EXPECT_FALSE(DrivesHdr(*snapshot, nullptr));
+  EXPECT_FALSE(DrivesHdr(*snapshot, &unasked));
+  EXPECT_FALSE(DrivesHdr(*snapshot, &dark));
+  EXPECT_EQ(HdrOf(*snapshot, &unasked), DomicileHdr::kOff);
+}
+
 TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {
   // `raw_ptr<T>` and `raw_ptr<T, VectorExperimental>` are distinct types, and
   // vectors of them do not convert.
@@ -618,6 +714,30 @@ TEST(DrmScreenTest, ADisplayTakesTheTurnAndScaleTheLayoutGivesIt) {
   EXPECT_EQ(left.GetSizeInPixel(), gfx::Size(3840, 2160))
       << "the panel's pixels, rather than its bounds multiplied by a scale "
          "they are not in";
+}
+
+TEST(DrmScreenTest, AProfileThatAsksForHdrDrawsTheDisplayInHdr10) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(AnHdrPanel(800).Build());
+
+  screen.OnDisplaysChanged(Pointers(snapshots), {{.id = 11, .enabled = true}});
+  const gfx::DisplayColorSpaces sdr = DisplayOf(screen, 11).GetColorSpaces();
+  screen.OnDisplaysChanged(
+      Pointers(snapshots),
+      {{.id = 11, .enabled = true, .hdr = true, .sdr_white_nits = 200.f}});
+  const gfx::DisplayColorSpaces hdr = DisplayOf(screen, 11).GetColorSpaces();
+
+  EXPECT_NE(sdr.GetOutputColorSpace(gfx::ContentColorUsage::kSRGB, false),
+            gfx::ColorSpace::CreateHDR10());
+  EXPECT_EQ(hdr.GetOutputColorSpace(gfx::ContentColorUsage::kSRGB, false),
+            gfx::ColorSpace::CreateHDR10())
+      << "the connector is in PQ, so SDR content is drawn into it too";
+  EXPECT_EQ(hdr.GetOutputFormat(gfx::ContentColorUsage::kHDR, false),
+            viz::SinglePlaneFormat::kRGBA_1010102)
+      << "the 10-bit format the planes took";
+  EXPECT_FLOAT_EQ(hdr.GetSDRMaxLuminanceNits(), 200.f);
 }
 
 TEST(DrmScreenTest, ADisplayTheLayoutSaysNothingAboutIsUprightAndUnscaled) {

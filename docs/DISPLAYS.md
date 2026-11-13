@@ -319,6 +319,31 @@ its planes take `XB30` or `XR30`; otherwise in 8. There is no setting.
 - `ten_bit_scanout.cc` decides both. The plan for HDR on top of it:
   [COLOR.md](/docs/architecture/COLOR.md).
 
+## HDR
+
+A profile entry with `"hdr": true` drives that monitor in HDR10: BT.2020
+primaries with the PQ curve. It is off by default, and `sdr_white` sets how
+bright SDR content's white is there (203 cd/m², BT.2408's reference white, if
+absent).
+
+- A monitor takes it when its EDID's HDR static metadata lists PQ and it
+  scans out in 10 bits ([above](#bit-depth)). `hdr_output.cc` decides, and
+  `DrmModeset` and `DrmScreen` both ask it, so the GPU process and the browser
+  agree.
+- `DrmModeset` asks for it as `DisplayConfigurationParams::domicile_hdr`. Once
+  the modeset commits, `DrmDisplay::DomicileSetHdr` sets the connector's
+  `Colorspace` to BT.2020 RGB, its `HDR_OUTPUT_METADATA` to PQ with the
+  panel's luminances, and the planes' output primaries to the panel's (patch
+  `0211`). Upstream does this only on ChromeOS, from the snapshot's color
+  space.
+- `DrmScreen` gives the display HDR10 color spaces with SDR white at
+  `sdr_white` and headroom up to the panel's peak (`HdrColorSpaces`), so viz
+  composites in PQ and maps SDR content to that white. A panel that reports
+  no peak is taken to reach 1000 cd/m².
+- It reaches the compositor through `hdr_displays` (`DomicileHdrDisplay`):
+  `unsupported`, `off` or `on`, the panel's luminances, and the SDR white in
+  use. The request goes back through `domicile_displays_configure_hdr`.
+
 ## DisplayLink docks
 
 - `evdi` hands DisplayLinkManager each page flip's `FB_DAMAGE_CLIPS`, and it
