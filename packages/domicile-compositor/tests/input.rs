@@ -7,7 +7,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{AppCursorImage, ChromeMessage, CursorShape, HostMessage};
 use smithay::input::keyboard::xkb;
 
 use crate::running::Compositor;
@@ -504,6 +504,84 @@ fn a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor() {
             |message| matches!(message, HostMessage::AppCursor { app_id, .. } if *app_id == app),
         )
         .expect("a client the pointer entered asks the chrome for a cursor");
+}
+
+/// A cursor a client draws on its own surface reaches the chrome as an image
+/// on `app_cursor`, with its hotspot, and again each time the client redraws
+/// it.
+#[test]
+fn a_cursor_a_client_draws_reaches_the_chrome_as_its_image() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("app", &["--cursor-surface"]);
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    drive(&mut chrome, &app_id);
+
+    let first = drawn_cursor(&mut chrome, &app_id, 4);
+    assert_eq!(first.hotspot, (1, 2));
+    assert_eq!(first.scale, 1);
+    assert_eq!(pixels_of(&first.png), (4, 4, [0xc0, 0x40, 0x20, 0xff]));
+
+    chrome
+        .say(&ChromeMessage::PointerButton {
+            app_id: app_id.clone(),
+            button: 0x110,
+            pressed: true,
+        })
+        .expect("the chrome can press");
+    let redrawn = drawn_cursor(&mut chrome, &app_id, 6);
+    assert_eq!(redrawn.hotspot, (1, 2), "a redraw keeps the hotspot");
+}
+
+/// The next cursor image for `app_id` that is `size` pixels square.
+fn drawn_cursor(
+    chrome: &mut domicile_test_chrome::Chrome,
+    app_id: &str,
+    size: u32,
+) -> AppCursorImage {
+    let told = chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::AppCursor { app_id: of, image: Some(image), .. }
+                    if of == app_id && pixels_of(&image.png).0 == size
+            )
+        })
+        .expect("the client's cursor image reaches the chrome");
+    let HostMessage::AppCursor {
+        cursor,
+        image: Some(image),
+        ..
+    } = told
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(
+        cursor,
+        CursorShape::Default,
+        "an older engine shows the arrow"
+    );
+    image
+}
+
+/// A cursor PNG's width, height and first pixel.
+fn pixels_of(png: &str) -> (u32, u32, [u8; 4]) {
+    let bytes = domicile_host::base64::decoded(png).expect("the PNG is base64");
+    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+        .read_info()
+        .expect("the image is a PNG");
+    let mut rgba = vec![0; reader.output_buffer_size().expect("it fits")];
+    let info = reader.next_frame(&mut rgba).expect("it decodes");
+    (
+        info.width,
+        info.height,
+        [rgba[0], rgba[1], rgba[2], rgba[3]],
+    )
 }
 
 /// A hand on the mouse over a window reaches a client holding a relative

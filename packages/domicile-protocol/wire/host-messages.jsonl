@@ -11,6 +11,7 @@
 {"type":"app_max_size","app_id":"app-2","size":[0.0,0.0]}
 {"type":"app_closed","app_id":"app-1"}
 {"type":"app_cursor","app_id":"app-2","cursor":"vertical-text"}
+{"type":"app_cursor","app_id":"app-2","cursor":"default","image":{"png":"iVBORw0KGgo=","hotspot":[1,2],"scale":2}}
 {"type":"app_presented","app_id":"app-2"}
 {"type":"app_suspended","app_id":"app-2","suspended":true}
 {"type":"app_transient_for","app_id":"app-4","transient_for":"app-2"}

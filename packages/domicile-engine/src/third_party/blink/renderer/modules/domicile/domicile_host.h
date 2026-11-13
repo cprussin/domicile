@@ -353,7 +353,8 @@ class MODULES_EXPORT DomicileHost final
                    Vector<domicile::mojom::blink::AppFramePtr> frames) override;
   void AppClosed(const String& app_id) override;
   void AppCursor(const String& app_id,
-                 domicile::mojom::blink::CursorShape cursor) override;
+                 domicile::mojom::blink::CursorShape cursor,
+                 domicile::mojom::blink::AppCursorImagePtr image) override;
   void AppPresented(const String& app_id) override;
   void AppSuspended(const String& app_id, bool suspended) override;
   void AppTransientFor(const String& app_id,

@@ -21,7 +21,6 @@ the detail, when there is one. Remove a gap when it's fixed.
   the fullscreen window back to its box.
 - **Browser window context menus have only Chrome's core items.** No spelling
   suggestions, page or extension items.
-- **Client-drawn cursor surfaces show a plain arrow.**
 - **Pages and the shell do not compose from an input method yet:** only
   native windows do.
   [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).
