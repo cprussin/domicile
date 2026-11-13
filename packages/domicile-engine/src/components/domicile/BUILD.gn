@@ -592,6 +592,7 @@ source_set("web_view_guest") {
   public_deps = [
     ":context_menu",
     ":desk_downloads",
+    ":desk_faults",
     ":file_choice",
     ":guest_dialogs",
     ":page_matches",
@@ -997,6 +998,18 @@ source_set("desk_activity") {
   public_deps = [ "//base" ]
 }
 
+# Bugs the engine catches in itself, from wherever it caught one to a control
+# channel, which tells the compositor. Its own target for :desk_activity's
+# reason.
+source_set("desk_faults") {
+  sources = [
+    "browser/desk_faults.cc",
+    "browser/desk_faults.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # The touchpad gestures the shell grabs, from the platform's input to one
 # control channel. Its own target for :desk_activity's reason.
 source_set("desk_gestures") {
@@ -1149,6 +1162,7 @@ source_set("control_channel") {
     ":common",
     ":cursor_shape",
     ":desk_activity",
+    ":desk_faults",
     ":desk_gestures",
     ":desk_lock",
     ":desk_modifier_taps",
@@ -1191,6 +1205,7 @@ source_set("unit_tests") {
     "browser/context_menu_unittest.cc",
     "browser/control_channel_unittest.cc",
     "browser/desk_activity_unittest.cc",
+    "browser/desk_faults_unittest.cc",
     "browser/desk_gestures_unittest.cc",
     "browser/desk_modifier_taps_unittest.cc",
     "browser/desk_pointer_hiding_unittest.cc",
@@ -1278,6 +1293,7 @@ source_set("unit_tests") {
     ":control_channel",
     ":cursor_shape",
     ":desk_activity",
+    ":desk_faults",
     ":desk_geometry",
     ":desk_gestures",
     ":desk_modifier_taps",

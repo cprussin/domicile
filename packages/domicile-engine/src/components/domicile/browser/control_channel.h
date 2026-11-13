@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "base/timer/timer.h"
 #include "components/domicile/browser/desk_activity.h"
+#include "components/domicile/browser/desk_faults.h"
 #include "components/domicile/browser/desk_gestures.h"
 #include "components/domicile/browser/desk_modifier_taps.h"
 #include "components/domicile/browser/desk_pointer.h"
@@ -242,6 +243,9 @@ class ControlChannel : public mojom::ControlChannel {
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
   void SomebodyIsHere(const std::string& input);
+  // The engine caught itself in a bug; see DeskFaults. Held while no
+  // compositor is connected, so the person still hears of it.
+  void FaultFound(const std::string& what);
   // The pointer moved on the desk; see DeskPointer. Dropped while no
   // compositor is connected, like SomebodyIsHere.
   void DeskPointerMoved(const DeskPointerAt& at);
@@ -284,6 +288,8 @@ class ControlChannel : public mojom::ControlChannel {
   // This channel's registration with the process's DeskActivity, given back in
   // the destructor.
   DeskActivity::ListenerId activity_;
+  // And with the process's DeskFaults.
+  DeskFaults::ListenerId faults_;
   // And with the process's DeskPointer.
   DeskPointer::ListenerId pointer_;
   // And with the process's DeskGestures, which forgets this page's grabs with
