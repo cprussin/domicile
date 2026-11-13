@@ -843,6 +843,26 @@ void DomicileHost::grabShortcut(ScriptState*,
                                 const String& written,
                                 bool while_inhibited,
                                 ExceptionState& exception_state) {
+  if (const auto modifier = ParseDomicileTap(written)) {
+    if (!Ready(exception_state)) {
+      return;
+    }
+    GrabbedTap* found = nullptr;
+    for (GrabbedTap& grabbed : taps_) {
+      if (grabbed.written == written) {
+        found = &grabbed;
+      }
+    }
+    if (found) {
+      ++found->holds;
+      found->while_inhibited |= while_inhibited;
+    } else {
+      taps_.push_back(
+          GrabbedTap{written, *modifier, /*holds=*/1, while_inhibited});
+    }
+    RegrabTap(*modifier);
+    return;
+  }
   String error;
   const std::optional<DomicileWrittenChord> chord =
       ParseDomicileChord(written, &error);
@@ -887,6 +907,21 @@ void DomicileHost::grabShortcut(ScriptState*,
 void DomicileHost::ungrabShortcut(ScriptState*,
                                   const String& written,
                                   ExceptionState& exception_state) {
+  if (const auto modifier = ParseDomicileTap(written)) {
+    if (!Ready(exception_state)) {
+      return;
+    }
+    for (wtf_size_t i = 0; i < taps_.size(); ++i) {
+      if (taps_[i].written == written) {
+        if (--taps_[i].holds == 0) {
+          taps_.EraseAt(i);
+          RegrabTap(*modifier);
+        }
+        return;
+      }
+    }
+    return;
+  }
   String error;
   if (!ParseDomicileChord(written, &error)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError, error);
@@ -1016,6 +1051,24 @@ void DomicileHost::TellWhetherTheKeyboardWindowInhibits() {
   }
   told_inhibits_ = inhibits;
   channel_->KeyboardWindowInhibitsShortcuts(inhibits);
+}
+
+void DomicileHost::RegrabTap(domicile::mojom::blink::TapModifier modifier) {
+  bool grabbed = false;
+  bool while_inhibited = false;
+  for (const GrabbedTap& tap : taps_) {
+    if (tap.modifier == modifier) {
+      grabbed = true;
+      while_inhibited |= tap.while_inhibited;
+    }
+  }
+  if (grabbed) {
+    // Sent again on each grab: the browser process keeps the latest
+    // `while_inhibited`, which an ungrab of another name can take away.
+    channel_->GrabModifierTap(modifier, while_inhibited);
+  } else {
+    channel_->UngrabModifierTap(modifier);
+  }
 }
 
 bool DomicileHost::StaysWhileInhibited(const DomicilePress& press) const {
@@ -1751,6 +1804,31 @@ void DomicileHost::GesturePerformed(
       GesturePhaseName(gesture->phase), gesture->fingers, gesture->dx,
       gesture->dy, gesture->scale, gesture->rotation, gesture->canceled,
       GestureEdgeName(gesture->edge)));
+}
+
+void DomicileHost::ModifierTapped(
+    domicile::mojom::blink::TapModifier modifier) {
+  using domicile::mojom::blink::TapModifier;
+  // A tap is over when it is heard: the key is already up. So `shortcut` and
+  // `shortcutrelease` together, for each name it is grabbed by, with no key
+  // and the modifier as the one held.
+  const bool alt = modifier == TapModifier::kAlt;
+  const bool ctrl = modifier == TapModifier::kCtrl;
+  const bool shift = modifier == TapModifier::kShift;
+  const bool meta = modifier == TapModifier::kMeta;
+  Vector<String> names;
+  for (const GrabbedTap& tap : taps_) {
+    if (tap.modifier == modifier) {
+      names.push_back(tap.written);
+    }
+  }
+  for (const String& name : names) {
+    DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
+        domicile_event_names::Shortcut(), name, 0, alt, ctrl, shift, meta));
+    DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
+        domicile_event_names::Shortcutrelease(), name, 0, alt, ctrl, shift,
+        meta));
+  }
 }
 
 void DomicileHost::ShortcutReleased(

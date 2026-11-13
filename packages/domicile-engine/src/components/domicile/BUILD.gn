@@ -1010,6 +1010,25 @@ source_set("desk_gestures") {
     "//ui/events",
     "//ui/events/types:headers",
   ]
+
+  # A gesture the shell takes is no tap of the modifier held through it.
+  deps = [ ":desk_modifier_taps" ]
+}
+
+# The lone modifier taps the shell grabs (a tap of Super alone), from aura's
+# events to one control channel. Its own target for :desk_activity's reason.
+source_set("desk_modifier_taps") {
+  sources = [
+    "browser/desk_modifier_taps.cc",
+    "browser/desk_modifier_taps.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events/types:headers",
+  ]
 }
 
 # Where the pointer is on the desk, from the browser's own input to every
@@ -1132,6 +1151,7 @@ source_set("control_channel") {
     ":desk_activity",
     ":desk_gestures",
     ":desk_lock",
+    ":desk_modifier_taps",
     ":desk_pointer",
     ":desk_pointer_hiding",
     ":display_transform",
@@ -1172,6 +1192,7 @@ source_set("unit_tests") {
     "browser/control_channel_unittest.cc",
     "browser/desk_activity_unittest.cc",
     "browser/desk_gestures_unittest.cc",
+    "browser/desk_modifier_taps_unittest.cc",
     "browser/desk_pointer_hiding_unittest.cc",
     "browser/desk_pointer_unittest.cc",
     "browser/desk_geometry_unittest.cc",
@@ -1259,6 +1280,7 @@ source_set("unit_tests") {
     ":desk_activity",
     ":desk_geometry",
     ":desk_gestures",
+    ":desk_modifier_taps",
     ":desk_pointer",
     ":desk_pointer_hiding",
     ":desk_tabs",

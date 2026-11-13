@@ -41,8 +41,40 @@ describe("ownKeybindings", () => {
     expect(bindings.get("default")).toEqual(new Map());
   });
 
+  it("spells a modifier alone, a tap of it, as its one name", () => {
+    const bindings = ownKeybindings({
+      keybindings: {
+        "--inhibited ctrl": KeyAction.Mode("y"),
+        Super: KeyAction.Mode("x"),
+      },
+    });
+    expect([...(bindings.get("default")?.keys() ?? [])]).toEqual([
+      "Ctrl",
+      "Meta",
+    ]);
+    expect(
+      inhibitedChords({
+        keybindings: { "--inhibited ctrl": KeyAction.Mode("y") },
+      }),
+    ).toEqual(new Set(["Ctrl"]));
+  });
+
+  it("refuses a tap of a modifier written twice, as Meta and Super", () => {
+    expect(() =>
+      ownKeybindings({
+        keybindings: { Meta: KeyAction.Mode("x"), Super: KeyAction.Mode("y") },
+      }),
+    ).toThrow("Super");
+  });
+
   it("refuses a chord with no keysym, an unknown modifier or one held twice", () => {
-    for (const chord of ["Meta+", "Hyper+l", "Meta+Super+l", "Meta+ l"]) {
+    for (const chord of [
+      "Meta+",
+      "Hyper+l",
+      "Meta+Super+l",
+      "Meta+ l",
+      "Shift+Meta",
+    ]) {
       expect(() =>
         ownKeybindings({ keybindings: { [chord]: KeyAction.Mode("x") } }),
       ).toThrow(chord);

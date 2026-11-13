@@ -8,6 +8,7 @@
 
 #include "base/check.h"
 #include "base/no_destructor.h"
+#include "components/domicile/browser/desk_modifier_taps.h"
 
 namespace domicile {
 
@@ -104,6 +105,11 @@ void DeskGestures::Take(const ui::NativeGesture& gesture) {
         owner_.reset();
       }
     }
+  }
+  if (gesture.phase == ui::NativeGesturePhase::kBegin) {
+    // Super held through a swipe the shell took is no tap of Super. No aura
+    // event shows the swipe, so DeskModifierTaps is told here.
+    DeskModifierTaps::Get().Interrupt();
   }
   if (!touched.is_null()) {
     touched.Run();

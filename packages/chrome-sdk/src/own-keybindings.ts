@@ -134,7 +134,10 @@ const unflagged = (flagged: string): string => {
   return written;
 };
 
-/** `written` in its one spelling: modifiers in {@link ORDER}, then the keysym. */
+/**
+ * `written` in its one spelling: modifiers in {@link ORDER}, then the keysym.
+ * A modifier alone (`Super`) is a tap of it, spelled as its name (`Meta`).
+ */
 export const spelled = (written: string): string => {
   if (/\s/.test(written)) {
     throw new Error(
@@ -143,9 +146,13 @@ export const spelled = (written: string): string => {
   }
   const parts = written.split("+");
   const keysym = parts.at(-1) ?? "";
-  if (keysym === "" || MODIFIERS.has(keysym.toLowerCase())) {
+  const tapped = MODIFIERS.get(keysym.toLowerCase());
+  if (parts.length === 1 && tapped !== undefined) {
+    return tapped;
+  }
+  if (keysym === "" || tapped !== undefined) {
     throw new Error(
-      `domicile: chord ${JSON.stringify(written)} names no key; its last part is the keysym`,
+      `domicile: chord ${JSON.stringify(written)} names no key; its last part is the keysym, unless it is one modifier alone, for a tap of it`,
     );
   }
   const held = parts.slice(0, -1).reduce((modifiers, part) => {
