@@ -2182,11 +2182,14 @@
 
 
                 os.mkfifo("/run/input")
-                # Opened for writing too, so the reader never sees end of file
-                # between the test's writers. Read-only, it closed and reopened
-                # after each, and a writer that opened in that gap got EPIPE.
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
                 while True:
-                    with open("/run/input", "r+") as commands:
+                    with open("/run/input") as commands:
                         for command in commands:
                             match command.split():
                                 case ["move", dx, dy]:
@@ -2485,11 +2488,14 @@
 
 
                 os.mkfifo("/run/input")
-                # Opened for writing too, so the reader never sees end of file
-                # between the test's writers. Read-only, it closed and reopened
-                # after each, and a writer that opened in that gap got EPIPE.
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
                 while True:
-                    with open("/run/input", "r+") as commands:
+                    with open("/run/input") as commands:
                         for command in commands:
                             match command.split():
                                 case ["tap", x, y]:
