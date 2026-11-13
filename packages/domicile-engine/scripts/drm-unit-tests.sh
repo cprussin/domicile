@@ -77,7 +77,7 @@ SUITES=(
   HeadlessDeskInputTest:10
   HeadlessDeskCursorsTest:4
   DrmColorCommitTest:3
-  DrmPageFlipTimeoutTest:8
+  DrmPageFlipTimeoutTest:10
   DrmDamageClipsTest:3
   DrmInputMethodTest:13
   DeskInputMethodTest:4
