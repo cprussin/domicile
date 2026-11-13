@@ -169,6 +169,42 @@ describe("useWindowMotion", () => {
 
       expect(motionOf(result, EDITOR.id)).toBeUndefined();
     });
+
+    // A background app's window, such as Messages', stays open when shut.
+    describe("by being shut", () => {
+      const shutting = () => {
+        const shown = showing(desktop("1", [TERMINAL, EDITOR]));
+        act(() => {
+          shown.rerender({
+            ...desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+            shut: [EDITOR.id],
+          });
+        });
+        return shown;
+      };
+
+      it("shrinks away from the box it had", () => {
+        const { result } = shutting();
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "closing",
+          placement: { ...placementOf(EDITOR.id), depth: leaving(TILED) },
+        });
+      });
+
+      it("is hidden when it says it has gone", () => {
+        const { result } = shutting();
+
+        act(() => {
+          result.current.onPlayedOut(EDITOR.id, "closing", SCREEN, "contents");
+        });
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "resting",
+          placement: undefined,
+        });
+      });
+    });
   });
 
   // Sent to the scratchpad or to a workspace no screen shows. It stays open,
