@@ -19,9 +19,9 @@ use crate::engine_session::{EngineSession, Remapped, Submission, Submitted};
 use crate::frame_descriptor::FrameDescriptor;
 use crate::frame_pacing::Paced;
 use crate::memory_frames::{MemoryError, MemoryFrame};
-use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
+use crate::shm_upload::{render_modifiers, shm_shape, upload_fourcc, CopyError};
 use crate::surface_commit::{committed_buffer, CommittedBuffer, Mapping};
-use crate::uploads::{UploadId, Uploads};
+use crate::uploads::{Shape, UploadId, Uploads};
 use crate::DomicileCompositor;
 use crate::{casting, engine_damage, gbm, shm_upload};
 
@@ -437,10 +437,14 @@ impl DomicileCompositor {
         let gpu = self.gpu.as_mut().ok_or(ShmRefused::NoRenderer)?;
         let gbm = gpu.gbm.as_ref().ok_or(ShmRefused::NoAllocator)?;
         let shape = shm_shape(commit.buffer).ok_or(ShmRefused::Unreadable)?;
-        let modifiers = render_modifiers(&gpu.renderer, shape.fourcc);
+        let drawn = Shape {
+            fourcc: upload_fourcc(&gpu.renderer, shape.fourcc),
+            ..shape
+        };
+        let modifiers = render_modifiers(&gpu.renderer, drawn.fourcc);
         let taken = self.uploads.take(
             app_id,
-            shape,
+            drawn,
             |upload| matches!(upload, Upload::Gpu(_)),
             |shape| gbm.allocate(shape, &modifiers).map(Upload::Gpu),
         )?;
