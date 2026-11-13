@@ -1243,6 +1243,11 @@ export type DomicileWindow = {
   readonly inhibitsShortcuts: boolean;
   readonly cursor: DomicileCursorShape;
   /**
+   * A cursor the client drew itself, as a CSS `cursor` value to set on its
+   * element in place of `cursor`; null while it uses a named one.
+   */
+  readonly cursorImage: string | null;
+  /**
    * A popup's parent window and its place relative to it, and whether it
    * grabbed the pointer; null and false for a toplevel.
    */

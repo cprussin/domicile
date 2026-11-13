@@ -63,9 +63,16 @@ const toplevelChanges = (
     ...(sameLimit(limitOf(before.maxWidth, before.maxHeight), maxSize)
       ? []
       : [WindowAction.AppMaxSize(appId, maxSize)]),
-    ...(before.cursor === window.cursor
+    ...(before.cursor === window.cursor &&
+    before.cursorImage === window.cursorImage
       ? []
-      : [WindowAction.AppCursorChanged(appId, window.cursor)]),
+      : [
+          WindowAction.AppCursorChanged(
+            appId,
+            window.cursor,
+            window.cursorImage,
+          ),
+        ]),
     ...(before.desktopId === window.desktopId
       ? []
       : [WindowAction.AppDesktopIdChanged(appId, window.desktopId)]),

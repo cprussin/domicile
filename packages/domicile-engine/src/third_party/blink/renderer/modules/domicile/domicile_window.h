@@ -50,6 +50,8 @@ struct DomicileWindowState {
   bool inhibits_shortcuts = false;
   V8DomicileCursorShape cursor =
       V8DomicileCursorShape(V8DomicileCursorShape::Enum::kDefault);
+  // The CSS cursor for an image the client drew itself; null for none.
+  String cursor_image;
   // Null for a toplevel.
   String parent;
   std::optional<double> x;
@@ -93,6 +95,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   bool urgent() const { return state_.urgent; }
   bool inhibitsShortcuts() const { return state_.inhibits_shortcuts; }
   V8DomicileCursorShape cursor() const { return state_.cursor; }
+  const String& cursorImage() const { return state_.cursor_image; }
   const String& parent() const { return state_.parent; }
   std::optional<double> x() const { return state_.x; }
   std::optional<double> y() const { return state_.y; }
