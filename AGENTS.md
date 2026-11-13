@@ -185,6 +185,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/GESTURES.md](/docs/architecture/GESTURES.md) | Touchpad and touchscreen gestures: pinch to the window under the pointer, Meta+pinch to the desk, multi-finger gestures to the shell. The plan. |
 | [/docs/architecture/WEB-APPS.md](/docs/architecture/WEB-APPS.md) | Web apps as desktop entries: `domicile open --app`, app windows without an address bar, and the plan for installing sites as apps. |
 | [/docs/architecture/TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md) | Input methods (fcitx5, IBus) composing into native windows, pages and the shell through one relay per seat. The plan. |
+| [/docs/architecture/COLOR.md](/docs/architecture/COLOR.md) | 10-bit client formats and scanout, `wp_color_management_v1`, and opt-in HDR per display on Chromium's color pipeline. The plan. |
 | [/docs/architecture/APP-MODULES.md](/docs/architecture/APP-MODULES.md) | Apps as modules: `domicile open --app <entry.js>` calls `main(root, host)` on `domicile://app-<id>/`; History and Settings as app modules instead of extensions. |
 
 [`/docs/KNOWN-GAPS.md`](/docs/KNOWN-GAPS.md) lists known gaps, each pointing at the doc
