@@ -715,6 +715,37 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_sync(DomicileEngine* engine,
                                                   DomicileSurfaceId surface,
                                                   uint32_t frame);
 
+// One of a surface's subsurfaces (wl_subsurface), in logical pixels from the
+// top left of the surface's crop.
+typedef struct DomicileSubsurface {
+  DomicileSurfaceId surface;
+  double x;
+  double y;
+  double width;
+  double height;
+  // Nonzero when it is drawn over the surface, zero when under it.
+  uint8_t above;
+} DomicileSubsurface;
+
+// Sets `surface`'s subsurfaces, bottom to top, which its frames draw with it:
+// each frame embeds each subsurface's newest frame at its place. Replaces the
+// last set; applies from the surface's next frame.
+//
+// A subsurface takes frames once the engine embeds it, which it reports as
+// `configure` with its size in device pixels. Submit to it at the newest box.
+// A subsurface whose surface is gone is left out.
+DOMICILE_ENGINE_EXPORT void domicile_surface_set_children(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    const DomicileSubsurface* children,
+    uint32_t count);
+
+// Sends `surface`'s last frame again, to show subsurfaces set since with no
+// new buffer of its own. Does nothing while a newer frame of it is on its
+// way, which shows them. The frame answers no `frame_done` or `presented`.
+DOMICILE_ENGINE_EXPORT void domicile_surface_redraw(DomicileEngine* engine,
+                                                    DomicileSurfaceId surface);
+
 // Tells the browser which connectors to light and where, in answer to the
 // `displays` callback.
 //
