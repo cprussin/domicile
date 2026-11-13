@@ -406,6 +406,10 @@ Each entry in `domicile.windows.list` describes one client window.
     `pidfdInode`.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
+  A client that draws its own cursor (a game, an image editor, a VM viewer)
+  also has `cursorImage`: a CSS `cursor` value holding its image and hotspot,
+  to set in place of `cursor`. The engine draws it like any page cursor, so it
+  turns with a rotated monitor, hides with the pointer and shows in captures.
 - **Pointer lock:** `pointerConstraint` is `"lock"` while a game or VM viewer
   under the pointer asks to lock it in place, and `"confine"` while one asks
   to keep it inside the window. It is offered only for the window under the

@@ -345,6 +345,22 @@ its own menu, on DisplayPort or HDMI 2.1, and a driver that supports it
    panel should still be lit.
 4. Remove `adaptive_sync` and reload. It should read `"off"` again.
 
+## A cursor an app draws itself
+
+Needs an app that sets its own cursor image, such as GIMP with a brush tool,
+a game, or `virt-viewer` over a guest. One monitor should be rotated
+(`"transform": "rotate-90"` in its profile).
+
+1. Hover the app on the upright monitor. Its own cursor should show, not the
+   arrow, and it should click at its tip (paint a dot: it lands under the
+   point that clicks).
+2. Move the app to the rotated monitor and hover it. The cursor should stay
+   upright to you and click at the same point.
+3. Take a screenshot, or share the screen in a browser call, with the cursor
+   over the app. The capture should show the app's cursor.
+4. Type in the app with pointer hiding on. The cursor should hide and come
+   back at the next move.
+
 ## Monitor cast on a GPU
 
 `guard-display-capture.sh` runs software-composited, so it reads shared
