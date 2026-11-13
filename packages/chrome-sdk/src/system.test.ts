@@ -649,25 +649,59 @@ describe("shell commands", () => {
   });
 });
 
-describe("idle warnings", () => {
-  it("streams how soon the screens blank, and when they no longer will", async () => {
+describe("idle watches", () => {
+  it("streams whether nobody has been at the desk for the time chosen", async () => {
     const host = new FakeHost();
-    const listening = system(host).idleWarnings();
+    const listening = system(host).idleAfter(120);
     host.reply(1, { kind: "started" });
-    const warnings = started(await listening);
-    host.event(1, { blanks_in_ms: 30_000, kind: "idle_warning" });
-    host.event(1, { blanks_in_ms: null, kind: "idle_warning" });
-    warnings.stop();
+    const watch = started(await listening);
+    host.event(1, { idle: true, kind: "idle" });
+    host.event(1, { idle: false, kind: "idle" });
+    watch.stop();
     host.end(1, { kind: "stopped" });
 
     expect(host.calls).toStrictEqual([
-      [1, { call: "idle_warnings" }],
+      [1, { call: "idle_after", seconds: 120 }],
       [1, { call: "unwatch" }],
     ]);
-    expect(await Array.fromAsync(warnings.items)).toStrictEqual([
-      30_000,
-      undefined,
+    expect(await Array.fromAsync(watch.items)).toStrictEqual([true, false]);
+  });
+
+  // The next compositor's clock starts from its start, so an idle spell is
+  // over.
+  it("watches again under the next compositor, no longer idle", async () => {
+    const host = new FakeHost();
+    const listening = system(host).idleAfter(120);
+    host.reply(1, { kind: "started" });
+    const watch = started(await listening);
+    host.event(1, { idle: true, kind: "idle" });
+    host.end(1, gone);
+    host.reply(2, { kind: "started" });
+    watch.stop();
+    host.end(2, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "idle_after", seconds: 120 }],
+      [2, { call: "idle_after", seconds: 120 }],
+      [2, { call: "unwatch" }],
     ]);
+    expect(await Array.fromAsync(watch.items)).toStrictEqual([true, false]);
+  });
+
+  it("watches a time before the screens blank", async () => {
+    const host = new FakeHost();
+    const listening = system(host).idleBeforeBlanking(30);
+    host.reply(1, { kind: "started" });
+    const watch = started(await listening);
+    host.event(1, { idle: true, kind: "idle" });
+    watch.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "idle_before_blanking", seconds: 30 }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(watch.items)).toStrictEqual([true]);
   });
 });
 

@@ -1,11 +1,11 @@
 //! Files, watches, processes, D-Bus, screenshots, shell commands, idle
-//! warnings and holds, the lock's refusals, window states and keymaps for one
+//! watches and holds, the lock's refusals, window states and keymaps for one
 //! chrome connection.
 //! The compositor takes the screenshots ([`System::screenshotting_with`]),
 //! sets window states ([`System::setting_window_states_with`]), adds virtual
 //! monitors ([`System::adding_virtual_monitors_with`]), shares the
-//! shell commands ([`System::sharing_shell_commands`]), idle warnings
-//! ([`System::sharing_idle_warnings`]), idle holds
+//! shell commands ([`System::sharing_shell_commands`]), idle watches
+//! ([`System::sharing_idle_watches`]), idle holds
 //! ([`System::sharing_idle_holds`]) and window requests
 //! ([`System::sharing_window_requests`]) between connections, sends the
 //! refusals ([`System::sharing_unlock_refusals`]), lists the keymaps
@@ -29,7 +29,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Instant, UNIX_EPOCH};
+use std::time::{Duration, UNIX_EPOCH};
 
 use domicile_protocol::{
     Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice, PreviewedWindow, Scale,
@@ -45,7 +45,7 @@ use crate::bells::Bells;
 use crate::dbus_json::{self, NotABody};
 use crate::fanout::Listener;
 use crate::idle_holds::{self, IdleHolds};
-use crate::idle_warnings::{self, IdleWarnings};
+use crate::idle_watches::{IdleWatches, Mark};
 use crate::keymaps::Keymaps;
 use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
@@ -93,8 +93,8 @@ pub struct System {
     preview: Option<Preview>,
     /// The pages that hear a `SystemRequest::SendShell`.
     shell_commands: ShellCommands,
-    /// The warning that the screens are about to blank.
-    idle_warnings: IdleWarnings,
+    /// The pages watching for the desk to go idle.
+    idle_watches: IdleWatches,
     /// What holds the desktop awake, and the pages that hear it change.
     idle_holds: IdleHolds,
     /// The pages that hear the lock refuse a passphrase.
@@ -211,10 +211,8 @@ enum Running {
     /// A D-Bus match, on a connection of its own so closing it ends the match.
     Match(Connection),
     /// The page hears shell commands, the lock's refusals, window requests,
-    /// the keymaps or what holds the desktop awake.
+    /// the keymaps, what holds the desktop awake or whether it is idle.
     Listening(Listener),
-    /// The page hears idle warnings.
-    IdleWarnings(idle_warnings::Listener),
     /// The page's virtual monitor, removed when this drops.
     VirtualMonitor(Box<dyn MonitorLease>),
 }
@@ -293,7 +291,8 @@ pub fn reach(request: &SystemRequest) -> Reach {
             false => Reach::Acts,
         },
         SystemRequest::ShellCommands
-        | SystemRequest::IdleWarnings
+        | SystemRequest::IdleAfter { .. }
+        | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::WindowRequests
@@ -339,7 +338,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands
-        | SystemRequest::IdleWarnings
+        | SystemRequest::IdleAfter { .. }
+        | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::SendShell { .. }
@@ -394,7 +394,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands
         | SystemRequest::SendShell { .. }
-        | SystemRequest::IdleWarnings
+        | SystemRequest::IdleAfter { .. }
+        | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::SetWindowStates { .. }
@@ -446,7 +447,7 @@ impl System {
             screen_record: None,
             preview: None,
             shell_commands: ShellCommands::default(),
-            idle_warnings: IdleWarnings::default(),
+            idle_watches: IdleWatches::new(|| {}),
             idle_holds: IdleHolds::default(),
             unlock_refusals: UnlockRefusals::default(),
             set_window_states: None,
@@ -516,10 +517,10 @@ impl System {
         self
     }
 
-    /// This system, hearing idle warnings through `warnings` instead of its
-    /// own, which never warns.
-    pub fn sharing_idle_warnings(mut self, warnings: IdleWarnings) -> System {
-        self.idle_warnings = warnings;
+    /// This system, watching for idle through `watches` instead of its own,
+    /// which no clock settles.
+    pub fn sharing_idle_watches(mut self, watches: IdleWatches) -> System {
+        self.idle_watches = watches;
         self
     }
 
@@ -798,17 +799,6 @@ impl System {
                         drop(listener);
                         Handled::Done
                     }
-                    Some(Running::IdleWarnings(listener)) => {
-                        (self.tell)(HostMessage::SystemEnd {
-                            id,
-                            end: SystemEnd::Stopped,
-                        });
-                        // Dropped outside the lock, which a warning being
-                        // heard waits for.
-                        drop(running);
-                        drop(listener);
-                        Handled::Done
-                    }
                     Some(Running::VirtualMonitor(lease)) => {
                         (self.tell)(HostMessage::SystemEnd {
                             id,
@@ -863,7 +853,6 @@ impl System {
                     Running::Watch(_)
                     | Running::Match(_)
                     | Running::Listening(_)
-                    | Running::IdleWarnings(_)
                     | Running::VirtualMonitor(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
@@ -880,7 +869,6 @@ impl System {
                     Running::Watch(_)
                     | Running::Match(_)
                     | Running::Listening(_)
-                    | Running::IdleWarnings(_)
                     | Running::VirtualMonitor(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
@@ -961,31 +949,14 @@ impl System {
                 }));
                 Ok((Running::Listening(listener), Box::new(|| {})))
             }),
-            SystemRequest::IdleWarnings => self.starting(id, |system| {
-                let warn = {
-                    let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
-                    move |blanks_at: Option<Instant>| {
-                        let Some(running) = running.upgrade() else {
-                            return;
-                        };
-                        // Under the lock, so no warning is told before the
-                        // reply or after `Unwatch` ends it.
-                        let running = running.lock().unwrap();
-                        if matches!(running.get(&id), Some(Running::IdleWarnings(_))) {
-                            tell(warned(id, blanks_at));
-                        }
-                    }
-                };
-                let listener = system.idle_warnings.listen(Arc::new(warn.clone()));
-                // A page that listens during a warning hears it at once.
-                let warnings = system.idle_warnings.clone();
-                let already = move || {
-                    if let Some(blanks_at) = warnings.blanks_at() {
-                        warn(Some(blanks_at));
-                    }
-                };
-                Ok((Running::IdleWarnings(listener), Box::new(already)))
-            }),
+            SystemRequest::IdleAfter { seconds } => {
+                self.idle_watch(id, seconds, Mark::After(Duration::from_secs(seconds)))
+            }
+            SystemRequest::IdleBeforeBlanking { seconds } => self.idle_watch(
+                id,
+                seconds,
+                Mark::BeforeBlanking(Duration::from_secs(seconds)),
+            ),
             SystemRequest::SendShell { command } => {
                 let reply = match self.shell_commands.send(&command) {
                     0 => failed(SystemError {
@@ -1246,6 +1217,44 @@ impl System {
     /// `start` returns what to register and what to run once the reply is out.
     /// The lock is held from the start until the reply is sent, so a watch's
     /// first change, which takes the lock, cannot come before it.
+    /// Starts the page's `id` watching for the desk to go idle at `mark`.
+    /// See [`IdleWatches`].
+    fn idle_watch(&self, id: u32, seconds: u64, mark: Mark) -> Handled {
+        self.starting(id, |system| {
+            if seconds == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "an idle watch needs at least 1 second",
+                )
+                .into());
+            }
+            let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+            let listener = system.idle_watches.watch(
+                mark,
+                Arc::new(move |idle| {
+                    let Some(running) = running.upgrade() else {
+                        return;
+                    };
+                    // Under the lock, so nothing is told before the reply or
+                    // after `Unwatch` ends it.
+                    let running = running.lock().unwrap();
+                    if matches!(running.get(&id), Some(Running::Listening(_))) {
+                        tell(HostMessage::SystemEvent {
+                            id,
+                            event: SystemEvent::Idle { idle },
+                        });
+                    }
+                }),
+            );
+            // The desk may already have been still that long.
+            let watches = system.idle_watches.clone();
+            Ok((
+                Running::Listening(listener),
+                Box::new(move || watches.wake()),
+            ))
+        })
+    }
+
     fn starting(
         &self,
         id: u32,
@@ -1406,23 +1415,9 @@ impl Drop for System {
                     let _ = connection.close();
                 }
                 Running::Listening(listener) => drop(listener),
-                Running::IdleWarnings(listener) => drop(listener),
                 Running::VirtualMonitor(lease) => drop(lease),
             }
         }
-    }
-}
-
-/// The idle warning for the page's `id`: how long until the screens blank at
-/// `blanks_at`, or none.
-fn warned(id: u32, blanks_at: Option<Instant>) -> HostMessage {
-    let blanks_in_ms = blanks_at.map(|at| {
-        u64::try_from(at.saturating_duration_since(Instant::now()).as_millis())
-            .expect("a warning fits in u64 milliseconds")
-    });
-    HostMessage::SystemEvent {
-        id,
-        event: SystemEvent::IdleWarning { blanks_in_ms },
     }
 }
 

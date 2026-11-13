@@ -40,46 +40,45 @@ domicile.session.on("idlechange", idle);
   page stays visible while the screens are off, so `visibilityState` and idle
   detectors are wrong.
 - A newly loaded page reads the current state.
-- `idlechange` fires as the screens go dark. To act before that, listen for
-  the [warning](#warning-before-blanking).
+- `idlechange` fires as the screens go dark. To act sooner, watch for
+  [idle after a time](#idle-after-a-time).
 - Undo idle changes when `idle` is `false`. The repaint finishes before the screens
   relight.
 - Input still reaches clients while blanked. Blanking does not lock; see
   [Locking](#locking).
 - With no timeout configured, `idle` stays `undefined`.
 
-### Warning before blanking
+### Idle after a time
 
-With `idle.warn_before_seconds` set, the compositor warns the shell before the
-screens go dark:
+`session.idleAfter(seconds)` streams `true` once nobody has been at the desk
+that long, and `false` on the next input. Watch as many times as needed, such
+as pausing media at two minutes:
 
 <!-- tab: React -->
 
 ```tsx
-const useDimmed = () => {
+const useIdleAfter = (seconds: number) => {
   const { session } = useDomicile();
-  const [dimmed, setDimmed] = useState(false);
+  const [idle, setIdle] = useState(false);
   useEffect(() => {
     let stop = () => {};
-    session.idleWarnings().then((warnings) =>
-      warnings.match({
-        Err: (error) => console.error("no idle warnings", error),
+    session.idleAfter(seconds).then((watch) =>
+      watch.match({
+        Err: (error) => console.error("no idle watch", error),
         Ok: async ({ items }) => {
           const reader = items.getReader();
           stop = () => reader.cancel();
           for (;;) {
-            const { done, value: blanksInMs } = await reader.read();
+            const { done, value } = await reader.read();
             if (done) return;
-            // A number: the screens go dark in that many milliseconds.
-            // `undefined`: input called it off, or the screens went dark.
-            setDimmed(blanksInMs !== undefined);
+            setIdle(value);
           }
         },
       }),
     );
     return () => stop();
-  }, [session]);
-  return dimmed;
+  }, [session, seconds]);
+  return idle;
 };
 ```
 
@@ -87,15 +86,15 @@ const useDimmed = () => {
 
 ```js
 // Awaited: both arms return a promise.
-await (await domicile.session.idleWarnings()).match({
+await (await domicile.session.idleAfter(120)).match({
   Err: async (error) => {
-    console.error("no idle warnings", error);
+    console.error("no idle watch", error);
   },
   Ok: async ({ items }) => {
-    for await (const blanksInMs of items) {
-      // A number: the screens go dark in that many milliseconds.
-      // `undefined`: input called it off, or the screens went dark.
-      document.body.classList.toggle("dimmed", blanksInMs !== undefined);
+    for await (const idle of items) {
+      if (idle) {
+        pauseMedia();
+      }
     }
   },
 });
@@ -103,11 +102,37 @@ await (await domicile.session.idleWarnings()).match({
 
 <!-- /tabs -->
 
-- Any input during the warning keeps the screens on, so a dim that wakes on a
-  key needs no code of its own.
-- A page that listens during a warning hears it at once.
+- Works with or without an idle timeout in the config.
+- Apps holding the screens on hold it off too. One letting go after the time
+  is up makes it `true` at once.
+- A page that watches on a desk already still that long hears `true` at once.
+- `seconds` must be at least `1`.
 - Allowed while locked, so a lock screen can dim too.
-- Without `idle.warn_before_seconds`, nothing is heard.
+- After a compositor restart the watch goes on and hears `false`: the new
+  clock starts from then.
+
+### Acting before blanking
+
+`session.idleBeforeBlanking(seconds)` is the same watch, `seconds` before the
+screens blank, to dim or count down:
+
+```js
+await (await domicile.session.idleBeforeBlanking(30)).match({
+  Err: async (error) => {
+    console.error("no idle watch", error);
+  },
+  Ok: async ({ items }) => {
+    for await (const idle of items) {
+      document.body.classList.toggle("dimmed", idle);
+    }
+  },
+});
+```
+
+- Any input keeps the screens on, so a dim that wakes on a key needs no code
+  of its own.
+- It stays `true` while the screens are dark, until input.
+- Silent when the screens never blank, or blank in `seconds` or less.
 
 ## Locking
 
