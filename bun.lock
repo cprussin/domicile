@@ -220,6 +220,22 @@
         "typescript": "catalog:",
       },
     },
+    "packages/electron-host": {
+      "name": "@domicile-desktop/electron-host",
+      "version": "0.0.0",
+      "bin": {
+        "electron-host": "./src/main.ts",
+      },
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/manganese-address": {
       "name": "@domicile-desktop/manganese-address",
       "version": "1.0.3",
@@ -1523,6 +1539,8 @@
     "@domicile-desktop/distro": ["@domicile-desktop/distro@workspace:packages/distro"],
 
     "@domicile-desktop/e2e-harness": ["@domicile-desktop/e2e-harness@workspace:packages/e2e-harness"],
+
+    "@domicile-desktop/electron-host": ["@domicile-desktop/electron-host@workspace:packages/electron-host"],
 
     "@domicile-desktop/engine": ["@domicile-desktop/engine@workspace:packages/domicile-engine"],
 
