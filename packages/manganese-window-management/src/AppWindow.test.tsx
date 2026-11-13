@@ -77,6 +77,7 @@ const windowProps = {
   hasKeyboard: false,
   motion: "resting",
   onMotionEnded: nothingEnded,
+  popups: [],
   rect: ON_SCREEN,
   resizing: false,
   syncedFrame: 0,
@@ -258,6 +259,64 @@ describe("AppWindow", () => {
       <AppWindow {...windowProps} cursor="text" focused={false} />,
     );
     expect(portal(container)).toHaveStyle({ cursor: "text" });
+  });
+
+  describe("its popups", () => {
+    const MENU = {
+      appId: "menu",
+      cursor: "default",
+      frame: 0,
+      rect: { height: 240, width: 180, x: 12, y: 30 },
+    };
+
+    /** The `<app>` of the popup `appId`. */
+    const popupElement = (container: HTMLElement, appId: string): Element => {
+      const element = container.querySelector(`[app-id="${appId}"]`);
+      if (element === null) {
+        throw new Error(`test: no popup ${appId}`);
+      } else {
+        return element;
+      }
+    };
+
+    // Firefox draws its whole window into one, so it must slide, open and
+    // close with the window.
+    it("are drawn over it, playing its motion", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          depth={4}
+          focused={false}
+          motion="arriving-from-end"
+          popups={[MENU]}
+        />,
+      );
+      const layer = popupElement(container, "menu").parentElement;
+
+      expect(layer).toHaveAttribute("data-motion", "arriving-from-end");
+      expect(layer).toHaveStyle({
+        insetBlockStart: "32px",
+        insetInlineStart: "0px",
+        zIndex: "5",
+      });
+      expect(popupElement(container, "menu")).toHaveStyle({
+        insetBlockStart: "30px",
+        insetInlineStart: "12px",
+      });
+    });
+
+    it("are not drawn while the window is off screen", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          popups={[MENU]}
+          rect={undefined}
+        />,
+      );
+
+      expect(container.querySelector('[app-id="menu"]')).toBeNull();
+    });
   });
 
   describe("the way it moves", () => {

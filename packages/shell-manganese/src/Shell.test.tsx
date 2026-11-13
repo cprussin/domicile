@@ -1820,13 +1820,19 @@ describe("Shell", () => {
         y: 30,
       });
 
+      // Placed on the window's contents, which it moves with.
       const menu = appElement(container, "menu");
       expect(boxOf(menu)).toMatchObject({
         height: "240px",
         width: "180px",
-        x: `${(Number.parseFloat(window.x) + 12).toString()}px`,
-        y: `${(Number.parseFloat(window.y) + 30).toString()}px`,
+        x: "12px",
+        y: "30px",
       });
+      const layer = menu.parentElement;
+      if (layer === null) {
+        throw new Error("test: the menu is drawn in nothing");
+      }
+      expect(boxOf(layer)).toMatchObject({ x: window.x, y: window.y });
       // Over its window, not in its own frame.
       expect(container.querySelectorAll("[data-window]").length).toBe(
         container.querySelectorAll('[data-window="app:term"]').length,
@@ -1853,9 +1859,11 @@ describe("Shell", () => {
         y: 0,
       });
       const over = (element: HTMLElement | null): boolean => {
-        const bubble = appElement(container, "bubble");
+        // Drawn in a layer over its window, which holds its depth.
+        const bubble = appElement(container, "bubble").parentElement;
         return (
           element !== null &&
+          bubble !== null &&
           element.style.zIndex === bubble.style.zIndex &&
           (bubble.compareDocumentPosition(element) &
             Node.DOCUMENT_POSITION_FOLLOWING) !==

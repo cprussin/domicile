@@ -1,99 +1,56 @@
 import { describe, expect, it } from "bun:test";
 
-import type { Placement } from "./placement";
-import { raised } from "./placement";
-import { popupsOver } from "./popup";
+import type { Popup } from "./popup";
+import { popupsOf } from "./popup";
 
-/** A window's placement with contents at `surface` and depth `depth`. */
-const placed = (
-  id: string,
-  surface: Placement["surface"],
-  depth = 0,
-): Placement => ({
-  bar: { height: 30, width: 0, x: 0, y: 0 },
-  bare: false,
-  behind: undefined,
-  depth,
-  frame: { height: 0, width: 0, x: 0, y: 0 },
-  id,
-  selected: false,
-  soleTab: false,
-  strip: undefined,
-  surface,
-  tabbed: undefined,
+/** A popup over `parent` at `position`. */
+const over = (
+  appId: string,
+  parent: string,
+  position: readonly [number, number],
+): Popup => ({
+  appId,
+  cursor: "default",
+  frame: 0,
+  parent,
+  position,
+  size: [100, 50],
 });
 
-describe("where a popup goes", () => {
-  // Over its window's open tab, which is drawn just over the window.
-  it("is its offset from its window's contents, just over the window", () => {
-    const [menu] = popupsOver(
-      [
-        {
-          appId: "menu",
-          cursor: "pointer",
-          frame: 0,
-          parent: "term",
-          position: [12, 30],
-          size: [180, 240],
-        },
-      ],
-      [placed("app:term", { height: 600, width: 800, x: 100, y: 50 }, 3)],
-    );
-
-    expect(menu).toStrictEqual({
-      appId: "menu",
-      cursor: "pointer",
-      depth: raised(3),
-      frame: 0,
-      rect: { height: 240, width: 180, x: 112, y: 80 },
-    });
-  });
-
-  it("adds up a submenu's offsets down to the window", () => {
-    const popups = popupsOver(
-      [
-        {
-          appId: "menu",
-          cursor: "default",
-          frame: 0,
-          parent: "term",
-          position: [12, 30],
-          size: [180, 240],
-        },
-        {
-          appId: "sub",
-          cursor: "default",
-          frame: 0,
-          parent: "menu",
-          position: [180, 20],
-          size: [100, 50],
-        },
-      ],
-      [placed("app:term", { height: 600, width: 800, x: 100, y: 50 })],
-    );
-
-    expect(popups.map(({ appId, rect }) => [appId, rect.x, rect.y])).toEqual([
-      ["menu", 112, 80],
-      ["sub", 292, 100],
+describe("a window's popups", () => {
+  it("are at their offsets from its contents, with their cursors", () => {
+    expect(
+      popupsOf(
+        [{ ...over("menu", "term", [12, 30]), cursor: "pointer" }],
+        "term",
+      ),
+    ).toStrictEqual([
+      {
+        appId: "menu",
+        cursor: "pointer",
+        frame: 0,
+        rect: { height: 50, width: 100, x: 12, y: 30 },
+      },
     ]);
   });
 
-  it("is nowhere while its window is not on this screen", () => {
-    // A window shown on another page has no placement here, so neither do its
-    // popups.
+  it("add up a submenu's offsets down to the window", () => {
+    const popups = popupsOf(
+      [over("menu", "term", [12, 30]), over("sub", "menu", [180, 20])],
+      "term",
+    );
+
+    expect(popups.map(({ appId, rect }) => [appId, rect.x, rect.y])).toEqual([
+      ["menu", 12, 30],
+      ["sub", 192, 50],
+    ]);
+  });
+
+  it("leave out other windows' popups", () => {
     expect(
-      popupsOver(
-        [
-          {
-            appId: "menu",
-            cursor: "default",
-            frame: 0,
-            parent: "term",
-            position: [0, 0],
-            size: [1, 1],
-          },
-        ],
-        [placed("app:other", { height: 1, width: 1, x: 0, y: 0 })],
+      popupsOf(
+        [over("menu", "other", [0, 0]), over("sub", "menu", [0, 0])],
+        "term",
       ),
     ).toEqual([]);
   });

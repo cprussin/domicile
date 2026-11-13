@@ -1,9 +1,6 @@
-// Places client popups, such as menus and tooltips, on screen.
+// Places client popups, such as menus and tooltips, over their windows.
 
-import type { Placement } from "./placement";
-import { raised } from "./placement";
 import type { Rect } from "./rect";
-import { appWindowId } from "./window";
 
 /** A popup announced by the host, as stored in the reducer. */
 export type Popup = {
@@ -18,36 +15,31 @@ export type Popup = {
   size: readonly [width: number, height: number];
 };
 
-/** Where one popup is drawn. */
-export type PlacedPopup = {
+/** A popup placed on its window's contents. */
+export type WindowPopup = {
   appId: string;
   cursor: string;
-  depth: number;
   frame: number;
+  /** Its box, from the top left of its window's contents. */
   rect: Rect;
 };
 
 /**
- * Places each popup at its offset from its parent chain's window, at that
- * window's {@link raised} depth, so it covers the window's open tab. Popups
- * come later in the document, so they draw on top.
- *
- * Skips popups whose window has no contents on this screen; embedding one here
- * would take its pixels from the page that shows the window.
+ * The popups over the window `appId`, however many popups deep, oldest first,
+ * each at its offsets summed up to the window.
  */
-export const popupsOver = (
+export const popupsOf = (
   popups: readonly Popup[],
-  placements: readonly Placement[],
-): PlacedPopup[] =>
+  appId: string,
+): WindowPopup[] =>
   popups.flatMap((popup) => {
-    const over = origin(popups, placements, popup.parent);
+    const over = offsetOf(popups, popup.parent, appId);
     return over === undefined
       ? []
       : [
           {
             appId: popup.appId,
             cursor: popup.cursor,
-            depth: raised(over.depth),
             frame: popup.frame,
             rect: {
               height: popup.size[1],
@@ -59,30 +51,22 @@ export const popupsOver = (
         ];
   });
 
-/** The top-left of `appId`'s box on screen, and its window's depth. */
-const origin = (
+/**
+ * The top left of `parent` from the window `appId`'s contents, or `undefined`
+ * when `parent` is not over that window.
+ */
+const offsetOf = (
   popups: readonly Popup[],
-  placements: readonly Placement[],
+  parent: string,
   appId: string,
-): { depth: number; x: number; y: number } | undefined => {
-  const popup = popups.find((candidate) => candidate.appId === appId);
+): { x: number; y: number } | undefined => {
+  const popup = popups.find((candidate) => candidate.appId === parent);
   if (popup === undefined) {
-    const placement = placements.find(({ id }) => id === appWindowId(appId));
-    return placement?.surface === undefined
-      ? undefined
-      : {
-          depth: placement.depth,
-          x: placement.surface.x,
-          y: placement.surface.y,
-        };
+    return parent === appId ? { x: 0, y: 0 } : undefined;
   } else {
-    const over = origin(popups, placements, popup.parent);
+    const over = offsetOf(popups, popup.parent, appId);
     return over === undefined
       ? undefined
-      : {
-          depth: over.depth,
-          x: over.x + popup.position[0],
-          y: over.y + popup.position[1],
-        };
+      : { x: over.x + popup.position[0], y: over.y + popup.position[1] };
   }
 };

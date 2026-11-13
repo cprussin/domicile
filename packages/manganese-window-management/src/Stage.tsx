@@ -2,7 +2,6 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ReactNode } from "react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
 
-import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
@@ -31,8 +30,8 @@ import type {
 } from "./placement";
 import { contentsOf, raised, TILED, wellDepthOf } from "./placement";
 import type { Spot } from "./pointer-warp";
-import type { Popup } from "./popup";
-import { popupsOver } from "./popup";
+import type { Popup, WindowPopup } from "./popup";
+import { popupsOf } from "./popup";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { SelectionTint } from "./SelectionTint";
@@ -231,6 +230,18 @@ export const Stage = memo(
     const named = useMemo(
       () => new Map(windows.map((window) => [window.id, window])),
       [windows],
+    );
+    // Each client window's popups, looked up once per change.
+    const popupsByApp = useMemo(
+      () =>
+        new Map(
+          windows.flatMap((window) =>
+            window.kind === WindowKind.App
+              ? [[window.appId, popupsOf(popups, window.appId)] as const]
+              : [],
+          ),
+        ),
+      [popups, windows],
     );
     // Every window, with a hidden workspace's laid out in its overview tile.
     const drawn = useMemo(
@@ -444,6 +455,11 @@ export const Stage = memo(
                 onPlayedOut={onPlayedOut}
                 onSelect={onSelect}
                 placement={placement}
+                popups={
+                  window.kind === WindowKind.App
+                    ? (popupsByApp.get(window.appId) ?? NO_POPUPS)
+                    : NO_POPUPS
+                }
                 // Every window, since a tiled edge resizes the windows on
                 // both sides of it. A window whose box stays put is unaffected.
                 resizing={stretching}
@@ -803,18 +819,6 @@ export const Stage = memo(
             );
           })}
           {/*
-          After every window and tab, so a popup wins the `z-index` tie at its
-          window's depth but stays under windows stacked above. Before the
-          tint and the drop indicator, which tie with it and cover it: Firefox
-          draws its whole window into a bubble.
-        */}
-          {popupsOver(
-            working ? popups : [],
-            screens.flatMap(({ screenful }) => screenful.placements),
-          ).map((popup) => (
-            <AppPopup key={popup.appId} popup={popup} />
-          ))}
-          {/*
           After every window and tab, at the open tab's raised depth, so it
           covers the selected container's windows and every tab. It follows
           the focused window as its glow does.
@@ -898,6 +902,9 @@ const deskOf = (screens: readonly StageScreen[]): Desk => {
   };
 };
 
+/** No popups, shared so a window without any keeps its memoized render. */
+const NO_POPUPS: readonly WindowPopup[] = [];
+
 type WindowContentsProps = {
   behindPanel: boolean;
   clickThrough: boolean;
@@ -920,6 +927,8 @@ type WindowContentsProps = {
   onPlayedOut: WindowMotions["onPlayedOut"];
   onSelect: (id: string) => void;
   placement: Placement | undefined;
+  /** Its client's popups. See `AppWindow`. */
+  popups: readonly WindowPopup[];
   /** See `AppWindow`. */
   resizing: boolean;
   restack: Restack | undefined;
@@ -958,6 +967,7 @@ const WindowContents = memo(
     onPlayedOut,
     onSelect,
     placement,
+    popups,
     resizing,
     restack,
     rewound,
@@ -1026,6 +1036,7 @@ const WindowContents = memo(
             hasKeyboard={hasKeyboard}
             motion={motion}
             onMotionEnded={ended}
+            popups={popups}
             rect={contents?.rect}
             resizing={unheld}
             restack={restack}

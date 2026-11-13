@@ -1,29 +1,32 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
-import type { PlacedPopup } from "./popup";
-import { placedAt } from "./window-styles";
+import type { WindowPopup } from "./popup";
 
 type Props = {
-  popup: PlacedPopup;
+  popup: WindowPopup;
 };
 
 /**
- * A client's popup (menu, tooltip) drawn over its window as a bare `<app>`
- * with no frame.
+ * A client's popup (menu, tooltip, or a subsurface such as the one Firefox
+ * draws its whole window into) as a bare `<app>` with no frame, placed on its
+ * window's contents. `AppWindow` draws it, so it plays the window's motion.
  *
- * A press on it focuses the parent window. It is a sibling of the window
- * because `<app>` has no children, so it does not follow the window's motion.
- * That is fine because a menu is open only while its window is at rest.
- *
- * It shows the cursor its client asks for over it. Firefox draws its whole
- * window into one, so that is every cursor Firefox asks for.
+ * A press on it focuses the parent window. It shows the cursor its client
+ * asks for over it.
  */
-export const AppPopup = ({
-  popup: { appId, cursor, depth, frame, rect },
-}: Props) => (
+export const AppPopup = ({ popup: { appId, cursor, frame, rect } }: Props) => (
   <app
     app-id={appId}
     frame={String(frame)}
-    style={{ ...placedAt(rect, depth), cursor }}
+    // Inline because the box and cursor are runtime values that Panda cannot
+    // extract at build time.
+    style={{
+      blockSize: `${rect.height.toString()}px`,
+      cursor,
+      inlineSize: `${rect.width.toString()}px`,
+      insetBlockStart: `${rect.y.toString()}px`,
+      insetInlineStart: `${rect.x.toString()}px`,
+      position: "absolute",
+    }}
   />
 );
