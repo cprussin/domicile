@@ -2,7 +2,8 @@
 //
 // - Commands use sway's syntax where sway has one (`focus left`, `layout
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
-//   `overview`, `clipboard`, `search-clipboard`, `screenshot`, `volume`, `mic`,
+//   `overview`, `clipboard`, `search-clipboard`, `screenshot`, `terminal`,
+//   `volume`, `mic`,
 //   `brightness`, `keymap`, `notifications`, `idle-inhibitor`,
 //   `night-light`, `virtual-monitor` and `resize grow <direction>` are
 //   manganese's own.
@@ -50,6 +51,8 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["clipboard", WindowAction.ClipboardToggled()],
   // The area is picked in the screenshot dialog.
   ["screenshot", WindowAction.ScreenshotTaken()],
+  // The config's `terminal`; nothing on a desk that names none.
+  ["terminal", WindowAction.TerminalOpened()],
   // The newest copy, as a site or a search.
   ["search-clipboard", WindowAction.ClipboardSearched()],
   // The drawer; a toggle, like the launcher.

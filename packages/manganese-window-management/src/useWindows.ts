@@ -5,6 +5,7 @@ import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
 import { WindowRequestKind } from "@domicile-desktop/sdk/window-state";
+import { deskTerminal } from "@domicile-desktop/system-apps/terminal";
 import {
   useCallback,
   useEffect,
@@ -102,6 +103,9 @@ export const useWindows = (
       }
       if (action.kind === WindowActionKind.ScreenshotTaken) {
         takeScreenshot(domicile);
+      }
+      if (action.kind === WindowActionKind.TerminalOpened) {
+        openTerminal(domicile);
       }
       if (action.kind === WindowActionKind.FileOpened) {
         domicile.processes.launch(openFile(action.path));
@@ -283,6 +287,37 @@ const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>
     box: { height: size[1], width: size[0], x: position[0], y: position[1] },
     name,
   }));
+
+/**
+ * Launches the terminal the desk's config names. A desk that names none has
+ * no terminal to open: Domicile has no default.
+ */
+const openTerminal = (domicile: Domicile) => {
+  deskTerminal(domicile)
+    .then((found) => {
+      found.match({
+        Err: (error) => {
+          // biome-ignore lint/suspicious/noConsole: surfacing a failed launch
+          console.error("The terminal could not be found", error);
+        },
+        Ok: (terminal) => {
+          terminal.match({
+            None: () => {
+              // biome-ignore lint/suspicious/noConsole: a binding with nothing to do
+              console.warn(
+                "No terminal to open: set `terminal` in the desk's config",
+              );
+            },
+            Some: (argv) => domicile.processes.launch(argv),
+          });
+        },
+      });
+    })
+    .catch((error: unknown) => {
+      // biome-ignore lint/suspicious/noConsole: surfacing a failed launch
+      console.error("The terminal could not be found", error);
+    });
+};
 
 /** Takes a screenshot, logging any failure but a dismissed dialog. */
 const takeScreenshot = (domicile: Pick<Domicile, "capture">) => {

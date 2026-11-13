@@ -27,13 +27,16 @@ replaces them.
 | `pinch:3:outward` | Toggle the launcher, closing the overview. |
 | Meta+Shift+V | Toggle the clipboard history. |
 | Meta+Shift+Space | Open the copied URL, or search Google for the copied text. Private from a private window. |
+| Meta+Return | `terminal`: open the config's terminal. Nothing without one. |
 | Meta+Shift+Return | Lock. Does nothing if the config has no `lock`. |
 | Print | Take a screenshot: pick the area in the screenshot dialog. Ctrl+C there copies it instead of saving. |
 | XF86AudioRaiseVolume / XF86AudioLowerVolume | Raise or lower the default output's volume by 5%, between 0 and 100%. |
 | XF86AudioMute / XF86AudioMicMute | Toggle the mute of the default output / the default microphone. |
 | XF86MonBrightnessUp / XF86MonBrightnessDown | Raise or lower the brightness by 5%. |
 
-There is no terminal key. Bind one with `exec`.
+Meta+Return opens the terminal the desk's config names (`terminal`; see
+[SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#terminal)). It does nothing on a desk
+that names none: there is no default terminal.
 
 ## Commands
 
@@ -109,7 +112,7 @@ Manganese-only commands:
 
 ## Example
 
-The defaults, plus a terminal on Meta+Return and workspaces on the
+The defaults, plus `btop` on Meta+Shift+B and workspaces on the
 Programmer's Dvorak number row:
 
 ```tsx
@@ -131,7 +134,7 @@ export const Shell = runManganese({
   keybindings: {
     keybindings: {
       ...DEFAULT_KEYBINDINGS,
-      "Meta+Return": exec("kitty"),
+      "Meta+Shift+b": exec("kitty", "btop"),
       ...Object.fromEntries(
         ROW.flatMap((key, at) => [
           [`Meta+${key}`, workspace(String(at + 1))],

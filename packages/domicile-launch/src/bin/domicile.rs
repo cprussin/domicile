@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use domicile_host::data_dirs::data_dirs;
+use domicile_host::desk_terminal;
 use domicile_host::mime_apps::lists;
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
@@ -200,6 +201,10 @@ fn places() -> Places {
             DESKTOP,
         ),
         data_dirs,
+        // Set by the compositor from its config; see `desk_terminal`.
+        terminal: desk_terminal::from_variable(
+            std::env::var(desk_terminal::VARIABLE).ok().as_deref(),
+        ),
     }
 }
 

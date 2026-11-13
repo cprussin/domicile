@@ -32,6 +32,14 @@ export type Config = {
    */
   shell_options?: Record<string, unknown>;
   startup?: StartupConfig;
+  /**
+   * The terminal applications such as htop and vim run in
+   * (`Terminal=true` in their desktop entries): its argv, which the
+   * application's own follows, as `["kitty", "--"]` or `["foot"]`. The
+   * launcher and `domicile open` offer such applications only when it is
+   * set, and a shell's terminal key opens it. Unset, there is no terminal.
+   */
+  terminal?: string[] | null;
   theme?: ThemeConfig;
 };
 

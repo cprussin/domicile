@@ -607,6 +607,19 @@ in {
             example = [["emacsclient" "-e" "t"]];
           };
 
+          terminal = lib.mkOption {
+            description = ''
+              The terminal applications such as htop and vim run in: an argv
+              that opens a terminal on its own and runs an application's argv
+              put after it. The launcher and `domicile open` offer those
+              applications only when it is set, and Manganese opens it on
+              Meta+Return. Unset, there is no terminal. Applied on reload.
+            '';
+            type = lib.types.nullOr (lib.types.nonEmptyListOf lib.types.str);
+            default = null;
+            example = ["kitty"];
+          };
+
           theme.mode = lib.mkOption {
             description = ''
               Whether the desktop is drawn dark or light.

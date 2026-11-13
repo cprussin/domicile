@@ -28,6 +28,7 @@ fn places(data: &Path, defaults: &str) -> Places {
     Places {
         data_dirs: vec![data.to_path_buf()],
         lists: vec![list],
+        terminal: None,
     }
 }
 
@@ -323,4 +324,45 @@ fn the_opener_is_the_application_opening_runs() {
         opener("https://example.com", home.path(), &places),
         Ok(None)
     );
+}
+
+#[test]
+fn a_terminal_application_opens_in_the_desks_terminal() {
+    let desk = written(&[
+        ("mime/globs2", "50:text/markdown:*.md\n"),
+        (
+            "applications/vim.desktop",
+            "[Desktop Entry]\nType=Application\nName=Vim\nExec=vim %F\nTerminal=true\nMimeType=text/markdown;\n",
+        ),
+    ]);
+    let home = written(&[("a.md", "# hi")]);
+    let mut places = places(desk.path(), "");
+    places.terminal = Some(vec!["foot".into()]);
+
+    assert_eq!(
+        opening("a.md", home.path(), &places),
+        Ok(Opening::Run(vec![
+            "foot".into(),
+            "vim".into(),
+            home.path().join("a.md").display().to_string()
+        ]))
+    );
+}
+
+#[test]
+fn without_a_terminal_a_terminal_application_opens_nothing() {
+    let desk = written(&[
+        ("mime/globs2", "50:text/markdown:*.md\n"),
+        (
+            "applications/vim.desktop",
+            "[Desktop Entry]\nType=Application\nName=Vim\nExec=vim %F\nTerminal=true\nMimeType=text/markdown;\n",
+        ),
+    ]);
+    let home = written(&[("a.md", "# hi")]);
+    let places = places(desk.path(), "");
+
+    assert!(matches!(
+        opening("a.md", home.path(), &places),
+        Err(OpenError::NoApplication { .. })
+    ));
 }

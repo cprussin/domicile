@@ -57,8 +57,9 @@ Browser address bars use the same rule.
   own before its supertypes' (`mime/subclasses`, and `text/plain` for every
   `text/*`); then installed entries whose `MimeType` lists one. The type
   comes from shared-mime-info's `mime/globs2`, by name; a directory is
-  `inode/directory`. `NoDisplay` and `Terminal` entries are not offered
-  otherwise.
+  `inode/directory`. `NoDisplay` entries are not offered otherwise.
+  `Terminal` entries are offered, and run in the config's `terminal`, only
+  when it names one ([SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#terminal)).
 - URLs and searches open as a page.
 
 ## Preview

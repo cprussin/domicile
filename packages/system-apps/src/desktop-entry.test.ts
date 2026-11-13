@@ -44,6 +44,7 @@ describe("parseDesktopEntry", () => {
         mimeTypes: ["text/html", "x-scheme-handler/http"],
         name: "Firefox",
         preview: "/usr/share/firefox/preview.svg",
+        terminal: undefined,
         windowClass: "Navigator",
         words: "firefox\nweb browser\ninternet;www;",
       }),
@@ -78,6 +79,7 @@ describe("parseDesktopEntry", () => {
         ],
         name: "LibreOffice",
         preview: undefined,
+        terminal: undefined,
         windowClass: "libreoffice-startcenter",
         words: "libreoffice\noffice\n",
       }),
@@ -97,8 +99,28 @@ describe("parseDesktopEntry", () => {
     );
   });
 
+  it("runs a recorded terminal entry in the desk's terminal", async () => {
+    const vim = parseDesktopEntry(
+      "vim.desktop",
+      await recorded("vim.desktop"),
+      true,
+      ["kitty", "--"],
+    ).map(({ command, terminal }) => ({ command, terminal }));
+    expect(vim).toStrictEqual(
+      Some({ command: ["kitty", "--", "vim"], terminal: ["kitty", "--"] }),
+    );
+  });
+
+  it("runs an application of its own windows as it is, terminal or not", () => {
+    expect(
+      parseDesktopEntry("a.desktop", entry("A", "a"), true, ["kitty"]).map(
+        ({ command, terminal }) => ({ command, terminal }),
+      ),
+    ).toStrictEqual(Some({ command: ["a"], terminal: undefined }));
+  });
+
   it("is nothing for a recorded entry a launcher should not offer", async () => {
-    // Vim runs in a terminal, which the launcher does not know; Zenity is
+    // Vim runs in a terminal, and this desk names none; Zenity is
     // `NoDisplay`.
     expect(
       parseDesktopEntry("vim.desktop", await recorded("vim.desktop")),

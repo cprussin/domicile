@@ -14,6 +14,11 @@ const command = (...words: readonly string[]) => KeyAction.SendShell(words);
 
 /** Run `argv` directly, without a shell. */
 export const exec = (...argv: readonly string[]) => command("exec", ...argv);
+/**
+ * Open the terminal the desk's config names (`terminal`). Does nothing on a
+ * desk that names none.
+ */
+export const terminal = () => command("terminal");
 /** Close the focused window, or every window in a `focus parent` selection. */
 export const kill = () => command("kill");
 /** Lock the desk. */
@@ -159,6 +164,7 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+g": group(),
   "Meta+minus": scratchpad(),
   "Meta+o": overview(),
+  "Meta+Return": terminal(),
   "Meta+Shift+a": focus("child"),
   "Meta+Shift+f": fullscreen(true),
   "Meta+Shift+minus": move("scratchpad"),

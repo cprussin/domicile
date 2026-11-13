@@ -530,7 +530,8 @@ struct Starting {
 impl Starting {
     /// Start the application `desktop_entry` names, handing it `token`.
     fn start(&self, desktop_entry: &str, token: &str) {
-        match launch_command(desktop_entry, &self.applications) {
+        let terminal = domicile_host::desk_terminal::current();
+        match launch_command(desktop_entry, &self.applications, terminal.as_deref()) {
             Some(command) => (self.launch)(&command, token),
             None => warn!(
                 %desktop_entry,
