@@ -22,8 +22,11 @@ export type TypeName = z.infer<typeof typeNameSchema>;
 /** A schema, reduced to what decides its TypeScript type. */
 export type JsonSchema = {
   readonly $ref?: string | undefined;
-  /** `true` for an object open to any key, which then names none. */
-  readonly additionalProperties?: true | undefined;
+  /**
+   * `true` for an object open to any key, or the schema of every value of a
+   * map. Either way the object names no key.
+   */
+  readonly additionalProperties?: true | JsonSchema | undefined;
   readonly anyOf?: readonly JsonSchema[] | undefined;
   readonly const?: string | undefined;
   readonly description?: string | undefined;
@@ -51,10 +54,12 @@ export const parseRootSchema = (value: unknown): RootSchema =>
  * signature that types them all.
  */
 const namesKeysOrIsOpen = (schema: {
-  additionalProperties?: boolean | undefined;
+  additionalProperties?: boolean | JsonSchema | undefined;
   properties?: unknown;
 }): boolean =>
-  schema.additionalProperties !== true || schema.properties === undefined;
+  schema.additionalProperties === undefined ||
+  schema.additionalProperties === false ||
+  schema.properties === undefined;
 
 const OPEN_AND_NAMED = {
   message: "additionalProperties: an object open to any key names none",
@@ -76,7 +81,7 @@ const constraints = {
 const typing = () => ({
   $ref: z.string().optional(),
   // `false` says only what `properties` does, so it is dropped below.
-  additionalProperties: z.boolean().optional(),
+  additionalProperties: z.union([z.boolean(), jsonSchemaSchema]).optional(),
   anyOf: z.array(jsonSchemaSchema).optional(),
   const: z.string().optional(),
   description: z.string().optional(),
@@ -91,7 +96,7 @@ const typing = () => ({
 
 const withoutConstraints = <
   T extends Partial<Record<keyof typeof constraints, unknown>> & {
-    additionalProperties?: boolean | undefined;
+    additionalProperties?: boolean | JsonSchema | undefined;
   },
 >({
   additionalProperties,
@@ -105,9 +110,11 @@ const withoutConstraints = <
   pattern: _pattern,
   ...typed
 }: T): Omit<T, keyof typeof constraints | "additionalProperties"> & {
-  additionalProperties?: true;
+  additionalProperties?: true | JsonSchema;
 } =>
-  additionalProperties === true ? { ...typed, additionalProperties } : typed;
+  additionalProperties === undefined || additionalProperties === false
+    ? typed
+    : { ...typed, additionalProperties };
 
 const jsonSchemaSchema: z.ZodType<JsonSchema> = z.lazy(() =>
   z

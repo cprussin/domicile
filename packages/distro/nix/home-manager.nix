@@ -440,6 +440,49 @@ in {
               default = [];
               example = ["~/src/my-extension"];
             };
+            settings = lib.mkOption {
+              description = ''
+                Each extension's chrome://extensions settings, by extension ID.
+                A setting left unset is changed in the Settings app; one
+                removed from here goes back to Chrome's default. An extension
+                that cannot use a setting refuses it.
+              '';
+              type = lib.types.attrsOf (lib.types.submodule {
+                options = {
+                  private = lib.mkOption {
+                    description = "Runs in private windows. Chrome's default is no.";
+                    type = lib.types.nullOr lib.types.bool;
+                    default = null;
+                  };
+                  file_access = lib.mkOption {
+                    description = "Runs on local files (`file://` pages). Chrome's default is no.";
+                    type = lib.types.nullOr lib.types.bool;
+                    default = null;
+                  };
+                  user_scripts = lib.mkOption {
+                    description = "May run the user scripts you add to it (`chrome.userScripts`). Chrome's default is no.";
+                    type = lib.types.nullOr lib.types.bool;
+                    default = null;
+                  };
+                  site_access = lib.mkOption {
+                    description = ''
+                      Which of the sites it asks for it runs on: `"on_click"`,
+                      `"all_sites"`, or a list of hosts, each also as `*.host`
+                      for its subdomains. Chrome's default is all.
+                    '';
+                    type = lib.types.nullOr (lib.types.either (lib.types.enum ["on_click" "all_sites"]) (lib.types.listOf lib.types.str));
+                    default = null;
+                  };
+                };
+              });
+              default = {};
+              example = {
+                eimadpbcbfnmbkopoojfekhnkhdbieeh = {
+                  private = true;
+                  site_access = ["github.com"];
+                };
+              };
+            };
           };
 
           files.omit = lib.mkOption {
