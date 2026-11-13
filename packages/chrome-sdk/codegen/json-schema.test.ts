@@ -50,6 +50,16 @@ describe("parseRootSchema", () => {
     ).toEqual({ options: { additionalProperties: true, type: "object" } });
   });
 
+  it("keeps a map whose values have a schema", () => {
+    const map = {
+      additionalProperties: { $ref: "#/$defs/Mode" },
+      type: "object",
+    } as const;
+    expect(
+      parseRootSchema({ ...ROOT, properties: { modes: map } }).properties,
+    ).toEqual({ modes: map });
+  });
+
   it("throws on an object open to other keys beside the ones it names", () => {
     expect(() =>
       parseRootSchema({

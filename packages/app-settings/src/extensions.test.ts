@@ -11,6 +11,7 @@ const UBLOCK: InstalledExtension = {
   name: "uBlock Origin Lite",
   optionsUrl:
     "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/dashboard.html",
+  settings: { private: false },
   version: "2025.1",
 };
 
@@ -67,6 +68,17 @@ describe(hostExtensions, () => {
     await extensions.setEnabled(UBLOCK.id, false);
     await changed;
     expect(state.installed[0]?.enabled).toBe(false);
+  });
+
+  it("changes an extension's settings, and tells listeners", async () => {
+    const { host, state } = withInstalled([UBLOCK]);
+    const extensions = hostExtensions(host);
+    const changed = new Promise<void>((resolve) => {
+      extensions.onChange(resolve);
+    });
+    await extensions.configure(UBLOCK.id, { private: true });
+    await changed;
+    expect(state.installed[0]?.settings).toEqual({ private: true });
   });
 
   it("opens an extension's options", async () => {

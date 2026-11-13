@@ -129,6 +129,14 @@ export type Size = number;
         { additionalProperties: true, type: "object" },
         "Record<string, unknown>",
       ],
+      [
+        "a map",
+        {
+          additionalProperties: { type: ["boolean", "null"] },
+          type: "object",
+        },
+        "Record<string, boolean | null>",
+      ],
     ])("emits %s", (_, schema, typescript) => {
       expect(typeOf(schema)).toBe(typescript);
     });

@@ -28,6 +28,10 @@ namespace domicile {
 //   Popup       a windows.create window: another DomicileWindowController of
 //               type `popup`, whose one tab is a browser window
 //               (domicile_browser_windows.h)
+//   Private     a private page is a tab of its off-the-record profile's
+//               desk, as an incognito tab is of an incognito window. Only
+//               extensions allowed in private windows see it; for them, the
+//               desk of the two whose tab last took focus is current.
 //
 // Chrome's tab lookups walk tab strips, which guests are not in. Four of them
 // call this desk through //chrome/browser/extensions/domicile_desk_hooks.h:
@@ -46,14 +50,18 @@ void StartDesk(Profile* profile);
 // desk's window. Must run after the tab helpers that assign its id.
 void AddToDesk(content::WebContents& guest);
 
-// Observes a profile desk's active tab.
+// Observes a profile desk's active tab, and its private profile's.
 class DeskObserver : public base::CheckedObserver {
  public:
   virtual void OnActiveTabChanged() = 0;
 };
 
-// The desk's active tab in `context`, or null if there is no desk or no tab.
-content::WebContents* ActiveDeskTab(content::BrowserContext* context);
+// The active tab of `context`'s desk, or of its private profile's when a
+// private page last took focus. Null with no desk or no tab, and for a private
+// page without `include_private` (util::IsIncognitoEnabled), as Chrome hides
+// an incognito window's tabs from an extension not allowed there.
+content::WebContents* ActiveDeskTab(content::BrowserContext* context,
+                                    bool include_private);
 
 // Observes `context`'s desk. Returns false if it has none.
 bool AddDeskObserver(content::BrowserContext* context, DeskObserver* observer);

@@ -34,10 +34,13 @@
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
 //!
 //! {"type":"extensions","version":1}
-//! {"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html"}]}
+//! {"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html","settings":{"private":false,"site_access":"all_sites"}}]}
 //! {"type":"refused","why":"…"}
 //!
 //! {"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
+//! {"type":"set"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"configure_extension","version":1,"id":"…","settings":{"private":true,"site_access":["github.com"]}}
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
 //!
 //! {"type":"history","version":1,"text":"…","end_time":1700000000123.5,"max_results":100}
@@ -78,7 +81,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::control::AppReuse;
-use crate::extensions::InstalledExtension;
+use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_data::SiteData;
@@ -109,8 +112,8 @@ pub enum Reply {
     Opened,
     /// Every permission's default and every site's own setting.
     SitePermissions(SiteSettings),
-    /// The engine stored a site's setting, a preferred media device or
-    /// whether an extension is enabled.
+    /// The engine stored a site's setting, a preferred media device, whether
+    /// an extension is enabled or an extension's settings.
     Set,
     /// The engine loaded an unpacked extension, which has this id.
     LoadedUnpacked { id: String },
@@ -253,6 +256,15 @@ pub fn set_extension_enabled_line(id: &str, enabled: bool) -> String {
     })
 }
 
+/// The request to change each of `settings` that is set on extension `id`.
+pub fn configure_extension_line(id: &str, settings: &ExtensionSettings) -> String {
+    line(&Command::ConfigureExtension {
+        version: VERSION,
+        id,
+        settings,
+    })
+}
+
 /// The request for the history rows `query` finds.
 pub fn history_line(query: &HistoryQuery) -> String {
     line(&Command::History {
@@ -386,6 +398,11 @@ enum Command<'a> {
         version: u32,
         id: &'a str,
         enabled: bool,
+    },
+    ConfigureExtension {
+        version: u32,
+        id: &'a str,
+        settings: &'a ExtensionSettings,
     },
     History {
         version: u32,

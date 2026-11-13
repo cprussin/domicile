@@ -156,6 +156,7 @@ Headless.
 |---|---|
 | `guard-webview-content-script.sh` | a `--load-extension` content script runs in a `<webview>` |
 | `guard-extension-installer.sh` | an extension named in the compositor's `extensions` message is installed (patch 0055) |
+| `guard-extension-in-private.sh` | an extension the `extensions` message's `settings` allow in private windows runs in a `<webview private>`; without them it does not |
 | `guard-extension-tray.sh` | the tray event, popup, its auto-resized size and `window.close()` (patch 0056) |
 | `guard-extension-open-popup.sh` | `action.openPopup()` reaches the shell as `extensionpopuprequested` |
 | `guard-extension-side-panel.sh` | `sidePanel.open()` opens the side panel's page as a popup window with no size, which the shell tiles |
