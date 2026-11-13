@@ -78,6 +78,20 @@ pub enum EngineError {
     Path(#[from] NulError),
 }
 
+/// `DomicileSubsurface`: one of a surface's subsurfaces, in logical pixels
+/// from the top left of the surface's crop.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Subsurface {
+    pub surface: SurfaceId,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    /// Nonzero when it is drawn over the surface, zero when under it.
+    pub above: u8,
+}
+
 /// One plane of a client's dmabuf, from `zwp_linux_buffer_params_v1.add`.
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -1123,6 +1137,46 @@ impl Engine {
             .expect("the caller checked syncs_frames");
         // SAFETY: the handle is live for the life of self.
         unsafe { f(self.handle, surface, frame) };
+    }
+
+    /// Sets `surface`'s subsurfaces, bottom to top, which its frames draw
+    /// with it from its next frame (`domicile_surface_set_children`). Each
+    /// is placed in logical pixels from the top left of `surface`'s crop.
+    ///
+    /// A subsurface takes frames once the engine embeds it, which it reports
+    /// as [`Event::Configure`]; submit to it at [`NEWEST_BOX`].
+    pub fn set_children(&self, surface: SurfaceId, children: &[Subsurface]) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, *const Subsurface, u32)> =
+            match self.symbol(
+                b"domicile_surface_set_children\0",
+                "domicile_surface_set_children",
+            ) {
+                Ok(symbol) => symbol,
+                Err(err) => {
+                    tracing::error!(%err, "subsurfaces cannot be drawn in their windows");
+                    return;
+                }
+            };
+        let count = u32::try_from(children.len()).expect("a surface has few subsurfaces");
+        // SAFETY: the handle is live for the life of self; `children` is
+        // borrowed for the call.
+        unsafe { f(self.handle, surface, children.as_ptr(), count) };
+    }
+
+    /// Sends `surface`'s last frame again, to show subsurfaces set since with
+    /// no new buffer of its own (`domicile_surface_redraw`). The frame
+    /// answers no [`Event::FrameDone`] or [`Event::Presented`].
+    pub fn redraw(&self, surface: SurfaceId) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId)> =
+            match self.symbol(b"domicile_surface_redraw\0", "domicile_surface_redraw") {
+                Ok(symbol) => symbol,
+                Err(err) => {
+                    tracing::error!(%err, "subsurfaces cannot be drawn in their windows");
+                    return;
+                }
+            };
+        // SAFETY: the handle is live for the life of self.
+        unsafe { f(self.handle, surface) };
     }
 
     fn surface_sync(
@@ -2486,6 +2540,14 @@ mod tests {
     fn a_shm_buffer_is_the_five_fields_the_c_header_declares() {
         assert_eq!(std::mem::size_of::<ShmBuffer>(), 20);
         assert_eq!(std::mem::offset_of!(ShmBuffer, fourcc), 16);
+    }
+
+    #[test]
+    fn a_subsurface_is_laid_out_as_the_engine_reads_it() {
+        // `DomicileSubsurface`: a u32, padding, four doubles, a u8, padding.
+        assert_eq!(std::mem::size_of::<Subsurface>(), 48);
+        assert_eq!(std::mem::offset_of!(Subsurface, x), 8);
+        assert_eq!(std::mem::offset_of!(Subsurface, above), 40);
     }
 
     #[test]

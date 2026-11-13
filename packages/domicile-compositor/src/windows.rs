@@ -64,12 +64,6 @@ impl DomicileCompositor {
                     .find(|(id, _)| id == app_id)
                     .map(|(_, popup)| popup.wl_surface().clone())
             })
-            .or_else(|| {
-                self.bubbles
-                    .iter()
-                    .find(|bubble| bubble.app_id == app_id)
-                    .map(|bubble| bubble.surface.clone())
-            })
     }
 
     /// The window this surface is, if it is one this compositor announced.
@@ -80,22 +74,22 @@ impl DomicileCompositor {
     }
 
     /// The window `surface` draws for: itself, or the window under the popup
-    /// or bubble it is. `None` for the chrome.
+    /// or subsurface it is. `None` for the chrome.
     pub fn window_of(&self, surface: &WlSurface) -> Option<String> {
         match self.by_surface.get(surface) {
             Some((app_id, Role::Toplevel(_))) => Some(app_id.clone()),
-            Some((_, Role::Bubble)) => self
-                .bubbles
+            Some((_, Role::Subsurface)) => self
+                .subsurfaces
                 .iter()
-                .find(|bubble| bubble.surface == *surface)
-                .and_then(|bubble| self.window_of(&bubble.parent)),
+                .find(|subsurface| subsurface.surface == *surface)
+                .and_then(|subsurface| self.window_of(&subsurface.parent)),
             Some((_, Role::Candidates)) => self.window_of(&self.candidates_editor()?),
             // A popup, announced or not, or a surface with no role yet.
             Some((_, Role::Popup(_))) | None => {
                 let window = self.window_under_menus(surface);
                 match self.by_surface.get(&window) {
                     Some((app_id, Role::Toplevel(_))) => Some(app_id.clone()),
-                    Some((_, Role::Popup(_) | Role::Bubble | Role::Candidates)) | None => None,
+                    Some((_, Role::Popup(_) | Role::Subsurface | Role::Candidates)) | None => None,
                 }
             }
         }
@@ -105,7 +99,7 @@ impl DomicileCompositor {
     pub fn bounds_of(&self, surface: &WlSurface) -> Option<domicile_scene::Bounds> {
         match self.by_surface.get(surface) {
             Some((app_id, Role::Toplevel(_))) => self.app_bounds.get(app_id).copied(),
-            Some((_, Role::Popup(_) | Role::Bubble | Role::Candidates)) | None => None,
+            Some((_, Role::Popup(_) | Role::Subsurface | Role::Candidates)) | None => None,
         }
     }
 
@@ -281,6 +275,22 @@ impl DomicileCompositor {
         self.pinch_window_gone(app_id);
         self.swipe_window_gone(app_id);
         self.touch_window_gone(app_id);
+        self.forget_the_drawing(app_id);
+        // An app id can return (a reconnecting client), but it then names a
+        // different window.
+        if self.pointer_app.as_deref() == Some(app_id) {
+            self.pointer_app = None;
+            self.cursor_surface = None;
+            self.pointer_surface = None;
+        }
+        self.forget_pointer_constraint(app_id);
+        debug!(%app_id, "gone -> Host::app_closed");
+        broadcast_closed(&self.hub, app_id);
+    }
+
+    /// Forget what `app_id` drew: a window, or a subsurface the host never
+    /// heard of.
+    pub fn forget_the_drawing(&mut self, app_id: &str) {
         // The surface stays on screen through the shell's close animation;
         // only frames that never went up come back now.
         let gone = self
@@ -310,15 +320,5 @@ impl DomicileCompositor {
         self.casting.window_gone(app_id);
         self.shm_refused.forget(app_id);
         self.first_frame_logged.forget(app_id);
-        // An app id can return (a reconnecting client), but it then names a
-        // different window.
-        if self.pointer_app.as_deref() == Some(app_id) {
-            self.pointer_app = None;
-            self.cursor_surface = None;
-            self.pointer_surface = None;
-        }
-        self.forget_pointer_constraint(app_id);
-        debug!(%app_id, "gone -> Host::app_closed");
-        broadcast_closed(&self.hub, app_id);
     }
 }
