@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 
 use domicile_launch::app_host::{answer, read_message, watched, write_message, Host};
 use domicile_launch::control::{Request, Response, SettingsFiles};
-use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::extensions::{
+    ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
+};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
@@ -306,6 +308,7 @@ fn every_installed_extension_is_the_desktop_s() {
                 "version": "1.0",
                 "enabled": true,
                 "options_url": null,
+                "settings": {"private": false},
             }],
         })
     );
@@ -325,6 +328,31 @@ fn an_extension_is_disabled_on_the_desktop() {
         Some(&Request::SetExtensionEnabled {
             id: ID.to_string(),
             enabled: false,
+        })
+    );
+}
+
+#[test]
+fn an_extension_is_configured_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({
+            "id": 19,
+            "type": "configure_extension",
+            "extension": ID,
+            "settings": {"private": true, "site_access": "on_click"},
+        })),
+        json!({"id": 19, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::ConfigureExtension {
+            id: ID.to_string(),
+            settings: ExtensionSettings {
+                in_private: Some(true),
+                site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
+                ..ExtensionSettings::default()
+            },
         })
     );
 }
@@ -588,9 +616,14 @@ impl Fake {
                                 version: "1.0".to_string(),
                                 enabled: true,
                                 options_url: None,
+                                settings: ExtensionSettings {
+                                    in_private: Some(false),
+                                    ..ExtensionSettings::default()
+                                },
                             }],
                         },
                         Request::SetExtensionEnabled { .. } => Response::Stored,
+                        Request::ConfigureExtension { .. } => Response::Stored,
                         Request::OpenUrl { .. } => Response::Opened,
                         Request::History(_) => Response::History {
                             items: vec![HistoryItem {

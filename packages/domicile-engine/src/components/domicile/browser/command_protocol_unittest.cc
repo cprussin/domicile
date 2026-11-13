@@ -63,6 +63,8 @@ struct Told {
   std::string device;
   std::string toggled;
   std::optional<bool> enabled;
+  std::string configured;
+  std::optional<ExtensionSettings> settings;
   std::optional<HistorySearch> search;
   std::string visits_of;
   std::optional<std::vector<base::Time>> deleted;
@@ -90,7 +92,8 @@ SitePermissionList StoredSettings() {
 }
 
 // What the recording `extensions` answers: one extension with an options page,
-// and one switched off without.
+// allowed in private windows and on one site, and one switched off without,
+// which has no settings to change.
 std::vector<InstalledExtension> InstalledExtensions() {
   InstalledExtension dark;
   dark.id = kExtensionId;
@@ -98,6 +101,9 @@ std::vector<InstalledExtension> InstalledExtensions() {
   dark.description = "Dark mode for every site";
   dark.version = "4.9";
   dark.enabled = true;
+  dark.settings.in_private = true;
+  dark.settings.site_access = SiteAccess::kSpecificSites;
+  dark.settings.sites = {"github.com"};
   dark.options_url =
       GURL("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html");
   InstalledExtension quiet;
@@ -244,6 +250,17 @@ std::string Answer(std::string_view line,
     }
     return base::ok();
   };
+  auto configure_extension =
+      [told, has_window](const std::string& id,
+                         const ExtensionSettings& settings)
+      -> base::expected<void, std::string> {
+    told->configured = id;
+    told->settings = settings;
+    if (!has_window) {
+      return base::unexpected("no shell");
+    }
+    return base::ok();
+  };
   auto list_media_devices = [has_window]() -> std::optional<MediaDeviceList> {
     if (!has_window) {
       return std::nullopt;
@@ -337,6 +354,7 @@ std::string Answer(std::string_view line,
                  .list_config_extensions = list_config_extensions,
                  .list_extensions = list_extensions,
                  .set_extension_enabled = set_extension_enabled,
+                 .configure_extension = configure_extension,
                  .list_media_devices = list_media_devices,
                  .set_media_device = set_media_device,
                  .search_history = search_history,
@@ -919,10 +937,13 @@ TEST(CommandProtocolTest, ListsTheProfilesExtensions) {
           R"({"type":"extensions","extensions":[)"
           R"({"id":"abcdefghijklmnopabcdefghijklmnop","name":"Dark Reader",)"
           R"("description":"Dark mode for every site","version":"4.9",)"
-          R"("enabled":true,"options_url":)"
+          R"("enabled":true,)"
+          R"("settings":{"private":true,"site_access":["github.com"]},)"
+          R"("options_url":)"
           R"("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html"},)"
           R"({"id":"ponmlkjihgfedcbaponmlkjihgfedcba","name":"Quiet",)"
-          R"("description":"","version":"1.0","enabled":false}]})",
+          R"("description":"","version":"1.0","enabled":false,)"
+          R"("settings":{}}]})",
           base::JSON_PARSE_RFC));
   EXPECT_EQ(TypeOf(Answer(R"({"type":"extensions","version":1})", &told,
                           /*has_window=*/false)),
@@ -951,6 +972,40 @@ TEST(CommandProtocolTest, RefusesASwitchWithoutAnIdAndAnEnabled) {
                           &told)),
             "refused");
   EXPECT_FALSE(told.enabled.has_value());
+}
+
+TEST(CommandProtocolTest, ConfiguresAnExtension) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"configure_extension","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
+                          R"("settings":{"private":true,)"
+                          R"("site_access":"on_click"}})",
+                          &told)),
+            "set");
+  EXPECT_EQ(told.configured, kExtensionId);
+  ExtensionSettings wanted;
+  wanted.in_private = true;
+  wanted.site_access = SiteAccess::kOnClick;
+  EXPECT_EQ(told.settings, wanted);
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"configure_extension","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
+                          R"("settings":{"private":false}})",
+                          &told, /*has_window=*/false)),
+            "refused");
+}
+
+TEST(CommandProtocolTest, RefusesAConfigurationItCannotRead) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"configure_extension","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop"})",
+                          &told)),
+            "refused");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"configure_extension","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
+                          R"("settings":{"private":"yes"}})",
+                          &told)),
+            "refused");
+  EXPECT_FALSE(told.settings.has_value());
 }
 
 // Returns the reply's `enabled`, or nothing as for TypeOf.

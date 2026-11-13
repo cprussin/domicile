@@ -24,6 +24,11 @@ WindowController* WindowFor(content::BrowserContext* context) {
   return g_desk ? g_desk->WindowFor(context) : nullptr;
 }
 
+WindowController* CurrentWindowFor(content::BrowserContext* context,
+                                   bool include_private) {
+  return g_desk ? g_desk->CurrentWindowFor(context, include_private) : nullptr;
+}
+
 bool FindTab(int tab_id,
              content::BrowserContext* context,
              WindowController** window,

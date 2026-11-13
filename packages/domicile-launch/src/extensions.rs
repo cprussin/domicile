@@ -1,10 +1,15 @@
 //! The extensions installed in the engine's profile, which the Settings app
-//! lists, enables and disables.
+//! lists, enables, disables and configures.
 //!
 //! The same shape crosses three hops, as [`crate::media_devices`] does: the
 //! engine's command socket, the control socket and `domicile-app-host`.
 
 use serde::{Deserialize, Serialize};
+
+/// An extension's chrome://extensions settings, as the config's
+/// `extensions.settings` spells them. Absent where the extension cannot use
+/// one; when configuring, absent where it stays as it is.
+pub use domicile_protocol::{ExtensionSettings, SiteAccess, SiteAccessMode};
 
 /// One installed extension.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,4 +22,6 @@ pub struct InstalledExtension {
     pub enabled: bool,
     /// The extension's options page, or none when it has no options page.
     pub options_url: Option<String>,
+    /// Its settings, each one it can use.
+    pub settings: ExtensionSettings,
 }

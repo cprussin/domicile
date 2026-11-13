@@ -11,8 +11,8 @@ use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::{Appearances, Host};
 use domicile_protocol::{
     AccessDialog, Appearance, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices,
-    HostMessage, Notification, Owner, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem,
-    Urgency, PROTOCOL_VERSION,
+    ExtensionSettings, HostMessage, Notification, Owner, PortalKind, PortalRequest,
+    PortalWallpaper, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
 };
 
 /// A window's owner, for tests about anything else.
@@ -269,9 +269,14 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
     // the handshake resends the list, like the keymap.
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
+    let private = ExtensionSettings {
+        in_private: Some(true),
+        ..ExtensionSettings::default()
+    };
     session.host_mut().set_extensions(
         vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".into()],
         vec!["/home/you/src/my-extension".into()],
+        [("ddkjiahejlhfcafbddmgiahcphecmpfh".into(), private.clone())].into(),
     );
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
@@ -284,6 +289,7 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
         Some(&HostMessage::Extensions {
             web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".into()],
             unpacked: vec!["/home/you/src/my-extension".into()],
+            settings: [("ddkjiahejlhfcafbddmgiahcphecmpfh".into(), private)].into(),
         }),
         "after the keymap, the other fact only the browser process reads"
     );
