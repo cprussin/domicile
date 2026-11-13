@@ -7,12 +7,13 @@
 
 mod running;
 
+use std::cell::Cell;
 use std::fs::File;
 use std::os::fd::{AsFd as _, FromRawFd as _, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, HostMessage, Preedit, Surrounding, TextField};
 use wayland_client::protocol::{
     wl_buffer, wl_compositor, wl_keyboard, wl_registry, wl_seat, wl_shm, wl_shm_pool, wl_surface,
 };
@@ -42,8 +43,9 @@ const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
 }
 "#;
 
-/// `a`, in evdev codes.
+/// `a` and `s`, in evdev codes.
 const EVDEV_KEY_A: u32 = 30;
+const EVDEV_KEY_S: u32 = 31;
 
 /// How long to wait for the compositor to answer.
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -706,6 +708,301 @@ fn an_emptied_candidate_list_closes_until_it_draws_again() {
         again.is_ok(),
         "the candidate list showed again when it drew\n{}",
         shown.compositor.complaint()
+    );
+}
+
+/// A focused field in a page, as the browser describes it.
+fn a_page_field(text: &str) -> ChromeMessage {
+    ChromeMessage::TextInput {
+        field: TextField {
+            enabled: true,
+            surrounding: Some(Surrounding {
+                text: text.to_string(),
+                cursor: u32::try_from(text.len()).expect("short"),
+                anchor: u32::try_from(text.len()).expect("short"),
+            }),
+            hint: 0,
+            purpose: 0,
+            cursor: Some([200, 100, 2, 18]),
+        },
+    }
+}
+
+/// The browser's next composition, waiting for it.
+fn composed(chrome: &mut domicile_test_chrome::Chrome, compositor: &Compositor) -> HostMessage {
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Composition { .. }))
+        .unwrap_or_else(|_| {
+            panic!(
+                "the browser heard no composition\n{}",
+                compositor.complaint()
+            )
+        })
+}
+
+/// An input method holding the keyboard, and a page field with the keyboard
+/// as its editor, the browser told its keys go to the input method first.
+fn a_composing_page(compositor: &Compositor, chrome: &mut domicile_test_chrome::Chrome) -> Peer {
+    let mut ime = Peer::an_input_method(compositor);
+    let handle = ime.queue.handle();
+    ime.input_method().grab_keyboard(&handle, ());
+    ime.roundtrip();
+    chrome
+        .say(&a_page_field("typed in a page"))
+        .expect("the chrome socket takes a field");
+    assert!(
+        ime.waits_for("activate", 1),
+        "a page field with the keyboard activates the input method; it heard {}\n{}",
+        ime.said(),
+        compositor.complaint()
+    );
+    let told = chrome.wait_for(|message| *message == HostMessage::InputMethod { composing: true });
+    assert!(
+        told.is_ok(),
+        "the browser is told its keys go to the input method\n{}",
+        compositor.complaint()
+    );
+    ime
+}
+
+/// A page field is the input method's editor while the browser has the
+/// keyboard: the input method reads its text, and what it composes reaches
+/// the browser.
+#[test]
+fn a_page_field_composes_from_the_input_method() {
+    let compositor = Compositor::started_with(A_DESK);
+    let mut chrome = compositor.chrome();
+    let mut ime = a_composing_page(&compositor, &mut chrome);
+    assert!(
+        ime.waits_for("surrounding_text(\"typed in a page\")", 1),
+        "the input method reads the page field's text; it heard {}",
+        ime.said()
+    );
+
+    ime.input_method()
+        .set_preedit_string("ni".to_string(), 0, 2);
+    ime.commit();
+    let HostMessage::Composition {
+        preedit,
+        commit,
+        delete,
+        ..
+    } = composed(&mut chrome, &compositor)
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(
+        (preedit, commit, delete),
+        (
+            Some(Preedit {
+                text: "ni".to_string(),
+                cursor_begin: 0,
+                cursor_end: 2
+            }),
+            None,
+            None
+        ),
+        "the preedit reaches the browser"
+    );
+
+    ime.input_method().commit_string("你".to_string());
+    ime.input_method().delete_surrounding_text(2, 0);
+    ime.commit();
+    let HostMessage::Composition {
+        preedit,
+        commit,
+        delete,
+        ..
+    } = composed(&mut chrome, &compositor)
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(
+        (preedit, commit, delete),
+        (None, Some("你".to_string()), Some([2, 0])),
+        "the committed text and the deletion reach the browser, and the preedit clears"
+    );
+}
+
+/// A key typed in a page goes to the input method first, and what the input
+/// method passes on comes back to the browser.
+#[test]
+fn a_page_key_goes_to_the_input_method_and_back() {
+    let compositor = Compositor::started_with(A_DESK);
+    let mut chrome = compositor.chrome();
+    let mut ime = a_composing_page(&compositor, &mut chrome);
+
+    chrome
+        .say(&ChromeMessage::KeyForInputMethod {
+            keycode: EVDEV_KEY_A,
+            pressed: true,
+        })
+        .expect("the chrome socket takes a key");
+    assert!(
+        ime.waits_for(&format!("key({EVDEV_KEY_A}, 1)"), 1),
+        "the input method's grab hears the page's key; it heard {}\n{}",
+        ime.said(),
+        compositor.complaint()
+    );
+
+    // An input method passes on a key it does not compose with a virtual
+    // keyboard, as fcitx5 does.
+    let (mut keyboard_peer, keyboard) = a_virtual_keyboard(&compositor);
+    keyboard.key(0, EVDEV_KEY_A, 1);
+    keyboard_peer.roundtrip();
+    let passed = chrome.wait_for(|message| {
+        matches!(message, HostMessage::KeyPassed { keycode, pressed: true, .. } if *keycode == EVDEV_KEY_A)
+    });
+    assert!(
+        passed.is_ok(),
+        "the key the input method passed on reaches the browser\n{}",
+        compositor.complaint()
+    );
+}
+
+/// With no input method, a page's key comes straight back, and the browser is
+/// never told to send keys to one.
+#[test]
+fn a_page_key_comes_straight_back_with_no_input_method() {
+    let compositor = Compositor::started_with(A_DESK);
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&a_page_field("typed in a page"))
+        .expect("the chrome socket takes a field");
+    chrome
+        .say(&ChromeMessage::KeyForInputMethod {
+            keycode: EVDEV_KEY_A,
+            pressed: true,
+        })
+        .expect("the chrome socket takes a key");
+
+    let composing = Cell::new(false);
+    let passed = chrome.wait_for(|message| {
+        if *message == (HostMessage::InputMethod { composing: true }) {
+            composing.set(true);
+        }
+        matches!(message, HostMessage::KeyPassed { keycode, pressed: true, .. } if *keycode == EVDEV_KEY_A)
+    });
+    assert!(
+        passed.is_ok(),
+        "the key came back\n{}",
+        compositor.complaint()
+    );
+    assert!(
+        !composing.get(),
+        "nothing composes, so the browser keeps its keys"
+    );
+}
+
+/// The input method follows the keyboard between a page and a native window:
+/// the window's text is read while it has the keyboard, and the page's once
+/// the browser takes it back.
+#[test]
+fn the_input_method_follows_the_keyboard_between_a_page_and_a_window() {
+    let compositor = Compositor::started_with(A_DESK);
+    let mut chrome = compositor.chrome();
+    let mut ime = a_composing_page(&compositor, &mut chrome);
+
+    let (mut editor, _) = a_focused_editor(&compositor, &mut chrome, "editor");
+    assert!(
+        ime.waits_for("surrounding_text(\"typed so far\")", 1),
+        "the window with the keyboard is the editor; the input method heard {}",
+        ime.said()
+    );
+    let stopped =
+        chrome.wait_for(|message| *message == HostMessage::InputMethod { composing: false });
+    assert!(
+        stopped.is_ok(),
+        "the browser keeps its keys while a window has the keyboard"
+    );
+    ime.input_method().commit_string("你".to_string());
+    ime.commit();
+    assert!(
+        editor.wait_for_trace("commit_string(\"你\")", 1),
+        "the window gets the text; it traced:\n{}",
+        editor.trace()
+    );
+
+    chrome
+        .say(&ChromeMessage::FocusChrome)
+        .expect("the chrome socket takes a focus");
+    assert!(
+        editor.wait_for_trace("text_input_leave(", 1),
+        "the window loses the editor; it traced:\n{}",
+        editor.trace()
+    );
+    assert!(
+        ime.waits_for("surrounding_text(\"typed in a page\")", 2),
+        "the page is the editor again; the input method heard {}",
+        ime.said()
+    );
+    let resumed =
+        chrome.wait_for(|message| *message == HostMessage::InputMethod { composing: true });
+    assert!(
+        resumed.is_ok(),
+        "the browser's keys go to the input method again\n{}",
+        compositor.complaint()
+    );
+}
+
+/// On a locked desk the browser keeps its keys, so the lock page's field takes
+/// them, and an input method's text reaches no page.
+#[test]
+fn a_locked_desk_keeps_the_browsers_keys() {
+    let compositor = Compositor::started_with(A_DESK);
+    let mut chrome = compositor.chrome();
+    let mut ime = a_composing_page(&compositor, &mut chrome);
+
+    compositor.reconfigure(A_DESK_THAT_LOCKS_IN_A_SECOND);
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
+        .expect("a desk nobody is at locks itself and says so");
+    let stopped =
+        chrome.wait_for(|message| *message == HostMessage::InputMethod { composing: false });
+    assert!(
+        stopped.is_ok(),
+        "the browser keeps its keys on a locked desk\n{}",
+        compositor.complaint()
+    );
+
+    chrome
+        .say(&ChromeMessage::KeyForInputMethod {
+            keycode: EVDEV_KEY_A,
+            pressed: true,
+        })
+        .expect("the chrome socket takes a key");
+    let passed = chrome.wait_for(
+        |message| matches!(message, HostMessage::KeyPassed { keycode, .. } if *keycode == EVDEV_KEY_A),
+    );
+    assert!(passed.is_ok(), "a key on a locked desk comes straight back");
+
+    ime.input_method().commit_string("secret".to_string());
+    ime.commit();
+    compositor.wait_for_log("input method: the desk is locked; its text reaches no editor");
+    // A key after the text, so everything the browser heard before it is in.
+    chrome
+        .say(&ChromeMessage::KeyForInputMethod {
+            keycode: EVDEV_KEY_S,
+            pressed: true,
+        })
+        .expect("the chrome socket takes a key");
+    let composed = Cell::new(false);
+    let after = chrome.wait_for(|message| {
+        if matches!(
+            message,
+            HostMessage::Composition {
+                commit: Some(_),
+                ..
+            }
+        ) {
+            composed.set(true);
+        }
+        matches!(message, HostMessage::KeyPassed { keycode, .. } if *keycode == EVDEV_KEY_S)
+    });
+    assert!(after.is_ok(), "the second key came back too");
+    assert!(
+        !composed.get(),
+        "the input method's text reached the browser on a locked desk"
     );
 }
 

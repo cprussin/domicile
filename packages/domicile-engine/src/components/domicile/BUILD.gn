@@ -832,6 +832,24 @@ source_set("private_pages") {
 # reason :shortcut_registry is one: it is the piece of the channel that can be
 # tested with a string, and the one whose cost was a bug -- see the header.
 # //base-free, because splitting bytes on a newline wants nothing.
+# The control channel's input method messages, read and written.
+#
+# Its own target beside :control_channel for :line_framer's reason: it is the
+# piece of the input method's crossing a test can reach with a string.
+source_set("input_method_lines") {
+  sources = [
+    "browser/input_method_lines.cc",
+    "browser/input_method_lines.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/base/ime/domicile:desk_input_method",
+  ]
+
+  deps = [ "//ui/gfx/geometry" ]
+}
+
 source_set("line_framer") {
   sources = [
     "browser/line_framer.cc",
@@ -1118,6 +1136,7 @@ source_set("control_channel") {
     ":desk_pointer_hiding",
     ":display_transform",
     ":extension_installer",
+    ":input_method_lines",
     ":line_framer",
     ":portal_request",
     ":shell_swap",
@@ -1170,6 +1189,7 @@ source_set("unit_tests") {
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/guest_dialogs_unittest.cc",
+    "browser/input_method_lines_unittest.cc",
     "browser/line_framer_unittest.cc",
     "browser/notification_window_unittest.cc",
     "browser/page_matches_unittest.cc",
@@ -1255,6 +1275,7 @@ source_set("unit_tests") {
     ":forwarded_keys",
     ":guest_dialogs",
     ":held_chords",
+    ":input_method_lines",
     ":keyboard_layout",
     ":line_framer",
     ":notification_window",

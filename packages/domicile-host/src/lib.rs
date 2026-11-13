@@ -893,6 +893,8 @@ impl Host {
             | ChromeMessage::Activity { .. }
             | ChromeMessage::DeskPointer { .. }
             | ChromeMessage::DeskCursor { .. }
+            | ChromeMessage::TextInput { .. }
+            | ChromeMessage::KeyForInputMethod { .. }
             | ChromeMessage::SyncFrames
             | ChromeMessage::SystemRequest { .. }
             | ChromeMessage::AnswerPortalRequest { .. } => {

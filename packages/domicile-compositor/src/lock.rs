@@ -399,6 +399,11 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::SwitchShortcutsInhibitor { .. }
             | ClientRequest::SetWhitePoint { .. }
             | ClientRequest::ChromeHello { .. }
+            // While locked the browser's keys come straight back and the
+            // input method's text is dropped (`chrome_editor`, `text_input`),
+            // so the lock page's field can still be typed in.
+            | ClientRequest::TextInput { .. }
+            | ClientRequest::KeyForInputMethod { .. }
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
             | ClientRequest::Lock
