@@ -11,9 +11,8 @@ describe("AppPopup", () => {
         popup={{
           appId: "menu",
           cursor: "pointer",
-          depth: 0,
           frame: 0,
-          rect: { height: 240, width: 180, x: 112, y: 80 },
+          rect: { height: 240, width: 180, x: 12, y: 30 },
         }}
       />,
     );
