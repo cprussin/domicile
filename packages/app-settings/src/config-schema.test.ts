@@ -33,6 +33,20 @@ describe(readSettings, () => {
     );
   });
 
+  it("reads a profile's HDR and everyday brightness", () => {
+    const placement = { display: "drm-1", hdr: true, sdr_white: 240 };
+    const read = readSettings({
+      output: { profiles: [{ displays: [placement], name: "desk" }] },
+    });
+    expect(
+      read.map(({ output }) =>
+        output.profiles.flatMap(({ displays }) =>
+          displays.map(({ hdr, sdr_white }) => ({ hdr, sdr_white })),
+        ),
+      ),
+    ).toEqual(Ok([{ hdr: true, sdr_white: 240 }]));
+  });
+
   it("says where a config does not fit", () => {
     expect(readSettings({ theme: { mode: "system" } }).isErr()).toBe(true);
     expect(readSettings({ theme: { tint: "red" } }).isErr()).toBe(true);
@@ -63,6 +77,11 @@ describe(readSettings, () => {
       {
         output: {
           profiles: [{ displays: [{ display: "a", refresh: 1e9 }], name: "p" }],
+        },
+      },
+      {
+        output: {
+          profiles: [{ displays: [{ display: "a", sdr_white: 0 }], name: "p" }],
         },
       },
     ]) {
