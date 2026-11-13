@@ -3001,7 +3001,6 @@ describe("Shell", () => {
       press("e");
       press("v");
       clientAppears("three");
-      press("w");
       // A focused tab lights its whole group too, so only the tint tells
       // the two apart.
       expect(lit(container)).toEqual(["app:two", "app:three"]);
@@ -3023,7 +3022,6 @@ describe("Shell", () => {
       press("e");
       press("v");
       clientAppears("three");
-      press("w");
 
       press("a");
 
@@ -3064,8 +3062,6 @@ describe("Shell", () => {
       press("e");
       press("v");
       clientAppears("three");
-
-      press("w");
 
       // The strip draws the line; the open tab covers it to join its window.
       const covers = css({ marginBlockEnd: "-1px" });

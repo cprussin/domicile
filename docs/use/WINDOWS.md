@@ -13,6 +13,7 @@ float and close the same way.
 - **Focus follows the pointer.** The window under it gets the keyboard; a
   click raises it.
 - Every window sits in a group, shown as tabs (Meta+W) or stacked (Meta+S).
+  Meta+W on a group already in tabs merges it with the groups beside it.
   Meta+B or Meta+V moves the window out of its group, to the right or below,
   into a group of its own. Meta+E splits every tab of a group out side by
   side.

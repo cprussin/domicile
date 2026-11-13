@@ -56,7 +56,7 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 | `move container to workspace <name>` | Send the window, or the `focus parent` selection, to workspace `1`–`10`. |
 | `workspace <name>` | Go to workspace `1`–`10`, or back to the previous one if it is already shown. |
 | `split h` / `split v` | Move the window, or the `focus parent` selection, out of its tab group to the group's right / below it. |
-| `layout stacking/tabbed/toggle split` | Set the container's layout. A split turned into tabs or a stack merges its groups; tabs turned into a split each get a group. |
+| `layout stacking/tabbed/toggle split` | Set the container's layout. A split turned into tabs or a stack merges its groups; tabs turned into a split each get a group. A group already tabbed or stacking passes `layout tabbed` or `layout stacking` to the split around it. |
 | `fullscreen toggle [global]` | Fullscreen on this screen, or every screen. |
 | `floating toggle` | Float or tile the window. |
 | `exec <argv…>` | Spawn `argv` from the compositor's `PATH`. |

@@ -33,7 +33,7 @@ or Super key).
 
 | Keys | Does |
 |---|---|
-| Meta+W | Tabs; merges a selected split into one group |
+| Meta+W | Stacked group back to tabs; otherwise merges the groups side by side into one tabbed group |
 | Meta+S | Stacked |
 | Meta+E | Splits a group's tabs side by side, switching between across and down |
 | Meta+B / Meta+V | Move the window out of its group, to the right / below |
