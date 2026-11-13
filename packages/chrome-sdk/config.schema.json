@@ -115,6 +115,11 @@
           "description": "Whether the display is part of the desktop.\n\nA disabled display must still be connected for the profile to match.\nThis lets a profile match a docked laptop and keep windows off its\nclosed lid.",
           "type": "boolean"
         },
+        "hdr": {
+          "default": false,
+          "description": "Whether to drive the monitor in HDR (HDR10: BT.2020 primaries with the\nPQ curve), so HDR video and images reach its full brightness and\ncolor.\n\nOff by default. Asked for only where the monitor's EDID says it takes\nPQ and the connector scans out in 10 bits; elsewhere it stays SDR.",
+          "type": "boolean"
+        },
         "mode": {
           "default": null,
           "description": "The mode to scan out, in physical pixels. Absent means the monitor's\nnative mode.\n\nApplying the profile fails when the monitor offers no mode of this\nsize. An engine that reports no modes (an older one, or a desktop in a\nwindow) cannot set one, so there it is a check: the profile applies\nonly while the monitor is at this mode.",
@@ -162,6 +167,13 @@
           "description": "Device pixels per logical pixel.\n\nFractional, because real scales are: 1.5 on a 2880x1920 panel gives a\n1920x1280 desktop. This differs from the integer `wl_output.scale`; the\ncompositor's `Screens` advertises that, and `xdg_output` carries the\nlogical size.",
           "format": "double",
           "type": "number"
+        },
+        "sdr_white": {
+          "default": null,
+          "description": "In HDR, how bright ordinary (SDR) content's white is, in cd/m² (nits).\nRaise it if SDR windows look dim beside the monitor in SDR.\n\nAbsent is 203, the reference white of ITU-R BT.2408. Ignored in SDR.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": ["integer", "null"]
         },
         "transform": {
           "$ref": "#/$defs/Transform",

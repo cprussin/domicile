@@ -53,10 +53,12 @@ const placementSchema = z.strictObject({
   adaptive_sync: z.boolean().optional(),
   display: z.string(),
   enabled: z.boolean().default(true),
+  hdr: z.boolean().optional(),
   mode: size.optional(),
   position: point.optional(),
   refresh: z.number().positive().optional(),
   scale: z.number().positive().default(1),
+  sdr_white: z.number().int().min(1).max(10_000).optional(),
   transform: z.enum(TRANSFORMS).default("normal"),
 });
 

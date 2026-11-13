@@ -123,6 +123,23 @@
         type = lib.types.bool;
         default = false;
       };
+      hdr = lib.mkOption {
+        description = ''
+          Whether to drive this monitor in HDR (HDR10). Used only where the
+          monitor's EDID takes PQ and the connector scans out in 10 bits;
+          elsewhere it stays SDR.
+        '';
+        type = lib.types.bool;
+        default = false;
+      };
+      sdr_white = lib.mkOption {
+        description = ''
+          In HDR, how bright ordinary (SDR) content's white is, in cd/m².
+          `null` is 203, the ITU-R BT.2408 reference white.
+        '';
+        type = lib.types.nullOr (lib.types.ints.between 1 10000);
+        default = null;
+      };
       position =
         (pair lib.types.int "The top-left corner, in the desktop's logical units.")
         // {default = [0 0];};

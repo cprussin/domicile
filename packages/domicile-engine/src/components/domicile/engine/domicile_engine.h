@@ -249,6 +249,29 @@ typedef struct DomicileAdaptiveDisplay {
   int32_t adaptive_sync;
 } DomicileAdaptiveDisplay;
 
+// Whether a display's connector is driven in HDR10 (BT.2020 with PQ).
+// Its panel's EDID takes no PQ, or the connector cannot scan out in 10 bits.
+#define DOMICILE_HDR_UNSUPPORTED 0
+// It can, and is not.
+#define DOMICILE_HDR_OFF 1
+// It is.
+#define DOMICILE_HDR_ON 2
+
+// An adaptive display, whether it is driven in HDR10, and its panel's
+// luminances, for `hdr_displays`.
+typedef struct DomicileHdrDisplay {
+  DomicileAdaptiveDisplay adaptive;
+  // One of the `DOMICILE_HDR_*` values.
+  int32_t hdr;
+  // The panel's luminances from its EDID, in cd/m², zero where unreported.
+  float max_luminance;
+  float max_average_luminance;
+  float min_luminance;
+  // In HDR, the luminance SDR content's white is shown at, in cd/m²; zero
+  // otherwise.
+  float sdr_white_nits;
+} DomicileHdrDisplay;
+
 // A browser window, for `browser_windows`: a page the browser holds, which a
 // capture tool may pick on ext-foreign-toplevel-list-v1 and capture alone
 // with domicile_browser_window_capture_start.
@@ -312,6 +335,18 @@ typedef struct DomicileAdaptiveLayout {
   // display then reports `DOMICILE_ADAPTIVE_SYNC_OFF`.
   int32_t adaptive_sync;
 } DomicileAdaptiveLayout;
+
+// An adaptive layout and whether to drive it in HDR10, for
+// `domicile_displays_configure_hdr`.
+typedef struct DomicileHdrLayout {
+  DomicileAdaptiveLayout adaptive;
+  // Nonzero to drive the connector in HDR10 where its panel takes it. The
+  // display reports `DOMICILE_HDR_UNSUPPORTED` where it does not.
+  int32_t hdr;
+  // In HDR, the luminance to show SDR content's white at, in cd/m². Zero or
+  // less is 203, the BT.2408 reference white.
+  float sdr_white_nits;
+} DomicileHdrLayout;
 
 // A tablet or touchscreen and the display it covers, for
 // `domicile_pointers_configure`.
@@ -535,6 +570,15 @@ typedef struct DomicileEngineCallbacks {
   void (*adaptive_displays)(void* user_data,
                             const DomicileAdaptiveDisplay* displays,
                             uint32_t count);
+  // Like `adaptive_displays`, plus whether each display is driven in HDR10
+  // and its panel's luminances. `displays` points at `count` records borrowed
+  // for the call.
+  //
+  // Called instead of `adaptive_displays` and the older display callbacks
+  // when set. An older engine ignores it.
+  void (*hdr_displays)(void* user_data,
+                       const DomicileHdrDisplay* displays,
+                       uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
@@ -744,6 +788,14 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_configure_modes(
 DOMICILE_ENGINE_EXPORT void domicile_displays_configure_adaptive(
     DomicileEngine* engine,
     const DomicileAdaptiveLayout* layout,
+    uint32_t count);
+
+// Like `domicile_displays_configure_adaptive`, with whether to drive each
+// connector in HDR10 and the SDR white to draw it at. A compositor that finds
+// no such symbol has an older engine, which drives every connector in SDR.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure_hdr(
+    DomicileEngine* engine,
+    const DomicileHdrLayout* layout,
     uint32_t count);
 
 // Tells the browser which display each tablet or touchscreen covers.

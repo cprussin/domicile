@@ -87,6 +87,23 @@ describe(readSettings, () => {
     ).toEqual(Ok(profiles));
   });
 
+  it("reads a profile's HDR and SDR white, which Settings does not edit yet", () => {
+    const placement = {
+      display: "drm-1",
+      enabled: true,
+      hdr: true,
+      scale: 1,
+      sdr_white: 240,
+      transform: "normal" as const,
+    };
+    const profiles = [{ displays: [placement], name: "desk" }];
+    expect(
+      readSettings({ output: { profiles } }).map(
+        (read) => read.output.profiles,
+      ),
+    ).toEqual(Ok(profiles));
+  });
+
   it("reads bound pointers, which Settings does not edit", () => {
     const pointers = [{ device: "QEMU QEMU USB Tablet", display: "Virtual-1" }];
     expect(
