@@ -1837,6 +1837,49 @@ describe("Shell", () => {
       expect(appElement(container, "term")).toBeDefined();
     });
 
+    it("draws the drop target and the selection tint over a window's bubble", async () => {
+      // Firefox draws its whole window into a bubble, which ties with them at
+      // the window's raised depth; the later element wins the tie.
+      const { container } = await renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("e");
+      const window2 = boxOf(appBox(container, "two"));
+      domicile.appear("bubble", {
+        height: Number.parseFloat(window2.height),
+        parent: "two",
+        width: Number.parseFloat(window2.width),
+        x: 0,
+        y: 0,
+      });
+      const over = (element: HTMLElement | null): boolean => {
+        const bubble = appElement(container, "bubble");
+        return (
+          element !== null &&
+          element.style.zIndex === bubble.style.zIndex &&
+          (bubble.compareDocumentPosition(element) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0
+        );
+      };
+
+      press("a");
+      press("a");
+      expect(over(container.querySelector("[data-selection]"))).toBe(true);
+      press("a", true);
+      press("a", true);
+
+      fireEvent.pointerDown(barFor(container, "app:one"), {
+        clientX: GAP + 100,
+        clientY: TOP_BAR + TOP_GAP + TITLE_BAR / 2,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: Number.parseFloat(window2.x) + 200,
+        clientY: Number.parseFloat(window2.y) + 300,
+      });
+      expect(over(container.querySelector("[data-drop]"))).toBe(true);
+    });
+
     it("renames the bar when the client renames its window", async () => {
       const { container } = await renderShell();
       clientAppears("term", "Terminal");
