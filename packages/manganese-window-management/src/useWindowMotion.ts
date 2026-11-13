@@ -8,6 +8,7 @@ import {
   movesAsTab,
   placedOn,
   sentAway,
+  shutAway,
   withClosing,
 } from "./closing";
 import { crossed } from "./crossing";
@@ -108,10 +109,13 @@ type ClosingOn = Closing & { screen: string };
  */
 type Slid = { at: number; rewound: number };
 
-/** An open window sent off the screen, how it leaves, and from which screen. */
+/**
+ * An open window sent off the screen or shut, how it leaves, and from which
+ * screen. A shut window leaves as a closed one does.
+ */
 type SendingOn = Leaving &
   Slid & {
-    motion: "sending" | "sending-tab" | "stowing";
+    motion: "closing" | "closing-tab" | "sending" | "sending-tab" | "stowing";
     screen: string;
   };
 
@@ -365,10 +369,23 @@ const advanced = (
       ...playing.sending.filter(
         ({ window }) => open.has(window.id) && !shownIds.has(window.id),
       ),
+      ...screens.flatMap(({ name, was }) =>
+        shutAway(was, shut).map((closing) => ({
+          ...closing,
+          at: time,
+          motion: movesAsTab(closing.placement)
+            ? ("closing-tab" as const)
+            : ("closing" as const),
+          rewound: 0,
+          screen: name,
+        })),
+      ),
       ...screens.flatMap(({ name, now, was }) =>
         (overviewing(was, now)
           ? []
-          : sentAway(was, now, Object.values(shown))
+          : sentAway(was, now, Object.values(shown)).filter(
+              ({ window }) => !shut.has(window.id),
+            )
         ).map((sending) => {
           const motion = sendingMotion(shown, sending);
           return {
@@ -595,9 +612,15 @@ const played = (
         ({ placement, window }) =>
           window.id !== id || outlastsBar(placement, motion, part),
       );
-      return closing.length === playing.closing.length
+      // A shut window closes from `sending`; see `SendingOn`.
+      const sending = playing.sending.filter(
+        ({ placement, window }) =>
+          window.id !== id || outlastsBar(placement, motion, part),
+      );
+      return closing.length === playing.closing.length &&
+        sending.length === playing.sending.length
         ? playing
-        : { ...playing, closing };
+        : { ...playing, closing, sending };
     }
     case "sending":
     case "sending-tab":
