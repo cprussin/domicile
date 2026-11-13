@@ -208,6 +208,11 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       const std::string& app_id,
       CreateFrameSinkCallback callback) override;
   void DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) override;
+  void EmbedFrameSink(const viz::FrameSinkId& child,
+                      const viz::FrameSinkId& parent,
+                      const viz::LocalSurfaceId& local_surface_id,
+                      const gfx::Size& size,
+                      double scale) override;
   void ImportBuffer(const viz::FrameSinkId& frame_sink_id,
                     gfx::GpuMemoryBufferHandle handle,
                     const gfx::Size& size,

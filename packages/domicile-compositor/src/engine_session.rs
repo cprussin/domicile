@@ -18,7 +18,7 @@ use smithay::reexports::wayland_server::Resource as _;
 
 use crate::engine::{
     BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, Pointer, Request,
-    SurfaceId, VirtualDisplay, LIBRARY, NEWEST_BOX,
+    Subsurface, SurfaceId, VirtualDisplay, LIBRARY, NEWEST_BOX,
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_imports::{Imports, Route, Then};
@@ -196,6 +196,23 @@ pub struct EngineSession {
     /// Imports whose buffer the client destroyed while it was on screen. See
     /// `engine_retired`.
     retired: Retired,
+    /// Each surface's subsurfaces as last set, by app id, so a restarted
+    /// engine gets them again.
+    children: HashMap<String, Vec<Child>>,
+}
+
+/// One of a surface's subsurfaces, as [`EngineSession::set_children`] takes
+/// it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Child {
+    /// The id the compositor gave the subsurface. The host never sees it.
+    pub app_id: String,
+    /// Logical, from the top left of its parent's crop.
+    pub position: (f64, f64),
+    /// Logical.
+    pub size: (f64, f64),
+    /// Whether it is drawn over its parent rather than under it.
+    pub above: bool,
 }
 
 /// What [`EngineSession::window_gone`] did.
@@ -224,6 +241,7 @@ impl EngineSession {
             waiting: Waiting::default(),
             lingering: Lingering::default(),
             retired: Retired::default(),
+            children: HashMap::new(),
         })
     }
 
@@ -267,6 +285,11 @@ impl EngineSession {
             // it. `surface_for` logs refusals; their frames end up in `blank`.
             for app_id in apps.values() {
                 let _ = self.surface_for(app_id);
+            }
+            // Before the frames that draw them.
+            let parents: Vec<String> = self.children.keys().cloned().collect();
+            for parent in parents {
+                self.send_the_children(&parent);
             }
         }
 
@@ -754,6 +777,7 @@ impl EngineSession {
     /// released now.
     pub fn window_gone(&mut self, app_id: &str) -> WindowGone {
         self.mapped.remove(app_id);
+        self.children.remove(app_id);
         let Some(surface) = self.surfaces.forget(app_id) else {
             return WindowGone::default();
         };
@@ -897,6 +921,61 @@ impl EngineSession {
         };
         self.engine.sync(surface, frame);
         true
+    }
+
+    /// Sets `app_id`'s subsurfaces, bottom to top, which its frames draw from
+    /// its next one. See [`crate::engine::Engine::set_children`]. Returns
+    /// whether they changed: if so and no frame of its own follows, the
+    /// caller [`EngineSession::redraw`]s it.
+    ///
+    /// Each child's surface is brokered now, so the parent's frame can embed
+    /// it before it has a frame of its own.
+    pub fn set_children(&mut self, app_id: &str, children: Vec<Child>) -> bool {
+        if self
+            .children
+            .get(app_id)
+            .map_or(children.is_empty(), |set| *set == children)
+        {
+            return false;
+        }
+        for child in &children {
+            let _ = self.surface_for(&child.app_id);
+        }
+        self.children.insert(app_id.to_owned(), children);
+        self.send_the_children(app_id);
+        true
+    }
+
+    /// Shows `app_id`'s last frame again with its subsurfaces as last set.
+    /// See [`crate::engine::Engine::redraw`].
+    pub fn redraw(&self, app_id: &str) {
+        if let Some(surface) = self.surfaces.get(app_id) {
+            self.engine.redraw(surface);
+        }
+    }
+
+    /// Tells the engine `app_id`'s subsurfaces as last set.
+    fn send_the_children(&mut self, app_id: &str) {
+        let Some(children) = self.children.get(app_id).cloned() else {
+            return;
+        };
+        let Some(surface) = self.surface_for(app_id) else {
+            return;
+        };
+        let children: Vec<Subsurface> = children
+            .iter()
+            .filter_map(|child| {
+                Some(Subsurface {
+                    surface: self.surfaces.get(&child.app_id)?,
+                    x: child.position.0,
+                    y: child.position.1,
+                    width: child.size.0,
+                    height: child.size.1,
+                    above: u8::from(child.above),
+                })
+            })
+            .collect();
+        self.engine.set_children(surface, &children);
     }
 
     /// Which app a surface belongs to, for an event that names only the
