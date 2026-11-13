@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -42,6 +43,11 @@ struct DomicilePress {
 // `own-keybindings` reads.
 std::optional<DomicileWrittenChord> ParseDomicileChord(const String& written,
                                                        String* error);
+
+// The modifier `written` names alone, `Meta` or any spelling the chord grammar
+// takes, for a binding of its tap; nullopt for anything else.
+std::optional<domicile::mojom::blink::TapModifier> ParseDomicileTap(
+    const String& written);
 
 // The press `chord` arrives as on a keyboard whose keysyms are on `keys`, or
 // nullopt for a keysym the keyboard cannot type.

@@ -18,6 +18,7 @@
 #include "base/timer/timer.h"
 #include "components/domicile/browser/desk_activity.h"
 #include "components/domicile/browser/desk_gestures.h"
+#include "components/domicile/browser/desk_modifier_taps.h"
 #include "components/domicile/browser/desk_pointer.h"
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/line_framer.h"
@@ -158,6 +159,9 @@ class ControlChannel : public mojom::ControlChannel {
   void UngrabShortcut(mojom::ShortcutPtr shortcut) override;
   void GrabGesture(mojom::GestureGrabPtr grab) override;
   void UngrabGesture(mojom::GestureGrabPtr grab) override;
+  void GrabModifierTap(mojom::TapModifier modifier,
+                       bool while_inhibited) override;
+  void UngrabModifierTap(mojom::TapModifier modifier) override;
   void KeyboardWindowInhibitsShortcuts(bool inhibits) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
   void PointerMotion(const std::string& app_id,
@@ -232,6 +236,9 @@ class ControlChannel : public mojom::ControlChannel {
   // give the native window under the pointer. Dropped while no compositor is
   // connected: its gesture would begin on a window it never heard of.
   void ForwardGesture(const ui::NativeGesture& gesture);
+  // A tap of a modifier alone this page grabbed; see DeskModifierTaps.
+  // Posted here for DeliverShortcut's reason.
+  void DeliverModifierTap(TapModifier modifier);
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
   void SomebodyIsHere(const std::string& input);
@@ -282,6 +289,8 @@ class ControlChannel : public mojom::ControlChannel {
   // And with the process's DeskGestures, which forgets this page's grabs with
   // it: a reloaded shell grabs its gestures again.
   DeskGestures::ChannelId gestures_;
+  // And with the process's DeskModifierTaps, likewise.
+  DeskModifierTaps::ChannelId taps_;
   // And with the process's ui::DeskCursorImageSource.
   ui::DeskCursorImageSource::ListenerId cursor_;
   // And with the process's ui::DeskInputMethod.

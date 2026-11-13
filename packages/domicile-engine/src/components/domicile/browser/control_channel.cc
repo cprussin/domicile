@@ -148,6 +148,32 @@ mojom::GesturePhase GesturePhaseToMojo(ui::NativeGesturePhase phase) {
   NOTREACHED();
 }
 
+TapModifier TapModifierFromMojo(mojom::TapModifier modifier) {
+  switch (modifier) {
+    case mojom::TapModifier::kAlt:
+      return TapModifier::kAlt;
+    case mojom::TapModifier::kCtrl:
+      return TapModifier::kCtrl;
+    case mojom::TapModifier::kShift:
+      return TapModifier::kShift;
+    case mojom::TapModifier::kMeta:
+      return TapModifier::kMeta;
+  }
+}
+
+mojom::TapModifier TapModifierToMojo(TapModifier modifier) {
+  switch (modifier) {
+    case TapModifier::kAlt:
+      return mojom::TapModifier::kAlt;
+    case TapModifier::kCtrl:
+      return mojom::TapModifier::kCtrl;
+    case TapModifier::kShift:
+      return mojom::TapModifier::kShift;
+    case TapModifier::kMeta:
+      return mojom::TapModifier::kMeta;
+  }
+}
+
 GestureGrab GestureGrabFromMojo(const mojom::GestureGrab& grab) {
   return GestureGrab{GestureKindFromMojo(grab.kind), grab.fingers,
                      GestureEdgeFromMojo(grab.edge)};
@@ -199,6 +225,9 @@ ControlChannel::ControlChannel(
           &ControlChannel::DeliverGesture, weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::ForwardGesture, weak_factory_.GetWeakPtr())));
+  taps_ = DeskModifierTaps::Get().AddChannel(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeliverModifierTap, weak_factory_.GetWeakPtr())));
   pointer_ = DeskPointer::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeskPointerMoved, weak_factory_.GetWeakPtr())));
@@ -221,6 +250,7 @@ ControlChannel::~ControlChannel() {
   ui::DeskInputMethod::Get().RemoveChannel(input_method_);
   ui::DeskCursorImageSource::Get().RemoveListener(cursor_);
   DeskPointer::Get().RemoveListener(pointer_);
+  DeskModifierTaps::Get().RemoveChannel(taps_);
   DeskGestures::Get().RemoveChannel(gestures_);
   DeskActivity::Get().RemoveListener(activity_);
   ShortcutRegistry::Get().RemoveChannel(channel_);
@@ -776,9 +806,22 @@ void ControlChannel::UngrabGesture(mojom::GestureGrabPtr grab) {
   DeskGestures::Get().Ungrab(gestures_, GestureGrabFromMojo(*grab));
 }
 
+void ControlChannel::GrabModifierTap(mojom::TapModifier modifier,
+                                     bool while_inhibited) {
+  // Recorded here, for GrabGesture's reason: aura sees every key in this
+  // process, and a modifier alone means nothing to the compositor.
+  DeskModifierTaps::Get().Grab(taps_, TapModifierFromMojo(modifier),
+                               while_inhibited);
+}
+
+void ControlChannel::UngrabModifierTap(mojom::TapModifier modifier) {
+  DeskModifierTaps::Get().Ungrab(taps_, TapModifierFromMojo(modifier));
+}
+
 void ControlChannel::KeyboardWindowInhibitsShortcuts(bool inhibits) {
   // Recorded here, for GrabGesture's reason.
   DeskGestures::Get().SetInhibited(gestures_, inhibits);
+  DeskModifierTaps::Get().SetInhibited(taps_, inhibits);
 }
 
 void ControlChannel::Key(const std::string& app_id,
@@ -994,6 +1037,12 @@ void ControlChannel::DeliverGesture(const ui::NativeGesture& gesture) {
         gesture.fingers, gesture.dx, gesture.dy, gesture.scale,
         gesture.rotation, gesture.canceled,
         GestureEdgeToMojo(gesture.edge)));
+  }
+}
+
+void ControlChannel::DeliverModifierTap(TapModifier modifier) {
+  if (client_) {
+    client_->ModifierTapped(TapModifierToMojo(modifier));
   }
 }
 

@@ -22,7 +22,7 @@ replaces them.
 | Meta+Minus / Meta+Shift+Minus | `scratchpad show` / `move scratchpad`. |
 | Meta+Shift+Q | Close the window. |
 | Meta+Space, Meta+D | Toggle the launcher, closing the overview. |
-| Meta+O | Toggle the overview. |
+| Meta+O, Super tapped alone | Toggle the overview. Super held for a chord, a drag or a scroll is no tap. |
 | `pinch:4:inward` / `pinch:4:outward` | `overview show` / `overview hide`: open and close the overview. |
 | `pinch:3:outward` | Toggle the launcher, closing the overview. |
 | Meta+Shift+V | Toggle the clipboard history. |

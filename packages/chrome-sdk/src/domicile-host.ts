@@ -776,6 +776,15 @@ export type DomicileHost = {
    * Throws a SyntaxError for a chord written wrong, and a NotFoundError for a
    * keysym the keyboard cannot type; before any keyboard is described, that
    * one is a console warning once it is.
+   *
+   * A modifier alone, `grabShortcut("Meta")` (or `Super`, `Alt`, `Ctrl`,
+   * `Shift`, in any spelling a chord takes), is a tap of it: either side's key
+   * pressed and let go with nothing else in between. Another key, a click, a
+   * scroll, a pinch, a touch or a touchpad gesture the shell takes makes it no
+   * tap, so `Meta+Return` and Super-dragging a window still work. A tap comes
+   * back as a `shortcut` and then a `shortcutrelease` with `keyCode` 0, once
+   * the key is up. The engine hears it before any page or window does, and
+   * the key still reaches the focused client as it always did.
    */
   grabShortcut(chord: string, whileInhibited?: boolean): void;
   /**
