@@ -20,6 +20,8 @@
 #include "ui/events/event.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/ozone/layout/scoped_keyboard_layout_engine.h"
+#include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
 #include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 
@@ -94,6 +96,10 @@ class DrmInputMethodTest : public testing::Test {
     return KeyEvent(type, VKEY_A, DomCode::US_A, EF_NONE);
   }
 
+  // A key another program typed is looked up in the process's layout, which
+  // the platform sets up outside a test.
+  ScopedKeyboardLayoutEngine layout_{
+      std::make_unique<StubKeyboardLayoutEngine>()};
   FakeDelegate delegate_;
   std::vector<DeskTextField> fields_;
   std::vector<std::pair<uint32_t, bool>> keys_;
@@ -179,6 +185,7 @@ TEST_F(DrmInputMethodTest, AKeyAnotherProgramTypedReachesTheFocusedField) {
   method_.Passed(kEvdevA, true);
   ASSERT_EQ(redispatched_.size(), 1u);
   EXPECT_EQ(redispatched_[0]->code(), DomCode::US_A);
+  EXPECT_EQ(redispatched_[0]->key_code(), VKEY_A);
   EXPECT_TRUE(DrmInputMethod::IsPassed(*redispatched_[0]));
 }
 
