@@ -31,6 +31,13 @@ Event names and full types are in `src/app-element.ts` and
   the element's box in page pixels whenever it moves or resizes. The client
   draws at the scale of the monitor holding most of the box. An unreported
   window draws for the densest monitor.
+- **Zoom:** CSS `zoom` on an `<app>` (or an ancestor) zooms the window's
+  content and keeps it sharp. The client is configured `zoom` times smaller
+  than the box and draws `zoom` times denser, so its buffer still fills the box.
+  The box itself is laid out as usual: `width: 100%` keeps the tile's size.
+  A client without `wp_fractional_scale_v1` draws at its display's
+  whole-number scale and is resampled, so a small zoom costs it a large
+  buffer. A `transform: scale()` is not zoom: it resamples the window.
 - **Hidden:** call `domicile.windows.setBounds(appId, { x: 0, y: 0, width: 0, height: 0 })`
   for an `<app>`
   the page does not draw. The client gets a frame callback once a second and

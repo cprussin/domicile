@@ -361,7 +361,8 @@ class Surface : public mojom::SurfaceObserver,
   // The page chose this id and size. Forwarded as xdg_toplevel.configure.
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size,
-                         double scale) override {
+                         double scale,
+                         double zoom) override {
     boxes_.push_back({.number = ++last_box_,
                       .local_surface_id = local_surface_id,
                       .size = size,
@@ -371,6 +372,7 @@ class Surface : public mojom::SurfaceObserver,
                   .width = static_cast<uint32_t>(size.width()),
                   .height = static_cast<uint32_t>(size.height()),
                   .scale = scale,
+                  .zoom = zoom,
                   .box = last_box_});
   }
 
@@ -962,7 +964,11 @@ struct DomicileEngine {
     for (const domicile::EngineEvent& event : queue_.Drain()) {
       switch (event.type) {
         case domicile::EngineEvent::Type::kConfigure:
-          if (callbacks_.configure_box) {
+          if (callbacks_.configure_zoomed) {
+            callbacks_.configure_zoomed(callbacks_.user_data, event.surface,
+                                        event.width, event.height, event.scale,
+                                        event.zoom, event.box);
+          } else if (callbacks_.configure_box) {
             callbacks_.configure_box(callbacks_.user_data, event.surface,
                                      event.width, event.height, event.scale,
                                      event.box);
