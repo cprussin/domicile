@@ -682,9 +682,8 @@ const systemEventSchema = z.looseObject({
       kind: z.literal("shell_command"),
     }),
     z.looseObject({
-      // `null` when the blanking was called off or the screens went dark.
-      blanks_in_ms: z.number().nullable(),
-      kind: z.literal("idle_warning"),
+      idle: z.boolean(),
+      kind: z.literal("idle"),
     }),
     z.looseObject({
       failures: z.number(),

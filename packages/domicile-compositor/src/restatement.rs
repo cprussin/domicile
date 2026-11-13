@@ -17,7 +17,7 @@
 //! | `output.max_scale` | applied to the running desktop (`cap_the_scale_at`) |
 //! | `output.displays` | applied (`Screens::reloaded_into`, `adopt_the_desktop`) |
 //! | `output.profiles` | re-matched against the connected monitors, same path |
-//! | `idle.blank_after_seconds`, `idle.warn_before_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
+//! | `idle.blank_after_seconds`, `idle.lock_after_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
 //! | `theme.mode` | sent to every chrome and the desk's clients, with the mode's own `cursor_theme` if it has one (`take_up_the_theme`) |
 //! | `theme.accent_color`, `contrast`, `reduced_motion`, `icon_theme`, `cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name` | sent to the desk's clients (`Portals::restyle`); `icon_theme` also redraws tray and notification icons; `cursor_theme` and `cursor_size` also go to every chrome's browser, which draws the pointer (`Host::set_appearance`) |
 //! | `theme.cursor_hide_after_ms`, `cursor_hide_when_typing` | sent to every chrome's browser, which hides the pointer (`Host::set_appearance`) |

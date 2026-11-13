@@ -136,7 +136,7 @@ An edit applies to the running desktop, and windows stay open:
 | `input.pointers` | Tablets, touchscreens and absolute mice rebound |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
-| `idle.blank_after_seconds`, `idle.warn_before_seconds` | Idle timer restarts. Dark screens relight |
+| `idle.blank_after_seconds`, `idle.lock_after_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
 | `theme.cursor_theme`, `cursor_size` | The pointer on a tty is redrawn; windows that read the settings portal follow |
@@ -326,10 +326,8 @@ the screens turn off. Any key, click, scroll or pointer motion turns them back
 on. `idle.lock_after_seconds` is how long before it locks.
 
 - Unset means the screens never blank. `0` is an error.
-- `idle.warn_before_seconds` warns the shell that long before blanking, so it
-  can dim or count down ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#warning-before-blanking)).
-  Unset means no warning. It must be at least `1` and less than
-  `blank_after_seconds`.
+- A shell that dims or counts down before blanking chooses when itself
+  ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#acting-before-blanking)).
 - `idle.lock_after_seconds` runs on its own clock from the same input, so it
   may be shorter or longer than `blank_after_seconds`. Unset means no lock on
   idle; the desktop still locks when the shell asks and before the machine

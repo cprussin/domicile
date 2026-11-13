@@ -1075,7 +1075,7 @@
                   programs.domicile = {
                     enable = true;
                     configDirectory = directory;
-                    settings.idle.warn_before_seconds = 5;
+                    settings.idle.lock_after_seconds = 900;
                   };
                 }
               ];
@@ -1245,7 +1245,7 @@
             # and becomes the shell.
             cp -f ${fromTs.xdg.configFile."domicile/domicile.json".source} config.json
             expect '.idle.blank_after_seconds == 600'
-            expect '.idle.warn_before_seconds == 5'
+            expect '.idle.lock_after_seconds == 900'
             expect '.input.keyboard.xkb_layout == "de"'
             expect '.shell == "${fromTs.programs.domicile.shell}"'
             grep -qF 'a desktop from a TS config' ${fromTs.programs.domicile.shell} || {

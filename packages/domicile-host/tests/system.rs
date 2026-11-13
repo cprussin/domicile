@@ -935,107 +935,195 @@ mod shell_commands {
     }
 }
 
-/// Warnings that the screens are about to blank, set by the compositor and
-/// heard on every connection listening.
-mod idle_warnings {
-    use domicile_host::idle_warnings::IdleWarnings;
+/// Pages hearing when nobody has been at the desktop for a time each chose.
+/// The compositor says how long the desk has been still; these tests stand in
+/// for its clock.
+mod idle_watches {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    use domicile_host::idle_watches::IdleWatches;
 
     use super::*;
 
-    const WARNING: Duration = Duration::from_secs(30);
+    const MINUTE: Duration = Duration::from_secs(60);
 
-    /// A system sharing `warnings`, as a chrome connection does.
-    fn page(warnings: &IdleWarnings) -> (System, Receiver<HostMessage>) {
+    /// A system sharing `watches`, as a chrome connection does.
+    fn page(watches: &IdleWatches) -> (System, Receiver<HostMessage>) {
         let (system, heard) = system_in(&std::env::temp_dir());
-        (system.sharing_idle_warnings(warnings.clone()), heard)
+        (system.sharing_idle_watches(watches.clone()), heard)
     }
 
-    /// How long the warning `heard` says is left, or `None` for no warning.
-    fn left(heard: &Receiver<HostMessage>, id: u32) -> Option<Duration> {
+    /// Watches that wake nothing.
+    fn watches() -> IdleWatches {
+        IdleWatches::new(|| {})
+    }
+
+    /// Whether `heard`'s next message says the desk is idle for `id`.
+    fn idle(heard: &Receiver<HostMessage>, id: u32) -> bool {
         match next(heard) {
             HostMessage::SystemEvent {
                 id: from,
-                event: SystemEvent::IdleWarning { blanks_in_ms },
-            } if from == id => blanks_in_ms.map(Duration::from_millis),
-            other => panic!("expected an idle warning for {id}, heard {other:?}"),
+                event: SystemEvent::Idle { idle },
+            } if from == id => idle,
+            other => panic!("expected an idle change for {id}, heard {other:?}"),
         }
     }
 
     #[test]
-    fn a_page_listening_hears_the_warning_and_when_it_is_called_off() {
-        let warnings = IdleWarnings::default();
-        let (page, heard) = page(&warnings);
-        page.handle(7, SystemRequest::IdleWarnings);
-        assert_eq!(reply(&heard, 7), SystemReply::Started);
+    fn each_time_a_page_chose_passes_in_order() {
+        let watches = watches();
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleAfter { seconds: 120 });
+        page.handle(2, SystemRequest::IdleAfter { seconds: 240 });
+        reply(&heard, 1);
+        reply(&heard, 2);
 
-        warnings.warn(Some(Instant::now() + WARNING));
-        let warned = left(&heard, 7).expect("a warning");
+        assert_eq!(watches.settle(Some(MINUTE), None), Some(MINUTE));
+        assert!(heard.try_recv().is_err(), "nothing is due yet");
+        assert_eq!(watches.settle(Some(2 * MINUTE), None), Some(2 * MINUTE));
+        assert!(idle(&heard, 1));
+        assert!(heard.try_recv().is_err(), "the later one is not due");
+        assert_eq!(watches.settle(Some(4 * MINUTE), None), None);
+        assert!(idle(&heard, 2));
+    }
+
+    #[test]
+    fn input_ends_every_idle_spell_once() {
+        let watches = watches();
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleAfter { seconds: 120 });
+        page.handle(2, SystemRequest::IdleAfter { seconds: 240 });
+        reply(&heard, 1);
+        reply(&heard, 2);
+        watches.settle(Some(3 * MINUTE), None);
+        assert!(idle(&heard, 1));
+
         assert!(
-            warned <= WARNING && warned > WARNING - PATIENCE,
-            "{warned:?}"
+            watches.stirred(),
+            "a spell ended, so the clock must start again"
         );
-
-        warnings.warn(None);
-        assert_eq!(left(&heard, 7), None);
+        assert!(!idle(&heard, 1));
+        assert!(heard.try_recv().is_err(), "the 4 minute one was never idle");
+        assert!(!watches.stirred(), "nothing was idle");
     }
 
     #[test]
-    fn a_page_that_listens_during_a_warning_hears_it_at_once() {
-        // A page reloaded during a warning missed its start.
-        let warnings = IdleWarnings::default();
-        warnings.warn(Some(Instant::now() + WARNING));
-        let (page, heard) = page(&warnings);
+    fn an_inhibitor_holds_them_as_it_holds_blanking() {
+        let watches = watches();
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleAfter { seconds: 120 });
+        reply(&heard, 1);
 
-        page.handle(7, SystemRequest::IdleWarnings);
-
-        assert_eq!(reply(&heard, 7), SystemReply::Started);
-        assert!(left(&heard, 7).is_some());
+        assert_eq!(watches.settle(None, None), None, "held: nothing is due");
+        watches.settle(Some(2 * MINUTE), None);
+        assert!(idle(&heard, 1), "released after the time: idle at once");
+        watches.settle(None, None);
+        assert!(!idle(&heard, 1), "taken while idle: somebody is watching");
     }
 
     #[test]
-    fn a_warning_that_did_not_change_is_not_told_again() {
-        let warnings = IdleWarnings::default();
-        let (page, heard) = page(&warnings);
-        page.handle(7, SystemRequest::IdleWarnings);
-        reply(&heard, 7);
+    fn a_page_can_act_a_time_before_the_screens_blank() {
+        let watches = watches();
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleBeforeBlanking { seconds: 30 });
+        reply(&heard, 1);
+        let blank_after = Some(10 * MINUTE);
 
-        warnings.warn(None);
-        page.handle(7, SystemRequest::Unwatch);
+        assert_eq!(
+            watches.settle(Some(MINUTE), blank_after),
+            Some(10 * MINUTE - Duration::from_secs(30) - MINUTE)
+        );
+        watches.settle(Some(10 * MINUTE - Duration::from_secs(30)), blank_after);
+        assert!(idle(&heard, 1));
+    }
+
+    #[test]
+    fn nothing_comes_before_screens_that_never_blank_or_blank_sooner() {
+        let watches = watches();
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleBeforeBlanking { seconds: 30 });
+        reply(&heard, 1);
+
+        assert_eq!(watches.settle(Some(MINUTE), None), None);
+        assert_eq!(
+            watches.settle(Some(MINUTE), Some(Duration::from_secs(30))),
+            None
+        );
+        assert!(heard.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_new_watch_wakes_the_clock_to_settle_it() {
+        // A page that starts watching on a still desk may already be due.
+        let woken = Arc::new(AtomicUsize::new(0));
+        let watches = IdleWatches::new({
+            let woken = woken.clone();
+            move || {
+                woken.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleAfter { seconds: 120 });
+        reply(&heard, 1);
+
+        assert_eq!(woken.load(Ordering::SeqCst), 1);
+        watches.settle(Some(3 * MINUTE), None);
+        assert!(idle(&heard, 1));
+    }
+
+    #[test]
+    fn no_time_is_refused() {
+        let (page, heard) = page(&watches());
+        page.handle(1, SystemRequest::IdleAfter { seconds: 0 });
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::InvalidInput);
+        page.handle(2, SystemRequest::IdleBeforeBlanking { seconds: 0 });
+        assert_eq!(failure(reply(&heard, 2)), SystemErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn a_page_that_stopped_watching_hears_no_more() {
+        let watches = watches();
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleAfter { seconds: 120 });
+        reply(&heard, 1);
+
+        page.handle(1, SystemRequest::Unwatch);
+        watches.settle(Some(3 * MINUTE), None);
 
         assert_eq!(
             next(&heard),
             HostMessage::SystemEnd {
-                id: 7,
-                end: SystemEnd::Stopped,
-            },
-            "no warning was running, so calling it off says nothing"
-        );
-    }
-
-    #[test]
-    fn a_page_that_stopped_listening_hears_no_more() {
-        let warnings = IdleWarnings::default();
-        let (page, heard) = page(&warnings);
-        page.handle(7, SystemRequest::IdleWarnings);
-        reply(&heard, 7);
-
-        page.handle(7, SystemRequest::Unwatch);
-        warnings.warn(Some(Instant::now() + WARNING));
-
-        assert_eq!(
-            next(&heard),
-            HostMessage::SystemEnd {
-                id: 7,
+                id: 1,
                 end: SystemEnd::Stopped,
             }
         );
         assert!(heard.try_recv().is_err());
     }
 
+    #[test]
+    fn a_page_that_is_gone_watches_nothing() {
+        let watches = watches();
+        let (page, heard) = page(&watches);
+        page.handle(1, SystemRequest::IdleAfter { seconds: 120 });
+        reply(&heard, 1);
+
+        drop(page);
+
+        assert_eq!(watches.settle(Some(MINUTE), None), None);
+    }
+
     /// A lock screen may dim too.
     #[test]
-    fn listening_is_its_own_reach() {
-        assert_eq!(reach(&SystemRequest::IdleWarnings), Reach::Listens);
+    fn watching_is_its_own_reach() {
+        assert_eq!(
+            reach(&SystemRequest::IdleAfter { seconds: 1 }),
+            Reach::Listens
+        );
+        assert_eq!(
+            reach(&SystemRequest::IdleBeforeBlanking { seconds: 1 }),
+            Reach::Listens
+        );
     }
 }
 
@@ -1746,7 +1834,8 @@ mod apps {
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
             },
-            SystemRequest::IdleWarnings,
+            SystemRequest::IdleAfter { seconds: 1 },
+            SystemRequest::IdleBeforeBlanking { seconds: 1 },
             SystemRequest::UnlockRefusals,
             SystemRequest::WindowRequests,
             SystemRequest::Bells,
