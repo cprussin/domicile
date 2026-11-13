@@ -584,11 +584,13 @@ interface ControlChannelClient {
   // A window drew its first frame, at `width` x `height`. `desktop_id` is
   // empty when the client set none. `dialog`: the client gave it a parent or
   // a fixed size. `client_frame`: the client asked to draw its own frame.
-  // `owner` is null when the compositor named none. `frame` is the window's
-  // synced frame, above 0 only for a window that appeared before this page.
+  // `owner` is null when the compositor named none. `toplevel_id` is the
+  // window's identifier on ext-foreign-toplevel-list-v1, which capture tools
+  // name it by. `frame` is the window's synced frame, above 0 only for a
+  // window that appeared before this page.
   AppAppeared(string app_id, string title, string desktop_id, double width,
               double height, bool dialog, bool client_frame,
-              WindowOwner? owner, uint32 frame);
+              WindowOwner? owner, string toplevel_id, uint32 frame);
 
   AppResized(string app_id, double width, double height);
 
@@ -637,6 +639,11 @@ interface ControlChannelClient {
   // Whether a window holds an active zwp_keyboard_shortcuts_inhibitor_v1:
   // while it has the keyboard, the desktop's shortcuts are its keys.
   AppInhibitsShortcuts(string app_id, bool inhibits);
+
+  // Each browser window's identifier on ext-foreign-toplevel-list-v1, by its
+  // id, as AppAppeared carries a native window's. The whole map, on every
+  // change.
+  BrowserToplevelIds(map<string, string> toplevel_ids);
 
   // A grabbed shortcut fired. Named for the event rather than the struct,
   // which would shadow the type inside the generated class.

@@ -518,7 +518,9 @@ and `wf-recorder` work. The code is `src/screencopy/`.
   since they are all the browser's. Capturing one shows its page alone, as
   the ScreenCast portal's browser window source does, without the shell's
   frame around it. With `paint_cursors` the pointer is drawn where it is
-  over the page, and nowhere while it is off it.
+  over the page, and nowhere while it is off it. The shell reads each
+  handle's identifier as `toplevelId`, so it can name a window to a capture
+  tool.
 - **A frame is ready once there is damage the client has not seen.** The
   first frame is damaged whole. Damage is reported in buffer pixels.
 - **Buffers** are shm `xrgb8888` or `argb8888` with packed rows, or a dmabuf

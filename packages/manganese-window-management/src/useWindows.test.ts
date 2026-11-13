@@ -322,6 +322,7 @@ describe("the desk's browser windows", () => {
     partition: "",
     popupWindow: null,
     title: "",
+    toplevelId: null,
     url: "https://example.com/",
     width: 0,
   };
@@ -546,6 +547,7 @@ describe("a command", () => {
           partition: "",
           popupWindow: null,
           title: "",
+          toplevelId: null,
           url: "https://example.com/",
           width: 0,
         },
@@ -588,6 +590,7 @@ describe("a command", () => {
       partition: "",
       popupWindow: null,
       title: "",
+      toplevelId: null,
       url: "https://messages.example/",
       width: 0,
     };

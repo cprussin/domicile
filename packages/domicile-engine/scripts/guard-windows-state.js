@@ -9,6 +9,8 @@
 //                                  fire
 //   GUARD listening                the channel is bound
 //   GUARD windows <json>           `windows`, every field of every window
+//   GUARD browser <json>           `browserWindows`: each one's id and
+//                                  toplevelId
 //   GUARD focused <id|null>        `focusedWindow`
 //   GUARD appearance <a> <c> <m>   `accentColor`, `highContrast`,
 //                                  `reducedMotion`
@@ -105,6 +107,9 @@ export const HostShell = (_root, desktop) => {
   void host.windows;
   console.log("GUARD listening");
 
+  // Window "1", which the stand-in names a toplevel id for.
+  host.openBrowserWindow("about:blank");
+
   // One call the browser must wrap as a `system_request`, and one that is not
   // a call and must not reach the compositor at all.
   host.callSystem(1, JSON.stringify({ call: "stat", path: "/" }));
@@ -142,6 +147,7 @@ const report = (host) => {
     sandboxed: window.sandboxed,
     sandboxInstanceId: window.sandboxInstanceId,
     title: window.title,
+    toplevelId: window.toplevelId,
     transientFor: window.transientFor,
     uid: window.uid,
     urgent: window.urgent,
@@ -150,6 +156,11 @@ const report = (host) => {
     y: window.y,
   }));
   console.log(`GUARD windows ${JSON.stringify(windows)}`);
+  const browser = (host.browserWindows ?? []).map(({ id, toplevelId }) => ({
+    id,
+    toplevelId,
+  }));
+  console.log(`GUARD browser ${JSON.stringify(browser)}`);
   console.log(`GUARD focused ${host.focusedWindow}`);
   console.log(
     `GUARD appearance ${host.accentColor} ${host.highContrast} ${host.reducedMotion}`,

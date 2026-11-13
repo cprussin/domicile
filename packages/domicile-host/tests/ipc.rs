@@ -24,6 +24,10 @@ const OWNER: Owner = Owner {
     sandbox: None,
 };
 
+/// A window's identifier on `ext-foreign-toplevel-list-v1`, for tests about
+/// anything else.
+const LISTED: &str = "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa";
+
 /// One chrome connection's [`Host`] and handshake state.
 #[derive(Default)]
 struct Session {
@@ -134,7 +138,7 @@ fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
 fn messages_before_the_handshake_are_ignored() {
     // No message takes effect before `Hello`.
     let mut session = Session::new();
-    let id = session.host_mut().app_created(OWNER);
+    let id = session.host_mut().app_created(OWNER, LISTED.to_string());
     let _ = session.ingest(&to_line(&ChromeMessage::FocusApp { app_id: id.clone() }));
     assert_eq!(
         session.host_mut().keyboard_target(),
@@ -145,7 +149,7 @@ fn messages_before_the_handshake_are_ignored() {
 #[test]
 fn a_message_after_the_handshake_reaches_the_host() {
     let mut session = Session::new();
-    let id = session.host_mut().app_created(OWNER);
+    let id = session.host_mut().app_created(OWNER, LISTED.to_string());
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
         checked: false,

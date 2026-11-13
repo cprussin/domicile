@@ -1607,6 +1607,7 @@ void DomicileHost::AppAppeared(const String& app_id,
                                bool dialog,
                                bool client_frame,
                                domicile::mojom::blink::WindowOwnerPtr owner,
+                               const String& toplevel_id,
                                uint32_t frame) {
   DomicileWindowState& state = WindowNamed(app_id);
   // A reload's catch-up can be older than a move this page already heard.
@@ -1626,6 +1627,7 @@ void DomicileHost::AppAppeared(const String& app_id,
   }
   state.title = title;
   state.desktop_id = desktop_id;
+  state.toplevel_id = toplevel_id;
   state.width = width;
   state.height = height;
   state.dialog = dialog;
@@ -2362,15 +2364,34 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
 // the list, so a shell that mounts late can still read it.
 void DomicileHost::WindowsChanged(
     Vector<domicile::mojom::blink::BrowserWindowPtr> windows) {
+  listed_browser_windows_ = std::move(windows);
+  ListBrowserWindows();
+}
+
+// The compositor's ids come on the control channel and the windows on their
+// own pipe, in either order, so each restates the list.
+void DomicileHost::BrowserToplevelIds(
+    const HashMap<String, String>& toplevel_ids) {
+  browser_toplevel_ids_ = toplevel_ids;
+  // `browserWindows` stays null until the browser lists them.
+  if (browser_windows_) {
+    ListBrowserWindows();
+  }
+}
+
+void DomicileHost::ListBrowserWindows() {
   HeapVector<Member<DomicileBrowserWindow>> listed;
-  listed.reserve(windows.size());
-  for (const auto& window : windows) {
+  listed.reserve(listed_browser_windows_.size());
+  for (const auto& window : listed_browser_windows_) {
+    const auto toplevel_id = browser_toplevel_ids_.find(window->id);
     listed.push_back(MakeGarbageCollected<DomicileBrowserWindow>(
         window->id, window->url.GetString(), window->title,
         window->popup_window == 0 ? std::nullopt
                                   : std::optional<int32_t>(window->popup_window),
         window->width, window->height, window->private_browsing,
-        window->partition, window->app, window->app_id, window->captured));
+        window->partition, window->app, window->app_id, window->captured,
+        toplevel_id == browser_toplevel_ids_.end() ? String()
+                                                   : toplevel_id->value));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

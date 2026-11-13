@@ -3,6 +3,8 @@
 //! `Host` tracks Wayland apps, applies the chrome's focus requests and reports
 //! changes back as `HostMessage`s. These tests need no Wayland or GPU.
 
+use std::collections::BTreeMap;
+
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Appearances, Host, Mapped};
 use domicile_protocol::{
@@ -20,6 +22,10 @@ const OWNER: Owner = Owner {
     sandbox: None,
 };
 
+/// A window's identifier on `ext-foreign-toplevel-list-v1`, for tests about
+/// anything else.
+const LISTED: &str = "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa";
+
 // ---- app lifecycle --------------------------------------------------------
 
 #[test]
@@ -34,7 +40,7 @@ fn a_window_names_the_process_that_owns_it() {
         pidfd_inode: Some(5021),
         sandbox: None,
     };
-    let app = host.app_created(owner.clone());
+    let app = host.app_created(owner.clone(), LISTED.to_string());
 
     let announced = host.app_mapped(&app, mapped());
     assert!(
@@ -43,6 +49,82 @@ fn a_window_names_the_process_that_owns_it() {
     );
     // The replay for a reloading chrome includes it.
     assert_eq!(host.open_apps().first(), announced.first());
+}
+
+#[test]
+fn a_window_names_its_handle_for_capture_tools() {
+    // A shell hands a capture tool the window's `ext-foreign-toplevel-list-v1`
+    // identifier, so the identifier the compositor listed it under is the one
+    // the chromes hear, on a reload too.
+    let mut host = Host::new();
+    let app = host.app_created(OWNER, "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".to_string());
+
+    let announced = host.app_mapped(&app, mapped());
+
+    assert!(
+        matches!(
+            announced.first(),
+            Some(HostMessage::AppAppeared { toplevel_id, .. })
+                if toplevel_id == "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA"
+        ),
+        "{announced:?}"
+    );
+    assert_eq!(host.open_apps().first(), announced.first());
+}
+
+#[test]
+fn browser_windows_name_their_handles_for_capture_tools_when_they_change() {
+    // Browser windows are the engine's, and the shell knows them by the
+    // engine's ids. The whole map is restated on each change; latest wins.
+    let mut host = Host::new();
+    let listed = BTreeMap::from([
+        (
+            "3".to_string(),
+            "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+        ),
+        (
+            "7".to_string(),
+            "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".to_string(),
+        ),
+    ]);
+
+    assert_eq!(
+        host.browser_toplevel_ids(listed.clone()),
+        Some(HostMessage::BrowserToplevelIds {
+            toplevel_ids: listed.clone()
+        })
+    );
+    assert_eq!(
+        host.browser_toplevel_ids(listed),
+        None,
+        "an unchanged map is not restated"
+    );
+}
+
+#[test]
+fn a_chrome_that_arrives_late_is_told_each_browser_windows_handle() {
+    // Before focus, as for the native windows. A desk with no browser windows
+    // says nothing, which a chrome that just connected already knows.
+    let mut host = Host::new();
+    assert_eq!(
+        host.open_apps(),
+        vec![HostMessage::FocusChanged { app_id: None }]
+    );
+    let listed = BTreeMap::from([(
+        "3".to_string(),
+        "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+    )]);
+    host.browser_toplevel_ids(listed.clone());
+
+    assert_eq!(
+        host.open_apps(),
+        vec![
+            HostMessage::BrowserToplevelIds {
+                toplevel_ids: listed
+            },
+            HostMessage::FocusChanged { app_id: None },
+        ]
+    );
 }
 
 #[test]
@@ -70,6 +152,7 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            toplevel_id: LISTED.to_string(),
             frame: 0,
         })
     );
@@ -104,6 +187,7 @@ fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            toplevel_id: LISTED.to_string(),
             frame: 0,
         })
     );
@@ -148,7 +232,7 @@ fn a_window_that_inhibits_before_it_draws_says_so_right_after_it_appears() {
     // A client may take its inhibitor before its first frame. The replay for a
     // reloading chrome says so too.
     let mut host = Host::new();
-    let app = host.app_created(OWNER);
+    let app = host.app_created(OWNER, LISTED.to_string());
     assert_eq!(host.app_inhibits_shortcuts(&app, true), None);
 
     let announced = host.app_mapped(&app, mapped());
@@ -170,7 +254,7 @@ fn a_window_names_the_page_anchor_it_asked_for_right_after_it_appears() {
     // The shell lays an anchored window out at its anchor rather than tiling
     // it, so the anchor comes with the announcement and the replay.
     let mut host = Host::new();
-    let app = host.app_created(OWNER);
+    let app = host.app_created(OWNER, LISTED.to_string());
     assert_eq!(host.app_anchored(&app, Some("bar".to_string())), None);
 
     let announced = host.app_mapped(&app, mapped());
@@ -216,7 +300,7 @@ fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() 
     // A client sets its title, app id and limits before its first frame. The
     // shell places a window once, so it needs them in the announcement.
     let mut host = Host::new();
-    let app = host.app_created(OWNER);
+    let app = host.app_created(OWNER, LISTED.to_string());
 
     assert_eq!(host.app_titled(&app, Some("pinentry".to_string())), None);
     assert_eq!(host.app_desktop_id(&app, "pinentry-qt".to_string()), None);
@@ -237,6 +321,7 @@ fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() 
             dialog: false,
             client_frame: true,
             owner: OWNER,
+            toplevel_id: LISTED.to_string(),
             frame: 0,
         },
         HostMessage::AppMinSize {
@@ -262,7 +347,7 @@ fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() 
 fn a_window_with_a_parent_or_a_fixed_size_is_a_dialog() {
     let dialog = |limits: ((f64, f64), (f64, f64)), hints: Mapped| {
         let mut host = Host::new();
-        let app = host.app_created(OWNER);
+        let app = host.app_created(OWNER, LISTED.to_string());
         host.app_min_size(&app, limits.0);
         host.app_max_size(&app, limits.1);
         match host.app_mapped(&app, hints).first() {
@@ -338,7 +423,7 @@ fn what_a_window_said_before_drawing_follows_its_announcement() {
     // Also the replay a chrome that arrives late hears.
     let mut host = Host::new();
     let parent = drawn(&mut host);
-    let dialog = host.app_created(OWNER);
+    let dialog = host.app_created(OWNER, LISTED.to_string());
     assert_eq!(host.app_transient_for(&dialog, Some(parent.clone())), None);
     assert_eq!(host.app_urgent(&dialog), None);
 
@@ -368,7 +453,7 @@ fn what_a_window_said_before_drawing_follows_its_announcement() {
 fn a_window_that_has_not_drawn_is_never_mentioned_to_the_chromes() {
     // The chromes have not heard of it.
     let mut host = Host::new();
-    let app = host.app_created(OWNER);
+    let app = host.app_created(OWNER, LISTED.to_string());
 
     assert_eq!(host.focus_requested(&app), None);
     assert_eq!(host.popup_placed(&app, (0.0, 0.0), (1.0, 1.0), false), None);
@@ -402,6 +487,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            toplevel_id: LISTED.to_string(),
             frame: 0,
         },
         HostMessage::AppAppeared {
@@ -412,6 +498,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            toplevel_id: LISTED.to_string(),
             frame: 0,
         },
     ]
@@ -424,6 +511,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
         dialog: false,
         client_frame: false,
         owner: OWNER,
+        toplevel_id: LISTED.to_string(),
         frame: 0,
     }))
     // Then the focus holder: the chrome, since no app has focus.
@@ -613,7 +701,10 @@ fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
 fn each_window_gets_its_own_id() {
     let mut host = Host::new();
 
-    assert_ne!(host.app_created(OWNER), host.app_created(OWNER));
+    assert_ne!(
+        host.app_created(OWNER, LISTED.to_string()),
+        host.app_created(OWNER, LISTED.to_string())
+    );
 }
 
 #[test]
@@ -1074,7 +1165,7 @@ fn mapped() -> Mapped {
 
 /// A window that has drawn its first frame, announced to the chromes.
 fn drawn(host: &mut Host) -> AppId {
-    let app = host.app_created(OWNER);
+    let app = host.app_created(OWNER, LISTED.to_string());
     host.app_mapped(&app, mapped());
     app
 }
