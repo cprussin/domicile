@@ -770,6 +770,15 @@ void ControlChannel::PointerMotion(const std::string& app_id,
   SendMessage(std::move(message));
 }
 
+void ControlChannel::PointerRelative(const std::string& app_id,
+                                     double dx,
+                                     double dy) {
+  base::DictValue message = ForApp("pointer_relative", app_id);
+  message.Set("dx", dx);
+  message.Set("dy", dy);
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::PointerLeave(const std::string& app_id) {
   SendMessage(ForApp("pointer_leave", app_id));
 }

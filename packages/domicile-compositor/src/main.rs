@@ -45,6 +45,7 @@ use smithay::wayland::{
     idle_inhibit::IdleInhibitManagerState,
     keyboard_shortcuts_inhibit::KeyboardShortcutsInhibitState,
     output::OutputManagerState,
+    relative_pointer::RelativePointerManagerState,
     security_context::SecurityContextState,
     selection::data_device::DataDeviceState,
     selection::ext_data_control::DataControlState as ExtDataControlState,
@@ -125,6 +126,7 @@ mod popups;
 mod portals;
 mod presentations;
 mod primary_node;
+mod relative_pointer;
 mod reply;
 mod restatement;
 mod scale;
@@ -397,6 +399,10 @@ struct DomicileCompositor {
     /// Kept alive so the wp_cursor_shape_v1 global persists.
     #[allow(dead_code)]
     cursor_shape_state: CursorShapeManagerState,
+    /// Kept alive so the zwp_relative_pointer_manager_v1 global persists. See
+    /// `crate::relative_pointer`.
+    #[allow(dead_code)]
+    relative_pointer_state: RelativePointerManagerState,
     /// Composition from an input method. See [`text_input`].
     text_input: text_input::TextInput,
     dmabuf_state: DmabufState,
@@ -1317,6 +1323,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Toolkits request cursors by name here, which map onto CSS cursor
         // keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
+        relative_pointer_state: RelativePointerManagerState::new::<DomicileCompositor>(&dh),
         text_input,
         dmabuf_state,
         dmabuf_global,
