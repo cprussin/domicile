@@ -867,8 +867,8 @@ pub enum HostMessage {
     /// Sent on each change and on connect, so a reloaded page knows the state.
     ///
     /// It goes out with the blanking modeset, not before it. Use it to
-    /// prepare what shows when the screens return. A shell warned before
-    /// blanking listens with [`SystemRequest::IdleWarnings`].
+    /// prepare what shows when the screens return. A shell that acts sooner
+    /// listens with [`SystemRequest::IdleBeforeBlanking`].
     ///
     /// Not sent at all when blanking is not configured. Idle is not locked;
     /// see [`HostMessage::Locked`].
@@ -2100,14 +2100,18 @@ pub enum SystemRequest {
     /// run it. Answered with [`SystemReply::Sent`]. `domicile send-shell`
     /// sends this.
     SendShell { command: Vec<String> },
-    /// Report when the screens are about to blank. Answered with
-    /// [`SystemReply::Started`], then a [`SystemEvent::IdleWarning`] on each
-    /// change, the first at once when a warning is already running.
-    /// [`SystemRequest::Unwatch`] ends it.
+    /// Report when nobody has been at the desktop for `seconds`, and when
+    /// somebody is again. Answered with [`SystemReply::Started`], then a
+    /// [`SystemEvent::Idle`] on each change: `true` that long after the last
+    /// input, `false` on the next. Idle inhibitors hold it off as they hold
+    /// off blanking. [`SystemRequest::Unwatch`] ends it.
     ///
-    /// Silent on a desktop that sets no `idle.warn_before_seconds`. See
-    /// `docs/IDLE.md`.
-    IdleWarnings,
+    /// `seconds` must be at least 1. See `docs/IDLE.md`.
+    IdleAfter { seconds: u64 },
+    /// As [`SystemRequest::IdleAfter`], `seconds` before the screens blank,
+    /// so a shell can dim or count down. Silent on a desktop whose screens
+    /// never blank, or blank sooner than `seconds`.
+    IdleBeforeBlanking { seconds: u64 },
     /// Report each passphrase the lock did not take. Answered with
     /// [`SystemReply::Started`], then a [`SystemEvent::UnlockRefused`] per
     /// refusal, to every page listening. [`SystemRequest::Unwatch`] ends it.
@@ -2401,9 +2405,10 @@ pub enum SystemEvent {
     Changed { path: String },
     /// A command sent with [`SystemRequest::SendShell`].
     ShellCommand { command: Vec<String> },
-    /// How long until the screens blank, in milliseconds, or `None` when input
-    /// or an idle inhibitor called the blanking off, or the screens went dark.
-    IdleWarning { blanks_in_ms: Option<u64> },
+    /// Whether nobody has been at the desktop for the time a
+    /// [`SystemRequest::IdleAfter`] or [`SystemRequest::IdleBeforeBlanking`]
+    /// named.
+    Idle { idle: bool },
     /// A [`ChromeMessage::Unlock`] that left the desktop locked.
     ///
     /// `failures` counts refused passphrases, wrong or unverifiable, since the

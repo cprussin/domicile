@@ -87,15 +87,6 @@ describe(readSettings, () => {
     ).toEqual(Ok(profiles));
   });
 
-  it("reads an idle warning, which Settings does not edit", () => {
-    const settings = readSettings({
-      idle: { blank_after_seconds: 600, warn_before_seconds: 30 },
-    });
-    expect(settings.map((read) => read.idle)).toEqual(
-      Ok({ blank_after_seconds: 600, warn_before_seconds: 30 }),
-    );
-  });
-
   it("reads bound pointers, which Settings does not edit", () => {
     const pointers = [{ device: "QEMU QEMU USB Tablet", display: "Virtual-1" }];
     expect(

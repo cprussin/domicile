@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use domicile_host::bells::Bells;
 use domicile_host::idle_holds::IdleHolds;
-use domicile_host::idle_warnings::IdleWarnings;
+use domicile_host::idle_watches::IdleWatches;
 use domicile_host::ipc::{apply_chrome_message, to_line};
 use domicile_host::keymaps::Keymaps;
 use domicile_host::shell_commands::ShellCommands;
@@ -88,9 +88,9 @@ pub struct ChromeHub {
     /// The pages listening for `domicile send-shell`, shared by every
     /// connection's `System`.
     pub shell_commands: ShellCommands,
-    /// When the screens blank, while a warning runs, shared by every
-    /// connection's `System`. Set by the compositor's idle clock.
-    pub idle_warnings: IdleWarnings,
+    /// The pages watching for the desk to go idle, shared by every
+    /// connection's `System`. Settled by the compositor's idle clock.
+    pub idle_watches: IdleWatches,
     /// What holds the desktop awake, shared by every connection's `System`.
     /// Set by the compositor's idle clock.
     pub idle_holds: IdleHolds,
@@ -121,6 +121,12 @@ impl ChromeHub {
         portals: Portals,
     ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
+        let idle_watches = IdleWatches::new({
+            let request_tx = Mutex::new(request_tx.clone());
+            move || {
+                let _ = request_tx.lock().unwrap().send(ClientRequest::IdleWatched);
+            }
+        });
         let hub = Arc::new(ChromeHub {
             host: Mutex::new(Host::new()),
             chromes: Mutex::new(Vec::new()),
@@ -137,7 +143,7 @@ impl ChromeHub {
             notifications: OnceLock::new(),
             eis: OnceLock::new(),
             shell_commands: ShellCommands::default(),
-            idle_warnings: IdleWarnings::default(),
+            idle_watches,
             idle_holds: IdleHolds::default(),
             unlock_refusals: UnlockRefusals::default(),
             window_requests: WindowRequests::default(),

@@ -283,6 +283,10 @@
     "lock.passphrase_hash" = ''
       The account password unlocks the desk, through PAM. See docs/LOCK.md.
     '';
+    "idle.warn_before_seconds" = ''
+      The shell chooses when to dim before blanking, with
+      `session.idleBeforeBlanking`. See docs/SHELL-IDLE-AND-LOCK.md.
+    '';
   };
 
   removed = import ./removed-settings.nix {inherit lib;} removedSettings;
@@ -520,18 +524,6 @@ in {
               type = lib.types.nullOr lib.types.ints.positive;
               default = null;
               example = 600;
-            };
-            warn_before_seconds = lib.mkOption {
-              description = ''
-                Seconds before blanking that the shell is warned, so it can dim
-                or count down. Input in that time keeps the screens on. Must be
-                less than `blank_after_seconds`.
-
-                `null`, the default, gives no warning. Applied on reload.
-              '';
-              type = lib.types.nullOr lib.types.ints.positive;
-              default = null;
-              example = 30;
             };
             lock_after_seconds = lib.mkOption {
               description = ''

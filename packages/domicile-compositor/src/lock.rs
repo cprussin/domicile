@@ -407,6 +407,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
             | ClientRequest::Lock
+            // A lock screen may dim too.
+            | ClientRequest::IdleWatched
             // Part of a theme change; allowed like `SetTheme`.
             | ClientRequest::TurnTheWindows { .. }
             | ClientRequest::ThemeCaptured { .. }

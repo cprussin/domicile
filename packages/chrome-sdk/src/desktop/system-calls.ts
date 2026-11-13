@@ -122,15 +122,21 @@ export type System = {
     Result<Listening<readonly string[]>, SystemError>
   >;
   /**
-   * Hear the milliseconds left before the screens blank when
-   * `idle.warn_before_seconds` passes, and `undefined` when input or an idle
-   * inhibitor calls it off or the screens go dark. A page that listens during
-   * a warning hears it at once. Allowed while the desktop is locked. See
-   * docs/SHELL-IDLE-AND-LOCK.md.
+   * Hear `true` once nobody has been at the desk for `seconds`, and `false`
+   * on the next input. Idle inhibitors hold it off as they hold off
+   * blanking. `seconds` must be at least 1. Allowed while the desktop is
+   * locked. See docs/SHELL-IDLE-AND-LOCK.md.
    */
-  idleWarnings: () => Promise<
-    Result<Listening<number | undefined>, SystemError>
-  >;
+  idleAfter: (
+    seconds: number,
+  ) => Promise<Result<Listening<boolean>, SystemError>>;
+  /**
+   * As `idleAfter`, `seconds` before the screens blank, to dim or count
+   * down. Silent when the screens never blank, or blank sooner.
+   */
+  idleBeforeBlanking: (
+    seconds: number,
+  ) => Promise<Result<Listening<boolean>, SystemError>>;
   /**
    * Hear what holds the desktop awake: the app ids of the windows and
    * applications whose idle inhibitors keep the screens from blanking, to name
@@ -289,15 +295,24 @@ export const system = (host: SystemHost): System => {
             : unexpected(event),
         Listened.Missed(),
       ),
+    idleAfter: (seconds) =>
+      listening(
+        calls,
+        { call: "idle_after", seconds },
+        idleOf,
+        // The next compositor's clock starts from its start.
+        false,
+      ),
+    idleBeforeBlanking: (seconds) =>
+      listening(
+        calls,
+        { call: "idle_before_blanking", seconds },
+        idleOf,
+        false,
+      ),
     idleHolds: () =>
       listening(calls, { call: "idle_holds" }, (event) =>
         event.kind === "idle_holds" ? event.holders : unexpected(event),
-      ),
-    idleWarnings: () =>
-      listening(calls, { call: "idle_warnings" }, (event) =>
-        event.kind === "idle_warning"
-          ? (event.blanks_in_ms ?? undefined)
-          : unexpected(event),
       ),
     keymaps: () =>
       listening(calls, { call: "keymaps" }, (event) =>
@@ -914,6 +929,10 @@ const resizeEdgeOf = (
       return ResizeEdge.BottomRight;
   }
 };
+
+/** Whether an idle watch's event says nobody is at the desk. */
+const idleOf = (event: Event): boolean =>
+  event.kind === "idle" ? event.idle : unexpected(event);
 
 const unexpected = (answer: unknown): never => {
   throw new Error(`an unexpected system answer: ${JSON.stringify(answer)}`);

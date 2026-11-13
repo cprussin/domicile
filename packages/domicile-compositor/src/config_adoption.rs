@@ -338,7 +338,8 @@ impl DomicileCompositor {
 
     /// Apply new `idle` timeouts.
     ///
-    /// The clock restarts from now, for blanking and locking alike.
+    /// The clock restarts from now, for blanking, locking and the shell's idle
+    /// watches alike.
     ///
     /// A dark desktop is woken. The new clock starts awake ([`Idle::after`]),
     /// so it can never report [`Blanking::ComeBack`] for screens the old clock
@@ -347,10 +348,7 @@ impl DomicileCompositor {
     pub fn reset_the_idle_clock(&mut self, idle: &IdleConfig) {
         let was_dark = self.the_screens_are_dark();
         // Keep client inhibitors; see [`Idle::takes_over_from`].
-        self.idle = match (Idle::after(idle, Instant::now()), self.idle.as_mut()) {
-            (Some(clock), Some(previous)) => Some(clock.takes_over_from(previous)),
-            (clock, _) => clock,
-        };
+        self.idle = Idle::after(idle, Instant::now()).takes_over_from(&mut self.idle);
         debug!("the idle clock starts over from the reloaded timeouts");
         // Not fatal on reload, unlike at startup: the desktop just stops
         // blanking and locking on its own. Logged so it is not silent.
@@ -361,9 +359,8 @@ impl DomicileCompositor {
                  blank or lock on its own until it is restarted"
             );
         }
-        // The new clock starts lit, so a warning running is over.
-        self.tell_the_shells_how_soon_the_screens_blank();
-        // Without a clock nothing holds; with a new one, the same as before.
+        // The new clock starts from now, and may blank at another time.
+        self.settle_the_idle_watches();
         self.tell_the_shells_what_holds_the_desktop_awake();
         if was_dark {
             debug!("the idle timeout changed while the screens were off; they come back on");

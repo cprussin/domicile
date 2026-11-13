@@ -276,6 +276,9 @@ pub enum ClientRequest {
     },
     /// The shell asked to lock now. See [`DomicileCompositor::shut_the_desk`].
     Lock,
+    /// A page started an idle watch. See
+    /// [`DomicileCompositor::settle_the_idle_watches`].
+    IdleWatched,
     /// The applications holding idle inhibitors through the portal, one name
     /// per inhibitor. From the portal thread; see [`crate::portals`].
     HeldAwakeByThePortal {
@@ -572,6 +575,7 @@ impl DomicileCompositor {
             ClientRequest::Lock => {
                 self.shut_the_desk("the shell asked for this desktop to be locked")
             }
+            ClientRequest::IdleWatched => self.settle_the_idle_watches(),
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // Replace any turnover in progress; its windows are about to
                 // get a newer theme.

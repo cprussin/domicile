@@ -642,16 +642,16 @@ struct DomicileCompositor {
     /// The engine said its browser went away, so the next hello is a new one.
     /// See [`crate::which_engine`].
     engine_disconnected: bool,
-    /// Idle tracking, for a desktop that blanks.
+    /// Idle tracking: blanking, locking and the shell's idle watches.
     ///
-    /// `None` if the config sets no idle timeout. Replaced by
+    /// Replaced by
     /// [`reset_the_idle_clock`](DomicileCompositor::reset_the_idle_clock) when
     /// a reload changes `idle`.
     ///
     /// Inhibitors are held as their surfaces. An inhibitor counts only if its
     /// surface is [`StillThere`] and among
     /// [`surfaces_on_the_desktop`](DomicileCompositor::surfaces_on_the_desktop).
-    idle: Option<Idle<WlSurface>>,
+    idle: Idle<WlSurface>,
     /// Whether somebody put the screens to sleep. Independent of `idle`,
     /// so it works on a desktop with no timeout.
     display_sleep: crate::display_sleep::DisplaySleep,
@@ -672,6 +672,9 @@ struct DomicileCompositor {
     /// Kept so a reload can remove or replace it; a calloop source can only be
     /// removed by its token.
     idle_clock: Option<RegistrationToken>,
+    /// The timer for the shell's next idle watch, if one is due. See
+    /// [`settle_the_idle_watches`](DomicileCompositor::settle_the_idle_watches).
+    idle_watch_clock: Option<RegistrationToken>,
     /// The lock, opened by PAM through `lock.pam_service`.
     ///
     /// Kept across reloads, which only swap its verifier
@@ -1428,6 +1431,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         index: None,
         // Armed below by `arm_the_idle_clock`, the same path a reload uses.
         idle_clock: None,
+        // Armed when a page watches.
+        idle_watch_clock: None,
         // Starts unlocked. Built once, never on reload; see the field.
         lock,
         // Taken by `logind::listen`, below.

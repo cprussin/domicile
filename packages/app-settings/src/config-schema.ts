@@ -114,7 +114,6 @@ const settingsSchema = z.strictObject({
     .strictObject({
       blank_after_seconds: z.number().int().positive().optional(),
       lock_after_seconds: z.number().int().positive().optional(),
-      warn_before_seconds: z.number().int().positive().optional(),
     })
     .prefault({}),
   input: z

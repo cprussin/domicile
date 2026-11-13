@@ -1,5 +1,6 @@
-//! Blanks the screens when nobody is here, and honors the idle inhibitors that
-//! hold them on. The clock is `crate::idle`'s.
+//! Blanks the screens when nobody is here, tells the shell's idle watches, and
+//! honors the idle inhibitors that hold both off. The clock is
+//! `crate::idle`'s.
 
 use std::time::{Duration, Instant};
 
@@ -26,7 +27,7 @@ use domicile_host::system::DisplayPower;
 use crate::client_requests::ClientRequest;
 use crate::display_sleep::asleep_in;
 use crate::held_frames::HeldFrames;
-use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
+use crate::idle::{announced, darkened, somebody_is_here, Blanking, StillThere};
 use crate::screen_saver::{self, Change, Hold, BROWSER};
 use crate::screens::name_of;
 use crate::{CalloopData, DomicileCompositor};
@@ -73,9 +74,7 @@ impl DomicileCompositor {
             debug!(input, "somebody is at this desktop again; its screens wake");
             self.state_the_connectors();
         }
-        let Some(idle) = self.idle.as_mut() else {
-            return;
-        };
+        let idle = &mut self.idle;
         let now = Instant::now();
         // Logging each restart would flood the journal; one that held off a
         // close blank or lock shows what keeps a desk from going idle.
@@ -99,14 +98,11 @@ impl DomicileCompositor {
                 self.tell_the_chromes_whether_anybody_is_here();
                 self.state_the_connectors();
             }
-            Some(Blanking::CallOff) => {
-                debug!("somebody is at this desktop again; its screens stay on");
-                self.tell_the_shells_how_soon_the_screens_blank();
-            }
-            Some(Blanking::Warn | Blanking::GoDark) => {
-                unreachable!("input never darkens a desktop")
-            }
+            Some(Blanking::GoDark) => unreachable!("input never darkens a desktop"),
             None => {}
+        }
+        if self.hub.idle_watches.stirred() {
+            self.settle_the_idle_watches();
         }
     }
 
@@ -118,17 +114,8 @@ impl DomicileCompositor {
         self.lock_if_nobody_is_here("nobody is at this desktop; it locks itself");
         let now = Instant::now();
         let on_the_desktop = self.surfaces_on_the_desktop();
-        let idle = self
-            .idle
-            .as_mut()
-            .expect("the idle clock is armed only where a timeout was stated");
-        let edge = idle.elapsed(now, &on_the_desktop);
-        // Before acting on the change, which borrows `self`.
-        let next = idle.next_check(now);
-        self.tell_the_shells_how_soon_the_screens_blank();
-        if edge == Some(Blanking::Warn) {
-            debug!("nobody is at this desktop; its screens go dark soon");
-        }
+        let edge = self.idle.elapsed(now, &on_the_desktop);
+        let next = self.idle.next_check(now);
         if edge == Some(Blanking::GoDark) {
             debug!(
                 connectors = self.engine_displays.len(),
@@ -144,11 +131,11 @@ impl DomicileCompositor {
     /// passed with nobody here. See [`Idle::lock_due`].
     fn lock_if_nobody_is_here(&mut self, why: &str) {
         let toplevels = &self.toplevels;
-        let Some(idle) = self.idle.as_mut() else {
-            return;
-        };
         let held_frames = &self.held_frames;
-        if idle.lock_due(Instant::now(), || desktop_surfaces(toplevels, held_frames)) {
+        if self
+            .idle
+            .lock_due(Instant::now(), || desktop_surfaces(toplevels, held_frames))
+        {
             self.shut_the_desk(why);
         }
     }
@@ -156,15 +143,15 @@ impl DomicileCompositor {
     /// Arm the idle timer for [`Idle::next_check`], replacing any existing
     /// one.
     ///
-    /// A desktop that never blanks gets no timer. Removing the old one keeps
-    /// reloads from piling up timers.
+    /// A desktop that never blanks or locks gets no timer. Removing the old
+    /// one keeps reloads from piling up timers.
     pub fn arm_the_idle_clock(&mut self) -> Result<(), InsertError<Timer>> {
         if let Some(armed) = self.idle_clock.take() {
             self.loop_handle.remove(armed);
         }
-        if let Some(idle) = &self.idle {
+        if self.idle.times_out() {
             self.idle_clock = Some(self.loop_handle.insert_source(
-                Timer::from_duration(idle.next_check(Instant::now())),
+                Timer::from_duration(self.idle.next_check(Instant::now())),
                 |_, _, data: &mut CalloopData| {
                     TimeoutAction::ToDuration(data.state.the_idle_clock_came_round())
                 },
@@ -236,7 +223,7 @@ impl DomicileCompositor {
 
     /// Whether this desktop's screens are off because nobody is here.
     pub fn the_screens_are_dark(&self) -> bool {
-        self.idle.as_ref().is_some_and(Idle::dark)
+        self.idle.dark()
     }
 
     /// Keep a blanked or sleeping desktop dark after a hotplug.
@@ -267,12 +254,35 @@ impl DomicileCompositor {
         self.hub.broadcast(announced(self.the_screens_are_dark()));
     }
 
-    /// Tell the shells when the screens blank, while a warning runs. See
-    /// `domicile_host::idle_warnings`, which tells them only of a change.
-    pub fn tell_the_shells_how_soon_the_screens_blank(&self) {
-        self.hub
-            .idle_warnings
-            .warn(self.idle.as_ref().and_then(Idle::blanks_at));
+    /// Tell the shell's idle watches how long the desk has been still, and
+    /// arm a timer for the next one due. See `domicile_host::idle_watches`,
+    /// which tells a page only of a change.
+    ///
+    /// Called when a page watches, when an inhibitor changes, when the clock
+    /// restarts and when input ends an idle spell. Other input only moves the
+    /// next watch later, so a timer armed before it fires early and arms the
+    /// rest.
+    pub fn settle_the_idle_watches(&mut self) {
+        let still = self
+            .idle
+            .unheld_for(Instant::now(), &self.surfaces_on_the_desktop());
+        let due = self.hub.idle_watches.settle(still, self.idle.blank_after());
+        if let Some(armed) = self.idle_watch_clock.take() {
+            self.loop_handle.remove(armed);
+        }
+        let Some(due) = due else {
+            return;
+        };
+        self.idle_watch_clock = Some(
+            self.loop_handle
+                .insert_source(Timer::from_duration(due), |_, _, data: &mut CalloopData| {
+                    // Spent, so not removed again.
+                    data.state.idle_watch_clock = None;
+                    data.state.settle_the_idle_watches();
+                    TimeoutAction::Drop
+                })
+                .expect("the event loop takes a timer"),
+        );
     }
 
     /// Tell a new chrome whether the desktop is idle.
@@ -281,20 +291,17 @@ impl DomicileCompositor {
     /// that can never trigger. A blanking desktop sends `false` even when
     /// active.
     pub fn tell_a_new_chrome_whether_anybody_is_here(&self) {
-        if self.idle.as_ref().is_some_and(Idle::blanks) {
+        if self.idle.blanks() {
             self.tell_the_chromes_whether_anybody_is_here();
         }
     }
 
     /// A client took an idle inhibitor for `surface`.
-    ///
-    /// Without a timeout there is nothing to inhibit.
     fn hold_the_screens_on(&mut self, surface: WlSurface) {
         let on_the_desktop = self.surfaces_on_the_desktop();
-        let Some(idle) = self.idle.as_mut() else {
-            return;
-        };
-        let edge = idle.inhibited_by(surface, Instant::now(), &on_the_desktop);
+        let edge = self
+            .idle
+            .inhibited_by(surface, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "a client is holding this desktop awake");
         self.tell_the_shells_what_holds_the_desktop_awake();
     }
@@ -320,10 +327,9 @@ impl DomicileCompositor {
     fn the_applications_holds_changed(&mut self, why: &str) {
         let held = !self.applications_holding().is_empty();
         let on_the_desktop = self.surfaces_on_the_desktop();
-        let Some(idle) = self.idle.as_mut() else {
-            return;
-        };
-        let edge = idle.held_by_applications(held, Instant::now(), &on_the_desktop);
+        let edge = self
+            .idle
+            .held_by_applications(held, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, why);
         self.tell_the_shells_what_holds_the_desktop_awake();
     }
@@ -371,10 +377,9 @@ impl DomicileCompositor {
     /// A client released an idle inhibitor.
     fn let_the_screens_go(&mut self, surface: &WlSurface) {
         let on_the_desktop = self.surfaces_on_the_desktop();
-        let Some(idle) = self.idle.as_mut() else {
-            return;
-        };
-        let edge = idle.uninhibited_by(surface, Instant::now(), &on_the_desktop);
+        let edge = self
+            .idle
+            .uninhibited_by(surface, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "nothing is holding this desktop awake now");
         self.tell_the_shells_what_holds_the_desktop_awake();
     }
@@ -392,19 +397,19 @@ impl DomicileCompositor {
     /// inhibitors on surfaces that were never windows.
     pub fn let_go_of_what_the_dead_were_holding(&mut self) {
         let toplevels = &self.toplevels;
-        let Some(idle) = self.idle.as_mut() else {
-            return;
-        };
-        let held = idle.inhibitors();
+        let held = self.idle.inhibitors();
         let held_frames = &self.held_frames;
-        let edge =
-            idle.the_dead_let_go(Instant::now(), || desktop_surfaces(toplevels, held_frames));
-        let let_go = idle.inhibitors() != held;
-        self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
-        // Listing the holders after every dispatch would cost a window list
-        // each time, so only when one went.
+        let edge = self
+            .idle
+            .the_dead_let_go(Instant::now(), || desktop_surfaces(toplevels, held_frames));
+        let let_go = self.idle.inhibitors() != held;
+        // Listing the holders and settling the watches after every dispatch
+        // would cost a window list each time, so only when one went.
         if let_go {
+            self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
             self.tell_the_shells_what_holds_the_desktop_awake();
+        } else {
+            self.lock_if_nobody_is_here("nothing holds this desktop awake now; it locks itself");
         }
     }
 
@@ -427,15 +432,12 @@ impl DomicileCompositor {
     /// [`BROWSER`].
     pub fn tell_the_shells_what_holds_the_desktop_awake(&mut self) {
         let on_the_desktop = self.surfaces_on_the_desktop();
-        // Without a timeout there is nothing to hold off.
-        let holders: Vec<String> = match &self.idle {
-            Some(idle) => idle
-                .holding(&on_the_desktop)
-                .map(|surface| window_name(&self.toplevels, surface))
-                .chain(self.applications_holding())
-                .collect(),
-            None => Vec::new(),
-        };
+        let holders: Vec<String> = self
+            .idle
+            .holding(&on_the_desktop)
+            .map(|surface| window_name(&self.toplevels, surface))
+            .chain(self.applications_holding())
+            .collect();
         if self.hub.idle_holds.hold(holders.clone()) {
             debug!(?holders, "what holds this desktop awake changed");
         }
@@ -443,19 +445,18 @@ impl DomicileCompositor {
 
     /// Act on an inhibitor state change, logging `why`.
     ///
-    /// Sets the connectors only when the screens go dark or come back.
+    /// Settles the shell's idle watches, which the inhibitors hold too. Sets
+    /// the connectors only when the screens go dark or come back.
     ///
     /// Also locks a desktop whose lock timeout passed while an inhibitor held
     /// it.
     fn the_inhibitors_changed(&mut self, edge: Option<Blanking>, why: &str) {
         self.lock_if_nobody_is_here("nothing holds this desktop awake now; it locks itself");
+        self.settle_the_idle_watches();
         let Some(edge) = edge else {
             return;
         };
-        self.tell_the_shells_how_soon_the_screens_blank();
         match edge {
-            Blanking::Warn => debug!("{why}; this desktop's screens go dark soon"),
-            Blanking::CallOff => debug!("{why}; this desktop's screens stay on"),
             Blanking::GoDark => {
                 debug!("{why}; this desktop's screens go dark");
                 self.state_the_connectors();
