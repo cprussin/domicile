@@ -340,6 +340,8 @@ its own menu, on DisplayPort or HDMI 2.1, and a driver that supports it
    should flicker once and come back, and `adaptiveSync` should read `"on"`.
    The monitor's own OSD (often a FreeSync or refresh counter) should show the
    rate moving with what is drawn, for example while a video plays at 24 fps.
+   With it on, the overview and workspace slides should be as smooth as with
+   it off.
 3. If it reads `"off"` instead, the log at `--v=1` should say the DRM thread
    refused a modeset with adaptive sync and tried again without it, and the
    panel should still be lit.
