@@ -31,6 +31,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence_handle.h"
@@ -122,11 +123,14 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // memory, for a browser that composites in software. The producer leaves
   // the memory alone until the buffer is released.
   //
+  // The SharedImage is in `color_space`, how the client's pixels encode color.
+  //
   // Fills `exported` so a producer holding its own sink can reference the same
   // SharedImage. See docs/architecture/ENGINE-FORK.md#buffer-import.
   uint64_t ImportBuffer(gfx::GpuMemoryBufferHandle handle,
                         const gfx::Size& size,
                         uint32_t fourcc,
+                        const gfx::ColorSpace& color_space,
                         std::optional<gpu::ExportedSharedImage>* exported);
 
   // Submits a frame showing `buffer_id`. False if there is no such buffer, or

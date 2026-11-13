@@ -11,6 +11,7 @@ import "ui/gfx/geometry/mojom/geometry.mojom";
 import "gpu/ipc/common/exported_shared_image.mojom";
 import "gpu/ipc/common/sync_token.mojom";
 import "ui/gfx/mojom/buffer_types.mojom";
+import "ui/gfx/mojom/color_space.mojom";
 import "ui/gfx/mojom/gpu_fence_handle.mojom";
 import "mojo/public/mojom/base/shared_memory.mojom";
 
@@ -378,10 +379,15 @@ interface FrameSinkBroker {
   //
   // `fourcc` is the client's DRM format. It is required because the byte order
   // decides whether red and blue are swapped.
+  //
+  // `color_space` is how the client's pixels encode color: sRGB unless it
+  // described them with wp_color_management_v1. The SharedImage is made in
+  // it, and viz converts from it to each display's.
   ImportBuffer(viz.mojom.FrameSinkId frame_sink_id,
                gfx.mojom.GpuMemoryBufferHandle buffer_handle,
                gfx.mojom.Size size,
-               uint32 fourcc)
+               uint32 fourcc,
+               gfx.mojom.ColorSpace color_space)
       => (uint64 buffer_id, gpu.mojom.ExportedSharedImage? exported);
 
   // Submits a frame showing `buffer_id` with `damage`.

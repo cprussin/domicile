@@ -27,6 +27,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence_handle.h"
 
@@ -212,6 +213,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                     gfx::GpuMemoryBufferHandle handle,
                     const gfx::Size& size,
                     uint32_t fourcc,
+                    const gfx::ColorSpace& color_space,
                     ImportBufferCallback callback) override;
   void SubmitBuffer(const viz::FrameSinkId& frame_sink_id,
                     uint64_t buffer_id,

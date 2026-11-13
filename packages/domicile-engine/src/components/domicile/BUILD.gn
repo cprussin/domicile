@@ -1330,6 +1330,7 @@ source_set("unit_tests") {
     "//cc/domicile:display_regions",
     "//cc/domicile:unit_tests",
     "//components/domicile/mojom",
+    "//components/domicile/engine:buffer_color_unit_tests",
     "//components/domicile/engine:event_queue_unit_tests",
     "//components/domicile/engine:probe_wait_unit_tests",
     "//components/domicile/engine:surface_alpha_unit_tests",
