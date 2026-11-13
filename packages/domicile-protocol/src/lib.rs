@@ -223,6 +223,14 @@ pub enum ChromeMessage {
         y: f64,
         moved: bool,
     },
+    /// The pointer moved by `(dx, dy)` over an app, in its surface-local
+    /// units, after the [`ChromeMessage::PointerMotion`] that took it there.
+    /// For `zwp_relative_pointer_v1`, which games and VM viewers read.
+    ///
+    /// The browser sends it only for a hand on the mouse: not for a move under
+    /// a still pointer, nor for a shell's pointer warp. Its deltas are the
+    /// accelerated ones, which the compositor also gives as unaccelerated.
+    PointerRelative { app_id: String, dx: f64, dy: f64 },
     /// Pointer left an app (focus returns to the chrome).
     PointerLeave { app_id: String },
     /// A touchpad pinch over a native app, with scale relative to its beginning.

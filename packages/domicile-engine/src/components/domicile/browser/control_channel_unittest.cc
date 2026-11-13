@@ -693,6 +693,17 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
   }
 }
 
+// A hand's relative motion reaches the compositor as its deltas.
+TEST_F(ControlChannelTest, RelativeMotionReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->PointerRelative("app", 3.5, -2);
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(),
+            R"({"app_id":"app","dx":3.5,"dy":-2.0,"type":"pointer_relative"})");
+}
+
 TEST_F(ControlChannelTest, TouchesKeepTheirPointsAndUnsignedTimes) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();

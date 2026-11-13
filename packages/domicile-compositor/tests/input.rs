@@ -584,6 +584,41 @@ fn pixels_of(png: &str) -> (u32, u32, [u8; 4]) {
     )
 }
 
+/// A hand on the mouse over a window reaches a client holding a relative
+/// pointer as relative motion, the same deltas given as unaccelerated. A
+/// delta for a window the pointer has left is dropped.
+#[test]
+fn relative_motion_reaches_the_window_under_the_pointer() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+
+    chrome
+        .say(&ChromeMessage::PointerRelative {
+            app_id: app.clone(),
+            dx: 3.5,
+            dy: -2.0,
+        })
+        .expect("the chrome can move the pointer");
+    assert!(
+        client.wait_for_trace(".relative_motion(3.5, -2, 3.5, -2)", 1),
+        "the client heard no relative motion; it traced:\n{}",
+        client.trace()
+    );
+
+    chrome
+        .say(&ChromeMessage::PointerRelative {
+            app_id: "app-elsewhere".into(),
+            dx: 9.0,
+            dy: 9.0,
+        })
+        .expect("the chrome can move the pointer");
+    compositor.wait_for_log("relative motion off the app under the pointer -> dropped");
+    assert!(
+        !client.trace().contains(".relative_motion(9"),
+        "a delta for another window reached this one"
+    );
+}
+
 /// The chrome receives the keymap compiled from the config.
 ///
 /// The chrome here stands for the browser process. On DRM/Ozone, Chromium's

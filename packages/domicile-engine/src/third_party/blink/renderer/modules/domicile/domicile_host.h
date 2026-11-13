@@ -110,6 +110,10 @@ class MODULES_EXPORT DomicileHost final
                         const gfx::PointF& point,
                         const gfx::SizeF& size,
                         bool moved) override;
+  void AppPointerRelative(const String& app_id,
+                          const gfx::Vector2dF& movement,
+                          const gfx::PointF& on_page,
+                          const gfx::SizeF& size) override;
   void AppPointerButton(const String& app_id,
                         uint32_t button,
                         bool pressed) override;
@@ -551,6 +555,10 @@ class MODULES_EXPORT DomicileHost final
   // What the compositor has said about each window, in the order they
   // appeared, and the frozen copy `windows` hands out.
   Vector<DomicileWindowState> window_states_;
+  // Where the page last warped the pointer, until the move that lands it
+  // there arrives: that move is the warp, not a hand, so it carries no
+  // relative motion. See `AppPointerRelative`.
+  std::optional<gfx::PointF> warped_to_;
   Member<FrozenArray<DomicileWindow>> client_windows_;
   String focused_window_;
   // Moments that arrived before anything listened -- see DispatchOrHold.
