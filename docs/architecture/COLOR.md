@@ -44,10 +44,13 @@ color descriptions, the protocol, and the config. Tracks
   catches. A format the engine accepts can still draw wrong, so
   `guard-buffer-formats.sh` has a `wl_shm` client draw a known color in each
   listed format and reads it back from viz.
-- **Formats:** `XRGB2101010`, `ARGB2101010`, `XBGR2101010`, `ABGR2101010`
-  (viz `BGRA_1010102`, `RGBA_1010102`) and `ABGR16161616F`, `XBGR16161616F`
-  (`RGBA_F16`). On the software compositor the 8-bit set only: viz's software
-  path draws no 10-bit image.
+- **Formats:** `ARGB2101010`, `ABGR2101010` (viz `BGRA_1010102`,
+  `RGBA_1010102`) and `ABGR16161616F` (`RGBA_F16`). Viz has no deep format
+  without alpha, and its twin with alpha draws padding as alpha even when
+  marked opaque, so `XRGB2101010`, `XBGR2101010` and `XBGR16161616F` are
+  offered only on `wl_shm`, where the compositor copies each frame into the
+  twin with alpha filled in. On the software compositor the 8-bit set only:
+  viz's software path draws no 10-bit image.
 - **HDR is opt-in per display (`hdr = true`).** An HDR mode changes how SDR
   content looks and some panels dim or flicker in it, as in sway, KDE and
   GNOME. A display whose EDID has no BT.2020 + PQ ignores it and reports that.
@@ -78,7 +81,7 @@ color descriptions, the protocol, and the config. Tracks
 
 ## Plan
 
-- [ ] engine + compositor: 10-bit and F16 formats in `FormatFromFourcc` and `FOURCCS`, on `wl_shm` too; `guard-buffer-formats.sh`
+- [x] engine + compositor: 10-bit and F16 formats in `FormatFromFourcc` and `FOURCCS`, on `wl_shm` too; `guard-buffer-formats.sh`
 - [ ] config + engine: `bit_depth` per placement; 10-bit plane format and `max bpc`, 8-bit fallback; reported per display
 - [ ] engine: buffer color descriptions on import (`gfx::ColorSpace`, `gfx::HDRMetadata`)
 - [ ] compositor: `wp_color_management_v1` with output and surface descriptions and preferred feedback

@@ -19,6 +19,8 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/common/sync_token.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
+#include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/gpu_fence.h"
@@ -34,21 +36,43 @@ namespace {
 constexpr gpu::SharedImageUsageSet kWindowUsage =
     gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
 
+// A viz format and the alpha its pixels carry.
+struct ImportFormat {
+  viz::SharedImageFormat format;
+  SkAlphaType alpha;
+};
+
 // Maps a DRM fourcc to the matching viz format.
 //
 // A mismatch does not fail; it draws the window with permuted channels. DRM
-// names channels from the most significant byte and viz in memory order, so
-// ARGB8888 is BGRA_8888.
-std::optional<viz::SharedImageFormat> FormatFromFourcc(uint32_t fourcc) {
+// names channels from the most significant bit and viz in memory order, so
+// ARGB8888 is BGRA_8888. Viz has no 10-bit or half-float format without
+// alpha, and its twin with alpha, even marked opaque, draws the padding bits
+// as alpha: a window of zeroed padding comes out transparent. Those formats
+// are refused; the compositor copies a wl_shm frame in one into its twin.
+std::optional<ImportFormat> FormatFromFourcc(uint32_t fourcc) {
   switch (fourcc) {
     case 0x34325241:  // DRM_FORMAT_ARGB8888
-      return viz::SinglePlaneFormat::kBGRA_8888;
+      return ImportFormat{viz::SinglePlaneFormat::kBGRA_8888,
+                          kPremul_SkAlphaType};
     case 0x34325258:  // DRM_FORMAT_XRGB8888
-      return viz::SinglePlaneFormat::kBGRX_8888;
+      return ImportFormat{viz::SinglePlaneFormat::kBGRX_8888,
+                          kOpaque_SkAlphaType};
     case 0x34324241:  // DRM_FORMAT_ABGR8888
-      return viz::SinglePlaneFormat::kRGBA_8888;
+      return ImportFormat{viz::SinglePlaneFormat::kRGBA_8888,
+                          kPremul_SkAlphaType};
     case 0x34324258:  // DRM_FORMAT_XBGR8888
-      return viz::SinglePlaneFormat::kRGBX_8888;
+      return ImportFormat{viz::SinglePlaneFormat::kRGBX_8888,
+                          kOpaque_SkAlphaType};
+    case 0x30335241:  // DRM_FORMAT_ARGB2101010
+      return ImportFormat{viz::SinglePlaneFormat::kBGRA_1010102,
+                          kPremul_SkAlphaType};
+    case 0x30334241:  // DRM_FORMAT_ABGR2101010
+      return ImportFormat{viz::SinglePlaneFormat::kRGBA_1010102,
+                          kPremul_SkAlphaType};
+    case 0x48344241:  // DRM_FORMAT_ABGR16161616F
+      return ImportFormat{viz::SinglePlaneFormat::kRGBA_F16,
+                          kPremul_SkAlphaType};
     default:
       return std::nullopt;
   }
@@ -144,7 +168,7 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     const gfx::Size& size,
     uint32_t fourcc,
     std::optional<gpu::ExportedSharedImage>* exported) {
-  const std::optional<viz::SharedImageFormat> format = FormatFromFourcc(fourcc);
+  const std::optional<ImportFormat> format = FormatFromFourcc(fourcc);
   if (!format) {
     LOG(ERROR) << "domicile: no SharedImageFormat for DRM fourcc 0x" << std::hex
                << fourcc
@@ -166,7 +190,8 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     // Viz reads the producer's memory itself: no copy on either side.
     const uint32_t stride = handle.stride;
     shared_image = sii->DomicileCreateSharedImageForSoftwareCompositor(
-        {*format, size, gfx::ColorSpace::CreateSRGB(),
+        {format->format, size, gfx::ColorSpace::CreateSRGB(),
+         kTopLeft_GrSurfaceOrigin, format->alpha,
          gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, "DomicileWindow"},
         std::move(handle).region(), stride);
     if (!shared_image) {
@@ -183,7 +208,8 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     // The part of exo::Buffer this needs. Its caching, fences, protected
     // content and YUV handling are viz's job or not yet supported.
     shared_image = sii->CreateSharedImage(
-        {*format, size, gfx::ColorSpace::CreateSRGB(), kWindowUsage,
+        {format->format, size, gfx::ColorSpace::CreateSRGB(),
+         kTopLeft_GrSurfaceOrigin, format->alpha, kWindowUsage,
          "DomicileWindow"},
         std::move(handle));
     if (!shared_image) {
