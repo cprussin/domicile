@@ -163,6 +163,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              double scale,
+             double zoom,
              EmbedCallback callback);
 
   // Drops `requester`'s waiting embeds without running their callbacks. For a
@@ -264,6 +265,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                  const viz::LocalSurfaceId& local_surface_id,
                  const gfx::Size& size,
                  double scale,
+                 double zoom,
                  EmbedCallback callback);
     PendingEmbed(PendingEmbed&&);
     PendingEmbed& operator=(PendingEmbed&&);
@@ -275,6 +277,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
     viz::LocalSurfaceId local_surface_id;
     gfx::Size size;
     double scale;
+    double zoom;
     EmbedCallback callback;
   };
 

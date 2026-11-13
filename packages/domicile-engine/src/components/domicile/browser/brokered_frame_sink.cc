@@ -112,7 +112,8 @@ void BrokeredFrameSink::CreateCompositorFrameSink(
 void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
                               const viz::LocalSurfaceId& local_surface_id,
                               const gfx::Size& size,
-                              double scale) {
+                              double scale,
+                              double zoom) {
   // Drop a late, older id. Several <app> elements for one window share an
   // allocator but use separate pipes, so ids can arrive out of order. Viz
   // closes a sink that submits to an older id, freezing the window.
@@ -135,7 +136,7 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
   scale_ = scale > 0 ? static_cast<float>(scale) : 1.f;
 
   if (observer_) {
-    observer_->OnSurfaceEmbedded(local_surface_id, size, scale);
+    observer_->OnSurfaceEmbedded(local_surface_id, size, scale, zoom);
   }
 }
 
