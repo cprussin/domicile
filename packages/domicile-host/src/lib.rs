@@ -922,6 +922,7 @@ impl Host {
             | ChromeMessage::Unlock { .. }
             | ChromeMessage::Lock
             | ChromeMessage::Activity { .. }
+            | ChromeMessage::EngineFault { .. }
             | ChromeMessage::DeskPointer { .. }
             | ChromeMessage::DeskCursor { .. }
             | ChromeMessage::TextInput { .. }

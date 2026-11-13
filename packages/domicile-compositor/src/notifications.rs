@@ -301,6 +301,32 @@ impl NotificationServer {
         );
     }
 
+    /// Warn that the engine caught itself in a bug, such as a page it took out
+    /// of fullscreen that stayed in. A bug, so it is loud, as for
+    /// [`Self::warn_that_graphics_failed`]: urgent, with a button to report it.
+    /// `what` says what went wrong. A later fault replaces an earlier one.
+    pub fn warn_of_an_engine_fault(&self, what: &str) {
+        self.add_from_portal(
+            OWN_APP.into(),
+            "engine-fault".into(),
+            PortalNotification {
+                title: "Something went wrong".into(),
+                body: format!("{what} This is a bug; please report it."),
+                icon: None,
+                priority: Priority::Urgent,
+                default_action: None,
+                buttons: vec![Button {
+                    label: "Report it".into(),
+                    action: Action {
+                        name: REPORT_A_BUG.into(),
+                        target: None,
+                    },
+                }],
+                display_hint: Vec::new(),
+            },
+        );
+    }
+
     /// Remove `app_id`'s notification `id`, if held.
     pub fn remove_from_portal(&self, app_id: &str, id: &str) {
         self.store
@@ -1173,6 +1199,43 @@ mod tests {
                 .map(|action| (action.key.as_str(), action.label.as_str()))
                 .collect::<Vec<_>>(),
             [("0", "Report it")]
+        );
+        match server.store.press(shown.id, "0") {
+            Pressed::Launches(command) => assert_eq!(
+                command,
+                [
+                    "domicile",
+                    "open",
+                    "https://github.com/cprussin/domicile/issues"
+                ]
+            ),
+            _ => panic!("Domicile's own button went elsewhere"),
+        }
+    }
+
+    /// An engine fault is a bug, so it says what went wrong, from Domicile,
+    /// kept until read, and "Report it" opens the issue tracker.
+    #[test]
+    fn an_engine_fault_warns_and_offers_a_report() {
+        let server = NotificationServer::unserved(Vec::new());
+        server.warn_of_an_engine_fault("A page stayed in fullscreen.");
+        let shown = server
+            .store
+            .change(|held| held.notifications.items().remove(0));
+        assert_eq!(
+            (
+                shown.app_name.as_str(),
+                shown.summary.as_str(),
+                shown.body.as_str(),
+                shown.urgency
+            ),
+            (
+                "Domicile",
+                "Something went wrong",
+                "A page stayed in fullscreen. This is a bug; please report it.",
+                Urgency::Critical
+            ),
+            "from Domicile, saying what, and kept until read"
         );
         match server.store.press(shown.id, "0") {
             Pressed::Launches(command) => assert_eq!(
