@@ -9,7 +9,8 @@ the detail, when there is one. Remove a gap when it's fixed.
   which you start yourself: [X11 apps](/docs/use/COMPATIBILITY.md#x11-apps).
   Electron, SDL and Qt apps are started in Wayland mode (`client_command` in
   `spawning.rs`).
-- **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
+- **Clients only get 8-bit formats, and output is 8-bit SDR.**
+  [COLOR.md](/docs/architecture/COLOR.md#plan).
 - **Games can't confine the pointer to their window yet.** A lock works:
   manganese locks the pointer for the focused window under it. A confinement
   is offered to the shell (`pointerConstraint: "confine"`), but no shell takes
