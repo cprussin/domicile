@@ -80,6 +80,12 @@ class SnapshotBuilder {
     return *this;
   }
 
+  // The bits a channel the EDID reports.
+  SnapshotBuilder& BitsPerChannel(uint32_t bits) {
+    bits_per_channel_ = bits;
+    return *this;
+  }
+
   // The formats the device's planes scan out.
   SnapshotBuilder& PlaneFormats(const std::vector<uint32_t>& formats) {
     plane_formats_.clear();
@@ -92,6 +98,8 @@ class SnapshotBuilder {
   std::unique_ptr<display::DisplaySnapshot> Build() {
     display::DisplaySnapshot::DisplayModeList modes;
     const display::DisplayMode* native = nullptr;
+    display::DisplaySnapshot::ColorInfo color_info;
+    color_info.bits_per_channel = bits_per_channel_;
     if (native_mode_size_.has_value()) {
       modes.push_back(std::make_unique<display::DisplayMode>(
           *native_mode_size_, /*interlaced=*/false, native_refresh_hz_));
@@ -103,7 +111,7 @@ class SnapshotBuilder {
         /*path_topology=*/std::vector<uint64_t>(),
         /*is_aspect_preserving_scaling=*/false, /*has_overscan=*/false,
         display::PrivacyScreenState::kNotSupported,
-        /*has_content_protection_key=*/false, display::DisplaySnapshot::ColorInfo(),
+        /*has_content_protection_key=*/false, color_info,
         name_, base::FilePath(), std::move(modes),
         display::PanelOrientation::kNormal, edid_,
         /*current_mode=*/native, native, product_code_,
@@ -125,6 +133,7 @@ class SnapshotBuilder {
   std::vector<uint8_t> edid_;
   std::string connector_ = "DP-1";
   uint32_t gamma_size_ = 0;
+  uint32_t bits_per_channel_ = 8;
   display::DrmFormatsAndModifiers plane_formats_;
 };
 
@@ -321,6 +330,58 @@ TEST(DrmScreenTest, ADisplayWhosePlanesTakeXbgrKeepsTheDefaultFormat) {
 
   EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(*snapshot, gfx::Point(), snapshot->native_mode())),
             OpaqueFrameFormat(display::Display()));
+}
+
+// A 10-bit framebuffer on an XB30 plane holds viz's RGBA_1010102.
+TEST(DrmScreenTest, ATenBitPanelOnPlanesThatTakeXbgrDrawsInRgba1010102) {
+  auto snapshot = SnapshotBuilder()
+                      .BitsPerChannel(10)
+                      .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888,
+                                     DRM_FORMAT_XRGB2101010,
+                                     DRM_FORMAT_XBGR2101010})
+                      .Build();
+
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(
+                *snapshot, gfx::Point(), snapshot->native_mode())),
+            viz::SinglePlaneFormat::kRGBA_1010102);
+}
+
+TEST(DrmScreenTest, ATenBitPanelOnPlanesThatTakeOnlyXrgbDrawsInBgra1010102) {
+  auto snapshot = SnapshotBuilder()
+                      .BitsPerChannel(10)
+                      .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888,
+                                     DRM_FORMAT_XRGB2101010})
+                      .Build();
+
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(
+                *snapshot, gfx::Point(), snapshot->native_mode())),
+            viz::SinglePlaneFormat::kBGRA_1010102);
+}
+
+// Its EDID says 8 bits reach the panel, so 10-bit frames would only cost
+// memory.
+TEST(DrmScreenTest, AnEightBitPanelDrawsInEightBitsWhateverThePlanesTake) {
+  auto snapshot = SnapshotBuilder()
+                      .BitsPerChannel(8)
+                      .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888,
+                                     DRM_FORMAT_XBGR2101010})
+                      .Build();
+
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(
+                *snapshot, gfx::Point(), snapshot->native_mode())),
+            OpaqueFrameFormat(display::Display()));
+}
+
+// A DisplayLink dock's planes take only XR24 and AR24.
+TEST(DrmScreenTest, ATenBitPanelOnEightBitPlanesDrawsInEightBits) {
+  auto snapshot = SnapshotBuilder()
+                      .BitsPerChannel(10)
+                      .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_ARGB8888})
+                      .Build();
+
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(
+                *snapshot, gfx::Point(), snapshot->native_mode())),
+            viz::SinglePlaneFormat::kBGRA_8888);
 }
 
 TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {

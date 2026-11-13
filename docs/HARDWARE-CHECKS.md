@@ -345,6 +345,20 @@ its own menu, on DisplayPort or HDMI 2.1, and a driver that supports it
    panel should still be lit.
 4. Remove `adaptive_sync` and reload. It should read `"off"` again.
 
+## 10-bit scanout
+
+Needs a monitor whose EDID reports 10 bits a channel (`edid-decode` on
+`/sys/class/drm/card*-<connector>/edid` says "Bits per primary color channel:
+10"), on DisplayPort or HDMI straight from the GPU, not through a DisplayLink
+dock.
+
+1. At `--v=1`, the GPU process should not log `cannot set 'max bpc'` for that
+   connector, and `/sys/kernel/debug/dri/0/<connector>/output_bpc` (amdgpu)
+   should read 10.
+2. Open a smooth gray gradient page (for example a full-screen CSS
+   `linear-gradient(black, white)`). It should show no bands.
+3. A monitor that reports 8 bits should look as before.
+
 ## A cursor an app draws itself
 
 Needs an app that sets its own cursor image, such as GIMP with a brush tool,
