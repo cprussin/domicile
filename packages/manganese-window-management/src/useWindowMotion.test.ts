@@ -38,6 +38,7 @@ const desktop = (
   overview: false,
   placements: showing.map(({ id }) => placementOf(id)),
   scratchpad: [],
+  shut: [],
   tabs: [],
   windows,
 });
@@ -121,6 +122,21 @@ describe("useWindowMotion", () => {
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+
+    // A background app's window, such as Messages', is open all along but
+    // shut until shown.
+    it("plays when a shut window is shown", () => {
+      const { rerender, result } = showing({
+        ...desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+        shut: [EDITOR.id],
+      });
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("opening");
     });
   });
 

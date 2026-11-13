@@ -239,6 +239,7 @@ const moved = (before: Desk, shown: Desk): boolean =>
       was.overview !== now.overview ||
       was.placements !== now.placements ||
       was.scratchpad !== now.scratchpad ||
+      was.shut !== now.shut ||
       was.tabs !== now.tabs ||
       was.windows !== now.windows
     );
@@ -250,6 +251,10 @@ const moved = (before: Desk, shown: Desk): boolean =>
  */
 const windowsOf = (desk: Desk): readonly ShellWindow[] =>
   Object.values(desk)[0]?.windows ?? [];
+
+/** The desk's shut windows. Every screen has the same list. */
+const shutOf = (desk: Desk): ReadonlySet<string> =>
+  new Set(Object.values(desk)[0]?.shut);
 
 /**
  * What is playing after the desk changes from `before` to `shown` at `time`.
@@ -275,7 +280,14 @@ const advanced = (
   const switched = screens.map(({ now, was }) => tabSwitched(was, now));
   // Sets, since every window is checked against them.
   const open = new Set(windows.map(({ id }) => id));
-  const wasOpen = new Set(windowsOf(before).map(({ id }) => id));
+  // A shut window is open but shown as closed, so showing it opens it.
+  const wasShut = shutOf(before);
+  const shut = shutOf(shown);
+  const wasOpen = new Set(
+    windowsOf(before)
+      .map(({ id }) => id)
+      .filter((id) => !wasShut.has(id)),
+  );
   const shownIds = placedIds(shown);
   const fades = [
     ...switched.flatMap(({ concealed }) =>
@@ -336,7 +348,9 @@ const advanced = (
     // opening finished.
     opening: [
       ...playing.opening.filter((id) => shownIds.has(id)),
-      ...windows.filter(({ id }) => !wasOpen.has(id)).map(({ id }) => id),
+      ...windows
+        .filter(({ id }) => !wasOpen.has(id) && !shut.has(id))
+        .map(({ id }) => id),
     ],
     // A window raised again before settling plays only the latest raise.
     restacking: [

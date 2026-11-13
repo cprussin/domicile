@@ -148,6 +148,8 @@ type Props = {
   screens: readonly StageScreen[];
   /** The windows hidden in the scratchpad. */
   scratchpad: readonly string[];
+  /** The open windows shown as closed. See `Shown.shut`. */
+  shut: readonly string[];
   windows: readonly ShellWindow[];
 };
 
@@ -199,6 +201,7 @@ export const Stage = memo(
     popups,
     scratchpad,
     screens,
+    shut,
     windows,
   }: Props) => {
     const motions = useWindowMotion(
@@ -212,6 +215,7 @@ export const Stage = memo(
               overview: overview !== undefined,
               placements,
               scratchpad,
+              shut,
               tabs,
               windows,
             },

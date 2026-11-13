@@ -89,6 +89,7 @@ import {
   activeIsPrivate,
   closedBrowsersOf,
   screenOfApp,
+  shutIdsOf,
   WindowAction,
   WindowActionKind,
 } from "@domicile-desktop/manganese-window-management/window-state";
@@ -614,6 +615,9 @@ export const Desktop = ({
   const shownWindows = useCallback(() => shownWindowsOf(screens), [screens]);
   // Closed inboxes' windows, which keep running, are no one's to pick.
   const closedBrowsers = useMemo(() => closedBrowsersOf(windows), [windows]);
+  // Shared, so the stage sees a change only when one is shown or hidden.
+  const shutIds = useMemo(() => shutIdsOf(windows), [windows]);
+  const shut = useShared(shutIds);
   // What the bars' items read. Each is its own context, so an item redraws
   // only when what it reads changes.
   const launcherControl = useMemo(
@@ -774,6 +778,7 @@ export const Desktop = ({
           popups={windows.popups}
           scratchpad={windows.scratchpad}
           screens={screens}
+          shut={shut}
           windows={windows.windows}
         />
       )}

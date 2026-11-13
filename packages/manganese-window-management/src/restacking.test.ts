@@ -31,6 +31,7 @@ const desktop = (placements: readonly Placement[], current = "1"): Shown => ({
   overview: false,
   placements,
   scratchpad: [],
+  shut: [],
   tabs: [],
   windows: [],
 });
