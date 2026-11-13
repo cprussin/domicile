@@ -28,9 +28,6 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **An input method's candidate list does not show over pages or the
   shell:** they compose from it, but only native windows show its list.
   [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).
-- **A GL client that started before the engine fell back to software stays
-  blank.** Its dmabufs are not copied into memory.
-  [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output).
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#open-questions).
 

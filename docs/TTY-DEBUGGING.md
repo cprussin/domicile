@@ -114,8 +114,9 @@ Usual causes:
 ### Scanout and render cards can differ
 
 A GPU process that falls back to software on its own sends windows in memory
-once the engine says so: the compositor logs "the engine changed how it
-composites". A client that drew in dmabufs before then stays blank.
+once the engine says so: the compositor logs "fell back to software
+compositing" as an error and shows a "Graphics aren't working"
+notification. A client that drew in dmabufs before then stays blank.
 `DOMICILE_SOFTWARE_COMPOSITING=yes` composites on the CPU from the start
 ([Software output](architecture/A-DESKTOP-ON-A-TTY.md#software-output)).
 
