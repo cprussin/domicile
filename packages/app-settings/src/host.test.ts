@@ -308,6 +308,7 @@ describe(spawnedHost, () => {
         enabled: true,
         id: "a".repeat(32),
         name: "uBlock Origin Lite",
+        settings: { private: false, site_access: ["github.com"] },
         version: "2025.1",
       };
       processes[0]?.answer({
@@ -348,6 +349,20 @@ describe(spawnedHost, () => {
       });
       processes[0]?.answer({ id: 2, type: "opened" });
       await opened;
+    });
+
+    it("changes an extension's settings", async () => {
+      const { asked, processes } = await started((host) =>
+        host.configureExtension("a".repeat(32), { site_access: "on_click" }),
+      );
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        extension: "a".repeat(32),
+        id: 1,
+        settings: { site_access: "on_click" },
+        type: "configure_extension",
+      });
+      processes[0]?.answer({ id: 1, type: "stored" });
+      await asked;
     });
 
     it("asks the desktop's picker for a folder", async () => {

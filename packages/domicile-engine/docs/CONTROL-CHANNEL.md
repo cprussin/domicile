@@ -102,7 +102,8 @@ The engine has two channels to the rest of Domicile:
   on typing if `when_typing`. See `components/domicile/browser/pointer_hiding.h`.
 - **`extensions`** stops in the browser process. It is the desk's
   `[extensions]` list, installed into the profile by
-  `chrome/browser/domicile/domicile_extension_installer.h`. See
+  `chrome/browser/domicile/domicile_extension_installer.h`, with each
+  extension's `settings` (`domicile_extension_settings.h`). See
   [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md).
 - **`force_dark`** stops in the browser process. It is the desk's
   `theme.force_dark`: hosts whose pages Chromium's auto dark mode draws dark
@@ -254,9 +255,12 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"config_extensions","ids":["…"]}
 
 {"type":"extensions","version":1}
-{"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html"}]}
+{"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html","settings":{"private":false,"site_access":"all_sites"}}]}
 
 {"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
+{"type":"set"}   |   {"type":"refused","why":"…"}
+
+{"type":"configure_extension","version":1,"id":"…","settings":{"private":true,"site_access":["github.com"]}}
 {"type":"set"}   |   {"type":"refused","why":"…"}
 
 {"type":"media_devices","version":1}
@@ -329,7 +333,10 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   ([APP-MODULES.md](/docs/architecture/APP-MODULES.md#domiciles-own-state)).
   `extensions` lists the shell profile's extensions, without apps, themes or
   Chrome's components; `options_url` is left out when there is no options
-  page.
+  page. `settings` has each setting the extension can use, spelled as the
+  config's `extensions.settings`; `configure_extension` changes the ones it
+  names, and refuses one the extension cannot use
+  ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#settings)).
 - `media_devices` and `set_media_device` are the Settings app's too. They list
   each kind's devices in the order of Chrome's device ranking in the shell
   profile's prefs, and move one to the top. A site that names no device gets

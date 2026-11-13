@@ -23,7 +23,7 @@
 {"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1,"mode":[1280,800],"refresh_mhz":0,"adaptive_sync":"unsupported","transform":"normal"}]}
 {"type":"displays","displays":[{"name":"drm-3","position":[0,0],"size":[1800,3200],"scale":2,"mode":[3840,2160],"refresh_mhz":0,"adaptive_sync":"unsupported","transform":"rotate-270"}]}
 {"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
-{"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"]}
+{"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"],"settings":{"ddkjiahejlhfcafbddmgiahcphecmpfh":{"private":true,"file_access":false,"site_access":["github.com","*.example.com"]},"eimadpbcbfnmbkopoojfekhnkhdbieeh":{"user_scripts":true,"site_access":"on_click"}}}
 {"type":"force_dark","sites":["mail.google.com"]}
 {"type":"input_method","composing":true}
 {"type":"composition","serial":1794500000000001,"preedit":{"text":"ni","cursor_begin":2,"cursor_end":2},"commit":"x","delete":[1,0]}

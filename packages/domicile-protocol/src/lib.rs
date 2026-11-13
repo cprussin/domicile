@@ -70,6 +70,43 @@ impl std::fmt::Debug for Passphrase {
     }
 }
 
+/// One extension's chrome://extensions settings, in
+/// [`HostMessage::Extensions`]. Each is left as the user set it when absent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtensionSettings {
+    /// Runs in private windows.
+    #[serde(rename = "private", default, skip_serializing_if = "Option::is_none")]
+    pub in_private: Option<bool>,
+    /// Runs on `file://` pages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_access: Option<bool>,
+    /// May use `chrome.userScripts`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_scripts: Option<bool>,
+    /// Which sites it runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_access: Option<SiteAccess>,
+}
+
+/// Which sites an extension runs on: a mode, or only the hosts listed (each
+/// also as `*.host` for its subdomains).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SiteAccess {
+    Mode(SiteAccessMode),
+    Sites(Vec<String>),
+}
+
+/// [`SiteAccess`] other than a list of sites.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteAccessMode {
+    /// Only where its action was clicked.
+    OnClick,
+    /// Everywhere it asks to.
+    AllSites,
+}
+
 /// Where the pointer is on one browser window's page, in
 /// [`ChromeMessage::DeskPointer`]. A cast of the window alone draws it there.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -694,13 +731,16 @@ pub enum HostMessage {
     /// `docs/architecture/EXTENSIONS.md`.
     ///
     /// `web_store` holds Chrome Web Store ids; `unpacked` holds absolute paths
-    /// to unpacked extension directories. Always the full list: the browser
-    /// removes what it installed and the list no longer names. Sent with the
+    /// to unpacked extension directories; `settings` holds each extension's
+    /// chrome://extensions settings by id. Always the full list: the browser
+    /// removes what it installed and the list no longer names, and puts back
+    /// Chrome's default for a setting it no longer names. Sent with the
     /// handshake and on reloads that change it. Not sent when nothing is
     /// configured, because an empty list uninstalls everything.
     Extensions {
         web_store: Vec<String>,
         unpacked: Vec<String>,
+        settings: BTreeMap<String, ExtensionSettings>,
     },
 
     /// Host names of sites the browser draws dark while the theme is dark.

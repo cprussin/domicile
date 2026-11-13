@@ -9,6 +9,9 @@
 //   in pages loaded after its extension installs, and nothing signals when the
 //   asynchronous install finishes.
 //
+// `private=1` makes the <webview> private, for guard-extension-in-private.sh;
+// `private=0` is the installer guard's ordinary page.
+//
 // The engine's document calls `HostShell` once the module loads.
 
 export const HostShell = (_root, desktop) => {
@@ -41,6 +44,14 @@ export const HostShell = (_root, desktop) => {
 
   const parameters = new URLSearchParams(location.search);
   const view = document.createElement("webview");
+  const isPrivate = required(parameters, "private");
+  if (isPrivate === "1") {
+    view.setAttribute("private", "");
+  } else if (isPrivate !== "0") {
+    throw new Error(
+      `guard-extension-installer: ?private= is 1 or 0, not ${isPrivate}`,
+    );
+  }
 
   // Inset on the witness, as in guard-webview-content-script.js.
   view.style.position = "absolute";

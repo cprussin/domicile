@@ -79,6 +79,30 @@ const keymapSchema = z.strictObject({ ...xkbFields, name: z.string() });
 const settingsSchema = z.strictObject({
   extensions: z
     .strictObject({
+      settings: z
+        .record(
+          z.string(),
+          // `null` is unset, as `domicile-config` reads it.
+          z.strictObject({
+            file_access: z
+              .boolean()
+              .nullish()
+              .transform((value) => value ?? undefined),
+            private: z
+              .boolean()
+              .nullish()
+              .transform((value) => value ?? undefined),
+            site_access: z
+              .union([z.enum(["on_click", "all_sites"]), z.array(z.string())])
+              .nullish()
+              .transform((value) => value ?? undefined),
+            user_scripts: z
+              .boolean()
+              .nullish()
+              .transform((value) => value ?? undefined),
+          }),
+        )
+        .default({}),
       unpacked: z.array(z.string()).default([]),
       web_store: z.array(z.string()).default([]),
     })

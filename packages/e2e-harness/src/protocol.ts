@@ -336,10 +336,22 @@ const keymapSchema = z.looseObject({
   type: z.literal("keymap"),
 });
 
-// The configured Chrome extensions: Web Store ids and absolute paths to
-// unpacked ones. Sent with the handshake and on config reload. The browser
-// process installs them; see `docs/architecture/EXTENSIONS.md`.
+// The configured Chrome extensions: Web Store ids, absolute paths to unpacked
+// ones, and each extension's settings by id. Sent with the handshake and on
+// config reload. The browser process installs them; see
+// `docs/architecture/EXTENSIONS.md`.
 const extensionsSchema = z.looseObject({
+  settings: z.record(
+    z.string(),
+    z.looseObject({
+      file_access: z.boolean().optional(),
+      private: z.boolean().optional(),
+      site_access: z
+        .union([z.enum(["on_click", "all_sites"]), z.array(z.string())])
+        .optional(),
+      user_scripts: z.boolean().optional(),
+    }),
+  ),
   type: z.literal("extensions"),
   unpacked: z.array(z.string()),
   web_store: z.array(z.string()),

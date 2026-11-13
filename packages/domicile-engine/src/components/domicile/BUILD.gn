@@ -402,6 +402,7 @@ source_set("command_protocol") {
 
   public_deps = [
     ":common",
+    ":extension_settings",
     "//base",
     "//components/domicile/mojom",
     "//url",
@@ -896,12 +897,26 @@ source_set("force_dark") {
 # test reaches it with no profile, and carrying it out is in
 # //chrome/browser/domicile, which is where a Profile and its ExtensionService
 # are. Also the shape :control_channel parses the `extensions` message into.
-# The standard library only.
 source_set("extension_installer") {
   sources = [
     "browser/extension_installer.cc",
     "browser/extension_installer.h",
   ]
+
+  public_deps = [ ":extension_settings" ]
+}
+
+# Each extension's chrome://extensions settings -- private windows, file
+# access, user scripts, site access -- as the config and the Settings app
+# spell them, and which to set so a profile holds the config's. Its own target
+# for :extension_installer's reason. //base only.
+source_set("extension_settings") {
+  sources = [
+    "browser/extension_settings.cc",
+    "browser/extension_settings.h",
+  ]
+
+  public_deps = [ "//base" ]
 }
 
 # How an extension's action is spelled for the shell's tray: a badge color as
@@ -1168,6 +1183,7 @@ source_set("unit_tests") {
     "browser/display_list_unittest.cc",
     "browser/download_list_unittest.cc",
     "browser/extension_installer_unittest.cc",
+    "browser/extension_settings_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
     "browser/force_dark_unittest.cc",
     "browser/file_choice_unittest.cc",
@@ -1252,6 +1268,7 @@ source_set("unit_tests") {
     ":display_transform",
     ":download_list",
     ":extension_installer",
+    ":extension_settings",
     ":extension_tray_entry",
     ":file_choice",
     ":force_dark",

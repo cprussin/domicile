@@ -5,13 +5,16 @@
 
 mod running;
 
-use domicile_protocol::HostMessage;
+use domicile_protocol::{ExtensionSettings, HostMessage};
 
 use crate::running::Compositor;
 
 const ONE_EXTENSION: &str = r#"
 {
-  "extensions": { "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"] },
+  "extensions": {
+    "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"],
+    "settings": { "ddkjiahejlhfcafbddmgiahcphecmpfh": { "private": true } }
+  },
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] }
 }
 "#;
@@ -34,9 +37,17 @@ fn the_extensions_the_config_names_reach_the_chrome_and_follow_an_edit() {
                 == HostMessage::Extensions {
                     web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".into()],
                     unpacked: vec![],
+                    settings: [(
+                        "ddkjiahejlhfcafbddmgiahcphecmpfh".into(),
+                        ExtensionSettings {
+                            in_private: Some(true),
+                            ..Default::default()
+                        },
+                    )]
+                    .into(),
                 }
         })
-        .expect("the extensions ride with the handshake");
+        .expect("the extensions and their settings ride with the handshake");
 
     compositor.reconfigure(AN_UNPACKED_EXTENSION);
 
@@ -46,6 +57,7 @@ fn the_extensions_the_config_names_reach_the_chrome_and_follow_an_edit() {
                 == HostMessage::Extensions {
                     web_store: vec![],
                     unpacked: vec!["/home/you/src/my-extension".into()],
+                    settings: Default::default(),
                 }
         })
         .expect("a connected chrome is told the list the edit names");
@@ -74,6 +86,7 @@ fn an_unpacked_extension_under_a_tilde_reaches_the_chrome_under_the_home() {
                 == HostMessage::Extensions {
                     web_store: vec![],
                     unpacked: vec![expanded.clone()],
+                    settings: Default::default(),
                 }
         })
         .expect("the chrome is told the path the tilde stands for");

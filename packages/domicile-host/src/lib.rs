@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage,
-    Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
+    AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, ExtensionSettings,
+    HostMessage, Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
 };
 
 pub mod app_names;
@@ -178,12 +178,13 @@ pub struct Host {
     /// `None` until set. The `domicile` daemon and unit tests have no
     /// keyboard, so they send no keymap rather than an invented layout.
     keymap: Option<String>,
-    /// Chrome extensions from the config (Web Store ids, unpacked
-    /// directories) for the browser process to install.
+    /// The [`HostMessage::Extensions`] naming the config's Chrome extensions
+    /// (Web Store ids, unpacked directories, settings) for the browser
+    /// process to install.
     ///
     /// `None` until set. The browser uninstalls extensions missing from the
     /// list, so a host without a config must not send an empty one.
-    extensions: Option<(Vec<String>, Vec<String>)>,
+    extensions: Option<HostMessage>,
     /// Host names of sites the browser draws dark, for
     /// [`HostMessage::ForceDark`].
     force_dark: Vec<String>,
@@ -267,18 +268,22 @@ impl Host {
     }
 
     /// Replace the config's extensions, for chromes that connect later.
-    pub fn set_extensions(&mut self, web_store: Vec<String>, unpacked: Vec<String>) {
-        self.extensions = Some((web_store, unpacked));
+    pub fn set_extensions(
+        &mut self,
+        web_store: Vec<String>,
+        unpacked: Vec<String>,
+        settings: BTreeMap<String, ExtensionSettings>,
+    ) {
+        self.extensions = Some(HostMessage::Extensions {
+            web_store,
+            unpacked,
+            settings,
+        });
     }
 
     /// The extensions message, or `None` if none were set.
     pub fn describe_extensions(&self) -> Option<HostMessage> {
-        self.extensions
-            .clone()
-            .map(|(web_store, unpacked)| HostMessage::Extensions {
-                web_store,
-                unpacked,
-            })
+        self.extensions.clone()
     }
 
     /// Replace the sites the browser draws dark, for chromes that connect

@@ -1,6 +1,6 @@
 // `domicile-app-host`, the process the app runs, as Settings uses it: the
 // desktop's config and shell files, its site permissions and site data, the
-// extensions it loads and uninstalls, and its cameras and microphones. Every reply is
+// extensions it loads, configures and uninstalls, and its cameras and microphones. Every reply is
 // parsed. The protocol is `domicile_launch::app_host`'s.
 
 import type { Result } from "@cprussin/option-result";
@@ -94,6 +94,23 @@ const mediaDevicesSchema = z.object({
  */
 export type MediaDevices = z.infer<typeof mediaDevicesSchema>;
 
+const extensionSettingsSchema = z.object({
+  file_access: z.boolean().optional(),
+  private: z.boolean().optional(),
+  site_access: z
+    .union([z.enum(["on_click", "all_sites"]), z.array(z.string())])
+    .optional(),
+  user_scripts: z.boolean().optional(),
+});
+
+/**
+ * An extension's chrome://extensions settings, spelled as the config's
+ * `extensions.settings`: whether it runs in private windows and on local
+ * files, may run user scripts, and which sites it runs on. A listed extension
+ * has each it can use; a change names only those that change.
+ */
+export type ExtensionSettings = z.infer<typeof extensionSettingsSchema>;
+
 const extensionSchema = z
   .object({
     description: z.string(),
@@ -101,6 +118,7 @@ const extensionSchema = z
     id: z.string(),
     name: z.string(),
     options_url: z.string().nullish(),
+    settings: extensionSettingsSchema,
     version: z.string(),
   })
   .transform(({ options_url, ...extension }) => ({
@@ -156,6 +174,11 @@ export type SettingsHost = {
   /** Every extension in the browser windows' profile. */
   extensions: () => Promise<InstalledExtension[]>;
   setExtensionEnabled: (id: string, enabled: boolean) => Promise<void>;
+  /** Changes each of `settings` that is set; the engine refuses one `id` cannot use. */
+  configureExtension: (
+    id: string,
+    settings: ExtensionSettings,
+  ) => Promise<void>;
   /** Opens `url` in a browser window. */
   openUrl: (url: string) => Promise<void>;
   mediaDevices: () => Promise<MediaDevices>;
@@ -247,6 +270,16 @@ export const spawnedHost = (
         return reply.ids;
       } else {
         throw unexpected(reply, "config_extensions");
+      }
+    },
+    configureExtension: async (extension, settings) => {
+      const reply = await ask({
+        extension,
+        settings,
+        type: "configure_extension",
+      });
+      if (reply.type !== "stored") {
+        throw unexpected(reply, "stored");
       }
     },
     extensions: async () => {

@@ -91,9 +91,14 @@ const INSTALLED: InstalledExtension[] = [
     id: UBLOCK,
     name: "uBlock Origin Lite",
     optionsUrl: `chrome-extension://${UBLOCK}/dashboard.html`,
+    settings: { file_access: false, private: false, site_access: "all_sites" },
     version: "2025.1",
   },
 ];
+
+/** uBlock's row on the Extensions page. */
+const ublock = async () =>
+  within(await screen.findByRole("group", { name: "uBlock Origin Lite" }));
 
 /** The app over a fake host with `config`, opened on `page`. */
 const renderApp = async (
@@ -572,9 +577,7 @@ describe(App, () => {
     it("opens an extension's options", async () => {
       const { host, user } = await renderApp("Extensions");
       await user.click(
-        await screen.findByRole("button", {
-          name: "Options for uBlock Origin Lite",
-        }),
+        (await ublock()).getByRole("button", { name: "Options" }),
       );
       expect(host.opened).toEqual([
         `chrome-extension://${UBLOCK}/dashboard.html`,
@@ -586,12 +589,152 @@ describe(App, () => {
         config: { extensions: { web_store: [UBLOCK] } },
       });
       await user.click(
-        await screen.findByRole("button", {
-          name: "Uninstall uBlock Origin Lite",
-        }),
+        (await ublock()).getByRole("button", { name: "Uninstall" }),
       );
       await waitFor(() => {
         expect(written(host.writes)).toEqual({});
+      });
+    });
+
+    it("shows an extension's settings only while it is on", async () => {
+      const { user } = await renderApp("Extensions");
+      const row = await ublock();
+      expect(
+        row.getByRole("switch", { name: "Allow in private windows" }),
+      ).toBeVisible();
+      await user.click(row.getByRole("switch", { name: "uBlock Origin Lite" }));
+      await waitFor(() => {
+        expect(
+          row.queryByRole("switch", { name: "Allow in private windows" }),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("shows only the settings an extension can use", async () => {
+      await renderApp("Extensions");
+      const row = await ublock();
+      expect(
+        row.getByRole("switch", { name: "Allow on local files" }),
+      ).toBeVisible();
+      expect(
+        row.queryByRole("switch", { name: "Allow user scripts" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("allows an extension in private windows", async () => {
+      const { host, user } = await renderApp("Extensions");
+      await user.click(
+        (await ublock()).getByRole("switch", {
+          name: "Allow in private windows",
+        }),
+      );
+      await waitFor(() => {
+        expect(host.configured).toEqual([
+          { id: UBLOCK, settings: { private: true } },
+        ]);
+      });
+      expect(host.writes).toEqual([]);
+    });
+
+    it("changes a setting the config sets in the config", async () => {
+      const { host, user } = await renderApp("Extensions", {
+        config: { extensions: { settings: { [UBLOCK]: { private: true } } } },
+      });
+      const allowed = (await ublock()).getByRole("switch", {
+        name: "Allow in private windows",
+      });
+      expect(allowed).toBeChecked();
+      await user.click(allowed);
+      await waitFor(() => {
+        expect(written(host.writes)).toEqual({
+          extensions: { settings: { [UBLOCK]: { private: false } } },
+        });
+      });
+      expect(host.configured).toEqual([]);
+    });
+
+    it("leaves a setting a read-only config sets", async () => {
+      await renderApp("Extensions", {
+        config: { extensions: { settings: { [UBLOCK]: { private: true } } } },
+        writable: false,
+      });
+      expect(
+        (await ublock()).getByRole("switch", {
+          name: "Allow in private windows",
+        }),
+      ).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("runs an extension only on the sites added to it", async () => {
+      const { host, user } = await renderApp("Extensions");
+      const row = await ublock();
+      await user.click(row.getByRole("combobox", { name: "Site access" }));
+      await user.click(
+        await screen.findByRole("option", { name: "On specific sites" }),
+      );
+      expect(host.configured).toEqual([]);
+      await user.type(
+        row.getByRole("textbox", { name: "Add a site" }),
+        "GitHub.com",
+      );
+      await user.click(row.getByRole("button", { name: "Add site" }));
+      await waitFor(() => {
+        expect(host.state.installed[0]?.settings.site_access).toEqual([
+          "github.com",
+        ]);
+      });
+      await user.click(
+        await row.findByRole("button", { name: "Remove github.com" }),
+      );
+      await waitFor(() => {
+        expect(host.configured.at(-1)).toEqual({
+          id: UBLOCK,
+          settings: { site_access: [] },
+        });
+      });
+    });
+
+    it("refuses a site Chrome cannot grant, and a site added twice", async () => {
+      const { host, user } = await renderApp("Extensions", {
+        config: {
+          extensions: {
+            settings: { [UBLOCK]: { site_access: ["github.com"] } },
+          },
+        },
+      });
+      const row = await ublock();
+      const field = row.getByRole("textbox", { name: "Add a site" });
+      await user.type(field, "https://gitlab.com");
+      await user.click(row.getByRole("button", { name: "Add site" }));
+      await user.clear(field);
+      await user.type(field, "github.com");
+      await user.click(row.getByRole("button", { name: "Add site" }));
+      expect(
+        await screen.findByText(/https:\/\/gitlab\.com is not a site/),
+      ).toBeVisible();
+      expect(host.writes).toEqual([]);
+      expect(row.getAllByText("github.com")).toHaveLength(1);
+    });
+
+    it("reads a config that sets a setting to null as leaving it", async () => {
+      await renderApp("Extensions", {
+        config: { extensions: { settings: { [UBLOCK]: { private: null } } } },
+        writable: false,
+      });
+      expect(
+        (await ublock()).getByRole("switch", {
+          name: "Allow in private windows",
+        }),
+      ).not.toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("runs an extension when it is clicked", async () => {
+      const { host, user } = await renderApp("Extensions");
+      await choose(user, "Site access", "When you click it");
+      await waitFor(() => {
+        expect(host.configured).toEqual([
+          { id: UBLOCK, settings: { site_access: "on_click" } },
+        ]);
       });
     });
   });
@@ -623,9 +766,7 @@ describe(App, () => {
     it("uninstalls an extension the config did not install", async () => {
       const { host, user } = await renderApp("Extensions");
       await user.click(
-        await screen.findByRole("button", {
-          name: "Uninstall uBlock Origin Lite",
-        }),
+        (await ublock()).getByRole("button", { name: "Uninstall" }),
       );
       await waitFor(() => {
         expect(host.uninstalled).toEqual([UBLOCK]);
@@ -642,7 +783,7 @@ describe(App, () => {
         await screen.findByRole("switch", { name: "uBlock Origin Lite" }),
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Uninstall uBlock Origin Lite" }),
+        (await ublock()).queryByRole("button", { name: "Uninstall" }),
       ).not.toBeInTheDocument();
     });
   });

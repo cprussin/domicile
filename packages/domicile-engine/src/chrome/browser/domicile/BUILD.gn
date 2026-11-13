@@ -38,6 +38,8 @@ source_set("domicile") {
     "domicile_downloads.h",
     "domicile_extension_installer.cc",
     "domicile_extension_installer.h",
+    "domicile_extension_settings.cc",
+    "domicile_extension_settings.h",
     "domicile_extension_tray.cc",
     "domicile_extension_tray.h",
     "domicile_external_apps.cc",
@@ -122,6 +124,8 @@ source_set("domicile") {
     "//components/domicile:private_pages",
     "//chrome/common:constants",
     "//components/domicile:extension_installer",
+    # Each extension's chrome://extensions settings.
+    "//components/domicile:extension_settings",
     "//components/prefs",
     "//extensions/browser",
     "//extensions/common",
