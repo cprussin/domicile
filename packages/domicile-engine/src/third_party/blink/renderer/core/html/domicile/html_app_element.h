@@ -20,6 +20,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 
 namespace blink {
 
@@ -62,6 +63,13 @@ class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
                                 const gfx::PointF& point,
                                 const gfx::SizeF& size,
                                 bool moved) = 0;
+  // A hand moved the pointer over `app_id` by `movement`, in the page's CSS
+  // pixels, to `on_page` in the page; `size` is the element's, as for
+  // `AppPointerMotion`. Sent after that motion.
+  virtual void AppPointerRelative(const String& app_id,
+                                  const gfx::Vector2dF& movement,
+                                  const gfx::PointF& on_page,
+                                  const gfx::SizeF& size) = 0;
   // A Linux button code (input-event-codes.h), going down or coming up.
   virtual void AppPointerButton(const String& app_id,
                                 uint32_t button,

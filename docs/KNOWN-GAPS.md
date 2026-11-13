@@ -10,6 +10,12 @@ the detail, when there is one. Remove a gap when it's fixed.
   Electron, SDL and Qt apps are started in Wayland mode (`client_command` in
   `spawning.rs`).
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
+- **Games can't lock or confine the pointer yet.** `zwp_relative_pointer_v1`
+  is served, so a game or VM viewer reads how far the mouse moved, but
+  `pointer-constraints` isn't, so the pointer can still leave its window.
+- **Relative motion's unaccelerated deltas are the accelerated ones.** The
+  engine forwards the page's `movementX/Y`, which is after pointer
+  acceleration (`crate::relative_pointer`).
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate
   the fullscreen window back to its box.
