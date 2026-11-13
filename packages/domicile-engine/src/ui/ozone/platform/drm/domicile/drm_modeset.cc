@@ -180,8 +180,7 @@ DrmModeset::~DrmModeset() {
 void DrmModeset::Start() {
   delegate_->AddObserver(this);
   delegate_->Initialize();
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
@@ -189,8 +188,7 @@ void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
           << " connector(s) laid out its way";
   layout_ = std::move(layout);
   // Re-read the displays; see the header.
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::SetVirtualDisplays(
@@ -202,14 +200,22 @@ void DrmModeset::SetVirtualDisplays(
     virtual_.push_back(VirtualSnapshot(display));
   }
   // Re-read the displays; see `SetLayout`.
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::Relight() {
   // The confirmation from before a resume or VT switch no longer describes
   // the hardware. See the header.
   confirmed_.clear();
+  Read();
+}
+
+void DrmModeset::Read() {
+  if (reading_) {
+    read_again_ = true;
+    return;
+  }
+  reading_ = true;
   delegate_->GetDisplays(
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
@@ -221,6 +227,13 @@ void DrmModeset::SetGamma(int64_t display_id, DomicileGammaRamp ramp) {
           << " drawn with a " << ramp.red.size() << "-entry gamma ramp";
   if (std::ranges::find(display_ids_, display_id) != display_ids_.end()) {
     ApplyGammaTo(display_id, ramp);
+  } else {
+    // Applied after the next reading that lists the display. Logged, because
+    // a ramp that never arrives looks like no ramp at all.
+    LOG(WARNING) << "domicile: display " << display_id
+                 << " is not in the last reading of the displays ("
+                 << display_ids_.size()
+                 << " connector(s)); its gamma ramp waits for the next one";
   }
   ramps_.insert_or_assign(display_id, std::move(ramp));
 }
@@ -240,8 +253,7 @@ void DrmModeset::ApplyGammaTo(int64_t id, const DomicileGammaRamp& ramp) {
 
 void DrmModeset::OnConfigurationChanged() {
   // A hotplug. Re-read so the screen and modeset share one reading.
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::OnDisplaySnapshotsInvalidated() {
@@ -258,6 +270,17 @@ bool ModesetWouldChangeAnything(
 }
 
 void DrmModeset::OnDisplaysReceived(
+    const std::vector<raw_ptr<display::DisplaySnapshot,
+                              VectorExperimental>>& connectors) {
+  reading_ = false;
+  TakeReading(connectors);
+  // A request made while this one was in flight: see `Read`.
+  if (std::exchange(read_again_, false)) {
+    Read();
+  }
+}
+
+void DrmModeset::TakeReading(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& connectors) {
   // Log every reading, including its modes. See `DescribeSnapshots`.
@@ -299,6 +322,9 @@ void DrmModeset::OnDisplaysReceived(
     // last modeset.
     VLOG(1) << "domicile: the displays read the same as last time; not "
                "modesetting again";
+    // A ramp sent while the displays were unread is applied here, with no
+    // modeset to apply it after.
+    ApplyGamma();
     return;
   }
 
@@ -328,9 +354,7 @@ void DrmModeset::OnDisplaysReceived(
                            << " display(s); trying again without it";
               self->adaptive_sync_refused_.insert(adaptive_sync.begin(),
                                                   adaptive_sync.end());
-              self->delegate_->GetDisplays(
-                  base::BindOnce(&DrmModeset::OnDisplaysReceived,
-                                 base::Unretained(self.get())));
+              self->Read();
               return;
             }
             if (!status) {
@@ -363,9 +387,7 @@ void DrmModeset::OnDisplaysReceived(
               // that went with this modeset predates it. Read again so the
               // display list says whether it took; the modeset it would ask
               // for is this one, so it asks for none.
-              self->delegate_->GetDisplays(
-                  base::BindOnce(&DrmModeset::OnDisplaysReceived,
-                                 base::Unretained(self.get())));
+              self->Read();
             }
           },
           weak_factory_.GetWeakPtr(), params),
