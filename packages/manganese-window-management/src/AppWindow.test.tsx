@@ -273,6 +273,22 @@ describe("AppWindow", () => {
       ).toContain("windowOpening");
     });
 
+    // Its scaled edge alone is too faint to show it over a like tab, such as
+    // a terminal opened over a terminal. The edge fades, so it never comes or
+    // goes in one frame.
+    it.each([
+      ["opening-tab", "windowOpeningTabEdge"],
+      ["closing-tab", "windowClosingTabEdge"],
+    ] as const)("carries a fading edge and shadow while %s", (motion, edge) => {
+      const { container } = render(
+        <AppWindow {...windowProps} focused={false} motion={motion} />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(windowBox(container)).animationName,
+      ).toContain(edge);
+    });
+
     // The contents and title bar are separate elements. Each must scale about
     // the same point or they would separate.
     it("turns about the middle of its whole frame rather than its own", () => {

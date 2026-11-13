@@ -429,6 +429,7 @@ export const Stage = memo(
                 crossing={crossing}
                 domicile={domicile}
                 dragging={stretching || held.has(window.id)}
+                fillsScreen={desk.fullscreen.has(window.id)}
                 floating={desk.floats.has(window.id)}
                 focused={focused}
                 fullscreen={desk.fullscreen.get(window.id) === false}
@@ -904,6 +905,8 @@ type WindowContentsProps = {
   dragging: boolean;
   floating: boolean;
   focused: boolean;
+  /** Whether it fills its screen, alone or in its group. */
+  fillsScreen: boolean;
   fullscreen: boolean;
   hasKeyboard: boolean;
   motion: WindowMotion;
@@ -939,6 +942,7 @@ const WindowContents = memo(
     crossing,
     domicile,
     dragging,
+    fillsScreen,
     floating,
     focused,
     fullscreen,
@@ -994,6 +998,7 @@ const WindowContents = memo(
     return (
       <WindowFrame
         depth={contents?.depth ?? 0}
+        fillsScreen={fillsScreen}
         frame={placement?.frame}
         motion={motion}
         onHover={hovered}
@@ -1167,6 +1172,7 @@ const WindowBar = memo(
     return (
       <WindowFrame
         depth={placement.depth}
+        fillsScreen={fullscreen}
         frame={placement.frame}
         motion={motion}
         onHover={hovered}
