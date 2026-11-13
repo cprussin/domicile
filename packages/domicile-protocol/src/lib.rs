@@ -130,6 +130,18 @@ pub struct CursorImage {
     pub bgra: String,
 }
 
+/// A cursor a client drew on its own surface, in
+/// [`HostMessage::AppCursor`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppCursorImage {
+    /// A PNG of the surface's buffer, in padded base64.
+    pub png: String,
+    /// The point that clicks, from the top left, in logical pixels.
+    pub hotspot: (i32, i32),
+    /// Buffer pixels per logical pixel: the surface's buffer scale.
+    pub scale: i32,
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -568,7 +580,16 @@ pub enum HostMessage {
 
     /// The cursor a client asked for over its surface, for the chrome to apply
     /// to the app's element.
-    AppCursor { app_id: String, cursor: CursorShape },
+    ///
+    /// `image` is a cursor the client drew itself, which a game, image editor
+    /// or VM viewer does. `cursor` is then [`CursorShape::Default`], which an
+    /// engine that does not read `image` shows instead.
+    AppCursor {
+        app_id: String,
+        cursor: CursorShape,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        image: Option<AppCursorImage>,
+    },
 
     /// A window or popup reached the screen: viz showed its first frame, or
     /// the first frame its client drew after a configure changed its size.

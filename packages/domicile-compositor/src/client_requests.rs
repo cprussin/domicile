@@ -332,6 +332,7 @@ impl DomicileCompositor {
                 );
                 let (surface, (x, y)) = self.input_target(surface, (x, y));
                 self.pointer_app = Some(app_id);
+                self.cursor_surface = None;
                 self.pointer_surface = Some(surface.clone());
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
@@ -353,6 +354,7 @@ impl DomicileCompositor {
                 self.cancel_swipe();
                 self.cast_pointer(None);
                 self.pointer_app = None;
+                self.cursor_surface = None;
                 self.pointer_surface = None;
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());

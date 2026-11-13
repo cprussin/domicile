@@ -211,6 +211,28 @@ describe("a report that changes nothing", () => {
     expect(next.windows[1]).toMatchObject({ url: "https://docs.rs/std" });
   });
 
+  it("keeps a cursor a client drew until it names one again", () => {
+    const drawn =
+      'image-set(url("data:image/png;base64,iVBO") 1x) 1 2, default';
+    const drawing = reduce(
+      desktop("gimp"),
+      WindowAction.AppCursorChanged("gimp", "default", drawn),
+    );
+    expect(drawing.windows[0]).toMatchObject({
+      cursor: "default",
+      cursorImage: drawn,
+    });
+
+    const named = reduce(
+      drawing,
+      WindowAction.AppCursorChanged("gimp", "crosshair"),
+    );
+    expect(named.windows[0]).toMatchObject({
+      cursor: "crosshair",
+      cursorImage: undefined,
+    });
+  });
+
   it("keeps the desktop when a window is told what it already has", () => {
     const state = reduce(
       desktop("kitty"),
