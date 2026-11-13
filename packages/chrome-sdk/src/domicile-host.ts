@@ -265,6 +265,12 @@ export type DomicileBrowserWindow = {
    * a window you hide, such as behind a tab, laid out while it is captured.
    */
   readonly isCaptured: boolean;
+  /**
+   * The window's identifier on ext-foreign-toplevel-list-v1, which a capture
+   * tool such as `grim -T` names it by, as DomicileWindow.toplevelId. Null
+   * until the compositor has listed the window.
+   */
+  readonly toplevelId: string | null;
 };
 
 /**
@@ -1175,6 +1181,12 @@ export type DomicileWindow = {
    * client set none.
    */
   readonly desktopId: string;
+  /**
+   * The window's identifier on ext-foreign-toplevel-list-v1, which a capture
+   * tool such as `grim -T` names it by. Fixed for the window's life. Null for
+   * a popup, which is not listed.
+   */
+  readonly toplevelId: string | null;
   /**
    * The process that connected the window's client, as the kernel recorded
    * it. The client cannot forge these, unlike the fields above. Null for a

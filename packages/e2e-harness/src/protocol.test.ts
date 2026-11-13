@@ -61,7 +61,7 @@ describe("parseHostMessage", () => {
 
   it("normalizes a missing app title and desktop id to undefined", () => {
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":true,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null,"sandbox":null}}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":true,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null,"sandbox":null},"toplevel_id":"Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa"}',
     );
     expect(message).toStrictEqual({
       app_id: "term",
@@ -77,13 +77,24 @@ describe("parseHostMessage", () => {
       },
       size: [640, 480],
       title: undefined,
+      toplevel_id: "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa",
       type: "app_appeared",
+    });
+  });
+
+  it("decodes each browser window's toplevel id", () => {
+    const message = parseHostMessage(
+      '{"type":"browser_toplevel_ids","toplevel_ids":{"3":"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE"}}',
+    );
+    expect(message).toStrictEqual({
+      toplevel_ids: { "3": "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE" },
+      type: "browser_toplevel_ids",
     });
   });
 
   it("decodes the process that owns a window", () => {
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":5021,"sandbox":null}}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":5021,"sandbox":null},"toplevel_id":"Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa"}',
     );
     expect(message).toMatchObject({
       owner: { gid: 100, pid: 4242, pidfd_inode: 5021, uid: 1001 },
@@ -92,7 +103,7 @@ describe("parseHostMessage", () => {
 
   it("decodes the sandbox a window's client connected from", () => {
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":null,"sandbox":{"engine":"org.flatpak","app_id":null,"instance_id":"3"}}}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":null,"sandbox":{"engine":"org.flatpak","app_id":null,"instance_id":"3"}},"toplevel_id":"Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa"}',
     );
     expect(message).toMatchObject({
       owner: {
@@ -213,7 +224,7 @@ describe("parseHostMessage", () => {
     ).toThrow();
     expect(() =>
       parseHostMessage(
-        '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null,"sandbox":null},"frame":1.5}',
+        '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null,"sandbox":null},"toplevel_id":"Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa","frame":1.5}',
       ),
     ).toThrow();
   });

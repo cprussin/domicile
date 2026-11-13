@@ -98,6 +98,8 @@ pub struct App {
     pub desktop_id: Option<String>,
     /// The process that connected the window's client.
     pub owner: Owner,
+    /// The window's identifier on `ext-foreign-toplevel-list-v1`.
+    pub toplevel_id: String,
     /// Content size of the latest committed buffer; `None` before the first.
     pub size: Option<(f64, f64)>,
     /// The window this one is a dialog for (`xdg_toplevel.set_parent`).
@@ -221,6 +223,9 @@ pub struct Host {
     /// The pictures set through the Wallpaper portal, which ride on the portal
     /// requests.
     portal_wallpaper: PortalWallpaper,
+    /// Each browser window's identifier on `ext-foreign-toplevel-list-v1`, by
+    /// the engine's window id.
+    browser_toplevel_ids: BTreeMap<String, String>,
 }
 
 impl Host {
@@ -460,11 +465,12 @@ impl Host {
             })
     }
 
-    /// Register a new Wayland toplevel and return its id.
+    /// Register a new Wayland toplevel, listed on
+    /// `ext-foreign-toplevel-list-v1` as `toplevel_id`, and return its id.
     ///
     /// The chromes hear of it at [`Host::app_mapped`]. Until then, changes to
     /// it are recorded and not reported.
-    pub fn app_created(&mut self, owner: Owner) -> AppId {
+    pub fn app_created(&mut self, owner: Owner, toplevel_id: String) -> AppId {
         self.next_id += 1;
         let app_id = format!("app-{}", self.next_id);
         self.apps.insert(
@@ -476,6 +482,7 @@ impl Host {
                 title: None,
                 desktop_id: None,
                 owner,
+                toplevel_id,
                 size: None,
                 transient_for: None,
                 urgent: false,
@@ -516,7 +523,8 @@ impl Host {
         }
     }
 
-    /// Messages that re-announce every open window and popup, then focus.
+    /// Messages that re-announce every open window and popup, the browser
+    /// windows' toplevel ids, then focus.
     ///
     /// `AppAppeared` is sent once, at map time. A page that was not listening
     /// then (a reload, or a map before the page's first render) needs this to
@@ -535,8 +543,11 @@ impl Host {
             )
             .collect();
         open.sort_by_key(|(arrival, _)| *arrival);
+        let browser_toplevels =
+            (!self.browser_toplevel_ids.is_empty()).then(|| self.describe_browser_toplevel_ids());
         open.into_iter()
             .flat_map(|(_, messages)| messages)
+            .chain(browser_toplevels)
             // Focus goes last because it names a window. It bypasses
             // `focus_change` so it does not consume a change other chromes are
             // still owed.
@@ -544,6 +555,25 @@ impl Host {
                 app_id: self.focus_holder(),
             }))
             .collect()
+    }
+
+    /// The browser windows are listed on `ext-foreign-toplevel-list-v1` as
+    /// `toplevel_ids`, by the engine's window id. Returns the message to
+    /// broadcast, or `None` if they did not change.
+    pub fn browser_toplevel_ids(
+        &mut self,
+        toplevel_ids: BTreeMap<String, String>,
+    ) -> Option<HostMessage> {
+        (self.browser_toplevel_ids != toplevel_ids).then(|| {
+            self.browser_toplevel_ids = toplevel_ids;
+            self.describe_browser_toplevel_ids()
+        })
+    }
+
+    fn describe_browser_toplevel_ids(&self) -> HostMessage {
+        HostMessage::BrowserToplevelIds {
+            toplevel_ids: self.browser_toplevel_ids.clone(),
+        }
     }
 
     /// The window with keyboard focus, or `None` for the chrome.
@@ -966,6 +996,7 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
         dialog: mapped.has_parent || is_fixed(app.min_size, app.max_size),
         client_frame: mapped.client_frame,
         owner: app.owner.clone(),
+        toplevel_id: app.toplevel_id.clone(),
         frame: app.frame,
     };
     let min = (app.min_size != NO_LIMIT).then(|| HostMessage::AppMinSize {

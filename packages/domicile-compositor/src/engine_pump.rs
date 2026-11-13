@@ -1,6 +1,7 @@
 //! Running the engine's events on the Wayland thread, returning the buffers it
 //! lets go of, and rejoining an engine that replaced it.
 
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 use domicile_protocol::HostMessage;
@@ -224,7 +225,8 @@ impl DomicileCompositor {
                 } => self.cast_captured(capture, frame, captured),
                 engine::Event::Compositing { in_memory } => self.engine_composites(in_memory),
                 engine::Event::BrowserWindows(windows) => {
-                    self.foreign_toplevels.browser_windows(&windows);
+                    let listed = self.foreign_toplevels.browser_windows(&windows);
+                    self.browser_toplevels_listed(listed);
                 }
                 engine::Event::GammaSizes(sizes) => self.gamma_sizes_reported(sizes),
                 // Acted on at the next hello, which is the new engine's.
@@ -232,7 +234,8 @@ impl DomicileCompositor {
                     warn!("the engine this desktop was drawing through went away");
                     self.engine_disconnected = true;
                     // Its windows went with it.
-                    self.foreign_toplevels.browser_windows(&[]);
+                    let listed = self.foreign_toplevels.browser_windows(&[]);
+                    self.browser_toplevels_listed(listed);
                 }
                 engine::Event::CaptureEnded { capture } => {
                     let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
@@ -288,6 +291,21 @@ impl DomicileCompositor {
                     self.restate_the_gamma();
                 }
             }
+        }
+    }
+
+    /// Tells the chromes each browser window's identifier on
+    /// `ext-foreign-toplevel-list-v1`, if any changed.
+    fn browser_toplevels_listed(&mut self, toplevel_ids: BTreeMap<String, String>) {
+        // Separate `let` so the host guard drops before the broadcast.
+        let listed = self
+            .hub
+            .host
+            .lock()
+            .unwrap()
+            .browser_toplevel_ids(toplevel_ids);
+        if let Some(listed) = listed {
+            self.hub.broadcast(listed);
         }
     }
 

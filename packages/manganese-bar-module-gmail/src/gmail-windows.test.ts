@@ -18,6 +18,7 @@ const browser = (
   partition: "",
   popupWindow: null,
   title,
+  toplevelId: null,
   url,
   width: 0,
 });

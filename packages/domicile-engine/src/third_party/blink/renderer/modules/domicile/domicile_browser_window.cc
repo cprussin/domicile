@@ -16,7 +16,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     const String& partition,
     bool is_app,
     const String& app_id,
-    bool is_captured)
+    bool is_captured,
+    const String& toplevel_id)
     : id_(id),
       url_(url),
       title_(title),
@@ -27,7 +28,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       partition_(partition),
       is_app_(is_app),
       app_id_(app_id),
-      is_captured_(is_captured) {}
+      is_captured_(is_captured),
+      toplevel_id_(toplevel_id) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

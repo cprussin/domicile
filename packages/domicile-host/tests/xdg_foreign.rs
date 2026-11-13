@@ -14,6 +14,10 @@ const OWNER: Owner = Owner {
     sandbox: None,
 };
 
+/// A window's identifier on `ext-foreign-toplevel-list-v1`, for tests about
+/// anything else.
+const LISTED: &str = "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa";
+
 fn parent_window(handle: &str) -> String {
     format!("wayland:{handle}")
 }
@@ -95,8 +99,8 @@ fn an_unexported_handle_names_nothing_and_leaves_other_exports() {
 #[test]
 fn a_closed_window_takes_its_exports_with_it() {
     let mut host = Host::new();
-    let closed = host.app_created(OWNER);
-    let open = host.app_created(OWNER);
+    let closed = host.app_created(OWNER, LISTED.to_string());
+    let open = host.app_created(OWNER, LISTED.to_string());
     let first = host.exports_mut().export(Some(closed.clone()));
     let second = host.exports_mut().export(Some(closed.clone()));
     let other = host.exports_mut().export(Some(open.clone()));

@@ -61,7 +61,8 @@ impl XdgShellHandler for DomicileCompositor {
         let wl_surface = surface.wl_surface().clone();
         {
             let mut host = self.hub.host.lock().unwrap();
-            let app_id = host.app_created(owner_of(surface.wl_surface()));
+            let listing = self.foreign_toplevels.listing();
+            let app_id = host.app_created(owner_of(surface.wl_surface()), listing.identifier());
             debug!(%app_id, "toplevel created -> Host::app_created");
             // Enter every output for now; the chrome has not placed the window.
             // Some toolkits (GLFW, kitty) wait for this before drawing.
@@ -74,7 +75,7 @@ impl XdgShellHandler for DomicileCompositor {
                 (app_id.clone(), Role::Toplevel(surface.clone())),
             );
             self.unannounced.insert(app_id.clone());
-            self.foreign_toplevels.opened(&app_id);
+            self.foreign_toplevels.opened(&app_id, listing);
             self.toplevels.push((app_id, surface));
         }
         self.the_running_apps_changed();
