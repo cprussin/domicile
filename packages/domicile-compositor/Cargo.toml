@@ -75,6 +75,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reis = { version = "0.7", features = ["calloop"] }
 # D-Bus: the portals (see `src/portals/`), the tray and notifications.
 zbus.workspace = true
+# The browser's stand-in editor (see `src/chrome_editor.rs`), a client of
+# the compositor's own display. Adds no crates: the test client already pulls
+# these in.
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
 # Generates `domicile_anchor_v1` from `protocols/` (see `src/anchors.rs`).
 # Adds no crates: `wayland-protocols` already pulls it in.
 wayland-scanner = "0.31"

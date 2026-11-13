@@ -30,6 +30,7 @@
 #include "net/socket/unix_domain_client_socket_posix.h"
 #include "ui/base/cursor/domicile/desk_cursor_image.h"
 #include "ui/base/cursor/domicile/desk_cursor_theme.h"
+#include "ui/base/ime/domicile/desk_input_method.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace domicile {
@@ -241,6 +242,11 @@ class ControlChannel : public mojom::ControlChannel {
   // while no compositor is connected: the next one is sent the pointer as it
   // is then, after `hello`.
   void DeskCursorChanged(const ui::DeskCursorImage& image);
+  // The focused field changed, or a key goes to the input method first; see
+  // ui::DeskInputMethod. Sent by the one channel it picked. Dropped while no
+  // compositor is connected: with none there is no input method either.
+  void SendTextField(const ui::DeskTextField& field);
+  void SendKeyForInputMethod(uint32_t evdev_code, bool pressed);
 
   void ReadLoop();
   void OnRead(int result);
@@ -278,6 +284,8 @@ class ControlChannel : public mojom::ControlChannel {
   DeskGestures::ChannelId gestures_;
   // And with the process's ui::DeskCursorImageSource.
   ui::DeskCursorImageSource::ListenerId cursor_;
+  // And with the process's ui::DeskInputMethod.
+  ui::DeskInputMethod::ChannelId input_method_;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;

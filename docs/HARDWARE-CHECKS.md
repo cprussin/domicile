@@ -434,6 +434,16 @@ Unverified. On a tty, start fcitx5 with its Wayland input method frontend and
 a pinyin input method, open foot, and type `nihao`. Expect the pinyin to show
 underlined in foot as you type, and Chinese text once you pick it with Space.
 
+## An input method in a page and the shell
+
+Unverified. With fcitx5 set up as in the check above, open a site in a
+browser window, click a search box and type `nihao`. Expect the pinyin
+underlined in the box as you type, and Chinese text once you pick it with
+Space. The candidate list does not show over a page yet, so Space takes the
+first. Do the same in the launcher. Then switch fcitx5 off with its hotkey and
+type: expect plain letters, with no lag. Lock the desk and type the password:
+expect it to unlock.
+
 ## Input method candidates under the caret
 
 Unverified. With fcitx5 set up as in the check above, set a monitor to scale

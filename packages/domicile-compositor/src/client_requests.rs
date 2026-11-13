@@ -127,6 +127,15 @@ pub enum ClientRequest {
         keycode: u32,
         pressed: bool,
     },
+    /// The browser's focused text field. See [`crate::chrome_editor`].
+    TextInput {
+        field: domicile_protocol::TextField,
+    },
+    /// A browser key for the input method. See [`crate::chrome_editor`].
+    KeyForInputMethod {
+        keycode: u32,
+        pressed: bool,
+    },
     KeyboardFocus {
         app_id: Option<String>,
     },
@@ -460,6 +469,11 @@ impl DomicileCompositor {
                 self.inject_key(keycode, pressed);
                 self.tell_the_chromes_the_modifiers();
             }
+            ClientRequest::TextInput { field } => self.take_the_browsers_field(field),
+            ClientRequest::KeyForInputMethod { keycode, pressed } => {
+                self.key_for_the_input_method(keycode, pressed);
+                self.tell_the_chromes_the_modifiers();
+            }
             ClientRequest::KeyboardFocus { app_id } => {
                 // A menu over the target window keeps the keyboard. Focus
                 // anywhere else dismisses it, like a click elsewhere.
@@ -588,6 +602,7 @@ impl DomicileCompositor {
                 // desktop one page starting releases keys held through another.
                 // `held` is cleared on the same terms.
                 self.release_pressed_keys();
+                self.tell_the_browser_if_composing();
                 // The new page has reported no boxes, so it has hidden
                 // nothing. One that never reports them would otherwise leave
                 // windows suspended for good.

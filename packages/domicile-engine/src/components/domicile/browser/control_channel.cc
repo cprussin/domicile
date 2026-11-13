@@ -25,6 +25,7 @@
 #include "base/values.h"
 #include "components/domicile/browser/desk_lock.h"
 #include "components/domicile/browser/desk_pointer_hiding.h"
+#include "components/domicile/browser/input_method_lines.h"
 #include "components/domicile/browser/portal_request.h"
 #include "components/domicile/browser/shell_swap.h"
 #include "components/domicile/browser/system_call.h"
@@ -204,11 +205,20 @@ ControlChannel::ControlChannel(
   cursor_ = ui::DeskCursorImageSource::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeskCursorChanged, weak_factory_.GetWeakPtr())));
+  // The field is changed and a key typed on the UI thread, where the window's
+  // input method is; both are posted here like the registry's deliveries.
+  input_method_ = ui::DeskInputMethod::Get().AddChannel(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::SendTextField, weak_factory_.GetWeakPtr())),
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::SendKeyForInputMethod,
+          weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
 
 ControlChannel::~ControlChannel() {
+  ui::DeskInputMethod::Get().RemoveChannel(input_method_);
   ui::DeskCursorImageSource::Get().RemoveListener(cursor_);
   DeskPointer::Get().RemoveListener(pointer_);
   DeskGestures::Get().RemoveChannel(gestures_);
@@ -270,6 +280,9 @@ void ControlChannel::OnConnect(int result) {
 
 void ControlChannel::OnHungUp() {
   connected_ = false;
+  // The input method went with the compositor. A key held for it is never
+  // passed back, so the window's next key is no longer held behind it.
+  ui::DeskInputMethod::Get().SetComposing(false);
   if (writing_) {
     RequeueTheLineInFlight();
   }
@@ -1066,6 +1079,18 @@ void ControlChannel::DeskCursorChanged(const ui::DeskCursorImage& image) {
   }
 }
 
+void ControlChannel::SendTextField(const ui::DeskTextField& field) {
+  if (connected_) {
+    SendMessage(TextInputMessage(field));
+  }
+}
+
+void ControlChannel::SendKeyForInputMethod(uint32_t evdev_code, bool pressed) {
+  if (connected_) {
+    SendMessage(KeyForInputMethodMessage(evdev_code, pressed));
+  }
+}
+
 void ControlChannel::ReadLoop() {
   const int result = socket_->Read(
       read_buffer_.get(), kReadBufferSize,
@@ -1196,6 +1221,38 @@ void ControlChannel::DispatchLine(const std::string& line,
       LOG(ERROR) << "domicile: the compositor sent a `force_dark` message "
                     "whose `sites` is not a list of strings. Pages keep the "
                     "sites they had.";
+    }
+    return;
+  }
+
+  // THE INPUT METHOD'S, for this process like `keymap`: the compositor is
+  // the editor of the field focused in it on the desk's input method. Every
+  // page's channel hears these, and the desk's input method keeps the first
+  // of each serial. See ui/base/ime/domicile/desk_input_method.h. Nothing
+  // goes on to the page: what was composed reaches it as typing.
+  if (*type == "input_method") {
+    if (const std::optional<bool> composing = message.FindBool("composing")) {
+      ui::DeskInputMethod::Get().SetComposing(*composing);
+    }
+    return;
+  }
+  if (*type == "composition") {
+    if (std::optional<HeardComposition> heard = ReadComposition(message)) {
+      ui::DeskInputMethod::Get().Compose(heard->serial,
+                                         std::move(heard->composition));
+    } else {
+      LOG(ERROR) << "domicile: the compositor sent a `composition` this "
+                    "engine cannot read; the field misses that much typing.";
+    }
+    return;
+  }
+  if (*type == "key_passed") {
+    if (const std::optional<PassedKey> passed = ReadPassedKey(message)) {
+      ui::DeskInputMethod::Get().PassKey(passed->serial, passed->evdev_code,
+                                         passed->pressed);
+    } else {
+      LOG(ERROR) << "domicile: the compositor sent a `key_passed` this "
+                    "engine cannot read; that key is lost.";
     }
     return;
   }

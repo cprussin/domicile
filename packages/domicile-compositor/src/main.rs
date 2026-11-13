@@ -71,6 +71,7 @@ mod buffer_transform;
 mod bus_names;
 mod casting;
 mod chrome_connection;
+mod chrome_editor;
 mod chrome_hub;
 mod client_damage;
 mod client_requests;
@@ -415,6 +416,14 @@ struct DomicileCompositor {
     pointer_constraint_offered: Option<crate::pointer_constraints::Offered>,
     /// Composition from an input method. See [`text_input`].
     text_input: text_input::TextInput,
+    /// The browser's stand-in on the input method relay, connected at the
+    /// browser's first text field. See [`chrome_editor`].
+    chrome_editor: Option<chrome_editor::ChromeEditor>,
+    /// Whether the browser's keys go to the input method first, as last told.
+    composing: bool,
+    /// The next serial for the browser's input method messages. See
+    /// `next_ime_serial`.
+    ime_serial: Option<u64>,
     dmabuf_state: DmabufState,
     /// Kept alive so the zwp_linux_dmabuf_v1 global persists. `None` where EGL
     /// gave us no renderer, in which case the global was never advertised.
@@ -1340,6 +1349,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         pointer_constraints_state: PointerConstraintsState::new::<DomicileCompositor>(&dh),
         pointer_constraint_offered: None,
         text_input,
+        chrome_editor: None,
+        composing: false,
+        ime_serial: None,
         dmabuf_state,
         dmabuf_global,
         gpu,
@@ -1731,6 +1743,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Before the flush, which delivers the request to the copying client.
         // See `read_what_was_copied`.
         data.state.read_what_was_copied();
+        data.state.keep_the_browser_composing();
         let _ = data.display.flush_clients();
         if stop.load(Ordering::SeqCst) {
             signal.stop();

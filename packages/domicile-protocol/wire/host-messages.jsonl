@@ -27,6 +27,9 @@
 {"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
 {"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"],"settings":{"ddkjiahejlhfcafbddmgiahcphecmpfh":{"private":true,"file_access":false,"site_access":["github.com","*.example.com"]},"eimadpbcbfnmbkopoojfekhnkhdbieeh":{"user_scripts":true,"site_access":"on_click"}}}
 {"type":"force_dark","sites":["mail.google.com"]}
+{"type":"input_method","composing":true}
+{"type":"composition","serial":1794500000000001,"preedit":{"text":"ni","cursor_begin":2,"cursor_end":2},"commit":"x","delete":[1,0]}
+{"type":"key_passed","serial":1794500000000002,"keycode":31,"pressed":true}
 {"type":"focus_changed","app_id":"app-2"}
 {"type":"focus_changed","app_id":null}
 {"type":"focus_requested","app_id":"app-2"}
