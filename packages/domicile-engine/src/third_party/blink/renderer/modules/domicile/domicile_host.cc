@@ -1642,8 +1642,32 @@ void DomicileHost::AppClosed(const String& app_id) {
   WindowsChanged();
 }
 
-void DomicileHost::AppCursor(const String& app_id,
-                             domicile::mojom::blink::CursorShape cursor) {
+namespace {
+
+// A client's own cursor as a CSS `cursor` value for its element: the PNG at
+// its scale, clicking at the hotspot in CSS pixels, over the arrow should the
+// image not load. CSS scales a hotspot by the image's resolution, as Wayland
+// gives it in logical pixels.
+String CursorImageCss(const domicile::mojom::blink::AppCursorImage& image) {
+  StringBuilder css;
+  css.Append("image-set(url(\"data:image/png;base64,");
+  css.Append(image.png);
+  css.Append("\") ");
+  css.AppendNumber(image.scale);
+  css.Append("x) ");
+  css.AppendNumber(image.hotspot_x);
+  css.Append(' ');
+  css.AppendNumber(image.hotspot_y);
+  css.Append(", default");
+  return css.ToString();
+}
+
+}  // namespace
+
+void DomicileHost::AppCursor(
+    const String& app_id,
+    domicile::mojom::blink::CursorShape cursor,
+    domicile::mojom::blink::AppCursorImagePtr image) {
   // THROUGH THE WIRE NAME, WHICH IS WHAT KEEPS THE LIST SINGULAR. The mojom
   // enum and `DomicileCursorShape` are two spellings of the same closed set,
   // and the obvious conversion between them is a 35-arm switch -- a third
@@ -1664,7 +1688,9 @@ void DomicileHost::AppCursor(const String& app_id,
   CHECK(shape.has_value())
       << "no DomicileCursorShape named '" << name
       << "', so domicile_cursor_shape.idl and cursor_shape.h disagree";
-  WindowNamed(app_id).cursor = *shape;
+  DomicileWindowState& window = WindowNamed(app_id);
+  window.cursor = *shape;
+  window.cursor_image = image ? CursorImageCss(*image) : String();
   WindowsChanged();
 }
 

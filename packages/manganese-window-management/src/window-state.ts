@@ -511,10 +511,18 @@ export const WindowAction = {
     kind: WindowActionKind.AppClosed as const,
   }),
 
-  /** The client asked for a cursor to be shown over its window. */
-  AppCursorChanged: (appId: string, cursor: CursorShape) => ({
+  /**
+   * The client asked for a cursor to be shown over its window: a shape, or
+   * `image`, the CSS cursor for one it drew itself.
+   */
+  AppCursorChanged: (
+    appId: string,
+    cursor: CursorShape,
+    image?: string | undefined,
+  ) => ({
     appId,
     cursor,
+    image,
     kind: WindowActionKind.AppCursorChanged as const,
   }),
 
@@ -1329,6 +1337,7 @@ const reduceAction = (
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         cursor: action.cursor,
+        cursorImage: action.image,
       }));
     }
     case WindowActionKind.AppFrameSynced: {

@@ -80,6 +80,7 @@ mod clipboard;
 mod compositor_casts;
 mod config_adoption;
 mod configure_answers;
+mod cursor_surface;
 mod decorations;
 mod display_sleep;
 mod dmabuf_descriptor;
@@ -493,6 +494,9 @@ struct DomicileCompositor {
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
+    /// The surface the client under the pointer draws its cursor on, if it
+    /// asked for one. See `crate::cursor_surface`.
+    cursor_surface: Option<WlSurface>,
     /// The surface of `pointer_app` the pointer is over: the window, or a
     /// bubble over it that takes input. See
     /// [`DomicileCompositor::input_target`].
@@ -1368,6 +1372,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         bubbles: Vec::new(),
         synced_moves: Default::default(),
         pointer_app: None,
+        cursor_surface: None,
         pointer_surface: None,
         held_buttons: Vec::new(),
         pinch: None,

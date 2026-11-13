@@ -352,6 +352,7 @@ impl DomicileCompositor {
                 );
                 let (surface, (x, y)) = self.input_target(surface, (x, y));
                 self.pointer_app = Some(app_id);
+                self.cursor_surface = None;
                 self.pointer_surface = Some(surface.clone());
                 self.offer_pointer_constraint();
                 if self.pointer_locked_over(&surface) {
@@ -385,6 +386,7 @@ impl DomicileCompositor {
                 self.cancel_swipe();
                 self.cast_pointer(None);
                 self.pointer_app = None;
+                self.cursor_surface = None;
                 self.pointer_surface = None;
                 self.offer_pointer_constraint();
                 let pointer = self.seat.get_pointer().unwrap();

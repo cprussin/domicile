@@ -31,7 +31,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
-# ControlChannel 21, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
+# ControlChannel 22, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 8,
@@ -43,7 +43,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7.
 #
-# 598, and it was 591 — the control channel's input method messages are seven
+# 599, and it was 598 — a cursor a client drew reaching the page is one
+# ControlChannel case. Before that 598, and it was 591 — the control channel's input method messages are seven
 # InputMethodLines cases. Before that 591, and it was 589 — a window's pointer lock or confinement reaching the page,
 # and the page's answer reaching the compositor, are two ControlChannel cases.
 # Before that 589, and it was 588 — a hand's relative motion reaching the compositor is one
@@ -217,7 +218,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=598
+FLOOR=599
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
