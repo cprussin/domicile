@@ -534,7 +534,8 @@ For sites with no dark theme of their own, such as Gmail:
 ```
 
 Each profile entry sets `enabled`, `position`, a fractional `scale`, a
-`transform`, and optionally `mode`, `refresh` and `adaptive_sync`. An entry
+`transform`, and optionally `mode`, `refresh`, `adaptive_sync`, `hdr` and
+`sdr_white`. An entry
 without `position` goes right of the positioned ones, in profile order.
 
 ### Naming a display
@@ -588,6 +589,30 @@ default.
 - If the driver refuses it, the monitor lights the same way without it.
 - The shell's `displays.list` says whether it took: `adaptiveSync` is `on`,
   `off` or `unsupported`.
+
+### `hdr`
+
+`"hdr": true` drives that monitor in HDR (HDR10), so HDR video and images
+reach its full brightness and color. It is off by default.
+
+- It is used only where the monitor says it takes HDR10 and its connector
+  carries 10 bits a channel. Elsewhere the monitor stays SDR.
+- `sdr_white` is how bright ordinary content's white is in HDR, in cd/m²
+  (nits), from 1 to 10000. Without it, 203. Raise it if windows look dim next
+  to the same monitor in SDR.
+
+```json
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "movies",
+        "displays": [{ "display": "drm-1", "hdr": true, "sdr_white": 250 }]
+      }
+    ]
+  }
+}
+```
 
 ### `transform`
 

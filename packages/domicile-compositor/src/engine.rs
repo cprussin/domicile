@@ -238,6 +238,39 @@ pub struct Display {
     /// Whether it scans out with a variable refresh rate, as the hardware
     /// says. Unsupported from an engine without `adaptive_displays`.
     pub adaptive_sync: AdaptiveSync,
+    /// Whether it is driven in HDR10, and its panel's luminances.
+    /// Unsupported from an engine without `hdr_displays`.
+    pub hdr: Hdr,
+}
+
+/// Whether a monitor is driven in HDR10 (BT.2020 with PQ), and how bright its
+/// panel gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Hdr {
+    pub state: HdrState,
+    /// The panel's peak luminance from its EDID, in cd/m², or zero if
+    /// unreported.
+    pub max_luminance: u32,
+    /// The panel's frame-average peak, in cd/m², or zero if unreported.
+    pub max_average_luminance: u32,
+    /// The panel's black, in 0.0001 cd/m² as `wp_color_management_v1`
+    /// states minimums, or zero if unreported.
+    pub min_luminance: u32,
+    /// While [`HdrState::On`], the luminance SDR content's white is shown
+    /// at, in cd/m²; zero otherwise.
+    pub sdr_white: u32,
+}
+
+/// Whether a monitor is driven in HDR10.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HdrState {
+    /// Its EDID takes no PQ, or its connector cannot scan out in 10 bits.
+    #[default]
+    Unsupported,
+    /// It can, and is not.
+    Off,
+    /// It is.
+    On,
 }
 
 /// Whether a monitor scans out with a variable refresh rate.
@@ -327,6 +360,10 @@ pub struct Connector {
     /// Whether to scan out with a variable refresh rate where the monitor
     /// can. The engine tries again without it if the driver refuses.
     pub adaptive_sync: bool,
+    /// Whether to drive it in HDR10 where the monitor takes it.
+    pub hdr: bool,
+    /// In HDR, the luminance to show SDR content's white at, in cd/m².
+    pub sdr_white: u32,
 }
 
 /// A tablet or touchscreen and the display it covers: the config's
@@ -515,6 +552,7 @@ struct Callbacks {
     moded_displays: Option<extern "C" fn(*mut c_void, *const RawModedDisplay, u32)>,
     browser_windows: Option<extern "C" fn(*mut c_void, *const RawBrowserWindow, u32)>,
     adaptive_displays: Option<extern "C" fn(*mut c_void, *const RawAdaptiveDisplay, u32)>,
+    hdr_displays: Option<extern "C" fn(*mut c_void, *const RawHdrDisplay, u32)>,
 }
 
 /// `DomicileBrowserWindow`, laid out as in the C header. Its strings are
@@ -716,6 +754,32 @@ struct RawAdaptiveDisplay {
     moded: RawModedDisplay,
     /// A `DOMICILE_ADAPTIVE_SYNC_*` value.
     adaptive_sync: i32,
+}
+
+/// `DomicileHdrDisplay`, laid out as in the C header. 112 bytes, including 4
+/// of tail padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawHdrDisplay {
+    adaptive: RawAdaptiveDisplay,
+    /// A `DOMICILE_HDR_*` value.
+    hdr: i32,
+    /// In cd/m², zero where unreported.
+    max_luminance: f32,
+    max_average_luminance: f32,
+    min_luminance: f32,
+    sdr_white_nits: f32,
+}
+
+/// `DomicileHdrLayout`, laid out as in the C header. 80 bytes, no padding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+struct RawHdrLayout {
+    adaptive: RawAdaptiveLayout,
+    /// Nonzero to ask for HDR10.
+    hdr: i32,
+    /// In cd/m².
+    sdr_white_nits: f32,
 }
 
 /// `DomicileAdaptiveLayout`, laid out as in the C header. 72 bytes, including
@@ -1438,6 +1502,17 @@ impl Engine {
     /// An engine without `domicile_displays_configure_modes` gets the layout
     /// without its modes, and lights each connector at its native one.
     pub fn configure_displays(&self, connectors: &[Connector]) {
+        type Hdr = unsafe extern "C" fn(*mut Handle, *const RawHdrLayout, u32);
+        if let Ok(f) = self.symbol::<Hdr>(
+            b"domicile_displays_configure_hdr\0",
+            "domicile_displays_configure_hdr",
+        ) {
+            let raw = hdr_layouts_from(connectors);
+            // SAFETY: as above, and `raw` outlives the call; the engine
+            // copies it.
+            unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+            return;
+        }
         type Adaptive = unsafe extern "C" fn(*mut Handle, *const RawAdaptiveLayout, u32);
         if let Ok(f) = self.symbol::<Adaptive>(
             b"domicile_displays_configure_adaptive\0",
@@ -1827,6 +1902,7 @@ fn join(
         moded_displays: Some(on_moded_displays),
         browser_windows: Some(on_browser_windows),
         adaptive_displays: Some(on_adaptive_displays),
+        hdr_displays: Some(on_hdr_displays),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2202,6 +2278,7 @@ fn display_from(record: &RawDisplay) -> Display {
         refresh_mhz: record.refresh_mhz,
         modes: Vec::new(),
         adaptive_sync: AdaptiveSync::Unsupported,
+        hdr: Hdr::default(),
     }
 }
 
@@ -2286,6 +2363,61 @@ fn adaptive_displays_from(records: &[RawAdaptiveDisplay]) -> Vec<Display> {
             ..display
         })
         .collect()
+}
+
+/// Queues each display's gamma ramp size, then the display list with each
+/// display's modes, adaptive sync and HDR. Called instead of
+/// [`on_adaptive_displays`] by an engine that reports HDR.
+extern "C" fn on_hdr_displays(user_data: *mut c_void, displays: *const RawHdrDisplay, count: u32) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. Both conversions copy them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    let ramped: Vec<RawRampedDisplay> = records
+        .iter()
+        .map(|record| record.adaptive.moded.ramped)
+        .collect();
+    push(user_data, Event::GammaSizes(gamma_sizes_from(&ramped)));
+    push(user_data, Event::Displays(hdr_displays_from(records)));
+}
+
+/// Converts the ABI's display records with their modes, adaptive sync and
+/// HDR.
+fn hdr_displays_from(records: &[RawHdrDisplay]) -> Vec<Display> {
+    let adaptive: Vec<RawAdaptiveDisplay> = records.iter().map(|record| record.adaptive).collect();
+    adaptive_displays_from(&adaptive)
+        .into_iter()
+        .zip(records)
+        .map(|(display, record)| Display {
+            hdr: Hdr {
+                state: hdr_state_from(record.hdr),
+                max_luminance: whole(record.max_luminance),
+                max_average_luminance: whole(record.max_average_luminance),
+                min_luminance: whole(record.min_luminance * 10_000.0),
+                sdr_white: whole(record.sdr_white_nits),
+            },
+            ..display
+        })
+        .collect()
+}
+
+/// A `DOMICILE_HDR_*` value. One this compositor has no name for is
+/// unsupported, the state that asks nothing of it.
+fn hdr_state_from(raw: i32) -> HdrState {
+    match raw {
+        1 => HdrState::Off,
+        2 => HdrState::On,
+        _ => HdrState::Unsupported,
+    }
+}
+
+/// A luminance rounded to a whole number. An EDID cannot state a negative or
+/// unbounded one, so either is unreported: zero. `as` saturates the rest.
+fn whole(luminance: f32) -> u32 {
+    if luminance.is_finite() && luminance > 0.0 {
+        luminance.round() as u32
+    } else {
+        0
+    }
 }
 
 /// A `DOMICILE_ADAPTIVE_SYNC_*` value. One this compositor has no name for is
@@ -2419,6 +2551,20 @@ fn adaptive_layouts_from(connectors: &[Connector]) -> Vec<RawAdaptiveLayout> {
         .collect()
 }
 
+/// The ABI's layout records with each connector's mode, rate, adaptive sync
+/// and HDR.
+fn hdr_layouts_from(connectors: &[Connector]) -> Vec<RawHdrLayout> {
+    adaptive_layouts_from(connectors)
+        .into_iter()
+        .zip(connectors)
+        .map(|(adaptive, connector)| RawHdrLayout {
+            adaptive,
+            hdr: i32::from(connector.hdr),
+            sdr_white_nits: connector.sdr_white as f32,
+        })
+        .collect()
+}
+
 /// A logical size as an `int32_t`. Profiles that do not fit are refused
 /// earlier, so this cannot fail.
 fn logical(size: u32) -> i32 {
@@ -2489,10 +2635,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_nineteen_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `adaptive_displays` is last, as
-        // in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 20 * 8);
+    fn the_callbacks_are_the_user_data_and_twenty_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `hdr_displays` is last, as in
+        // the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 21 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2505,6 +2651,88 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Callbacks, moded_displays), 17 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, browser_windows), 18 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, adaptive_displays), 19 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, hdr_displays), 20 * 8);
+    }
+
+    #[test]
+    fn an_hdr_display_is_an_adaptive_display_and_its_luminances() {
+        // 88 (`DomicileAdaptiveDisplay`) + 4 + 4 * 4 + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawHdrDisplay>(), 112);
+        assert_eq!(std::mem::offset_of!(RawHdrDisplay, hdr), 88);
+        assert_eq!(std::mem::offset_of!(RawHdrDisplay, sdr_white_nits), 104);
+    }
+
+    #[test]
+    fn an_hdr_layout_is_an_adaptive_layout_a_flag_and_a_white() {
+        // 72 (`DomicileAdaptiveLayout`) + 4 + 4.
+        assert_eq!(std::mem::size_of::<RawHdrLayout>(), 80);
+        assert_eq!(std::mem::offset_of!(RawHdrLayout, hdr), 72);
+        assert_eq!(std::mem::offset_of!(RawHdrLayout, sdr_white_nits), 76);
+    }
+
+    #[test]
+    fn a_display_says_whether_it_is_in_hdr_and_how_bright_it_gets() {
+        let (panel, _name) = named(
+            RawDisplay {
+                id: 7,
+                width: 3840,
+                height: 2160,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("DP-1").expect("no nul in it");
+        let record = |hdr, sdr_white_nits| RawHdrDisplay {
+            adaptive: RawAdaptiveDisplay {
+                moded: RawModedDisplay {
+                    ramped: RawRampedDisplay {
+                        connected: RawConnectedDisplay {
+                            display: panel,
+                            connector: connector.as_ptr(),
+                        },
+                        gamma_size: 0,
+                    },
+                    modes: std::ptr::null(),
+                    mode_count: 0,
+                },
+                adaptive_sync: 0,
+            },
+            hdr,
+            max_luminance: 599.6,
+            max_average_luminance: 350.0,
+            min_luminance: 0.05,
+            sdr_white_nits,
+        };
+        let displays = hdr_displays_from(&[record(2, 240.0), record(1, 0.0), record(7, 0.0)]);
+        assert_eq!(
+            displays[0].hdr,
+            Hdr {
+                state: HdrState::On,
+                max_luminance: 600,
+                max_average_luminance: 350,
+                min_luminance: 500,
+                sdr_white: 240,
+            }
+        );
+        assert_eq!(displays[1].hdr.state, HdrState::Off);
+        assert_eq!(
+            displays[2].hdr.state,
+            HdrState::Unsupported,
+            "a state from a newer engine asks nothing of this compositor"
+        );
+    }
+
+    #[test]
+    fn a_connector_asks_for_hdr_and_its_white_in_its_layout() {
+        let asking = Connector {
+            hdr: true,
+            sdr_white: 240,
+            ..LIT
+        };
+        let raw = hdr_layouts_from(&[asking, LIT]);
+        assert_eq!((raw[0].hdr, raw[0].sdr_white_nits), (1, 240.0));
+        assert_eq!(raw[1].hdr, 0);
+        assert_eq!(raw[0].adaptive, adaptive_layouts_from(&[asking])[0]);
     }
 
     #[test]
@@ -3077,6 +3305,7 @@ mod tests {
             refresh_mhz: 0,
             modes: Vec::new(),
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         assert!(display(VirtualDisplay::id_of(1)).is_virtual());
         // EDID-derived ids are positive.
@@ -3177,6 +3406,8 @@ mod tests {
         mode: None,
         refresh_mhz: None,
         adaptive_sync: false,
+        hdr: false,
+        sdr_white: domicile_config::DEFAULT_SDR_WHITE,
     };
 
     #[test]
@@ -3214,6 +3445,8 @@ mod tests {
             mode: None,
             refresh_mhz: None,
             adaptive_sync: false,
+            hdr: false,
+            sdr_white: domicile_config::DEFAULT_SDR_WHITE,
         }]);
 
         assert_eq!(
@@ -3308,6 +3541,7 @@ mod tests {
                 refresh_mhz: 0,
                 modes: Vec::new(),
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             }]
         );
     }
@@ -3368,6 +3602,7 @@ mod tests {
                     refresh_mhz: 59_997,
                     modes: Vec::new(),
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Display {
                     id: 9,
@@ -3379,6 +3614,7 @@ mod tests {
                     refresh_mhz: 0,
                     modes: Vec::new(),
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );

@@ -26,7 +26,10 @@ pub use input_devices::{
     TouchpadConfig,
 };
 pub use pointers::{PointerConfig, PointerTarget};
-pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
+pub use profile::{
+    Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform,
+    DEFAULT_SDR_WHITE,
+};
 pub use startup::StartupConfig;
 
 use std::collections::BTreeMap;

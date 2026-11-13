@@ -23,7 +23,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 47,
 # WindowDiff 7, EngineEventQueue 8, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 57,
-# DomicileDisplayList 12, DomicileKeyboardLayout 3, ShellWindows 8,
+# DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3,
 # ExtensionSettings 7, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 32,
@@ -43,7 +43,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1.
 #
-# 611, and it was 599 — a tap of a modifier alone is eleven DeskModifierTaps
+# 612, and it was 611 — a panel's HDR state and luminances are one
+# DomicileDisplayList case. Before that 611, and it was 599 — a tap of a modifier alone is eleven DeskModifierTaps
 # cases and one TapModifierOf case. Before that 599, and it was 598 — a cursor
 # a client drew reaching the page is one ControlChannel case. Before that 598, and it was 591 — the control channel's input method messages are seven
 # InputMethodLines cases. Before that 591, and it was 589 — a window's pointer lock or confinement reaching the page,
@@ -219,7 +220,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=611
+FLOOR=612
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
