@@ -45,6 +45,7 @@ use smithay::wayland::{
     idle_inhibit::IdleInhibitManagerState,
     keyboard_shortcuts_inhibit::KeyboardShortcutsInhibitState,
     output::OutputManagerState,
+    pointer_constraints::PointerConstraintsState,
     relative_pointer::RelativePointerManagerState,
     security_context::SecurityContextState,
     selection::data_device::DataDeviceState,
@@ -123,6 +124,7 @@ mod pam;
 mod peer_process;
 mod pinch;
 mod pnp_ids;
+mod pointer_constraints;
 mod popups;
 mod portals;
 mod presentations;
@@ -404,6 +406,13 @@ struct DomicileCompositor {
     /// `crate::relative_pointer`.
     #[allow(dead_code)]
     relative_pointer_state: RelativePointerManagerState,
+    /// Kept alive so the zwp_pointer_constraints_v1 global persists. See
+    /// `crate::pointer_constraints`.
+    #[allow(dead_code)]
+    pointer_constraints_state: PointerConstraintsState,
+    /// The lock or confinement offered to the page, for the window under the
+    /// pointer. See `crate::pointer_constraints`.
+    pointer_constraint_offered: Option<crate::pointer_constraints::Offered>,
     /// Composition from an input method. See [`text_input`].
     text_input: text_input::TextInput,
     /// The browser's stand-in on the input method relay, connected at the
@@ -1333,6 +1342,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
         relative_pointer_state: RelativePointerManagerState::new::<DomicileCompositor>(&dh),
+        pointer_constraints_state: PointerConstraintsState::new::<DomicileCompositor>(&dh),
+        pointer_constraint_offered: None,
         text_input,
         chrome_editor: None,
         composing: false,

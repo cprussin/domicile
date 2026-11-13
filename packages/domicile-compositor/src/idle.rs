@@ -453,6 +453,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         ClientRequest::PointerMotion { moved, .. } => moved.then_some("the pointer moving"),
         // Sent only for a hand on the mouse, never for a still pointer.
         ClientRequest::PointerRelative { .. } => Some("the pointer moving"),
+        // The page answering a game's ask, not a hand.
+        ClientRequest::PointerConstrained { .. } => None,
         // The lock screen's own field forwards no `Key`s, so an unlock attempt
         // is the only sign someone is typing. Lighting on any attempt lets the
         // user see a rejection.

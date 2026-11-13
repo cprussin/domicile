@@ -316,6 +316,7 @@ impl DomicileCompositor {
             self.pointer_app = None;
             self.pointer_surface = None;
         }
+        self.forget_pointer_constraint(app_id);
         debug!(%app_id, "gone -> Host::app_closed");
         broadcast_closed(&self.hub, app_id);
     }

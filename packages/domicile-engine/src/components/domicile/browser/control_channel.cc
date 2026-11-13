@@ -792,6 +792,13 @@ void ControlChannel::PointerRelative(const std::string& app_id,
   SendMessage(std::move(message));
 }
 
+void ControlChannel::PointerConstrained(const std::string& app_id,
+                                        bool active) {
+  base::DictValue message = ForApp("pointer_constrained", app_id);
+  message.Set("active", active);
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::PointerLeave(const std::string& app_id) {
   SendMessage(ForApp("pointer_leave", app_id));
 }
@@ -1408,6 +1415,34 @@ void ControlChannel::DispatchLine(const std::string& line,
       return;
     }
     client_->AppCursor(*app_id, *shape);
+    return;
+  }
+
+  if (*type == "app_pointer_constraint") {
+    const std::string* app_id = message.FindString("app_id");
+    if (!app_id) {
+      return;
+    }
+    // `null` for none; a name this build does not know is dropped, as an
+    // unknown cursor is, rather than read as one it does.
+    const base::Value* named = message.Find("constraint");
+    std::optional<mojom::PointerConstraint> constraint;
+    if (named && named->is_string()) {
+      if (named->GetString() == "lock") {
+        constraint = mojom::PointerConstraint::kLock;
+      } else if (named->GetString() == "confine") {
+        constraint = mojom::PointerConstraint::kConfine;
+      } else {
+        LOG(WARNING) << "domicile: the compositor offered a pointer "
+                        "constraint named '"
+                     << named->GetString()
+                     << "', which this engine does not know; dropped.";
+        return;
+      }
+    } else if (named && !named->is_none()) {
+      return;
+    }
+    client_->AppPointerConstraint(*app_id, constraint);
     return;
   }
 

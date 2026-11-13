@@ -314,6 +314,14 @@ const appCursorSchema = z.looseObject({
   type: z.literal("app_cursor"),
 });
 
+// The window under the pointer asked to lock or confine it, or `null` once
+// that ask ended.
+const appPointerConstraintSchema = z.looseObject({
+  app_id: z.string(),
+  constraint: z.enum(["lock", "confine"]).nullable(),
+  type: z.literal("app_pointer_constraint"),
+});
+
 // A window or popup reached the screen: its first frame, or the first frame
 // drawn after a configure changed its size.
 const appPresentedSchema = z.looseObject({
@@ -741,6 +749,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appMaxSizeSchema,
   appClosedSchema,
   appCursorSchema,
+  appPointerConstraintSchema,
   appPresentedSchema,
   appSuspendedSchema,
   appTransientForSchema,
@@ -790,6 +799,9 @@ export type AppMinSizeMessage = z.infer<typeof appMinSizeSchema>;
 export type AppMaxSizeMessage = z.infer<typeof appMaxSizeSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
+export type AppPointerConstraintMessage = z.infer<
+  typeof appPointerConstraintSchema
+>;
 export type AppTransientForMessage = z.infer<typeof appTransientForSchema>;
 export type AppAnchoredMessage = z.infer<typeof appAnchoredSchema>;
 export type AppUrgentMessage = z.infer<typeof appUrgentSchema>;

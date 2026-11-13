@@ -167,6 +167,16 @@ pub struct CursorImage {
     pub bgra: String,
 }
 
+/// What a client asked the pointer to do over its window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PointerConstraint {
+    /// Keep the pointer where it is; the client reads relative motion.
+    Lock,
+    /// Keep the pointer inside the window.
+    Confine,
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -256,6 +266,13 @@ pub enum ChromeMessage {
     /// a still pointer, nor for a shell's pointer warp. Its deltas are the
     /// accelerated ones, which the compositor also gives as unaccelerated.
     PointerRelative { app_id: String, dx: f64, dy: f64 },
+    /// The page took or let go of the pointer for a window that asked to lock
+    /// or confine it ([`HostMessage::AppPointerConstraint`]).
+    ///
+    /// `true` once the page holds it: the compositor then tells the client
+    /// its pointer is locked or confined. `false` when the page let it go, by
+    /// Escape, a focus change or the shell's own choice.
+    PointerConstrained { app_id: String, active: bool },
     /// Pointer left an app (focus returns to the chrome).
     PointerLeave { app_id: String },
     /// A touchpad pinch over a native app, with scale relative to its beginning.
@@ -626,6 +643,17 @@ pub enum HostMessage {
     /// The cursor a client asked for over its surface, for the chrome to apply
     /// to the app's element.
     AppCursor { app_id: String, cursor: CursorShape },
+
+    /// The window under the pointer asked to lock the pointer in place or
+    /// confine it to the window (`zwp_pointer_constraints_v1`), or `None` once
+    /// that ask ended: the client withdrew it or the pointer left the window.
+    ///
+    /// Only the window under the pointer is offered one. The page answers
+    /// with [`ChromeMessage::PointerConstrained`].
+    AppPointerConstraint {
+        app_id: String,
+        constraint: Option<PointerConstraint>,
+    },
 
     /// A window or popup reached the screen: viz showed its first frame, or
     /// the first frame its client drew after a configure changed its size.

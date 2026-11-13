@@ -60,6 +60,7 @@
     "./tree/path": "./src/tree/path.ts",
     "./useClientIcons": "./src/useClientIcons.ts",
     "./useGrabCursor": "./src/useGrabCursor.ts",
+    "./usePointerLock": "./src/usePointerLock.ts",
     "./usePointerWarp": "./src/usePointerWarp.ts",
     "./useWindows": "./src/useWindows.ts",
     "./window": "./src/window.ts",
