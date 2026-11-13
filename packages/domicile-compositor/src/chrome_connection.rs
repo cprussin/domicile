@@ -678,6 +678,14 @@ fn read_chrome_messages(
             }
             // Held per connection, since every chrome hears each move. See
             // `ChromeHub::syncs_frames`.
+            Ok(ChromeMessage::TextInput { field }) => {
+                hub.send_request(ClientRequest::TextInput { field });
+                Vec::new()
+            }
+            Ok(ChromeMessage::KeyForInputMethod { keycode, pressed }) => {
+                hub.send_request(ClientRequest::KeyForInputMethod { keycode, pressed });
+                Vec::new()
+            }
             Ok(ChromeMessage::Activity { input }) => {
                 hub.send_request(ClientRequest::Activity { input });
                 Vec::new()
