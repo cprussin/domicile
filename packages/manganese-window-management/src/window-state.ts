@@ -340,18 +340,20 @@ export const killedIdsOf = (state: WindowState): readonly string[] =>
   commandedWindowsOn(workspaceHere(state));
 
 /**
- * The engine's ids of the background windows shown as closed: off every
- * workspace and the scratchpad, though their pages keep running. See
+ * The background windows shown as closed: off every workspace and the
+ * scratchpad, though their pages keep running. See
  * {@link WindowState.background}.
  */
+export const shutIdsOf = (state: WindowState): readonly string[] =>
+  state.background.filter(
+    (id) =>
+      workspaceHolding(state, id) === undefined &&
+      !state.scratchpad.includes(id),
+  );
+
+/** The engine's ids of the windows {@link shutIdsOf} names. */
 export const closedBrowsersOf = (state: WindowState): readonly string[] =>
-  state.background
-    .filter(
-      (id) =>
-        workspaceHolding(state, id) === undefined &&
-        !state.scratchpad.includes(id),
-    )
-    .map(engineIdOf);
+  shutIdsOf(state).map(engineIdOf);
 
 /**
  * Of `ids`, the windows a close request closes: all but a background app's,
