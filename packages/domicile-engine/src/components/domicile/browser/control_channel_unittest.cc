@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/dcheck_is_on.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
@@ -75,10 +76,12 @@ class FakeClient : public mojom::ControlChannelClient {
                    bool dialog,
                    bool client_frame,
                    mojom::WindowOwnerPtr owner,
+                   const std::string& toplevel_id,
                    uint32_t frame) override {
     heard_.push_back(base::StringPrintf(
-        "appeared %s %s %s %gx%g%s%s%s%s", app_id.c_str(), title.c_str(),
-        desktop_id.c_str(), width, height, dialog ? " dialog" : "",
+        "appeared %s as %s %s %s %gx%g%s%s%s%s", app_id.c_str(),
+        toplevel_id.c_str(), title.c_str(), desktop_id.c_str(), width, height,
+        dialog ? " dialog" : "",
         client_frame ? " client_frame" : "", Owned(owner).c_str(),
         frame ? base::StringPrintf(" frame %u", frame).c_str() : ""));
   }
@@ -166,6 +169,14 @@ class FakeClient : public mojom::ControlChannelClient {
   void AppInhibitsShortcuts(const std::string& app_id, bool inhibits) override {
     heard_.push_back(base::StringPrintf("inhibits %s %s", app_id.c_str(),
                                         inhibits ? "true" : "false"));
+  }
+  void BrowserToplevelIds(
+      const base::flat_map<std::string, std::string>& toplevel_ids) override {
+    std::string heard = "browser toplevels";
+    for (const auto& [window, toplevel_id] : toplevel_ids) {
+      heard += " " + window + "=" + toplevel_id;
+    }
+    heard_.push_back(heard);
   }
   void ShortcutPressed(mojom::ShortcutPtr) override {}
   void ShortcutReleased(mojom::ShortcutPtr) override {}
@@ -323,7 +334,8 @@ TEST_F(ControlChannelTest, ALineBeforeThePageBindsReachesItAfterInOrder) {
 TEST_F(ControlChannelTest, AWindowReachesThePageWithItsSizeAndHints) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"toplevel_id\":"
+      "\"t1\",\"title\":"
       "\"pinentry\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":true,\"client_frame\":true}\n"
       "{\"type\":\"locked\",\"locked\":false}\n");
@@ -331,8 +343,39 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsSizeAndHints) {
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
-                "appeared app-1 pinentry  400x300 dialog client_frame",
+                "appeared app-1 as t1 pinentry  400x300 dialog client_frame",
                 "locked false"}));
+}
+
+// A window names its toplevel id, which a shell hands capture tools: a line
+// without one is dropped.
+TEST_F(ControlChannelTest, AWindowWithoutItsToplevelIdIsDropped) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+      "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":false,\"client_frame\":false}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_, (std::vector<std::string>{"locked false"}));
+}
+
+// Each browser window's toplevel id reaches the page, by window id. A map
+// with a value that is not a string is dropped whole.
+TEST_F(ControlChannelTest, EachBrowserWindowsToplevelIdReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"browser_toplevel_ids\",\"toplevel_ids\":"
+      "{\"3\":\"Xy7p\",\"7\":\"aU2i\"}}\n"
+      "{\"type\":\"browser_toplevel_ids\",\"toplevel_ids\":{\"3\":4}}\n"
+      "{\"type\":\"browser_toplevel_ids\",\"toplevel_ids\":{}}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"browser toplevels 3=Xy7p 7=aU2i",
+                                      "browser toplevels", "locked false"}));
 }
 
 // The page hears when a window reaches the screen and when the compositor
@@ -357,11 +400,13 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
   // A uid past 2^31 does not fit base::Value's int.
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"toplevel_id\":"
+      "\"t1\",\"title\":"
       "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false,\"owner\":{\"pid\":4242,"
       "\"uid\":4294967294,\"gid\":100,\"pidfd_inode\":5021}}\n"
-      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"toplevel_id\":"
+      "\"t2\",\"title\":"
       "\"b\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false,\"owner\":{\"pid\":7,"
       "\"uid\":1000,\"gid\":1000,\"pidfd_inode\":null,\"sandbox\":"
@@ -371,8 +416,8 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
-                "appeared app-1 a  400x300 owner 4242/4294967294/100/5021",
-                "appeared app-2 b  400x300 owner 7/1000/1000/none sandbox "
+                "appeared app-1 as t1 a  400x300 owner 4242/4294967294/100/5021",
+                "appeared app-2 as t2 b  400x300 owner 7/1000/1000/none sandbox "
                 "org.flatpak/-/3",
                 "locked false"}));
 }
@@ -383,7 +428,8 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
 TEST_F(ControlChannelTest, TheFramesAMoveShowsWithReachThePage) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"toplevel_id\":"
+      "\"t2\",\"title\":"
       "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false,\"frame\":3}\n"
       "{\"type\":\"popup_placed\",\"app_id\":\"app-3\",\"parent\":"
@@ -399,7 +445,7 @@ TEST_F(ControlChannelTest, TheFramesAMoveShowsWithReachThePage) {
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
-                "appeared app-2 a  400x300 frame 3",
+                "appeared app-2 as t2 a  400x300 frame 3",
                 "placed app-3 over app-2 app-2@4 app-3@1",
                 "placed app-3 over app-2", "locked false"}));
 }
@@ -575,10 +621,12 @@ TEST_F(ControlChannelTest, ACompositorThatHangsUpEndsWhatItHadAndIsReplaced) {
   // Driving call 3 is not a new call.
   control_->CallSystem(3, R"({"call":"unwatch"})");
   control_.FlushForTesting();
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"toplevel_id\":"
+      "\"t1\",\"title\":"
       "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false}\n"
-      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"toplevel_id\":"
+      "\"t2\",\"title\":"
       "\"b\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false}\n"
       "{\"type\":\"app_closed\",\"app_id\":\"app-2\"}\n"

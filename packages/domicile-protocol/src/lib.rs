@@ -585,11 +585,25 @@ pub enum HostMessage {
         client_frame: bool,
         /// The process that connected the window's client.
         owner: Owner,
+        /// The window's identifier on `ext-foreign-toplevel-list-v1`, which a
+        /// capture tool such as `grim -T` takes to name it. Fixed for the
+        /// window's life.
+        toplevel_id: String,
         /// The window's synced frame, for a page that renders `<app frame>`.
         /// Above 0 only for a window that appeared before this page did. See
         /// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
         #[serde(default, skip_serializing_if = "is_frame_zero")]
         frame: u32,
+    },
+
+    /// Each browser window's identifier on `ext-foreign-toplevel-list-v1`, by
+    /// the engine's window id, as [`HostMessage::AppAppeared`] carries a
+    /// native window's.
+    ///
+    /// Sent whenever the browser windows change, and after `welcome`. Latest
+    /// wins.
+    BrowserToplevelIds {
+        toplevel_ids: BTreeMap<String, String>,
     },
 
     /// A window's title, sent whenever it changes.

@@ -138,6 +138,9 @@ const appAppearedSchema = z.looseObject({
   // The size of the first frame.
   size: sizeSchema,
   title: titleSchema,
+  // The window's identifier on `ext-foreign-toplevel-list-v1`, for capture
+  // tools. Fixed for the window's life.
+  toplevel_id: z.string(),
   type: z.literal("app_appeared"),
 });
 
@@ -306,6 +309,13 @@ const displayInfoSchema = z.looseObject({
 const displaysSchema = z.looseObject({
   displays: z.array(displayInfoSchema),
   type: z.literal("displays"),
+});
+
+// Each browser window's identifier on `ext-foreign-toplevel-list-v1`, by the
+// engine's window id. Sent after `welcome` and on every change; latest wins.
+const browserToplevelIdsSchema = z.looseObject({
+  toplevel_ids: z.record(z.string(), z.string()),
+  type: z.literal("browser_toplevel_ids"),
 });
 
 const appCursorSchema = z.looseObject({
@@ -763,6 +773,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appAnchoredSchema,
   appUrgentSchema,
   displaysSchema,
+  browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
   forceDarkSchema,
@@ -795,6 +806,9 @@ export type HostMessage = z.infer<typeof hostMessageSchema>;
 export type HostMessageJson = z.infer<typeof hostMessageSchema>;
 export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
+export type BrowserToplevelIdsMessage = z.infer<
+  typeof browserToplevelIdsSchema
+>;
 export type AppTitledMessage = z.infer<typeof appTitledSchema>;
 export type AppDesktopIdMessage = z.infer<typeof appDesktopIdSchema>;
 export type AppInhibitsShortcutsMessage = z.infer<

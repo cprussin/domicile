@@ -368,13 +368,16 @@ pub mod fixture {
 
     /// A window that has drawn its first frame, announced to the chromes.
     pub fn drawn(host: &mut domicile_host::Host) -> String {
-        let app_id = host.app_created(domicile_protocol::Owner {
-            pid: 1,
-            uid: 1000,
-            gid: 1000,
-            pidfd_inode: None,
-            sandbox: None,
-        });
+        let app_id = host.app_created(
+            domicile_protocol::Owner {
+                pid: 1,
+                uid: 1000,
+                gid: 1000,
+                pidfd_inode: None,
+                sandbox: None,
+            },
+            "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa".to_string(),
+        );
         host.app_mapped(
             &app_id,
             domicile_host::Mapped {

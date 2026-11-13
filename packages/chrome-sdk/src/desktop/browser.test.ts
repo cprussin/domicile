@@ -25,6 +25,7 @@ describe("browser", () => {
         partition: "",
         popupWindow: undefined,
         title: "",
+        toplevelId: undefined,
         url: "https://example.com/",
         width: 0,
       },
