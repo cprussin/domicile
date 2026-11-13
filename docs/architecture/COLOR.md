@@ -62,12 +62,19 @@ color descriptions, the protocol, and the config. Tracks
 - **SDR white is 203 nits by default** (ITU-R BT.2408), set per display from
   Settings. It is the white level viz composites SDR content at, and the
   reference white the protocol tells clients.
-- **Protocol features:** parametric descriptions with named primaries (sRGB,
-  BT.2020, Display P3, Adobe RGB), named transfer functions (gamma 2.2,
-  compound power 2.4, BT.1886, ext linear, ST 2084 PQ, HLG), luminances,
+- **Protocol features:** version 1, parametric descriptions with named
+  primaries (sRGB, BT.2020, Display P3, Adobe RGB), named transfer functions
+  (sRGB, gamma 2.2, BT.1886, ext linear, ST 2084 PQ, HLG), luminances,
   mastering display primaries, extended target volume and Windows scRGB (for
   games under Proton). Perceptual intent only. No ICC: viz takes no ICC per
-  quad, and ICC clients are rare.
+  quad, and ICC clients are rare. Version 2 renames events for 64-bit
+  identities and adds nothing a client needs.
+- **A buffer's color is fixed at import.** Viz reads a quad's color space from
+  its SharedImage, so the engine imports each buffer in its surface's color
+  (`domicile_surface_set_color`) and the compositor keys an import on that
+  color. A surface whose description changes has its buffers imported again,
+  once each. A commit that changes only the description, with no buffer,
+  shows from the next buffer.
 - **Output descriptions follow the display.** SDR: the EDID primaries with
   gamma 2.2. HDR: BT.2020 with PQ, the panel's luminances from the EDID and
   the SDR white as reference. A surface's preferred description is its main
@@ -83,8 +90,8 @@ color descriptions, the protocol, and the config. Tracks
 
 - [x] engine + compositor: 10-bit and F16 formats in `FormatFromFourcc` and `FOURCCS`, on `wl_shm` too; `guard-buffer-formats.sh`
 - [ ] config + engine: `bit_depth` per placement; 10-bit plane format and `max bpc`, 8-bit fallback; reported per display
-- [ ] engine: buffer color descriptions on import (`gfx::ColorSpace`, `gfx::HDRMetadata`)
-- [ ] compositor: `wp_color_management_v1` with output and surface descriptions and preferred feedback
+- [x] engine: buffer color descriptions on import (`gfx::ColorSpace`, `gfx::HDRMetadata`)
+- [x] compositor: `wp_color_management_v1` with output and surface descriptions and preferred feedback. Every display describes itself as sRGB with gamma 2.2 until the HDR step gives each its own
 - [ ] engine: HDR10 display color spaces from the EDID and the layout; `Colorspace`, `HDR_OUTPUT_METADATA`
 - [ ] config: `hdr` and SDR white per placement; HDR capability reported per display
 - [ ] engine + compositor: night light as a viz color matrix on HDR displays; `wlr-gamma-control` fails there
