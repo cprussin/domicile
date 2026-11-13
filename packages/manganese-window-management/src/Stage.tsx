@@ -803,6 +803,18 @@ export const Stage = memo(
             );
           })}
           {/*
+          After every window and tab, so a popup wins the `z-index` tie at its
+          window's depth but stays under windows stacked above. Before the
+          tint and the drop indicator, which tie with it and cover it: Firefox
+          draws its whole window into a bubble.
+        */}
+          {popupsOver(
+            working ? popups : [],
+            screens.flatMap(({ screenful }) => screenful.placements),
+          ).map((popup) => (
+            <AppPopup key={popup.appId} popup={popup} />
+          ))}
+          {/*
           After every window and tab, at the open tab's raised depth, so it
           covers the selected container's windows and every tab. It follows
           the focused window as its glow does.
@@ -829,16 +841,6 @@ export const Stage = memo(
           )}
           {working && aim !== undefined && <DropIndicator aim={aim} />}
           {movingId !== undefined && pulled && <GrabbingSheet />}
-          {/*
-          Last, so a popup wins the `z-index` tie at its window's depth but
-          stays under windows stacked above.
-        */}
-          {popupsOver(
-            working ? popups : [],
-            screens.flatMap(({ screenful }) => screenful.placements),
-          ).map((popup) => (
-            <AppPopup key={popup.appId} popup={popup} />
-          ))}
         </SettleHandoffs>
       </main>
     );
