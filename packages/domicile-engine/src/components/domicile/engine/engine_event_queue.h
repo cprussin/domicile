@@ -138,6 +138,8 @@ struct EngineEvent {
   uint32_t height = 0;
   // kConfigure: device pixels per CSS pixel of the page the box is in.
   double scale = 1.0;
+  // kConfigure: the embedding element's CSS `zoom`.
+  double zoom = 1.0;
   // kConfigure: the box's number, which a submit names to be shown at it.
   uint64_t box = 0;
   // kReleased, and kImported, where zero is a refusal.

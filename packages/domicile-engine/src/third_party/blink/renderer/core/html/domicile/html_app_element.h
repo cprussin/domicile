@@ -143,7 +143,11 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // Called by LayoutAppSurface once layout has a box, and again whenever that
   // box changes size. The box is what the producer is told to render at: for an
   // <app> the layout box *is* the xdg_toplevel.configure.
-  void SurfaceBoxChanged(const gfx::Size& size);
+  //
+  // `zoom` is the element's CSS `zoom`, ancestors' included. The client draws
+  // that much denser at a logical size that much smaller, so a zoomed window
+  // stays sharp where a transform would resample it.
+  void SurfaceBoxChanged(const gfx::Size& size, double zoom);
 
   // The control channel named synced frame `frame` for window `app_id`. Each
   // <app> for it in `document` that sets no `frame` shows the newest one
@@ -226,6 +230,10 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // change the box does not reconfigure the client, which would make every
   // relayout of the page a resize of every window on it.
   gfx::Size configured_size_;
+
+  // The CSS `zoom` last sent with the box. A zoom change reconfigures the
+  // client even when the box keeps its size.
+  double configured_zoom_ = 1.0;
 
   // Whether an Embed() has been asked for and not yet answered. The browser
   // holds the reply until a producer connects for this app id, which may be

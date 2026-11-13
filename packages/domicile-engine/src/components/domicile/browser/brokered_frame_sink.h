@@ -107,13 +107,16 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   //
   // `scale` is the page's device pixels per CSS pixel. The producer uses it to
   // convert `size` to the client's logical pixels; each monitor has its own.
+  // `zoom` is the element's CSS `zoom`, passed on to the producer. Frames stay
+  // at `scale`: the client's denser buffer still fills `size`.
   //
   // Ignores a `local_surface_id` older than the current one, since viz closes
   // a sink that submits to an older id.
   void Embed(const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
-             double scale);
+             double scale,
+             double zoom);
 
   // Imports a dmabuf as a SharedImage and returns its buffer id, or 0 on
   // failure. Follows components/exo/buffer.cc.

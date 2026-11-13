@@ -535,6 +535,19 @@ typedef struct DomicileEngineCallbacks {
   void (*adaptive_displays)(void* user_data,
                             const DomicileAdaptiveDisplay* displays,
                             uint32_t count);
+  // Like `configure_box`, plus the embedding element's CSS `zoom`. Configure
+  // the client at `width` x `height` over `scale` times `zoom`, and have it
+  // draw at that product: its buffer still fills the box, `zoom` times denser.
+  // 1 for an unzoomed element.
+  //
+  // Called instead of `configure_box` when set. An older engine ignores it.
+  void (*configure_zoomed)(void* user_data,
+                           DomicileSurfaceId surface,
+                           uint32_t width,
+                           uint32_t height,
+                           double scale,
+                           double zoom,
+                           uint64_t box);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
