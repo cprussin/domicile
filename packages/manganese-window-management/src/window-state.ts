@@ -456,6 +456,7 @@ export enum WindowActionKind {
   ShortcutsInhibitorSwitched,
   SplitToggled,
   TabSubgrouped,
+  TerminalOpened,
   VirtualMonitorAdded,
   VirtualMonitorRemoved,
   WindowBarPressed,
@@ -991,6 +992,16 @@ export const WindowAction = {
 
   /** `group`: turns the focused tab into a group of its own. */
   TabSubgrouped: () => ({ kind: WindowActionKind.TabSubgrouped as const }),
+
+  /**
+   * `terminal`: open the terminal the desk's config names.
+   *
+   * Changes no state; `useWindows` launches it, and the host announces its
+   * window. Does nothing on a desk that names none.
+   */
+  TerminalOpened: () => ({
+    kind: WindowActionKind.TerminalOpened as const,
+  }),
 
   /** `virtual-monitor add`. The shell adds a monitor of `size`. */
   VirtualMonitorAdded: (size: {
@@ -1602,6 +1613,10 @@ const reduceAction = (
     }
     case WindowActionKind.ScreenshotTaken: {
       // The compositor takes it, through the portal dialog.
+      return state;
+    }
+    case WindowActionKind.TerminalOpened: {
+      // `useWindows` launches it; the host announces its window.
       return state;
     }
     case WindowActionKind.MediaKeyPressed:

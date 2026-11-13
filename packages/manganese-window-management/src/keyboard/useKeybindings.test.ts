@@ -20,7 +20,7 @@ const KEYS: ShellKeybindings = {
     "Meta+Shift+l": KeyAction.SendShell(["move", "right"]),
     "Meta+space": KeyAction.SendShell(["launcher"]),
     "Meta+v": KeyAction.SendShell(["clipboard"]),
-    "Meta+x": KeyAction.SendShell(["terminal"]),
+    "Meta+x": KeyAction.SendShell(["teleport"]),
     XF86AudioRaiseVolume: KeyAction.SendShell(["volume", "up"]),
   },
   modes: {
@@ -117,7 +117,7 @@ describe("useKeybindings", () => {
     presses("Meta+x");
 
     expect(acted).toStrictEqual([]);
-    expect(reported).toStrictEqual(["manganese: no command `terminal`"]);
+    expect(reported).toStrictEqual(["manganese: no command `teleport`"]);
   });
 
   it("says when a key enters a mode", () => {

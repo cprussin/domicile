@@ -11,6 +11,8 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::desk_terminal::wrapped;
+
 /// The group keys are read from in a desktop entry.
 const GROUP: &str = "[Desktop Entry]";
 
@@ -23,6 +25,8 @@ pub struct Handler {
     /// Its desktop file id.
     pub id: String,
     exec: String,
+    /// The desk's terminal, for a `Terminal=true` entry, which runs in it.
+    terminal: Option<Vec<String>>,
 }
 
 impl Handler {
@@ -31,7 +35,7 @@ impl Handler {
     /// `url` takes the place of the first `%u` or `%U`; other field codes
     /// are dropped. Without either code, `url` goes last, as GIO does.
     pub fn command(&self, url: &str) -> Option<Vec<String>> {
-        placed(&self.exec, url, URL_CODES)
+        self.in_terminal(placed(&self.exec, url, URL_CODES))
     }
 
     /// The argv that opens the local file `path`, or `None` if its `Exec` is
@@ -40,7 +44,15 @@ impl Handler {
     /// As [`Handler::command`], but `%f` and `%F` take `path` too: a local
     /// path is a URL to `%u` as well.
     pub fn file_command(&self, path: &str) -> Option<Vec<String>> {
-        placed(&self.exec, path, FILE_CODES)
+        self.in_terminal(placed(&self.exec, path, FILE_CODES))
+    }
+
+    /// `argv`, in the desk's terminal for a `Terminal=true` entry.
+    fn in_terminal(&self, argv: Option<Vec<String>>) -> Option<Vec<String>> {
+        match &self.terminal {
+            Some(terminal) => argv.map(|argv| wrapped(terminal, argv)),
+            None => argv,
+        }
     }
 }
 
@@ -93,13 +105,14 @@ pub fn lists(
 ///   An id `[Removed Associations]` lists for the type, or for one before it,
 ///   is skipped, unless a list of higher priority added it.
 ///
-/// Entries come from `application_dirs`. `Terminal` entries are skipped: the
-/// desktop has no terminal to run them in. Unreadable lists are skipped, as
-/// the spec says.
+/// Entries come from `application_dirs`. A `Terminal` entry runs in
+/// `terminal`, the desk's (see [`crate::desk_terminal`]), and is skipped when
+/// there is none to run it in. Unreadable lists are skipped, as the spec says.
 pub fn default_handler(
     mimes: &[&str],
     lists: &[PathBuf],
     application_dirs: &[PathBuf],
+    terminal: Option<&[String]>,
 ) -> Option<Handler> {
     let lists: Vec<String> = lists
         .iter()
@@ -111,9 +124,9 @@ pub fn default_handler(
             .flat_map(|list| listed(list, group, mime))
             .collect()
     };
-    let installed: Vec<Installed> = installed(application_dirs)
+    let installed: Vec<Installed> = installed(application_dirs, terminal)
         .into_iter()
-        .filter(|found| !found.terminal)
+        .filter(|found| !found.terminal || terminal.is_some())
         .collect();
     let mut ids: Vec<String> = mimes
         .iter()
@@ -145,13 +158,22 @@ pub fn default_handler(
 /// `.desktop`, or `None` if none under `application_dirs` is usable.
 ///
 /// A notification's `desktop-entry` hint names its application this way. Field
-/// codes are dropped: it opens no file or URL.
-pub fn launch_command(name: &str, application_dirs: &[PathBuf]) -> Option<Vec<String>> {
+/// codes are dropped: it opens no file or URL. A `Terminal` entry runs in
+/// `terminal`, if the desk has one.
+pub fn launch_command(
+    name: &str,
+    application_dirs: &[PathBuf],
+    terminal: Option<&[String]>,
+) -> Option<Vec<String>> {
     let id = format!("{name}.desktop");
-    installed(application_dirs)
+    installed(application_dirs, terminal)
         .into_iter()
         .find(|found| found.handler.id == id)
-        .and_then(|found| expanded(&found.handler.exec, "", &[]).map(|(words, _)| words))
+        .and_then(|found| {
+            found
+                .handler
+                .in_terminal(expanded(&found.handler.exec, "", &[]).map(|(words, _)| words))
+        })
 }
 
 /// An installed handler and the types it declares.
@@ -167,11 +189,12 @@ impl Installed {
     }
 }
 
-/// Every usable application under `dirs`, sorted by id.
+/// Every usable application under `dirs`, sorted by id. `Terminal` entries
+/// run in `terminal`.
 ///
 /// An id in an earlier directory hides the same id in later ones. Keeps
 /// `NoDisplay` entries: they still open files.
-fn installed(dirs: &[PathBuf]) -> Vec<Installed> {
+fn installed(dirs: &[PathBuf], terminal: Option<&[String]>) -> Vec<Installed> {
     let mut found: Vec<(String, PathBuf)> = Vec::new();
     for (id, path) in dirs.iter().flat_map(|dir| entry_files(dir, dir)) {
         if !found.iter().any(|(seen, _)| *seen == id) {
@@ -188,13 +211,15 @@ fn installed(dirs: &[PathBuf]) -> Vec<Installed> {
             let exec = keys.get("Exec")?;
             let usable =
                 keys.get("Type") == Some(&"Application") && keys.get("Hidden") != Some(&"true");
+            let in_terminal = keys.get("Terminal") == Some(&"true");
             usable.then(|| Installed {
                 handler: Handler {
                     id,
                     exec: exec.to_string(),
+                    terminal: terminal.filter(|_| in_terminal).map(<[String]>::to_vec),
                 },
                 mime_types: keys.get("MimeType").unwrap_or(&"").to_string(),
-                terminal: keys.get("Terminal") == Some(&"true"),
+                terminal: in_terminal,
             })
         })
         .collect()

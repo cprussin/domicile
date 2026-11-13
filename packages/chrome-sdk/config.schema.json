@@ -896,6 +896,14 @@
     "startup": {
       "$ref": "#/$defs/StartupConfig"
     },
+    "terminal": {
+      "default": null,
+      "description": "The terminal applications such as htop and vim run in\n(`Terminal=true` in their desktop entries): its argv, which the\napplication's own follows, as `[\"kitty\", \"--\"]` or `[\"foot\"]`. The\nlauncher and `domicile open` offer such applications only when it is\nset, and a shell's terminal key opens it. Unset, there is no terminal.",
+      "items": {
+        "type": "string"
+      },
+      "type": ["array", "null"]
+    },
     "theme": {
       "$ref": "#/$defs/ThemeConfig"
     }

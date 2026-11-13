@@ -819,6 +819,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Some(path) => Config::load(path)?,
         None => Config::default(),
     };
+    // Every process started from here on is told it; see `desk_terminal`.
+    domicile_host::desk_terminal::set(config.terminal.clone());
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<DomicileCompositor> = Display::new()?;
@@ -1653,6 +1655,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         tracing::warn!(%err, "keeping the last config that parsed");
                         return;
                     }
+                    // Processes started after the reload get the new one.
+                    domicile_host::desk_terminal::set(data.state.config.current().terminal.clone());
                     let restated = Restatement::between(&was, data.state.config.current());
                     let rebuilt = data.state.screens.reloaded_into(
                         &data.state.config.current().output,

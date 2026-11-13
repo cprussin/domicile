@@ -20,6 +20,7 @@ import {
   screenshot,
   searchClipboard,
   stepWorkspace,
+  terminal,
   virtualMonitor,
   volume,
 } from "./commands";
@@ -177,9 +178,13 @@ describe("manganese's default keys", () => {
     });
   });
 
-  // No default terminal binding; users bind their own with `exec`.
-  it("launch nothing on Meta+Return", () => {
-    expect(DEFAULT_KEYBINDINGS["Meta+Return"]).toBeUndefined();
+  // The config's `terminal`; Domicile names no default one.
+  it("open the desk's terminal on Meta+Return", () => {
+    expect(DEFAULT_KEYBINDINGS["Meta+Return"]).toEqual(terminal());
+    expect(terminal()).toEqual({
+      args: ["terminal"],
+      kind: KeyActionKind.SendShell,
+    });
   });
 });
 

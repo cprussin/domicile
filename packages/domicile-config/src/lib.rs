@@ -1029,6 +1029,12 @@ pub struct Config {
     pub lockdown: LockdownConfig,
     pub output: OutputConfig,
     pub startup: StartupConfig,
+    /// The terminal applications such as htop and vim run in
+    /// (`Terminal=true` in their desktop entries): its argv, which the
+    /// application's own follows, as `["kitty", "--"]` or `["foot"]`. The
+    /// launcher and `domicile open` offer such applications only when it is
+    /// set, and a shell's terminal key opens it. Unset, there is no terminal.
+    pub terminal: Option<Vec<String>>,
     pub theme: ThemeConfig,
     /// The shell `domicile` runs when given none: a path or a package, as
     /// `domicile load-shell` takes. The compositor ignores it.
@@ -1089,6 +1095,12 @@ impl Config {
         self.input.validate()?;
         self.lock.validate()?;
         self.startup.validate()?;
+        if self.terminal.as_ref().is_some_and(Vec::is_empty) {
+            return Err(ConfigError::Validation(
+                "terminal is empty, which names no program to run; leave it out for no terminal"
+                    .to_string(),
+            ));
+        }
         self.theme.validate()?;
         self.output.validate()
     }

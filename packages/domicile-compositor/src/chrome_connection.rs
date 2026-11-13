@@ -23,7 +23,7 @@ use crate::lock::Asked;
 use crate::locking::say_what_the_lock_refused;
 use crate::peer_process::peer_pid;
 use crate::scale::output_scale;
-use crate::spawning::{desktop_environment, home_directory};
+use crate::spawning::{desktop_environment, home_directory, terminal_variable};
 use crate::theme_turnover::chrome_key;
 
 /// A chrome request answered on its own connection thread.
@@ -213,6 +213,8 @@ fn read_chrome_messages(
             }
         },
     )
+    // The desk's terminal follows the config's reloads.
+    .with_live_environment(|| vec![terminal_variable()])
     .screenshotting_with({
         let portals = hub.portals.clone();
         move |file| portals.screenshot(file)

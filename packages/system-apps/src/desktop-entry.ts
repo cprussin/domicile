@@ -17,7 +17,7 @@ export type DesktopEntry = {
   name: string;
   /** Empty for an entry with no `Comment`. */
   comment: string;
-  /** The argv it runs. */
+  /** The argv it runs: in the desk's terminal, for a `Terminal` entry. */
   command: readonly string[];
   /** `Exec` as written, for `commandOf` to open a file with. */
   exec: string;
@@ -31,34 +31,42 @@ export type DesktopEntry = {
   preview: string | undefined;
   /** `StartupWMClass`: the app id of the window it opens, if not its own id. */
   windowClass: string | undefined;
+  /**
+   * The desk's terminal, which this `Terminal=true` entry runs in, as htop
+   * and vim do; `undefined` for an application with windows of its own.
+   */
+  terminal: readonly string[] | undefined;
 };
 
 /**
  * Entry `text` as `id`, or nothing if a launcher should not offer it.
  *
  * Reads only unlocalized keys in `[Desktop Entry]`. Rejects non-applications,
- * `Hidden` entries, entries without a `Name` or a readable `Exec`, and
- * `Terminal` entries, since no terminal is configured. Rejects `NoDisplay`
- * entries too, unless `shown` is false: such an entry still opens files.
+ * `Hidden` entries and entries without a `Name` or a readable `Exec`. A
+ * `Terminal` entry runs in `terminal`, the desk's (see `./terminal`), and is
+ * rejected when there is none. Rejects `NoDisplay` entries too, unless
+ * `shown` is false: such an entry still opens files.
  */
 export const parseDesktopEntry = (
   id: string,
   text: string,
   shown = true,
+  terminal?: readonly string[],
 ): Option<DesktopEntry> => {
   const keys = keysOf(text);
   const flag = (key: string) => keys.get(key) === "true";
   const name = keys.get("Name");
   const exec = keys.get("Exec");
+  const runsIn = flag("Terminal") ? terminal : undefined;
   return keys.get("Type") !== "Application" ||
     flag("Hidden") ||
     (shown && flag("NoDisplay")) ||
-    flag("Terminal") ||
+    (flag("Terminal") && terminal === undefined) ||
     name === undefined ||
     exec === undefined
     ? None()
     : commandOf(exec).map((command) => ({
-        command,
+        command: inTerminal(runsIn, command),
         comment: unescaped(keys.get("Comment") ?? ""),
         exec,
         icon: optional(keys.get("Icon")),
@@ -68,6 +76,7 @@ export const parseDesktopEntry = (
           .filter((type) => type !== ""),
         name: unescaped(name),
         preview: optional(keys.get("X-Domicile-Preview")),
+        terminal: runsIn,
         windowClass: optional(keys.get("StartupWMClass")),
         words: [name, keys.get("GenericName") ?? "", keys.get("Keywords") ?? ""]
           .map(unescaped)
@@ -75,6 +84,12 @@ export const parseDesktopEntry = (
           .toLowerCase(),
       }));
 };
+
+/** `command`, run in `terminal` if there is one. */
+export const inTerminal = (
+  terminal: readonly string[] | undefined,
+  command: readonly string[],
+): string[] => [...(terminal ?? []), ...command];
 
 /** The `[Desktop Entry]` group's keys; the first of a repeated key wins. */
 const keysOf = (text: string): ReadonlyMap<string, string> => {

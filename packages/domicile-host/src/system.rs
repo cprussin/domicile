@@ -64,6 +64,10 @@ type Tell = Arc<dyn Fn(HostMessage) + Send + Sync>;
 /// Variables to set, or with `None` to remove, in every process's environment.
 pub type Environment = Vec<(OsString, Option<OsString>)>;
 
+/// Variables read anew for each process, after the fixed [`Environment`]: a
+/// setting a config reload can change.
+type LiveEnvironment = Arc<dyn Fn() -> Environment + Send + Sync>;
+
 /// The calls one chrome connection has running.
 ///
 /// Dropping it kills its processes and ends its watches, so a page that goes
@@ -71,6 +75,8 @@ pub type Environment = Vec<(OsString, Option<OsString>)>;
 pub struct System {
     home: PathBuf,
     environment: Environment,
+    /// See [`System::with_live_environment`].
+    live_environment: Option<LiveEnvironment>,
     /// What processes start at, rather than the spawning thread's nice
     /// value; see [`crate::priority::starting_at`].
     nice: i32,
@@ -427,6 +433,7 @@ impl System {
         System {
             home,
             environment,
+            live_environment: None,
             nice,
             tell: Arc::new(tell),
             running: Arc::new(Mutex::new(HashMap::new())),
@@ -488,6 +495,17 @@ impl System {
         preview: impl Fn(PreviewedWindow) -> Result<String, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.preview = Some(Arc::new(preview));
+        self
+    }
+
+    /// This system, setting `live`'s variables, read as each process starts,
+    /// after its fixed environment. The desk's terminal is one; see
+    /// [`crate::desk_terminal`].
+    pub fn with_live_environment(
+        mut self,
+        live: impl Fn() -> Environment + Send + Sync + 'static,
+    ) -> System {
+        self.live_environment = Some(Arc::new(live));
         self
     }
 
@@ -658,7 +676,12 @@ impl System {
                     .split_first()
                     .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "an empty argv"))?;
                 let mut command = Command::new(program);
-                for (name, value) in &system.environment {
+                let live = system
+                    .live_environment
+                    .as_ref()
+                    .map(|live| live())
+                    .unwrap_or_default();
+                for (name, value) in system.environment.iter().chain(&live) {
                     match value {
                         Some(value) => command.env(name, value),
                         None => command.env_remove(name),

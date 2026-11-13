@@ -940,8 +940,14 @@ fn mail_client(spawn: impl Fn(&[String]) + Send + Sync + 'static) -> Open {
             home.as_deref(),
             CURRENT_DESKTOP,
         );
-        let handler = default_handler(&["x-scheme-handler/mailto"], &lists, &applications)
-            .ok_or("no installed application opens mailto: links")?;
+        let terminal = domicile_host::desk_terminal::current();
+        let handler = default_handler(
+            &["x-scheme-handler/mailto"],
+            &lists,
+            &applications,
+            terminal.as_deref(),
+        )
+        .ok_or("no installed application opens mailto: links")?;
         let command = handler
             .command(url)
             .ok_or_else(|| format!("{} has an Exec line that cannot be read", handler.id))?;

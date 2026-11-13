@@ -147,6 +147,7 @@ An edit applies to the running desktop, and windows stay open:
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
+| `terminal` | Processes started from then on get the new terminal: the launcher's next opening, the next `domicile open` from a new window, and Meta+Return |
 | `lock` | The next passphrase is checked through the new PAM service. The desktop never unlocks from a reload ([LOCK.md](LOCK.md#reloading)) |
 
 - A config module is watched with its directory, except `node_modules` and
@@ -173,9 +174,33 @@ An edit applies to the running desktop, and windows stay open:
   argv: `[["emacs", "--daemon"], ["sh", "-c", "…"]]`.
 - `files`: what the launcher's file index leaves out. See
   [LAUNCHER.md](LAUNCHER.md).
+- `terminal`: see [Terminal](#terminal).
 - `output.max_scale`: the highest scale advertised for the output that
   follows Domicile's window. Applies only when `output.displays` is empty.
   Default `2`; `1` turns scaling off.
+
+## Terminal
+
+Applications such as htop and vim run in a terminal (`Terminal=true` in their
+desktop entries). Domicile has no default terminal, so they are offered only
+when the config names one:
+
+```json
+{ "terminal": ["kitty"] }
+```
+
+- It is an argv. Run alone, it opens a terminal; with an application's argv
+  after it, it runs that application in one. `["kitty"]` and `["foot"]` work
+  as written; `["alacritty", "-e"]` needs its `-e`, so Meta+Return opens
+  nothing with it. Prefer one that opens a shell when given nothing to run.
+- With it set, the launcher lists those applications and offers them under
+  "Open with", and `domicile open` runs them for the types they open. Vim
+  opening `a.txt` runs `kitty vim a.txt`.
+- Manganese opens it on Meta+Return.
+- Unset, those applications are left out, as before, and Meta+Return does
+  nothing.
+- The compositor passes it to every process it starts as `DOMICILE_TERMINAL`,
+  a JSON array. That is how the launcher and `domicile open` see it.
 
 ## Keyboard
 

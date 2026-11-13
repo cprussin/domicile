@@ -8,6 +8,7 @@ use std::thread;
 
 use tracing::debug;
 
+use domicile_host::desk_terminal;
 use domicile_host::priority;
 use domicile_host::system::Environment;
 
@@ -111,7 +112,10 @@ pub fn client_command(
     let (program, args) = words.split_first().expect("both start with a program");
     let mut child = Command::new(program);
     child.args(args);
-    for (name, value) in desktop_environment(wayland_display, library_path) {
+    for (name, value) in desktop_environment(wayland_display, library_path)
+        .into_iter()
+        .chain([terminal_variable()])
+    {
         match value {
             Some(value) => child.env(name, value),
             None => child.env_remove(name),
@@ -123,6 +127,16 @@ pub fn client_command(
     }
     priority::starting_at(&mut child, nice);
     Some(child)
+}
+
+/// [`desk_terminal::VARIABLE`] for the terminal the live config names, or to
+/// remove it. Read at each start rather than kept in
+/// [`desktop_environment`], so a reload reaches the next process.
+pub fn terminal_variable() -> (OsString, Option<OsString>) {
+    (
+        desk_terminal::VARIABLE.into(),
+        desk_terminal::variable(desk_terminal::current().as_deref()),
+    )
 }
 
 /// The variables [`client_command`] sets, or with `None` removes, so a process

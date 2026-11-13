@@ -21,6 +21,7 @@ describe("parseCommand", () => {
     ["overview", WindowAction.OverviewToggled()],
     ["clipboard", WindowAction.ClipboardToggled()],
     ["screenshot", WindowAction.ScreenshotTaken()],
+    ["terminal", WindowAction.TerminalOpened()],
     ["search-clipboard", WindowAction.ClipboardSearched()],
     ["notifications", WindowAction.NotificationsToggled()],
     ["notifications clear", WindowAction.NotificationsCleared()],
@@ -123,7 +124,7 @@ describe("parseCommand", () => {
 
   it.each([
     // Unknown verb.
-    "terminal",
+    "teleport",
     // Unknown argument.
     "focus sideways",
     // Workspace out of range.

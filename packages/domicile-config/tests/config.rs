@@ -778,6 +778,28 @@ fn an_empty_startup_command_is_refused() {
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
+// ---- terminal -------------------------------------------------------------
+
+#[test]
+fn a_desk_that_names_no_terminal_has_none() {
+    // No default: #877 decided against one.
+    assert_eq!(Config::parse("{}").unwrap().terminal, None);
+}
+
+#[test]
+fn a_terminal_is_an_argv() {
+    let terminal = Config::parse(r#"{ "terminal": ["kitty", "--"] }"#)
+        .unwrap()
+        .terminal;
+    assert_eq!(terminal, Some(vec!["kitty".to_string(), "--".to_string()]));
+}
+
+#[test]
+fn an_empty_terminal_is_refused() {
+    let err = Config::parse(r#"{ "terminal": [] }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
 // ---- files ----------------------------------------------------------------
 
 #[test]

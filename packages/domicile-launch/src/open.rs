@@ -28,6 +28,9 @@ pub struct Places {
     /// The `mimeapps.list` files, highest priority first; see
     /// `domicile_host::mime_apps::lists`.
     pub lists: Vec<PathBuf>,
+    /// The desk's terminal, which `Terminal=true` applications run in, or
+    /// none to skip them. See `domicile_host::desk_terminal`.
+    pub terminal: Option<Vec<String>>,
 }
 
 /// What opening a target does.
@@ -220,7 +223,13 @@ fn handler(
         .iter()
         .map(|dir| dir.join("applications"))
         .collect();
-    default_handler(mimes, &places.lists, &applications).ok_or_else(|| OpenError::NoApplication {
+    default_handler(
+        mimes,
+        &places.lists,
+        &applications,
+        places.terminal.as_deref(),
+    )
+    .ok_or_else(|| OpenError::NoApplication {
         target: target.to_string(),
         mime: mimes[0].to_string(),
     })

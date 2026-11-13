@@ -9,7 +9,7 @@ import { appIcons } from "@domicile-desktop/system-apps/app-icons";
 import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { findBookmarks } from "@domicile-desktop/system-apps/bookmark";
 import { curlFetch } from "@domicile-desktop/system-apps/curl";
-import { dataDirs } from "@domicile-desktop/system-apps/data-dirs";
+import { appPlaces } from "@domicile-desktop/system-apps/data-dirs";
 import type { DesktopEntry as InstalledEntry } from "@domicile-desktop/system-apps/desktop-entry";
 import { favicon } from "@domicile-desktop/system-apps/favicon";
 import type { Favicons } from "@domicile-desktop/system-apps/favicons";
@@ -133,6 +133,7 @@ const webAppEntry = (app: WebApp): InstalledEntry => ({
   mimeTypes: [],
   name: app.name,
   preview: undefined,
+  terminal: undefined,
   windowClass: undefined,
   words: app.name.toLowerCase(),
 });
@@ -142,10 +143,11 @@ const read = async (
   omits: (id: string) => boolean,
   iconTheme: IconTheme,
 ): Promise<Installed> => {
-  const dirs = succeeded(await dataDirs(domicile));
+  const { dirs, terminal } = succeeded(await appPlaces(domicile));
   const theme = await iconTheme();
   return {
-    entries: succeeded(await installedApps(domicile, dirs)).filter(
+    // htop and vim, in the desk's terminal when the config names one.
+    entries: succeeded(await installedApps(domicile, dirs, terminal)).filter(
       ({ id }) => !omits(id),
     ),
     icon: appIcons(domicile, dirs, ["apps"], { theme }),

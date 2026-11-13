@@ -32,7 +32,8 @@
     "./omit": "./src/omit.ts",
     "./opener": "./src/opener.ts",
     "./openers": "./src/openers.ts",
-    "./opens": "./src/opens.ts"
+    "./opens": "./src/opens.ts",
+    "./terminal": "./src/terminal.ts"
   },
   "files": [
     "src/**",
