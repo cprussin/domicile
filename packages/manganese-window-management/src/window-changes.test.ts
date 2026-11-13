@@ -113,6 +113,7 @@ describe("windowChanges", () => {
       ).toStrictEqual([
         WindowAction.PopupPlaced({
           appId: "menu",
+          cursor: "default",
           frame: 0,
           parent: "term",
           position: [10, 20],
@@ -200,9 +201,57 @@ describe("windowChanges", () => {
       ).toStrictEqual([
         WindowAction.PopupPlaced({
           appId: "menu",
+          cursor: "default",
           frame: 0,
           parent: "term",
           position: [30, 20],
+          size: [100, 200],
+        }),
+      ]);
+    });
+
+    it("places a popup with the cursor its client asked for over it", () => {
+      // Firefox draws its whole window into a bubble, so every cursor it asks
+      // for is over the bubble.
+      const menu = listedWindow("menu", {
+        height: 200,
+        parent: "term",
+        width: 100,
+        x: 10,
+        y: 20,
+      });
+      const drawn =
+        'image-set(url("data:image/png;base64,iVBO") 1x) 1 2, default';
+
+      expect(
+        windowChanges(
+          NO_RULES,
+          [TERM, menu],
+          [TERM, { ...menu, cursor: "pointer" }],
+        ),
+      ).toStrictEqual([
+        WindowAction.PopupPlaced({
+          appId: "menu",
+          cursor: "pointer",
+          frame: 0,
+          parent: "term",
+          position: [10, 20],
+          size: [100, 200],
+        }),
+      ]);
+      expect(
+        windowChanges(
+          NO_RULES,
+          [TERM, menu],
+          [TERM, { ...menu, cursorImage: drawn }],
+        ),
+      ).toStrictEqual([
+        WindowAction.PopupPlaced({
+          appId: "menu",
+          cursor: drawn,
+          frame: 0,
+          parent: "term",
+          position: [10, 20],
           size: [100, 200],
         }),
       ]);
@@ -232,6 +281,7 @@ describe("windowChanges", () => {
         WindowAction.AppFrameSynced("term", 4),
         WindowAction.PopupPlaced({
           appId: "menu",
+          cursor: "default",
           frame: 1,
           parent: "term",
           position: [10, 40],

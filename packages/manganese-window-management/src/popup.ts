@@ -8,6 +8,8 @@ import { appWindowId } from "./window";
 /** A popup announced by the host, as stored in the reducer. */
 export type Popup = {
   appId: string;
+  /** The CSS cursor its client asked for over it. */
+  cursor: string;
   /** The synced frame its `<app>` shows. See `DomicileWindow.frame`. */
   frame: number;
   /** The window or popup it is over, by app id. */
@@ -19,6 +21,7 @@ export type Popup = {
 /** Where one popup is drawn. */
 export type PlacedPopup = {
   appId: string;
+  cursor: string;
   depth: number;
   frame: number;
   rect: Rect;
@@ -43,6 +46,7 @@ export const popupsOver = (
       : [
           {
             appId: popup.appId,
+            cursor: popup.cursor,
             depth: raised(over.depth),
             frame: popup.frame,
             rect: {

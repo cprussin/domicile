@@ -76,6 +76,7 @@ type ShellWindow = {
  */
 type Popup = {
   appId: string;
+  cursor: string;
   parent: string;
   position: readonly [x: number, y: number];
   size: readonly [width: number, height: number];
@@ -281,6 +282,7 @@ const popupOf = (window: ClientWindow): readonly Popup[] =>
     : [
         {
           appId: window.appId,
+          cursor: window.cursor,
           parent: window.parent,
           position: [window.x ?? 0, window.y ?? 0],
           size: [window.width ?? 0, window.height ?? 0],
@@ -389,6 +391,7 @@ const popupStyleOf = (
   return over === undefined
     ? undefined
     : {
+        cursor: popup.cursor,
         height: popup.size[1],
         left: over.left + popup.position[0],
         top: over.top + popup.position[1],
