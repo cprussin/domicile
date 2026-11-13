@@ -26,6 +26,7 @@
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
 #include "ui/ozone/platform/drm/domicile/edid_name.h"
+#include "ui/ozone/platform/drm/domicile/ten_bit_scanout.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/drm_window_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
@@ -92,6 +93,25 @@ void DrawInAFormatThePlanesTake(display::Display& screen,
   gfx::DisplayColorSpaces color_spaces = screen.GetColorSpaces();
   color_spaces.SetOutputFormats(viz::SinglePlaneFormat::kBGRA_8888,
                                 viz::SinglePlaneFormat::kBGRA_8888);
+  screen.SetColorSpaces(color_spaces);
+}
+
+// Draws `screen`'s frames in 10 bits a channel where its panel and planes
+// take them; see `TenBitScanoutFourcc`. Viz names channels in memory order, so
+// XBGR2101010 is RGBA_1010102.
+void DrawInTenBitsWhereThePanelTakesThem(
+    display::Display& screen,
+    const display::DisplaySnapshot& snapshot) {
+  const std::optional<uint32_t> fourcc = TenBitScanoutFourcc(snapshot);
+  if (!fourcc) {
+    return;
+  }
+  const viz::SharedImageFormat format =
+      *fourcc == DRM_FORMAT_XBGR2101010
+          ? viz::SinglePlaneFormat::kRGBA_1010102
+          : viz::SinglePlaneFormat::kBGRA_1010102;
+  gfx::DisplayColorSpaces color_spaces = screen.GetColorSpaces();
+  color_spaces.SetOutputFormats(format, format);
   screen.SetColorSpaces(color_spaces);
 }
 
@@ -234,6 +254,7 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
     screen.set_label(name);
   }
   DrawInAFormatThePlanesTake(screen, snapshot);
+  DrawInTenBitsWhereThePanelTakesThem(screen, snapshot);
   return screen;
 }
 

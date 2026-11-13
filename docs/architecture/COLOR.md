@@ -20,7 +20,7 @@ color descriptions, the protocol, and the config. Tracks
  client ◀── output / preferred image ─────┤◀── DomicileDisplays: color space,            ▼
             description                   │    HDR capable, luminances       DrmDisplay: plane format,
                                           │                                  Colorspace, HDR_OUTPUT_
- profile: hdr, bit_depth ─────────────────┴──▶ DomicileDisplayLayout ──────▶ METADATA, max bpc
+ profile: hdr ────────────────────────────┴──▶ DomicileDisplayLayout ──────▶ METADATA, max bpc
 ```
 
 | Piece | Where | Does |
@@ -28,9 +28,9 @@ color descriptions, the protocol, and the config. Tracks
 | Importable formats | engine `FormatFromFourcc`, compositor `FOURCCS` | One list in two places, kept equal by `test-the-engines-fourccs-agree.sh`. The compositor advertises the ones its renderer also imports, on `zwp_linux_dmabuf_v1` and `wl_shm` |
 | Buffer color | `ImportBuffer` / `domicile_surface_import_*` | Each import carries the surface's color description. The engine builds the `SharedImage` in that `gfx::ColorSpace` and sets its `gfx::HDRMetadata`, in place of sRGB |
 | Display color | `drm_screen.cc` | Builds each `display::Display`'s `gfx::DisplayColorSpaces` from the EDID and the layout: SDR, or HDR10 with an SDR white level and the panel's peak luminance. Output format is `RGBA_1010102` at 10 bits |
-| Scanout | Chromium `DrmDisplay`, `HardwareDisplayController` | HDR10 sets `Colorspace` to `BT2020_RGB` and writes `HDR_OUTPUT_METADATA`. Domicile adds `max bpc` and the 10-bit plane format, with an 8-bit fallback |
+| Scanout | Chromium `DrmDisplay`; `ten_bit_scanout.cc` | A panel whose EDID reports 10 bits, on planes that take `XB30` or `XR30`, scans out of a 10-bit framebuffer with `max bpc` at 10. HDR10 sets `Colorspace` to `BT2020_RGB` and writes `HDR_OUTPUT_METADATA` |
 | Protocol | `domicile-compositor` (`color_management.rs`) | `wp_color_manager_v1`, per-output and per-surface image descriptions, preferred description feedback. Smithay has none; the global is built on `wayland-protocols`' staging server bindings |
-| Config | `domicile-config` placement: `hdr`, `bit_depth` | Per display. Settings shows an HDR switch and an SDR brightness slider for displays that report HDR |
+| Config | `domicile-config` placement: `hdr` | Per display. Settings shows an HDR switch and an SDR brightness slider for displays that report HDR |
 | Night light | `gamma.rs`, engine | On an HDR display it is a color matrix in viz's linear composition. `wlr-gamma-control` fails for that display |
 
 ## Key decisions
@@ -51,11 +51,11 @@ color descriptions, the protocol, and the config. Tracks
 - **HDR is opt-in per display (`hdr = true`).** An HDR mode changes how SDR
   content looks and some panels dim or flicker in it, as in sway, KDE and
   GNOME. A display whose EDID has no BT.2020 + PQ ignores it and reports that.
-- **`bit_depth` defaults to 8, `hdr` implies 10.** Some drivers and adapters
-  light a 10-bit plane black or banded. `bit_depth = 10` asks for it on SDR.
-  The atomic test commit picks 8 bits when the plane or connector refuses 10,
-  and the display reports what it got. The DisplayLink dock (evdi) takes only
-  `XRGB8888`.
+- **10-bit scanout follows the hardware, with no setting.** A panel gets it
+  when its EDID reports at least 10 bits a channel and the planes take a
+  10-bit format, as ChromeOS decides; otherwise 8 bits. `max bpc` is raised
+  to 10 there, as wlroots does, so the driver does not dither the link to 8.
+  The DisplayLink dock (evdi) takes only `XRGB8888`, so it stays 8-bit.
 - **SDR white is 203 nits by default** (ITU-R BT.2408), set per display from
   Settings. It is the white level viz composites SDR content at, and the
   reference white the protocol tells clients.
@@ -79,16 +79,10 @@ color descriptions, the protocol, and the config. Tracks
 ## Plan
 
 - [ ] engine + compositor: 10-bit and F16 formats in `FormatFromFourcc` and `FOURCCS`, on `wl_shm` too; `guard-buffer-formats.sh`
-- [ ] config + engine: `bit_depth` per placement; 10-bit plane format and `max bpc`, 8-bit fallback; reported per display
+- [x] engine: 10-bit framebuffers and `max bpc` where the EDID and planes take 10 bits
 - [ ] engine: buffer color descriptions on import (`gfx::ColorSpace`, `gfx::HDRMetadata`)
 - [ ] compositor: `wp_color_management_v1` with output and surface descriptions and preferred feedback
 - [ ] engine: HDR10 display color spaces from the EDID and the layout; `Colorspace`, `HDR_OUTPUT_METADATA`
 - [ ] config: `hdr` and SDR white per placement; HDR capability reported per display
 - [ ] engine + compositor: night light as a viz color matrix on HDR displays; `wlr-gamma-control` fails there
 - [ ] Settings: HDR switch and SDR brightness for HDR displays (mockup first)
-
-## Open questions
-
-- **Settings or config only for `bit_depth`?** Recommend config only: it
-  fixes banding on panels that need it, and a person can't tell from Settings
-  whether theirs does.
