@@ -32,7 +32,8 @@ Manganese uses sway's layout model. For the key bindings, see
 - `layout toggle split` (Meta+E) on a group splits its tabs into groups of
   their own. On a window alone in its group, it turns the split around the
   group between a row and a column. `layout tabbed` or `layout stacking` on a split merges its groups'
-  windows into one group.
+  windows into one group. On a group already in that layout, it acts on the
+  split around the group.
 - `move <direction>` moves a window alone in its group as the group would: into
   the next group that way, as a tab. A tab moves along its strip, then out of
   the group past its end. A selected group moves the same way, nesting as a

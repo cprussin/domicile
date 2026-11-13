@@ -550,7 +550,6 @@ describe("the focus box", () => {
       WindowAction.LayoutSet(Layout.SplitH),
       WindowAction.ContainerSplit(Axis.Vertical),
       WindowAction.AppAppeared("mail", "mail"),
-      WindowAction.LayoutSet(Layout.Tabbed),
     );
 
     expect(focusBoxOf(state)).toEqual({
@@ -569,7 +568,6 @@ describe("the focus box", () => {
       WindowAction.LayoutSet(Layout.SplitH),
       WindowAction.ContainerSplit(Axis.Vertical),
       WindowAction.AppAppeared("mail", "mail"),
-      WindowAction.LayoutSet(Layout.Tabbed),
       WindowAction.ParentFocused(),
     );
 

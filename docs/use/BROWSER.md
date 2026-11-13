@@ -14,7 +14,7 @@ tiles beside your apps like any other.
 - `domicile open <address>` opens one from a terminal.
 
 A new tab is a new window: it opens beside the one you were in, in the same
-group. Meta+W puts a group in tabs.
+group. Meta+W merges groups side by side into one group of tabs.
 
 ## The address bar
 

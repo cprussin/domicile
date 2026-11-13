@@ -861,7 +861,6 @@ describe("the workspaces", () => {
       desktop("mail", "kitty"),
       WindowAction.ContainerSplit(Axis.Vertical),
       WindowAction.AppAppeared("editor", "editor"),
-      WindowAction.LayoutSet(Layout.Tabbed),
       WindowAction.ParentFocused(),
       WindowAction.WindowSentToWorkspace("2"),
     );
@@ -1454,7 +1453,6 @@ describe("the pointer", () => {
       WindowAction.LayoutSet(Layout.SplitH),
       WindowAction.ContainerSplit(Axis.Vertical),
       WindowAction.AppAppeared("mail", "mail"),
-      WindowAction.LayoutSet(Layout.Tabbed),
       WindowAction.FocusStepped(Direction.Left),
       WindowAction.FocusStepped(Direction.Left),
       WindowAction.WindowHovered(APP("mail")),
@@ -2228,7 +2226,6 @@ describe("the launcher", () => {
       WindowAction.LayoutSet(Layout.SplitH),
       WindowAction.ContainerSplit(Axis.Vertical),
       WindowAction.AppAppeared("mail", "mail"),
-      WindowAction.LayoutSet(Layout.Tabbed),
       WindowAction.FocusStepped(Direction.Left),
       WindowAction.FocusStepped(Direction.Left),
       WindowAction.NewTabPressed(APP("mail")),
