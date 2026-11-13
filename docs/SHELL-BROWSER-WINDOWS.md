@@ -183,6 +183,10 @@ user's and every other partition, like a separate browser profile:
   preview or a screen cast of the page alone sets it, and `browser.on("change")`
   fires. A page with no layout box draws nothing, so the capture would get no
   frame. Manganese draws a hidden tab under the shown one meanwhile.
+- **`toplevelId`** is the window's identifier on
+  `ext-foreign-toplevel-list-v1`, for a capture tool, as a native window's is
+  ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#windows)). It is `undefined` until
+  the compositor lists the window.
 - `domicile://` addresses, and `blob:` URLs the shell created, show
   `about:blank#blocked`. A guest on the shell's origin could control the
   compositor.

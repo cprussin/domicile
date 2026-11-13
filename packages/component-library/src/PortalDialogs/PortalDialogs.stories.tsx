@@ -421,6 +421,7 @@ const browserWindow = (id: string, title: string): DomicileBrowserWindow => ({
   partition: "",
   popupWindow: null,
   title,
+  toplevelId: null,
   url: "https://example.com",
   width: 0,
 });

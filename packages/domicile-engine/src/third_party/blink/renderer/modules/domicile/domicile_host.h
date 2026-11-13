@@ -337,6 +337,8 @@ class MODULES_EXPORT DomicileHost final
   void AppTitled(const String& app_id, const String& title) override;
   void AppDesktopId(const String& app_id, const String& desktop_id) override;
   void AppInhibitsShortcuts(const String& app_id, bool inhibits) override;
+  void BrowserToplevelIds(
+      const HashMap<String, String>& toplevel_ids) override;
   void AppAppeared(const String& app_id,
                    const String& title,
                    const String& desktop_id,
@@ -345,6 +347,7 @@ class MODULES_EXPORT DomicileHost final
                    bool dialog,
                    bool client_frame,
                    domicile::mojom::blink::WindowOwnerPtr owner,
+                   const String& toplevel_id,
                    uint32_t frame) override;
   void AppResized(const String& app_id, double width, double height) override;
   void AppMinSize(const String& app_id, double width, double height) override;
@@ -454,6 +457,9 @@ class MODULES_EXPORT DomicileHost final
   // Rebuild `client_windows_` from `window_states_` and say so with
   // `windowschanged`.
   void WindowsChanged();
+  // Rebuild `browser_windows_` from `listed_browser_windows_` and
+  // `browser_toplevel_ids_` and say so with `browserwindowschanged`.
+  void ListBrowserWindows();
 
   // A moment rather than a state -- `focusrequested`, `shortcut` --
   // has no attribute to read late, so one that arrives before anything
@@ -605,8 +611,11 @@ class MODULES_EXPORT DomicileHost final
   String shell_options_;
   std::optional<bool> high_contrast_;
   std::optional<bool> reduced_motion_;
-  // Replaced wholesale, like `displays_`, and for its reason.
+  // Replaced wholesale, like `displays_`, and for its reason. Built from the
+  // browser's list and the compositor's toplevel ids, which come apart.
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;
+  Vector<domicile::mojom::blink::BrowserWindowPtr> listed_browser_windows_;
+  HashMap<String, String> browser_toplevel_ids_;
   // And `cast_sinks_`, for the same reason.
   Member<FrozenArray<DomicileCastSink>> cast_sinks_;
   // And `downloads_`.

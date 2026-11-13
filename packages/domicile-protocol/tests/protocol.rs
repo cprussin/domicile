@@ -469,6 +469,7 @@ fn wire_shape_is_pinned() {
             pidfd_inode: None,
             sandbox: None,
         },
+        toplevel_id: "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa".into(),
         frame: 0,
     })
     .unwrap();
@@ -667,6 +668,7 @@ fn a_window_appears_at_its_synced_frame() {
                 pidfd_inode: None,
                 sandbox: None,
             },
+            toplevel_id: "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa".into(),
             frame,
         })
         .unwrap()
