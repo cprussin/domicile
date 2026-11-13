@@ -1,7 +1,8 @@
 //! Something every listening page hears, across every chrome connection: the
 //! shell commands ([`crate::shell_commands`]), the lock's refusals
 //! ([`crate::unlock_refusals`]) and clients' window requests
-//! ([`crate::window_requests`]).
+//! ([`crate::window_requests`]). [`crate::idle_watches`] shares its
+//! [`Listener`].
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -23,6 +24,15 @@ pub(crate) struct Listener {
     stop: Option<Box<dyn FnOnce() + Send>>,
 }
 
+impl Listener {
+    /// A listener that calls `stop` when it drops.
+    pub(crate) fn stopping(stop: impl FnOnce() + Send + 'static) -> Listener {
+        Listener {
+            stop: Some(Box::new(stop)),
+        }
+    }
+}
+
 impl<T: ?Sized + 'static> Fanout<T> {
     /// Calls `hear` with every item sent until the [`Listener`] drops.
     pub(crate) fn listen(&self, hear: Hear<T>) -> Listener {
@@ -31,11 +41,9 @@ impl<T: ?Sized + 'static> Fanout<T> {
         listeners.next += 1;
         listeners.hearing.insert(key, hear);
         let fanout = self.clone();
-        Listener {
-            stop: Some(Box::new(move || {
-                fanout.0.lock().unwrap().hearing.remove(&key);
-            })),
-        }
+        Listener::stopping(move || {
+            fanout.0.lock().unwrap().hearing.remove(&key);
+        })
     }
 
     /// Sends `item` to every listener, and returns how many there were.

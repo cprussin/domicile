@@ -563,12 +563,6 @@ pub struct IdleConfig {
     ///
     /// Absent means never. Zero is refused.
     pub blank_after_seconds: Option<u64>,
-    /// Seconds before the screens go dark that the shell is warned, so it can
-    /// dim or count down. Input in that time calls the blanking off.
-    ///
-    /// Absent means no warning. It must be at least 1 and less than
-    /// `blank_after_seconds`.
-    pub warn_before_seconds: Option<u64>,
     /// Seconds without input before the desktop locks.
     ///
     /// Absent means the desktop locks only when its shell asks. Zero is
@@ -581,12 +575,6 @@ impl IdleConfig {
     /// for never.
     pub fn blank_after(&self) -> Option<Duration> {
         self.blank_after_seconds.map(Duration::from_secs)
-    }
-
-    /// How long before blanking the shell is warned, or `None` for no
-    /// warning.
-    pub fn warn_before(&self) -> Option<Duration> {
-        self.warn_before_seconds.map(Duration::from_secs)
     }
 
     /// How long the desktop goes without input before it locks, or `None`
@@ -610,15 +598,7 @@ impl IdleConfig {
                     .into(),
             ));
         }
-        match (self.warn_before_seconds, self.blank_after_seconds) {
-            (Some(warn), Some(blank)) if warn > 0 && warn < blank => Ok(()),
-            (Some(_), _) => Err(ConfigError::Validation(
-                "idle.warn_before_seconds must be at least 1 second and less than \
-                 idle.blank_after_seconds; leave the key out for no warning"
-                    .into(),
-            )),
-            (None, _) => Ok(()),
-        }
+        Ok(())
     }
 }
 

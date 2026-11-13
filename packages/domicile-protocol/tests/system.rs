@@ -505,32 +505,34 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
     );
 }
 
-/// A page hears when the screens are about to blank, and when that is called
-/// off. See `docs/IDLE.md`.
+/// A page hears when nobody has been at the desktop for a time it chose, and
+/// when somebody is again. See `docs/IDLE.md`.
 #[test]
-fn a_page_hears_how_soon_the_screens_blank_and_when_they_no_longer_will() {
+fn a_page_hears_the_desktop_go_idle_after_a_time_it_chose() {
     assert_eq!(
-        chrome(r#"{"type":"system_request","id":13,"request":{"call":"idle_warnings"}}"#),
+        chrome(
+            r#"{"type":"system_request","id":13,"request":{"call":"idle_after","seconds":120}}"#
+        ),
         ChromeMessage::SystemRequest {
             id: 13,
-            request: SystemRequest::IdleWarnings,
+            request: SystemRequest::IdleAfter { seconds: 120 },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":14,"request":{"call":"idle_before_blanking","seconds":30}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 14,
+            request: SystemRequest::IdleBeforeBlanking { seconds: 30 },
         }
     );
     assert_eq!(
         host(&HostMessage::SystemEvent {
             id: 13,
-            event: SystemEvent::IdleWarning {
-                blanks_in_ms: Some(30_000),
-            },
+            event: SystemEvent::Idle { idle: true },
         }),
-        r#"{"type":"system_event","id":13,"event":{"kind":"idle_warning","blanks_in_ms":30000}}"#
-    );
-    assert_eq!(
-        host(&HostMessage::SystemEvent {
-            id: 13,
-            event: SystemEvent::IdleWarning { blanks_in_ms: None },
-        }),
-        r#"{"type":"system_event","id":13,"event":{"kind":"idle_warning","blanks_in_ms":null}}"#
+        r#"{"type":"system_event","id":13,"event":{"kind":"idle","idle":true}}"#
     );
 }
 

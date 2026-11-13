@@ -38,40 +38,45 @@ const A_DESK_THAT_BLANKS_LATER: &str = r#"
 }
 "#;
 
-/// A desk that warns its shell a second before it blanks, the shortest the
-/// config allows.
-const A_DESK_THAT_WARNS: &str = r#"
-{
-  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
-  "idle": { "blank_after_seconds": 2, "warn_before_seconds": 1 }
+/// Whether `message` tells watch `id` the desk is `idle`.
+fn idle(id: u32, idle: bool) -> impl Fn(&HostMessage) -> bool {
+    move |message| {
+        matches!(
+            message,
+            HostMessage::SystemEvent {
+                id: heard,
+                event: SystemEvent::Idle { idle: heard_idle },
+            } if *heard == id && *heard_idle == idle
+        )
+    }
 }
-"#;
 
-/// The page hears the warning from the armed timer, and a key calls it off.
-#[test]
-fn a_key_during_the_warning_keeps_the_screens_on() {
-    let compositor = Compositor::started_with(A_DESK_THAT_WARNS);
-    let mut chrome = compositor.chrome();
+/// Starts watch `id` going idle after `seconds`.
+fn watch(chrome: &mut domicile_test_chrome::Chrome, id: u32, seconds: u64) {
     chrome
         .say(&ChromeMessage::SystemRequest {
-            id: 1,
-            request: SystemRequest::IdleWarnings,
+            id,
+            request: SystemRequest::IdleAfter { seconds },
         })
         .expect("the chrome socket takes a system call");
+}
 
+/// The shell's watches go idle in the order of their times, on a desk with no
+/// timeout of its own, and a key ends both.
+#[test]
+fn a_page_hears_each_time_it_chose_pass_and_a_key_end_them() {
+    let compositor = Compositor::started_with(NOBODY_MENTIONED_IDLE);
+    let mut chrome = compositor.chrome();
+    watch(&mut chrome, 2, 2);
+    watch(&mut chrome, 1, 1);
+
+    let first = chrome
+        .wait_for(|message| idle(1, true)(message) || idle(2, true)(message))
+        .expect("a watch goes idle");
+    assert!(idle(1, true)(&first), "the shorter goes first: {first:?}");
     chrome
-        .wait_for(|message| {
-            matches!(
-                message,
-                HostMessage::SystemEvent {
-                    id: 1,
-                    event: SystemEvent::IdleWarning {
-                        blanks_in_ms: Some(_)
-                    },
-                }
-            )
-        })
-        .expect("the page is warned");
+        .wait_for(idle(2, true))
+        .expect("the longer goes idle after");
     chrome
         .say(&ChromeMessage::Key {
             app_id: "nothing".into(),
@@ -81,17 +86,60 @@ fn a_key_during_the_warning_keeps_the_screens_on() {
         .expect("the chrome socket takes a key");
 
     chrome
+        .wait_for(idle(1, false))
+        .expect("the key ends the first");
+    chrome
+        .wait_for(idle(2, false))
+        .expect("the key ends the second");
+}
+
+/// An idle inhibitor holds the shell's watches as it holds blanking, and
+/// letting go after the time is up goes idle at once.
+#[test]
+fn a_film_holds_the_shells_idle_watches_until_it_is_gone() {
+    let compositor = Compositor::started_with(NOBODY_MENTIONED_IDLE);
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 2,
+            request: SystemRequest::IdleHolds,
+        })
+        .expect("the chrome socket takes a system call");
+    let film = compositor.client_with("film", &["--hold-the-screens-on"]);
+    chrome
         .wait_for(|message| {
             matches!(
                 message,
                 HostMessage::SystemEvent {
-                    id: 1,
-                    event: SystemEvent::IdleWarning { blanks_in_ms: None },
-                }
+                    id: 2,
+                    event: SystemEvent::IdleHolds { holders },
+                } if !holders.is_empty()
             )
         })
-        .expect("the warning is called off");
-    compositor.wait_for_log("somebody is at this desktop again; its screens stay on");
+        .expect("the film holds the desktop awake");
+    watch(&mut chrome, 1, 1);
+
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 3,
+            request: SystemRequest::IdleHolds,
+        })
+        .expect("the chrome socket takes a system call");
+    let heard = chrome
+        .wait_for(|message| {
+            idle(1, true)(message) || matches!(message, HostMessage::SystemReply { id: 3, .. })
+        })
+        .expect("the page hears something");
+    assert!(
+        !idle(1, true)(&heard),
+        "the film held the watch past its time"
+    );
+
+    drop(film);
+    chrome
+        .wait_for(idle(1, true))
+        .expect("the watch goes idle once the film is gone");
 }
 
 /// Blanking alone leaves the desktop unlocked: a page on the dark desk still

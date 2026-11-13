@@ -76,7 +76,7 @@ The engine builds it with the SDK's layer over a `DomicileAppHost`, which has
 | An app may | An app may not |
 |---|---|
 | `read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch` | `screenshot`, `shell_commands`, `send_shell` |
-| `spawn` and its `stdin`, `close_stdin`, `kill` | `idle_warnings`, `unlock_refusals` |
+| `spawn` and its `stdin`, `close_stdin`, `kill` | `idle_after`, `idle_before_blanking`, `unlock_refusals` |
 | `dbus_call`, `dbus_match`, `unwatch` | `set_window_states`, `window_requests` |
 | | `keymaps`, `select_keymap` |
 | | every other control channel member: input, focus, windows, lock, theme |
