@@ -6,13 +6,23 @@ import type { Seen } from "./overview/sight";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import type { WindowMotion } from "./window-motion";
-import { clippedTo, screenClipStyles, slidAcross } from "./window-styles";
+import {
+  clippedTo,
+  screenClipStyles,
+  slidAcross,
+  unedgedOn,
+} from "./window-styles";
 
 type Props = {
   /** The window's contents or its bar. */
   children: ReactNode;
   /** The depth of the contents or bar it holds. */
   depth: number;
+  /**
+   * Whether the window fills its screen, alone or in its group. See
+   * `unedgedOn`.
+   */
+  fillsScreen: boolean;
   /**
    * The window's frame, which the scratchpad slides lift and popups opened in
    * the window stay inside.
@@ -53,13 +63,14 @@ export const WINDOW_FRAME = "data-window-frame";
  * the windows beside it.
  *
  * Takes no space, stacking or pointer of its own (see `screenClipStyles`).
- * Its children inherit the slide distances from it, and it clips them to
- * their screen during a workspace switch. In the overview, it shows them
- * through their workspace's tile.
+ * Its children inherit the slide distances and tab edge from it, and it clips
+ * them to their screen during a workspace switch. In the overview, it shows
+ * them through their workspace's tile.
  */
 export const WindowFrame = ({
   children,
   depth,
+  fillsScreen,
   frame,
   motion,
   onHover,
@@ -76,15 +87,16 @@ export const WindowFrame = ({
     onPointerOver={(event) => {
       onHover([event.clientX, event.clientY]);
     }}
-    style={
-      screen === undefined
-        ? undefined
+    style={{
+      ...unedgedOn(fillsScreen),
+      ...(screen === undefined
+        ? {}
         : {
             ...slidAcross(screen, frame, motion, rewound),
             ...clippedTo(screen, motion),
             ...seenClip(seen, screen, depth),
-          }
-    }
+          }),
+    }}
   >
     <div
       className={seenStyles({

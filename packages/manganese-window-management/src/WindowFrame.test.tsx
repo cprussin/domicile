@@ -28,6 +28,7 @@ describe("WindowFrame", () => {
     render(
       <WindowFrame
         depth={0}
+        fillsScreen={false}
         frame={{ height: 800, width: 400, x: 0, y: 0 }}
         motion="resting"
         onHover={noHover}
@@ -57,6 +58,7 @@ describe("WindowFrame", () => {
     render(
       <WindowFrame
         depth={0}
+        fillsScreen={false}
         frame={undefined}
         motion="resting"
         onHover={(at) => {
@@ -86,6 +88,7 @@ describe("WindowFrame", () => {
     render(
       <WindowFrame
         depth={0}
+        fillsScreen={false}
         frame={undefined}
         motion="resting"
         onHover={noHover}
@@ -110,10 +113,12 @@ describe("WindowFrame", () => {
     const styleOf = (
       motion: WindowMotion = "resting",
       seen: Seen | undefined = undefined,
+      fillsScreen = false,
     ) => {
       render(
         <WindowFrame
           depth={2}
+          fillsScreen={fillsScreen}
           frame={{ height: 400, width: 600, x: 40, y: 300 }}
           motion={motion}
           onHover={noHover}
@@ -128,6 +133,16 @@ describe("WindowFrame", () => {
       const moved = screen.getByRole("button").parentElement;
       return { moved: moved?.style, wrapper: moved?.parentElement?.style };
     };
+
+    // A tab's contents carry an edge while they grow or shrink (see
+    // `movingStyles`), whose shadow would spill onto the next display.
+    it("takes the edge off a moving tab that fills its screen", () => {
+      expect(
+        styleOf("resting", undefined, true).wrapper?.getPropertyValue(
+          "--tab-edge",
+        ),
+      ).toBe("none");
+    });
 
     it("slides its parts the width of the screen", () => {
       // A workspace switch slides by the width of the window's screen.

@@ -35,6 +35,13 @@ const SCRATCHPAD_SLIDE = {
   "100%": { opacity: "1", transform: "translateY(0)" },
 };
 
+/**
+ * The ring and shadow an opening or closing tab's contents carry, or
+ * `--tab-edge` where they would spill off the screen (see `unedgedOn`).
+ */
+const TAB_EDGE =
+  "var(--tab-edge, 0 0 0 1px {colors.borderStrong}, {shadows.lifted})";
+
 // The scratchpad backdrop fades in with a window's drop, and out with its
 // stow by playing this backwards. Two names for the same reason as
 // `SCRATCHPAD_SLIDE`.
@@ -101,6 +108,13 @@ export const windowManagementPreset = definePreset({
             transform: "scale(var(--collapse-x, 1), var(--collapse-y, 1))",
           },
         },
+        // Fades in as the contents start to shrink, so the shadow does not
+        // appear in one frame.
+        windowClosingTabEdge: {
+          "0%": { boxShadow: "none" },
+          "30%": { boxShadow: TAB_EDGE },
+          "100%": { boxShadow: TAB_EDGE },
+        },
         // A tab switch: the revealed tab fades in over the hidden one; see
         // `tab-switch.ts`.
         //
@@ -157,6 +171,13 @@ export const windowManagementPreset = definePreset({
             transform: "scale(var(--collapse-x, 1), var(--collapse-y, 1))",
           },
           "100%": { opacity: "1", transform: "scale(1, 1)" },
+        },
+        // Fades out as the contents settle, so the shadow does not vanish in
+        // one frame.
+        windowOpeningTabEdge: {
+          "0%": { boxShadow: TAB_EDGE },
+          "70%": { boxShadow: TAB_EDGE },
+          "100%": { boxShadow: "none" },
         },
         windowRestacking: RESTACKING,
         windowRestackingAgain: RESTACKING,

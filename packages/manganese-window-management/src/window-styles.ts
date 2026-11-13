@@ -223,6 +223,16 @@ export const slidAcross = (
 });
 
 /**
+ * Custom property taking the ring and shadow off a moving tab's contents (see
+ * `movingStyles`) when its window fills its screen, where the shadow would
+ * spill onto the next display. None otherwise, so the keyframes' own applies.
+ */
+export const unedgedOn = (
+  fillsScreen: boolean,
+): Record<`--${string}`, string> =>
+  fillsScreen ? { "--tab-edge": "none" } : {};
+
+/**
  * The wrapper around each part of a window that clips it to its screen; see
  * {@link clippedTo}.
  *
@@ -288,11 +298,16 @@ export const movingStyles = cva({
     // they uncover; a new tab's grow out of it over the tab they hide (see
     // `contentsScaledAbout`). A fade alone, over the same box, reads as a tab
     // switch. Slower than a window's, so the move to the strip is seen.
+    //
+    // Their edge scales with them, too thin to show them over a like tab (a
+    // terminal over a terminal), so they also carry a ring and shadow
+    // (`windowOpeningTabEdge`, `windowClosingTabEdge`). A second animation,
+    // since `box-shadow` cannot run on the compositor thread.
     {
       contents: true,
       css: {
         animationDuration: "token(durations.slow)",
-        animationName: "windowClosingIntoTab",
+        animationName: "windowClosingIntoTab, windowClosingTabEdge",
         animationTimingFunction: "token(easings.outQuart)",
       },
       motion: "closing-tab",
@@ -301,7 +316,7 @@ export const movingStyles = cva({
       contents: true,
       css: {
         animationDuration: "token(durations.slow)",
-        animationName: "windowOpeningFromTab",
+        animationName: "windowOpeningFromTab, windowOpeningTabEdge",
         animationTimingFunction: "token(easings.outQuart)",
       },
       motion: "opening-tab",

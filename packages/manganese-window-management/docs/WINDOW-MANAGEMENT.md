@@ -425,6 +425,10 @@ with windows, and the shown one.
 - Closing a tab: it closes up toward its start as the tabs after it slide
   back. Its contents shrink into the tab and fade out over the tab it
   uncovers, as slowly as a new tab's grow out.
+- An opening or closing tab's contents carry a ring and shadow while they
+  move, so they show over a tab that looks like them. Both fade, so neither
+  comes or goes in one frame. None in a group filling its screen, where the
+  shadow would spill onto the next display.
 - Sending away a tab: it shrinks and fades with its contents, as a sent
   window does, while the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
