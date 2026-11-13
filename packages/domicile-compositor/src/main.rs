@@ -144,6 +144,7 @@ mod shm_upload;
 mod shortcuts_inhibit;
 mod spawning;
 mod spike_probes;
+mod subsurfaces;
 mod surface_commit;
 mod swipe;
 mod synced_moves;
@@ -193,11 +194,11 @@ use crate::lock::{Lock, Verdict, Verifier};
 use crate::modifiers::Held;
 use crate::once_per_window::OncePerWindow;
 use crate::outputs::{advertise_output, screens_at_startup, LiveOutput};
-use crate::popups::Bubble;
 use crate::portals::{shell_appearance, Selection};
 use crate::restatement::Restatement;
 use crate::screens::{Advertised, Screens};
 use crate::spawning::{chrome_display, home_directory, spawn_client};
+use crate::subsurfaces::Subsurface;
 use crate::surface_commit::{LastBuffer, Role};
 use crate::windows::SizeLimits;
 use domicile_config::{Config, ConfigError, ConfigStore};
@@ -482,13 +483,12 @@ struct DomicileCompositor {
     /// They have the keyboard while open. Focus moving anywhere but their
     /// window dismisses them all; see `ClientRequest::KeyboardFocus`.
     grabbing: Vec<PopupSurface>,
-    /// Every announced bubble: a subsurface of a window or popup, placed as a
-    /// popup is.
-    ///
-    /// Chromium draws its bubbles this way, extension popups among them.
-    /// Announced once it has a buffer; see `place_the_bubbles`.
-    bubbles: Vec<Bubble>,
-    /// Bubble moves of the commit transaction being applied, held so each
+    /// Every subsurface of a window, a popup or another subsurface, which
+    /// its parent's frames draw. See `crate::subsurfaces`.
+    subsurfaces: Vec<Subsurface>,
+    /// The number of the last subsurface, for its id.
+    next_subsurface: u64,
+    /// Popup moves of the commit transaction being applied, held so each
     /// names the frames it shows with. See `surface_commit`.
     synced_moves: crate::synced_moves::SyncedMoves,
     /// The app the pointer is currently over, so a `set_cursor` request can be
@@ -498,7 +498,7 @@ struct DomicileCompositor {
     /// asked for one. See `crate::cursor_surface`.
     cursor_surface: Option<WlSurface>,
     /// The surface of `pointer_app` the pointer is over: the window, or a
-    /// bubble over it that takes input. See
+    /// subsurface of it that takes input. See
     /// [`DomicileCompositor::input_target`].
     pointer_surface: Option<WlSurface>,
     /// Pointer buttons the seat was told are down, in the order pressed.
@@ -568,7 +568,7 @@ struct DomicileCompositor {
     /// See `announce_a_new_window`.
     unannounced: HashSet<String>,
     /// Every announced surface's app id and role, kept in step with
-    /// `toplevels`, `popups` and `bubbles`, so a commit finds its window
+    /// `toplevels`, `popups` and `subsurfaces`, so a commit finds its window
     /// without searching them.
     by_surface: HashMap<WlSurface, (String, Role)>,
 
@@ -1374,7 +1374,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         clock: Clock::new(),
         popups: Vec::new(),
         grabbing: Vec::new(),
-        bubbles: Vec::new(),
+        subsurfaces: Vec::new(),
+        next_subsurface: 0,
         synced_moves: Default::default(),
         pointer_app: None,
         cursor_surface: None,

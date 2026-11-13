@@ -123,8 +123,11 @@ impl DomicileCompositor {
                         }
                         Some(Ok(None)) | None => {}
                     }
-                    // A popup's size comes from its positioner, not the page.
-                    if self.popups.iter().any(|(id, _)| *id == app_id) {
+                    // A popup's size comes from its positioner, not the page,
+                    // and a subsurface's from its own buffer.
+                    if self.popups.iter().any(|(id, _)| *id == app_id)
+                        || self.subsurfaces.iter().any(|sub| sub.app_id == app_id)
+                    {
                         continue;
                     }
                     let Some(toplevel) = self.toplevel_for(&app_id) else {

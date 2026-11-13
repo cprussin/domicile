@@ -1168,6 +1168,49 @@ TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
   EXPECT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
 }
 
+// A window's subsurface is drawn in the window's own frames: the producer
+// embeds its sink under the window's, so it learns its surface and gets
+// BeginFrames, as a window embedded by a page does.
+TEST_F(FrameSinkBrokerTest, AProducerEmbedsOneOfItsSinksInAnother) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  testing::NiceMock<viz::MockCompositorFrameSinkClient> window_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> window_sink;
+  const viz::FrameSinkId window =
+      BrokerASink(remote, window_client, window_sink, mojo::NullRemote());
+  FakeSurfaceObserver observer;
+  testing::NiceMock<viz::MockCompositorFrameSinkClient> child_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> child_sink;
+  const viz::FrameSinkId child =
+      BrokerASink(remote, child_client, child_sink, observer.BindRemote());
+
+  const viz::LocalSurfaceId local_surface_id = AllocateLocalSurfaceId();
+  remote->EmbedFrameSink(child, window, local_surface_id, kEmbeddedSize,
+                         kEmbeddedScale);
+
+  EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
+  EXPECT_EQ(kEmbeddedSize, observer.embedded_.Get<gfx::Size>());
+  RunUntilIdle();
+  EXPECT_TRUE(VizHasHierarchy(window, child));
+}
+
+TEST_F(FrameSinkBrokerTest, EmbeddingInASinkNeverBrokeredIsABadMessage) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  testing::NiceMock<viz::MockCompositorFrameSinkClient> sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId child =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  mojo::test::BadMessageObserver bad_message;
+
+  remote->EmbedFrameSink(child, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                         kEmbeddedSize, kEmbeddedScale);
+
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("No brokered frame sink"));
+}
+
 TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
   // On a tty the browser reads displays before the compositor connects.
   // Without this, the compositor would wait for a hotplug.
