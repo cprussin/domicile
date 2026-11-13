@@ -38,20 +38,26 @@ impl SeatHandler for DomicileCompositor {
     }
 
     // The web engine draws the pointer, so forward a client's cursor request to
-    // the chrome as a CSS cursor for the element under the pointer.
+    // the chrome as a CSS cursor for the element under the pointer, or the
+    // image the client drew on its own surface (`crate::cursor_surface`).
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
-        if let Some(app_id) = self.pointer_app.clone() {
-            let cursor = match image {
-                CursorImageStatus::Hidden => CursorShape::None,
-                CursorImageStatus::Named(icon) => cursor_shape(icon),
-                // A client-drawn cursor surface needs native compositing (see
-                // `docs/architecture/WINDOW-COMPOSITING.md`). Use the default
-                // arrow until then.
-                CursorImageStatus::Surface(_) => CursorShape::Default,
-            };
-            self.hub
-                .broadcast(HostMessage::AppCursor { app_id, cursor });
-        }
+        let Some(app_id) = self.pointer_app.clone() else {
+            return;
+        };
+        let cursor = match image {
+            CursorImageStatus::Hidden => CursorShape::None,
+            CursorImageStatus::Named(icon) => cursor_shape(icon),
+            CursorImageStatus::Surface(surface) => {
+                self.show_a_cursor_surface(app_id, &surface);
+                return;
+            }
+        };
+        self.cursor_surface = None;
+        self.hub.broadcast(HostMessage::AppCursor {
+            app_id,
+            cursor,
+            image: None,
+        });
     }
 
     /// Both clipboards follow keyboard focus.

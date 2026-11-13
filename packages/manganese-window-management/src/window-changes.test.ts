@@ -174,6 +174,18 @@ describe("windowChanges", () => {
       ).toStrictEqual([WindowAction.AppCursorChanged("term", "pointer")]);
     });
 
+    it("says a cursor it drew itself, and its return to a named one", () => {
+      const drawn =
+        'image-set(url("data:image/png;base64,iVBO") 1x) 1 2, default';
+      const drawing = { ...TERM, cursorImage: drawn };
+      expect(windowChanges(NO_RULES, [TERM], [drawing])).toStrictEqual([
+        WindowAction.AppCursorChanged("term", TERM.cursor, drawn),
+      ]);
+      expect(windowChanges(NO_RULES, [drawing], [TERM])).toStrictEqual([
+        WindowAction.AppCursorChanged("term", TERM.cursor, undefined),
+      ]);
+    });
+
     it("places a popup that moved", () => {
       const menu = listedWindow("menu", {
         height: 200,

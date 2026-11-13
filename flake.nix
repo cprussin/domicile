@@ -2182,6 +2182,12 @@
 
 
                 os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
                 while True:
                     with open("/run/input") as commands:
                         for command in commands:
@@ -2482,6 +2488,12 @@
 
 
                 os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
                 while True:
                     with open("/run/input") as commands:
                         for command in commands:
