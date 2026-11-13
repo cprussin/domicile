@@ -30,6 +30,7 @@ describe("where a popup goes", () => {
       [
         {
           appId: "menu",
+          cursor: "pointer",
           frame: 0,
           parent: "term",
           position: [12, 30],
@@ -41,6 +42,7 @@ describe("where a popup goes", () => {
 
     expect(menu).toStrictEqual({
       appId: "menu",
+      cursor: "pointer",
       depth: raised(3),
       frame: 0,
       rect: { height: 240, width: 180, x: 112, y: 80 },
@@ -52,6 +54,7 @@ describe("where a popup goes", () => {
       [
         {
           appId: "menu",
+          cursor: "default",
           frame: 0,
           parent: "term",
           position: [12, 30],
@@ -59,6 +62,7 @@ describe("where a popup goes", () => {
         },
         {
           appId: "sub",
+          cursor: "default",
           frame: 0,
           parent: "menu",
           position: [180, 20],
@@ -82,6 +86,7 @@ describe("where a popup goes", () => {
         [
           {
             appId: "menu",
+            cursor: "default",
             frame: 0,
             parent: "term",
             position: [0, 0],

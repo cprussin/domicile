@@ -195,6 +195,16 @@ describe("Shell", () => {
       host.change("term", { cursor: "text" });
       expect(windowFor("term").style.cursor).toBe("text");
     });
+
+    it("shows the cursor the client asked for over its menu", () => {
+      // Firefox draws its whole window into one, so it asks for every cursor
+      // there.
+      const host = shell();
+      host.appear("term", { height: 480, width: 640 });
+      host.appear("menu", { height: 240, parent: "term", width: 180 });
+      host.change("menu", { cursor: "pointer" });
+      expect(windowFor("menu").style.cursor).toBe("pointer");
+    });
   });
 
   describe("the keyboard", () => {
