@@ -81,9 +81,9 @@ void DeskModifierTaps::Grab(ChannelId channel,
   base::AutoLock held(lock_);
   auto found = std::ranges::find(channels_, channel, &Channel::id);
   CHECK(found != channels_.end());
-  auto grab = std::ranges::find(found->grabs, modifier, &Grab::modifier);
+  auto grab = std::ranges::find(found->grabs, modifier, &Grabbed::modifier);
   if (grab == found->grabs.end()) {
-    found->grabs.push_back(Grab{modifier, while_inhibited});
+    found->grabs.push_back(Grabbed{modifier, while_inhibited});
   } else {
     grab->while_inhibited = while_inhibited;
   }
@@ -93,7 +93,7 @@ void DeskModifierTaps::Ungrab(ChannelId channel, TapModifier modifier) {
   base::AutoLock held(lock_);
   auto found = std::ranges::find(channels_, channel, &Channel::id);
   CHECK(found != channels_.end());
-  std::erase_if(found->grabs, [modifier](const Grab& grab) {
+  std::erase_if(found->grabs, [modifier](const Grabbed& grab) {
     return grab.modifier == modifier;
   });
 }
@@ -165,7 +165,7 @@ void DeskModifierTaps::Interrupt() {
 
 DeskModifierTaps::Tapped DeskModifierTaps::Taker(TapModifier modifier) const {
   for (const Channel& channel : channels_) {
-    auto grab = std::ranges::find(channel.grabs, modifier, &Grab::modifier);
+    auto grab = std::ranges::find(channel.grabs, modifier, &Grabbed::modifier);
     if (grab != channel.grabs.end() &&
         (!channel.inhibited || grab->while_inhibited)) {
       return channel.tapped;

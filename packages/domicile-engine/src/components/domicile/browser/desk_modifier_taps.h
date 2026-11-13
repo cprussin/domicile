@@ -91,7 +91,7 @@ class DeskModifierTaps {
   void Interrupt();
 
  private:
-  struct Grab {
+  struct Grabbed {
     TapModifier modifier;
     bool while_inhibited = false;
   };
@@ -99,7 +99,7 @@ class DeskModifierTaps {
   struct Channel {
     ChannelId id = 0;
     Tapped tapped;
-    std::vector<Grab> grabs;
+    std::vector<Grabbed> grabs;
     bool inhibited = false;
   };
 
