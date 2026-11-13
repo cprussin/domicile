@@ -56,6 +56,12 @@ pub enum ClientRequest {
         /// [`ChromeMessage::PointerMotion`](domicile_protocol::ChromeMessage::PointerMotion).
         moved: bool,
     },
+    /// See [`ChromeMessage::PointerRelative`](domicile_protocol::ChromeMessage::PointerRelative).
+    PointerRelative {
+        app_id: String,
+        dx: f64,
+        dy: f64,
+    },
     PointerLeave,
     PointerPinch {
         owner: usize,
@@ -356,6 +362,9 @@ impl DomicileCompositor {
                     },
                 );
                 pointer.frame(self);
+            }
+            ClientRequest::PointerRelative { app_id, dx, dy } => {
+                self.move_relatively(&app_id, (dx, dy));
             }
             ClientRequest::PointerLeave => {
                 self.cancel_pinch();
