@@ -10,9 +10,12 @@ the detail, when there is one. Remove a gap when it's fixed.
   Electron, SDL and Qt apps are started in Wayland mode (`client_command` in
   `spawning.rs`).
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
-- **Games can't lock or confine the pointer yet.** `zwp_relative_pointer_v1`
-  is served, so a game or VM viewer reads how far the mouse moved, but
-  `pointer-constraints` isn't, so the pointer can still leave its window.
+- **Games can't confine the pointer to their window yet.** A lock works:
+  manganese locks the pointer for the focused window under it. A confinement
+  is offered to the shell (`pointerConstraint: "confine"`), but no shell takes
+  it, because the engine has no way yet to keep its pointer inside a box on a
+  desk of several monitors. A confinement's region is not read either; a lock
+  or confinement covers the whole window.
 - **Relative motion's unaccelerated deltas are the accelerated ones.** The
   engine forwards the page's `movementX/Y`, which is after pointer
   acceleration (`crate::relative_pointer`).
