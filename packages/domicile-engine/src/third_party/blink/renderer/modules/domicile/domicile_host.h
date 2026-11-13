@@ -178,6 +178,10 @@ class MODULES_EXPORT DomicileHost final
                    DOMRectReadOnly* unless_over,
                    ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
+  void pointerConstrained(ScriptState*,
+                          const String& app_id,
+                          bool active,
+                          ExceptionState&);
   void setAppBounds(ScriptState*,
                     const String& app_id,
                     double x,
@@ -356,6 +360,10 @@ class MODULES_EXPORT DomicileHost final
                  domicile::mojom::blink::CursorShape cursor,
                  domicile::mojom::blink::AppCursorImagePtr image) override;
   void AppPresented(const String& app_id) override;
+  void AppPointerConstraint(
+      const String& app_id,
+      std::optional<domicile::mojom::blink::PointerConstraint> constraint)
+      override;
   void AppSuspended(const String& app_id, bool suspended) override;
   void AppTransientFor(const String& app_id,
                        const String& transient_for) override;

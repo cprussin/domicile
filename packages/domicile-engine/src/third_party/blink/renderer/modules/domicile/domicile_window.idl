@@ -83,4 +83,11 @@
   readonly attribute double? x;
   readonly attribute double? y;
   readonly attribute boolean grab;
+
+  // What the client asked the pointer to do while it is over the window:
+  // "lock" it in place, as a game turning its camera does, or "confine" it to
+  // the window; null for neither. Offered only for the window under the
+  // pointer. The shell decides whether to grant it, and says so with
+  // DomicileHost.pointerConstrained(); only then is the client told.
+  readonly attribute DOMString? pointerConstraint;
 };

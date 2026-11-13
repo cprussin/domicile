@@ -703,6 +703,14 @@ export type DomicileHost = {
    */
   closeApp(appId: string): void;
   /**
+   * Say this page took the pointer for a window's `pointerConstraint`
+   * (`active`), as a pointer lock on its <app>, or let it go. Only once taken
+   * is the client told its pointer is locked or confined; letting go unlocks
+   * it. The compositor drops an answer for a window it is not offering one
+   * to.
+   */
+  pointerConstrained(appId: string, active: boolean): void;
+  /**
    * Where the page put an <app>, in the page's CSS pixels. The client draws at
    * the scale of the monitor holding most of that box. Layout still places the
    * window; this only tells the compositor where it ended up.
@@ -1247,4 +1255,12 @@ export type DomicileWindow = {
   readonly x: number | null;
   readonly y: number | null;
   readonly grab: boolean;
+  /**
+   * What the client asked the pointer to do while it is over the window:
+   * "lock" it in place, as a game turning its camera does, or "confine" it to
+   * the window; null for neither. Offered only for the window under the
+   * pointer. The shell decides whether to grant it, and says so with
+   * DomicileHost.pointerConstrained(); only then is the client told.
+   */
+  readonly pointerConstraint: string | null;
 };

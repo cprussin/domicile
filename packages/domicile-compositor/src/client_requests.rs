@@ -62,6 +62,11 @@ pub enum ClientRequest {
         dx: f64,
         dy: f64,
     },
+    /// See [`ChromeMessage::PointerConstrained`](domicile_protocol::ChromeMessage::PointerConstrained).
+    PointerConstrained {
+        app_id: String,
+        active: bool,
+    },
     PointerLeave,
     PointerPinch {
         owner: usize,
@@ -340,6 +345,12 @@ impl DomicileCompositor {
                 self.pointer_app = Some(app_id);
                 self.cursor_surface = None;
                 self.pointer_surface = Some(surface.clone());
+                self.offer_pointer_constraint();
+                if self.pointer_locked_over(&surface) {
+                    // The page holds the pointer still for a lock; only
+                    // relative motion reaches the client.
+                    return;
+                }
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 // The chrome sends surface-local coords, so anchor the focus at
@@ -358,6 +369,9 @@ impl DomicileCompositor {
             ClientRequest::PointerRelative { app_id, dx, dy } => {
                 self.move_relatively(&app_id, (dx, dy));
             }
+            ClientRequest::PointerConstrained { app_id, active } => {
+                self.page_constrained(&app_id, active);
+            }
             ClientRequest::PointerLeave => {
                 self.cancel_pinch();
                 self.cancel_swipe();
@@ -365,6 +379,7 @@ impl DomicileCompositor {
                 self.pointer_app = None;
                 self.cursor_surface = None;
                 self.pointer_surface = None;
+                self.offer_pointer_constraint();
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 pointer.motion(
