@@ -244,6 +244,10 @@ impl DomicileCompositor {
         let Some(session) = self.engine.as_mut() else {
             return Published::NotShown;
         };
+        session.describe(
+            app_id,
+            crate::color_management::committed_color(commit.surface),
+        );
         let submission = session.submit(
             app_id,
             submitted,
