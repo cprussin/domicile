@@ -23,6 +23,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
+#include "components/domicile/browser/desk_faults.h"
 #include "components/domicile/browser/desk_pointer_hiding.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shell_swap.h"
@@ -851,6 +852,19 @@ TEST_F(ControlChannelTest, UnboundSwipesAndHoldsReachTheCompositor) {
   EXPECT_EQ(Heard(), R"({"fingers":3,"phase":"begin","type":"pointer_hold"})");
   EXPECT_EQ(Heard(),
             R"({"canceled":true,"phase":"end","type":"pointer_hold"})");
+}
+
+// A bug the engine caught in itself reaches the compositor, which tells the
+// person.
+TEST_F(ControlChannelTest, AnEngineFaultReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+
+  DeskFaults::Get().Report("A page stayed in fullscreen.");
+
+  EXPECT_EQ(Heard(),
+            R"({"type":"engine_fault","what":"A page stayed in fullscreen."})");
 }
 
 }  // namespace
