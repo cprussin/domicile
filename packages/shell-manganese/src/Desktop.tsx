@@ -81,6 +81,7 @@ import type { Aim } from "@domicile-desktop/manganese-window-management/tiled/ai
 import { AimKind } from "@domicile-desktop/manganese-window-management/tiled/aim";
 import type { NodeRef } from "@domicile-desktop/manganese-window-management/tree/path";
 import { useClientIcons } from "@domicile-desktop/manganese-window-management/useClientIcons";
+import { usePointerLock } from "@domicile-desktop/manganese-window-management/usePointerLock";
 import { usePointerWarp } from "@domicile-desktop/manganese-window-management/usePointerWarp";
 import { useWindows } from "@domicile-desktop/manganese-window-management/useWindows";
 import { WindowKind } from "@domicile-desktop/manganese-window-management/window";
@@ -397,6 +398,7 @@ export const Desktop = ({
   const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
   useAutoBrightness(domicile, shellOptions.brightness.automatic);
   useNightLight(domicile, shellOptions.nightLight);
+  usePointerLock(domicile.windows);
   // Before the paint, so text never shows in the old face.
   useLayoutEffect(() => {
     applyFont(shellOptions.font);
