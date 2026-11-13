@@ -52,6 +52,9 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Activity {
         input: Some("KeyPressed from AT Translated Set 2 keyboard".into()),
     });
+    chrome_round_trip(&ChromeMessage::EngineFault {
+        what: "A page stayed in fullscreen.".into(),
+    });
     chrome_round_trip(&ChromeMessage::DeskPointer {
         at: Some((12.5, 3.0)),
         windows: vec![PointerOverWindow {

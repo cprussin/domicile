@@ -34,7 +34,10 @@ The engine has two channels to the rest of Domicile:
   input, at most every 200 ms, for the idle clock, `desk_pointer` for
   each pointer move, `desk_cursor` for each change of the pointer's
   image, for screen casts, and `pointer_swipe` and `pointer_hold` for each
-  touchpad swipe or hold the shell did not grab.
+  touchpad swipe or hold the shell did not grab, and `engine_fault` for a
+  bug the engine caught in itself (`DeskFaults`), which the compositor logs
+  as an error and shows as an urgent notification with a "Report it"
+  button.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,

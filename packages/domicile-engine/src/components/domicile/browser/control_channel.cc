@@ -220,6 +220,9 @@ ControlChannel::ControlChannel(
   activity_ = DeskActivity::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::SomebodyIsHere, weak_factory_.GetWeakPtr())));
+  faults_ = DeskFaults::Get().AddListener(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::FaultFound, weak_factory_.GetWeakPtr())));
   gestures_ = DeskGestures::Get().AddChannel(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeliverGesture, weak_factory_.GetWeakPtr())),
@@ -252,6 +255,7 @@ ControlChannel::~ControlChannel() {
   DeskPointer::Get().RemoveListener(pointer_);
   DeskModifierTaps::Get().RemoveChannel(taps_);
   DeskGestures::Get().RemoveChannel(gestures_);
+  DeskFaults::Get().RemoveListener(faults_);
   DeskActivity::Get().RemoveListener(activity_);
   ShortcutRegistry::Get().RemoveChannel(channel_);
 }
@@ -1095,6 +1099,12 @@ void ControlChannel::SomebodyIsHere(const std::string& input) {
     message.Set("input", input);
     SendMessage(std::move(message));
   }
+}
+
+void ControlChannel::FaultFound(const std::string& what) {
+  base::DictValue message = Typed("engine_fault");
+  message.Set("what", what);
+  SendMessage(std::move(message));
 }
 
 void ControlChannel::DeskPointerMoved(const DeskPointerAt& at) {
