@@ -306,6 +306,19 @@ default.
 - The browser still draws at the monitor's nominal rate. Adaptive sync helps
   when a frame is late, not by drawing at a lower rate when nothing moves.
 
+## Bit depth
+
+A panel scans out in 10 bits a channel when its EDID reports at least 10 and
+its planes take `XB30` or `XR30`; otherwise in 8. There is no setting.
+
+- The browser draws its frames in `RGBA_1010102` (or `BGRA_1010102` on planes
+  with only `XR30`) (`DrawInTenBitsWhereThePanelTakesThem` in
+  `drm_screen.cc`).
+- `DrmDisplay` raises the connector's `max bpc` to 10, so the link carries
+  10 bits instead of a dithered 8 (patch `0210`).
+- `ten_bit_scanout.cc` decides both. The plan for HDR on top of it:
+  [COLOR.md](/docs/architecture/COLOR.md).
+
 ## DisplayLink docks
 
 - `evdi` hands DisplayLinkManager each page flip's `FB_DAMAGE_CLIPS`, and it
@@ -315,6 +328,7 @@ default.
   `0204`). Upstream sent no clip without ChromeOS's PSR2 flag, so evdi marked
   the whole screen changed on every flip.
 - No gamma table, so no night light ([below](#night-light-and-gamma-control)).
+- Planes take only 8-bit formats, so a dock's monitors scan out in 8 bits.
 
 ## Night light and gamma control
 
