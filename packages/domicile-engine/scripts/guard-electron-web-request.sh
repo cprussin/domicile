@@ -14,8 +14,8 @@
 # and asserts:
 #
 #   ready       the socket took the hello
-#   cancelled   the page's fetch of /blocked failed: onBeforeRequest
-#               cancelled it
+#   canceled   the page's fetch of /blocked failed: onBeforeRequest
+#               canceled it
 #   redirected  the page's fetch of /moved read /landed: onBeforeRequest
 #               redirected it
 #   sent        the server saw the header onBeforeSendHeaders added
@@ -237,16 +237,16 @@ PY
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready cancelled redirected sent received told)"
+echo "  (ready canceled redirected sent received told)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-web-request-guard.sh`
-# runs this block directly. MEASURED is "<ready> <cancelled> <redirected>
+# runs this block directly. MEASURED is "<ready> <canceled> <redirected>
 # <sent> <received> <told>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
 "1 1 1 1 1 1")
-  PASSED="the app's webRequest listeners cancelled one request, redirected \
+  PASSED="the app's webRequest listeners canceled one request, redirected \
 another, added a header the server saw and one the page read, and heard \
 each request's events, the page's own as its mainFrame"
   ;;
@@ -255,8 +255,8 @@ each request's events, the page's own as its mainFrame"
 guard-electron-socket.sh is the guard for that"
   ;;
 "1 0 1 1 1 1")
-  FAILURE="THE PAGE LOADED /blocked ALTHOUGH THE APP CANCELLED IT: \
-ElectronWebRequestLoader::AfterBeforeRequest must fail a cancelled request \
+  FAILURE="THE PAGE LOADED /blocked ALTHOUGH THE APP CANCELED IT: \
+ElectronWebRequestLoader::AfterBeforeRequest must fail a canceled request \
 with ERR_BLOCKED_BY_CLIENT"
   ;;
 "1 0 0 0 0 "*)

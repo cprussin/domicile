@@ -3,7 +3,7 @@
 # passes.
 #
 # Runs the verdict block from `guard-electron-web-request.sh` itself, not a copy,
-# like the other guards' tests. Key case: a request the app cancelled that
+# like the other guards' tests. Key case: a request the app canceled that
 # loaded anyway is a failure even when everything else worked.
 set -u
 
@@ -56,14 +56,14 @@ says() { # $1 MEASURED, $2 what the sentence must contain
   esac
 }
 
-# MEASURED is "<ready> <cancelled> <redirected> <sent> <received> <told>".
+# MEASURED is "<ready> <canceled> <redirected> <sent> <received> <told>".
 echo "the claim — an app's webRequest listeners see and change its page's requests"
 expect "every listener doing its part is the pass" "pass" \
   "$(verdict "1 1 1 1 1 1")"
 expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0")"
 expect "and points at the socket's guard" "yes" \
   "$(says "0 0 0 0 0 0" "guard-electron-socket.sh")"
-expect "a cancelled request that loaded is a failure" "fail" \
+expect "a canceled request that loaded is a failure" "fail" \
   "$(verdict "1 0 1 1 1 1")"
 expect "and names where the cancel is kept" "yes" \
   "$(says "1 0 1 1 1 1" "ERR_BLOCKED_BY_CLIENT")"

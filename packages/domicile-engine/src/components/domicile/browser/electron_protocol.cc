@@ -255,7 +255,8 @@ constexpr std::pair<ElectronWebRequestEvent, std::string_view>
 
 base::expected<ElectronRequest, ElectronRefusal> ParseWebRequestListen(
     const base::DictValue& request) {
-  base::expected<std::string, std::string> session = SessionIn(request);
+  base::expected<std::string, std::string> session =
+      SessionIn(request, /*optional=*/false);
   if (!session.has_value()) {
     return Refuse(std::move(session.error()));
   }
