@@ -1,5 +1,35 @@
 # @domicile-desktop/system-audio
 
+## 1.1.3
+
+### Patch Changes
+
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [c454256]
+- Updated dependencies [d566f68]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [87ac040]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [3e37020]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [2a1913f]
+- Updated dependencies [94e5909]
+- Updated dependencies [da632d6]
+- Updated dependencies [a5ade39]
+- Updated dependencies [0a4d218]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [8c477cc]
+- Updated dependencies [996cc29]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [8ff882e]
+- Updated dependencies [25522ef]
+- Updated dependencies [e821d1f]
+- Updated dependencies [19cc2c5]
+  - @domicile-desktop/sdk@2.3.0
+  - @domicile-desktop/react@0.2.0
+
 ## 1.1.2
 
 ### Patch Changes
