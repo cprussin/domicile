@@ -13,6 +13,21 @@ const action = {
   title: "Dark Reader",
 };
 
+const installed = {
+  configured: ["fileAccess" as const],
+  enabled: false,
+  fileAccess: false,
+  fromConfig: true,
+  icon: "data:image/png;base64,AA==",
+  id: "abcdefghijklmnopabcdefghijklmnop",
+  inPrivate: null,
+  name: "Dark Reader",
+  optionsUrl: null,
+  siteAccess: "specific_sites" as const,
+  sites: ["github.com"],
+  userScripts: null,
+};
+
 describe("extensions", () => {
   it("lists nothing until the engine says", () => {
     expect(
@@ -68,6 +83,65 @@ describe("extensions", () => {
     expect(await asked).toStrictEqual({
       id: action.id,
       popup: `chrome-extension://${action.id}/popup.html`,
+    });
+  });
+
+  describe("installed", () => {
+    it("lists nothing until the engine says", () => {
+      expect(
+        desktop(new FakeDomicileHost().host).extensions.installed,
+      ).toBeUndefined();
+    });
+
+    it("lists each extension, with undefined for each setting it cannot use", () => {
+      const fake = new FakeDomicileHost();
+      fake.set({ installedExtensions: [installed] });
+
+      expect(desktop(fake.host).extensions.installed).toStrictEqual([
+        {
+          ...installed,
+          inPrivate: undefined,
+          optionsUrl: undefined,
+          userScripts: undefined,
+        },
+      ]);
+    });
+
+    it("throws on a site access it does not know", () => {
+      const fake = new FakeDomicileHost();
+      fake.set({
+        installedExtensions: [{ ...installed, siteAccess: "sometimes" }],
+      });
+
+      expect(() => desktop(fake.host).extensions.installed).toThrow();
+    });
+
+    it("says the installed extensions changed", async () => {
+      const fake = new FakeDomicileHost();
+      const changed = new Promise((resolve) => {
+        desktop(fake.host).extensions.on("installed", () => {
+          resolve(undefined);
+        });
+      });
+      fake.set({ installedExtensions: [] });
+
+      expect(await changed).toBeUndefined();
+    });
+
+    it("switches, configures and uninstalls an extension", () => {
+      const fake = new FakeDomicileHost();
+      const { extensions } = desktop(fake.host);
+      extensions.setEnabled(installed.id, false).catch(() => undefined);
+      extensions
+        .configure(installed.id, { siteAccess: "on_click" })
+        .catch(() => undefined);
+      extensions.uninstall(installed.id).catch(() => undefined);
+
+      expect(fake.calls).toStrictEqual([
+        ["setExtensionEnabled", installed.id, false],
+        ["configureExtension", installed.id, { siteAccess: "on_click" }],
+        ["uninstallExtension", installed.id],
+      ]);
     });
   });
 });

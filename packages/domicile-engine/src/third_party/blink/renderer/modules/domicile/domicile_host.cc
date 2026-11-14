@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension_settings.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_download_state.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_header.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_response.h"
@@ -56,6 +57,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_download.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_extension.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_extension_popup_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_installed_extension.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_notification.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_notification_action.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_gesture_event.h"
@@ -405,6 +407,11 @@ const FrozenArray<DomicileNotification>* DomicileHost::notifications() const {
 
 const FrozenArray<DomicileExtension>* DomicileHost::extensions() const {
   return extensions_.Get();
+}
+
+const FrozenArray<DomicileInstalledExtension>*
+DomicileHost::installedExtensions() const {
+  return installed_extensions_.Get();
 }
 
 std::optional<bool> DomicileHost::idle() const {
@@ -1226,6 +1233,123 @@ void DomicileHost::activateExtension(ScriptState*,
   }
 }
 
+namespace {
+
+// The browser's answer to a change asked of an extension: empty for done, or
+// why not.
+void ExtensionAnswered(ScriptPromiseResolver<IDLUndefined>* resolver,
+                       const String& error) {
+  if (!error.empty()) {
+    resolver->RejectWithDOMException(DOMExceptionCode::kOperationError, error);
+    return;
+  }
+  resolver->Resolve();
+}
+
+// The site access configureExtension() names, as DomicileInstalledExtension
+// spells it, or nothing for a name that is none.
+std::optional<domicile::mojom::blink::SiteAccess> SiteAccessNamed(
+    const String& name) {
+  if (name == "on_click") {
+    return domicile::mojom::blink::SiteAccess::kOnClick;
+  }
+  if (name == "specific_sites") {
+    return domicile::mojom::blink::SiteAccess::kSpecificSites;
+  }
+  if (name == "all_sites") {
+    return domicile::mojom::blink::SiteAccess::kAllSites;
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+ScriptPromise<IDLUndefined> DomicileHost::setExtensionEnabled(
+    ScriptState* script_state,
+    const String& id,
+    bool enabled,
+    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty extension id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  tray_->SetEnabled(id, enabled,
+                    BindOnce(&ExtensionAnswered, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLUndefined> DomicileHost::configureExtension(
+    ScriptState* script_state,
+    const String& id,
+    const DomicileExtensionSettings* settings,
+    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty extension id");
+    return EmptyPromise();
+  }
+  auto wanted = domicile::mojom::blink::ExtensionSettings::New();
+  if (settings->hasInPrivate()) {
+    wanted->in_private = settings->inPrivate();
+  }
+  if (settings->hasFileAccess()) {
+    wanted->file_access = settings->fileAccess();
+  }
+  if (settings->hasUserScripts()) {
+    wanted->user_scripts = settings->userScripts();
+  }
+  if (settings->hasSiteAccess()) {
+    wanted->site_access = SiteAccessNamed(settings->siteAccess());
+    if (!wanted->site_access.has_value()) {
+      exception_state.ThrowTypeError(
+          "siteAccess must be \"on_click\", \"specific_sites\" or "
+          "\"all_sites\"");
+      return EmptyPromise();
+    }
+  }
+  if (settings->hasSites()) {
+    if (wanted->site_access !=
+        domicile::mojom::blink::SiteAccess::kSpecificSites) {
+      exception_state.ThrowTypeError(
+          "sites are only for siteAccess \"specific_sites\"");
+      return EmptyPromise();
+    }
+    wanted->sites = settings->sites();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  tray_->Configure(id, std::move(wanted),
+                   BindOnce(&ExtensionAnswered, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLUndefined> DomicileHost::uninstallExtension(
+    ScriptState* script_state,
+    const String& id,
+    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty extension id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  tray_->Uninstall(id, BindOnce(&ExtensionAnswered, WrapPersistent(resolver)));
+  return promise;
+}
+
 // A document going away has nobody waiting to hear it.
 void DomicileHost::ReportShellRan(const String& serial) {
   if (EnsureBound()) {
@@ -1983,6 +2107,22 @@ void DomicileHost::ExtensionsChanged(
   DispatchEvent(*Event::Create(domicile_event_names::Extensionschanged()));
 }
 
+// Every installed extension, wholesale, as `extensions` is.
+void DomicileHost::InstalledChanged(
+    Vector<domicile::mojom::blink::InstalledExtensionPtr> extensions) {
+  HeapVector<Member<DomicileInstalledExtension>> installed;
+  installed.reserve(extensions.size());
+  for (const auto& extension : extensions) {
+    installed.push_back(
+        MakeGarbageCollected<DomicileInstalledExtension>(*extension));
+  }
+  installed_extensions_ =
+      MakeGarbageCollected<FrozenArray<DomicileInstalledExtension>>(
+          std::move(installed));
+  DispatchEvent(
+      *Event::Create(domicile_event_names::Installedextensionschanged()));
+}
+
 // Dispatched, not held: see onextensionpopuprequested in the IDL.
 void DomicileHost::PopupRequested(const String& id, const String& popup) {
   DispatchEvent(*MakeGarbageCollected<DomicileExtensionPopupEvent>(
@@ -2727,6 +2867,7 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(tray_items_);
   visitor->Trace(notifications_);
   visitor->Trace(extensions_);
+  visitor->Trace(installed_extensions_);
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);

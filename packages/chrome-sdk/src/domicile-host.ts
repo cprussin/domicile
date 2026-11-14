@@ -125,6 +125,24 @@ export type DomicileExtensionPopupEventInit = EventInit & {
   popup?: string;
 };
 
+/**
+ * What DomicileHost.configureExtension() sets on an extension: each member
+ * present is set, and the rest are left. The names and values are
+ * DomicileInstalledExtension's.
+ */
+export type DomicileExtensionSettings = {
+  inPrivate?: boolean;
+  fileAccess?: boolean;
+  userScripts?: boolean;
+  /** "on_click", "specific_sites" or "all_sites". */
+  siteAccess?: string;
+  /**
+   * With "specific_sites" only: hosts, each also as `*.host` for its
+   * subdomains.
+   */
+  sites?: readonly string[];
+};
+
 /** A request header `DomicileHost.fetchWithCookies()` sends. */
 export type DomicileFetchHeader = {
   name: string;
@@ -580,6 +598,11 @@ export type DomicileHostEventMap = {
    * did not see asked for is not one to open later.
    */
   extensionpopuprequested: DomicileExtensionPopupEvent;
+  /**
+   * Fires when one is installed, uninstalled, switched on or off, or
+   * reconfigured, or its icon loads.
+   */
+  installedextensionschanged: Event;
   idlechanged: Event;
   lockedchanged: Event;
   themechanged: Event;
@@ -893,6 +916,30 @@ export type DomicileHost = {
    */
   activateExtension(id: string): void;
   /**
+   * Switch installed extension `id` on or off, as chrome://extensions does.
+   * Resolves once switched; `installedExtensions` and `extensions` follow.
+   * Rejects with an OperationError saying why, in words to show, when it is
+   * not. Over the tray's pipe, as activateExtension().
+   */
+  setExtensionEnabled(id: string, enabled: boolean): Promise<void>;
+  /**
+   * Set each of `settings` present on installed extension `id`, or none.
+   * Rejects with an OperationError saying why, in words to show: a setting
+   * the extension cannot use, one the desk's config sets (its `configured`),
+   * or a site that is not a host. Throws a TypeError for a `siteAccess` that
+   * is not one of its three, or `sites` without "specific_sites".
+   */
+  configureExtension(
+    id: string,
+    settings: DomicileExtensionSettings,
+  ): Promise<void>;
+  /**
+   * Uninstall extension `id`, as its user would. Rejects with an
+   * OperationError saying why, in words to show: one the config installed
+   * (its `fromConfig`) is only the config's to remove.
+   */
+  uninstallExtension(id: string): Promise<void>;
+  /**
    * Opens a browser window at `url`, for the shell's own UI such as a `+`
    * button or a launcher. It appears in the next `browserwindowschanged`. A
    * domicile:// address shows blocked, as in a <webview>.
@@ -1043,6 +1090,13 @@ export type DomicileHost = {
   readonly tray: readonly DomicileTrayItem[] | null;
   readonly notifications: readonly DomicileNotification[] | null;
   readonly extensions: readonly DomicileExtension[] | null;
+  /**
+   * Every extension installed in the shell's profile, switched on or off,
+   * with its settings, for a menu that manages them. Null until the browser
+   * lists them, which it does as soon as this page listens. No [SameObject],
+   * for `displays`' reason.
+   */
+  readonly installedExtensions: readonly DomicileInstalledExtension[] | null;
   readonly idle: boolean | null;
   readonly locked: boolean | null;
   readonly theme: DomicileTheme | null;
@@ -1124,6 +1178,52 @@ export type DomicileHost = {
     type: T,
     listener: (event: DomicileHostEventMap[T]) => void,
   ): void;
+};
+
+/**
+ * One extension installed in the shell's profile, switched on or off, as a
+ * shell's menu of extensions draws it. Apps, themes and Chrome's own are left
+ * out, as chrome://extensions leaves them out.
+ *
+ * An interface rather than a dictionary for DomicileExtension's reason: these
+ * are read off DomicileHost.installedExtensions.
+ */
+export type DomicileInstalledExtension = {
+  /**
+   * What setExtensionEnabled(), configureExtension() and uninstallExtension()
+   * name it by, and the id of its entry in `extensions` when it has an action.
+   */
+  readonly id: string;
+  readonly name: string;
+  /**
+   * The manifest's icon as data:image/png;base64,..., drawn at this page's
+   * device pixel ratio. Chrome's placeholder until the icon loads.
+   */
+  readonly icon: string;
+  /** Switched on. Only a switched-on extension has an action in `extensions`. */
+  readonly enabled: boolean;
+  /**
+   * Its chrome://extensions settings. Each is null where the extension cannot
+   * use it: private windows where its manifest keeps it out, local files and
+   * sites where it asks for none, user scripts where it does not ask for
+   * chrome.userScripts.
+   */
+  readonly inPrivate: boolean | null;
+  readonly fileAccess: boolean | null;
+  readonly userScripts: boolean | null;
+  /** "on_click", "specific_sites" or "all_sites". */
+  readonly siteAccess: string | null;
+  /** With "specific_sites": hosts, each also as `*.host` for its subdomains. */
+  readonly sites: readonly string[];
+  /**
+   * The settings the desk's config sets, by the names above. Only the config
+   * changes them: configureExtension() refuses them.
+   */
+  readonly configured: readonly string[];
+  /** The config installed it, so only the config uninstalls it. */
+  readonly fromConfig: boolean;
+  /** Its options page, or null if it has none. */
+  readonly optionsUrl: string | null;
 };
 
 /**

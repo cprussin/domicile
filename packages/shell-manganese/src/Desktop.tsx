@@ -21,12 +21,14 @@ import { KeymapOptionsContext } from "@domicile-desktop/manganese-bar-module-key
 import { PortalSignIn } from "@domicile-desktop/manganese-bar-module-network/PortalSignIn";
 import { useCaptivePortal } from "@domicile-desktop/manganese-bar-module-network/useCaptivePortal";
 import { useExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useExtensions";
+import { useInstalledExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useInstalledExtensions";
 import { useOpenedPopup } from "@domicile-desktop/manganese-bar-module-tray/extensions/useOpenedPopup";
 import type { TrayState } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
 import { TrayContext } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
 import { trayEntries } from "@domicile-desktop/manganese-bar-module-tray/tray-entry";
 import { useTray } from "@domicile-desktop/manganese-bar-module-tray/useTray";
 import { useTrayOrder } from "@domicile-desktop/manganese-bar-module-tray/useTrayOrder";
+import { useTrayPins } from "@domicile-desktop/manganese-bar-module-tray/useTrayPins";
 import { useVolumeKeys } from "@domicile-desktop/manganese-bar-module-volume/useVolumeKeys";
 import { Clipboard } from "@domicile-desktop/manganese-clipboard/Clipboard";
 import { useClipboard } from "@domicile-desktop/manganese-clipboard/useClipboard";
@@ -258,6 +260,8 @@ export const Desktop = ({
 
   // Subscribed once for the desk, not per bar: there is a bar per monitor.
   const extensions = useExtensions(domicile);
+  // Every installed extension, for the tray's menu.
+  const installedExtensions = useInstalledExtensions(domicile);
 
   // Tray icons, subscribed once for the desk.
   const tray = useTray(domicile);
@@ -265,6 +269,8 @@ export const Desktop = ({
   const trayOrder = useTrayOrder(
     trayEntries(tray, extensions, []).map(({ key }) => key),
   );
+  // Pins too, so unpinning on one bar unpins on every bar.
+  const trayPins = useTrayPins();
 
   // Notifications, subscribed once for the desk. One toast manager for the
   // page's life, because the toaster subscribes to it once.
@@ -666,12 +672,23 @@ export const Desktop = ({
     () => ({
       clicked: clickedExtension,
       extensions,
+      installed: installedExtensions,
       items: tray,
       open: openExtension,
       opened,
       order: trayOrder,
+      pins: trayPins,
     }),
-    [clickedExtension, extensions, opened, openExtension, tray, trayOrder],
+    [
+      clickedExtension,
+      extensions,
+      installedExtensions,
+      opened,
+      openExtension,
+      tray,
+      trayOrder,
+      trayPins,
+    ],
   );
   // Kept while each screen shows the same workspace, though `screens` changes
   // with every window.

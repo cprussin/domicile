@@ -55,6 +55,8 @@ class DomicileClipboardEntry;
 class DomicileTrayItem;
 class DomicileNotification;
 class DomicileExtension;
+class DomicileExtensionSettings;
+class DomicileInstalledExtension;
 class DomicileWindow;
 class DomicileFileSearch;
 class DomicileFetchHeader;
@@ -235,6 +237,18 @@ class MODULES_EXPORT DomicileHost final
   void grabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void ungrabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
+  ScriptPromise<IDLUndefined> setExtensionEnabled(ScriptState*,
+                                                  const String& id,
+                                                  bool enabled,
+                                                  ExceptionState&);
+  ScriptPromise<IDLUndefined> configureExtension(
+      ScriptState*,
+      const String& id,
+      const DomicileExtensionSettings* settings,
+      ExceptionState&);
+  ScriptPromise<IDLUndefined> uninstallExtension(ScriptState*,
+                                                 const String& id,
+                                                 ExceptionState&);
 
   // Blink's DEFINE_ATTRIBUTE_EVENT_LISTENER, keyed on the fork's own names
   // rather than event_type_names: see domicile_event_names.h for why.
@@ -349,6 +363,7 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileTrayItem>* tray() const;
   const FrozenArray<DomicileNotification>* notifications() const;
   const FrozenArray<DomicileExtension>* extensions() const;
+  const FrozenArray<DomicileInstalledExtension>* installedExtensions() const;
   std::optional<bool> idle() const;
   std::optional<bool> locked() const;
   std::optional<V8DomicileTheme> theme() const;
@@ -440,6 +455,9 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::ExtensionTrayClient:
   void ExtensionsChanged(
       Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) override;
+  void InstalledChanged(
+      Vector<domicile::mojom::blink::InstalledExtensionPtr> extensions)
+      override;
   void PopupRequested(const String& id, const String& popup) override;
 
   // domicile::mojom::blink::BrowserWindowsClient:
@@ -634,6 +652,7 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileTrayItem>> tray_items_;
   Member<FrozenArray<DomicileNotification>> notifications_;
   Member<FrozenArray<DomicileExtension>> extensions_;
+  Member<FrozenArray<DomicileInstalledExtension>> installed_extensions_;
   std::optional<bool> idle_;
   std::optional<bool> locked_;
   std::optional<V8DomicileTheme> theme_;

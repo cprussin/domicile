@@ -23,6 +23,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -252,6 +253,12 @@ std::vector<std::string> ConfigExtensionsOf(Profile& profile) {
     ids.push_back(id.GetString());
   }
   return ids;
+}
+
+void WatchConfigExtensions(PrefChangeRegistrar& registrar,
+                           const base::RepeatingClosure& changed) {
+  registrar.Add(kAddedPref, changed);
+  WatchConfiguredSettings(registrar, changed);
 }
 
 std::vector<InstalledExtension> ExtensionsOf(Profile& profile) {

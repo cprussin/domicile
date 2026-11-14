@@ -178,7 +178,8 @@ interface DomicileExtension {
 - **`extensions`** holds every extension whose manifest names an action, and
   `extensionschanged` fires on every change, so a reloaded page reads it
   again. Chrome synthesizes an action for one that names none and shows it in
-  the toolbar only once pinned; the tray has no pins, so it leaves it out. Sources: `ExtensionRegistryObserver` and
+  the toolbar only once pinned; the tray leaves it out, and lists it only in
+  its menu. Sources: `ExtensionRegistryObserver` and
   `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
 - **`icon`** is a data URL because `action.setIcon({imageData})` has no URL.
 - **Action state** is per tab. The list reports the active tab's state and is
@@ -227,8 +228,34 @@ interface DomicileExtension {
   panel), but ask for no user gesture, which the desk's clicks lack. Phantom
   opens in its side panel by default from 26.37.
 
-SDK side: the `DomicileHost` types in `packages/chrome-sdk`, and the tray
-and popup panel in `packages/manganese-bar-module-tray/src/extensions/`.
+- **Every installed extension** reaches the shell too, for a menu that
+  switches and configures them, as chrome://extensions does. The SDK gives it
+  as `domicile.extensions.installed` (`on("installed")`), with `setEnabled`,
+  `configure` and `uninstall`:
+
+  ```ts
+  // DomicileHost
+  readonly installedExtensions: readonly DomicileInstalledExtension[] | null; // with installedextensionschanged
+  setExtensionEnabled(id: string, enabled: boolean): Promise<void>;
+  configureExtension(id: string, settings: DomicileExtensionSettings): Promise<void>;
+  uninstallExtension(id: string): Promise<void>;
+  ```
+
+  - Each row has the manifest's icon, whether it is on, and the
+    [settings](#settings) it can use (null for one it cannot), the sites for
+    `"specific_sites"`, which settings the config sets (`configured`), and
+    whether the config installed it (`fromConfig`).
+  - The calls are the Settings app's (`SetExtensionEnabledIn`,
+    `ConfigureExtensionIn`, `UninstallFrom`). Each rejects with an
+    `OperationError` carrying the engine's words: a setting the config sets,
+    an extension the config installed, or one not installed.
+  - The list is resent once per burst of changes: an install, a load, a pref
+    or permission change, a new config, a loaded icon.
+  - Manganese draws it as the tray's menu: see
+    [TOP-BAR.md](/packages/shell-manganese/docs/TOP-BAR.md#tray).
+
+SDK side: the `DomicileHost` types in `packages/chrome-sdk`, and the tray,
+its menu and popup panel in `packages/manganese-bar-module-tray/src/`.
 
 ### Tabs
 

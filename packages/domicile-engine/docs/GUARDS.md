@@ -171,6 +171,7 @@ Headless.
 | `guard-extension-installer.sh` | an extension named in the compositor's `extensions` message is installed (patch 0055) |
 | `guard-extension-in-private.sh` | an extension the `extensions` message's `settings` allow in private windows runs in a `<webview private>`; without them it does not |
 | `guard-extension-tray.sh` | the tray event, popup, its auto-resized size and `window.close()` (patch 0056) |
+| `guard-extension-menu.sh` | `installedExtensions` lists every extension with its settings; `configureExtension()`, `setExtensionEnabled()` and `uninstallExtension()` change it, and refuse what the config owns |
 | `guard-extension-open-popup.sh` | `action.openPopup()` reaches the shell as `extensionpopuprequested` |
 | `guard-extension-side-panel.sh` | `sidePanel.open()` opens the side panel's page as a popup window with no size, which the shell tiles |
 | `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057), and `webNavigation.getAllFrames` lists its page |
