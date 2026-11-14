@@ -863,6 +863,8 @@ source_set("electron_protocol") {
     "//base",
     "//url",
   ]
+
+  deps = [ "//net" ]
 }
 
 # Which of a <webview>'s navigations ask the shell first. Its own target beside

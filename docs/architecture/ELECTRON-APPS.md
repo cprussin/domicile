@@ -70,7 +70,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 
 - Each line is one JSON object, both ways
   ([`electron_protocol.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_protocol.h)).
-  A binary body, for a protocol response, comes with the protocol handlers.
+  Protocol bodies travel as base64.
 - One connection is one app. Closing it closes the app's windows.
 - A request the engine needs answered (a protocol request, `sendSync`)
   carries an id; the host replies with that id.
@@ -116,10 +116,30 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 
 ### Requests
 
-- **`protocol.handle`** (and the older `register*Protocol`) registers the
-  app's schemes (`app://`, `vscode-file://`) for its guests only. The engine
-  forwards each request to the host and streams the response back. A
-  response that is a file the engine can read is sent as its path.
+- **Sessions** are partitions inside the app's own: `session.fromPartition`
+  and `webPreferences.partition` name one, `persist:` keeps it on disk as in
+  Electron, and none reaches another app's storage or the profile's.
+  `open_window` names the window's session.
+- **`protocol.handle`** (and the older `register*Protocol`) sends a session's
+  requests for a scheme to the app: `handle_protocol` names the session and
+  scheme, the engine sends each request as `protocol_request`, and the app
+  answers with a whole body, a file the engine reads, or a stream of pieces
+  ([`electron_app.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_app.h),
+  [`domicile_electron_loader.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_loader.h)).
+  A window opens a URL in a scheme its session handles; content keeps other
+  schemes out of guests.
+- **`loadFile`** is a `file:` URL that the host's own `file:` handler serves,
+  from the mirror, as Electron would serve it. The engine's file loader never
+  serves an Electron page: what `file:` reads is the app's to decide.
+- **`http` and `https`** go to the network unless the session handles them;
+  the app then answers before anything else sees the request, as in Electron.
+- **An app's own schemes** (`app://`, `cowork-artifact://`) are registered
+  when the engine starts, because Chromium registers schemes only then: from
+  the quirks table and from schemes the app registered on earlier runs. An
+  app that brings a new scheme runs on its own Electron until the next login.
+- **Not yet:** a handler's redirect (the load fails loudly), a request body
+  that is a file or a stream, and requests from an Electron page's workers,
+  which go to the network.
 - **`session.webRequest`**, cookies and `setPermissionRequestHandler` apply
   to the app's partition only.
 
@@ -203,7 +223,10 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `webPreferences.preload`, `ipcMain`, `webContents.send`
 - [x] engine: `sendSync`, message ports
 - [x] `electron-host`: `sendSync`, `postMessage`, `MessageChannelMain`
-- [ ] engine: `protocol.handle`, per-app partition, `session` and `webRequest`
+- [x] engine: `protocol.handle`, `loadFile` and sessions
+- [ ] engine: an app's own schemes, registered at start
+- [ ] engine: `webRequest`, cookies, permission handlers, storage clearing
+- [ ] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it

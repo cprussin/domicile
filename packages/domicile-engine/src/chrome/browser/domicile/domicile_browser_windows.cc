@@ -197,15 +197,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // Opens an app window at `url` for an Electron app, with `app_id`, in its
   // own `partition`. Returns its id, or nothing when the profile has no shell
   // to own it.
-  std::optional<std::string> OpenElectron(const GURL& url,
-                                          const std::string& app_id,
-                                          const WebViewPartition& partition,
-                                          const std::string& preload,
-                                          ElectronPageCalls calls) {
+  std::optional<std::string> OpenElectron(
+      const GURL& url,
+      const std::string& app_id,
+      const WebViewPartition& partition,
+      const std::string& preload,
+      ElectronPageCalls calls,
+      base::WeakPtr<ElectronSession> session) {
     WebViewGuest* made = Make(
         [&](WebViewGuest& guest) {
-          // Before the first navigation, which runs the preload too.
-          ElectronPage::Attach(guest.contents(), preload, std::move(calls));
+          // Before the first navigation, which runs the preload and loads
+          // through the session too.
+          ElectronPage::Attach(guest.contents(), preload, std::move(calls),
+                               std::move(session));
           guest.Navigate(url);
         },
         /*popup_window=*/std::nullopt, 0, 0,
@@ -859,17 +863,19 @@ DeskWindows* ShellDeskWindows() {
 
 }  // namespace
 
-std::optional<std::string> OpenElectronWindow(const GURL& url,
-                                              const std::string& app_id,
-                                              const WebViewPartition& partition,
-                                              const std::string& preload,
-                                              ElectronPageCalls calls) {
+std::optional<std::string> OpenElectronWindow(
+    const GURL& url,
+    const std::string& app_id,
+    const WebViewPartition& partition,
+    const std::string& preload,
+    ElectronPageCalls calls,
+    base::WeakPtr<ElectronSession> session) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {
     return std::nullopt;
   }
   return windows->OpenElectron(url, app_id, partition, preload,
-                               std::move(calls));
+                               std::move(calls), std::move(session));
 }
 
 ElectronPage* ElectronPageOf(const std::string& id) {

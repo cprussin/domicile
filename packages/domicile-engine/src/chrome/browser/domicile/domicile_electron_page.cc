@@ -47,20 +47,34 @@ ElectronAnswer Answering(
 
 ElectronPage::ElectronPage(content::WebContents* contents,
                            std::string preload,
-                           ElectronPageCalls calls)
+                           ElectronPageCalls calls,
+                           base::WeakPtr<ElectronSession> session)
     : content::WebContentsObserver(contents),
       content::WebContentsUserData<ElectronPage>(*contents),
       preload_(std::move(preload)),
-      calls_(std::move(calls)) {}
+      calls_(std::move(calls)),
+      session_(std::move(session)) {}
 
 ElectronPage::~ElectronPage() = default;
 
 // static
 void ElectronPage::Attach(content::WebContents& contents,
                           std::string preload,
-                          ElectronPageCalls calls) {
+                          ElectronPageCalls calls,
+                          base::WeakPtr<ElectronSession> session) {
   CHECK(!FromWebContents(&contents));
-  CreateForWebContents(&contents, std::move(preload), std::move(calls));
+  CreateForWebContents(&contents, std::move(preload), std::move(calls),
+                       std::move(session));
+}
+
+// static
+base::WeakPtr<ElectronSession> ElectronPage::SessionOf(
+    content::WebContents& contents) {
+  ElectronPage* page = FromWebContents(&contents);
+  if (page == nullptr) {
+    return nullptr;
+  }
+  return page->session_;
 }
 
 void ElectronPage::Deliver(const std::string& channel,

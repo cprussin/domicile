@@ -4,13 +4,16 @@
 #include "components/domicile/browser/electron_protocol.h"
 
 #include <algorithm>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
@@ -18,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "net/http/http_util.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -57,10 +61,9 @@ base::expected<GURL, std::string> UrlIn(const base::DictValue& request) {
   GURL url(*text);
   if (!url.is_valid()) {
     return base::unexpected(base::StrCat({*text, " is not a URL"}));
-  } else if (!url.SchemeIsHTTPOrHTTPS()) {
-    // Content refuses any other scheme in a guest (NavigationControllerImpl's
-    // web-safe check), so a file: URL would open a window that never loads.
-    // An app's own files come with its protocols.
+  } else if (!IsElectronHandleableScheme(url.scheme())) {
+    // Whether the app's session serves the scheme is the app's to say; a
+    // scheme no app may handle never opens.
     return base::unexpected(
         base::StrCat({url.scheme(), ": URLs do not open in an app window"}));
   } else {
@@ -73,6 +76,179 @@ base::expected<ElectronRequest, ElectronRefusal> Refuse(
     std::optional<ElectronWindow> window = std::nullopt) {
   return base::unexpected(
       ElectronRefusal{.why = std::move(why), .window = window});
+}
+
+base::expected<ElectronRequest, ElectronRefusal> RefuseRequest(std::string why,
+                                                               int request) {
+  return base::unexpected(
+      ElectronRefusal{.why = std::move(why), .request = request});
+}
+
+// The "session" a request names: "" when it names none and may leave it out.
+base::expected<std::string, std::string> SessionIn(
+    const base::DictValue& request,
+    bool optional) {
+  const base::Value* session = request.Find("session");
+  if (session == nullptr && optional) {
+    return base::ok(std::string());
+  } else if (session == nullptr || !session->is_string()) {
+    return base::unexpected("\"session\" must be a string");
+  } else {
+    return base::ok(session->GetString());
+  }
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseHandleProtocol(
+    const base::DictValue& request,
+    bool handle) {
+  base::expected<std::string, std::string> session =
+      SessionIn(request, /*optional=*/false);
+  const std::string* scheme = request.FindString("scheme");
+  if (!session.has_value()) {
+    return Refuse(std::move(session.error()));
+  } else if (scheme == nullptr) {
+    return Refuse("\"scheme\" must be a string");
+  } else if (!IsElectronHandleableScheme(*scheme)) {
+    return Refuse(base::StrCat({"an app cannot handle ", *scheme, ":"}));
+  }
+  return ElectronHandleProtocol{
+      .session = std::move(*session), .scheme = *scheme, .handle = handle};
+}
+
+base::expected<std::string, std::string> Base64In(
+    const base::DictValue& request,
+    std::string_view key) {
+  const std::string* text = request.FindString(key);
+  std::string bytes;
+  if (text == nullptr || !base::Base64Decode(*text, &bytes)) {
+    return base::unexpected(base::StrCat({"\"", key, "\" must be base64"}));
+  }
+  return base::ok(std::move(bytes));
+}
+
+base::expected<ElectronHeaders, std::string> HeadersIn(
+    const base::DictValue& response) {
+  const base::ListValue* list = response.FindList("headers");
+  if (list == nullptr) {
+    return base::unexpected("\"headers\" must be an array");
+  }
+  ElectronHeaders headers;
+  for (const base::Value& pair : *list) {
+    const base::ListValue* entry = pair.GetIfList();
+    if (entry == nullptr || entry->size() != 2 || !(*entry)[0].is_string() ||
+        !(*entry)[1].is_string()) {
+      return base::unexpected(
+          "each header must be a [name, value] pair of strings");
+    }
+    const std::string& name = (*entry)[0].GetString();
+    const std::string& value = (*entry)[1].GetString();
+    if (!net::HttpUtil::IsValidHeaderName(name)) {
+      return base::unexpected(
+          base::StrCat({"\"", name, "\" is not a header name"}));
+    } else if (!net::HttpUtil::IsValidHeaderValue(value)) {
+      return base::unexpected(base::StrCat(
+          {"header ", name, " has a value no response can carry"}));
+    }
+    headers.emplace_back(name, value);
+  }
+  return base::ok(std::move(headers));
+}
+
+base::expected<ElectronResponse, std::string> ResponseIn(
+    const base::DictValue& request) {
+  const std::optional<int> status = request.FindInt("status");
+  if (!status.has_value() || *status < 100 || *status > 599) {
+    return base::unexpected("\"status\" must be from 100 to 599");
+  }
+  base::expected<ElectronHeaders, std::string> headers = HeadersIn(request);
+  if (!headers.has_value()) {
+    return base::unexpected(std::move(headers.error()));
+  }
+  const int bodies = request.contains("body") + request.contains("file") +
+                     request.contains("stream");
+  if (bodies != 1) {
+    return base::unexpected(
+        "a response has one of \"body\", \"file\" and \"stream\"");
+  }
+  ElectronResponse response{.status = *status,
+                            .headers = std::move(*headers),
+                            .body = ElectronStreamedBody()};
+  if (request.contains("body")) {
+    base::expected<std::string, std::string> body = Base64In(request, "body");
+    if (!body.has_value()) {
+      return base::unexpected(std::move(body.error()));
+    }
+    response.body = std::move(*body);
+  } else if (request.contains("file")) {
+    const std::string* file = request.FindString("file");
+    if (file == nullptr || !base::FilePath(*file).IsAbsolute()) {
+      return base::unexpected("\"file\" must be an absolute path");
+    }
+    response.body = base::FilePath(*file);
+  } else if (request.FindBool("stream") != true) {
+    return base::unexpected("\"stream\" must be true");
+  }
+  return base::ok(std::move(response));
+}
+
+// The protocol request a line answers, or why it names none.
+base::expected<int, std::string> ProtocolRequestIn(
+    const base::DictValue& request) {
+  const std::optional<int> number = request.FindInt("request");
+  if (!number.has_value() || *number < 1) {
+    return base::unexpected("\"request\" must be a whole number from 1");
+  }
+  return base::ok(*number);
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseProtocolAnswer(
+    std::string_view type,
+    const base::DictValue& request) {
+  const base::expected<int, std::string> number = ProtocolRequestIn(request);
+  if (!number.has_value()) {
+    return Refuse(number.error());
+  } else if (type == "protocol_response") {
+    if (const base::Value* error = request.Find("error")) {
+      if (!error->is_string()) {
+        return RefuseRequest("\"error\" must be a string", *number);
+      }
+      return ElectronProtocolResponse{
+          .request = *number, .response = base::unexpected(error->GetString())};
+    }
+    base::expected<ElectronResponse, std::string> response =
+        ResponseIn(request);
+    if (!response.has_value()) {
+      return RefuseRequest(std::move(response.error()), *number);
+    }
+    return ElectronProtocolResponse{.request = *number,
+                                    .response = std::move(*response)};
+  } else if (type == "protocol_data") {
+    base::expected<std::string, std::string> data = Base64In(request, "data");
+    if (!data.has_value()) {
+      return RefuseRequest(std::move(data.error()), *number);
+    }
+    return ElectronProtocolData{.request = *number, .bytes = std::move(*data)};
+  } else {
+    CHECK_EQ(type, "protocol_end");
+    const base::Value* error = request.Find("error");
+    if (error != nullptr && !error->is_string()) {
+      return RefuseRequest("\"error\" must be a string", *number);
+    }
+    return ElectronProtocolEnd{
+        .request = *number,
+        .error = error ? std::optional(error->GetString()) : std::nullopt};
+  }
+}
+
+base::ListValue HeadersList(const ElectronHeaders& headers) {
+  base::ListValue list;
+  for (const auto& [name, value] : headers) {
+    base::ListValue pair;
+    pair.Append(name);
+    pair.Append(value);
+    list.Append(std::move(pair));
+  }
+  return list;
 }
 
 base::expected<ElectronRequest, std::string> ParseHello(
@@ -225,6 +401,56 @@ std::string Written(base::DictValue event) {
 
 }  // namespace
 
+bool IsElectronHandleableScheme(std::string_view scheme) {
+  // The schemes content, Blink and the engine give their own meaning. An
+  // app's handler for one would either never run or take over something
+  // that is not the app's.
+  static constexpr std::string_view kReserved[] = {"about",
+                                                   "blob",
+                                                   "chrome",
+                                                   "chrome-error",
+                                                   "chrome-extension",
+                                                   "chrome-native",
+                                                   "chrome-search",
+                                                   "chrome-untrusted",
+                                                   "data",
+                                                   "devtools",
+                                                   "domicile",
+                                                   "filesystem",
+                                                   "googlechrome",
+                                                   "intent",
+                                                   "isolated-app",
+                                                   "javascript",
+                                                   "view-source",
+                                                   "ws",
+                                                   "wss"};
+  return !scheme.empty() && base::IsAsciiLower(scheme[0]) &&
+         std::ranges::all_of(scheme,
+                             [](char c) {
+                               return base::IsAsciiLower(c) ||
+                                      base::IsAsciiDigit(c) || c == '+' ||
+                                      c == '-' || c == '.';
+                             }) &&
+         std::ranges::find(kReserved, scheme) == std::end(kReserved);
+}
+
+base::expected<WebViewPartition, std::string> ElectronSessionPartition(
+    const WebViewPartition& app,
+    std::string_view session) {
+  base::expected<std::optional<WebViewPartition>, std::string> parsed =
+      ParseWebViewPartition(session);
+  if (!parsed.has_value()) {
+    return base::unexpected(std::move(parsed.error()));
+  } else if (!parsed->has_value()) {
+    return app;
+  }
+  // ":" keeps a session's name apart from the app's own and from any other
+  // app's, whose names never hold one.
+  return WebViewPartition{
+      .name = base::StrCat({app.name, ":", (*parsed)->name}),
+      .persist = (*parsed)->persist};
+}
+
 bool IsElectronPortName(std::string_view name) {
   // Short enough that no count reaches it, and a name is never a number
   // that overflows anything that reads it.
@@ -248,6 +474,11 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
         [](std::string why) { return ElectronRefusal{.why = std::move(why)}; });
   } else if (*type == "ipc_reply") {
     return ParseReply(*request);
+  } else if (*type == "handle_protocol" || *type == "unhandle_protocol") {
+    return ParseHandleProtocol(*request, *type == "handle_protocol");
+  } else if (*type == "protocol_response" || *type == "protocol_data" ||
+             *type == "protocol_end") {
+    return ParseProtocolAnswer(*type, *request);
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }
@@ -260,13 +491,18 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
       return Refuse(std::move(url.error()), *window);
     } else if (*type == "open_window") {
       const base::Value* preload = request->Find("preload");
+      base::expected<std::string, std::string> session =
+          SessionIn(*request, /*optional=*/true);
       if (preload != nullptr && !preload->is_string()) {
         return Refuse("\"preload\" must be a string", *window);
+      } else if (!session.has_value()) {
+        return Refuse(std::move(session.error()), *window);
       }
       return ElectronOpenWindow{
           .window = *window,
           .url = std::move(*url),
-          .preload = preload ? preload->GetString() : std::string()};
+          .preload = preload ? preload->GetString() : std::string(),
+          .session = std::move(*session)};
     } else {
       return ElectronLoadUrl{.window = *window, .url = std::move(*url)};
     }
@@ -386,6 +622,24 @@ std::string ElectronPortClosed(ElectronWindow window, std::string_view port) {
 
 std::string ElectronPageGone(ElectronWindow window) {
   return Line(Event("page_gone", window));
+}
+
+std::string ElectronProtocolRequest(int request,
+                                    std::string_view session,
+                                    const ElectronFetch& fetch) {
+  base::DictValue event;
+  event.Set("type", "protocol_request");
+  event.Set("request", request);
+  event.Set("session", session);
+  event.Set("url", fetch.url.spec());
+  event.Set("method", fetch.method);
+  event.Set("headers", HeadersList(fetch.headers));
+  if (fetch.body.has_value()) {
+    event.Set("body", base::Base64Encode(*fetch.body));
+  }
+  // Strings throughout, so it writes; header bytes that are not UTF-8 were
+  // refused by the page's own fetch.
+  return Written(std::move(event));
 }
 
 }  // namespace domicile
