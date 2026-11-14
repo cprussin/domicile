@@ -94,6 +94,17 @@ const mediaDevicesSchema = z.object({
  */
 export type MediaDevices = z.infer<typeof mediaDevicesSchema>;
 
+const monitorSchema = z.object({
+  hdr: z.enum(["unsupported", "off", "on"]),
+  names: z.array(z.string()),
+});
+
+/**
+ * A lit monitor: every name a profile's `display` can match it by, and whether
+ * it is in HDR. `unsupported` when its panel or connector can't show HDR.
+ */
+export type Monitor = z.infer<typeof monitorSchema>;
+
 const extensionSettingsSchema = z.object({
   file_access: z.boolean().optional(),
   private: z.boolean().optional(),
@@ -182,6 +193,8 @@ export type SettingsHost = {
   /** Opens `url` in a browser window. */
   openUrl: (url: string) => Promise<void>;
   mediaDevices: () => Promise<MediaDevices>;
+  /** The lit monitors. */
+  monitors: () => Promise<Monitor[]>;
   /** Gives device `id` to sites that ask for a `kind` without naming one. */
   setMediaDevice: (kind: MediaKind, id: string) => Promise<void>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
@@ -306,6 +319,14 @@ export const spawnedHost = (
         throw unexpected(reply, "media_devices");
       }
     },
+    monitors: async () => {
+      const reply = await ask({ type: "monitors" });
+      if (reply.type === "monitors") {
+        return reply.monitors;
+      } else {
+        throw unexpected(reply, "monitors");
+      }
+    },
     onChange: (listener) => {
       changes.add(listener);
       // A failed start fails the requests made with it, which report it.
@@ -428,6 +449,11 @@ const replySchema = z.discriminatedUnion("type", [
   mediaDevicesSchema.extend({
     id: z.number(),
     type: z.literal("media_devices"),
+  }),
+  z.object({
+    id: z.number(),
+    monitors: z.array(monitorSchema),
+    type: z.literal("monitors"),
   }),
   z.object({
     extensions: z.array(extensionSchema),

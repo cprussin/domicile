@@ -14,7 +14,8 @@ use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
+    ChromeMessage, HostMessage, MonitorInfo, SystemError, SystemErrorKind, SystemReply,
+    SystemRequest, Theme,
 };
 
 use crate::cli::MonitorMode;
@@ -154,6 +155,22 @@ pub fn theme(
     let said = exchanged(socket, &messages, patience)?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::Theme { theme }) => Ok(theme),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Asks the compositor at `socket` for the lit monitors, under the names a
+/// display profile can call them by.
+pub fn monitors(
+    socket: &Path,
+    patience: Option<Duration>,
+) -> Result<Vec<MonitorInfo>, CompositorError> {
+    let said = exchanged(socket, &[ChromeMessage::WhichMonitors], patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::Monitors { monitors }) => Ok(monitors),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

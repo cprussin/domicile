@@ -32,7 +32,7 @@ use domicile_launch::command_socket::{
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{
-    power_displays, screen_record, screenshot, send_shell, theme,
+    monitors, power_displays, screen_record, screenshot, send_shell, theme,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -560,7 +560,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Visits { .. }
         | Response::Deleted
         | Response::Cleared
-        | Response::SiteData { .. } => Err(format!(
+        | Response::SiteData { .. }
+        | Response::Monitors { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -1260,6 +1261,9 @@ fn answer_a_command(
                     power_displays: &|power, display| {
                         power_displays(chrome, power, display, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())
+                    },
+                    monitors: &|| {
+                        monitors(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                 },
             )

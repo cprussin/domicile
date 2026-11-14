@@ -189,7 +189,9 @@ const PageContent = ({
     case PageId.Keyboard:
       return configPage(KeyboardPage);
     case PageId.Displays:
-      return configPage(DisplaysPage);
+      return configPageOf((ready) => (
+        <DisplaysPage {...named} editor={ready} host={host} report={report} />
+      ));
     case PageId.Power:
       return configPage(PowerPage);
     case PageId.Privacy:

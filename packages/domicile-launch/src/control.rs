@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
-use domicile_protocol::{Scale, Theme};
+use domicile_protocol::{MonitorInfo, Scale, Theme};
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -120,6 +120,10 @@ pub enum Request {
         #[serde(default)]
         to: Option<ThemeChange>,
     },
+    /// Report each lit monitor under the names a display profile can call it
+    /// by. Asked by `domicile-app-host`, so Settings offers HDR only where a
+    /// monitor takes it.
+    Monitors,
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by its `wl_output` name, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -277,6 +281,9 @@ pub enum Response {
 
     /// The desktop's theme, after the request.
     Theme { theme: Theme },
+
+    /// Answers `monitors`.
+    Monitors { monitors: Vec<MonitorInfo> },
 
     /// The compositor turned the monitors off or on.
     Powered,
@@ -450,6 +457,11 @@ pub type Theming<'a> = &'a dyn Fn(Option<Theme>) -> Result<Theme, String>;
 /// tests.
 pub type PowerDisplays<'a> = &'a dyn Fn(DisplayPower, Option<&str>) -> Result<(), String>;
 
+/// Asks the compositor for the lit monitors.
+///
+/// [`crate::compositor_socket::monitors`] in a desktop; a closure in tests.
+pub type ListMonitors<'a> = &'a dyn Fn() -> Result<Vec<MonitorInfo>, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -484,6 +496,7 @@ pub struct Desktop<'a> {
     pub disable_while_typing: DisableWhileTyping<'a>,
     pub theme: Theming<'a>,
     pub power_displays: PowerDisplays<'a>,
+    pub monitors: ListMonitors<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -646,6 +659,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }
         Ok(Request::Theme { to }) => to_line(&match themed(to, desktop.theme) {
             Ok(theme) => Response::Theme { theme },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Monitors) => to_line(&match (desktop.monitors)() {
+            Ok(monitors) => Response::Monitors { monitors },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SleepDisplays { display }) => {

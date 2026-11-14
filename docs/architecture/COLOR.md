@@ -30,7 +30,7 @@ color descriptions, the protocol, and the config. Tracks
 | Display color | `drm_screen.cc` | Builds each `display::Display`'s `gfx::DisplayColorSpaces` from the EDID and the layout: SDR, or HDR10 with an SDR white level and the panel's peak luminance. Output format is `RGBA_1010102` at 10 bits |
 | Scanout | Chromium `DrmDisplay`; `ten_bit_scanout.cc` | A panel whose EDID reports 10 bits, on planes that take `XB30` or `XR30`, scans out of a 10-bit framebuffer with `max bpc` at 10. HDR10 sets `Colorspace` to `BT2020_RGB` and writes `HDR_OUTPUT_METADATA` |
 | Protocol | `domicile-compositor` (`color_management.rs`) | `wp_color_manager_v1`, per-output and per-surface image descriptions, preferred description feedback. Smithay has none; the global is built on `wayland-protocols`' staging server bindings |
-| Config | `domicile-config` placement: `hdr` | Per display. Settings shows an HDR switch and an SDR brightness slider for displays that report HDR |
+| Config | `domicile-config` placement: `hdr` | Per display. Settings shows an HDR switch and an SDR brightness field per monitor, and "Not supported" for a plugged-in monitor that can't show HDR |
 | Night light | `gamma.rs`, engine | On an HDR display it is a color matrix in viz's linear composition. `wlr-gamma-control` fails for that display |
 
 ## Key decisions
@@ -101,4 +101,4 @@ color descriptions, the protocol, and the config. Tracks
 - [x] config: `hdr` and SDR white per placement; HDR capability reported per display to the compositor
 - [x] engine + compositor: night light as a viz color matrix on HDR displays; `wlr-gamma-control` fails there
 - [x] Settings: HDR switch and SDR brightness per monitor (mockup first)
-- [ ] protocol: the shell sees each display's HDR state (unsupported, off, on) and luminances, so Settings offers HDR only where it works
+- [x] protocol: the shell sees each display's HDR state (unsupported, off, on) and luminances, so Settings offers HDR only where it works

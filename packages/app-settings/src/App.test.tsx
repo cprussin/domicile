@@ -8,7 +8,7 @@ import { App } from "./App";
 import { hostExtensions } from "./extensions";
 import type { FakeHostState } from "./fake-host";
 import { fakeHost } from "./fake-host";
-import type { InstalledExtension, SettingsFiles } from "./host";
+import type { InstalledExtension, Monitor, SettingsFiles } from "./host";
 
 const CONFIG_PATH = "/home/me/.config/domicile/domicile.json";
 const SHELL_PATH = "/home/me/.config/domicile/shell.ts";
@@ -107,6 +107,7 @@ const renderApp = async (
     chosen = "/home/me/src/my-extension",
     config = {},
     configExtensions = [],
+    monitors,
     options,
     refuse,
     writable = true,
@@ -115,6 +116,8 @@ const renderApp = async (
     chosen?: string | null;
     config?: Record<string, unknown>;
     configExtensions?: string[];
+    /** The lit monitors; none by default. */
+    monitors?: Monitor[];
     /** What the shell declares; none by default. */
     options?: Options;
     refuse?: string;
@@ -127,6 +130,7 @@ const renderApp = async (
     files: files(config, writable, options),
     installed: structuredClone(INSTALLED),
     media: structuredClone(MEDIA),
+    monitors,
     refuse,
     siteData: structuredClone(SITE_DATA),
     sites: structuredClone(SITES),
@@ -454,6 +458,44 @@ describe(App, () => {
           { displays: [{ display: "drm-1", hdr: true }], name: "laptop" },
         ]);
       });
+    });
+
+    it("says a plugged-in monitor that can't show HDR can't, in place of its switch", async () => {
+      await renderApp("Displays", {
+        config: {
+          output: {
+            profiles: [
+              {
+                displays: [
+                  { display: "DEL DELL U3219Q 2ZLS413" },
+                  { display: "drm-2" },
+                  { display: "drm-3" },
+                ],
+                name: "desk",
+              },
+            ],
+          },
+        },
+        monitors: [
+          {
+            hdr: "unsupported",
+            names: [
+              "drm-1",
+              "DEL DELL U3219Q 2ZLS413",
+              "Dell Inc. DELL U3219Q 2ZLS413",
+            ],
+          },
+          { hdr: "off", names: ["drm-2"] },
+        ],
+      });
+      await screen.findByText("Not supported");
+      expect(screen.getAllByText("Not supported")).toHaveLength(1);
+      expect(
+        screen.queryByRole("switch", { name: "DEL DELL U3219Q 2ZLS413 HDR" }),
+      ).toBeNull();
+      // One that takes it, and one not plugged in, keep their switches.
+      screen.getByRole("switch", { name: "drm-2 HDR" });
+      screen.getByRole("switch", { name: "drm-3 HDR" });
     });
 
     it("sets how bright everyday content is on a display in HDR", async () => {

@@ -13,6 +13,7 @@ use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
+use domicile_protocol::{DisplayHdr, MonitorInfo};
 use serde_json::{json, Value};
 
 #[test]
@@ -227,6 +228,19 @@ fn media_devices_are_the_desktops() {
             "type": "media_devices",
             "cameras": [{"id": "/dev/video2", "name": "USB Camera"}],
             "microphones": [],
+        })
+    );
+}
+
+#[test]
+fn the_monitors_are_the_desktops() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 19, "type": "monitors"})),
+        json!({
+            "id": 19,
+            "type": "monitors",
+            "monitors": [{"names": ["drm-1", "DEL DELL U3219Q 2ZLS413"], "hdr": "unsupported"}],
         })
     );
 }
@@ -645,6 +659,15 @@ impl Fake {
                             }],
                         },
                         Request::ClearSiteData { .. } => Response::Cleared,
+                        Request::Monitors => Response::Monitors {
+                            monitors: vec![MonitorInfo {
+                                names: vec![
+                                    "drm-1".to_string(),
+                                    "DEL DELL U3219Q 2ZLS413".to_string(),
+                                ],
+                                hdr: DisplayHdr::Unsupported,
+                            }],
+                        },
                         other => panic!("the host never asks {other:?}"),
                     })
                 },

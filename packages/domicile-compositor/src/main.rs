@@ -1067,6 +1067,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     {
         let mut host = hub.host.lock().unwrap();
         host.describe_displays(screens.outputs().map(Advertised::described).collect());
+        host.describe_monitors(screens.outputs().map(Advertised::monitor).collect());
         hub.portals
             .displays(screens.outputs().map(Zone::from).collect());
         // The keymap, for the browser process to decode keys. Outside ChromeOS

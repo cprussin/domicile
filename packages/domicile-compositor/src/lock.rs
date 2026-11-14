@@ -430,7 +430,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::PowerDisplays { .. },
         )
         | Asked::OnTheConnection(
-            ConnectionRequest::SetTheme { .. } | ConnectionRequest::WhichTheme,
+            ConnectionRequest::SetTheme { .. }
+            | ConnectionRequest::WhichTheme
+            | ConnectionRequest::WhichMonitors,
         )
         | Asked::System(
             Reach::ReadsTheKernel
@@ -1124,6 +1126,7 @@ mod tests {
         for request in [
             ConnectionRequest::SetTheme { theme: Theme::Dark },
             ConnectionRequest::WhichTheme,
+            ConnectionRequest::WhichMonitors,
         ] {
             assert_eq!(refused(Asked::OnTheConnection(&request)), None);
         }
