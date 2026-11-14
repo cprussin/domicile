@@ -95,6 +95,14 @@ impl DomicileCompositor {
         }
     }
 
+    /// The CSS `zoom` of the window `surface` draws for, which its popups
+    /// share. 1 for the chrome and for a window the page has not zoomed.
+    pub fn zoom_of(&self, surface: &WlSurface) -> f64 {
+        self.window_of(surface)
+            .and_then(|app_id| self.app_zoom.get(&app_id).copied())
+            .unwrap_or(1.0)
+    }
+
     /// Where the page last put the window `surface` is, if it has said.
     pub fn bounds_of(&self, surface: &WlSurface) -> Option<domicile_scene::Bounds> {
         match self.by_surface.get(surface) {
@@ -312,6 +320,7 @@ impl DomicileCompositor {
         self.last_buffers.remove(app_id);
         self.unannounced.remove(app_id);
         self.app_bounds.remove(app_id);
+        self.app_zoom.remove(app_id);
         self.held_frames.forget(app_id);
         self.suspended.remove(app_id);
         self.presentations.forget(app_id);

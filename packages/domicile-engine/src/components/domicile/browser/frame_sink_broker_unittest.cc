@@ -74,6 +74,8 @@ constexpr char kTestApp[] = "test-app";
 constexpr gfx::Size kEmbeddedSize(320, 240);
 // The page's device scale factor.
 constexpr double kEmbeddedScale = 1.5;
+// The <app> element's CSS `zoom`.
+constexpr double kEmbeddedZoom = 1.25;
 
 // The DRM fourcc of the buffers tests import, and its viz format.
 constexpr uint32_t kArgb8888 = 0x34325241;
@@ -184,10 +186,11 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
   // mojom::SurfaceObserver implementation.
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size,
-                         double scale) override {
+                         double scale,
+                         double zoom) override {
     told_.push_back(local_surface_id);
     if (!embedded_.IsReady()) {
-      embedded_.SetValue(local_surface_id, size, scale);
+      embedded_.SetValue(local_surface_id, size, scale, zoom);
     }
   }
 
@@ -197,7 +200,8 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
   }
 
   // The first embed.
-  base::test::TestFuture<viz::LocalSurfaceId, gfx::Size, double> embedded_;
+  base::test::TestFuture<viz::LocalSurfaceId, gfx::Size, double, double>
+      embedded_;
   // Every LocalSurfaceId sent, in order. The producer submits to the last.
   std::vector<viz::LocalSurfaceId> told_;
   std::vector<uint64_t> released_;
@@ -731,7 +735,8 @@ TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
 
   EXPECT_EQ(frame_sink_id, embedded.Get());
 }
@@ -743,7 +748,8 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
   RunUntilIdle();
   EXPECT_FALSE(embedded.IsReady());
 
@@ -771,7 +777,8 @@ TEST_F(FrameSinkBrokerTest, ARendererEmbedsUnderItsOwnFrameSink) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-              kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+              kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+              embedded.GetCallback());
 
   EXPECT_EQ(frame_sink_id, embedded.Get());
 }
@@ -786,11 +793,27 @@ TEST_F(FrameSinkBrokerTest, ARendererNamingAnotherRenderersFrameSinkIsBad) {
 
   mojo::test::BadMessageObserver bad_message;
   page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-              kEmbeddedSize, kEmbeddedScale, base::DoNothing());
+              kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom, base::DoNothing());
 
   // A substring: mojo prefixes the error when the message crossed processes.
   EXPECT_THAT(bad_message.WaitForBadMessage(),
               testing::HasSubstr("parent frame sink is not the renderer's"));
+}
+
+// A zoom that is not a positive number is reported: the compositor configures
+// the client at the box over it.
+TEST_F(FrameSinkBrokerTest, ARendererSendingANonsenseZoomIsBad) {
+  ExternalSurfaceProvider provider(broker());
+  mojo::Remote<mojom::ExternalSurfaceProvider> page;
+  provider.Bind(page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id());
+
+  mojo::test::BadMessageObserver bad_message;
+  page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+              kEmbeddedSize, kEmbeddedScale, /*zoom=*/0, base::DoNothing());
+
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("zoom is not a positive number"));
 }
 
 // A renderer hears when the producer of a surface it embeds disconnects, and
@@ -889,7 +912,8 @@ TEST_F(FrameSinkBrokerTest, AnEmbedWithATokenFromADisconnectedSinkIsRefused) {
   BrokerASink(*old_producer, old_client, old_sink, mojo::NullRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> first;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, first.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  first.GetCallback());
   ASSERT_TRUE(first.Get().has_value());
   old_producer.reset();
   RunUntilIdle();
@@ -904,7 +928,8 @@ TEST_F(FrameSinkBrokerTest, AnEmbedWithATokenFromADisconnectedSinkIsRefused) {
   // The same allocator, so the same embed token.
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> stale;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, stale.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  stale.GetCallback());
 
   ASSERT_TRUE(stale.IsReady());
   EXPECT_EQ(std::nullopt, stale.Get());
@@ -935,10 +960,12 @@ TEST_F(FrameSinkBrokerTest, EachAppEmbedsItsOwnSurface) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_terminal;
   broker()->Embed(page_, "terminal", kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, for_terminal.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  for_terminal.GetCallback());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
   broker()->Embed(page_, "editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, for_editor.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  for_editor.GetCallback());
 
   EXPECT_EQ(terminal.Get(), for_terminal.Get());
   EXPECT_EQ(editor.Get(), for_editor.Get());
@@ -954,7 +981,8 @@ TEST_F(FrameSinkBrokerTest, AWaitingEmbedTakesOnlyItsOwnApp) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
   broker()->Embed(page_, "editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, for_editor.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  for_editor.GetCallback());
   RunUntilIdle();
 
   // The terminal connects first. The editor's element is still waiting.
@@ -992,11 +1020,12 @@ TEST_F(FrameSinkBrokerTest, AWaitingEmbedIsDroppedWithItsPage) {
                 kPageFrameSinkId.client_id());
 
   gone_page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                   kEmbeddedSize, kEmbeddedScale, base::DoNothing());
+                   kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                   base::DoNothing());
   const viz::LocalSurfaceId kept_surface = AllocateLocalSurfaceId();
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> kept;
   kept_page->Embed(kTestApp, kPageFrameSinkId, kept_surface, kEmbeddedSize,
-                   kEmbeddedScale, kept.GetCallback());
+                   kEmbeddedScale, kEmbeddedZoom, kept.GetCallback());
   RunUntilIdle();
   gone_page.reset();
   RunUntilIdle();
@@ -1029,12 +1058,14 @@ TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
   const viz::LocalSurfaceId local_surface_id = AllocateLocalSurfaceId();
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, local_surface_id,
-                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
 
   EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
   EXPECT_EQ(kEmbeddedSize, observer.embedded_.Get<gfx::Size>());
-  // Each monitor's page has its own scale.
-  EXPECT_EQ(kEmbeddedScale, observer.embedded_.Get<double>());
+  // Each monitor's page has its own scale, and each element its own zoom.
+  EXPECT_EQ(kEmbeddedScale, observer.embedded_.Get<2>());
+  EXPECT_EQ(kEmbeddedZoom, observer.embedded_.Get<3>());
 }
 
 // Two <app> elements showing one window share its allocator but use separate
@@ -1055,7 +1086,7 @@ TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_newer;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, newer, kEmbeddedSize,
-                  kEmbeddedScale, for_newer.GetCallback());
+                  kEmbeddedScale, kEmbeddedZoom, for_newer.GetCallback());
   ASSERT_TRUE(for_newer.Wait());
   RunUntilIdle();
   sink->SubmitCompositorFrame(observer.told_.back(),
@@ -1065,7 +1096,7 @@ TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
   // The late embed is still answered: the element needs a FrameSinkId.
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_older;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, older, kEmbeddedSize,
-                  kEmbeddedScale, for_older.GetCallback());
+                  kEmbeddedScale, kEmbeddedZoom, for_older.GetCallback());
   ASSERT_TRUE(for_older.Wait());
   RunUntilIdle();
   sink->SubmitCompositorFrame(observer.told_.back(),
@@ -1092,7 +1123,8 @@ TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
 
@@ -1110,7 +1142,8 @@ TEST_F(FrameSinkBrokerTest, AnEmbeddedWindowAsksForNoBeginFrames) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
 
@@ -1130,7 +1163,8 @@ TEST_F(FrameSinkBrokerTest, ABeginFrameWithNothingToDrawIsAnswered) {
       BrokerABrowserHeldSink(remote, observer.BindRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
 
@@ -1157,7 +1191,8 @@ TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
       BrokerASink(remote, sink_client, sink, mojo::NullRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
   ASSERT_TRUE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
@@ -1191,6 +1226,8 @@ TEST_F(FrameSinkBrokerTest, AProducerEmbedsOneOfItsSinksInAnother) {
 
   EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
   EXPECT_EQ(kEmbeddedSize, observer.embedded_.Get<gfx::Size>());
+  // The scale given already carries the window's zoom.
+  EXPECT_EQ(1.0, observer.embedded_.Get<3>());
   RunUntilIdle();
   EXPECT_TRUE(VizHasHierarchy(window, child));
 }

@@ -369,12 +369,17 @@ pub enum Event {
     ///
     /// `number` names the box for [`Engine::submit`]. `None` from an engine
     /// without `configure_box`.
+    ///
+    /// `zoom` is the `<app>`'s CSS `zoom`: the client draws `zoom` times
+    /// denser at a logical size `zoom` times smaller, so the box stays sharp.
+    /// 1 from an engine without `configure_zoomed`.
     Configure {
         surface: SurfaceId,
         width: u32,
         height: u32,
         scale: Option<f64>,
         number: Option<u64>,
+        zoom: f64,
     },
     /// `wl_buffer.release`: viz has stopped reading the dmabuf, so the client
     /// may reuse it.
@@ -529,6 +534,7 @@ struct Callbacks {
     moded_displays: Option<extern "C" fn(*mut c_void, *const RawModedDisplay, u32)>,
     browser_windows: Option<extern "C" fn(*mut c_void, *const RawBrowserWindow, u32)>,
     adaptive_displays: Option<extern "C" fn(*mut c_void, *const RawAdaptiveDisplay, u32)>,
+    configure_zoomed: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64, f64, u64)>,
 }
 
 /// `DomicileBrowserWindow`, laid out as in the C header. Its strings are
@@ -1881,6 +1887,7 @@ fn join(
         moded_displays: Some(on_moded_displays),
         browser_windows: Some(on_browser_windows),
         adaptive_displays: Some(on_adaptive_displays),
+        configure_zoomed: Some(on_configure_zoomed),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -1931,6 +1938,7 @@ extern "C" fn on_configure(user_data: *mut c_void, surface: SurfaceId, width: u3
             height,
             scale: None,
             number: None,
+            zoom: 1.0,
         },
     );
 }
@@ -1950,6 +1958,7 @@ extern "C" fn on_configure_at(
             height,
             scale: Some(scale),
             number: None,
+            zoom: 1.0,
         },
     );
 }
@@ -1970,6 +1979,29 @@ extern "C" fn on_configure_box(
             height,
             scale: Some(scale),
             number: Some(number),
+            zoom: 1.0,
+        },
+    );
+}
+
+extern "C" fn on_configure_zoomed(
+    user_data: *mut c_void,
+    surface: SurfaceId,
+    width: u32,
+    height: u32,
+    scale: f64,
+    zoom: f64,
+    number: u64,
+) {
+    push(
+        user_data,
+        Event::Configure {
+            surface,
+            width,
+            height,
+            scale: Some(scale),
+            number: Some(number),
+            zoom,
         },
     );
 }
@@ -2554,7 +2586,7 @@ mod tests {
     fn the_callbacks_are_the_user_data_and_nineteen_pointers_the_c_header_declares() {
         // `released` follows `configure`, and `adaptive_displays` is last, as
         // in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 20 * 8);
+        assert_eq!(std::mem::size_of::<Callbacks>(), 21 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2567,6 +2599,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Callbacks, moded_displays), 17 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, browser_windows), 18 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, adaptive_displays), 19 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, configure_zoomed), 20 * 8);
     }
 
     #[test]
@@ -3191,6 +3224,7 @@ mod tests {
         // Only the engine knows the scale a box was laid out at.
         let events = RefCell::new(Vec::new());
         let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        on_configure_zoomed(queue, 1, 640, 480, 2.0, 1.5, 8);
         on_configure_box(queue, 2, 640, 480, 2.0, 9);
         on_configure_at(queue, 3, 1200, 900, 1.5);
         on_configure(queue, 4, 800, 600);
@@ -3199,11 +3233,21 @@ mod tests {
             events.into_inner(),
             vec![
                 Event::Configure {
+                    surface: 1,
+                    width: 640,
+                    height: 480,
+                    scale: Some(2.0),
+                    number: Some(8),
+                    zoom: 1.5,
+                },
+                // An engine without `configure_zoomed` zooms nothing.
+                Event::Configure {
                     surface: 2,
                     width: 640,
                     height: 480,
                     scale: Some(2.0),
                     number: Some(9),
+                    zoom: 1.0,
                 },
                 // An engine without `configure_box` numbers no box.
                 Event::Configure {
@@ -3212,6 +3256,7 @@ mod tests {
                     height: 900,
                     scale: Some(1.5),
                     number: None,
+                    zoom: 1.0,
                 },
                 // An engine without `configure_at` sends no scale.
                 Event::Configure {
@@ -3220,6 +3265,7 @@ mod tests {
                     height: 600,
                     scale: None,
                     number: None,
+                    zoom: 1.0,
                 },
             ]
         );

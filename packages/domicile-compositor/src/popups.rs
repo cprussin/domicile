@@ -178,11 +178,13 @@ impl DomicileCompositor {
         match placed {
             None => positioner.get_geometry(),
             Some((parent, window, screen)) => {
-                // The positioner works relative to the parent's geometry.
-                let parent_at =
-                    Point::from((window.min.x, window.min.y)) + self.menu_offset(&parent).to_f64();
+                // The positioner works relative to the parent's geometry, in
+                // its window's logical units, which a zoomed window draws
+                // larger on the desktop.
+                let screen =
+                    crate::scale::screen_in_window(window.min, screen, self.zoom_of(&parent));
                 let target = Rectangle::<f64, Logical>::new(
-                    Point::from((screen.min.x, screen.min.y)) - parent_at,
+                    Point::from((screen.min.x, screen.min.y)) - self.menu_offset(&parent).to_f64(),
                     (screen.max.x - screen.min.x, screen.max.y - screen.min.y).into(),
                 );
                 positioner.get_unconstrained_geometry(target.to_i32_round())
@@ -200,15 +202,18 @@ impl DomicileCompositor {
         let window = self.bounds_of(&self.window_under_menus(popup.wl_surface()))?;
         let at = self.menu_offset(popup.wl_surface());
         let size = popup.with_pending_state(|state| state.geometry.size);
+        // The popup is in its window's logical units, which a zoomed window
+        // draws larger on the desktop.
+        let zoom = self.zoom_of(popup.wl_surface());
         let min = domicile_scene::Point {
-            x: window.min.x + f64::from(at.x),
-            y: window.min.y + f64::from(at.y),
+            x: window.min.x + f64::from(at.x) * zoom,
+            y: window.min.y + f64::from(at.y) * zoom,
         };
         Some(domicile_scene::Bounds {
             min,
             max: domicile_scene::Point {
-                x: min.x + f64::from(size.w),
-                y: min.y + f64::from(size.h),
+                x: min.x + f64::from(size.w) * zoom,
+                y: min.y + f64::from(size.h) * zoom,
             },
         })
     }
