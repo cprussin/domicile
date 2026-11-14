@@ -23,7 +23,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 52,
 # WindowDiff 7, EngineEventQueue 8, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 57,
-# DomicileDisplayList 12, DomicileKeyboardLayout 3, ShellWindows 8,
+# DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, BufferColor 4, ExtensionInstaller 3,
 # ExtensionSettings 7, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 32,
@@ -44,6 +44,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
 # PictureInPictureVideos 13.
 #
+# 651, and it was 650 — a panel's HDR state and luminances are one
+# DomicileDisplayList case. Before that
 # 650, and it was 645 — a client's image description is four BufferColor
 # cases and one more FrameSinkBroker case. Before that 645, and it was 642 — 10-bit and half-float client buffers are three
 # FrameSinkBroker cases. Before that 642, and it was 641 — a renderer sending a
@@ -230,7 +232,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=650
+FLOOR=651
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
