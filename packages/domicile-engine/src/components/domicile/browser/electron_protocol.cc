@@ -115,7 +115,7 @@ base::expected<std::string, std::string> PortIn(
     return base::unexpected(
         "\"port\" must name a port: \"m\" or \"r\", then a number");
   }
-  return *port;
+  return base::ok(*port);
 }
 
 base::expected<ElectronRequest, ElectronRefusal> ParsePostToPage(
