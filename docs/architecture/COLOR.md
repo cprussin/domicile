@@ -75,10 +75,13 @@ color descriptions, the protocol, and the config. Tracks
   color. A surface whose description changes has its buffers imported again,
   once each. A commit that changes only the description, with no buffer,
   shows from the next buffer.
-- **Output descriptions follow the display.** SDR: the EDID primaries with
-  gamma 2.2. HDR: BT.2020 with PQ, the panel's luminances from the EDID and
-  the SDR white as reference. A surface's preferred description is its main
-  display's, and changes when the window moves or the display's mode does.
+- **Output descriptions follow the display.** SDR: sRGB primaries with
+  gamma 2.2, as the engine draws it. HDR: BT.2020 with PQ, the SDR white as
+  reference, and the panel's black and peak from the EDID as the target
+  luminance. A surface's preferred description is that of the display holding
+  most of its window, and changes, with `preferred_changed`, when the window
+  moves or that display goes into or out of HDR. Each
+  `wp_color_management_output_v1` hears `image_description_changed` then too.
 - **Night light on HDR is a viz color matrix.** A gamma ramp after PQ encoding
   bends the curve the panel decodes. Viz's display color matrix applies in
   linear light before encoding. Gamma ramps from clients assume SDR, so
@@ -91,8 +94,10 @@ color descriptions, the protocol, and the config. Tracks
 - [x] engine + compositor: 10-bit and F16 formats in `FormatFromFourcc` and `FOURCCS`, on `wl_shm` too; `guard-buffer-formats.sh`
 - [x] engine: 10-bit framebuffers and `max bpc` where the EDID and planes take 10 bits
 - [x] engine: buffer color descriptions on import (`gfx::ColorSpace`, `gfx::HDRMetadata`)
-- [x] compositor: `wp_color_management_v1` with output and surface descriptions and preferred feedback. Every display describes itself as sRGB with gamma 2.2 until the HDR step gives each its own
+- [x] compositor: `wp_color_management_v1` with output and surface descriptions and preferred feedback
+- [x] compositor: each display's own description, HDR10 while in HDR, and `image_description_changed` and `preferred_changed` when it changes
 - [x] engine: HDR10 display color spaces from the EDID and the layout; `Colorspace`, `HDR_OUTPUT_METADATA`
 - [x] config: `hdr` and SDR white per placement; HDR capability reported per display to the compositor
 - [ ] engine + compositor: night light as a viz color matrix on HDR displays; `wlr-gamma-control` fails there
-- [ ] Settings: HDR switch and SDR brightness for HDR displays (mockup first); the shell sees each display's HDR state
+- [x] Settings: HDR switch and SDR brightness per monitor (mockup first)
+- [ ] protocol: the shell sees each display's HDR state (unsupported, off, on) and luminances, so Settings offers HDR only where it works

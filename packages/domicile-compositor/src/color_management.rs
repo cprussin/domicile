@@ -4,12 +4,15 @@
 //! [`crate::engine_session::EngineSession::describe`]); viz converts them to
 //! each display's. See `docs/architecture/COLOR.md`.
 //!
-//! Version 1, parametric descriptions only. Every display is SDR for now, so
-//! every output and preferred description is sRGB primaries with gamma 2.2.
+//! Version 1, parametric descriptions only. A display driven in HDR describes
+//! itself as HDR10 ([`Description::of_display`]), every other as sRGB with
+//! gamma 2.2. A surface prefers the description of the display holding most of
+//! it, and hears when that changes.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use smithay::output::Output;
 use smithay::reexports::wayland_protocols::wp::color_management::v1::server::{
     wp_color_management_output_v1::{self, WpColorManagementOutputV1},
     wp_color_management_surface_feedback_v1::{self, WpColorManagementSurfaceFeedbackV1},
@@ -22,14 +25,15 @@ use smithay::reexports::wayland_protocols::wp::color_management::v1::server::{
     wp_image_description_info_v1::WpImageDescriptionInfoV1,
     wp_image_description_v1::{self, WpImageDescriptionV1},
 };
-use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+use smithay::reexports::wayland_server::protocol::{wl_output::WlOutput, wl_surface::WlSurface};
 use smithay::reexports::wayland_server::{
     backend::ClientId, Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
     WEnum,
 };
 use smithay::wayland::compositor::{with_states, Cacheable};
 
-use crate::engine::{Chromaticity, Color};
+use crate::engine::{Chromaticity, Color, Hdr, HdrState};
+use crate::screens::Screens;
 use crate::DomicileCompositor;
 
 /// The version advertised. Version 2 renames `ready` and `preferred_changed`
@@ -210,9 +214,35 @@ pub struct Description {
 }
 
 impl Description {
-    /// What every display is, until HDR: sRGB primaries, gamma 2.2.
+    /// What a display in SDR is: sRGB primaries, gamma 2.2.
     pub fn sdr_display() -> Self {
         Description::named(Named::Srgb, Transfer::Gamma22)
+    }
+
+    /// What a display is: HDR10 while it is driven in HDR, with SDR white
+    /// where the engine draws it and the panel's luminance range as its
+    /// target, and [`sdr_display`](Description::sdr_display) otherwise.
+    pub fn of_display(hdr: &Hdr) -> Self {
+        if hdr.state != HdrState::On {
+            return Description::sdr_display();
+        }
+        let pq = Transfer::Pq.default_luminances();
+        // The panel's black is in 0.0001 cd/m²; zero is unreported.
+        let min = if hdr.min_luminance > 0 {
+            f64::from(hdr.min_luminance) / 10_000.0
+        } else {
+            pq.min
+        };
+        Description {
+            luminances: Some(Luminances {
+                min,
+                max: pq.max,
+                reference: f64::from(hdr.sdr_white),
+            }),
+            mastering_luminance: (hdr.max_luminance > 0)
+                .then(|| (min, f64::from(hdr.max_luminance))),
+            ..Description::named(Named::Bt2020, Transfer::Pq)
+        }
     }
 
     fn named(primaries: Named, transfer: Transfer) -> Self {
@@ -336,12 +366,28 @@ fn set_pending(surface: &WlSurface, description: Option<Arc<Description>>) {
 /// Identities for `ready`: nonzero, and never reused.
 static LAST_IDENTITY: AtomicU32 = AtomicU32::new(0);
 
+/// A new identity for `ready` or `preferred_changed`.
+fn new_identity() -> u32 {
+    LAST_IDENTITY.fetch_add(1, Ordering::Relaxed) + 1
+}
+
 /// Makes `new` a ready image description of `description`.
 fn ready(
     data_init: &mut DataInit<'_, DomicileCompositor>,
     new: New<WpImageDescriptionV1>,
     description: Description,
     information: bool,
+) {
+    ready_as(data_init, new, description, information, new_identity());
+}
+
+/// Makes `new` a ready image description of `description`, with `identity`.
+fn ready_as(
+    data_init: &mut DataInit<'_, DomicileCompositor>,
+    new: New<WpImageDescriptionV1>,
+    description: Description,
+    information: bool,
+    identity: u32,
 ) {
     let made = data_init.init(
         new,
@@ -350,7 +396,86 @@ fn ready(
             information,
         },
     );
-    made.ready(LAST_IDENTITY.fetch_add(1, Ordering::Relaxed) + 1);
+    made.ready(identity);
+}
+
+/// The `wp_color_management_output_v1`s clients hold, each with the
+/// description it last stated, so each hears when its display goes into or
+/// out of HDR.
+#[derive(Debug, Default)]
+pub struct DisplayColors {
+    outputs: Vec<(WpColorManagementOutputV1, WlOutput, Description)>,
+}
+
+impl DisplayColors {
+    /// Sends `image_description_changed` to each output whose display's
+    /// description is no longer the one it stated, and forgets those clients
+    /// let go of.
+    pub fn restate(&mut self, screens: &Screens) {
+        self.outputs.retain(|(color, _, _)| color.is_alive());
+        for (color, output, stated) in &mut self.outputs {
+            let now = description_of(screens, output);
+            if now != *stated {
+                *stated = now;
+                color.image_description_changed();
+            }
+        }
+    }
+}
+
+/// The description of the display `output` advertises. One that is gone is in
+/// SDR.
+fn description_of(screens: &Screens, output: &WlOutput) -> Description {
+    let hdr = Output::from_resource(output)
+        .map_or_else(Hdr::default, |output| screens.hdr_of(&output.name()));
+    Description::of_display(&hdr)
+}
+
+/// A surface's preferred description, with its identity, and the feedback
+/// objects to tell when it changes.
+struct Preferred(Mutex<PreferredState>);
+
+struct PreferredState {
+    description: Description,
+    identity: u32,
+    feedbacks: Vec<WpColorManagementSurfaceFeedbackV1>,
+}
+
+impl Default for Preferred {
+    fn default() -> Self {
+        Preferred(Mutex::new(PreferredState {
+            description: Description::sdr_display(),
+            identity: new_identity(),
+            feedbacks: Vec::new(),
+        }))
+    }
+}
+
+fn with_preferred<T>(surface: &WlSurface, f: impl FnOnce(&mut PreferredState) -> T) -> T {
+    with_states(surface, |states| {
+        states
+            .data_map
+            .insert_if_missing_threadsafe(Preferred::default);
+        let preferred = states.data_map.get::<Preferred>().expect("inserted above");
+        let mut state = preferred.0.lock().unwrap();
+        f(&mut state)
+    })
+}
+
+/// Makes `description` what `surface` prefers, and tells its feedback objects
+/// if that changed.
+pub fn prefer(surface: &WlSurface, description: Description) {
+    with_preferred(surface, |state| {
+        state.feedbacks.retain(Resource::is_alive);
+        if state.description == description {
+            return;
+        }
+        state.description = description;
+        state.identity = new_identity();
+        for feedback in &state.feedbacks {
+            feedback.preferred_changed(state.identity);
+        }
+    });
 }
 
 /// Sends a chromaticity event's eight values, each times a million.
@@ -429,7 +554,7 @@ impl GlobalDispatch<WpColorManagerV1, ()> for DomicileCompositor {
 
 impl Dispatch<WpColorManagerV1, ()> for DomicileCompositor {
     fn request(
-        _: &mut Self,
+        state: &mut Self,
         _: &Client,
         manager: &WpColorManagerV1,
         request: wp_color_manager_v1::Request,
@@ -438,8 +563,10 @@ impl Dispatch<WpColorManagerV1, ()> for DomicileCompositor {
         data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
-            wp_color_manager_v1::Request::GetOutput { id, .. } => {
-                data_init.init(id, ());
+            wp_color_manager_v1::Request::GetOutput { id, output } => {
+                let color = data_init.init(id, output.clone());
+                let stated = description_of(&state.screens, &output);
+                state.display_colors.outputs.push((color, output, stated));
             }
             wp_color_manager_v1::Request::GetSurface { id, surface } => {
                 let taken = with_states(&surface, |states| {
@@ -463,7 +590,8 @@ impl Dispatch<WpColorManagerV1, ()> for DomicileCompositor {
                 data_init.init(id, surface);
             }
             wp_color_manager_v1::Request::GetSurfaceFeedback { id, surface } => {
-                data_init.init(id, surface);
+                let feedback = data_init.init(id, surface.clone());
+                with_preferred(&surface, |state| state.feedbacks.push(feedback));
             }
             wp_color_manager_v1::Request::CreateParametricCreator { obj } => {
                 data_init.init(obj, Mutex::new(Params::default()));
@@ -489,13 +617,13 @@ impl Dispatch<WpColorManagerV1, ()> for DomicileCompositor {
     }
 }
 
-impl Dispatch<WpColorManagementOutputV1, ()> for DomicileCompositor {
+impl Dispatch<WpColorManagementOutputV1, WlOutput> for DomicileCompositor {
     fn request(
-        _: &mut Self,
+        state: &mut Self,
         _: &Client,
         _: &WpColorManagementOutputV1,
         request: wp_color_management_output_v1::Request,
-        _: &(),
+        output: &WlOutput,
         _: &DisplayHandle,
         data_init: &mut DataInit<'_, Self>,
     ) {
@@ -504,7 +632,7 @@ impl Dispatch<WpColorManagementOutputV1, ()> for DomicileCompositor {
                 ready(
                     data_init,
                     image_description,
-                    Description::sdr_display(),
+                    description_of(&state.screens, output),
                     true,
                 );
             }
@@ -607,12 +735,9 @@ impl Dispatch<WpColorManagementSurfaceFeedbackV1, WlSurface> for DomicileComposi
                     );
                     return;
                 }
-                ready(
-                    data_init,
-                    image_description,
-                    Description::sdr_display(),
-                    true,
-                );
+                let (description, identity) =
+                    with_preferred(surface, |state| (state.description.clone(), state.identity));
+                ready_as(data_init, image_description, description, true, identity);
             }
             wp_color_management_surface_feedback_v1::Request::Destroy => {}
             _ => unreachable!("version 1 has no other requests"),
@@ -982,6 +1107,57 @@ mod tests {
             chromaticities(millionths(&Named::Bt2020.chromaticities())),
             Named::Bt2020.chromaticities()
         );
+    }
+
+    fn hdr(state: HdrState) -> Hdr {
+        Hdr {
+            state,
+            max_luminance: 600,
+            max_average_luminance: 400,
+            min_luminance: 500,
+            sdr_white: if state == HdrState::On { 240 } else { 0 },
+        }
+    }
+
+    #[test]
+    fn a_display_not_driven_in_hdr_is_srgb_with_gamma_2_2() {
+        for state in [HdrState::Unsupported, HdrState::Off] {
+            assert_eq!(
+                Description::of_display(&hdr(state)),
+                Description::sdr_display()
+            );
+        }
+    }
+
+    #[test]
+    fn a_display_in_hdr_is_hdr10_with_its_sdr_white_and_its_panels_range() {
+        let description = Description::of_display(&hdr(HdrState::On));
+        assert_eq!(
+            (description.primaries, description.transfer),
+            (Named::Bt2020, Transfer::Pq)
+        );
+        assert_eq!(
+            description.luminances,
+            Some(Luminances {
+                min: 0.05,
+                max: 10_000.0,
+                reference: 240.0,
+            }),
+            "SDR white is its reference, as the engine draws it"
+        );
+        assert_eq!(description.target_luminance(), (0.05, 600.0));
+    }
+
+    #[test]
+    fn a_panel_that_reports_no_luminances_gets_pqs_own() {
+        let quiet = Hdr {
+            state: HdrState::On,
+            sdr_white: 203,
+            ..Hdr::default()
+        };
+        let description = Description::of_display(&quiet);
+        assert_eq!(description.luminances().min, 0.005);
+        assert_eq!(description.target_luminance(), (0.005, 10_000.005));
     }
 
     #[test]

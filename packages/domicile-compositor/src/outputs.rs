@@ -18,6 +18,7 @@ use tracing::debug;
 
 use domicile_config::Config;
 
+use crate::color_management::Description;
 use crate::eis::barriers::Zone;
 use crate::screens::{pointer_targets, Advertised, Screens, Slot};
 use crate::{grepped, CalloopData, DomicileCompositor};
@@ -325,6 +326,7 @@ impl DomicileCompositor {
         }
         self.outputs = outputs;
         self.screens = screens;
+        self.display_colors.restate(&self.screens);
         self.tell_the_casts_the_screens();
         // Tell the engine, which holds DRM master, which connectors to light. A
         // profile that turns a panel off needs the panel actually turned off.
@@ -422,6 +424,10 @@ impl DomicileCompositor {
     pub fn place_window(&self, surface: &WlSurface, bounds: Option<domicile_scene::Bounds>) {
         self.enter_only(surface, bounds);
         self.prefer_scale(surface, bounds);
+        crate::color_management::prefer(
+            surface,
+            Description::of_display(&self.screens.hdr_for(bounds)),
+        );
     }
 
     /// Record window `app_id`'s new CSS `zoom` and tell it, and its popups,
