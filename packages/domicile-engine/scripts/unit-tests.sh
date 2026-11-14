@@ -31,7 +31,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
-# ControlChannel 24, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
+# ControlChannel 25, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 8,
@@ -44,11 +44,12 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
 # PictureInPictureVideos 13, ElectronProtocol 12, ElectronApp 14.
 #
-# 680, and it was 677 — a display's color matrix reaching its window, and
-# the two ways it is a bad message, are three FrameSinkBroker cases. Before
-# that 677, and it was 651 — the Electron socket's requests and events are
-# twelve ElectronProtocol cases, and an app on it is fourteen ElectronApp cases.
-# Before that
+# 681, and it was 680 — each display's HDR state reaching the page is one
+# ControlChannel case. Before that 680, and it was 677 — a display's color
+# matrix reaching its window, and the two ways it is a bad message, are three
+# FrameSinkBroker cases. Before that 677, and it was 651 — the Electron
+# socket's requests and events are twelve ElectronProtocol cases, and an app on
+# it is fourteen ElectronApp cases. Before that
 # 651, and it was 650 — a panel's HDR state and luminances are one
 # DomicileDisplayList case. Before that
 # 650, and it was 645 — a client's image description is four BufferColor
@@ -237,7 +238,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=680
+FLOOR=681
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

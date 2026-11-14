@@ -554,9 +554,9 @@ mojom::DisplayTransform TransformNamed(const std::string* named) {
       mojom::DisplayTransform::kNormal);
 }
 
-// The wire's adaptive sync state, or `unsupported` for one this browser has
-// no name for, which asks nothing of a shell.
-std::string AdaptiveSyncNamed(const std::string* named) {
+// The wire's adaptive sync or HDR state, or `unsupported` for one this
+// browser has no name for, which asks nothing of a shell.
+std::string SupportNamed(const std::string* named) {
   if (named && (*named == "off" || *named == "on")) {
     return *named;
   }
@@ -1598,6 +1598,12 @@ void ControlChannel::DispatchLine(const std::string& line,
       const std::optional<double> refresh = display->FindDouble("refresh_mhz");
       // Optional too: a host that predates it has no adaptive sync.
       const std::string* adaptive_sync = display->FindString("adaptive_sync");
+      // As is HDR, and a luminance it leaves out is unreported.
+      const std::string* hdr = display->FindString("hdr");
+      const auto luminance = [display](std::string_view key) {
+        const std::optional<double> nits = display->FindDouble(key);
+        return nits && *nits > 0 ? static_cast<uint32_t>(*nits) : 0u;
+      };
       displays.push_back(mojom::DisplayInfo::New(
           *name, static_cast<int32_t>(Number((*position)[0])),
           static_cast<int32_t>(Number((*position)[1])),
@@ -1607,7 +1613,9 @@ void ControlChannel::DispatchLine(const std::string& line,
           moded ? static_cast<uint32_t>(Number((*mode)[0])) : 0u,
           moded ? static_cast<uint32_t>(Number((*mode)[1])) : 0u,
           refresh && *refresh > 0 ? static_cast<uint32_t>(*refresh) : 0u,
-          AdaptiveSyncNamed(adaptive_sync), TransformNamed(transform)));
+          SupportNamed(adaptive_sync), SupportNamed(hdr),
+          luminance("peak_luminance"), luminance("sdr_white"),
+          TransformNamed(transform)));
     }
     // Sent even when every entry was malformed, because an empty desktop is an
     // answer: a page told nothing and a page told there are no screens are

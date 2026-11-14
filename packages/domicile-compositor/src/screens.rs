@@ -15,10 +15,12 @@
 use domicile_config::{
     ConfigError, Connected, Desk, Desktop, InputConfig, Layout, OutputConfig, Transform,
 };
-use domicile_protocol::{AdaptiveSync as WireAdaptiveSync, DisplayInfo, DisplayTransform, Scale};
+use domicile_protocol::{
+    AdaptiveSync as WireAdaptiveSync, DisplayHdr, DisplayInfo, DisplayTransform, Scale,
+};
 use domicile_scene::{Bounds, Point};
 
-use crate::engine::{AdaptiveSync, Connector, Display, Hdr, Pointer, VirtualDisplay};
+use crate::engine::{AdaptiveSync, Connector, Display, Hdr, HdrState, Pointer, VirtualDisplay};
 use crate::pnp_ids::Vendors;
 
 /// The `wl_output` physical size for an output with no known size.
@@ -143,6 +145,9 @@ impl Advertised {
             // Unknown is zero on both sides of the wire.
             refresh_mhz: u32::try_from(self.refresh_mhz).unwrap_or(0),
             adaptive_sync: as_wire_adaptive_sync(self.adaptive_sync),
+            hdr: as_wire_hdr(self.hdr.state),
+            peak_luminance: self.hdr.max_luminance,
+            sdr_white: self.hdr.sdr_white,
             transform: as_wire_transform(self.transform),
         }
     }
@@ -154,6 +159,15 @@ fn as_wire_adaptive_sync(adaptive_sync: AdaptiveSync) -> WireAdaptiveSync {
         AdaptiveSync::Unsupported => WireAdaptiveSync::Unsupported,
         AdaptiveSync::Off => WireAdaptiveSync::Off,
         AdaptiveSync::On => WireAdaptiveSync::On,
+    }
+}
+
+/// HDR as the protocol spells it.
+fn as_wire_hdr(state: HdrState) -> DisplayHdr {
+    match state {
+        HdrState::Unsupported => DisplayHdr::Unsupported,
+        HdrState::Off => DisplayHdr::Off,
+        HdrState::On => DisplayHdr::On,
     }
 }
 
@@ -1031,7 +1045,7 @@ fn engine_pixel_on(connector: &Connector, (x, y): (f64, f64)) -> Option<(f64, f6
 mod tests {
     use super::*;
 
-    use crate::engine::{HdrState, Mode};
+    use crate::engine::Mode;
     use domicile_config::{Config, Desk};
 
     fn desktop(text: &str) -> Desktop {
@@ -1167,6 +1181,9 @@ mod tests {
                 mode: [5120, 2880],
                 refresh_mhz: 0,
                 adaptive_sync: WireAdaptiveSync::Unsupported,
+                hdr: DisplayHdr::Unsupported,
+                peak_luminance: 0,
+                sdr_white: 0,
                 transform: DisplayTransform::Normal,
             }
         );
@@ -2100,6 +2117,16 @@ mod tests {
             after.hdr_for(None),
             Hdr::default(),
             "a window on no display yet is in SDR"
+        );
+        let told = after
+            .outputs()
+            .next()
+            .expect("the laptop's output")
+            .described();
+        assert_eq!(
+            (told.hdr, told.peak_luminance, told.sdr_white),
+            (DisplayHdr::On, 600, 240),
+            "the shell sees it too"
         );
         assert_ne!(
             asked.outputs().next().map(|output| output.hdr),

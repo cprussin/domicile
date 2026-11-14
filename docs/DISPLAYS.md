@@ -343,6 +343,9 @@ absent).
 - It reaches the compositor through `hdr_displays` (`DomicileHdrDisplay`):
   `unsupported`, `off` or `on`, the panel's luminances, and the SDR white in
   use. The request goes back through `domicile_displays_configure_hdr`.
+- The shell sees it as `Display.hdr` (`unsupported`, `off` or `on`),
+  `Display.peakLuminance` (cd/m², zero when the EDID reports none) and
+  `Display.sdrWhite` (cd/m² while on, zero otherwise).
 
 ## DisplayLink docks
 

@@ -1199,6 +1199,9 @@ mod tests {
             mode: size,
             refresh_mhz: 0,
             adaptive_sync: domicile_protocol::AdaptiveSync::Unsupported,
+            hdr: domicile_protocol::DisplayHdr::Unsupported,
+            peak_luminance: 0,
+            sdr_white: 0,
             transform: domicile_protocol::DisplayTransform::Normal,
         }
     }

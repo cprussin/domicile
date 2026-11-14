@@ -1883,7 +1883,8 @@ void DomicileHost::Displays(
     described.push_back(MakeGarbageCollected<DomicileDisplay>(
         display->name, display->x, display->y, display->width, display->height,
         display->scale, display->mode_width, display->mode_height,
-        display->refresh_mhz, display->adaptive_sync,
+        display->refresh_mhz, display->adaptive_sync, display->hdr,
+        display->peak_luminance, display->sdr_white,
         TransformName(display->transform)));
   }
   displays_ = MakeGarbageCollected<FrozenArray<DomicileDisplay>>(
