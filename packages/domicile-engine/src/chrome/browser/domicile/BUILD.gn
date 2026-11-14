@@ -37,6 +37,8 @@ source_set("domicile") {
     "domicile_devtools.h",
     "domicile_downloads.cc",
     "domicile_downloads.h",
+    "domicile_electron_socket.cc",
+    "domicile_electron_socket.h",
     "domicile_extension_installer.cc",
     "domicile_extension_installer.h",
     "domicile_extension_settings.cc",
@@ -104,6 +106,9 @@ source_set("domicile") {
     "//components/domicile:desk_activity",
     # The desk's downloads, for the shell's Downloads pipe.
     "//components/domicile:desk_downloads",
+    # Electron apps' windows, for the Electron socket.
+    "//components/domicile:electron_app",
+    "//components/domicile:line_framer",
     # Where the pointer is on the desk, from aura's own events.
     "//components/domicile:desk_pointer",
     # Hides the pointer while typing and after a pause, from aura's own events

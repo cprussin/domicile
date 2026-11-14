@@ -4,10 +4,14 @@
 #ifndef CHROME_BROWSER_DOMICILE_DOMICILE_BROWSER_WINDOWS_H_
 #define CHROME_BROWSER_DOMICILE_DOMICILE_BROWSER_WINDOWS_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
+#include "base/functional/callback.h"
 #include "components/domicile/browser/desk_pointer.h"
+#include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/mojom/browser_windows.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -59,6 +63,31 @@ bool OpenAppWindow(const GURL& url,
 // Returns false when there is no shell to own it. See
 // docs/architecture/APP-MODULES.md.
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
+
+// Opens an app window at `url` for an Electron app, with `app_id`, in its own
+// `partition`, and returns the window's id. Nothing when there is no shell to
+// own it. See docs/architecture/ELECTRON-APPS.md.
+std::optional<std::string> OpenElectronWindow(
+    const GURL& url,
+    const std::string& app_id,
+    const WebViewPartition& partition);
+
+// Loads `url` in browser window `id` of the shell's profile.
+void LoadBrowserWindow(const std::string& id, const GURL& url);
+
+// Asks the shell to focus browser window `id` of the shell's profile.
+void FocusBrowserWindow(const std::string& id);
+
+// Closes browser window `id` of the shell's profile once its page agrees.
+void AskToCloseBrowserWindow(const std::string& id);
+
+// Closes browser window `id` of the shell's profile without asking.
+void CloseBrowserWindow(const std::string& id);
+
+// Runs `loaded` with a browser window's id each time its page finishes
+// loading, until the subscription goes.
+base::CallbackListSubscription WatchBrowserWindowLoads(
+    base::RepeatingCallback<void(const std::string& id)> loaded);
 
 // The shell's WebContents in any profile, or null while there is none.
 content::WebContents* DeskShellContents();
