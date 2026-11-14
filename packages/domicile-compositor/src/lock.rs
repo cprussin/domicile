@@ -850,6 +850,8 @@ mod tests {
                     app_id: "app-1".into(),
                     dx: 2.0,
                     dy: 1.0,
+                    dx_unaccel: 1.0,
+                    dy_unaccel: 0.5,
                 },
             ),
             (

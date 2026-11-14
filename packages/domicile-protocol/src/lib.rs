@@ -189,6 +189,15 @@ pub enum PointerConstraint {
     Confine,
 }
 
+/// A rectangle of a window's surface, in its surface-local units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -275,9 +284,18 @@ pub enum ChromeMessage {
     /// For `zwp_relative_pointer_v1`, which games and VM viewers read.
     ///
     /// The browser sends it only for a hand on the mouse: not for a move under
-    /// a still pointer, nor for a shell's pointer warp. Its deltas are the
-    /// accelerated ones, which the compositor also gives as unaccelerated.
-    PointerRelative { app_id: String, dx: f64, dy: f64 },
+    /// a still pointer, nor for a shell's pointer warp. `(dx, dy)` is after
+    /// pointer acceleration; `(dx_unaccel, dy_unaccel)` is the device's own
+    /// motion in the same units. A device that reports no unaccelerated
+    /// motion (a nested desktop's host, emulated input) gives the accelerated
+    /// deltas for both.
+    PointerRelative {
+        app_id: String,
+        dx: f64,
+        dy: f64,
+        dx_unaccel: f64,
+        dy_unaccel: f64,
+    },
     /// The page took or let go of the pointer for a window that asked to lock
     /// or confine it ([`HostMessage::AppPointerConstraint`]).
     ///
@@ -716,9 +734,15 @@ pub enum HostMessage {
     ///
     /// Only the window under the pointer is offered one. The page answers
     /// with [`ChromeMessage::PointerConstrained`].
+    ///
+    /// `region` is the part of the window the constraint holds, as
+    /// non-overlapping rectangles of its surface; `None` for the whole
+    /// window, and always `None` with no constraint. A confined pointer stays
+    /// inside it; a lock begins only inside it.
     AppPointerConstraint {
         app_id: String,
         constraint: Option<PointerConstraint>,
+        region: Option<Vec<SurfaceRect>>,
     },
 
     /// A window or popup reached the screen: viz showed its first frame, or

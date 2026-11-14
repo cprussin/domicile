@@ -8,14 +8,14 @@
 
 #include "components/domicile/common/forwarded_keys.h"
 #include "components/domicile/common/held_chords.h"
+#include "components/domicile/common/warp_landing.h"
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/cast_sinks.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/downloads.mojom-blink.h"
-#include "components/domicile/mojom/picture_in_picture.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
+#include "components/domicile/mojom/picture_in_picture.mojom-blink.h"
 #include "components/domicile/mojom/shell_fetch.mojom-blink.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/html/domicile/html_app_element.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_event_names.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -116,6 +117,7 @@ class MODULES_EXPORT DomicileHost final
                         bool moved) override;
   void AppPointerRelative(const String& app_id,
                           const gfx::Vector2dF& movement,
+                          const std::optional<gfx::Vector2dF>& unaccelerated,
                           const gfx::PointF& on_page,
                           const gfx::SizeF& size) override;
   void AppPointerButton(const String& app_id,
@@ -186,6 +188,10 @@ class MODULES_EXPORT DomicileHost final
                           const String& app_id,
                           bool active,
                           ExceptionState&);
+  ScriptPromise<IDLBoolean> confinePointer(
+      ScriptState*,
+      const HeapVector<Member<DOMRectReadOnly>>& boxes,
+      ExceptionState&);
   void setAppBounds(ScriptState*,
                     const String& app_id,
                     double x,
@@ -394,8 +400,8 @@ class MODULES_EXPORT DomicileHost final
   void AppPresented(const String& app_id) override;
   void AppPointerConstraint(
       const String& app_id,
-      std::optional<domicile::mojom::blink::PointerConstraint> constraint)
-      override;
+      std::optional<domicile::mojom::blink::PointerConstraint> constraint,
+      const std::optional<Vector<gfx::RectF>>& region) override;
   void AppSuspended(const String& app_id, bool suspended) override;
   void AppTransientFor(const String& app_id,
                        const String& transient_for) override;
@@ -609,7 +615,7 @@ class MODULES_EXPORT DomicileHost final
   // Where the page last warped the pointer, until the move that lands it
   // there arrives: that move is the warp, not a hand, so it carries no
   // relative motion. See `AppPointerRelative`.
-  std::optional<gfx::PointF> warped_to_;
+  domicile::WarpLanding warp_landing_;
   Member<FrozenArray<DomicileWindow>> client_windows_;
   String focused_window_;
   // Moments that arrived before anything listened -- see DispatchOrHold.

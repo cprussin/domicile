@@ -255,6 +255,14 @@ source_set("held_chords") {
   sources = [ "common/held_chords.h" ]
 }
 
+# Which pointer move is the shell's own warp landing. Header only, for
+# :held_chords' reason.
+source_set("warp_landing") {
+  sources = [ "common/warp_landing.h" ]
+
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 # Whether an origin is the shell's. Its own target for :web_view_url's reason:
 # the check needs no browser, so its tests need none either.
 source_set("shell_origin") {
@@ -1382,6 +1390,8 @@ source_set("unit_tests") {
     "common/scroll_metadata_unittest.cc",
     "common/synced_frame_unittest.cc",
     "common/theme_unittest.cc",
+    "common/unaccelerated_motion_unittest.cc",
+    "common/warp_landing_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
@@ -1462,6 +1472,7 @@ source_set("unit_tests") {
     ":synced_frame",
     ":system_call",
     ":theme",
+    ":warp_landing",
     ":web_view_partition",
     ":web_view_url",
     ":will_navigate",
@@ -1509,6 +1520,8 @@ source_set("unit_tests") {
     # declarations `xkb_keyboard_layout_engine.h` includes through
     # `scoped_xkb.h`. //ui/events/ozone/layout:unittests names the same set.
     "//third_party/blink/public/common",
+    # The unaccelerated motion's trip to the renderer, in a WebInputEvent.
+    "//third_party/blink/public/mojom:mojom_platform",
     "//ui/events",
     "//ui/events/blink",
     "//ui/events:dom_keycode_converter",

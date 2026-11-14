@@ -53,6 +53,7 @@ SUITES=(
   DrmEdidSerialTest:18
   DrmConnectorNameTest:6
   DrmPointerCrossingTest:20
+  DrmPointerConfinementTest:6
   DrmPointerTargetsTest:6
   DrmDeskInputTest:6
   DrmCanvasTest:7

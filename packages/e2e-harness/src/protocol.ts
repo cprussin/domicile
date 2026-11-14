@@ -403,6 +403,17 @@ const appCursorSchema = z.looseObject({
 const appPointerConstraintSchema = z.looseObject({
   app_id: z.string(),
   constraint: z.enum(["lock", "confine"]).nullable(),
+  // Rectangles of the surface the constraint holds; null for the whole window.
+  region: z
+    .array(
+      z.looseObject({
+        height: z.number(),
+        width: z.number(),
+        x: z.number(),
+        y: z.number(),
+      }),
+    )
+    .nullable(),
   type: z.literal("app_pointer_constraint"),
 });
 

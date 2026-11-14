@@ -78,6 +78,7 @@ blink_modules_sources("domicile") {
     "//components/domicile:forwarded_keys",
     # The chords fired and not yet released. See DomicileHost::ReleaseChords.
     "//components/domicile:held_chords",
+    "//components/domicile:warp_landing",
     # And the wire names of the themes, for the same reason and in both
     # directions: `DomicileHost.theme` is a `DomicileTheme` where the
     # compositor's is a `mojom::Theme`, and `setTheme()` goes back the other

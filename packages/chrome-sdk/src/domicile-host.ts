@@ -758,6 +758,20 @@ export type DomicileHost = {
    */
   pointerConstrained(appId: string, active: boolean): void;
   /**
+   * Hold the pointer inside `boxes`, in this page's CSS pixels, for a window
+   * whose `pointerConstraint` is "confine": the pointer stops at their edges,
+   * even where a box reaches onto another monitor. An empty list lets go; so
+   * does this page going away. A later call replaces the boxes. Clipped to
+   * this page's own box.
+   *
+   * Resolves true once the pointer is held, and false where this engine does
+   * not move the pointer itself -- nested in another compositor, or headless
+   * -- or none of the boxes is on this page. The shell still answers
+   * `pointerConstrained` either way; the client's own motion stays its own.
+   * A box with a NaN or infinite edge throws.
+   */
+  confinePointer(boxes: readonly DOMRectReadOnly[]): Promise<boolean>;
+  /**
    * Where the page put an <app>, in the page's CSS pixels. The client draws at
    * the scale of the monitor holding most of that box. Layout still places the
    * window; this only tells the compositor where it ended up.
@@ -1388,4 +1402,11 @@ export type DomicileWindow = {
    * DomicileHost.pointerConstrained(); only then is the client told.
    */
   readonly pointerConstraint: string | null;
+  /**
+   * The part of the window `pointerConstraint` holds the pointer to, as boxes
+   * in the window's own coordinates, which `width` and `height` measure; null
+   * for all of it. The client sets it for a confinement, and for a lock it
+   * says where the pointer may be when the lock takes hold.
+   */
+  readonly pointerRegion: readonly DOMRectReadOnly[] | null;
 };

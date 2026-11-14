@@ -104,6 +104,22 @@ describe("pointer", () => {
     ]);
   });
 
+  it("asks the engine to hold the pointer in boxes, and to let go", () => {
+    const fake = new FakeDomicileHost();
+    const { pointer } = desktop(fake.host);
+    pointer.confine([{ height: 4, width: 3, x: 1, y: 2 }]).catch(() => {
+      /* never answered */
+    });
+    pointer.confine([]).catch(() => {
+      /* never answered */
+    });
+
+    expect(fake.calls).toStrictEqual([
+      ["confinePointer", [new DOMRectReadOnly(1, 2, 3, 4)]],
+      ["confinePointer", []],
+    ]);
+  });
+
   it("hears the keymaps and switches them through the compositor", async () => {
     const fake = new FakeDomicileHost();
     const { keyboard } = desktop(fake.host);

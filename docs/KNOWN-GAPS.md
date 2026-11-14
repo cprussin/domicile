@@ -12,15 +12,11 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **A display in SDR tells clients it is sRGB with gamma 2.2,** whatever its
   panel's gamut, because that is how the engine draws it.
   [COLOR.md](/docs/architecture/COLOR.md).
-- **Games can't confine the pointer to their window yet.** A lock works:
-  manganese locks the pointer for the focused window under it. A confinement
-  is offered to the shell (`pointerConstraint: "confine"`), but no shell takes
-  it, because the engine has no way yet to keep its pointer inside a box on a
-  desk of several monitors. A confinement's region is not read either; a lock
-  or confinement covers the whole window.
-- **Relative motion's unaccelerated deltas are the accelerated ones.** The
-  engine forwards the page's `movementX/Y`, which is after pointer
-  acceleration (`crate::relative_pointer`).
+- **Nested or headless, a confinement does not hold the pointer.** The
+  client is told it is confined, but only the console's cursor is held in the
+  window (`DomicileHost.confinePointer`); a host compositor or the headless
+  desk moves its own. Unaccelerated relative motion there is the accelerated
+  motion, since only libinput on a console reports both.
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate
   the fullscreen window back to its box.

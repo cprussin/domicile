@@ -355,6 +355,8 @@ struct Client {
     /// See [`crate::arguments::Arguments::constrain_pointer`]. Taken once
     /// asked.
     constrain_pointer: Option<ConstrainPointer>,
+    /// See [`crate::arguments::Arguments::constrain_region`].
+    constrain_region: Option<(i32, i32, i32, i32)>,
     /// The open popups, each over the one before it or the window.
     popups: Vec<Popup>,
     /// Whether to open a bubble once the window is up. See
@@ -678,6 +680,7 @@ impl Client {
             cursor_drawn: None,
             ask_to_drag: asked.ask_to_drag,
             constrain_pointer: asked.constrain_pointer,
+            constrain_region: asked.constrain_region,
             popups: Vec::new(),
             wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
             bubble: None,
@@ -1530,17 +1533,42 @@ fn constrain_the_pointer(
         return;
     };
     let lifetime = zwp_pointer_constraints_v1::Lifetime::Persistent;
+    let region = client.constrain_region.map(|(x, y, width, height)| {
+        let region = client
+            .globals
+            .compositor
+            .as_ref()
+            .expect("a client with a window has a compositor")
+            .create_region(handle, ());
+        region.add(x, y, width, height);
+        region
+    });
     match constraint {
         ConstrainPointer::Lock => {
-            let locked =
-                constraints.lock_pointer(&window.surface, pointer, None, lifetime, handle, ());
+            let locked = constraints.lock_pointer(
+                &window.surface,
+                pointer,
+                region.as_ref(),
+                lifetime,
+                handle,
+                (),
+            );
             crate::say!(locked.id(), "lock_pointer()");
         }
         ConstrainPointer::Confine => {
-            let confined =
-                constraints.confine_pointer(&window.surface, pointer, None, lifetime, handle, ());
+            let confined = constraints.confine_pointer(
+                &window.surface,
+                pointer,
+                region.as_ref(),
+                lifetime,
+                handle,
+                (),
+            );
             crate::say!(confined.id(), "confine_pointer()");
         }
+    }
+    if let Some(region) = region {
+        region.destroy();
     }
 }
 

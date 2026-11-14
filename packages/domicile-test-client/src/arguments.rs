@@ -125,8 +125,12 @@ pub struct Arguments {
 
     /// Whether the client asks, when the pointer first enters its window, to
     /// lock the pointer there or confine it to the window, as a game does. A
-    /// persistent ask over the whole window.
+    /// persistent ask over the whole window, unless `constrain_region` names
+    /// part of it.
     pub constrain_pointer: Option<ConstrainPointer>,
+    /// The part of the window `constrain_pointer` asks for, as
+    /// `(x, y, width, height)` in surface-local units.
+    pub constrain_region: Option<(i32, i32, i32, i32)>,
 
     /// Whether to open a bubble over the window once it is up: a desync
     /// `wl_subsurface`, as Chromium draws an extension popup.
@@ -309,6 +313,9 @@ pub enum ArgumentError {
     #[error("--constrain-pointer wants lock or confine, not {value}")]
     NotAConstraint { value: String },
 
+    #[error("--constrain-region wants WIDTHxHEIGHT+X+Y, not {value}")]
+    NotARegion { value: String },
+
     #[error(
         "--format wants abgr2101010, xbgr2101010, abgr16161616f or xbgr16161616f, not {value}"
     )]
@@ -342,6 +349,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut cursor_surface = None;
     let mut ask_to_drag = None;
     let mut constrain_pointer = None;
+    let mut constrain_region = None;
     let mut bubble = None;
     let mut bubble_without_input = None;
     let mut scrolling_bubble = None;
@@ -460,6 +468,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
                 };
                 take(&mut constrain_pointer, &flag, constraint)?;
             }
+            "--constrain-region" => {
+                take(&mut constrain_region, &flag, region(&mut args, &flag)?)?;
+            }
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
@@ -540,6 +551,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         cursor_surface: cursor_surface.unwrap_or(false),
         ask_to_drag,
         constrain_pointer,
+        constrain_region,
         bubble: bubble.unwrap_or(false),
         bubble_without_input: bubble_without_input.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),
@@ -593,6 +605,32 @@ fn size<T: std::str::FromStr>(
             flag: flag.to_string(),
             value: stated.clone(),
         })
+}
+
+/// A rectangle written `WIDTHxHEIGHT+X+Y`, as X11 geometry is, returned as
+/// `(x, y, width, height)`.
+fn region(
+    args: &mut impl Iterator<Item = OsString>,
+    flag: &str,
+) -> Result<(i32, i32, i32, i32), ArgumentError> {
+    let stated = value(args, flag)?;
+    let parsed = (|| {
+        let (width, rest) = stated.split_once('x')?;
+        let mut rest = rest.split('+');
+        let height = rest.next()?;
+        let x = rest.next()?;
+        let y = rest.next()?;
+        if rest.next().is_some() {
+            return None;
+        }
+        Some((
+            x.parse().ok()?,
+            y.parse().ok()?,
+            width.parse().ok()?,
+            height.parse().ok()?,
+        ))
+    })();
+    parsed.ok_or(ArgumentError::NotARegion { value: stated })
 }
 
 /// The `wl_output.transform` named after a flag: `normal`, `90`, `180`, `270`,

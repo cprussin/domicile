@@ -139,6 +139,21 @@ With the compositor at `--log-level debug`, a lock logs `pointer constraint
 offered -> Host` then `pointer constrained`, and letting go logs `pointer let
 go`.
 
+## Pointer confinement and raw mouse motion in a game
+
+On a console, with a physical mouse. Run a game or VM viewer that confines
+the pointer rather than locking it, such as a strategy game under Wayland
+(SDL's `SDL_VIDEODRIVER=wayland` with mouse grab on) or `virt-viewer` with its
+pointer grab. Put its window across two monitors if it fits. Expect:
+
+- Pushing the mouse against each edge of the window stops the pointer there,
+  on both monitors, and it slides along the edge.
+- Switching windows with a keyboard chord frees the pointer; coming back
+  holds it again.
+- In a game that reads raw motion (aiming in a first-person game with
+  pointer lock), a fast and a slow flick over the same distance on the desk
+  turn the camera the same amount, as with acceleration off.
+
 ## Dead GPU process
 
 ```sh

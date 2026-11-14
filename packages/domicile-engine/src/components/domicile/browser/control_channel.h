@@ -64,6 +64,14 @@ using KeymapSink = base::RepeatingCallback<void(const std::string&)>;
 using PointerWarpSink = base::RepeatingCallback<
     void(double x, double y, const std::optional<gfx::RectF>& unless_over)>;
 
+// How a `confine_pointer` reaches the cursor it is about, for
+// PointerWarpSink's reasons: boxes in the page's CSS pixels, none to let go.
+// `confined` is answered on this channel's sequence with whether the platform
+// can hold the pointer.
+using PointerConfineSink = base::RepeatingCallback<void(
+    const std::vector<gfx::RectF>& boxes,
+    base::OnceCallback<void(bool confined)> confined)>;
+
 // How the desktop's theme reaches the color scheme every page in this process
 // is drawn in. A callback for KeymapSink's reason: NativeTheme belongs to the
 // UI thread. See components/domicile/browser/color_scheme.h.
@@ -111,6 +119,7 @@ class ControlChannel : public mojom::ControlChannel {
                  mojo::PendingReceiver<mojom::ControlChannel> receiver,
                  KeymapSink keymap_sink,
                  PointerWarpSink warp_sink,
+                 PointerConfineSink confine_sink,
                  ThemeSink theme_sink,
                  ExtensionsSink extensions_sink,
                  CursorThemeSink cursor_theme_sink,
@@ -142,6 +151,8 @@ class ControlChannel : public mojom::ControlChannel {
   void WarpPointer(double x,
                    double y,
                    const std::optional<gfx::RectF>& unless_over) override;
+  void ConfinePointer(const std::vector<gfx::RectF>& boxes,
+                      ConfinePointerCallback confined) override;
   void CloseApp(const std::string& app_id) override;
   void SetAppBounds(const std::string& app_id,
                     double x,
@@ -171,7 +182,9 @@ class ControlChannel : public mojom::ControlChannel {
                      bool moved) override;
   void PointerRelative(const std::string& app_id,
                        double dx,
-                       double dy) override;
+                       double dy,
+                       double dx_unaccel,
+                       double dy_unaccel) override;
   void PointerConstrained(const std::string& app_id, bool active) override;
   void PointerLeave(const std::string& app_id) override;
   void PointerButton(const std::string& app_id,
@@ -273,6 +286,7 @@ class ControlChannel : public mojom::ControlChannel {
   const std::string socket_path_;
   const KeymapSink keymap_sink_;
   const PointerWarpSink warp_sink_;
+  const PointerConfineSink confine_sink_;
   const ThemeSink theme_sink_;
   const ExtensionsSink extensions_sink_;
   const CursorThemeSink cursor_theme_sink_;
@@ -346,6 +360,7 @@ class ControlChannel : public mojom::ControlChannel {
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
                         PointerWarpSink warp_sink,
+                        PointerConfineSink confine_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
                         CursorThemeSink cursor_theme_sink,

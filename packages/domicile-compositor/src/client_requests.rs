@@ -61,6 +61,8 @@ pub enum ClientRequest {
         app_id: String,
         dx: f64,
         dy: f64,
+        dx_unaccel: f64,
+        dy_unaccel: f64,
     },
     /// See [`ChromeMessage::PointerConstrained`](domicile_protocol::ChromeMessage::PointerConstrained).
     PointerConstrained {
@@ -385,8 +387,14 @@ impl DomicileCompositor {
                 );
                 pointer.frame(self);
             }
-            ClientRequest::PointerRelative { app_id, dx, dy } => {
-                self.move_relatively(&app_id, (dx, dy));
+            ClientRequest::PointerRelative {
+                app_id,
+                dx,
+                dy,
+                dx_unaccel,
+                dy_unaccel,
+            } => {
+                self.move_relatively(&app_id, (dx, dy), (dx_unaccel, dy_unaccel));
             }
             ClientRequest::PointerConstrained { app_id, active } => {
                 self.page_constrained(&app_id, active);

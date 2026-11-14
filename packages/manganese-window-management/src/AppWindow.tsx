@@ -18,6 +18,7 @@ import type { WindowPopup } from "./popup";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { useLowered } from "./useLowered";
+import { usePointerConfinement } from "./usePointerConfinement";
 import type { Settler } from "./useSettling";
 import { UPRIGHT, useSettling } from "./useSettling";
 import { appWindowId } from "./window";
@@ -236,6 +237,15 @@ export const AppWindow = ({
   useEffect(() => {
     domicile.windows.setBounds(appId, { height, width, x, y });
   }, [appId, domicile, height, width, x, y]);
+
+  // Holds the pointer in the window for a game or VM viewer that asked, while
+  // it has the keyboard.
+  usePointerConfinement(
+    domicile,
+    appId,
+    rect,
+    hasKeyboard && !behindPanel && !leaving,
+  );
 
   // Tells the client how it is laid out, so a tiled window draws no shadow,
   // rounded corners or resize border of its own. Floats get none, as in sway.

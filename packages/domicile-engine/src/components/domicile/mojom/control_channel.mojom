@@ -539,6 +539,15 @@ interface ControlChannel {
   // this process can. See `PointerAlreadyOver`.
   WarpPointer(double x, double y, gfx.mojom.RectF? unless_over);
 
+  // Keep a hand's pointer inside `boxes`, in the page's coordinates, for a
+  // game that confined it to its window; none lets it go. Stops in the
+  // browser process for WarpPointer's reason: the pointer is this process's.
+  // A box may reach onto any monitor the page spans. `confined` is false
+  // where the platform cannot hold the pointer: a nested desktop, whose
+  // pointer is the host session's, or a headless one, whose pointer the
+  // compositor moves. The browser lets go when the page goes away.
+  ConfinePointer(array<gfx.mojom.RectF> boxes) => (bool confined);
+
   // The shell's module ran: its `Shell` returned. Or it did not, and `why` is
   // what the page's error screen says. `serial` is the ShellSource serial the
   // document names, so the browser hears only the page it served. Sent once
@@ -557,9 +566,12 @@ interface ControlChannel {
   // at the desk.
   PointerMotion(string app_id, double x, double y, bool moved);
   // How far a hand moved the pointer over `app_id`, in its surface-local
-  // units, after the PointerMotion that took it there. Not sent for a still
-  // pointer or a shell's warp. For zwp_relative_pointer_v1.
-  PointerRelative(string app_id, double dx, double dy);
+  // units, after the PointerMotion that took it there: `dx`/`dy` after pointer
+  // acceleration, `dx_unaccel`/`dy_unaccel` before it. A device that reports
+  // no unaccelerated motion gives the accelerated deltas for both. Not sent
+  // for a still pointer or a shell's warp. For zwp_relative_pointer_v1.
+  PointerRelative(string app_id, double dx, double dy, double dx_unaccel,
+                  double dy_unaccel);
   // The page took (`active`) or let go of the pointer for `app_id`'s ask to
   // lock or confine it (AppPointerConstraint). Only then is the client told.
   PointerConstrained(string app_id, bool active);
@@ -627,8 +639,11 @@ interface ControlChannelClient {
 
   // The window under the pointer asked to lock or confine it, or null once
   // that ask ended: the client withdrew it or the pointer left the window.
-  // The page answers with PointerConstrained.
-  AppPointerConstraint(string app_id, PointerConstraint? constraint);
+  // The page answers with PointerConstrained. `region` is the part of the
+  // window the ask holds to, as boxes in the window's own coordinates; null
+  // for all of it, and always null with no constraint.
+  AppPointerConstraint(string app_id, PointerConstraint? constraint,
+                       array<gfx.mojom.RectF>? region);
 
   // The compositor marked a window `suspended`, or cleared it.
   AppSuspended(string app_id, bool suspended);

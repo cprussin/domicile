@@ -699,7 +699,7 @@ void DomicileHost::warpPointer(ScriptState*,
     return;
   }
   if (Ready(exception_state)) {
-    warped_to_ = gfx::PointF(x, y);
+    warp_landing_.Warped(gfx::PointF(x, y));
     channel_->WarpPointer(
         x, y,
         unless_over == nullptr
@@ -725,6 +725,43 @@ void DomicileHost::pointerConstrained(ScriptState*,
   if (ReadyForApp(app_id, exception_state)) {
     channel_->PointerConstrained(app_id, active);
   }
+}
+
+namespace {
+
+void SettleConfinement(ScriptPromiseResolver<IDLBoolean>* resolver,
+                       bool confined) {
+  resolver->Resolve(confined);
+}
+
+}  // namespace
+
+ScriptPromise<IDLBoolean> DomicileHost::confinePointer(
+    ScriptState* script_state,
+    const HeapVector<Member<DOMRectReadOnly>>& boxes,
+    ExceptionState& exception_state) {
+  // Refused here for `warpPointer`'s reason: a box with a NaN edge holds no
+  // point, and the mistake is the page's.
+  Vector<gfx::RectF> held;
+  for (const DOMRectReadOnly* box : boxes) {
+    if (!std::isfinite(box->x()) || !std::isfinite(box->y()) ||
+        !std::isfinite(box->width()) || !std::isfinite(box->height())) {
+      exception_state.ThrowTypeError("confinePointer: boxes must be finite");
+      return EmptyPromise();
+    }
+    held.push_back(gfx::RectF(box->left(), box->top(),
+                              box->right() - box->left(),
+                              box->bottom() - box->top()));
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  channel_->ConfinePointer(
+      held, BindOnce(&SettleConfinement, WrapPersistent(resolver)));
+  return promise;
 }
 
 void DomicileHost::setAppBounds(ScriptState*, const String& app_id, double x,
@@ -1274,26 +1311,34 @@ void DomicileHost::AppPointerMotion(const String& app_id,
   }
 }
 
-// A WARP MOVES THE POINTER TOO, AND NOBODY MOVED IT. The browser reports a
-// warp as a move (synthesized, which Blink does not see), and Blink measures
-// its `movementX/Y` from where the pointer was, so it would reach a game as a
-// flick of the mouse. The move that lands where the page last warped is taken
-// as the warp. A warp the browser skipped or clamped leaves its target
-// waiting, which costs at most one later move that lands exactly there.
-void DomicileHost::AppPointerRelative(const String& app_id,
-                                      const gfx::Vector2dF& movement,
-                                      const gfx::PointF& on_page,
-                                      const gfx::SizeF& size) {
-  if (warped_to_ && std::abs(warped_to_->x() - on_page.x()) < 1 &&
-      std::abs(warped_to_->y() - on_page.y()) < 1) {
-    warped_to_.reset();
+// A WARP MOVES THE POINTER TOO, AND NOBODY MOVED IT, so the move that lands
+// it reaches no client. See `domicile::WarpLanding`, which has the tests.
+void DomicileHost::AppPointerRelative(
+    const String& app_id,
+    const gfx::Vector2dF& movement,
+    const std::optional<gfx::Vector2dF>& unaccelerated,
+    const gfx::PointF& on_page,
+    const gfx::SizeF& size) {
+  if (warp_landing_.Landed(on_page)) {
     return;
   }
   // Scaled as a point is, from the element's CSS pixels into the client's.
   const gfx::PointF scaled = IntoClient(
       app_id, gfx::PointF(movement.x(), movement.y()), size);
+  // The device's own motion is in physical pixels, as the accelerated motion
+  // was before it became the page's CSS pixels, so it takes the same density.
+  // A device that said none moved as far as the page saw.
+  const double density = window_ ? window_->devicePixelRatio() : 0;
+  const gfx::PointF scaled_unaccel =
+      unaccelerated && density > 0
+          ? IntoClient(app_id,
+                       gfx::PointF(unaccelerated->x() / density,
+                                   unaccelerated->y() / density),
+                       size)
+          : scaled;
   if (EnsureBound()) {
-    channel_->PointerRelative(app_id, scaled.x(), scaled.y());
+    channel_->PointerRelative(app_id, scaled.x(), scaled.y(),
+                              scaled_unaccel.x(), scaled_unaccel.y());
   }
 }
 
@@ -1777,14 +1822,17 @@ void DomicileHost::AppPresented(const String& app_id) {
 
 void DomicileHost::AppPointerConstraint(
     const String& app_id,
-    std::optional<domicile::mojom::blink::PointerConstraint> constraint) {
+    std::optional<domicile::mojom::blink::PointerConstraint> constraint,
+    const std::optional<Vector<gfx::RectF>>& region) {
   String named;
   if (constraint) {
     named = *constraint == domicile::mojom::blink::PointerConstraint::kLock
                 ? "lock"
                 : "confine";
   }
-  WindowNamed(app_id).pointer_constraint = named;
+  DomicileWindowState& window = WindowNamed(app_id);
+  window.pointer_constraint = named;
+  window.pointer_region = region;
   WindowsChanged();
 }
 

@@ -48,7 +48,8 @@ The engine has two channels to the rest of Domicile:
   `displays`, `keymap`, `extensions`, `force_dark`, `tray`, `notifications`, `shell_config`,
   `idle`, `locked`, `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
-  `ungrab_shortcut`, `warp_pointer`, and `ShellRan`/`ShellFailed`, which
+  `ungrab_shortcut`, `warp_pointer`, `confine_pointer`, and
+  `ShellRan`/`ShellFailed`, which
   `DomicileShell` sends once the shell's module ran or did not, for
   `load_shell` (below).
 - **Not from the compositor:** `browserwindowschanged`, the desk's browser
@@ -138,6 +139,29 @@ The engine has two channels to the rest of Domicile:
     pointer over a browser window's page.
   - Logic and tests: `components/domicile/browser/pointer_warp.h`. Execution:
     `chrome/browser/domicile/domicile_pointer_warp.cc`.
+  - The move that lands a warp reaches no client as relative motion: nobody
+    moved the mouse. See `components/domicile/common/warp_landing.h`.
+- **`confine_pointer`**: holds the pointer inside boxes in the page's
+  coordinates, for a game or VM viewer whose `zwp_pointer_constraints_v1`
+  confinement the shell took. An empty list lets go, as does the page going
+  away.
+  - Boxes are clipped to the page's own box. Only the DRM cursor is held,
+    through `OzonePlatform::SetDomicilePointerConfinement`; nested or
+    headless it answers false.
+  - The DRM cursor clamps each mouse and tablet move in the confining
+    window's pixels, so a box across a seam holds on both monitors. Warps
+    are not held.
+  - Logic and tests: `components/domicile/browser/pointer_warp.h` and
+    `ui/ozone/platform/drm/domicile/drm_pointer_confinement.h`. Execution:
+    `chrome/browser/domicile/domicile_pointer_confinement.cc`.
+- **`app_pointer_constraint`** carries the window's `region` beside its
+  `constraint`: rectangles in the window's surface coordinates, `null` for the
+  whole window, read as `DomicileWindow.pointerRegion`.
+- **`pointer_relative`** carries `dx`/`dy`, the page's `movementX/Y`, and
+  `dx_unaccel`/`dy_unaccel`, the device's own motion before acceleration.
+  On a console libinput reports it and it rides the `PointerEvent` from the
+  mouse to the `<app>` (`ui/events/domicile/unaccelerated_motion.h`). A
+  device that reports none sends the accelerated motion for both.
 - **A compositor that hangs up** is replaced, not fatal. The browser:
   - answers each of the page's open system calls with a failed
     `system_reply` or `system_end` of kind `compositor_gone`, and closes each
