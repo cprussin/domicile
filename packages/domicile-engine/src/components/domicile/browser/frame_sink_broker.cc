@@ -226,6 +226,7 @@ void FrameSinkBroker::ImportBuffer(const viz::FrameSinkId& frame_sink_id,
                                    gfx::GpuMemoryBufferHandle handle,
                                    const gfx::Size& size,
                                    uint32_t fourcc,
+                                   const gfx::ColorSpace& color_space,
                                    ImportBufferCallback callback) {
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
   if (!frame_sink) {
@@ -234,7 +235,8 @@ void FrameSinkBroker::ImportBuffer(const viz::FrameSinkId& frame_sink_id,
   }
   std::optional<gpu::ExportedSharedImage> exported;
   const uint64_t buffer_id =
-      frame_sink->ImportBuffer(std::move(handle), size, fourcc, &exported);
+      frame_sink->ImportBuffer(std::move(handle), size, fourcc,
+                               color_space, &exported);
   std::move(callback).Run(buffer_id, std::move(exported));
 }
 

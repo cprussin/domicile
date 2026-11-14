@@ -39,6 +39,7 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "components/domicile/common/synced_frame.h"
+#include "components/domicile/engine/buffer_color.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
 #include "components/domicile/engine/probe_wait.h"
@@ -180,11 +181,18 @@ class Surface : public mojom::SurfaceObserver,
 
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
+  // The color buffers imported from now on are drawn in. See
+  // domicile_surface_set_color.
+  const BufferColor& color() const { return color_; }
+  void SetColor(BufferColor color) { color_ = std::move(color); }
+
   // Wraps the browser's SharedImage as a resource for later Submit calls.
-  // `has_alpha` comes from FourccHasAlpha.
+  // `has_alpha` comes from FourccHasAlpha, and `hdr_metadata` is the color's
+  // the buffer was imported in.
   void Adopt(uint64_t buffer_id,
              gpu::ExportedSharedImage exported,
-             bool has_alpha) {
+             bool has_alpha,
+             const gfx::HDRMetadata& hdr_metadata) {
     scoped_refptr<gpu::ClientSharedImage> shared_image =
         gpu::ClientSharedImage::ImportUnowned(std::move(exported));
     if (!shared_image) {
@@ -194,6 +202,7 @@ class Surface : public mojom::SurfaceObserver,
         shared_image, viz::TransferableResource::ResourceSource::kUI,
         shared_image->creation_sync_token());
     resource.id = next_resource_id_;
+    resource.hdr_metadata = hdr_metadata;
     next_resource_id_ = viz::ResourceId(next_resource_id_.GetUnsafeValue() + 1);
     resource_to_buffer_[resource.id] = buffer_id;
     buffers_[buffer_id] = {std::move(shared_image), std::move(resource),
@@ -621,6 +630,7 @@ class Surface : public mojom::SurfaceObserver,
   };
 
   viz::FrameSinkId frame_sink_id_;
+  BufferColor color_;
   // The box shown last, then every newer one, oldest first.
   base::circular_deque<Box> boxes_;
   uint64_t last_box_ = 0;
@@ -1304,6 +1314,14 @@ struct DomicileEngine {
     return created;
   }
 
+  // Posted, so it lands before any import asked for after it.
+  void SetSurfaceColor(DomicileSurfaceId surface, domicile::BufferColor color) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::SetSurfaceColorOnThread,
+                       base::Unretained(this), surface, std::move(color)));
+  }
+
   void DestroySurface(DomicileSurfaceId surface) {
     RunOnThreadAndWait(base::BindOnce(&DomicileEngine::DestroySurfaceOnThread,
                                       base::Unretained(this), surface));
@@ -1892,6 +1910,14 @@ struct DomicileEngine {
     surfaces_.erase(iter);
   }
 
+  void SetSurfaceColorOnThread(DomicileSurfaceId surface,
+                               domicile::BufferColor color) {
+    auto iter = surfaces_.find(surface);
+    if (iter != surfaces_.end()) {
+      iter->second->SetColor(std::move(color));
+    }
+  }
+
   void ImportBufferOnThread(DomicileSurfaceId surface,
                             gfx::GpuMemoryBufferHandle handle,
                             const gfx::Size& size,
@@ -1904,21 +1930,26 @@ struct DomicileEngine {
 
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     domicile::Surface* raw = iter->second.get();
+    const domicile::BufferColor& color = raw->color();
     broker_->ImportBuffer(
         raw->frame_sink_id(), std::move(handle), size, fourcc,
+        color.color_space,
         base::BindOnce(
             [](base::RunLoop* loop, DomicileBufferId* imported,
-               domicile::Surface* surface, bool has_alpha, uint64_t id,
+               domicile::Surface* surface, bool has_alpha,
+               gfx::HDRMetadata hdr_metadata, uint64_t id,
                std::optional<gpu::ExportedSharedImage> exported) {
               // Without the SharedImage there is nothing to submit, so treat
               // the import as refused.
               if (id != 0 && exported.has_value()) {
-                surface->Adopt(id, std::move(exported).value(), has_alpha);
+                surface->Adopt(id, std::move(exported).value(), has_alpha,
+                               hdr_metadata);
                 *imported = id;
               }
               loop->Quit();
             },
-            &loop, imported, raw, domicile::FourccHasAlpha(fourcc)));
+            &loop, imported, raw, domicile::FourccHasAlpha(fourcc),
+            color.hdr_metadata));
     loop.Run();
   }
 
@@ -1930,19 +1961,24 @@ struct DomicileEngine {
                                  uint64_t request) {
     auto iter = surfaces_.find(surface);
     if (iter == surfaces_.end() || !broker_ || handle.is_null()) {
-      OnImported(surface, request, /*has_alpha=*/false, 0, std::nullopt);
+      OnImported(surface, request, /*has_alpha=*/false, gfx::HDRMetadata(), 0,
+                 std::nullopt);
       return;
     }
+    const domicile::BufferColor& color = iter->second->color();
     broker_->ImportBuffer(
         iter->second->frame_sink_id(), std::move(handle), size, fourcc,
+        color.color_space,
         base::BindOnce(&DomicileEngine::OnImported, base::Unretained(this),
-                       surface, request, domicile::FourccHasAlpha(fourcc)));
+                       surface, request, domicile::FourccHasAlpha(fourcc),
+                       color.hdr_metadata));
   }
 
   // The surface may have gone while the browser imported.
   void OnImported(DomicileSurfaceId surface,
                   uint64_t request,
                   bool has_alpha,
+                  const gfx::HDRMetadata& hdr_metadata,
                   uint64_t id,
                   std::optional<gpu::ExportedSharedImage> exported) {
     DomicileBufferId imported = 0;
@@ -1950,7 +1986,8 @@ struct DomicileEngine {
     // Without the SharedImage there is nothing to submit, so treat the import
     // as refused.
     if (iter != surfaces_.end() && id != 0 && exported.has_value()) {
-      iter->second->Adopt(id, std::move(exported).value(), has_alpha);
+      iter->second->Adopt(id, std::move(exported).value(), has_alpha,
+                          hdr_metadata);
       imported = id;
     }
     queue_.Push({.type = domicile::EngineEvent::Type::kImported,
@@ -2235,6 +2272,15 @@ void domicile_surface_destroy(DomicileEngine* engine,
                               DomicileSurfaceId surface) {
   if (engine) {
     engine->DestroySurface(surface);
+  }
+}
+
+void domicile_surface_set_color(DomicileEngine* engine,
+                                DomicileSurfaceId surface,
+                                const DomicileColor* color) {
+  if (engine) {
+    engine->SetSurfaceColor(surface, color ? domicile::BufferColorFrom(*color)
+                                           : domicile::BufferColor());
   }
 }
 

@@ -50,6 +50,7 @@
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/color_space.h"
 #include "third_party/skia/include/core/SkAlphaType.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -380,7 +381,8 @@ class FrameSinkBrokerTest : public testing::Test {
     base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
         future;
     remote->ImportBuffer(frame_sink_id, ADmabuf(kBufferSize), kBufferSize,
-                         kArgb8888, future.GetCallback());
+                         kArgb8888, gfx::ColorSpace::CreateSRGB(),
+                         future.GetCallback());
     auto [buffer_id, exported] = future.Take();
     CHECK_NE(buffer_id, 0u);
     CHECK(exported.has_value());
@@ -394,11 +396,12 @@ class FrameSinkBrokerTest : public testing::Test {
   scoped_refptr<gpu::ClientSharedImage> ImportAs(
       mojo::Remote<mojom::FrameSinkBroker>& remote,
       const viz::FrameSinkId& frame_sink_id,
-      uint32_t fourcc) {
+      uint32_t fourcc,
+      const gfx::ColorSpace& color_space = gfx::ColorSpace::CreateSRGB()) {
     base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
         future;
     remote->ImportBuffer(frame_sink_id, ADmabuf(kBufferSize), kBufferSize,
-                         fourcc, future.GetCallback());
+                         fourcc, color_space, future.GetCallback());
     auto [buffer_id, exported] = future.Take();
     if (!exported.has_value()) {
       return nullptr;
@@ -418,7 +421,8 @@ class FrameSinkBrokerTest : public testing::Test {
     base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
         future;
     remote->ImportBuffer(frame_sink_id, std::move(handle), kBufferSize,
-                         kArgb8888, future.GetCallback());
+                         kArgb8888, gfx::ColorSpace::CreateSRGB(),
+                         future.GetCallback());
     return future.Take();
   }
 
@@ -1831,6 +1835,27 @@ TEST_F(FrameSinkBrokerTest, ADeepFourccWithoutAlphaIsRefused) {
     SCOPED_TRACE(testing::Message() << "fourcc 0x" << std::hex << fourcc);
     EXPECT_FALSE(ImportAs(remote, frame_sink_id, fourcc));
   }
+}
+
+// A client that described its pixels (wp_color_management_v1) is drawn in
+// that color space, which viz converts from to each display's.
+TEST_F(FrameSinkBrokerTest, ABufferIsImportedInTheColorSpaceAskedFor) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const gfx::ColorSpace pq(gfx::ColorSpace::PrimaryID::BT2020,
+                           gfx::ColorSpace::TransferID::PQ);
+
+  // DRM_FORMAT_ABGR2101010.
+  scoped_refptr<gpu::ClientSharedImage> shared_image =
+      ImportAs(remote, frame_sink_id, 0x30334241, pq);
+
+  ASSERT_TRUE(shared_image);
+  EXPECT_EQ(shared_image->color_space(), pq);
 }
 
 // A window drawn into shared memory, on a browser that composites in

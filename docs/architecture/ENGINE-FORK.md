@@ -251,6 +251,7 @@ Calls (compositor → engine):
 |---|---|
 | `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing. The page's embed waits for this call. |
 | `domicile_surface_import_async(surface, dmabuf, request)`, answered by `imported` | `zwp_linux_dmabuf_v1`. `domicile_surface_import` is the blocking form an older compositor calls. |
+| `domicile_surface_set_color(surface, color)` | `wp_color_management_surface_v1.set_image_description`: buffers imported after it are drawn in that color ([COLOR.md](COLOR.md)) |
 | `domicile_surface_import_shm(surface, buffer)` | `wl_shm`, for an engine on the CPU. Blocks; refused while the browser composites on the GPU ([`wl_shm` clients on the CPU](WINDOW-COMPOSITING.md#wl_shm-clients-on-the-cpu)). |
 | `domicile_surface_submit_transformed(surface, buffer, crop, damage, box, transform)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` and `wl_surface.set_buffer_transform`, shown at the box of the acked configure |
 | `domicile_surface_submit_fenced(…, transform, acquire_fence)` | the same, read once `acquire_fence` signals, like `zwp_linux_surface_synchronization_v1`'s acquire fence. The compositor's shm copies use it ([WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)). |
@@ -324,6 +325,11 @@ Decisions:
   cannot create new ones. This takes the browser off the per-frame path.
 - `ImportBuffer` refuses a DRM fourcc it cannot map. Guessing swaps color
   channels (`ARGB8888` vs `ABGR8888`).
+- **A buffer's color is fixed at import.** Viz reads a resource's color space
+  from its SharedImage, so `ImportBuffer` takes the surface's color space and
+  the producer puts its HDR metadata on the resource. A surface whose color
+  changes has its buffers imported again (`engine_imports.rs` keys an import
+  on the color too).
 
 ### Display capture
 
