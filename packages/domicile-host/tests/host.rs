@@ -1440,3 +1440,30 @@ fn the_inputs_listed_are_the_engines_last_report() {
         }
     );
 }
+
+#[test]
+fn a_native_window_is_found_by_its_toplevel_id_and_others_are_refused_by_name() {
+    let mut host = Host::new();
+    let owner = Owner { pid: 4242, ..OWNER };
+    let editor = host.app_created(owner, "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".to_string());
+    host.app_mapped(&editor, mapped());
+    host.app_created(OWNER, "nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7".to_string());
+    host.browser_toplevel_ids(BTreeMap::from([(
+        "3".to_string(),
+        "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+    )]));
+
+    assert_eq!(
+        host.native_window("kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA"),
+        Ok((editor, 4242))
+    );
+    let browser = host
+        .native_window("Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE")
+        .expect_err("a browser window is the shell's");
+    assert!(browser.contains("browser window"), "{browser}");
+    // An undrawn window is not listed, so it is not found either.
+    let undrawn = host
+        .native_window("nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7")
+        .expect_err("not listed");
+    assert!(undrawn.contains("list-windows"), "{undrawn}");
+}

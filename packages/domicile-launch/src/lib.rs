@@ -54,6 +54,7 @@ pub mod graphical_session;
 pub mod handshake;
 pub mod heard;
 pub mod history;
+pub mod idle_inhibit;
 pub mod install_app;
 pub mod listing;
 pub mod media_devices;

@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     DesktopStatus, HostMessage, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale,
-    ShellBinding, ShellCommandHelp, Theme, WatchTopic,
+    ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
 };
 use serde::{Deserialize, Serialize};
 
@@ -167,6 +167,12 @@ pub enum Request {
         #[serde(default)]
         scale: Scale,
     },
+    /// Lock the desktop. The compositor owns the lock, so this works with
+    /// any shell that draws a lock screen.
+    Lock,
+    /// Focus, close or kill the native window `id`, as `domicile
+    /// list-windows` prints it.
+    ActOnWindow { id: String, act: WindowAct },
     /// Hear about `topics` for as long as the connection is open: each
     /// topic's answer at once, then again whenever it changes, each as a
     /// [`Response::Heard`]. See `domicile subscribe`.
@@ -333,6 +339,10 @@ pub enum Response {
 
     /// The compositor turned the monitors off or on.
     Powered,
+
+    /// The compositor did what was asked: locked the desktop, or acted on a
+    /// window.
+    Done,
 
     /// What a [`Request::Subscribe`] heard: the compositor's answer for one
     /// of its topics, such as a `window_list`.
@@ -507,6 +517,18 @@ pub type Theming<'a> = &'a dyn Fn(Option<Theme>) -> Result<Theme, String>;
 /// tests.
 pub type PowerDisplays<'a> = &'a dyn Fn(DisplayPower, Option<&str>) -> Result<(), String>;
 
+/// Asks the compositor to lock the desktop.
+///
+/// [`crate::compositor_socket::lock`] in a desktop; a closure in tests.
+pub type Locking<'a> = &'a dyn Fn() -> Result<(), String>;
+
+/// Asks the compositor to focus, close or kill a native window, by its
+/// `ext-foreign-toplevel-list-v1` identifier.
+///
+/// [`crate::compositor_socket::act_on_window`] in a desktop; a closure in
+/// tests.
+pub type ActingOnWindows<'a> = &'a dyn Fn(&str, WindowAct) -> Result<(), String>;
+
 /// Asks the compositor for the lit monitors.
 ///
 /// [`crate::compositor_socket::monitors`] in a desktop; a closure in tests.
@@ -578,6 +600,8 @@ pub struct Desktop<'a> {
     pub disable_while_typing: DisableWhileTyping<'a>,
     pub theme: Theming<'a>,
     pub power_displays: PowerDisplays<'a>,
+    pub lock: Locking<'a>,
+    pub act_on_window: ActingOnWindows<'a>,
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
@@ -787,6 +811,14 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Inputs) => to_line(&match (desktop.inputs)() {
             Ok(inputs) => Response::Inputs { inputs },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Lock) => to_line(&match (desktop.lock)() {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ActOnWindow { id, act }) => to_line(&match (desktop.act_on_window)(&id, act) {
+            Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SleepDisplays { display }) => {

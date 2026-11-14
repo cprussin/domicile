@@ -425,6 +425,13 @@ pub enum ChromeMessage {
     /// never says `hello`.
     Watch { topics: Vec<WatchTopic> },
 
+    /// Focus, close or kill the native window `id`, its
+    /// `ext-foreign-toplevel-list-v1` identifier as `domicile list-windows`
+    /// prints it. Answered with [`HostMessage::WindowActed`] on this
+    /// connection only. Sent by `domicile focus-window`, `close-window` and
+    /// `kill-window`.
+    ActOnWindow { id: String, act: WindowAct },
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -859,6 +866,13 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::WhichInputs`] on the asking connection only,
     /// in the order the engine found the devices.
     InputList { inputs: Vec<ListedInput> },
+
+    /// Answers [`ChromeMessage::ActOnWindow`] on the asking connection only:
+    /// why it was not done, or nothing when it was.
+    WindowActed {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
 
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
@@ -2860,6 +2874,20 @@ pub struct ListedWindow {
     pub url: Option<String>,
     /// A browser window in the off-the-record profile.
     pub private: bool,
+}
+
+/// What a [`ChromeMessage::ActOnWindow`] does to a window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WindowAct {
+    /// Ask the shell to show and focus it, as the window's own activation
+    /// request does ([`HostMessage::FocusRequested`]). The shell decides.
+    Focus,
+    /// Ask its client to close it, as its close button does. The client may
+    /// refuse, for example to ask about unsaved work.
+    Close,
+    /// Kill its client's process with `SIGKILL`, and every window it has.
+    Kill,
 }
 
 /// What a [`ChromeMessage::Watch`] hears about.

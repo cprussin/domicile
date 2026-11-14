@@ -12,11 +12,11 @@ use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, Syste
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
     negotiate, ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemRequest, Theme,
-    PROTOCOL_VERSION,
+    WindowAct, PROTOCOL_VERSION,
 };
 use tracing::{debug, error, warn};
 
-use crate::chrome_hub::{Chrome, ChromeHub};
+use crate::chrome_hub::{broadcast_focus_request, Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
 use crate::grepped;
 use crate::lock::Asked;
@@ -468,6 +468,11 @@ fn read_chrome_messages(
             // For `domicile subscribe`. Not checked against the lock: each
             // topic is one a `which_*` answers while locked. The writer thread
             // sends the answers, so this thread never waits on them.
+            Ok(ChromeMessage::ActOnWindow { id, act }) => {
+                vec![HostMessage::WindowActed {
+                    refused: act_on_window(hub, &id, act).err(),
+                }]
+            }
             Ok(ChromeMessage::Watch { topics }) => {
                 hub.watchers.watch(writer.clone(), &topics);
                 hub.outbound.watched();
@@ -828,6 +833,40 @@ fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<
         }
         None => answered_on_the_connection(hub, request),
     }
+}
+
+/// Do `act` to the native window `id`, for `domicile focus-window`,
+/// `close-window` and `kill-window`, or say why not.
+///
+/// Refused while locked, like the shell's own `close_app`, since each acts on
+/// what the lock screen hides.
+fn act_on_window(hub: &ChromeHub, id: &str, act: WindowAct) -> Result<(), String> {
+    if hub.the_desk_is_locked() {
+        return Err("the desktop is locked".to_string());
+    }
+    let (app_id, pid) = hub.host.lock().unwrap().native_window(id)?;
+    match act {
+        // As an activation request: the shell shows it, or refuses.
+        WindowAct::Focus => broadcast_focus_request(hub, &app_id),
+        WindowAct::Close => hub.send_request(ClientRequest::CloseApp { app_id }),
+        WindowAct::Kill => {
+            // A window of this process's own, like an embedded engine's, is
+            // not killed with the desktop under it.
+            if pid <= 1 || pid == std::process::id() as i32 {
+                return Err(format!(
+                    "{id} belongs to process {pid}, which is not killed from here"
+                ));
+            }
+            // SAFETY: `kill` takes any pid and signal and only reports errors.
+            if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
+                return Err(format!(
+                    "could not kill process {pid}, which has {id}: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Answer a message from an app's connection: a system call it may make, or

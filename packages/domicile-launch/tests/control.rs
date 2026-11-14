@@ -19,7 +19,7 @@ use domicile_launch::site_permissions::{Permission, Setting, SitePermission, Sit
 use domicile_protocol::{
     AdaptiveSync, DesktopStatus, DisplayHdr, DisplayInfo, DisplayTransform, InputConnection,
     InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding,
-    ShellCommandHelp, Theme, WindowKind,
+    ShellCommandHelp, Theme, WindowAct, WindowKind,
 };
 
 #[test]
@@ -432,6 +432,31 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         ),
         Response::ShellBindings {
             bindings: vec![binding]
+        }
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"lock\"}",
+            &Desktop {
+                lock: &|| Ok(()),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Done
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"act_on_window\",\"id\":\"kD3m\",\"act\":\"close\"}",
+            &Desktop {
+                act_on_window: &|id, act| {
+                    assert_eq!((id, act), ("kD3m", WindowAct::Close));
+                    Err("the desktop is locked".to_string())
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the desktop is locked".to_string()
         }
     );
     let keyboard = ListedInput {
@@ -1155,6 +1180,8 @@ fn nothing_dialed() -> Desktop<'static> {
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
+        lock: &|| panic!("only lock locks the desktop"),
+        act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
         windows: &|| panic!("only windows lists the windows"),

@@ -219,6 +219,44 @@ ID  KIND         CONNECTION  VENDOR:PRODUCT  NAME
 `connection`, `sys_path` (its device under `/sys`, or empty), `vendor` and
 `product` per device.
 
+## `domicile lock`
+
+Lock the desktop now, as its lock timeout does. The compositor owns the lock,
+so this works with any shell that draws a lock screen.
+
+## `domicile focus-window <id>`
+
+Ask the shell to show and focus the native window `id`, as `list-windows`
+prints it. This is the request a window makes for itself when it wants
+attention, so the shell decides: Manganese switches to its workspace.
+
+## `domicile close-window <id>`
+
+Ask the native window `id` to close, as its close button does. The app may
+ask first, for example about unsaved work.
+
+## `domicile kill-window <id>`
+
+Kill the process of the native window `id` with `SIGKILL`, for an app that no
+longer answers. Every window of that process goes with it, and for an X11 app
+that is `xwayland-satellite` and every X11 window.
+
+`focus-window`, `close-window` and `kill-window` take only native windows.
+The shell shows and closes browser windows.
+
+## `domicile inhibit-idle -- <command>...`
+
+Run a command and keep the screens on, and the desktop unlocked, until it
+exits, like `systemd-inhibit --what=idle`. It exits as the command does.
+
+```
+domicile inhibit-idle -- rsync -a ~/photos backup:photos
+```
+
+The shell lists the command's program among what holds the desktop awake, as
+`status` does. `--` is optional unless the command's own first word starts
+with `-`.
+
 ## `domicile subscribe [windows|displays|inputs|status]...`
 
 Print what `list-windows --json`, `list-displays --json`, `list-inputs --json`
@@ -297,10 +335,11 @@ that `send-shell --help` prints the shell's own commands.
 
 ## While locked
 
-`screenshot`, `screen-record` and `send-shell` are refused while the desktop
-is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
-`wake-displays`, `list-displays`, `list-windows`, `list-inputs`, `status`,
-`subscribe`, `list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.
+`screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`
+and `kill-window` are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
+`wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
+`list-inputs`, `status`, `subscribe`, `list-shell-commands` and
+`list-bindings` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

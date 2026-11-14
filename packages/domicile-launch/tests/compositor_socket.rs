@@ -9,11 +9,12 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    displays, inputs, monitors, power_displays, screen_record, screenshot, send_shell,
-    shell_bindings, shell_commands, status, theme, virtual_monitor, windows, CompositorError,
+    act_on_window, displays, inputs, lock, monitors, power_displays, screen_record, screenshot,
+    send_shell, shell_bindings, shell_commands, status, theme, virtual_monitor, windows,
+    CompositorError,
 };
 use domicile_launch::control::Shot;
-use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme};
+use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme, WindowAct};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -650,4 +651,36 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
     let directory = tempfile::tempdir().expect("a temp directory");
     let path = directory.path().join("chrome.sock");
     (directory, path)
+}
+
+#[test]
+fn a_window_act_is_answered_with_why_not() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "act_on_window",
+        "{\"type\":\"window_acted\",\"refused\":\"no window kD3m\"}\n",
+    );
+
+    assert_eq!(
+        act_on_window(&path, "kD3m", WindowAct::Focus, Some(BRIEFLY)),
+        Ok(Err("no window kD3m".to_string()))
+    );
+    let asked = heard.join().expect("the compositor was listening");
+    assert!(asked[0].contains("\"act\":\"focus\""), "{asked:?}");
+}
+
+#[test]
+fn a_lock_is_taken_when_the_status_after_it_is_answered() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_status",
+        "{\"type\":\"status\",\"theme\":\"dark\",\"locked\":true,\"keymap\":null,\
+         \"screens_off\":false,\"held_awake_by\":[],\"capturing\":[]}\n",
+    );
+
+    assert_eq!(lock(&path, Some(BRIEFLY)), Ok(()));
+    let asked = heard.join().expect("the compositor was listening");
+    assert!(asked[0].contains("\"lock\""), "{asked:?}");
 }

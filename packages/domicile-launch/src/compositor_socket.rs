@@ -16,7 +16,7 @@ use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     ChromeMessage, DesktopStatus, HostMessage, ListedDisplay, ListedInput, ListedWindow,
     MonitorInfo, ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind, SystemReply,
-    SystemRequest, Theme, WatchTopic,
+    SystemRequest, Theme, WatchTopic, WindowAct,
 };
 
 use crate::cli::MonitorMode;
@@ -135,6 +135,51 @@ pub fn power_displays(
     match answer.reply {
         SystemReply::Set => Ok(()),
         reply => Err(not_done(socket, reply, answer.said)),
+    }
+}
+
+/// Tells the compositor at `socket` to lock the desktop.
+///
+/// The lock has no answer of its own, so a `which_status` follows it: the
+/// compositor answers a connection's messages in order, so its answer means
+/// the lock was taken.
+pub fn lock(socket: &Path, patience: Option<Duration>) -> Result<(), CompositorError> {
+    let said = exchanged(
+        socket,
+        &[ChromeMessage::Lock, ChromeMessage::WhichStatus],
+        patience,
+    )?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::Status(_)) => Ok(()),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Tells the compositor at `socket` to do `act` to the native window `id`.
+/// The outer error is the compositor's; the inner, why it refused.
+pub fn act_on_window(
+    socket: &Path,
+    id: &str,
+    act: WindowAct,
+    patience: Option<Duration>,
+) -> Result<Result<(), String>, CompositorError> {
+    let said = exchanged(
+        socket,
+        &[ChromeMessage::ActOnWindow {
+            id: id.to_owned(),
+            act,
+        }],
+        patience,
+    )?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::WindowActed { refused }) => Ok(refused.map_or(Ok(()), Err)),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
     }
 }
 

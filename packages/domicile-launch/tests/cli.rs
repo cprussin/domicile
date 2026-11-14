@@ -7,7 +7,7 @@ use domicile_launch::cli::{
 };
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
-use domicile_protocol::{Scale, WatchTopic};
+use domicile_protocol::{Scale, WatchTopic, WindowAct};
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -586,6 +586,11 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "list-bindings",
         "list-inputs",
         "subscribe",
+        "lock",
+        "focus-window",
+        "close-window",
+        "kill-window",
+        "inhibit-idle",
         "help",
     ] {
         assert!(
@@ -867,4 +872,50 @@ fn subscribe_takes_topics_or_hears_every_one() {
             said: "workspaces".to_string()
         })
     );
+}
+
+#[test]
+fn a_window_is_acted_on_by_its_id() {
+    assert_eq!(
+        run(&["kill-window", "kD3m"]),
+        Ok(Invocation::Ask {
+            request: Request::ActOnWindow {
+                id: "kD3m".to_string(),
+                act: WindowAct::Kill
+            }
+        })
+    );
+    assert_eq!(
+        run(&["focus-window"]),
+        Err(CliError::NoWindow {
+            verb: "focus-window".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["lock"]),
+        Ok(Invocation::Ask {
+            request: Request::Lock
+        })
+    );
+}
+
+#[test]
+fn inhibit_idle_runs_what_follows_the_dashes() {
+    assert_eq!(
+        run(&["inhibit-idle", "--", "mpv", "--fs", "film.mkv"]),
+        Ok(Invocation::InhibitIdle {
+            command: vec![
+                "mpv".to_string(),
+                "--fs".to_string(),
+                "film.mkv".to_string()
+            ]
+        })
+    );
+    assert_eq!(
+        run(&["inhibit-idle", "sleep", "60"]),
+        Ok(Invocation::InhibitIdle {
+            command: vec!["sleep".to_string(), "60".to_string()]
+        })
+    );
+    assert_eq!(run(&["inhibit-idle", "--"]), Err(CliError::NothingToRun));
 }

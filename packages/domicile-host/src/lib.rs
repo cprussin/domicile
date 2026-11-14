@@ -399,6 +399,30 @@ impl Host {
         self.browser_windows = windows;
     }
 
+    /// The native window whose `ext-foreign-toplevel-list-v1` identifier is
+    /// `id`: its app id and its client's process. Errs saying why there is
+    /// none, as `domicile focus-window` and the like print it.
+    pub fn native_window(&self, id: &str) -> Result<(AppId, i32), String> {
+        if let Some(app) = self
+            .apps
+            .values()
+            .find(|app| app.toplevel_id == id && app.mapped.is_some())
+        {
+            return Ok((app.app_id.clone(), app.owner.pid));
+        }
+        if self
+            .browser_toplevel_ids
+            .values()
+            .any(|listed| listed == id)
+        {
+            return Err(format!(
+                "{id} is a browser window, which the shell shows and closes; \
+                 only a native window can be focused, closed or killed here"
+            ));
+        }
+        Err(format!("no window {id}; domicile list-windows lists them"))
+    }
+
     /// Replace the input devices, as the engine reports them.
     pub fn input_devices(&mut self, inputs: Vec<ListedInput>) {
         self.inputs = inputs;
@@ -1115,6 +1139,7 @@ impl Host {
             | ChromeMessage::WhichShellBindings
             | ChromeMessage::WhichInputs
             | ChromeMessage::Watch { .. }
+            | ChromeMessage::ActOnWindow { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

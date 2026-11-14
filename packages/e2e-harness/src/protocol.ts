@@ -659,6 +659,13 @@ const inputListSchema = z.looseObject({
   type: z.literal("input_list"),
 });
 
+// Answers `act_on_window` on the asking connection only, for `domicile
+// focus-window`, `close-window` and `kill-window`: why not, or nothing.
+const windowActedSchema = z.looseObject({
+  refused: z.string().optional(),
+  type: z.literal("window_acted"),
+});
+
 const boundShortcutSchema = z.looseObject({
   app_id: z.string(),
   chord: z.string(),
@@ -917,6 +924,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   shellCommandListSchema,
   shellBindingListSchema,
   inputListSchema,
+  windowActedSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -978,6 +986,7 @@ export type StatusMessage = z.infer<typeof statusSchema>;
 export type ShellCommandListMessage = z.infer<typeof shellCommandListSchema>;
 export type ShellBindingListMessage = z.infer<typeof shellBindingListSchema>;
 export type InputListMessage = z.infer<typeof inputListSchema>;
+export type WindowActedMessage = z.infer<typeof windowActedSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

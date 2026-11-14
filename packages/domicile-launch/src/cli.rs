@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use domicile_protocol::{Scale, WatchTopic};
+use domicile_protocol::{Scale, WatchTopic, WindowAct};
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
@@ -52,6 +52,13 @@ Ask the running desktop:
   domicile list-windows [--json]        Print each window, native and browser
   domicile list-inputs [--json]         Print each keyboard, pointer and touch
                                         device
+  domicile lock                         Lock the desktop
+  domicile focus-window <id>            Ask the shell to show and focus a
+                                        window, by its list-windows id
+  domicile close-window <id>            Ask a window to close
+  domicile kill-window <id>             Kill a window's process
+  domicile inhibit-idle -- <command>... Run a command, keeping the screens on
+                                        until it exits
   domicile subscribe [windows|displays|inputs|status]...
                                         Print each as a JSON line, then again
                                         whenever it changes, until stopped
@@ -184,6 +191,17 @@ pub enum CliError {
     #[error("{said} is not something to subscribe to: windows, displays, inputs or status.")]
     NotATopic { said: String },
     #[error(
+        "{verb} takes a window's id, as domicile list-windows prints it, and \
+         was given nothing:\n\n    \
+         domicile {verb} kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA\n"
+    )]
+    NoWindow { verb: String },
+    #[error(
+        "inhibit-idle takes a command to run, and was given nothing:\n\n    \
+         domicile inhibit-idle -- mpv film.mkv\n"
+    )]
+    NothingToRun,
+    #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
          domicile check-config ~/.config/domicile/domicile.json\n"
@@ -261,6 +279,9 @@ pub enum Invocation {
     Power { power: Power },
     /// Add a virtual monitor until stdin ends, resizing it to each size read.
     Monitor { name: String, mode: MonitorMode },
+    /// Run `command`, keeping the screens on and the desktop unlocked until
+    /// it exits.
+    InhibitIdle { command: Vec<String> },
     /// Print the desktop's answer for each of `topics`, every topic when
     /// empty, as a JSON line, then again whenever one changes.
     Subscribe { topics: Vec<WatchTopic> },
@@ -468,6 +489,28 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 }),
                 (Some(extra), _) => Err(CliError::Extra { verb: first, extra }),
             },
+            Verb::Acting(act) => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NoWindow { verb: first }),
+                (Some(id), None) => Ok(Invocation::Ask {
+                    request: Request::ActOnWindow { id, act },
+                }),
+                (Some(id), Some(extra)) => Err(CliError::Extra {
+                    verb: format!("{first} {id}"),
+                    extra,
+                }),
+            },
+            Verb::Inhibiting => {
+                let mut command: Vec<String> = args.collect();
+                // `--` ends the options, which this takes none of.
+                if command.first().is_some_and(|word| word == "--") {
+                    command.remove(0);
+                }
+                if command.is_empty() {
+                    Err(CliError::NothingToRun)
+                } else {
+                    Ok(Invocation::InhibitIdle { command })
+                }
+            }
             Verb::Subscribing => {
                 let mut topics = Vec::new();
                 for said in args {
@@ -600,6 +643,11 @@ enum Verb {
     Monitoring,
     /// `subscribe`, which takes topics or nothing.
     Subscribing,
+    /// `focus-window`, `close-window` or `kill-window`, which take a window's
+    /// id.
+    Acting(WindowAct),
+    /// `inhibit-idle`, which takes a command.
+    Inhibiting,
     /// `sleep-displays` or `wake-displays`, which take a display or nothing.
     Sleeping(DisplayPower),
     /// `list-displays`, `list-windows` or `status`, which take `--json` or
@@ -630,6 +678,11 @@ fn verb(word: &str) -> Option<Verb> {
         "log-out" => Some(Verb::Powering(Power::LogOut)),
         "monitor" => Some(Verb::Monitoring),
         "subscribe" => Some(Verb::Subscribing),
+        "lock" => Some(Verb::Asking(Request::Lock)),
+        "focus-window" => Some(Verb::Acting(WindowAct::Focus)),
+        "close-window" => Some(Verb::Acting(WindowAct::Close)),
+        "kill-window" => Some(Verb::Acting(WindowAct::Kill)),
+        "inhibit-idle" => Some(Verb::Inhibiting),
         "list-displays" => Some(Verb::Listing(Listing::Displays)),
         "list-windows" => Some(Verb::Listing(Listing::Windows)),
         "status" => Some(Verb::Listing(Listing::Status)),

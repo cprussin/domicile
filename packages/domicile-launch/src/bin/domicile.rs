@@ -32,8 +32,8 @@ use domicile_launch::command_socket::{
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{
-    displays, inputs, monitors, power_displays, screen_record, screenshot, send_shell,
-    shell_bindings, shell_commands, status, theme, windows,
+    act_on_window, displays, inputs, lock, monitors, power_displays, screen_record, screenshot,
+    send_shell, shell_bindings, shell_commands, status, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -48,6 +48,7 @@ use domicile_launch::control_socket::{
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
+use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::listing::{
     bindings_table, displays_table, inputs_table, shell_commands_table, status_table, windows_table,
@@ -162,6 +163,10 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Monitor { name, mode } => monitored(name, mode),
         Invocation::List { listing, json } => listed(listing, json),
         Invocation::Subscribe { topics } => subscribed(topics),
+        Invocation::InhibitIdle { command } => {
+            let status = inhibit_idle(&command)?;
+            Ok(ExitCode::from(exit_code(status)))
+        }
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -528,7 +533,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Response::Opened | Response::Powered => Ok(ExitCode::SUCCESS),
+        Response::Opened | Response::Powered | Response::Done => Ok(ExitCode::SUCCESS),
         Response::DisableWhileTyping { enabled } => {
             println!("{}", if enabled { "on" } else { "off" });
             Ok(ExitCode::SUCCESS)
@@ -1367,6 +1372,11 @@ fn answer_a_command(
                     power_displays: &|power, display| {
                         power_displays(chrome, power, display, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())
+                    },
+                    lock: &|| lock(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
+                    act_on_window: &|id, act| {
+                        act_on_window(chrome, id, act, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())?
                     },
                     monitors: &|| {
                         monitors(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
