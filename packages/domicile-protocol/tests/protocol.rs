@@ -5,7 +5,7 @@
 
 use domicile_protocol::{
     negotiate, AdaptiveSync, AppCursorImage, AppFrame, Appearance, ChromeMessage, ClipboardEntry,
-    CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayInfo, DisplayTransform,
+    CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayHdr, DisplayInfo, DisplayTransform,
     HostMessage, Owner, Passphrase, PointerConstraint, PointerOverWindow, PROTOCOL_VERSION,
 };
 
@@ -369,6 +369,9 @@ fn the_desktop_is_described_to_the_chrome() {
                 mode: [1920, 1080],
                 refresh_mhz: 0,
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: DisplayHdr::Unsupported,
+                peak_luminance: 0,
+                sdr_white: 0,
                 transform: DisplayTransform::Normal,
             },
             DisplayInfo {
@@ -379,6 +382,9 @@ fn the_desktop_is_described_to_the_chrome() {
                 mode: [5120, 2880],
                 refresh_mhz: 0,
                 adaptive_sync: AdaptiveSync::On,
+                hdr: DisplayHdr::On,
+                peak_luminance: 1000,
+                sdr_white: 203,
                 transform: DisplayTransform::Normal,
             },
         ],
@@ -397,6 +403,10 @@ fn the_desktop_is_described_to_the_chrome() {
     assert_eq!(v["displays"][1]["transform"], "normal");
     assert_eq!(v["displays"][0]["adaptive_sync"], "unsupported");
     assert_eq!(v["displays"][1]["adaptive_sync"], "on");
+    assert_eq!(v["displays"][0]["hdr"], "unsupported");
+    assert_eq!(v["displays"][1]["hdr"], "on");
+    assert_eq!(v["displays"][1]["peak_luminance"], 1000);
+    assert_eq!(v["displays"][1]["sdr_white"], 203);
 }
 
 #[test]
@@ -413,6 +423,9 @@ fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
         mode: [3840, 2160],
         refresh_mhz: 0,
         adaptive_sync: AdaptiveSync::Unsupported,
+        hdr: DisplayHdr::Unsupported,
+        peak_luminance: 0,
+        sdr_white: 0,
         transform: DisplayTransform::Rotate270,
     })
     .unwrap();
@@ -430,6 +443,8 @@ fn a_display_that_predates_these_fields_still_reads() {
             .expect("it reads");
     assert_eq!(old.transform, DisplayTransform::Normal);
     assert_eq!(old.adaptive_sync, AdaptiveSync::Unsupported);
+    assert_eq!(old.hdr, DisplayHdr::Unsupported);
+    assert_eq!((old.peak_luminance, old.sdr_white), (0, 0));
     // `[0, 0]`, not the size: an unstated mode stays unstated.
     assert_eq!(old.mode, [0, 0]);
 }

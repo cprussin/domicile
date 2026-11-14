@@ -184,7 +184,13 @@ class FakeClient : public mojom::ControlChannelClient {
   void GesturePerformed(mojom::GesturePtr) override {}
   void ModifierTapped(mojom::TapModifier) override {}
   void Modifiers(bool, bool, bool, bool) override {}
-  void Displays(std::vector<mojom::DisplayInfoPtr>) override {}
+  void Displays(std::vector<mojom::DisplayInfoPtr> displays) override {
+    for (const auto& display : displays) {
+      heard_.push_back(base::StringPrintf(
+          "display %s hdr %s peak %u white %u", display->name.c_str(),
+          display->hdr.c_str(), display->peak_luminance, display->sdr_white));
+    }
+  }
   void Files(const std::string&,
              const std::vector<std::string>&,
              uint32_t,
@@ -543,6 +549,34 @@ TEST_F(ControlChannelTest, AWindowInhibitingShortcutsReachesThePage) {
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{"inhibits app-1 true",
                                       "inhibits app-1 false", "locked false"}));
+}
+
+// Each display says whether it is driven in HDR, so a shell can offer HDR
+// only where a panel takes it. A state this browser has no name for, or a
+// host that predates the fields, is `unsupported`.
+TEST_F(ControlChannelTest, EachDisplaysHdrReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"displays\",\"displays\":["
+      "{\"name\":\"lit\",\"position\":[0,0],\"size\":[1920,1080],"
+      "\"scale\":1,\"hdr\":\"on\",\"peak_luminance\":1000,"
+      "\"sdr_white\":203},"
+      "{\"name\":\"able\",\"position\":[1920,0],\"size\":[1920,1080],"
+      "\"scale\":1,\"hdr\":\"off\",\"peak_luminance\":600,"
+      "\"sdr_white\":0},"
+      "{\"name\":\"odd\",\"position\":[3840,0],\"size\":[1920,1080],"
+      "\"scale\":1,\"hdr\":\"dolby\"},"
+      "{\"name\":\"old\",\"position\":[5760,0],\"size\":[1920,1080],"
+      "\"scale\":1}]}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "display lit hdr on peak 1000 white 203",
+                "display able hdr off peak 600 white 0",
+                "display odd hdr unsupported peak 0 white 0",
+                "display old hdr unsupported peak 0 white 0", "locked false"}));
 }
 
 // The browser process draws the pointer on a tty, so the theme stops there.

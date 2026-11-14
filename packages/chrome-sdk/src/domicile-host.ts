@@ -402,6 +402,22 @@ export type DomicileDisplay = {
    */
   readonly adaptiveSync: string;
   /**
+   * Whether the panel is driven in HDR10: `unsupported` (its EDID takes no
+   * PQ, its connector cannot scan out in 10 bits, or Domicile runs in a
+   * window), `off` or `on`. A DOMString for the reason `transform` is.
+   */
+  readonly hdr: string;
+  /**
+   * The panel's peak luminance from its EDID, in cd/m². Zero when it reports
+   * none.
+   */
+  readonly peakLuminance: number;
+  /**
+   * While `hdr` is `on`, the luminance SDR content's white is shown at, in
+   * cd/m². Zero otherwise.
+   */
+  readonly sdrWhite: number;
+  /**
    * The monitor's rotation: `normal`, `rotate-90`, `rotate-180` or
    * `rotate-270`, as the config file spells them.
    *

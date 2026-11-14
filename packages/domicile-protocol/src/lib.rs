@@ -2606,6 +2606,17 @@ pub struct DisplayInfo {
     /// Whether the monitor scans out with a variable refresh rate.
     #[serde(default)]
     pub adaptive_sync: AdaptiveSync,
+    /// Whether the monitor is driven in HDR10. See `docs/COLOR.md`.
+    #[serde(default)]
+    pub hdr: DisplayHdr,
+    /// The panel's peak luminance from its EDID, in cd/m². Zero when it
+    /// reports none.
+    #[serde(default)]
+    pub peak_luminance: u32,
+    /// While [`DisplayHdr::On`], the luminance SDR content's white is shown
+    /// at, in cd/m². Zero otherwise.
+    #[serde(default)]
+    pub sdr_white: u32,
     /// How the monitor is rotated.
     #[serde(default)]
     pub transform: DisplayTransform,
@@ -2622,6 +2633,21 @@ pub enum AdaptiveSync {
     Unsupported,
     /// It can, and is not: its profile does not ask for it, or the driver
     /// refused it.
+    Off,
+    /// It is.
+    On,
+}
+
+/// Whether a monitor is driven in HDR10: BT.2020 primaries with the PQ
+/// transfer function. See `docs/COLOR.md`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DisplayHdr {
+    /// Its EDID takes no PQ, its connector cannot scan out in 10 bits, or the
+    /// desktop runs in a window.
+    #[default]
+    Unsupported,
+    /// It can, and is not: its profile does not ask for it.
     Off,
     /// It is.
     On,

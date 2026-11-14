@@ -220,6 +220,15 @@ struct DisplayInfo {
   // `unsupported`, `off` or `on`, as the wire spells it. The browser maps any
   // other value to `unsupported`.
   string adaptive_sync;
+  // Whether the monitor is driven in HDR10: `unsupported`, `off` or `on`, as
+  // the wire spells it. The browser maps any other value to `unsupported`.
+  string hdr;
+  // The panel's peak luminance from its EDID in cd/m², or zero when it
+  // reports none.
+  uint32 peak_luminance;
+  // While `hdr` is `on`, the luminance SDR white is shown at in cd/m²; zero
+  // otherwise.
+  uint32 sdr_white;
   DisplayTransform transform;
 };
 
