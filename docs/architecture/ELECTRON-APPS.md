@@ -194,7 +194,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: the Electron socket and windows (`BrowserWindow` create, load, title, show, close)
 - [x] `electron-host`: `BrowserWindow` over the Electron socket
 - [x] engine: preload, `contextBridge`, `ipcRenderer` `send`/`on`/`invoke`, `webContents.send`
-- [ ] `electron-host`: `webPreferences.preload`, `ipcMain`, `webContents.send`
+- [x] `electron-host`: `webPreferences.preload`, `ipcMain`, `webContents.send`
 - [ ] engine: `sendSync`, message ports
 - [ ] engine: `protocol.handle`, per-app partition, `session` and `webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
