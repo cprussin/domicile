@@ -38,6 +38,7 @@
   X(notificationschanged, Notificationschanged)                   \
   X(extensionschanged, Extensionschanged)                         \
   X(extensionpopuprequested, Extensionpopuprequested)             \
+  X(installedextensionschanged, Installedextensionschanged)       \
   X(idlechanged, Idlechanged)                                     \
   X(lockedchanged, Lockedchanged)                                 \
   X(themechanged, Themechanged)                                   \

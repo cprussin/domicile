@@ -539,6 +539,25 @@ extension with an action. See
 - **Drag to reorder.** The order is saved in `localStorage` (`tray-order:v1`)
   and shared by every screen. Extensions are keyed by id, apps by title. New
   icons go last, apps first.
+- **The menu of every icon**, under a caret at the row's end. It lists every
+  app and every installed extension, on or off.
+  - **Pins.** Each icon's pin puts it in the row or keeps it out. New icons
+    arrive pinned. Dragging an icon onto the caret unpins it. Unpinned keys
+    are saved in `localStorage` (`tray-unpinned:v1`) and shared by every
+    screen. A switched-off extension has no pin.
+  - **Rows** click as their icon does. An unpinned extension's popup opens
+    from the row's icon, shown while the popup is open. Right-clicking an
+    app's name opens its own menu.
+  - **Switch** turns an extension on or off entirely.
+  - **⋯** holds an extension's options page (in a browser window), what
+    websites it can read, private windows, local files and user scripts,
+    each where it can use them, and Uninstall…, which asks first. "On sites
+    you choose…" opens Settings. A setting the config sets is grayed with a
+    lock, saying "Set in your config"; an extension the config installed has
+    no Uninstall.
+  - A dot on the caret says an unpinned extension has a badge.
+  - A change the engine refuses is said at the top, with its words on hover.
+  - The footer opens Settings.
 - **App icons**: click sends `Activate`, middle-click `SecondaryActivate`.
   - Right-click opens the app's dbusmenu under the icon: submenus, check
     boxes and radio items; disabled entries are grayed and hidden ones left

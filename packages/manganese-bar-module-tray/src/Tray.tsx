@@ -4,6 +4,7 @@ import type {
   ExtensionPopup,
 } from "@domicile-desktop/sdk/extension";
 import type { TrayItem } from "@domicile-desktop/sdk/tray";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { css } from "../styled-system/css";
@@ -33,6 +34,12 @@ type Props = {
   opened: ExtensionPopup | undefined;
   /** The user's icon order; see `useTrayOrder`. */
   order: readonly string[];
+  /** After the icons: the button for the menu of every icon. */
+  end?: ReactNode | undefined;
+  /** An icon was dragged onto `end`: keep icon `key` out of the tray. */
+  onUnpin?: ((key: string) => void) | undefined;
+  /** The keys of the icons kept out of the tray; see `useTrayPins`. */
+  unpinned?: ReadonlySet<string> | undefined;
 };
 
 /**
@@ -48,18 +55,30 @@ type Props = {
  *
  * Disabled actions are hidden. The state is each action's default, not the
  * focused tab's; see docs/architecture/EXTENSIONS.md.
+ *
+ * Unpinned icons are left out, except an extension whose popup is open, which
+ * shows while it is so the popup hangs from it. An icon dragged onto `end` is
+ * unpinned.
  */
 export const Tray = ({
   domicile,
+  end,
   extensions,
   items,
   onMove,
   onActivate,
   onOpen,
+  onUnpin = () => undefined,
   opened,
   order,
+  unpinned = new Set(),
 }: Props) => {
-  const entries = trayEntries(items, extensions, order);
+  const entries = trayEntries(items, extensions, order).filter(
+    (entry) =>
+      !unpinned.has(entry.key) ||
+      (entry.kind === TrayEntryKind.Extension &&
+        opened?.id === entry.extension.id),
+  );
   const shown = entries.map(({ key }) => key);
 
   // The key of the icon being dragged while the button is down.
@@ -121,6 +140,23 @@ export const Tray = ({
           />
         </div>
       ))}
+      {end !== undefined && (
+        <div
+          className={entryStyles}
+          onPointerOver={() => {
+            if (dragged !== undefined) {
+              moved.current = true;
+            }
+          }}
+          onPointerUp={() => {
+            if (dragged !== undefined) {
+              onUnpin(dragged);
+            }
+          }}
+        >
+          {end}
+        </div>
+      )}
     </div>
   );
 };

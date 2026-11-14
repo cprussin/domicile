@@ -39,6 +39,10 @@ const MenuComponent = ({ children, trigger, ...rootProps }: Props) => {
 };
 
 export const Menu = Object.assign(MenuComponent, {
+  CheckboxItem: ContextMenu.CheckboxItem,
   Item: ContextMenu.Item,
+  RadioGroup: ContextMenu.RadioGroup,
+  RadioItem: ContextMenu.RadioItem,
   Separator: ContextMenu.Separator,
+  Submenu: ContextMenu.Submenu,
 });
