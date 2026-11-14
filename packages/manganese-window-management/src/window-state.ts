@@ -804,7 +804,7 @@ export const WindowAction = {
 
   /**
    * The user started dragging the tiled group `group` by its tab strip. Its
-   * open tab is focused, as by a click; a selection around it stays.
+   * open tab is focused; a selection around it stays.
    */
   GroupGrabbed: (group: NodeRef) => ({
     group,
@@ -1032,9 +1032,9 @@ export const WindowAction = {
   }),
 
   /**
-   * The user pressed window `id`'s title bar or tab. Unlike
-   * {@link WindowAction.WindowSelected}, it ends a `focus parent` selection
-   * around the window.
+   * The user pressed window `id`'s title bar or tab. As
+   * {@link WindowAction.WindowSelected} does, it ends a `focus parent`
+   * selection around the window.
    */
   WindowBarPressed: (id: string) => ({
     id,
@@ -1165,7 +1165,7 @@ export const WindowAction = {
     kind: WindowActionKind.WindowResized as const,
   }),
 
-  /** The user clicked in a window. A selection around it stays. */
+  /** The user clicked in a window, which ends a selection around it. */
   WindowSelected: (id: string) => ({
     id,
     kind: WindowActionKind.WindowSelected as const,
@@ -1725,7 +1725,7 @@ const reduceAction = (
       return reachWindow(state, action.id, picked);
     }
     case WindowActionKind.WindowSelected: {
-      return reachWindow(state, action.id);
+      return reachWindow(state, action.id, picked);
     }
     case WindowActionKind.WindowSentToScratchpad: {
       return hideInScratchpad(state);
@@ -2148,20 +2148,27 @@ const openTabBeside = (state: WindowState, id: string): string => {
   }
 };
 
-// Focuses `id`, shown on `screen`, when the pointer enters it.
+// Focuses `id`, shown on `screen`, when the pointer enters it. Coming from
+// another screen ends a selection around it, as coming from another window
+// does.
 const pointAtShown = (
   state: WindowState,
   workspace: Workspace,
   screen: string,
   id: string,
-): WindowState =>
-  // Same object when already focused: each element in a window (such as a
-  // browser's address bar and page) reports the hover again.
-  focusedOn(workspace) === id && state.focused === screen
-    ? state
-    : onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
-        reached(found, id),
-      );
+): WindowState => {
+  if (state.focused !== screen) {
+    return onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
+      picked(found, id),
+    );
+  } else if (focusedOn(workspace) === id) {
+    // Same object when already focused: each element in a window (such as a
+    // browser's address bar and page) reports the hover again.
+    return state;
+  } else {
+    return onWorkspace(state, workspace.name, (found) => reached(found, id));
+  }
+};
 
 // Focuses the screen under the pointer. Same object when it is already
 // focused (this fires on every move) or not yet described by the host.

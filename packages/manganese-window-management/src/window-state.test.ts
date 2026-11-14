@@ -1516,16 +1516,25 @@ describe("the pointer", () => {
 
   it("answers a press in the window it is already in with the same state", () => {
     // `AppWindow` reports every press, most of which change nothing. Returning
-    // a new object would re-render the desktop on every click and undo `focus
-    // parent`.
-    const state = reduce(
-      desktop("kitty", "editor"),
-      WindowAction.ParentFocused(),
-    );
+    // a new object would re-render the desktop on every click.
+    const state = desktop("kitty", "editor");
 
     expect(
       reduceWindows(state, WindowAction.WindowSelected(APP("editor"))),
     ).toBe(state);
+  });
+
+  it("ends a selection around the window pressed in", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ParentFocused(),
+      WindowAction.WindowSelected(APP("editor")),
+    );
+
+    expect(focusedNodeOf(workspaceHere(state).tiling)).toMatchObject({
+      id: APP("editor"),
+      kind: NodeKind.Window,
+    });
   });
 
   it("goes to the workspace of a window that asks to be reached", () => {
@@ -1557,6 +1566,59 @@ describe("the pointer", () => {
 
     expect(state.focused).toBe("left");
     expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  describe("coming back to a selected group from another screen", () => {
+    /** Kitty and the editor tabbed and selected on the left, mail on the right. */
+    const selected = () =>
+      reduce(
+        desktop(),
+        WindowAction.ScreensDescribed(sideBySide("left", "right")),
+        WindowAction.AppAppeared("kitty", "kitty"),
+        WindowAction.AppAppeared("editor", "editor"),
+        WindowAction.WorkspaceSelected("2"),
+        WindowAction.AppAppeared("mail", "mail"),
+        WindowAction.WindowHovered(APP("editor")),
+        WindowAction.ParentFocused(),
+      );
+
+    it("ends the selection after crossing a window there", () => {
+      // As crossing another group on the same screen does.
+      const state = reduce(
+        selected(),
+        WindowAction.WindowHovered(APP("mail")),
+        WindowAction.WindowHovered(APP("editor")),
+      );
+
+      expect(focusedNodeOf(workspaceOn(state, "left").tiling)).toMatchObject({
+        id: APP("editor"),
+        kind: NodeKind.Window,
+      });
+    });
+
+    it("ends the selection after crossing an empty spot there", () => {
+      const state = reduce(
+        selected(),
+        WindowAction.ScreenHovered("right"),
+        WindowAction.WindowHovered(APP("editor")),
+      );
+
+      expect(focusedNodeOf(workspaceOn(state, "left").tiling)).toMatchObject({
+        id: APP("editor"),
+        kind: NodeKind.Window,
+      });
+    });
+
+    it("keeps the selection while the pointer stays on its screen", () => {
+      const state = reduce(
+        selected(),
+        WindowAction.WindowHovered(APP("editor")),
+      );
+
+      expect(focusedNodeOf(workspaceOn(state, "left").tiling).kind).toBe(
+        NodeKind.Container,
+      );
+    });
   });
 
   it("moves the keyboard to a screen it crossed onto with no window under it", () => {

@@ -94,8 +94,9 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   without that tab. A fullscreen group keeps its glow and tint while
   selected. The focused window's bar gets the accent color; tabs keep
   their usual states. Meta+Shift+A, focusing a floating window, clicking
-  another window, or pressing a title bar or tab inside the group ends the
-  selection, leaving that window selected.
+  any window, pressing a title bar or tab inside the group, or the pointer
+  coming back from another screen ends the selection, leaving that window
+  selected.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
   `focus_requested`. Manganese switches to that window's workspace, shows its
   tab, focuses it and warps the pointer to it. A browser window whose page or
