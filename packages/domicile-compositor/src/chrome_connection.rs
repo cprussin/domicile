@@ -38,6 +38,7 @@ pub enum ConnectionRequest {
     WhichMonitors,
     WhichDisplays,
     WhichWindows,
+    WhichStatus,
 }
 
 /// Write a message's responses to the connection that asked, in order.
@@ -462,6 +463,9 @@ fn read_chrome_messages(
             Ok(ChromeMessage::WhichWindows) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichWindows)
             }
+            Ok(ChromeMessage::WhichStatus) => {
+                answer_on_the_connection(hub, ConnectionRequest::WhichStatus)
+            }
             // The Wayland thread runs the theme turnover and its deadline
             // timer.
             Ok(ChromeMessage::ThemeCaptured { theme }) => {
@@ -855,6 +859,12 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
         // For `domicile list-displays` and `list-windows`.
         ConnectionRequest::WhichDisplays => vec![hub.host.lock().unwrap().list_displays()],
         ConnectionRequest::WhichWindows => vec![hub.host.lock().unwrap().list_windows()],
+        // For `domicile status`, which works while locked to say so.
+        ConnectionRequest::WhichStatus => vec![hub.host.lock().unwrap().status(
+            hub.the_desk_is_locked(),
+            hub.keymaps.listed().map(|listed| listed.active),
+            hub.idle_holds.holders(),
+        )],
         // A page has no filesystem, so the compositor searches for it. Safe
         // because `search_files` names no path; this side decides what is read.
         //

@@ -44,6 +44,9 @@ Ask the running desktop:
   domicile list-displays [--json]       Print each display: the names
                                         sleep-displays takes, mode, layout
   domicile list-windows [--json]        Print each window, native and browser
+  domicile status [--json]              Print the shell, theme, keymap, lock,
+                                        and what keeps the screens on or
+                                        captures the desktop
   domicile disable-while-typing [on|off|toggle]
                                         Set the touchpad setting, or print it
   domicile monitor <name> <W>x<H>[@Hz] [scale]
@@ -252,11 +255,12 @@ pub enum Invocation {
     Help,
 }
 
-/// What a `list-*` verb lists.
+/// What a `list-*` verb or `status` prints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Listing {
     Displays,
     Windows,
+    Status,
 }
 
 impl Listing {
@@ -265,6 +269,7 @@ impl Listing {
         match self {
             Self::Displays => Request::Displays,
             Self::Windows => Request::Windows,
+            Self::Status => Request::Status,
         }
     }
 }
@@ -550,7 +555,8 @@ enum Verb {
     Monitoring,
     /// `sleep-displays` or `wake-displays`, which take a display or nothing.
     Sleeping(DisplayPower),
-    /// `list-displays` or `list-windows`, which take `--json` or nothing.
+    /// `list-displays`, `list-windows` or `status`, which take `--json` or
+    /// nothing.
     Listing(Listing),
 }
 
@@ -578,6 +584,7 @@ fn verb(word: &str) -> Option<Verb> {
         "monitor" => Some(Verb::Monitoring),
         "list-displays" => Some(Verb::Listing(Listing::Displays)),
         "list-windows" => Some(Verb::Listing(Listing::Windows)),
+        "status" => Some(Verb::Listing(Listing::Status)),
         _ => None,
     }
 }

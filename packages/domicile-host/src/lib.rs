@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, ExtensionSettings,
-    HostMessage, ListedDisplay, ListedWindow, MonitorInfo, Notification, Owner, PortalRequest,
-    PortalWallpaper, Theme, TrayItem, WindowKind,
+    AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DesktopStatus, DisplayInfo,
+    ExtensionSettings, HostMessage, ListedDisplay, ListedWindow, MonitorInfo, Notification, Owner,
+    PortalRequest, PortalWallpaper, Theme, TrayItem, WindowKind,
 };
 
 pub mod app_names;
@@ -359,6 +359,28 @@ impl Host {
                 .chain(browser)
                 .collect(),
         }
+    }
+
+    /// How the desktop is, answering `which_status`. The lock, the keymap and
+    /// the idle holds are the compositor's, so it passes them.
+    pub fn status(
+        &self,
+        locked: bool,
+        keymap: Option<String>,
+        held_awake_by: Vec<String>,
+    ) -> HostMessage {
+        HostMessage::Status(DesktopStatus {
+            theme: self.theme,
+            locked,
+            keymap,
+            screens_off: self.darkness.all,
+            held_awake_by,
+            capturing: self
+                .portal_requests
+                .as_ref()
+                .map(|(_, capturing)| capturing.clone())
+                .unwrap_or_default(),
+        })
     }
 
     /// Replace the browser windows, as the engine reports them.
@@ -1030,6 +1052,7 @@ impl Host {
             | ChromeMessage::WhichMonitors
             | ChromeMessage::WhichDisplays
             | ChromeMessage::WhichWindows
+            | ChromeMessage::WhichStatus
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

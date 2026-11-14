@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Appearances, BrowserWindow, Host, Mapped};
 use domicile_protocol::{
-    AdaptiveSync, AppFrame, Appearance, ChromeMessage, CursorTheme, DisplayHdr, DisplayInfo,
-    DisplayTransform, HostMessage, ListedDisplay, ListedWindow, MonitorInfo, Owner, Theme,
-    WindowKind, PROTOCOL_VERSION,
+    AdaptiveSync, AppFrame, Appearance, Capturing, CapturingKind, ChromeMessage, CursorTheme,
+    DesktopStatus, Devices, DisplayHdr, DisplayInfo, DisplayTransform, HostMessage, ListedDisplay,
+    ListedWindow, MonitorInfo, Owner, Theme, WindowKind, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -160,6 +160,42 @@ fn every_window_is_listed_native_and_browser_alike() {
             ]
         }
     );
+}
+
+#[test]
+fn the_status_says_how_the_desktop_is_and_what_is_holding_or_watching_it() {
+    // What a person checks before walking away: the theme, the lock, the
+    // keymap, whether the screens are off, what keeps them on, and what is
+    // recording or controlling the desktop.
+    let mut host = Host::new();
+    let remote = Capturing {
+        id: 2,
+        app_id: "org.example.Remote".into(),
+        kind: CapturingKind::InputCapture {
+            devices: Devices::default(),
+        },
+    };
+    host.set_portal_requests(Vec::new(), vec![remote.clone()]);
+    host.describe_darkness(true, Vec::new());
+
+    assert_eq!(
+        host.status(true, Some("dvorak".into()), vec!["Firefox".into()]),
+        HostMessage::Status(DesktopStatus {
+            theme: Theme::Dark,
+            locked: true,
+            keymap: Some("dvorak".into()),
+            screens_off: true,
+            held_awake_by: vec!["Firefox".into()],
+            capturing: vec![remote],
+        })
+    );
+    // Monitors slept one by one leave the rest lit.
+    host.describe_darkness(false, vec!["DP-1".into()]);
+    let HostMessage::Status(status) = host.status(false, None, Vec::new()) else {
+        unreachable!("status answers with a status")
+    };
+    assert!(!status.screens_off);
+    assert!(status.capturing.len() == 1);
 }
 
 // ---- app lifecycle --------------------------------------------------------

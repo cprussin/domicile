@@ -146,6 +146,25 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox
 `--json` prints a JSON array instead, for scripts, with `kind`, `title`,
 `app`, `pid`, `size`, `focused` and `urgent` per window.
 
+## `domicile status [--json]`
+
+Print how the desktop is: the shell it serves, theme, keymap, whether it is
+locked, whether the screens are off, what keeps them on (idle inhibitors), and
+what records or controls it (screen casts, recordings, remote desktop, input
+capture).
+
+```
+shell       /nix/store/…/shell.js
+theme       dark
+keymap      dvorak
+locked      no
+screens     lit
+held awake  Firefox
+capturing   -
+```
+
+`--json` prints `{"shell": …, "status": {…}}` instead, for scripts.
+
 ## `domicile disable-while-typing [on|off|toggle]`
 
 Set whether a touchpad ignores the pointer while you type, or print it. On by
@@ -187,7 +206,7 @@ Print the commands. `--help` and `-h` do the same, also after a verb.
 
 `screenshot`, `screen-record` and `send-shell` are refused while the desktop
 is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
-`wake-displays`, `list-displays` and `list-windows` work, and a `monitor` added before keeps resizing.
+`wake-displays`, `list-displays`, `list-windows` and `status` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

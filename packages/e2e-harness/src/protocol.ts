@@ -589,6 +589,18 @@ const portalCapturingSchema = z.looseObject({
   kind: z.string(),
 });
 
+// How the desktop is. Answers `which_status` on the asking connection only, for
+// `domicile status`.
+const statusSchema = z.looseObject({
+  capturing: z.array(portalCapturingSchema),
+  held_awake_by: z.array(z.string()),
+  keymap: z.string().nullable(),
+  locked: z.boolean(),
+  screens_off: z.boolean(),
+  theme: z.enum(["dark", "light"]),
+  type: z.literal("status"),
+});
+
 const boundShortcutSchema = z.looseObject({
   app_id: z.string(),
   chord: z.string(),
@@ -842,6 +854,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   monitorsSchema,
   displayListSchema,
   windowListSchema,
+  statusSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -899,6 +912,7 @@ export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type MonitorsMessage = z.infer<typeof monitorsSchema>;
 export type DisplayListMessage = z.infer<typeof displayListSchema>;
 export type WindowListMessage = z.infer<typeof windowListSchema>;
+export type StatusMessage = z.infer<typeof statusSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

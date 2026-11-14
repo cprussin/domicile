@@ -1,9 +1,11 @@
 //! Tests for how `domicile list-*` prints what the desktop said.
 
-use domicile_launch::listing::{displays_table, windows_table};
+use std::path::Path;
+
+use domicile_launch::listing::{displays_table, status_table, windows_table};
 use domicile_protocol::{
-    AdaptiveSync, DisplayHdr, DisplayInfo, DisplayTransform, ListedDisplay, ListedWindow,
-    WindowKind,
+    AdaptiveSync, Capturing, CapturingKind, DesktopStatus, Devices, DisplayHdr, DisplayInfo,
+    DisplayTransform, ListedDisplay, ListedWindow, Theme, WindowKind,
 };
 
 #[test]
@@ -107,4 +109,56 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox
 #[test]
 fn no_windows_prints_the_header_alone() {
     assert_eq!(windows_table(&[]), "ID  KIND  APP  PID  SIZE  TITLE\n");
+}
+
+#[test]
+fn the_status_prints_one_line_per_question() {
+    let status = DesktopStatus {
+        theme: Theme::Dark,
+        locked: false,
+        keymap: Some("dvorak".to_string()),
+        screens_off: false,
+        held_awake_by: vec!["Firefox".to_string(), "mpv".to_string()],
+        capturing: vec![Capturing {
+            id: 2,
+            app_id: "org.example.Remote".to_string(),
+            kind: CapturingKind::InputCapture {
+                devices: Devices::default(),
+            },
+        }],
+    };
+    assert_eq!(
+        status_table(Path::new("/desk/shell.js"), &status),
+        "\
+shell       /desk/shell.js
+theme       dark
+keymap      dvorak
+locked      no
+screens     lit
+held awake  Firefox, mpv
+capturing   org.example.Remote (input_capture)
+"
+    );
+    assert_eq!(
+        status_table(
+            Path::new("/desk/shell.js"),
+            &DesktopStatus {
+                locked: true,
+                keymap: None,
+                screens_off: true,
+                held_awake_by: Vec::new(),
+                capturing: Vec::new(),
+                ..status
+            }
+        ),
+        "\
+shell       /desk/shell.js
+theme       dark
+keymap      -
+locked      yes
+screens     off
+held awake  -
+capturing   -
+"
+    );
 }

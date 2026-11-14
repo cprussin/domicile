@@ -1,7 +1,9 @@
 //! How `domicile list-*` prints what the desktop said, for a person. `--json`
 //! prints the desktop's answer instead, for scripts.
 
-use domicile_protocol::{ListedDisplay, ListedWindow};
+use std::path::Path;
+
+use domicile_protocol::{DesktopStatus, ListedDisplay, ListedWindow};
 use serde::Serialize;
 
 /// Each display as a block: its names, mode, layout and color.
@@ -83,6 +85,51 @@ pub fn windows_table(windows: &[ListedWindow]) -> String {
                 .collect();
             format!("{padded}{}\n", row[5])
         })
+        .collect()
+}
+
+/// How the desktop is, one line per question, with `-` for none.
+pub fn status_table(shell: &Path, status: &DesktopStatus) -> String {
+    let or_none = |said: String| match said.as_str() {
+        "" => "-".to_string(),
+        _ => said,
+    };
+    let lines = [
+        ("shell", shell.display().to_string()),
+        ("theme", wire_word(status.theme)),
+        ("keymap", or_none(status.keymap.clone().unwrap_or_default())),
+        (
+            "locked",
+            if status.locked { "yes" } else { "no" }.to_string(),
+        ),
+        (
+            "screens",
+            if status.screens_off { "off" } else { "lit" }.to_string(),
+        ),
+        ("held awake", or_none(status.held_awake_by.join(", "))),
+        (
+            "capturing",
+            or_none(
+                status
+                    .capturing
+                    .iter()
+                    .map(|capturing| {
+                        let kind = serde_json::to_value(&capturing.kind)
+                            .expect("a capture always serializes");
+                        format!(
+                            "{} ({})",
+                            capturing.app_id,
+                            kind["kind"].as_str().expect("a capture's kind is a word")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ),
+        ),
+    ];
+    lines
+        .iter()
+        .map(|(question, answer)| format!("{question:<10}  {answer}\n"))
         .collect()
 }
 

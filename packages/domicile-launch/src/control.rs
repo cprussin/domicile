@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
-use domicile_protocol::{ListedDisplay, ListedWindow, MonitorInfo, Scale, Theme};
+use domicile_protocol::{DesktopStatus, ListedDisplay, ListedWindow, MonitorInfo, Scale, Theme};
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -129,6 +129,9 @@ pub enum Request {
     Displays,
     /// Report every window, native and browser.
     Windows,
+    /// Report the shell, the theme, the lock, the keymap, whether the screens
+    /// are off, and what holds them on or captures the desktop.
+    Status,
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by its `wl_output` name, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -295,6 +298,13 @@ pub enum Response {
 
     /// Answers `windows`.
     Windows { windows: Vec<ListedWindow> },
+
+    /// Answers `status`: the module being served, and what the compositor
+    /// said.
+    Status {
+        shell: PathBuf,
+        status: DesktopStatus,
+    },
 
     /// The compositor turned the monitors off or on.
     Powered,
@@ -483,6 +493,11 @@ pub type ListDisplays<'a> = &'a dyn Fn() -> Result<Vec<ListedDisplay>, String>;
 /// [`crate::compositor_socket::windows`] in a desktop; a closure in tests.
 pub type ListWindows<'a> = &'a dyn Fn() -> Result<Vec<ListedWindow>, String>;
 
+/// Asks the compositor how the desktop is.
+///
+/// [`crate::compositor_socket::status`] in a desktop; a closure in tests.
+pub type AskStatus<'a> = &'a dyn Fn() -> Result<DesktopStatus, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -520,6 +535,7 @@ pub struct Desktop<'a> {
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
+    pub status: AskStatus<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -694,6 +710,13 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Windows) => to_line(&match (desktop.windows)() {
             Ok(windows) => Response::Windows { windows },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Status) => to_line(&match (desktop.status)() {
+            Ok(status) => Response::Status {
+                shell: desktop.module.to_path_buf(),
+                status,
+            },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SleepDisplays { display }) => {

@@ -64,6 +64,13 @@ fn a_listing_prints_a_table_or_with_json_what_the_desktop_said() {
         })
     );
     assert_eq!(
+        run(&["status", "--json"]),
+        Ok(Invocation::List {
+            listing: Listing::Status,
+            json: true
+        })
+    );
+    assert_eq!(
         run(&["list-windows", "--yaml"]),
         Err(CliError::Extra {
             verb: "list-windows".to_string(),

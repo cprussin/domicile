@@ -381,6 +381,10 @@ pub enum ChromeMessage {
     /// `domicile list-windows`.
     WhichWindows,
 
+    /// Report how the desktop is. Answered with [`HostMessage::Status`] on
+    /// this connection only. Sent by `domicile status`.
+    WhichStatus,
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -792,6 +796,9 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::WhichWindows`] on the asking connection only.
     /// Native windows first, in the order they opened, then browser windows.
     WindowList { windows: Vec<ListedWindow> },
+
+    /// Answers [`ChromeMessage::WhichStatus`] on the asking connection only.
+    Status(DesktopStatus),
 
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
@@ -2689,6 +2696,24 @@ pub struct ListedDisplay {
     pub names: Vec<String>,
     /// Off when slept or blanked.
     pub lit: bool,
+}
+
+/// How the desktop is, as `domicile status` prints it. See
+/// [`HostMessage::Status`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesktopStatus {
+    pub theme: Theme,
+    pub locked: bool,
+    /// The config's name for the keymap typed on; `None` before the
+    /// compositor lists the keymaps.
+    pub keymap: Option<String>,
+    /// Every monitor is off: blanked while idle, or slept together.
+    pub screens_off: bool,
+    /// What keeps the screens on, one name per idle inhibitor.
+    pub held_awake_by: Vec<String>,
+    /// What records or controls the desktop: screen casts, recordings, remote
+    /// desktop and input capture sessions.
+    pub capturing: Vec<Capturing>,
 }
 
 /// Who draws a window.

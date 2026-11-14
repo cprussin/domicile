@@ -17,8 +17,8 @@ use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
-    AdaptiveSync, DisplayHdr, DisplayInfo, DisplayTransform, ListedDisplay, ListedWindow,
-    MonitorInfo, Theme, WindowKind,
+    AdaptiveSync, DesktopStatus, DisplayHdr, DisplayInfo, DisplayTransform, ListedDisplay,
+    ListedWindow, MonitorInfo, Theme, WindowKind,
 };
 
 #[test]
@@ -390,6 +390,27 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         ),
         Response::Windows {
             windows: vec![window.clone()]
+        }
+    );
+    let status = DesktopStatus {
+        theme: Theme::Light,
+        locked: false,
+        keymap: None,
+        screens_off: false,
+        held_awake_by: Vec::new(),
+        capturing: Vec::new(),
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"status\"}",
+            &Desktop {
+                status: &|| Ok(status.clone()),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Status {
+            shell: PathBuf::from("/shell.js"),
+            status
         }
     );
     assert_eq!(
@@ -1074,6 +1095,7 @@ fn nothing_dialed() -> Desktop<'static> {
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
         windows: &|| panic!("only windows lists the windows"),
+        status: &|| panic!("only status asks how the desktop is"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),
