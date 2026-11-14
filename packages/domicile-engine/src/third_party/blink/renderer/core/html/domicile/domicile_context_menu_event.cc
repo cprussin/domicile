@@ -46,6 +46,8 @@ std::optional<WebViewContextMenuAction> ActionNamed(const String& name) {
     return WebViewContextMenuAction::kCopyMediaAddress;
   } else if (name == "save-media-as") {
     return WebViewContextMenuAction::kSaveMediaAs;
+  } else if (name == "picture-in-picture") {
+    return WebViewContextMenuAction::kPictureInPicture;
   } else if (name == "inspect") {
     return WebViewContextMenuAction::kInspect;
   } else {
@@ -139,6 +141,8 @@ bool DomicileContextMenuEvent::Offers(WebViewContextMenuAction action) const {
       return has_source;
     case WebViewContextMenuAction::kSaveMediaAs:
       return has_pixels || has_source;
+    case WebViewContextMenuAction::kPictureInPicture:
+      return menu_->can_picture_in_picture;
   }
 }
 

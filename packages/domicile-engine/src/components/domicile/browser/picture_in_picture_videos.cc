@@ -4,6 +4,7 @@
 #include "components/domicile/browser/picture_in_picture_videos.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "base/check.h"
@@ -130,6 +131,18 @@ void PictureInPictureVideos::Act(const std::string& id,
                                  mojom::PictureInPictureAction action) {
   if (Video* video = Find(id)) {
     video->controls->Act(action);
+  }
+}
+
+// A time Blink's IDL let through is finite; one that is not, or is before the
+// start, is a renderer that skipped it.
+void PictureInPictureVideos::Seek(const std::string& id, double seconds) {
+  if (!std::isfinite(seconds) || seconds < 0) {
+    receivers_.ReportBadMessage("seek to a time that is not one");
+    return;
+  }
+  if (Video* video = Find(id)) {
+    video->controls->Seek(seconds);
   }
 }
 

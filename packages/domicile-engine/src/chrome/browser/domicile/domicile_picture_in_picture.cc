@@ -170,6 +170,9 @@ class ShellVideoOverlayWindow : public content::VideoOverlayWindow,
         return;
     }
   }
+  void Seek(double seconds) override {
+    controller_->SeekTo(base::Seconds(seconds));
+  }
   void Resized(const gfx::Size& size) override {
     shown_size_ = size;
     controller_->UpdateLayerBounds();

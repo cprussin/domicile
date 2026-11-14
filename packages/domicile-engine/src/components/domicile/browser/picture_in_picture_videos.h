@@ -42,6 +42,8 @@ class PictureInPictureVideos : public mojom::PictureInPictureVideos {
    public:
     virtual ~Controls() = default;
     virtual void Act(mojom::PictureInPictureAction action) = 0;
+    // Moves the video to `seconds` in.
+    virtual void Seek(double seconds) = 0;
     // The shell shows the video `size` big, in CSS pixels.
     virtual void Resized(const gfx::Size& size) = 0;
   };
@@ -101,6 +103,7 @@ class PictureInPictureVideos : public mojom::PictureInPictureVideos {
       mojo::PendingRemote<mojom::PictureInPictureVideosClient> client) override;
   void Act(const std::string& id,
            mojom::PictureInPictureAction action) override;
+  void Seek(const std::string& id, double seconds) override;
   void Resize(const std::string& id, const gfx::Size& size) override;
   void Show(const std::string& id,
             const viz::FrameSinkId& parent_frame_sink_id,

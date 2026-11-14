@@ -34,6 +34,7 @@ export enum PageMenuCommand {
   CopyLinkAddress = "CopyLinkAddress",
   OpenMedia = "OpenMedia",
   SaveMediaAs = "SaveMediaAs",
+  PictureInPicture = "PictureInPicture",
   CopyImage = "CopyImage",
   CopyMediaAddress = "CopyMediaAddress",
   Undo = "Undo",
@@ -65,6 +66,8 @@ export type PageContext = {
   hasPixels: boolean;
   link: string | undefined;
   media: MediaKind;
+  /** Whether a video can go into picture-in-picture, and whether it is in it. */
+  pictureInPicture: { active: boolean; can: boolean };
   /** Ask the browser to do one of the things only it can, for this click. */
   run: (action: WebViewContextMenuAction) => void;
   selection: string;
@@ -132,6 +135,10 @@ export const pageContextOf = (
   hasPixels: event.hasImageContents,
   link: addressOf(event.linkUrl),
   media: mediaSchema.parse(event.mediaType),
+  pictureInPicture: {
+    active: event.inPictureInPicture,
+    can: event.canPictureInPicture,
+  },
   run: (action) => {
     event.run(action);
   },
@@ -227,6 +234,7 @@ export const choosePageCommand = (
     case PageMenuCommand.SaveLinkAs:
     case PageMenuCommand.CopyLinkAddress:
     case PageMenuCommand.SaveMediaAs:
+    case PageMenuCommand.PictureInPicture:
     case PageMenuCommand.CopyImage:
     case PageMenuCommand.CopyMediaAddress:
     case PageMenuCommand.Undo:
@@ -250,6 +258,7 @@ const browserActionFor = (
     | PageMenuCommand.SaveLinkAs
     | PageMenuCommand.CopyLinkAddress
     | PageMenuCommand.SaveMediaAs
+    | PageMenuCommand.PictureInPicture
     | PageMenuCommand.CopyImage
     | PageMenuCommand.CopyMediaAddress
     | PageMenuCommand.Undo
@@ -271,6 +280,9 @@ const browserActionFor = (
     }
     case PageMenuCommand.SaveMediaAs: {
       return "save-media-as";
+    }
+    case PageMenuCommand.PictureInPicture: {
+      return "picture-in-picture";
     }
     case PageMenuCommand.CopyImage: {
       return "copy-image";
@@ -360,6 +372,7 @@ const linkGroup = (): PageMenuItem[] => [
 /**
  * An image's, a video's or an audio's commands, named for which it is. A
  * canvas has pixels and no address; a broken image an address and no pixels.
+ * A video can go into picture-in-picture, or come out.
  */
 const mediaGroups = (context: PageContext): PageMenuItem[][] => {
   const noun = nounOf(context.media);
@@ -380,6 +393,16 @@ const mediaGroups = (context: PageContext): PageMenuItem[][] => {
       ...(context.source === undefined
         ? []
         : [item(PageMenuCommand.CopyMediaAddress, `Copy ${noun} address`)]),
+      ...(context.pictureInPicture.can
+        ? [
+            item(
+              PageMenuCommand.PictureInPicture,
+              context.pictureInPicture.active
+                ? "Exit picture in picture"
+                : "Picture in picture",
+            ),
+          ]
+        : []),
     ];
     return group.length === 0 ? [] : [group];
   }

@@ -108,6 +108,9 @@ struct WebViewContextMenu {
   WebViewMediaType media_type;
   // Whether an image has pixels to copy. A broken image has none.
   bool has_image_contents;
+  // Whether a video can go into picture-in-picture, and whether it is in it.
+  bool can_picture_in_picture;
+  bool in_picture_in_picture;
 
   // The selected text, empty for none.
   string selection_text;
@@ -142,6 +145,8 @@ enum WebViewContextMenuAction {
   // Copy the image, video or audio address, or save the file.
   kCopyMediaAddress,
   kSaveMediaAs,
+  // Put the video into picture-in-picture, or take it out when it is in.
+  kPictureInPicture,
   // Open DevTools on the element under the click. See WebViewGuest.Inspect.
   kInspect,
 };

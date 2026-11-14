@@ -5,6 +5,7 @@
 # The checks are ordered: picture-in-picture only means something once the
 # shell drew the window and its video played. Key cases:
 #
+#   - A menu with no picture-in-picture blames the context menu's flags.
 #   - A refused request blames WebViewGuest::EnterPictureInPicture.
 #   - An entered video the shell never heard blames ShowInactive.
 #   - A close that never paused blames kClose, and a listing that stays
@@ -47,6 +48,7 @@ judge() { # NAME=value overrides
     SAW_APIS=1
     SAW_WINDOW=1
     SAW_PLAYING=1
+    SAW_MENU=1
     SAW_ENTERED=1
     SAW_LISTED=1
     SAW_LEFT_PAUSED=1
@@ -90,6 +92,8 @@ expect "and blames the canvas stream" "yes" \
 echo
 echo "the claim"
 expect "every step seen is the pass" "pass" "$(verdict)"
+expect "a menu without picture-in-picture blames its media flags" "yes" \
+  "$(blames "media_flags" SAW_MENU=0)"
 expect "a refused request blames EnterPictureInPicture" "yes" \
   "$(blames "EnterPictureInPicture" SAW_ENTERED=0)"
 expect "an unheard video blames ShowInactive" "yes" \

@@ -6,6 +6,7 @@
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "content/public/browser/context_menu_params.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "ui/gfx/geometry/point.h"
@@ -161,6 +162,43 @@ TEST(ContextMenuTest, ACanvasHasPixelsAndNoAddress) {
   EXPECT_TRUE(Offers(params, Action::kCopyImage));
   EXPECT_FALSE(Offers(params, Action::kCopyMediaAddress));
   EXPECT_TRUE(Offers(params, Action::kSaveMediaAs));
+}
+
+TEST(ContextMenuTest, AVideoBlinkCanFloatGoesIntoPictureInPicture) {
+  content::ContextMenuParams params;
+  params.src_url = GURL("https://example.test/film.webm");
+  params.media_type = ContextMenuDataMediaType::kVideo;
+  params.media_flags = blink::ContextMenuData::kMediaCanPictureInPicture;
+
+  const mojom::WebViewContextMenuPtr menu =
+      AsWebViewContextMenu(1, params, gfx::Point());
+  EXPECT_TRUE(menu->can_picture_in_picture);
+  EXPECT_FALSE(menu->in_picture_in_picture);
+  EXPECT_TRUE(Offers(params, Action::kPictureInPicture));
+}
+
+TEST(ContextMenuTest, AVideoInPictureInPictureSaysSo) {
+  content::ContextMenuParams params;
+  params.media_type = ContextMenuDataMediaType::kVideo;
+  params.media_flags = blink::ContextMenuData::kMediaCanPictureInPicture |
+                       blink::ContextMenuData::kMediaPictureInPicture;
+
+  EXPECT_TRUE(
+      AsWebViewContextMenu(1, params, gfx::Point())->in_picture_in_picture);
+  EXPECT_TRUE(Offers(params, Action::kPictureInPicture));
+}
+
+TEST(ContextMenuTest, OnlyAVideoBlinkCanFloatGoesIntoPictureInPicture) {
+  content::ContextMenuParams video;
+  video.media_type = ContextMenuDataMediaType::kVideo;
+  // An image's flags are never a video's, whatever they say.
+  content::ContextMenuParams image = OverAnImageInALink();
+  image.media_flags = blink::ContextMenuData::kMediaCanPictureInPicture;
+
+  EXPECT_FALSE(
+      AsWebViewContextMenu(1, video, gfx::Point())->can_picture_in_picture);
+  EXPECT_FALSE(Offers(video, Action::kPictureInPicture));
+  EXPECT_FALSE(Offers(image, Action::kPictureInPicture));
 }
 
 }  // namespace

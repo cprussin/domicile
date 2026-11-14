@@ -35,14 +35,16 @@ describe("pictureInPicture", () => {
     expect(heard).toEqual([[VIDEO]]);
   });
 
-  it("acts on a video and says how big it is shown", () => {
+  it("acts on a video, seeks it and says how big it is shown", () => {
     const fake = new FakeDomicileHost();
     const { pictureInPicture } = desktop(fake.host);
     pictureInPicture.act("1", "back-to-page");
+    pictureInPicture.seek("1", 42.5);
     pictureInPicture.resize("1", 320, 180);
 
     expect(fake.calls).toStrictEqual([
       ["actOnPictureInPictureVideo", "1", "back-to-page"],
+      ["seekPictureInPictureVideo", "1", 42.5],
       ["resizePictureInPictureVideo", "1", 320, 180],
     ]);
   });

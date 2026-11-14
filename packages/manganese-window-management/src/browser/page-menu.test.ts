@@ -24,6 +24,7 @@ const plain = (overrides: Partial<PageContext> = {}): PageContext => ({
   hasPixels: false,
   link: undefined,
   media: MediaKind.None,
+  pictureInPicture: { active: false, can: false },
   run: () => undefined,
   selection: "",
   source: undefined,
@@ -47,10 +48,12 @@ const event = (fields: Partial<DomicileContextMenuEvent>) =>
     canCut: false,
     canDelete: false,
     canPaste: false,
+    canPictureInPicture: false,
     canRedo: false,
     canSelectAll: false,
     canUndo: false,
     hasImageContents: false,
+    inPictureInPicture: false,
     isEditable: false,
     linkText: "",
     linkUrl: "",
@@ -90,6 +93,17 @@ describe("pageContextOf", () => {
 
   it("refuses a media type it has never heard of", () => {
     expect(() => pageContextOf(event({ mediaType: "hologram" }))).toThrow();
+  });
+
+  it("reads whether a video can go into picture-in-picture, and is in it", () => {
+    const context = pageContextOf(
+      event({
+        canPictureInPicture: true,
+        inPictureInPicture: true,
+        mediaType: "video",
+      }),
+    );
+    expect(context.pictureInPicture).toEqual({ active: true, can: true });
   });
 
   it("hands an action back to the event it came from", async () => {
@@ -212,6 +226,36 @@ describe("pageMenuFor", () => {
     ]);
   });
 
+  it("puts a video that can go into picture-in-picture there", () => {
+    const [media] = pageMenuFor(
+      plain({
+        media: MediaKind.Video,
+        pictureInPicture: { active: false, can: true },
+        source: "https://example.test/film.webm",
+      }),
+      page,
+    );
+    expect(media?.at(-1)).toEqual({
+      command: PageMenuCommand.PictureInPicture,
+      disabled: false,
+      label: "Picture in picture",
+      shortcut: undefined,
+    });
+  });
+
+  it("takes a video in picture-in-picture out", () => {
+    const [media] = pageMenuFor(
+      plain({
+        media: MediaKind.Video,
+        pictureInPicture: { active: true, can: true },
+      }),
+      page,
+    );
+    expect(media?.map((item) => item.label)).toEqual([
+      "Exit picture in picture",
+    ]);
+  });
+
   it("saves and copies a canvas, which has no address", () => {
     expect(
       commandsOf(plain({ hasPixels: true, media: MediaKind.Canvas }))[0],
@@ -288,5 +332,16 @@ describe("choosePageCommand", () => {
       BrowserCommand.ZoomOut,
       BrowserCommand.ZoomReset,
     ]);
+  });
+
+  it("asks the browser for picture-in-picture", async () => {
+    const ran = await new Promise<string>((resolve) => {
+      choosePageCommand(
+        PageMenuCommand.PictureInPicture,
+        plain({ run: resolve }),
+        { browse: () => undefined, openWindow: () => undefined },
+      );
+    });
+    expect(ran).toBe("picture-in-picture");
   });
 });

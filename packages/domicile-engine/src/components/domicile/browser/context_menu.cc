@@ -5,6 +5,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/context_menu_params.h"
+#include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "ui/gfx/geometry/point.h"
@@ -39,6 +40,17 @@ bool Can(const content::ContextMenuParams& params,
   return (params.edit_flags & flag) != 0;
 }
 
+bool Has(const content::ContextMenuParams& params,
+         blink::ContextMenuData::MediaFlags flag) {
+  return (params.media_flags & flag) != 0;
+}
+
+// A video Blink can float, as Chrome's menu checks it.
+bool CanPictureInPicture(const content::ContextMenuParams& params) {
+  return params.media_type == ContextMenuDataMediaType::kVideo &&
+         Has(params, blink::ContextMenuData::kMediaCanPictureInPicture);
+}
+
 // An image that loaded, or a canvas.
 bool HasPixels(const content::ContextMenuParams& params) {
   return (params.media_type == ContextMenuDataMediaType::kImage ||
@@ -69,6 +81,9 @@ mojom::WebViewContextMenuPtr AsWebViewContextMenu(
   menu->src_url = params.src_url;
   menu->media_type = AsWebViewMediaType(params.media_type);
   menu->has_image_contents = params.has_image_contents;
+  menu->can_picture_in_picture = CanPictureInPicture(params);
+  menu->in_picture_in_picture =
+      Has(params, blink::ContextMenuData::kMediaPictureInPicture);
   menu->selection_text = base::UTF16ToUTF8(params.selection_text);
   menu->is_editable = params.is_editable;
   menu->can_undo = Can(params, blink::ContextMenuDataEditFlags::kCanUndo);
@@ -105,6 +120,8 @@ bool Offers(const content::ContextMenuParams& params,
       return HasSource(params);
     case mojom::WebViewContextMenuAction::kSaveMediaAs:
       return HasPixels(params) || HasSource(params);
+    case mojom::WebViewContextMenuAction::kPictureInPicture:
+      return CanPictureInPicture(params);
   }
 }
 

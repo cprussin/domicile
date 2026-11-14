@@ -41,6 +41,8 @@ class CORE_EXPORT DomicileContextMenuEvent final : public Event {
   String srcUrl() const;
   String mediaType() const;
   bool hasImageContents() const { return menu_->has_image_contents; }
+  bool canPictureInPicture() const { return menu_->can_picture_in_picture; }
+  bool inPictureInPicture() const { return menu_->in_picture_in_picture; }
   const String& selectionText() const { return menu_->selection_text; }
   bool isEditable() const { return menu_->is_editable; }
   bool canUndo() const { return menu_->can_undo; }

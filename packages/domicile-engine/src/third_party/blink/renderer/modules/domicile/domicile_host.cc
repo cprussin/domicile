@@ -2349,6 +2349,23 @@ void DomicileHost::actOnPictureInPictureVideo(
   }
 }
 
+void DomicileHost::seekPictureInPictureVideo(ScriptState*,
+                                             const String& id,
+                                             double seconds,
+                                             ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a picture-in-picture video's");
+    return;
+  }
+  if (seconds < 0) {
+    exception_state.ThrowRangeError("seconds must not be negative");
+    return;
+  }
+  if (Ready(exception_state)) {
+    picture_in_picture_->Seek(id, seconds);
+  }
+}
+
 void DomicileHost::resizePictureInPictureVideo(
     ScriptState*,
     const String& id,

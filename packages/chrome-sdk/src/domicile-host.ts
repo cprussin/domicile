@@ -956,6 +956,11 @@ export type DomicileHost = {
     action: DomicilePictureInPictureAction,
   ): void;
   /**
+   * Moves video `id` to `seconds` in, as its progress bar does. Throws
+   * RangeError for a negative time. An unknown id does nothing.
+   */
+  seekPictureInPictureVideo(id: string, seconds: number): void;
+  /**
    * Says video `id` is shown `width` by `height` CSS pixels big; its page
    * hears it as its PictureInPictureWindow's size. An unknown id does
    * nothing.

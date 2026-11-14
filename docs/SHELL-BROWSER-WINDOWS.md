@@ -351,12 +351,13 @@ Draw the context menu yourself:
 
 - `domicile-context-menu`: a right click the page did not `preventDefault`.
   The event carries what was under the click: `linkUrl`, `srcUrl`,
-  `mediaType`, `selectionText`, `isEditable`, the `can*` edit flags, and `x` /
-  `y` relative to the view.
+  `mediaType`, `selectionText`, `isEditable`, the `can*` edit flags,
+  `canPictureInPicture` / `inPictureInPicture` for a video, and `x` / `y`
+  relative to the view.
 - `event.run(action)` does what only the browser can: `copy-link-address`,
-  `save-link-as`, `copy-image`, `copy-media-address`, `save-media-as`, the
-  edit commands (`cut`, `paste`, …) and `inspect`. A save asks
-  `domicile-file-chooser` where. See `WEBVIEW_CONTEXT_MENU_ACTIONS`.
+  `save-link-as`, `copy-image`, `copy-media-address`, `save-media-as`,
+  `picture-in-picture` (enters, or leaves when in), the edit commands (`cut`,
+  `paste`, …) and `inspect`. A save asks `domicile-file-chooser` where. See `WEBVIEW_CONTEXT_MENU_ACTIONS`.
 - Back, reload and "open in new window" (`browser.open`) need no menu
   action.
 - `view.inspect()` opens DevTools for the page in a new browser window. It
@@ -405,14 +406,16 @@ Manganese fills the screen with the window while its page is fullscreen
 
 ## Picture-in-picture video
 
-A page's `requestPictureInPicture()`, or its video controls' button, lists the
-video in `domicile.pictureInPicture.videos`; `change` fires as videos come and
-go, play and pause. Each has the browser window it plays in (`window`), its
+A page's `requestPictureInPicture()`, its video controls' button, or the
+context menu's `picture-in-picture` lists the video in
+`domicile.pictureInPicture.videos`; `change` fires as videos come and go, play
+and pause. Each has the browser window it plays in (`window`), its
 own size, which controls the site offers, and its length and position.
 
 Show one with `<app picture-in-picture="id">`: the element draws the page's
 own video, stretched to its box. Tell the page how big it is shown with
-`pictureInPicture.resize(id, width, height)`, and act on it with
+`pictureInPicture.resize(id, width, height)`, move it with
+`pictureInPicture.seek(id, seconds)`, and act on it with
 `pictureInPicture.act(id, action)`:
 
 - `"play"`, `"pause"`, `"previous-track"` and `"next-track"`, as the video's
@@ -426,7 +429,7 @@ A video's `width` and `height` are 0 until its page says them; keep its box
 in the shape it has now.
 
 Manganese floats each video over every window, in the bottom-right corner of
-its window's screen, with its controls under the pointer.
+its window's screen, with its controls and progress bar under the pointer.
 
 ## Crashed pages
 

@@ -1,5 +1,7 @@
 // The shell module guard-webview-video-picture-in-picture.sh loads. It opens
-// `<site>/video` in a browser window and draws it in a `<webview window>`.
+// `<site>/video` in a browser window and draws it in a `<webview window>` at
+// the top left. A right click on the video runs the menu's
+// "picture-in-picture".
 // Each video the desk lists in picture-in-picture it shows in an
 // `<app picture-in-picture>`, sizes, and then closes, as the shell's close
 // button does.
@@ -11,6 +13,8 @@
 //
 //   GUARD shell-loaded                 this module ran
 //   GUARD window id=…                  the browser window it drew
+//   GUARD menu media=… can=…           a right click's menu
+//   GUARD menu-picture-in-picture      it ran the menu's picture-in-picture
 //   GUARD pip id=… ours=… size=…       a listed video; `ours` is whether its
 //                                      window is the one drawn here
 //   GUARD pip-closed id=…              it closed that video
@@ -35,6 +39,15 @@ export const HostShell = (_root, desktop) => {
         view.style.inlineSize = "640px";
         view.style.blockSize = "360px";
         view.setAttribute("window", window.id);
+        view.addEventListener("domicile-context-menu", (event) => {
+          say(
+            `menu media=${event.mediaType} can=${event.canPictureInPicture} in=${event.inPictureInPicture}`,
+          );
+          if (event.canPictureInPicture) {
+            event.run("picture-in-picture");
+            say("menu-picture-in-picture");
+          }
+        });
         document.body.append(view);
         say(`window id=${window.id}`);
       }

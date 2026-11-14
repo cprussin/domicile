@@ -22,6 +22,8 @@ export type PictureInPicture = {
   readonly videos: readonly DomicilePictureInPictureVideo[];
   /** Act on video `id` as its controls do. */
   act: (id: string, action: DomicilePictureInPictureAction) => void;
+  /** Move video `id` to `seconds` in, as its progress bar does. */
+  seek: (id: string, seconds: number) => void;
   /** Say video `id` is shown `width` by `height` CSS pixels big. */
   resize: (id: string, width: number, height: number) => void;
   on: On<PictureInPictureListeners>;
@@ -34,6 +36,7 @@ export type PictureInPictureHost = Pick<
   | "pictureInPictureVideos"
   | "removeEventListener"
   | "resizePictureInPictureVideo"
+  | "seekPictureInPictureVideo"
 >;
 
 /** The list before the browser says, the same each read. */
@@ -51,6 +54,9 @@ export const pictureInPicture = (
   }),
   resize: (id, width, height) => {
     host.resizePictureInPictureVideo(id, width, height);
+  },
+  seek: (id, seconds) => {
+    host.seekPictureInPictureVideo(id, seconds);
   },
   get videos() {
     return host.pictureInPictureVideos ?? NONE;

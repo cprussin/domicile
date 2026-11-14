@@ -304,12 +304,16 @@ class MODULES_EXPORT DomicileHost final
     return picture_in_picture_videos_.Get();
   }
 
-  // Act on or resize a video in picture-in-picture. The next
+  // Act on, seek or resize a video in picture-in-picture. The next
   // `pictureinpicturevideoschanged` reflects what changed.
   void actOnPictureInPictureVideo(ScriptState*,
                                   const String& id,
                                   V8DomicilePictureInPictureAction action,
                                   ExceptionState&);
+  void seekPictureInPictureVideo(ScriptState*,
+                                 const String& id,
+                                 double seconds,
+                                 ExceptionState&);
   void resizePictureInPictureVideo(ScriptState*,
                                    const String& id,
                                    uint32_t width,
