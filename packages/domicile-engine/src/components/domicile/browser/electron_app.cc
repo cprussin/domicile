@@ -12,6 +12,8 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/types/expected.h"
@@ -28,7 +30,7 @@ ElectronApp::~ElectronApp() {
 }
 
 void ElectronApp::Take(std::string_view line) {
-  const base::expected<ElectronRequest, ElectronRefusal> request =
+  base::expected<ElectronRequest, ElectronRefusal> request =
       ParseElectronRequest(line);
   if (!request.has_value() && request.error().window.has_value()) {
     send_.Run(
@@ -58,6 +60,15 @@ void ElectronApp::Take(std::string_view line) {
     if (const std::optional<std::string> id = IdOf(close->window)) {
       desk_->AskToClose(*id);
     }
+  } else if (auto* send = std::get_if<ElectronSendToPage>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(send->window)) {
+      std::string args_json;
+      // Parsed from JSON, so it writes.
+      CHECK(base::JSONWriter::Write(send->args, &args_json));
+      desk_->SendToPage(*id, send->channel, args_json);
+    }
+  } else if (auto* reply = std::get_if<ElectronReply>(&*request)) {
+    Reply(std::move(*reply));
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -101,7 +112,14 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
                                    " is already open"})));
     return;
   }
-  const std::optional<std::string> id = desk_->Open(open.url, *hello_);
+  ElectronPageCalls calls{
+      .sent = base::BindRepeating(&ElectronApp::PageSent,
+                                  weak_factory_.GetWeakPtr(), open.window),
+      .invoked = base::BindRepeating(&ElectronApp::PageInvoked,
+                                     weak_factory_.GetWeakPtr(), open.window),
+  };
+  const std::optional<std::string> id =
+      desk_->Open(open.url, *hello_, open.preload, std::move(calls));
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
@@ -109,6 +127,40 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
     windows_.emplace(open.window, Window{.id = *id, .title = std::string()});
     send_.Run(ElectronWindowOpened(open.window));
   }
+}
+
+void ElectronApp::Reply(ElectronReply reply) {
+  auto waiting = invokes_.find(reply.invoke);
+  if (waiting == invokes_.end()) {
+    send_.Run(ElectronRefused(base::StrCat(
+        {"no invoke ", base::NumberToString(reply.invoke), " is waiting"})));
+    return;
+  }
+  ElectronAnswer answer = std::move(waiting->second);
+  invokes_.erase(waiting);
+  std::move(answer).Run(std::move(reply.answer));
+}
+
+void ElectronApp::PageSent(ElectronWindow number,
+                           std::string channel,
+                           base::ListValue args) {
+  // A window the app closed may still have its page for a moment.
+  if (windows_.contains(number)) {
+    send_.Run(ElectronIpcMessage(number, channel, args));
+  }
+}
+
+void ElectronApp::PageInvoked(ElectronWindow number,
+                              std::string channel,
+                              base::ListValue args,
+                              ElectronAnswer answer) {
+  if (!windows_.contains(number)) {
+    std::move(answer).Run(base::unexpected("the window is closed"));
+    return;
+  }
+  const int invoke = next_invoke_++;
+  invokes_.emplace(invoke, std::move(answer));
+  send_.Run(ElectronIpcInvoke(number, invoke, channel, args));
 }
 
 std::optional<std::string> ElectronApp::IdOf(ElectronWindow number) {

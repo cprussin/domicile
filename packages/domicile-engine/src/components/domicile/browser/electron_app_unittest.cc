@@ -3,12 +3,16 @@
 
 #include "components/domicile/browser/electron_app.h"
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/types/expected.h"
+#include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -23,12 +27,17 @@ constexpr char kHello[] =
 class FakeDesk final : public ElectronDesk {
  public:
   std::optional<std::string> Open(const GURL& url,
-                                  const ElectronHello& hello) override {
+                                  const ElectronHello& hello,
+                                  const std::string& preload,
+                                  ElectronPageCalls page_calls) override {
     if (!has_shell) {
       return std::nullopt;
     }
-    calls.push_back("open " + url.spec() + " as " + hello.app_id);
-    return base::NumberToString(next_id++);
+    calls.push_back("open " + url.spec() + " as " + hello.app_id +
+                    (preload.empty() ? "" : " with " + preload));
+    const std::string id = base::NumberToString(next_id++);
+    pages.emplace(id, std::move(page_calls));
+    return id;
   }
   void Load(const std::string& id, const GURL& url) override {
     calls.push_back("load " + id + " " + url.spec());
@@ -38,8 +47,15 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("ask to close " + id);
   }
   void Close(const std::string& id) override { calls.push_back("close " + id); }
+  void SendToPage(const std::string& id,
+                  const std::string& channel,
+                  const std::string& args_json) override {
+    calls.push_back("send " + id + " " + channel + " " + args_json);
+  }
 
   bool has_shell = true;
+  // What each window's page may call, by id.
+  std::map<std::string, ElectronPageCalls> pages;
   int next_id = 10;
   std::vector<std::string> calls;
 };
@@ -213,6 +229,106 @@ TEST_F(ElectronAppTest, AnAppThatGoesClosesItsWindows) {
   app_.reset();
 
   EXPECT_EQ(desk_.calls, (Lines{"close 10", "close 11"}));
+}
+
+TEST_F(ElectronAppTest, AWindowsPreloadReachesTheDesk) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("preload":"window.x = 1"})");
+
+  EXPECT_EQ(desk_.calls, Lines{"open https://a.test/ as com.anthropic.Claude "
+                               "with window.x = 1"});
+}
+
+using Answer = std::optional<base::expected<base::Value, std::string>>;
+
+// Writes an invoke's answer to `answer`.
+ElectronAnswer Into(Answer& answer) {
+  return base::BindOnce(
+      [](Answer* answer, base::expected<base::Value, std::string> given) {
+        *answer = std::move(given);
+      },
+      &answer);
+}
+
+base::ListValue OneAndA() {
+  base::ListValue args;
+  args.Append(1);
+  args.Append("a");
+  return args;
+}
+
+TEST_F(ElectronAppTest, APagesSendReachesTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+
+  desk_.pages.at("10").sent.Run("ping", OneAndA());
+
+  EXPECT_EQ(sent_, Lines{R"({"args":[1,"a"],"channel":"ping",)"
+                         R"("type":"ipc_message","window":2})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, APagesInvokeIsAnsweredByTheAppsReply) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+  Answer first;
+  Answer second;
+
+  desk_.pages.at("10").invoked.Run("get", OneAndA(), Into(first));
+  desk_.pages.at("10").invoked.Run("get", base::ListValue(), Into(second));
+  app_->Take(R"({"type":"ipc_reply","invoke":2,"error":"no handler"})");
+  app_->Take(R"({"type":"ipc_reply","invoke":1,"result":{"v":7}})");
+
+  EXPECT_EQ(sent_, (Lines{R"({"args":[1,"a"],"channel":"get","invoke":1,)"
+                          R"("type":"ipc_invoke","window":2})"
+                          "\n",
+                          R"({"args":[],"channel":"get","invoke":2,)"
+                          R"("type":"ipc_invoke","window":2})"
+                          "\n"}));
+  ASSERT_TRUE(first.has_value() && first->has_value());
+  EXPECT_EQ(base::WriteJson(**first), R"({"v":7})");
+  ASSERT_TRUE(second.has_value());
+  EXPECT_EQ(*second, base::unexpected("no handler"));
+}
+
+TEST_F(ElectronAppTest, AReplyNobodyWaitsOnIsRefused) {
+  Hello();
+
+  app_->Take(R"({"type":"ipc_reply","invoke":9,"result":1})");
+
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"refused\","
+                         "\"why\":\"no invoke 9 is waiting\"}\n"});
+}
+
+TEST_F(ElectronAppTest, AnInvokeFromAClosedWindowFails) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  app_->Listed({});
+  sent_.clear();
+  Answer answer;
+
+  page.invoked.Run("get", base::ListValue(), Into(answer));
+  page.sent.Run("ping", base::ListValue());
+
+  ASSERT_TRUE(answer.has_value());
+  EXPECT_EQ(*answer, base::unexpected("the window is closed"));
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, TheAppsSendReachesItsWindowsPage) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"ipc_send","window":2,"channel":"ping",)"
+             R"("args":[1,"a"]})");
+
+  EXPECT_EQ(desk_.calls, Lines{R"(send 10 ping [1,"a"])"});
 }
 
 }  // namespace
