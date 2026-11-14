@@ -17,9 +17,8 @@ namespace domicile {
 // - Payment Request is off (patch 0183), as passwords and passkeys are (patch
 //   0048): its only UI is a Chrome sheet, and sites without it fall back to
 //   their own forms. FedCM ("Sign in with Google"'s account chooser) asks the
-//   shell instead; see domicile_identity_dialog.h.
-// - Picture-in-picture video is off (patch 0183), since Chrome floats it in a
-//   window of its own.
+//   shell instead (domicile_identity_dialog.h), and the shell draws
+//   picture-in-picture video (domicile_picture_in_picture.h).
 //
 // Called once from StartDesk, before any page is made.
 void RefuseChromeDialogs();
