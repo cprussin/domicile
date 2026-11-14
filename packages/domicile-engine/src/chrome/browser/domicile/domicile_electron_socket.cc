@@ -59,8 +59,11 @@ bool ConnectedByUs(const net::UnixDomainServerSocket::Credentials& peer) {
 class ChromeElectronDesk final : public ElectronDesk {
  public:
   std::optional<std::string> Open(const GURL& url,
-                                  const ElectronHello& hello) override {
-    return OpenElectronWindow(url, hello.app_id, hello.partition);
+                                  const ElectronHello& hello,
+                                  const std::string& preload,
+                                  ElectronPageCalls calls) override {
+    return OpenElectronWindow(url, hello.app_id, hello.partition, preload,
+                              std::move(calls));
   }
   void Load(const std::string& id, const GURL& url) override {
     LoadBrowserWindow(id, url);
@@ -70,6 +73,11 @@ class ChromeElectronDesk final : public ElectronDesk {
     AskToCloseBrowserWindow(id);
   }
   void Close(const std::string& id) override { CloseBrowserWindow(id); }
+  void SendToPage(const std::string& id,
+                  const std::string& channel,
+                  const std::string& args_json) override {
+    SendToElectronWindow(id, channel, args_json);
+  }
 };
 
 // One app on the UI thread: its ElectronApp, told of the desk's windows.

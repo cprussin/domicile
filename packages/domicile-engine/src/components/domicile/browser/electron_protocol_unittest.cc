@@ -6,6 +6,9 @@
 #include <string>
 #include <variant>
 
+#include "base/json/json_writer.h"
+#include "base/values.h"
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -121,6 +124,80 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"title\":\"Claude\",\"type\":\"title_changed\",\"window\":4}\n");
   EXPECT_EQ(ElectronWindowClosed(5),
             "{\"type\":\"window_closed\",\"window\":5}\n");
+}
+
+TEST(ElectronProtocolTest, OpenWindowCarriesItsPreload) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+      R"("preload":"window.x = 1"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*request).preload, "window.x = 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","preload":3})"),
+            "\"preload\" must be a string");
+}
+
+TEST(ElectronProtocolTest, IpcSendCarriesItsChannelAndArguments) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"ipc_send","window":2,"channel":"ping","args":[1,"a"]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& send = std::get<ElectronSendToPage>(*request);
+  EXPECT_EQ(send.window, 2);
+  EXPECT_EQ(send.channel, "ping");
+  EXPECT_EQ(base::WriteJson(send.args), R"([1,"a"])");
+
+  const auto refused = ParseElectronRequest(
+      R"({"type":"ipc_send","window":2,"channel":"ping"})");
+  ASSERT_FALSE(refused.has_value());
+  EXPECT_EQ(refused.error(),
+            (ElectronRefusal{.why = "\"args\" must be an array", .window = 2}));
+}
+
+TEST(ElectronProtocolTest, IpcReplyCarriesAResultOrWhyItFailed) {
+  const auto result = ParseElectronRequest(
+      R"({"type":"ipc_reply","invoke":3,"result":{"ok":true}})");
+  ASSERT_TRUE(result.has_value()) << result.error().why;
+  const auto& reply = std::get<ElectronReply>(*result);
+  EXPECT_EQ(reply.invoke, 3);
+  ASSERT_TRUE(reply.answer.has_value());
+  EXPECT_EQ(base::WriteJson(*reply.answer), R"({"ok":true})");
+
+  const auto nothing =
+      ParseElectronRequest(R"({"type":"ipc_reply","invoke":4})");
+  ASSERT_TRUE(nothing.has_value()) << nothing.error().why;
+  EXPECT_TRUE(std::get<ElectronReply>(*nothing).answer->is_none());
+
+  const auto failed = ParseElectronRequest(
+      R"({"type":"ipc_reply","invoke":5,"error":"no handler"})");
+  ASSERT_TRUE(failed.has_value()) << failed.error().why;
+  EXPECT_EQ(std::get<ElectronReply>(*failed).answer,
+            base::unexpected("no handler"));
+}
+
+TEST(ElectronProtocolTest, IpcReplyIsOneOrTheOther) {
+  EXPECT_EQ(WhyRefused(R"({"type":"ipc_reply","invoke":1,"result":1,)"
+                       R"("error":"x"})"),
+            "a reply has a \"result\" or an \"error\", not both");
+  EXPECT_EQ(WhyRefused(R"({"type":"ipc_reply","invoke":0})"),
+            "\"invoke\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"ipc_reply","invoke":1,"error":2})"),
+            "\"error\" must be a string");
+}
+
+TEST(ElectronProtocolTest, IpcEventsAreOneLineEach) {
+  base::ListValue args;
+  args.Append(1);
+  args.Append("a");
+  EXPECT_EQ(ElectronIpcMessage(1, "ping", args),
+            R"({"args":[1,"a"],"channel":"ping","type":"ipc_message",)"
+            R"("window":1})"
+            "\n");
+  EXPECT_EQ(ElectronIpcInvoke(2, 7, "get", args),
+            R"({"args":[1,"a"],"channel":"get","invoke":7,)"
+            R"("type":"ipc_invoke","window":2})"
+            "\n");
 }
 
 }  // namespace

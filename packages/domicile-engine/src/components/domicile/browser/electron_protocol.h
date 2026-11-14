@@ -10,6 +10,7 @@
 #include <variant>
 
 #include "base/types/expected.h"
+#include "base/values.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "url/gurl.h"
 
@@ -24,7 +25,8 @@ namespace domicile {
 //   -> {"type":"ready"}
 //   -> {"type":"refused","why":"..."}
 //
-//   {"type":"open_window","window":1,"url":"https://claude.ai/"}
+//   {"type":"open_window","window":1,"url":"https://claude.ai/",
+//    "preload":"...the preload's source..."}       ("preload" may be left out)
 //   -> {"type":"window_opened","window":1}
 //   -> {"type":"window_refused","window":1,"why":"..."}
 //
@@ -32,16 +34,29 @@ namespace domicile {
 //   {"type":"focus_window","window":1}
 //   {"type":"close_window","window":1}     (the page may refuse)
 //   {"type":"destroy_window","window":1}   (closes without asking)
+//   {"type":"ipc_send","window":1,"channel":"c","args":[...]}
+//                                          (webContents.send)
+//   {"type":"ipc_reply","invoke":3,"result":...}    (a handler's result)
+//   {"type":"ipc_reply","invoke":3,"error":"..."}   (or why it failed)
 //
 // The engine also says, on its own:
 //
 //   {"type":"window_loaded","window":1}
 //   {"type":"title_changed","window":1,"title":"Claude"}
 //   {"type":"window_closed","window":1}
+//   {"type":"ipc_message","window":1,"channel":"c","args":[...]}
+//                                          (ipcRenderer.send)
+//   {"type":"ipc_invoke","window":1,"invoke":3,"channel":"c","args":[...]}
+//                                          (ipcRenderer.invoke; answer
+//                                           with ipc_reply)
 //
 // The host picks window numbers. Only http and https URLs open: content
 // loads no other scheme in a guest. An app's own files and protocols arrive
 // with the protocol handlers.
+//
+// IPC arguments and results are JSON, not structured clones: a Map, a Set or
+// bytes do not survive the trip. An invoke's number is the engine's, counted
+// per app.
 
 inline constexpr int kElectronProtocolVersion = 1;
 
@@ -58,6 +73,8 @@ struct ElectronHello {
 struct ElectronOpenWindow {
   ElectronWindow window;
   GURL url;
+  // The preload's source; empty for none.
+  std::string preload;
 };
 
 struct ElectronLoadUrl {
@@ -77,12 +94,28 @@ struct ElectronDestroyWindow {
   ElectronWindow window;
 };
 
+// webContents.send: `args` on `channel` to window `window`'s page.
+struct ElectronSendToPage {
+  ElectronWindow window;
+  std::string channel;
+  base::ListValue args;
+};
+
+// An ipcMain handler's answer to invoke `invoke`: its result, or why it
+// failed.
+struct ElectronReply {
+  int invoke;
+  base::expected<base::Value, std::string> answer;
+};
+
 using ElectronRequest = std::variant<ElectronHello,
                                      ElectronOpenWindow,
                                      ElectronLoadUrl,
                                      ElectronFocusWindow,
                                      ElectronCloseWindow,
-                                     ElectronDestroyWindow>;
+                                     ElectronDestroyWindow,
+                                     ElectronSendToPage,
+                                     ElectronReply>;
 
 // Why a line is not a request, and which window it was for when it names
 // one, so the app hears of it as that window's.
@@ -106,6 +139,13 @@ std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);
 std::string ElectronWindowLoaded(ElectronWindow window);
 std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
+std::string ElectronIpcMessage(ElectronWindow window,
+                               std::string_view channel,
+                               const base::ListValue& args);
+std::string ElectronIpcInvoke(ElectronWindow window,
+                              int invoke,
+                              std::string_view channel,
+                              const base::ListValue& args);
 
 }  // namespace domicile
 

@@ -100,7 +100,55 @@ base::expected<ElectronRequest, std::string> ParseHello(
 bool IsWindowRequest(std::string_view type) {
   return type == "open_window" || type == "load_url" ||
          type == "focus_window" || type == "close_window" ||
-         type == "destroy_window";
+         type == "destroy_window" || type == "ipc_send";
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseReply(
+    base::DictValue& request) {
+  const std::optional<int> invoke = request.FindInt("invoke");
+  if (!invoke.has_value() || *invoke < 1) {
+    return Refuse("\"invoke\" must be a whole number from 1");
+  }
+  if (const base::Value* error = request.Find("error")) {
+    if (!error->is_string()) {
+      return Refuse("\"error\" must be a string");
+    } else if (request.contains("result")) {
+      return Refuse("a reply has a \"result\" or an \"error\", not both");
+    }
+    return ElectronReply{.invoke = *invoke,
+                         .answer = base::unexpected(error->GetString())};
+  }
+  // A handler that returns nothing answers null, as JSON has no undefined.
+  std::optional<base::Value> result = request.Extract("result");
+  return ElectronReply{
+      .invoke = *invoke,
+      .answer = result.has_value() ? std::move(*result) : base::Value()};
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseSendToPage(
+    base::DictValue& request,
+    ElectronWindow window) {
+  const std::string* channel = request.FindString("channel");
+  base::ListValue* args = request.FindList("args");
+  if (channel == nullptr) {
+    return Refuse("\"channel\" must be a string", window);
+  } else if (args == nullptr) {
+    return Refuse("\"args\" must be an array", window);
+  }
+  return ElectronSendToPage{
+      .window = window, .channel = *channel, .args = std::move(*args)};
+}
+
+std::string WithChannel(base::DictValue event,
+                        std::string_view channel,
+                        const base::ListValue& args) {
+  event.Set("channel", channel);
+  event.Set("args", args.Clone());
+  std::string line;
+  // From a page's JSON.stringify, so it writes.
+  CHECK(base::JSONWriter::Write(event, &line));
+  line.push_back('\n');
+  return line;
 }
 
 }  // namespace
@@ -118,6 +166,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
   } else if (*type == "hello") {
     return ParseHello(*request).transform_error(
         [](std::string why) { return ElectronRefusal{.why = std::move(why)}; });
+  } else if (*type == "ipc_reply") {
+    return ParseReply(*request);
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }
@@ -129,7 +179,14 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     if (!url.has_value()) {
       return Refuse(std::move(url.error()), *window);
     } else if (*type == "open_window") {
-      return ElectronOpenWindow{.window = *window, .url = std::move(*url)};
+      const base::Value* preload = request->Find("preload");
+      if (preload != nullptr && !preload->is_string()) {
+        return Refuse("\"preload\" must be a string", *window);
+      }
+      return ElectronOpenWindow{
+          .window = *window,
+          .url = std::move(*url),
+          .preload = preload ? preload->GetString() : std::string()};
     } else {
       return ElectronLoadUrl{.window = *window, .url = std::move(*url)};
     }
@@ -137,6 +194,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ElectronFocusWindow{.window = *window};
   } else if (*type == "close_window") {
     return ElectronCloseWindow{.window = *window};
+  } else if (*type == "ipc_send") {
+    return ParseSendToPage(*request, *window);
   } else {
     CHECK_EQ(*type, "destroy_window");
     return ElectronDestroyWindow{.window = *window};
@@ -179,6 +238,21 @@ std::string ElectronTitleChanged(ElectronWindow window,
 
 std::string ElectronWindowClosed(ElectronWindow window) {
   return Line(Event("window_closed", window));
+}
+
+std::string ElectronIpcMessage(ElectronWindow window,
+                               std::string_view channel,
+                               const base::ListValue& args) {
+  return WithChannel(Event("ipc_message", window), channel, args);
+}
+
+std::string ElectronIpcInvoke(ElectronWindow window,
+                              int invoke,
+                              std::string_view channel,
+                              const base::ListValue& args) {
+  base::DictValue event = Event("ipc_invoke", window);
+  event.Set("invoke", invoke);
+  return WithChannel(std::move(event), channel, args);
 }
 
 }  // namespace domicile
