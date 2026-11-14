@@ -997,6 +997,16 @@ class WebViewGuest : public mojom::WebViewGuest,
   // changed. The renderer reads it from the widget's visual properties.
   void SetPageFullscreen(bool fullscreen);
 
+  // Checks that the page itself left fullscreen, kLeavesFullscreenWithin after
+  // the engine took it out. A page that stays in fills its window and looks
+  // stuck while the shell has shrunk the window back, and nothing else would
+  // say why. See FullscreenChecked.
+  void CheckLeftFullscreen();
+  // Reports a fault when `document`, still the page, holds a fullscreen
+  // element though the engine left fullscreen. A reply that is not a bool, as
+  // from a frame that could not run the read, says nothing.
+  void FullscreenChecked(content::WeakDocumentPtr document, base::Value held);
+
   // Opens a browser window at `target_url`, with no opener, for a middle click
   // or an extension. Never opens an empty window.
   void ReportNewWindow(const GURL& target_url);
@@ -1152,6 +1162,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Whether the page is fullscreen. Also what IsFullscreenForTabOrPending
   // answers, so the renderer's state and the element's never differ.
   bool page_fullscreen_ = false;
+  // Runs out kLeavesFullscreenWithin after the page leaves fullscreen. See
+  // CheckLeftFullscreen.
+  base::OneShotTimer left_fullscreen_check_;
   // Whether the page holds a screen wake lock. See ScreenWakeLockChanged.
   bool wake_lock_ = false;
 
