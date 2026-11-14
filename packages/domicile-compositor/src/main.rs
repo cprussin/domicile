@@ -462,6 +462,9 @@ struct DomicileCompositor {
     /// again to an engine that reports its displays, since a new engine
     /// starts neutral.
     gamma: gamma::Ramps<ZwlrGammaControlV1>,
+    /// The `wp_color_management_output_v1`s clients hold, told when their
+    /// display goes into or out of HDR.
+    display_colors: color_management::DisplayColors,
     /// Frame callbacks of the windows the page hides. See
     /// [`crate::held_frames`].
     held_frames: HeldFrames<WlCallback>,
@@ -1380,6 +1383,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         app_bounds: HashMap::new(),
         app_zoom: HashMap::new(),
         gamma: gamma::Ramps::default(),
+        display_colors: color_management::DisplayColors::default(),
         held_frames: HeldFrames::new(),
         suspended: HashSet::new(),
         presentations: Presentations::new(),

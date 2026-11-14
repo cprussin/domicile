@@ -9,9 +9,9 @@ the detail, when there is one. Remove a gap when it's fixed.
   which you start yourself: [X11 apps](/docs/use/COMPATIBILITY.md#x11-apps).
   Electron, SDL and Qt apps are started in Wayland mode (`client_command` in
   `spawning.rs`).
-- **Output is SDR,** and every display tells clients it is sRGB with gamma 2.2,
-  whatever its panel.
-  [COLOR.md](/docs/architecture/COLOR.md#plan).
+- **A display in SDR tells clients it is sRGB with gamma 2.2,** whatever its
+  panel's gamut, because that is how the engine draws it.
+  [COLOR.md](/docs/architecture/COLOR.md).
 - **Games can't confine the pointer to their window yet.** A lock works:
   manganese locks the pointer for the focused window under it. A confinement
   is offered to the shell (`pointerConstraint: "confine"`), but no shell takes

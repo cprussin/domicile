@@ -13,6 +13,7 @@ use wayland_client::protocol::{wl_compositor, wl_output, wl_registry, wl_surface
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, WEnum};
 use wayland_protocols::wp::color_management::v1::client::{
     wp_color_management_output_v1::WpColorManagementOutputV1,
+    wp_color_management_surface_feedback_v1::{self, WpColorManagementSurfaceFeedbackV1},
     wp_color_management_surface_v1::WpColorManagementSurfaceV1,
     wp_color_manager_v1::{self, Feature, Primaries, TransferFunction, WpColorManagerV1},
     wp_image_description_creator_params_v1::WpImageDescriptionCreatorParamsV1,
@@ -42,6 +43,7 @@ struct Client {
     named_primaries: Option<Primaries>,
     luminances: Option<(u32, u32, u32)>,
     informed: bool,
+    preferred_changed: bool,
 }
 
 fn connect(compositor: &Compositor) -> (EventQueue<Client>, Client) {
@@ -180,6 +182,46 @@ fn a_display_describes_itself_as_srgb_with_gamma_2_2() {
     assert_eq!(client.luminances, Some((2000, 80, 80)));
 }
 
+#[test]
+fn a_surface_prefers_one_description_until_its_display_changes() {
+    let compositor = Compositor::started_with(A_DISPLAY);
+    let (mut queue, mut client) = connect(&compositor);
+    let handle = queue.handle();
+    let manager = client.manager.clone().expect("bound");
+    let surface = client
+        .compositor
+        .as_ref()
+        .expect("a wl_compositor")
+        .create_surface(&handle, ());
+
+    let feedback = manager.get_surface_feedback(&surface, &handle, ());
+    let first = feedback.get_preferred_parametric(&handle, ());
+    let second = feedback.get_preferred(&handle, ());
+    queue
+        .roundtrip(&mut client)
+        .unwrap_or_else(|error| panic!("{error}: {}", compositor.complaint()));
+    assert_eq!(client.ready.len(), 2, "{}", compositor.complaint());
+    assert_eq!(
+        client.ready[0], client.ready[1],
+        "one description is one identity, so a client can tell it has not changed"
+    );
+
+    let _info = first.get_information(&handle, ());
+    queue
+        .roundtrip(&mut client)
+        .unwrap_or_else(|error| panic!("{error}: {}", compositor.complaint()));
+    queue
+        .roundtrip(&mut client)
+        .expect("the information arrived");
+    assert_eq!(
+        client.named_tf,
+        Some(TransferFunction::Gamma22),
+        "an SDR display"
+    );
+    assert!(!client.preferred_changed, "nothing changed");
+    drop(second);
+}
+
 impl Dispatch<wl_registry::WlRegistry, ()> for Client {
     fn event(
         client: &mut Self,
@@ -270,6 +312,21 @@ impl Dispatch<WpImageDescriptionInfoV1, ()> for Client {
             } => client.luminances = Some((min_lum, max_lum, reference_lum)),
             wp_image_description_info_v1::Event::Done => client.informed = true,
             _ => {}
+        }
+    }
+}
+
+impl Dispatch<WpColorManagementSurfaceFeedbackV1, ()> for Client {
+    fn event(
+        client: &mut Self,
+        _: &WpColorManagementSurfaceFeedbackV1,
+        event: wp_color_management_surface_feedback_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wp_color_management_surface_feedback_v1::Event::PreferredChanged { .. } = event {
+            client.preferred_changed = true;
         }
     }
 }

@@ -837,6 +837,23 @@ impl Screens {
         self.holding_most_of(bounds).map(Advertised::bounds)
     }
 
+    /// Whether the display holding the most of a window in `bounds` is
+    /// driven in HDR. A window on no display is in SDR.
+    pub fn hdr_for(&self, bounds: Option<Bounds>) -> Hdr {
+        bounds
+            .and_then(|bounds| self.holding_most_of(bounds))
+            .map_or_else(Hdr::default, |output| output.hdr)
+    }
+
+    /// Whether the display named `name` is driven in HDR. One there is no
+    /// longer is in SDR.
+    pub fn hdr_of(&self, name: &str) -> Hdr {
+        self.outputs
+            .iter()
+            .find(|output| output.name == name)
+            .map_or_else(Hdr::default, |output| output.hdr)
+    }
+
     /// The display holding the most of `bounds`, as sway picks it.
     fn holding_most_of(&self, bounds: Bounds) -> Option<&Advertised> {
         self.outputs
@@ -2072,6 +2089,18 @@ mod tests {
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(after.outputs().next().map(|output| output.hdr), Some(on));
+        let lit_output = after.outputs().next().expect("one display");
+        assert_eq!(after.hdr_of(&lit_output.name), on);
+        assert_eq!(
+            after.hdr_for(Some(lit_output.bounds())),
+            on,
+            "a window on it is in HDR"
+        );
+        assert_eq!(
+            after.hdr_for(None),
+            Hdr::default(),
+            "a window on no display yet is in SDR"
+        );
         assert_ne!(
             asked.outputs().next().map(|output| output.hdr),
             Some(on),
