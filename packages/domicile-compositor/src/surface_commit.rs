@@ -123,12 +123,25 @@ pub struct LastBuffer {
     mapping: Mapping,
 }
 
+impl LastBuffer {
+    /// The surface's logical size while it shows this buffer.
+    pub fn logical_size(&self) -> (f64, f64) {
+        let (width, height) = surface_size(
+            upright_size(self.size, self.mapping.buffer_transform),
+            self.mapping.buffer_scale,
+            self.mapping.viewport.size,
+        );
+        (f64::from(width), f64::from(height))
+    }
+}
+
 /// The role a surface committed in, for the steps of a commit that differ.
 #[derive(Clone)]
 pub enum Role {
     Toplevel(ToplevelSurface),
     Popup(PopupSurface),
-    Bubble,
+    /// See `crate::subsurfaces`.
+    Subsurface,
     /// An input method's candidate list. See `text_input.rs`.
     Candidates,
 }
@@ -174,20 +187,11 @@ impl CompositorHandler for DomicileCompositor {
         self.tell_the_held_moves(surface);
     }
 
-    /// A destroyed bubble or candidate list goes at once: no commit will come
-    /// to notice it.
+    /// A destroyed subsurface or candidate list goes at once: no commit will
+    /// come to notice it.
     fn destroyed(&mut self, surface: &WlSurface) {
         self.candidates_destroyed(surface);
-        if let Some(at) = self
-            .bubbles
-            .iter()
-            .position(|bubble| bubble.surface == *surface)
-        {
-            let bubble = self.bubbles.remove(at);
-            self.by_surface.remove(&bubble.surface);
-            debug!(app_id = %bubble.app_id, "bubble destroyed -> Host::app_closed");
-            self.forget(&bubble.app_id);
-        }
+        self.subsurface_destroyed(surface);
     }
 }
 
@@ -196,7 +200,7 @@ impl DomicileCompositor {
     fn apply_the_commit(&mut self, surface: &WlSurface) {
         self.announce_a_new_popup(surface);
         self.place_a_repositioned_popup(surface);
-        self.place_the_bubbles(surface);
+        let children_changed = self.place_the_subsurfaces(surface);
         self.place_the_candidates(surface);
         let Some((committer, role)) = self.committer(surface) else {
             return;
@@ -302,6 +306,8 @@ impl DomicileCompositor {
                 .map(|last| last.size),
             _ => None,
         };
+        // Whether this commit puts up a frame of its own.
+        let draws = attached.is_some() || remaps.is_some();
         // The buffer's size in pixels, if this commit shows one.
         let buffer_size = match &attached {
             Some(buffer) => committed_buffer(buffer).map(|committed| committed.size()),
@@ -516,6 +522,7 @@ impl DomicileCompositor {
         });
         let shown = shown.or(remapped);
         self.answer_when_shown(shown, callbacks, feedback);
+        self.show_the_subsurfaces(surface, children_changed, draws);
     }
 }
 
@@ -556,7 +563,7 @@ impl DomicileCompositor {
                 box_size: None,
             },
             // Sized by its own buffer.
-            Role::Bubble | Role::Candidates => Answered {
+            Role::Subsurface | Role::Candidates => Answered {
                 configured: None,
                 at_box: NEWEST_BOX,
                 box_size: None,

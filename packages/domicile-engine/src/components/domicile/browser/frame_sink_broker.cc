@@ -179,6 +179,18 @@ void FrameSinkBroker::DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) {
   EraseFrameSink(iter, mojom::FrameSinkEnd::kClosed);
 }
 
+void FrameSinkBroker::EmbedFrameSink(const viz::FrameSinkId& child,
+                                     const viz::FrameSinkId& parent,
+                                     const viz::LocalSurfaceId& local_surface_id,
+                                     const gfx::Size& size,
+                                     double scale) {
+  BrokeredFrameSink* embedded = OwnedFrameSink(child);
+  if (!embedded || !OwnedFrameSink(parent)) {
+    return;
+  }
+  embedded->Embed(parent, local_surface_id, size, scale);
+}
+
 void FrameSinkBroker::WaitForEnd(const viz::FrameSinkId& frame_sink_id,
                                  EndCallback callback) {
   if (!frame_sink_map_.contains(frame_sink_id)) {
