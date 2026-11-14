@@ -76,6 +76,7 @@ pub mod site_permissions;
 pub mod software_compositing;
 pub mod spawn;
 pub mod splash;
+pub mod subscription;
 pub mod supervise;
 pub mod uninstall_app;
 pub mod web_address;

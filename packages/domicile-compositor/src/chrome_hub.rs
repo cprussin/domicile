@@ -16,7 +16,7 @@ use domicile_host::shell_commands::ShellCommands;
 use domicile_host::unlock_refusals::UnlockRefusals;
 use domicile_host::window_requests::WindowRequests;
 use domicile_host::Host;
-use domicile_protocol::{ChromeMessage, HostMessage, Theme};
+use domicile_protocol::{ChromeMessage, HostMessage, Theme, WatchTopic};
 use smithay::reexports::calloop::channel::Sender;
 
 use crate::client_requests::ClientRequest;
@@ -27,6 +27,7 @@ use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::portals::Portals;
 use crate::theme_turnover::chrome_key;
 use crate::virtual_monitors::VirtualMonitors;
+use crate::watchers::Watchers;
 use crate::{eis, notifications, tray};
 
 /// One connected chrome: where to write to it.
@@ -110,6 +111,9 @@ pub struct ChromeHub {
     /// connection's `System`. The Wayland thread lists them; see
     /// [`crate::DomicileCompositor::switch_the_keymap`].
     pub keymaps: Keymaps,
+    /// The connections `domicile subscribe` holds. The writer thread tells
+    /// them; see [`serve_outbound`].
+    pub watchers: Watchers,
 }
 
 impl ChromeHub {
@@ -150,6 +154,7 @@ impl ChromeHub {
             bells: Bells::default(),
             virtual_monitors: VirtualMonitors::default(),
             keymaps: Keymaps::default(),
+            watchers: Watchers::default(),
         });
         (hub, outbound_rx)
     }
@@ -212,6 +217,25 @@ impl ChromeHub {
             if Arc::ptr_eq(&chrome.writer, writer) {
                 chrome.syncs_frames = syncs;
             }
+        }
+    }
+
+    /// How the desktop is, answering `which_status`.
+    pub fn status(&self) -> HostMessage {
+        self.host.lock().unwrap().status(
+            self.the_desk_is_locked(),
+            self.keymaps.listed().map(|listed| listed.active),
+            self.idle_holds.holders(),
+        )
+    }
+
+    /// The answer to a [`WatchTopic`], as its `which_*` gets it.
+    pub fn watched(&self, topic: WatchTopic) -> HostMessage {
+        match topic {
+            WatchTopic::Windows => self.host.lock().unwrap().list_windows(),
+            WatchTopic::Displays => self.host.lock().unwrap().list_displays(),
+            WatchTopic::Inputs => self.host.lock().unwrap().list_inputs(),
+            WatchTopic::Status => self.status(),
         }
     }
 
@@ -291,8 +315,12 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
     // Wake on a timeout too: compositing sends nothing outbound, so the report
     // would otherwise never run.
     while let Some(next) = outbound.recv_until(REPORT_EVERY) {
+        // Asked after everything the writer handles, since nothing says when
+        // a watched list changed, and on the timeout too, for what changes
+        // with no message at all, like what holds the screens on.
         let Some(item) = next else {
             report(&mut window, &hub);
+            hub.watchers.tell(|topic| hub.watched(topic));
             continue;
         };
         let message = match item {
@@ -303,6 +331,10 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
             }
             Outbound::Bell(app_id) => {
                 hub.bells.send(&app_id);
+                continue;
+            }
+            Outbound::Watched => {
+                hub.watchers.tell(|topic| hub.watched(topic));
                 continue;
             }
         };
@@ -317,6 +349,7 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 .is_ok()
         });
         drop(chromes);
+        hub.watchers.tell(|topic| hub.watched(topic));
 
         report(&mut window, &hub);
     }

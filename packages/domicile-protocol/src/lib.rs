@@ -418,6 +418,13 @@ pub enum ChromeMessage {
     /// by `domicile list-inputs`.
     WhichInputs,
 
+    /// Hear about `topics` on this connection until it closes: each topic's
+    /// answer at once ([`HostMessage::WindowList`], [`HostMessage::DisplayList`],
+    /// [`HostMessage::InputList`], [`HostMessage::Status`]), then again
+    /// whenever it changes. Sent by `domicile subscribe`, whose connection
+    /// never says `hello`.
+    Watch { topics: Vec<WatchTopic> },
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -2853,6 +2860,20 @@ pub struct ListedWindow {
     pub url: Option<String>,
     /// A browser window in the off-the-record profile.
     pub private: bool,
+}
+
+/// What a [`ChromeMessage::Watch`] hears about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WatchTopic {
+    /// [`HostMessage::WindowList`].
+    Windows,
+    /// [`HostMessage::DisplayList`].
+    Displays,
+    /// [`HostMessage::InputList`].
+    Inputs,
+    /// [`HostMessage::Status`].
+    Status,
 }
 
 /// An input device as `domicile list-inputs` prints it. See

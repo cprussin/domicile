@@ -1114,6 +1114,7 @@ impl Host {
             | ChromeMessage::WhichShellCommands
             | ChromeMessage::WhichShellBindings
             | ChromeMessage::WhichInputs
+            | ChromeMessage::Watch { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

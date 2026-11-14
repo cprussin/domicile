@@ -159,6 +159,7 @@ mod unlock_backoff;
 mod uploads;
 mod viewport;
 mod virtual_monitors;
+mod watchers;
 mod which_engine;
 mod window_geometry;
 mod windows;

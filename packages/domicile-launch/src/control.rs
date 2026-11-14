@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DesktopStatus, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding,
-    ShellCommandHelp, Theme,
+    DesktopStatus, HostMessage, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale,
+    ShellBinding, ShellCommandHelp, Theme, WatchTopic,
 };
 use serde::{Deserialize, Serialize};
 
@@ -167,6 +167,10 @@ pub enum Request {
         #[serde(default)]
         scale: Scale,
     },
+    /// Hear about `topics` for as long as the connection is open: each
+    /// topic's answer at once, then again whenever it changes, each as a
+    /// [`Response::Heard`]. See `domicile subscribe`.
+    Subscribe { topics: Vec<WatchTopic> },
     /// Resize the monitor this connection holds. Not answered.
     ResizeVirtualMonitor {
         width: u32,
@@ -329,6 +333,10 @@ pub enum Response {
 
     /// The compositor turned the monitors off or on.
     Powered,
+
+    /// What a [`Request::Subscribe`] heard: the compositor's answer for one
+    /// of its topics, such as a `window_list`.
+    Heard { message: HostMessage },
 
     /// The compositor added the virtual monitor, on this output.
     VirtualMonitor { output: String },
@@ -591,6 +599,15 @@ pub struct Lent {
     pub client: std::os::unix::net::UnixStream,
 }
 
+/// A [`Request::Subscribe`] and the connection it came on, which
+/// [`crate::control_socket::serve_one`] lends to
+/// [`crate::subscription::follow`].
+pub struct Subscription {
+    pub topics: Vec<WatchTopic>,
+    /// Where the client hears back. Its end is the subscription's.
+    pub client: std::os::unix::net::UnixStream,
+}
+
 /// How a screenshot the compositor took ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shot {
@@ -783,6 +800,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         Ok(Request::VirtualMonitor { .. }) => to_line(&Response::Refused {
             why: "a virtual monitor lasts as long as its connection, which this \
                   desktop was not lent"
+                .to_string(),
+        }),
+        // Lent the connection by `serve_one` too.
+        Ok(Request::Subscribe { .. }) => to_line(&Response::Refused {
+            why: "a subscription lasts as long as its connection, which this desktop \
+                  was not lent"
                 .to_string(),
         }),
         Ok(Request::ResizeVirtualMonitor { .. }) => to_line(&Response::Refused {

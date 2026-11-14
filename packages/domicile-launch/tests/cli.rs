@@ -7,7 +7,7 @@ use domicile_launch::cli::{
 };
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
-use domicile_protocol::Scale;
+use domicile_protocol::{Scale, WatchTopic};
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -585,6 +585,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "list-shell-commands",
         "list-bindings",
         "list-inputs",
+        "subscribe",
         "help",
     ] {
         assert!(
@@ -837,6 +838,33 @@ fn monitor_takes_nothing_after_its_scale() {
         Err(CliError::Extra {
             verb: "monitor Pane 1280x720 2".to_string(),
             extra: "again".to_string()
+        })
+    );
+}
+
+#[test]
+fn subscribe_takes_topics_or_hears_every_one() {
+    assert_eq!(
+        run(&["subscribe", "windows", "status", "windows"]),
+        Ok(Invocation::Subscribe {
+            topics: vec![WatchTopic::Windows, WatchTopic::Status]
+        })
+    );
+    assert_eq!(
+        run(&["subscribe"]),
+        Ok(Invocation::Subscribe {
+            topics: vec![
+                WatchTopic::Windows,
+                WatchTopic::Displays,
+                WatchTopic::Inputs,
+                WatchTopic::Status,
+            ]
+        })
+    );
+    assert_eq!(
+        run(&["subscribe", "workspaces"]),
+        Err(CliError::NotATopic {
+            said: "workspaces".to_string()
         })
     );
 }

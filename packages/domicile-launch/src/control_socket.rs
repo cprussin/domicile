@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::cli::MonitorMode;
-use crate::control::{parse_response, to_line, Lent, Request, Response};
+use crate::control::{parse_response, to_line, Lent, Request, Response, Subscription};
 
 /// How long either end waits for the other.
 ///
@@ -134,32 +134,51 @@ pub fn answer_one(
 }
 
 /// [`answer_one`], lending the connection of a [`Request::VirtualMonitor`]
-/// to `lend`, which holds it as long as the client keeps it open.
+/// to `lend`, and of a [`Request::Subscribe`] to `subscribe`, which hold it
+/// as long as the client keeps it open.
 ///
-/// `lend` is [`crate::monitor_lending::lend`] in a desktop.
+/// `lend` is [`crate::monitor_lending::lend`] and `subscribe`
+/// [`crate::subscription::follow`] in a desktop.
 pub fn serve_one(
     stream: UnixStream,
     patience: Duration,
     answer: &dyn Fn(&str) -> String,
     lend: &dyn Fn(Lent),
+    subscribe: &dyn Fn(Subscription),
 ) -> std::io::Result<()> {
-    serve(stream, patience, answer, Some(lend))
+    serve(stream, patience, answer, Some((lend, subscribe)))
 }
 
-/// [`serve_one`]; with no `lend`, `answer` refuses a monitor.
+/// The lenders [`serve_one`] takes.
+type Lenders<'a> = (&'a dyn Fn(Lent), &'a dyn Fn(Subscription));
+
+/// [`serve_one`]; with no lenders, `answer` refuses a monitor and a
+/// subscription.
 fn serve(
     stream: UnixStream,
     patience: Duration,
     answer: &dyn Fn(&str) -> String,
-    lend: Option<&dyn Fn(Lent)>,
+    lenders: Option<Lenders>,
 ) -> std::io::Result<()> {
     stream.set_read_timeout(Some(patience))?;
     stream.set_write_timeout(Some(patience))?;
     let mut asking = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
     asking.read_line(&mut line)?;
+    if let (Some((_, subscribe)), Ok(Request::Subscribe { topics })) =
+        (lenders, serde_json::from_str(line.trim()))
+    {
+        // The client listens for as long as it likes.
+        stream.set_read_timeout(None)?;
+        stream.set_write_timeout(None)?;
+        subscribe(Subscription {
+            topics,
+            client: stream,
+        });
+        return Ok(());
+    }
     if let (
-        Some(lend),
+        Some((lend, _)),
         Ok(Request::VirtualMonitor {
             name,
             width,
@@ -167,7 +186,7 @@ fn serve(
             refresh_mhz,
             scale,
         }),
-    ) = (lend, serde_json::from_str(line.trim()))
+    ) = (lenders, serde_json::from_str(line.trim()))
     {
         // The client resizes it whenever it likes.
         stream.set_read_timeout(None)?;
@@ -235,15 +254,34 @@ pub fn hold(
     exchanged(path, request, patience, false)
 }
 
-/// Sends `request` and reads the response. `finished` half-closes the
-/// connection after the request, so the desktop sees its end.
-fn exchanged(
+/// Sends `request`, as for a [`Request::Subscribe`], and hands `heard` each
+/// response until it returns false or the desktop hangs up. Waits as long as
+/// the desktop says nothing.
+pub fn listen(
     path: &Path,
     request: &Request,
-    patience: Option<Duration>,
-    finished: bool,
-) -> Result<(Response, UnixStream), AskError> {
-    let mut stream = UnixStream::connect(path).map_err(|why| match why.kind() {
+    mut heard: impl FnMut(Response) -> bool,
+) -> Result<(), AskError> {
+    let mut stream = connected(path)?;
+    stream
+        .write_all(to_line(request).as_bytes())
+        .map_err(|why| unreachable_desktop(path, &why))?;
+    for line in BufReader::new(&stream).lines() {
+        let line = line.map_err(|why| unreachable_desktop(path, &why))?;
+        let response = parse_response(line.trim()).map_err(|_| AskError::Unreadable {
+            path: path.display().to_string(),
+            said: line.clone(),
+        })?;
+        if !heard(response) {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// A connection to the desktop at `path`.
+fn connected(path: &Path) -> Result<UnixStream, AskError> {
+    UnixStream::connect(path).map_err(|why| match why.kind() {
         // A missing socket, or a stale one left by a dead desktop.
         std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused => {
             AskError::NoDesktop {
@@ -254,7 +292,18 @@ fn exchanged(
             kind,
             path: path.display().to_string(),
         },
-    })?;
+    })
+}
+
+/// Sends `request` and reads the response. `finished` half-closes the
+/// connection after the request, so the desktop sees its end.
+fn exchanged(
+    path: &Path,
+    request: &Request,
+    patience: Option<Duration>,
+    finished: bool,
+) -> Result<(Response, UnixStream), AskError> {
+    let mut stream = connected(path)?;
     stream
         .set_read_timeout(patience)
         .map_err(|why| unreachable_desktop(path, &why))?;

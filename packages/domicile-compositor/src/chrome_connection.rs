@@ -160,6 +160,7 @@ fn chrome_connection(
         .lock()
         .unwrap()
         .retain(|held| !Arc::ptr_eq(&held.writer, &writer));
+    hub.watchers.forget(&writer);
     debug!("chrome client disconnected");
 }
 
@@ -463,6 +464,14 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::WhichInputs) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichInputs)
+            }
+            // For `domicile subscribe`. Not checked against the lock: each
+            // topic is one a `which_*` answers while locked. The writer thread
+            // sends the answers, so this thread never waits on them.
+            Ok(ChromeMessage::Watch { topics }) => {
+                hub.watchers.watch(writer.clone(), &topics);
+                hub.outbound.watched();
+                Vec::new()
             }
             // The Wayland thread runs the theme turnover and its deadline
             // timer.
@@ -895,11 +904,7 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
         ConnectionRequest::WhichDisplays => vec![hub.host.lock().unwrap().list_displays()],
         ConnectionRequest::WhichWindows => vec![hub.host.lock().unwrap().list_windows()],
         // For `domicile status`, which works while locked to say so.
-        ConnectionRequest::WhichStatus => vec![hub.host.lock().unwrap().status(
-            hub.the_desk_is_locked(),
-            hub.keymaps.listed().map(|listed| listed.active),
-            hub.idle_holds.holders(),
-        )],
+        ConnectionRequest::WhichStatus => vec![hub.status()],
         // For `domicile list-shell-commands`: what `send-shell` takes.
         ConnectionRequest::WhichShellCommands => vec![HostMessage::ShellCommandList {
             commands: hub.shell_commands.described(),

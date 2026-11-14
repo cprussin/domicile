@@ -253,6 +253,8 @@ impl DomicileCompositor {
                 }
                 engine::Event::InputDevices(inputs) => {
                     self.hub.host.lock().unwrap().input_devices(inputs);
+                    // Not told to the chromes, so the watchers would not hear.
+                    self.hub.outbound.watched();
                 }
                 engine::Event::GammaSizes(sizes) => self.gamma_sizes_reported(sizes),
                 // Acted on at the next hello, which is the new engine's.

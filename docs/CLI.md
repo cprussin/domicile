@@ -219,6 +219,25 @@ ID  KIND         CONNECTION  VENDOR:PRODUCT  NAME
 `connection`, `sys_path` (its device under `/sys`, or empty), `vendor` and
 `product` per device.
 
+## `domicile subscribe [windows|displays|inputs|status]...`
+
+Print what `list-windows --json`, `list-displays --json`, `list-inputs --json`
+and `status --json` would, as one JSON line each, then a topic's line again
+whenever its answer changes, until stopped. With no topic, every one.
+
+```
+$ domicile subscribe windows | jq -c '.windows | map(.title)'
+["notes.org"]
+["notes.org","Inbox"]
+```
+
+Each line is the compositor's message, its `type` saying which topic it
+answers: `window_list` (with `windows`), `display_list` (`displays`),
+`input_list` (`inputs`) or `status` (the fields of `status --json`'s
+`status`). A line is sent only when it differs from the last for its topic.
+Most changes arrive at once; what holds the screens on or captures the
+desktop may take up to five seconds. It ends when the desktop does.
+
 ## `domicile status [--json]`
 
 Print how the desktop is: the shell it serves, theme, keymap, whether it is
@@ -281,7 +300,7 @@ that `send-shell --help` prints the shell's own commands.
 `screenshot`, `screen-record` and `send-shell` are refused while the desktop
 is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `list-displays`, `list-windows`, `list-inputs`, `status`,
-`list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.
+`subscribe`, `list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

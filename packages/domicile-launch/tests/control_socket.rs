@@ -9,9 +9,10 @@ use std::time::Duration;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::control::{Request, Response};
 use domicile_launch::control_socket::{
-    address, advertised, answer_one, ask, hold, serve_one, take, AskError, NotInADesktop, TakeError,
+    address, advertised, answer_one, ask, hold, listen, serve_one, take, AskError, NotInADesktop,
+    TakeError,
 };
-use domicile_protocol::Scale;
+use domicile_protocol::{HostMessage, Scale, Theme, WatchTopic};
 
 /// Read timeout: long enough not to flake under load, short enough to keep the
 /// suite fast.
@@ -390,6 +391,7 @@ fn a_virtual_monitor_is_lent_the_connection_it_came_on() {
             assert!(next.contains("resize_virtual_monitor"), "{next}");
             lent.client.write_all(b"lent\n").expect("the client hears");
         },
+        &|_| unreachable!("a monitor is not a subscription"),
     )
     .expect("the desktop lent it");
 
@@ -437,4 +439,92 @@ fn a_held_request_keeps_its_connection_after_the_answer() {
         }
     );
     assert_eq!(desktop.join().expect("the desktop read on"), "more");
+}
+
+#[test]
+fn a_subscription_is_lent_the_connection_it_came_on() {
+    let (_scratch, path) = scratch();
+    let control = take(&path).expect("nothing was there");
+    let listener = control.listener().expect("the run's own listener");
+    let mut client = UnixStream::connect(&path).expect("a client");
+    client
+        .write_all(b"{\"type\":\"subscribe\",\"topics\":[\"windows\",\"status\"]}\n")
+        .expect("it asked");
+    let (stream, _) = listener.accept().expect("the desktop took the connection");
+
+    serve_one(
+        stream,
+        BRIEFLY,
+        &|_| unreachable!("a subscription is lent, not answered"),
+        &|_| unreachable!("a subscription is not a monitor"),
+        &|mut subscription| {
+            assert_eq!(
+                subscription.topics,
+                vec![WatchTopic::Windows, WatchTopic::Status]
+            );
+            subscription
+                .client
+                .write_all(b"lent\n")
+                .expect("the client hears");
+        },
+    )
+    .expect("the desktop lent it");
+
+    let mut heard = String::new();
+    BufReader::new(client)
+        .read_line(&mut heard)
+        .expect("the client heard back");
+    assert_eq!(heard, "lent\n");
+}
+
+#[test]
+fn a_listener_hears_each_response_until_it_stops() {
+    let (_scratch, path) = scratch();
+    let control = take(&path).expect("nothing was there");
+    let listener = control.listener().expect("the run's own listener");
+    let desktop = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("the client connected");
+        let mut lines = BufReader::new(stream.try_clone().expect("readable")).lines();
+        let asked = lines.next().expect("a request").expect("a line");
+        let mut answering = stream;
+        answering
+            .write_all(
+                b"{\"type\":\"heard\",\"message\":{\"type\":\"theme\",\"theme\":\"dark\"}}\n\
+                  {\"type\":\"heard\",\"message\":{\"type\":\"theme\",\"theme\":\"light\"}}\n\
+                  {\"type\":\"heard\",\"message\":{\"type\":\"theme\",\"theme\":\"dark\"}}\n",
+            )
+            .expect("the desktop answered");
+        asked
+    });
+
+    let mut heard = Vec::new();
+    listen(
+        &path,
+        &Request::Subscribe {
+            topics: vec![WatchTopic::Status],
+        },
+        |response| {
+            heard.push(response);
+            heard.len() < 2
+        },
+    )
+    .expect("the desktop answered");
+
+    assert!(desktop
+        .join()
+        .expect("the desktop ran")
+        .contains("subscribe"));
+    assert_eq!(
+        heard,
+        vec![
+            Response::Heard {
+                message: HostMessage::Theme { theme: Theme::Dark }
+            },
+            Response::Heard {
+                message: HostMessage::Theme {
+                    theme: Theme::Light
+                }
+            },
+        ]
+    );
 }

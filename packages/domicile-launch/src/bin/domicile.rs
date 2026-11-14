@@ -42,7 +42,8 @@ use domicile_launch::control::{
     answer, Desktop as ControlDesktop, Request, Response, SettingsFiles,
 };
 use domicile_launch::control_socket::{
-    address, advertised, ask, hold, serve_one, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
+    address, advertised, ask, hold, listen, serve_one, take, Control, PATIENCE as ANSWER_WITHIN,
+    VARIABLE,
 };
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
@@ -74,9 +75,10 @@ use domicile_launch::spawn::{
     the_engine_takes_input, Runtime,
 };
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
+use domicile_launch::subscription::follow;
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
-use domicile_protocol::Theme;
+use domicile_protocol::{Theme, WatchTopic};
 
 /// How long each startup milestone may take. A debug build on a loaded
 /// machine takes seconds.
@@ -159,6 +161,7 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Power { power } => powered(power),
         Invocation::Monitor { name, mode } => monitored(name, mode),
         Invocation::List { listing, json } => listed(listing, json),
+        Invocation::Subscribe { topics } => subscribed(topics),
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -559,6 +562,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         }
         // Only `domicile monitor` asks for this, and holds the connection.
         Response::VirtualMonitor { .. }
+        // `subscribed` asks for these.
+        | Response::Heard { .. }
         // Only `domicile-app-host` asks for these.
         | Response::SettingsFiles { .. }
         | Response::SitePermissions(_)
@@ -672,6 +677,44 @@ fn monitored(name: String, mode: MonitorMode) -> Result<ExitCode, String> {
     forward_sizes(std::io::stdin().lock(), &held, std::io::stderr())
         .map_err(|why| format!("the monitor's sizes did not reach the desktop: {why}"))?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// Prints what the running desktop says about `topics`, one JSON line each,
+/// until it stops or stdout closes.
+fn subscribed(topics: Vec<WatchTopic>) -> Result<ExitCode, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let mut code = ExitCode::SUCCESS;
+    let mut stdout = std::io::stdout().lock();
+    listen(
+        &socket,
+        &Request::Subscribe { topics },
+        |response| match response {
+            Response::Heard { message } => {
+                // Flushed per line, for a pipe reading as it goes. A closed
+                // stdout, as from `| head`, ends it.
+                writeln!(
+                    stdout,
+                    "{}",
+                    serde_json::to_string(&message).expect("a message serializes")
+                )
+                .and_then(|()| stdout.flush())
+                .is_ok()
+            }
+            Response::Refused { why } => {
+                eprintln!("domicile: {why}");
+                code = ExitCode::FAILURE;
+                false
+            }
+            answer => {
+                eprintln!("domicile: the desktop answered {answer:?} to a subscription");
+                code = ExitCode::FAILURE;
+                false
+            }
+        },
+    )
+    .map_err(|why| why.to_string())?;
+    Ok(code)
 }
 
 /// Runs desktops on `shell`, restarting them while [`Policy`] allows.
@@ -1217,6 +1260,7 @@ fn answer_a_command(
     chrome: &Path,
 ) {
     let lending = |lent| lend(lent, chrome, ANSWER_WITHIN);
+    let following = |subscription| follow(subscription, chrome);
     if let Err(why) = serve_one(
         stream,
         ANSWER_WITHIN,
@@ -1345,6 +1389,7 @@ fn answer_a_command(
             )
         },
         &lending,
+        &following,
     ) {
         eprintln!("domicile: a command went unanswered: {why}");
     }

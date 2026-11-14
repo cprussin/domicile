@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use domicile_protocol::Scale;
+use domicile_protocol::{Scale, WatchTopic};
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
@@ -52,6 +52,9 @@ Ask the running desktop:
   domicile list-windows [--json]        Print each window, native and browser
   domicile list-inputs [--json]         Print each keyboard, pointer and touch
                                         device
+  domicile subscribe [windows|displays|inputs|status]...
+                                        Print each as a JSON line, then again
+                                        whenever it changes, until stopped
   domicile status [--json]              Print the shell, theme, keymap, lock,
                                         and what keeps the screens on or
                                         captures the desktop
@@ -178,6 +181,8 @@ pub enum CliError {
     NotASize { said: String },
     #[error("{said} is not a scale like 2 or 1.5.")]
     NotAScale { said: String },
+    #[error("{said} is not something to subscribe to: windows, displays, inputs or status.")]
+    NotATopic { said: String },
     #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
@@ -256,6 +261,9 @@ pub enum Invocation {
     Power { power: Power },
     /// Add a virtual monitor until stdin ends, resizing it to each size read.
     Monitor { name: String, mode: MonitorMode },
+    /// Print the desktop's answer for each of `topics`, every topic when
+    /// empty, as a JSON line, then again whenever one changes.
+    Subscribe { topics: Vec<WatchTopic> },
     /// Ask the running desktop for a listing and print it as a table, or
     /// with `json` as the JSON array it answered with.
     List { listing: Listing, json: bool },
@@ -460,6 +468,24 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 }),
                 (Some(extra), _) => Err(CliError::Extra { verb: first, extra }),
             },
+            Verb::Subscribing => {
+                let mut topics = Vec::new();
+                for said in args {
+                    let topic = topic(&said).ok_or(CliError::NotATopic { said })?;
+                    if !topics.contains(&topic) {
+                        topics.push(topic);
+                    }
+                }
+                if topics.is_empty() {
+                    topics = vec![
+                        WatchTopic::Windows,
+                        WatchTopic::Displays,
+                        WatchTopic::Inputs,
+                        WatchTopic::Status,
+                    ];
+                }
+                Ok(Invocation::Subscribe { topics })
+            }
             Verb::Checking => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NothingToCheck),
                 (Some(config), None) => Ok(Invocation::Check {
@@ -572,6 +598,8 @@ enum Verb {
     Powering(Power),
     /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
+    /// `subscribe`, which takes topics or nothing.
+    Subscribing,
     /// `sleep-displays` or `wake-displays`, which take a display or nothing.
     Sleeping(DisplayPower),
     /// `list-displays`, `list-windows` or `status`, which take `--json` or
@@ -601,12 +629,24 @@ fn verb(word: &str) -> Option<Verb> {
         "reboot" => Some(Verb::Powering(Power::Reboot)),
         "log-out" => Some(Verb::Powering(Power::LogOut)),
         "monitor" => Some(Verb::Monitoring),
+        "subscribe" => Some(Verb::Subscribing),
         "list-displays" => Some(Verb::Listing(Listing::Displays)),
         "list-windows" => Some(Verb::Listing(Listing::Windows)),
         "status" => Some(Verb::Listing(Listing::Status)),
         "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
+        _ => None,
+    }
+}
+
+/// The [`WatchTopic`] `word` names, if any.
+fn topic(word: &str) -> Option<WatchTopic> {
+    match word {
+        "windows" => Some(WatchTopic::Windows),
+        "displays" => Some(WatchTopic::Displays),
+        "inputs" => Some(WatchTopic::Inputs),
+        "status" => Some(WatchTopic::Status),
         _ => None,
     }
 }

@@ -16,7 +16,7 @@ use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     ChromeMessage, DesktopStatus, HostMessage, ListedDisplay, ListedInput, ListedWindow,
     MonitorInfo, ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind, SystemReply,
-    SystemRequest, Theme,
+    SystemRequest, Theme, WatchTopic,
 };
 
 use crate::cli::MonitorMode;
@@ -361,6 +361,22 @@ pub fn virtual_monitor(
         }
         reply => Err(not_done(socket, reply, said)),
     }
+}
+
+/// Asks the compositor at `socket` to tell `topics` over a new connection,
+/// at once and on every change, and returns that connection. Each line it
+/// carries is a [`HostMessage`]; it ends when the compositor does.
+pub fn watch(socket: &Path, topics: &[WatchTopic]) -> Result<UnixStream, CompositorError> {
+    let mut stream = connected(socket, None)?;
+    let mut line = serde_json::to_string(&ChromeMessage::Watch {
+        topics: topics.to_vec(),
+    })
+    .expect("a chrome message always serializes");
+    line.push('\n');
+    stream
+        .write_all(line.as_bytes())
+        .map_err(|why| unreachable(socket, &why))?;
+    Ok(stream)
 }
 
 /// The compositor's reply to a call, and the line it came in.
