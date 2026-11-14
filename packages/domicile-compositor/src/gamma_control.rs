@@ -18,6 +18,7 @@ use smithay::reexports::wayland_server::{
 use tracing::{debug, warn};
 
 use crate::clipboard::without_blocking;
+use crate::engine::HdrState;
 use crate::DomicileCompositor;
 
 /// Advertises the manager.
@@ -34,7 +35,8 @@ impl DomicileCompositor {
         }
     }
 
-    /// Sends engine display `display` its ramp, if it has gamma.
+    /// Sends engine display `display` its ramp, if it has gamma, and its color
+    /// matrix, which carries the night light in HDR.
     fn restate_the_gamma_of(&self, display: i64) {
         let Some(session) = self.engine.as_ref() else {
             return;
@@ -46,6 +48,22 @@ impl DomicileCompositor {
             .map(|advertised| advertised.name.as_str());
         if let Some(ramp) = self.gamma.ramp(display, output) {
             session.set_gamma(display, &ramp);
+        }
+        session.set_color_matrix(display, &self.gamma.matrix(display, output));
+    }
+
+    /// Takes which engine displays are driven in HDR. A client holding one
+    /// that went into it hears `failed`: its ramp assumes SDR.
+    pub fn gamma_hdr_reported(&mut self) {
+        let hdr = self
+            .engine_displays
+            .iter()
+            .filter(|display| display.hdr.state == HdrState::On)
+            .map(|display| display.id)
+            .collect();
+        for lost in self.gamma.set_hdr(hdr) {
+            debug!(control = ?lost.id(), "gamma control: its monitor went into HDR");
+            lost.failed();
         }
     }
 

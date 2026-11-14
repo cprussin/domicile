@@ -343,6 +343,9 @@ absent).
 - It reaches the compositor through `hdr_displays` (`DomicileHdrDisplay`):
   `unsupported`, `off` or `on`, the panel's luminances, and the SDR white in
   use. The request goes back through `domicile_displays_configure_hdr`.
+- The shell sees it as `Display.hdr` (`unsupported`, `off` or `on`),
+  `Display.peakLuminance` (cd/m², zero when the EDID reports none) and
+  `Display.sdrWhite` (cd/m² while on, zero otherwise).
 
 ## DisplayLink docks
 
@@ -398,5 +401,22 @@ zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicil
 - `DrmModeset` sets each monitor's ramp again after each modeset, so a VT
   switch or resume keeps it. The compositor sends every ramp again after each
   display report, which covers a hotplug and an engine restart.
+
+### In HDR
+
+A ramp scales the values the CRTC sends, and in HDR those are PQ-encoded, so
+a ramp there would bend the curve the panel decodes rather than warm the
+light. So a monitor driven in HDR:
+
+- keeps an identity ramp, and draws its night light through a color matrix
+  instead: `domicile_displays_set_color_matrix` → `FrameSinkBroker.SetColorMatrix`
+  → `ui::Compositor::SetDisplayColorMatrix` on the browser window showing it.
+  Viz applies it to the whole frame in linear light (patch `0217`). Each gain
+  is the ramp's raised to 2.2, so the night light looks the same in HDR as
+  in SDR.
+- refuses `wlr-gamma-control` clients with `failed`, since their ramps assume
+  SDR. A client holding a monitor when it goes into HDR is let go the same way.
+- Every other monitor draws through the identity matrix, so leaving HDR
+  undoes the night light's matrix.
 - A nested desktop does nothing: the host compositor owns the screen.
 - Sandboxed apps don't see the global.

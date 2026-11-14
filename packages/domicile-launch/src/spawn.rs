@@ -21,6 +21,10 @@ pub struct Spawn {
     pub env: Vec<(String, OsString)>,
 }
 
+/// The variable that names the engine's Electron socket to the apps a desktop
+/// starts.
+pub const ELECTRON_VARIABLE: &str = "DOMICILE_ELECTRON_SOCK";
+
 /// The socket and file paths for one run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Runtime {
@@ -35,6 +39,11 @@ pub struct Runtime {
     ///
     /// Lives in the run directory, since only the supervisor dials it.
     pub command: PathBuf,
+    /// The engine's Electron socket, which each `electron-host` dials for its
+    /// app's windows. Apps find it in [`ELECTRON_VARIABLE`].
+    ///
+    /// Lives in the run directory, as [`Runtime::command`] does.
+    pub electron: PathBuf,
     /// The control socket for `domicile which-shell` and
     /// `domicile load-shell`.
     ///
@@ -99,6 +108,9 @@ pub fn engine(
         // Lets `domicile load-shell` swap the shell without a restart. Passed
         // on every run, not only in development.
         format!("--domicile-command-socket={}", runtime.command.display()).into(),
+        // Lets Electron apps open their windows on the desk. See
+        // docs/architecture/ELECTRON-APPS.md.
+        format!("--domicile-electron-socket={}", runtime.electron.display()).into(),
         // Log ERROR and above to stderr. The fork reports problems at ERROR.
         // WARNING adds a dozen routine upstream lines on every nested start.
         // `--enable-logging` lets `--log-level=0` or `1`, or `--v=1`, in
@@ -196,6 +208,8 @@ pub fn let_the_engine_take_input(compositor: &mut Spawn) {
 /// The compositor starts apps, so its environment is what apps inherit:
 ///
 /// - `DOMICILE_SOCK`: `domicile` commands in a terminal reach this desktop.
+/// - `DOMICILE_ELECTRON_SOCK`: an Electron app's `electron-host` reaches the
+///   engine.
 /// - `BROWSER`: `domicile-open-url`, a single program because many readers
 ///   don't split the value.
 /// - `PATH`: [`Runtime::shims`] first, so `xdg-open` is `domicile open`.
@@ -261,6 +275,10 @@ pub fn compositor(
         args,
         env: vec![
             (VARIABLE.to_string(), runtime.control.clone().into()),
+            (
+                ELECTRON_VARIABLE.to_string(),
+                runtime.electron.clone().into(),
+            ),
             ("BROWSER".to_string(), browser.into()),
             ("PATH".to_string(), path),
             ("XDG_DATA_DIRS".to_string(), data_dirs),

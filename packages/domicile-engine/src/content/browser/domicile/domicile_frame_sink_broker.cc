@@ -47,6 +47,7 @@
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/display/screen.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "third_party/skia/include/core/SkM44.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel_server_endpoint.h"
@@ -398,6 +399,30 @@ void RedrawDisplay(int64_t display_id) {
   }
 }
 
+// Has viz draw display `display_id` through `matrix`, 3x3 and row-major, in
+// linear light (patch 0217), and redraws it so a still screen shows it. A
+// display no window shows has nothing to draw.
+void SetColorMatrix(int64_t display_id,
+                    const domicile::FrameSinkBroker::ColorMatrix& m) {
+  const std::optional<viz::FrameSinkId> target =
+      DisplayCaptureTarget(display_id);
+  if (!target) {
+    return;
+  }
+  // SkM44's sixteen-number constructor takes rows.
+  const SkM44 matrix(m[0], m[1], m[2], 0,  //
+                     m[3], m[4], m[5], 0,  //
+                     m[6], m[7], m[8], 0,  //
+                     0, 0, 0, 1);
+  for (aura::WindowTreeHost* host :
+       aura::Env::GetInstance()->window_tree_hosts()) {
+    if (host->compositor()->frame_sink_id() == *target) {
+      host->compositor()->SetDisplayColorMatrix(matrix);
+      host->compositor()->ScheduleFullRedraw();
+    }
+  }
+}
+
 // The browser's frame sink broker and the socket producers reach it over.
 //
 // The socket path is the only access control. A FrameSinkBroker pipe can
@@ -419,7 +444,8 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
                 base::BindRepeating(&SetGamma),
                 base::BindRepeating(&InjectInput),
                 base::BindRepeating(&SetInputConfig),
-                base::BindRepeating(&RedrawDisplay)),
+                base::BindRepeating(&RedrawDisplay),
+                base::BindRepeating(&SetColorMatrix)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

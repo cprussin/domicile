@@ -64,12 +64,15 @@ import { Shell } from "./Shell";
 // `screens/host-displays.ts`. Two landscape monitors side by side.
 const LEFT: DomicileDisplay = {
   adaptiveSync: "unsupported",
+  hdr: "unsupported",
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,
   name: "left",
+  peakLuminance: 0,
   refreshMhz: 60_000,
   scale: 1,
+  sdrWhite: 0,
   transform: "normal",
   width: 1920,
   x: 0,
@@ -78,12 +81,15 @@ const LEFT: DomicileDisplay = {
 
 const RIGHT: DomicileDisplay = {
   adaptiveSync: "unsupported",
+  hdr: "unsupported",
   height: 1024,
   modeHeight: 1024,
   modeWidth: 1280,
   name: "right",
+  peakLuminance: 0,
   refreshMhz: 60_000,
   scale: 1,
+  sdrWhite: 0,
   transform: "normal",
   width: 1280,
   x: 1920,

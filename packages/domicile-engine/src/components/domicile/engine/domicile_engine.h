@@ -946,6 +946,18 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_set_gamma(DomicileEngine* engine,
                                                         const uint16_t* ramp,
                                                         uint32_t size);
 
+// Sets the 3x3 color matrix, row-major, that display `display_id` is drawn
+// with, in linear light, for a night light on a display driven in HDR: a
+// gamma ramp there would bend the PQ curve the panel decodes. The identity
+// undoes it. `matrix` is nine finite numbers, copied before this returns.
+//
+// Unlike a gamma ramp, it works off a tty too: viz applies it, not the CRTC.
+// Ignored for a display no browser window shows.
+DOMICILE_ENGINE_EXPORT void domicile_displays_set_color_matrix(
+    DomicileEngine* engine,
+    int64_t display_id,
+    const float* matrix);
+
 // Delivers emulated input (EIS) to the desk, as the engine's own pointer and
 // keyboard would: the shell sees it first, and the engine forwards what lands
 // on a window as it forwards a real device's. A headless desk and a desk on

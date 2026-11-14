@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Appearances, Host, Mapped};
 use domicile_protocol::{
-    AdaptiveSync, AppFrame, Appearance, ChromeMessage, CursorTheme, DisplayInfo, DisplayTransform,
-    HostMessage, Owner, Theme, PROTOCOL_VERSION,
+    AdaptiveSync, AppFrame, Appearance, ChromeMessage, CursorTheme, DisplayHdr, DisplayInfo,
+    DisplayTransform, HostMessage, Owner, Theme, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -1147,6 +1147,9 @@ fn lying_down(name: &str, position: [i32; 2], size: [u32; 2], scale: u32) -> Dis
         mode: size,
         refresh_mhz: 0,
         adaptive_sync: AdaptiveSync::Unsupported,
+        hdr: DisplayHdr::Unsupported,
+        peak_luminance: 0,
+        sdr_white: 0,
         transform: DisplayTransform::Normal,
     }
 }

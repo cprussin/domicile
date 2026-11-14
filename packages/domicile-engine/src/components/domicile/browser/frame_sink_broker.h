@@ -4,6 +4,7 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_FRAME_SINK_BROKER_H_
 #define COMPONENTS_DOMICILE_BROWSER_FRAME_SINK_BROKER_H_
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -82,6 +83,12 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // is not redrawing would show it only when something next changed.
   // Injected for the same reason. Empty when the embedder has no CRTC.
   using DisplayRedrawer = base::RepeatingCallback<void(int64_t)>;
+  // Sets the color matrix viz draws one display with, 3x3 and row-major, and
+  // redraws it. Injected because finding a display's window needs //ui/aura.
+  // Empty when the embedder has no windows; the matrix is then dropped.
+  using ColorMatrix = std::array<float, 9>;
+  using ColorMatrixSetter =
+      base::RepeatingCallback<void(int64_t, const ColorMatrix&)>;
   // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
   // Injected for the same reason. Empty when the embedder runs inside another
   // session; the contents are then dropped.
@@ -124,7 +131,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       GammaSetter set_gamma = GammaSetter(),
       InputInjector inject_input = InputInjector(),
       InputConfigSetter set_input_config = InputConfigSetter(),
-      DisplayRedrawer redraw_display = DisplayRedrawer());
+      DisplayRedrawer redraw_display = DisplayRedrawer(),
+      ColorMatrixSetter set_color_matrix = ColorMatrixSetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -238,6 +246,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   void ConfigureVirtualDisplays(
       std::vector<mojom::VirtualDisplayPtr> displays) override;
   void SetGamma(int64_t display_id, mojom::GammaRampPtr ramp) override;
+  void SetColorMatrix(int64_t display_id,
+                      const std::vector<float>& matrix) override;
   void InjectInput(mojom::DeskInputPtr input) override;
   void SetClipboard(mojom::Clipboard clipboard,
                     const ClipboardContents& contents) override;
@@ -330,6 +340,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const InputConfigSetter set_input_config_;
   // See DisplayRedrawer.
   const DisplayRedrawer redraw_display_;
+  // See ColorMatrixSetter.
+  const ColorMatrixSetter set_color_matrix_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
   base::RepeatingClosure producer_gone_;

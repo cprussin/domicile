@@ -435,6 +435,13 @@ impl EngineSession {
         self.engine.set_gamma(display, ramp);
     }
 
+    /// Sets the color matrix display `display` draws with in linear light.
+    ///
+    /// See [`crate::engine::Engine::set_color_matrix`].
+    pub fn set_color_matrix(&self, display: i64, matrix: &[f32; 9]) {
+        self.engine.set_color_matrix(display, matrix);
+    }
+
     /// Hands one emulated event to the shell's window.
     ///
     /// See [`crate::engine::Engine::inject_input`].

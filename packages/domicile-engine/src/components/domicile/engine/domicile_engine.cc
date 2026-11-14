@@ -1630,6 +1630,13 @@ struct DomicileEngine {
                        base::Unretained(this), display_id, std::move(ramp)));
   }
 
+  void SetColorMatrix(int64_t display_id, std::vector<float> matrix) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::SetColorMatrixOnThread,
+                       base::Unretained(this), display_id, std::move(matrix)));
+  }
+
   // Drops a kind this build does not know, from a newer compositor.
   void InjectInput(const DomicileDeskInput& input) {
     domicile::mojom::DeskInputKind kind;
@@ -1867,6 +1874,12 @@ struct DomicileEngine {
                         domicile::mojom::GammaRampPtr ramp) {
     if (broker_) {
       broker_->SetGamma(display_id, std::move(ramp));
+    }
+  }
+
+  void SetColorMatrixOnThread(int64_t display_id, std::vector<float> matrix) {
+    if (broker_) {
+      broker_->SetColorMatrix(display_id, matrix);
     }
   }
 
@@ -2607,6 +2620,18 @@ void domicile_displays_set_gamma(DomicileEngine* engine,
                                    base::ToVector(entries.first(size)),
                                    base::ToVector(entries.subspan(size, size)),
                                    base::ToVector(entries.last(size))));
+}
+
+void domicile_displays_set_color_matrix(DomicileEngine* engine,
+                                        int64_t display_id,
+                                        const float* matrix) {
+  if (!engine || !matrix) {
+    return;
+  }
+  // Nine, row-major; see the header. `UNSAFE_BUFFERS` is required to span an
+  // ABI pointer.
+  const auto entries = UNSAFE_BUFFERS(base::span(matrix, 9u));
+  engine->SetColorMatrix(display_id, base::ToVector(entries));
 }
 
 void domicile_clipboard_set(DomicileEngine* engine,
