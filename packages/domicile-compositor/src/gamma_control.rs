@@ -36,7 +36,7 @@ impl DomicileCompositor {
     }
 
     /// Sends engine display `display` its ramp, if it has gamma, and its color
-    /// matrix, which carries the night light in HDR.
+    /// matrix, which carries the night light in HDR or with no gamma.
     fn restate_the_gamma_of(&self, display: i64) {
         let Some(session) = self.engine.as_ref() else {
             return;
@@ -52,9 +52,17 @@ impl DomicileCompositor {
         session.set_color_matrix(display, &self.gamma.matrix(display, output));
     }
 
-    /// Takes which engine displays are driven in HDR. A client holding one
-    /// that went into it hears `failed`: its ramp assumes SDR.
-    pub fn gamma_hdr_reported(&mut self) {
+    /// Takes which engine displays are on a connector and which are driven in
+    /// HDR. A client holding one that went into HDR hears `failed`: its ramp
+    /// assumes SDR.
+    pub fn gamma_displays_reported(&mut self) {
+        let connected = self
+            .engine_displays
+            .iter()
+            .filter(|display| !display.connector.is_empty())
+            .map(|display| display.id)
+            .collect();
+        self.gamma.set_connected(connected);
         let hdr = self
             .engine_displays
             .iter()

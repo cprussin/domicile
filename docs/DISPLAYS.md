@@ -355,7 +355,8 @@ absent).
 - Each flip names its own frame's damage, on its plane's own device (patch
   `0204`). Upstream sent no clip without ChromeOS's PSR2 flag, so evdi marked
   the whole screen changed on every flip.
-- No gamma table, so no night light ([below](#night-light-and-gamma-control)).
+- No gamma table, so the night light is a color matrix
+  ([below](#with-no-gamma-table)), and `wlr-gamma-control` clients are refused.
 - Planes take only 8-bit formats, so a dock's monitors scan out in 8 bits.
 
 ## Night light and gamma control
@@ -389,8 +390,8 @@ zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicil
 - A client is told the CRTC's own ramp size: `GAMMA_LUT_SIZE`, or the legacy
   ramp's. The GPU process reads it into each display's report
   (`DomicileRampedDisplay.gamma_size`).
-- A monitor with no gamma gets `failed` at once: a DisplayLink dock, a nested
-  or headless desktop. So does a client whose monitor is unplugged.
+- A client on a monitor with no gamma gets `failed` at once: a DisplayLink
+  dock, a nested or headless desktop. So does a client whose monitor is unplugged.
 - A table that isn't three ramps of the advertised size is the
   `invalid_gamma` protocol error. The fd is read without waiting, as wlroots
   does.
@@ -401,6 +402,13 @@ zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicil
 - `DrmModeset` sets each monitor's ramp again after each modeset, so a VT
   switch or resume keeps it. The compositor sends every ramp again after each
   display report, which covers a hotplug and an engine restart.
+
+### With no gamma table
+
+A monitor on a connector whose CRTC has no gamma (`GAMMA_LUT_SIZE` 0, as
+`evdi` on a DisplayLink dock) draws its night light through the color matrix
+[below](#in-hdr), as in HDR. A display on no connector (nested) is left to the
+host compositor.
 
 ### In HDR
 

@@ -15,7 +15,8 @@
 //! A monitor driven in HDR keeps an identity ramp, since a ramp would bend the
 //! PQ curve its panel decodes. Its night light is a color matrix viz applies in
 //! linear light instead ([`Ramps::matrix`]), and no client can hold it: their
-//! ramps assume SDR.
+//! ramps assume SDR. So is a monitor on a connector with no gamma, as on a
+//! DisplayLink dock.
 //!
 //! See `docs/DISPLAYS.md#night-light-and-gamma-control`.
 
@@ -39,6 +40,10 @@ pub struct Ramps<H> {
     held: HashMap<i64, Held<H>>,
     /// The engine displays driven in HDR.
     hdr: HashSet<i64>,
+    /// The engine displays on a connector. One not in `sizes` has no gamma, so
+    /// its night light is a color matrix. A display on none (nested) is the
+    /// host compositor's to warm.
+    connected: HashSet<i64>,
 }
 
 struct Held<H> {
@@ -72,6 +77,7 @@ impl<H: PartialEq> Default for Ramps<H> {
             sizes: HashMap::new(),
             held: HashMap::new(),
             hdr: HashSet::new(),
+            connected: HashSet::new(),
         }
     }
 }
@@ -122,6 +128,11 @@ impl<H: PartialEq> Ramps<H> {
             .filter_map(|display| self.held.remove(&display))
             .map(|held| held.holder)
             .collect()
+    }
+
+    /// Takes which engine displays are on a connector.
+    pub fn set_connected(&mut self, connected: HashSet<i64>) {
+        self.connected = connected;
     }
 
     /// Gives `display` to `holder`. Returns its ramp size.
@@ -188,13 +199,16 @@ impl<H: PartialEq> Ramps<H> {
     }
 
     /// The 3x3 color matrix, row-major, that `display`, shown as `output`,
-    /// draws with in linear light: its night light in HDR, the identity
-    /// otherwise, where its ramp warms it.
+    /// draws with in linear light: its night light in HDR or on a connector
+    /// with no gamma, the identity otherwise, where its ramp warms it or the
+    /// host compositor does.
     ///
     /// A ramp scales encoded values, and light goes about as their 2.2 power,
     /// so each gain is raised to it to look the same.
     pub fn matrix(&self, display: i64, output: Option<&str>) -> [f32; 9] {
-        let white = if self.hdr.contains(&display) {
+        let warmed_here = self.hdr.contains(&display)
+            || (self.connected.contains(&display) && !self.sizes.contains_key(&display));
+        let white = if warmed_here {
             self.white_of(output)
         } else {
             white_point(NEUTRAL)
@@ -430,6 +444,36 @@ mod tests {
 
         assert_eq!(ramps.matrix(7, None), IDENTITY, "its ramp warms it");
         assert_eq!(ramps.ramp(7, None), Some(ramp_of(WARM, 2)));
+    }
+
+    #[test]
+    fn a_monitor_with_no_gamma_is_warmed_in_linear_light() {
+        let mut ramps = with_sizes(&[(7, 2)]);
+        ramps.set_connected([7, 9].into_iter().collect());
+        ramps.set_white_point(None, WARM);
+
+        assert_eq!(ramps.ramp(9, None), None);
+        assert_eq!(ramps.matrix(9, None), ramps_in_hdr_matrix(WARM));
+        assert_eq!(ramps.matrix(7, None), IDENTITY, "its ramp warms it");
+    }
+
+    #[test]
+    fn a_display_on_no_connector_is_not_warmed() {
+        let mut ramps = with_sizes(&[]);
+        ramps.set_white_point(None, WARM);
+
+        assert_eq!(
+            ramps.matrix(9, None),
+            IDENTITY,
+            "a nested desktop's host owns the screen"
+        );
+    }
+
+    fn ramps_in_hdr_matrix(white: WhitePoint) -> [f32; 9] {
+        let mut ramps = with_sizes(&[]);
+        ramps.set_white_point(None, white);
+        in_hdr(&mut ramps, &[1]);
+        ramps.matrix(1, None)
     }
 
     #[test]

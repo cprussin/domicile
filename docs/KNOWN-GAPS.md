@@ -44,8 +44,6 @@ the detail, when there is one. Remove a gap when it's fixed.
   performance problem. [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#plan).
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](/docs/architecture/DISPLAY-TILINGS.md#cost).
-- **The night light can't warm a DisplayLink monitor.** Its driver (`evdi`)
-  has no gamma table.
 
 ## Browser windows
 
