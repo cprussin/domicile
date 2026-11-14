@@ -168,6 +168,7 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,
     uint32_t fourcc,
+    const gfx::ColorSpace& color_space,
     std::optional<gpu::ExportedSharedImage>* exported) {
   const std::optional<ImportFormat> format = FormatFromFourcc(fourcc);
   if (!format) {
@@ -191,7 +192,7 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     // Viz reads the producer's memory itself: no copy on either side.
     const uint32_t stride = handle.stride;
     shared_image = sii->DomicileCreateSharedImageForSoftwareCompositor(
-        {format->format, size, gfx::ColorSpace::CreateSRGB(),
+        {format->format, size, color_space,
          kTopLeft_GrSurfaceOrigin, format->alpha,
          gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, "DomicileWindow"},
         std::move(handle).region(), stride);
@@ -209,7 +210,7 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     // The part of exo::Buffer this needs. Its caching, fences, protected
     // content and YUV handling are viz's job or not yet supported.
     shared_image = sii->CreateSharedImage(
-        {format->format, size, gfx::ColorSpace::CreateSRGB(),
+        {format->format, size, color_space,
          kTopLeft_GrSurfaceOrigin, format->alpha, kWindowUsage,
          "DomicileWindow"},
         std::move(handle));

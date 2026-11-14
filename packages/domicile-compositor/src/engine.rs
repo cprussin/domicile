@@ -130,6 +130,36 @@ pub struct ShmBuffer {
     pub fourcc: u32,
 }
 
+/// `DomicileChromaticity`: a CIE 1931 xy chromaticity.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Chromaticity {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// `DomicileColor`: how a surface's pixels encode color, from its
+/// `wp_image_description_v1`. Luminances are in cd/m²; zero is unset. Built by
+/// [`crate::color_management::Description::engine_color`].
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Color {
+    /// `DOMICILE_PRIMARIES_*`.
+    pub primaries: u32,
+    /// `DOMICILE_TRANSFER_*`.
+    pub transfer: u32,
+    pub reference_luminance: f32,
+    pub has_mastering: u32,
+    pub mastering_red: Chromaticity,
+    pub mastering_green: Chromaticity,
+    pub mastering_blue: Chromaticity,
+    pub mastering_white: Chromaticity,
+    pub mastering_min_luminance: f32,
+    pub mastering_max_luminance: f32,
+    pub max_cll: f32,
+    pub max_fall: f32,
+}
+
 /// `DomicileDmabuf`: a client's buffer. The fds are borrowed for the call.
 #[repr(C)]
 pub struct Dmabuf {
@@ -1656,6 +1686,24 @@ impl Engine {
         true
     }
 
+    /// Sets how `surface`'s pixels encode color; `None` is sRGB. Buffers
+    /// imported afterward are drawn in it, so import a buffer again to show it
+    /// in the new color. An engine without `domicile_surface_set_color` draws
+    /// every buffer as sRGB.
+    pub fn set_surface_color(&self, surface: SurfaceId, color: Option<&Color>) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, *const Color)> = match self
+            .symbol(
+                b"domicile_surface_set_color\0",
+                "domicile_surface_set_color",
+            ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        let color = color.map_or(std::ptr::null(), |color| color as *const Color);
+        // SAFETY: as above, and `color` outlives the call.
+        unsafe { f(self.handle, surface, color) };
+    }
+
     /// Releases an imported buffer after the client destroys its `wl_buffer`.
     pub fn forget(&self, surface: SurfaceId, buffer: BufferId) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, BufferId)> =
@@ -2583,6 +2631,16 @@ mod tests {
         assert_eq!(std::mem::size_of::<Subsurface>(), 48);
         assert_eq!(std::mem::offset_of!(Subsurface, x), 8);
         assert_eq!(std::mem::offset_of!(Subsurface, above), 40);
+    }
+
+    #[test]
+    fn a_color_is_the_record_the_c_header_declares() {
+        // 2 enums + reference + has_mastering (16), four chromaticities (32),
+        // then four floats (16).
+        assert_eq!(std::mem::size_of::<Color>(), 64);
+        assert_eq!(std::mem::offset_of!(Color, mastering_red), 16);
+        assert_eq!(std::mem::offset_of!(Color, mastering_min_luminance), 48);
+        assert_eq!(std::mem::offset_of!(Color, max_fall), 60);
     }
 
     #[test]
