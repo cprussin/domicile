@@ -51,6 +51,8 @@
 //!   {"id":17,"type":"site_data","sites":[{"host":"mail.example","bytes":20480.0,"cookies":3}]}
 //! {"id":18,"type":"clear_site_data","host":"mail.example"}
 //!   {"id":18,"type":"cleared"}
+//! {"id":19,"type":"monitors"}
+//!   {"id":19,"type":"monitors","monitors":[{"names":["drm-1","DEL DELL U3219Q 2ZLS413",…],"hdr":"unsupported"}]}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -193,6 +195,7 @@ enum AppRequest {
     ClearSiteData {
         host: String,
     },
+    Monitors,
 }
 
 /// Which file a write replaces.
@@ -348,6 +351,12 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                 other => Err(refusal_or_surprise(other)),
             }
         }
+        AppRequest::Monitors => match (host.ask)(&Request::Monitors)? {
+            Response::Monitors { monitors } => {
+                Ok(json!({"type": "monitors", "monitors": monitors}))
+            }
+            other => Err(refusal_or_surprise(other)),
+        },
     }
 }
 

@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, ExtensionSettings,
-    HostMessage, Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
+    HostMessage, MonitorInfo, Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
 };
 
 pub mod app_names;
@@ -176,6 +176,9 @@ pub struct Host {
     /// Empty until described. The `domicile` daemon never describes one, so
     /// it reports no screens rather than an invented display.
     displays: Vec<DisplayInfo>,
+    /// The lit monitors' names and HDR states. Empty until described, like
+    /// `displays`.
+    monitors: Vec<MonitorInfo>,
     /// The compiled keymap, for the browser process rather than the page.
     ///
     /// `None` until set. The `domicile` daemon and unit tests have no
@@ -244,6 +247,19 @@ impl Host {
     /// Replace the desktop's displays, for chromes that connect later.
     pub fn describe_displays(&mut self, displays: Vec<DisplayInfo>) {
         self.displays = displays;
+    }
+
+    /// Replace the lit monitors' names and HDR states, for
+    /// [`HostMessage::Monitors`].
+    pub fn describe_monitors(&mut self, monitors: Vec<MonitorInfo>) {
+        self.monitors = monitors;
+    }
+
+    /// The monitors message, answering `which_monitors`.
+    pub fn monitors(&self) -> HostMessage {
+        HostMessage::Monitors {
+            monitors: self.monitors.clone(),
+        }
     }
 
     /// The display named `name`, if the desktop has it.
@@ -907,6 +923,7 @@ impl Host {
             | ChromeMessage::ReplyToNotification { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::WhichTheme
+            | ChromeMessage::WhichMonitors
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

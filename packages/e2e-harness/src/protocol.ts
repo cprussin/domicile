@@ -328,6 +328,22 @@ const displaysSchema = z.looseObject({
   type: z.literal("displays"),
 });
 
+// Each lit monitor under the names a display profile can call it by, and
+// whether it is in HDR. Answers `which_monitors` on the asking connection only,
+// for Settings.
+const monitorsSchema = z.looseObject({
+  monitors: z.array(
+    z.looseObject({
+      hdr: z
+        .enum(["unsupported", "off", "on"])
+        .nullish()
+        .transform((hdr) => hdr ?? "unsupported"),
+      names: z.array(z.string().min(1)),
+    }),
+  ),
+  type: z.literal("monitors"),
+});
+
 // Each browser window's identifier on `ext-foreign-toplevel-list-v1`, by the
 // engine's window id. Sent after `welcome` and on every change; latest wins.
 const browserToplevelIdsSchema = z.looseObject({
@@ -790,6 +806,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appAnchoredSchema,
   appUrgentSchema,
   displaysSchema,
+  monitorsSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -844,6 +861,7 @@ export type AppTransientForMessage = z.infer<typeof appTransientForSchema>;
 export type AppAnchoredMessage = z.infer<typeof appAnchoredSchema>;
 export type AppUrgentMessage = z.infer<typeof appUrgentSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
+export type MonitorsMessage = z.infer<typeof monitorsSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

@@ -35,6 +35,7 @@ pub enum ConnectionRequest {
     SearchFiles { query: String },
     SetTheme { theme: Theme },
     WhichTheme,
+    WhichMonitors,
 }
 
 /// Write a message's responses to the connection that asked, in order.
@@ -450,6 +451,9 @@ fn read_chrome_messages(
             Ok(ChromeMessage::WhichTheme) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichTheme)
             }
+            Ok(ChromeMessage::WhichMonitors) => {
+                answer_on_the_connection(hub, ConnectionRequest::WhichMonitors)
+            }
             // The Wayland thread runs the theme turnover and its deadline
             // timer.
             Ok(ChromeMessage::ThemeCaptured { theme }) => {
@@ -838,6 +842,8 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
         // Answered here, after any `set_theme` this connection sent, so
         // `domicile theme` reads back the theme it set.
         ConnectionRequest::WhichTheme => vec![hub.host.lock().unwrap().describe_theme()],
+        // So Settings can offer HDR only on the monitors that take it.
+        ConnectionRequest::WhichMonitors => vec![hub.host.lock().unwrap().monitors()],
         // A page has no filesystem, so the compositor searches for it. Safe
         // because `search_files` names no path; this side decides what is read.
         //

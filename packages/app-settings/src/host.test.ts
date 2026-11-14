@@ -220,6 +220,14 @@ describe(spawnedHost, () => {
       await stored;
     });
 
+    it("lists the monitors", async () => {
+      const { asked, processes } = await started((host) => host.monitors());
+      const monitors = [{ hdr: "unsupported" as const, names: ["drm-1"] }];
+      expect(processes[0]?.sent.at(-1)).toEqual({ id: 1, type: "monitors" });
+      processes[0]?.answer({ id: 1, monitors, type: "monitors" });
+      expect(await asked).toEqual(monitors);
+    });
+
     it("lists media devices and prefers one", async () => {
       const { asked, host, processes } = await started((host) =>
         host.mediaDevices(),

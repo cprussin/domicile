@@ -16,7 +16,7 @@ use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
-use domicile_protocol::Theme;
+use domicile_protocol::{DisplayHdr, MonitorInfo, Theme};
 
 #[test]
 fn a_desktop_says_which_shell_it_is_running() {
@@ -334,6 +334,38 @@ fn a_desktop_told_to_sleep_or_wake_the_displays_tells_the_compositor() {
         assert_eq!(told.take(), Some((power, display)));
         assert_eq!(answered, Response::Powered);
     }
+}
+
+#[test]
+fn a_desktop_asked_its_monitors_asks_the_compositor() {
+    let lit = MonitorInfo {
+        names: vec!["drm-1".to_string()],
+        hdr: DisplayHdr::On,
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"monitors\"}",
+            &Desktop {
+                monitors: &|| Ok(vec![lit.clone()]),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Monitors {
+            monitors: vec![lit.clone()]
+        }
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"monitors\"}",
+            &Desktop {
+                monitors: &|| Err("no compositor".to_string()),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "no compositor".to_string()
+        }
+    );
 }
 
 #[test]
@@ -969,6 +1001,7 @@ fn nothing_dialed() -> Desktop<'static> {
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
+        monitors: &|| panic!("only monitors lists the monitors"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),

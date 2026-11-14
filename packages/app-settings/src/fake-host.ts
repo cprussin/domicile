@@ -4,6 +4,7 @@ import type {
   ExtensionSettings,
   InstalledExtension,
   MediaDevices,
+  Monitor,
   SettingsFiles,
   SettingsHost,
   SiteData,
@@ -24,6 +25,8 @@ export type FakeHostState = {
   /** The hosts that store data, which clearing one removes. */
   siteData: SiteData[];
   media: MediaDevices;
+  /** The lit monitors; none by default. */
+  monitors?: Monitor[] | undefined;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
 };
@@ -68,6 +71,7 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve("c".repeat(32));
     },
     mediaDevices: () => Promise.resolve(structuredClone(state.media)),
+    monitors: () => Promise.resolve(structuredClone(state.monitors ?? [])),
     onChange: (listener) => {
       changes.add(listener);
       return () => {

@@ -11,13 +11,15 @@ import { css } from "../../styled-system/css";
 import { flex, grid } from "../../styled-system/patterns";
 import { AddRow } from "../AddRow";
 import type { ConfigPath } from "../config-document";
-import type { ConfigEditor, ConfigPageProps } from "../config-editor";
+import type { ConfigEditor, ConfigPageProps, Report } from "../config-editor";
 import type { Display, Placement, Profile, Transform } from "../config-schema";
+import type { Monitor, SettingsHost } from "../host";
 import type { NumberRule } from "../number-text";
 import { parseNumber } from "../number-text";
 import { Page } from "../Page";
 import { SettingRow } from "../SettingRow";
 import { TextSetting } from "../TextSetting";
+import { useMonitors } from "../useMonitors";
 
 const ROTATIONS = [
   { label: "None", value: "normal" },
@@ -38,12 +40,20 @@ const NITS = { integer: true, positive: true } as const;
 const DEFAULT_SDR_WHITE = 203;
 const ORIGIN = [0, 0] as const;
 
+type DisplaysPageProps = ConfigPageProps & {
+  host: SettingsHost;
+  report: Report;
+};
+
 /** `output`: the profiles that place monitors, and described displays. */
 export const DisplaysPage = ({
   description,
   editor,
+  host,
+  report,
   title,
-}: ConfigPageProps) => {
+}: DisplaysPageProps) => {
+  const monitors = useMonitors(host, report);
   const { readOnly, settings } = editor;
   const { output } = settings;
   const disabled = readOnly !== undefined;
@@ -69,6 +79,7 @@ export const DisplaysPage = ({
           editor={editor}
           index={index}
           key={`${index}-${profile.name}`}
+          monitors={monitors ?? []}
           profile={profile}
           profiles={output.profiles.length}
         />
@@ -132,6 +143,8 @@ export const DisplaysPage = ({
 
 type ProfileCardProps = {
   editor: ConfigEditor;
+  /** The lit monitors, which say whether each takes HDR. */
+  monitors: readonly Monitor[];
   profile: Profile;
   index: number;
   profiles: number;
@@ -141,6 +154,7 @@ type ProfileCardProps = {
 const ProfileCard = ({
   editor,
   index,
+  monitors,
   profile,
   profiles,
 }: ProfileCardProps) => {
@@ -179,15 +193,19 @@ const ProfileCard = ({
           {profile.displays.map((placement, at) => (
             <PlacementRow
               editor={editor}
+              hdrUnsupported={monitors.some(
+                ({ hdr, names }) =>
+                  hdr === "unsupported" && names.includes(placement.display),
+              )}
               key={`${at}-${placement.display}`}
               path={[...path, "displays", at]}
               placement={placement}
             />
           ))}
           <p className={hintStyles}>
-            HDR turns on only for monitors that support it. Everyday brightness
-            is how bright windows and the desktop look while HDR is on; raise it
-            if they seem dim.
+            Monitors that can’t show HDR say so while they’re plugged in.
+            Everyday brightness is how bright windows and the desktop look while
+            HDR is on; raise it if they seem dim.
           </p>
         </div>
       )}
@@ -219,6 +237,8 @@ const ProfileCard = ({
 
 type PlacementRowProps = {
   editor: ConfigEditor;
+  /** Plugged in, and its panel or connector can't show HDR. */
+  hdrUnsupported: boolean;
   placement: Placement;
   path: ConfigPath;
 };
@@ -239,7 +259,12 @@ const PLACEMENT_HEADINGS = [
  * One monitor in a profile: on or off, its scale, position, rotation and
  * HDR. A row of the grid, or on a narrow card a stack of labeled settings.
  */
-const PlacementRow = ({ editor, path, placement }: PlacementRowProps) => {
+const PlacementRow = ({
+  editor,
+  hdrUnsupported,
+  path,
+  placement,
+}: PlacementRowProps) => {
   const { readOnly, set } = editor;
   const disabled = readOnly !== undefined;
   const name = placement.display;
@@ -295,17 +320,21 @@ const PlacementRow = ({ editor, path, placement }: PlacementRowProps) => {
         />
       </Field>
       <Field label="HDR">
-        <Switch
-          checked={placement.hdr === true}
-          disabled={disabled}
-          hideLabel
-          label={`${name} HDR`}
-          onCheckedChange={(hdr) => {
-            set([...path, "hdr"], hdr ? true : undefined);
-          }}
-        />
+        {hdrUnsupported ? (
+          <span className={unsupportedStyles}>Not supported</span>
+        ) : (
+          <Switch
+            checked={placement.hdr === true}
+            disabled={disabled}
+            hideLabel
+            label={`${name} HDR`}
+            onCheckedChange={(hdr) => {
+              set([...path, "hdr"], hdr ? true : undefined);
+            }}
+          />
+        )}
       </Field>
-      {placement.hdr === true ? (
+      {placement.hdr === true && !hdrUnsupported ? (
         <Field label="Everyday brightness">
           <span className={nitsStyles}>
             <NumberSetting
@@ -626,6 +655,12 @@ const nitsStyles = flex({
 });
 
 const emptyCellStyles = css({ [NARROW]: { display: "none" } });
+
+const unsupportedStyles = css({
+  color: "muted",
+  fontSize: "xs",
+  whiteSpace: "nowrap",
+});
 
 const describedStyles = grid({
   alignItems: "center",

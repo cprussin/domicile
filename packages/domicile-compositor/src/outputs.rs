@@ -249,6 +249,7 @@ impl DomicileCompositor {
         let desktop = {
             let mut host = self.hub.host.lock().unwrap();
             host.describe_displays(self.screens.outputs().map(Advertised::described).collect());
+            host.describe_monitors(self.screens.outputs().map(Advertised::monitor).collect());
             host.describe_desktop()
         };
         self.hub.broadcast(desktop);
@@ -361,6 +362,7 @@ impl DomicileCompositor {
         let desktop = {
             let mut host = self.hub.host.lock().unwrap();
             host.describe_displays(self.screens.outputs().map(Advertised::described).collect());
+            host.describe_monitors(self.screens.outputs().map(Advertised::monitor).collect());
             host.describe_desktop()
         };
         self.hub.broadcast(desktop);

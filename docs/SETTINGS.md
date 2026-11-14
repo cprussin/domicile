@@ -65,7 +65,8 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
                                                                      site_permissions,              set_site_permission,
                                                                      extensions,                    load_unpacked,
                                                                      media_devices,                 uninstall_extension,
-                                                                     site_data                      config_extensions,
+                                                                     site_data,                     config_extensions,
+                                                                     monitors
                                                                                                     extensions,
                                                                                                     set_extension_enabled,
                                                                                                     configure_extension,
@@ -73,6 +74,9 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
                                                                                                     set_media_device,
                                                                                                     site_data,
                                                                                                     clear_site_data
+
+                                                    domicile ─ chrome socket ─▶ compositor
+                                                                                which_monitors
 ```
 
 | Part | Where |
@@ -88,6 +92,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
 | Site data | The engine's `site_data` and `clear_site_data` commands. They read and remove the shell profile's data through Chrome's `BrowsingDataModel`, as `chrome://settings/content/all` does. |
 | Camera and microphone | The engine's `media_devices` and `set_media_device` commands. They read and write Chrome's device ranking in the shell profile's prefs, which Chrome uses for a site that names no device. |
+| HDR per monitor | The host's `monitors` asks the compositor `which_monitors`: each lit monitor's names (output name, and its EDID name with either maker spelling) and HDR state. A profile monitor whose `display` names a plugged-in monitor that can't show HDR says "Not supported" in place of its switch. A monitor that isn't plugged in keeps its switch. |
 | Opening it | `domicile-settings` runs `domicile open --app` on `settings.js`. |
 
 ## Key decisions

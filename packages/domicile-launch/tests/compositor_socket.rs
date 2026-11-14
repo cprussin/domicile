@@ -9,10 +9,11 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    power_displays, screen_record, screenshot, send_shell, theme, virtual_monitor, CompositorError,
+    monitors, power_displays, screen_record, screenshot, send_shell, theme, virtual_monitor,
+    CompositorError,
 };
 use domicile_launch::control::Shot;
-use domicile_protocol::{Scale, Theme};
+use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -354,6 +355,48 @@ fn a_theme_the_compositor_did_not_name_is_carried_back() {
 }
 
 #[test]
+fn the_compositor_is_asked_its_monitors_and_says_them() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_monitors",
+        "{\"type\":\"monitors\",\"monitors\":[{\"names\":[\"drm-1\",\"DEL DELL U3219Q 2ZLS413\"],\
+         \"hdr\":\"on\"}]}\n",
+    );
+
+    assert_eq!(
+        monitors(&path, Some(BRIEFLY)),
+        Ok(vec![MonitorInfo {
+            names: vec!["drm-1".to_string(), "DEL DELL U3219Q 2ZLS413".to_string()],
+            hdr: DisplayHdr::On,
+        }])
+    );
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        vec!["{\"type\":\"which_monitors\"}\n".to_string()]
+    );
+}
+
+#[test]
+fn monitors_the_compositor_did_not_describe_are_carried_back() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_monitors",
+        "{\"type\":\"locked\",\"locked\":true}\n",
+    );
+
+    assert_eq!(
+        monitors(&path, Some(BRIEFLY)),
+        Err(CompositorError::Unreadable {
+            path: path.display().to_string(),
+            said: "{\"type\":\"locked\",\"locked\":true}".to_string()
+        })
+    );
+    heard.join().expect("the compositor was listening");
+}
+
+#[test]
 fn a_virtual_monitor_is_added_resized_and_given_back() {
     let (_scratch, path) = scratch();
     let heard = a_compositor_lending(
@@ -452,6 +495,16 @@ fn a_compositor_asked_its_theme(
     path: &Path,
     with: &'static str,
 ) -> std::thread::JoinHandle<Vec<String>> {
+    a_compositor_asked(path, "which_theme", with)
+}
+
+/// A fake compositor at `path` that reads lines until one names `last`, then
+/// replies `with`. Returns the lines it read.
+fn a_compositor_asked(
+    path: &Path,
+    last: &'static str,
+    with: &'static str,
+) -> std::thread::JoinHandle<Vec<String>> {
     let listener = UnixListener::bind(path).expect("the compositor binds its chrome socket");
     std::thread::spawn(move || {
         let (stream, _) = listener.accept().expect("a supervisor dialed");
@@ -459,7 +512,7 @@ fn a_compositor_asked_its_theme(
         let mut lines = Vec::new();
         while lines
             .last()
-            .is_none_or(|line: &String| !line.contains("which_theme"))
+            .is_none_or(|line: &String| !line.contains(last))
         {
             let mut line = String::new();
             reader

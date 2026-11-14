@@ -364,6 +364,13 @@ pub enum ChromeMessage {
     /// hears no broadcast.
     WhichTheme,
 
+    /// Report each lit monitor under the names a display profile can call it
+    /// by. Answered with [`HostMessage::Monitors`] on this connection only.
+    ///
+    /// Sent by `domicile-app-host` for Settings, whose connection never says
+    /// `hello` and so hears no broadcast.
+    WhichMonitors,
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -763,6 +770,11 @@ pub enum HostMessage {
     /// host with no desktop described, such as unit tests or the `domicile`
     /// daemon.
     Displays { displays: Vec<DisplayInfo> },
+
+    /// Each lit monitor, under the names a display profile can call it by.
+    /// Answers [`ChromeMessage::WhichMonitors`] on the asking connection
+    /// only, so Settings can offer HDR only where a monitor takes it.
+    Monitors { monitors: Vec<MonitorInfo> },
 
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
@@ -2636,6 +2648,17 @@ pub enum AdaptiveSync {
     Off,
     /// It is.
     On,
+}
+
+/// A lit monitor as a display profile names it. See
+/// [`HostMessage::Monitors`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MonitorInfo {
+    /// Every name a profile's `display` matches it by: its output name, and
+    /// its EDID name with the maker as a three-letter code and spelled out.
+    pub names: Vec<String>,
+    /// Whether it is driven in HDR10.
+    pub hdr: DisplayHdr,
 }
 
 /// Whether a monitor is driven in HDR10: BT.2020 primaries with the PQ
