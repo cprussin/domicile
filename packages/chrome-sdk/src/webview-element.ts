@@ -152,6 +152,17 @@ export const WEBVIEW_FOCUS_REQUEST_EVENT = "domicile-focus-request";
 export const WEBVIEW_GUEST_KEYDOWN_EVENT = "domicile-guest-keydown";
 
 /**
+ * Fired when a key press reaches the page: not a modifier, a repeat or a chord
+ * the shell grabbed. Typing in the window, as opposed to a key the desktop
+ * handled. Bubbles.
+ *
+ * A plain `Event` naming no key, so typed text, passwords included, stays in
+ * the guest. An `<app>` fires the same for its client (see
+ * `APP_KEY_DELIVERED_EVENT`).
+ */
+export const WEBVIEW_KEY_DELIVERED_EVENT = "domicile-key-delivered";
+
+/**
  * Fired when {@link HTMLWebViewElement.zoom} changes. Carries no payload.
  * Bubbles.
  *

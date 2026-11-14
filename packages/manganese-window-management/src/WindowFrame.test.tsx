@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { APP_KEY_DELIVERED_EVENT } from "@domicile-desktop/sdk/app-element";
+import { WEBVIEW_KEY_DELIVERED_EVENT } from "@domicile-desktop/sdk/webview-element";
 import {
   drawAt,
   drawPopups,
@@ -183,5 +185,35 @@ describe("WindowFrame", () => {
       expect(wrapper?.clip).toBe("rect(100px, 1280px, 900px, 0px)");
       expect(moved?.clip).toBe("rect(100px, 1280px, 900px, 0px)");
     });
+  });
+
+  it("reports a key reaching either kind of window as a reach", () => {
+    // Typing in a window ends a selection around it, as a click does.
+    let reaches = 0;
+    render(
+      <WindowFrame
+        depth={0}
+        fillsScreen={false}
+        frame={undefined}
+        motion="resting"
+        onHover={noHover}
+        onReach={() => {
+          reaches += 1;
+        }}
+        rewound={0}
+        screen={undefined}
+        seen={undefined}
+      >
+        <button type="button">part</button>
+      </WindowFrame>,
+    );
+
+    for (const type of [APP_KEY_DELIVERED_EVENT, WEBVIEW_KEY_DELIVERED_EVENT]) {
+      screen
+        .getByRole("button")
+        .dispatchEvent(new Event(type, { bubbles: true }));
+    }
+
+    expect(reaches).toBe(2);
   });
 });

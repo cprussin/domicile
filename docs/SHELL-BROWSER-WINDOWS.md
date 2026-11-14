@@ -335,6 +335,9 @@ Bind browser keys yourself:
 
 - `domicile-guest-keydown`: a `KeyboardEvent` for each chord (Ctrl, Alt or
   Meta held) the page did not `preventDefault`. Plain keys never arrive.
+- `domicile-key-delivered`: a plain `Event` for each key press the page gets
+  (not a modifier, a repeat or a grabbed chord). Names no key. `<app>` fires
+  the same for its client.
 - `domicile-zoom-in-request` / `domicile-zoom-out-request`: Ctrl+wheel. They
   zoom nothing. Call `view.setZoom(factor)` (0.25 to 5). Zoom is per host, as
   in Chrome.
