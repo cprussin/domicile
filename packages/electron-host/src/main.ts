@@ -8,7 +8,9 @@ import { join } from "node:path";
 
 import { readAppPackage } from "./app-package";
 import { createApp } from "./electron/app";
+import { createBrowserWindow } from "./electron/browser-window";
 import { ELECTRON_VERSION } from "./electron/version";
+import { connectEngine } from "./engine";
 import { readEnvironment } from "./environment";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
@@ -45,7 +47,19 @@ const main = async ([resources, ...args]: string[]) => {
       }),
       pkg,
     });
-    const electron = { app };
+    const socket =
+      env.DOMICILE_ELECTRON_SOCK ??
+      fail(
+        "DOMICILE_ELECTRON_SOCK is not set, so there is no desktop to open this app's windows on. Start it from inside a Domicile desktop.",
+      );
+    const engine = (
+      await connectEngine(socket, pkg.appId, `persist:electron-${pkg.name}`)
+    ).match({ Err: fail, Ok: (value) => value });
+    engine.events.on("lost", (why) => fail(`lost the engine: ${why}`));
+    engine.events.on("refused", (why) =>
+      fail(`the engine refused a request: ${why}`),
+    );
+    const electron = { app, BrowserWindow: createBrowserWindow(engine, app) };
     Bun.plugin({
       name: "electron",
       setup: (build) => {

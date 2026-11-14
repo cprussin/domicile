@@ -179,8 +179,9 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 
 ## Plan
 
-- [ ] `electron-host`: resolve the app, mirror its resources, the `electron` hook, `app` lifecycle and paths
+- [x] `electron-host`: resolve the app, mirror its resources, the `electron` hook, `app` lifecycle and paths
 - [ ] engine: the Electron socket and windows (`BrowserWindow` create, load, title, show, close)
+- [x] `electron-host`: `BrowserWindow` over the Electron socket
 - [ ] engine: preload, `contextBridge`, `ipcRenderer`, `invoke`, `sendSync`, message ports
 - [ ] engine: `protocol.handle`, per-app partition, `session` and `webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`

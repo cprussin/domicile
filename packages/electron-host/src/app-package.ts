@@ -7,6 +7,11 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 export type AppPackage = {
+  /**
+   * The app's desktop id: its `desktopName` without `.desktop`, else its
+   * `name`. Its windows carry it, so the desktop matches them to the app.
+   */
+  readonly appId: string;
   /** The script to run, absolute. */
   readonly main: string;
   readonly name: string;
@@ -16,6 +21,7 @@ export type AppPackage = {
 };
 
 const manifest = z.object({
+  desktopName: z.string().optional(),
   main: z.string().default("index.js"),
   name: z.string(),
   productName: z.string().optional(),
@@ -30,6 +36,9 @@ export const readAppPackage = async (
   const parsed = manifest.safeParse(JSON.parse(await readFile(path, "utf8")));
   return parsed.success
     ? Ok({
+        appId:
+          parsed.data.desktopName?.replace(/\.desktop$/, "") ??
+          parsed.data.name,
         main: join(app, parsed.data.main),
         name: parsed.data.name,
         productName: parsed.data.productName ?? parsed.data.name,
