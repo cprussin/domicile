@@ -26,6 +26,7 @@
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
 #include "ui/ozone/platform/drm/domicile/edid_name.h"
+#include "ui/ozone/platform/drm/domicile/hdr_output.h"
 #include "ui/ozone/platform/drm/domicile/ten_bit_scanout.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/drm_window_host.h"
@@ -115,6 +116,17 @@ void DrawInTenBitsWhereThePanelTakesThem(
   screen.SetColorSpaces(color_spaces);
 }
 
+// Draws `screen`'s frames in HDR10, in the 10-bit format
+// `DrawInTenBitsWhereThePanelTakesThem` picked.
+void DrawInHdr(display::Display& screen,
+               const display::DisplaySnapshot& snapshot,
+               float sdr_white_nits) {
+  const gfx::DisplayColorSpaces drawn = screen.GetColorSpaces();
+  screen.SetColorSpaces(HdrColorSpaces(
+      snapshot, sdr_white_nits,
+      drawn.GetOutputFormat(gfx::ContentColorUsage::kHDR, false)));
+}
+
 // Returns `mode`'s size, or the displayless bounds if there is none.
 gfx::Size SizeOf(const display::DisplayMode* mode) {
   return mode ? mode->size() : kDisplaylessBounds;
@@ -192,13 +204,25 @@ DomicilePanel PanelFromSnapshot(
   panel.refresh_mhz = lit ? MillihertzOf(*lit) : 0;
   panel.physical_size_mm = DisplayPhysicalSizeMm(snapshot);
   panel.adaptive_sync = AdaptiveSyncOf(snapshot);
+  const DomicileDisplayLayout* wanted = WantedFor(layout, snapshot.display_id());
+  panel.hdr = HdrOf(snapshot, wanted);
+  if (const std::optional<gfx::HDRStaticMetadata>& metadata =
+          snapshot.hdr_static_metadata()) {
+    panel.max_luminance = static_cast<float>(metadata->max);
+    panel.max_average_luminance = static_cast<float>(metadata->max_avg);
+    panel.min_luminance = static_cast<float>(metadata->min);
+  }
+  if (panel.hdr == DomicileHdr::kOn) {
+    panel.sdr_white_nits = wanted->sdr_white_nits;
+  }
   return panel;
 }
 
 bool PanelChangedUnseen(const DomicilePanel& before,
                         const DomicilePanel& after) {
   return before.refresh_mhz != after.refresh_mhz ||
-         before.adaptive_sync != after.adaptive_sync;
+         before.adaptive_sync != after.adaptive_sync ||
+         before.hdr != after.hdr || before.sdr_white_nits != after.sdr_white_nits;
 }
 
 DomicileAdaptiveSync AdaptiveSyncOf(const display::DisplaySnapshot& snapshot) {
@@ -297,6 +321,9 @@ std::vector<display::Display> DisplaysFromSnapshots(
         *snapshot, origins[index], ModeForLayout(*snapshot, wanted));
     if (wanted) {
       TurnAndScale(screen, *wanted);
+    }
+    if (DrivesHdr(*snapshot, wanted)) {
+      DrawInHdr(screen, *snapshot, wanted->sdr_white_nits);
     }
     displays.push_back(screen);
   }

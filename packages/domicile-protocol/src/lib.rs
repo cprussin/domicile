@@ -409,6 +409,16 @@ pub enum ChromeMessage {
         input: Option<String>,
     },
 
+    /// The engine caught itself in a bug: a page it took out of fullscreen
+    /// stayed in it, say.
+    ///
+    /// The compositor logs it as an error and tells the person, with a way to
+    /// report it, rather than leaving a broken window unexplained.
+    EngineFault {
+        /// What went wrong, in a sentence a person can read.
+        what: String,
+    },
+
     /// Where the pointer is on the desk, in the shell page's CSS pixels,
     /// which are the desktop's logical pixels, or `None` off it, and each
     /// browser window whose page it is on.

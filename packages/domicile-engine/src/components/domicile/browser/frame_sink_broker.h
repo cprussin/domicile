@@ -27,6 +27,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence_handle.h"
 
@@ -163,6 +164,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              double scale,
+             double zoom,
              EmbedCallback callback);
 
   // Drops `requester`'s waiting embeds without running their callbacks. For a
@@ -208,10 +210,16 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       const std::string& app_id,
       CreateFrameSinkCallback callback) override;
   void DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) override;
+  void EmbedFrameSink(const viz::FrameSinkId& child,
+                      const viz::FrameSinkId& parent,
+                      const viz::LocalSurfaceId& local_surface_id,
+                      const gfx::Size& size,
+                      double scale) override;
   void ImportBuffer(const viz::FrameSinkId& frame_sink_id,
                     gfx::GpuMemoryBufferHandle handle,
                     const gfx::Size& size,
                     uint32_t fourcc,
+                    const gfx::ColorSpace& color_space,
                     ImportBufferCallback callback) override;
   void SubmitBuffer(const viz::FrameSinkId& frame_sink_id,
                     uint64_t buffer_id,
@@ -264,6 +272,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                  const viz::LocalSurfaceId& local_surface_id,
                  const gfx::Size& size,
                  double scale,
+                 double zoom,
                  EmbedCallback callback);
     PendingEmbed(PendingEmbed&&);
     PendingEmbed& operator=(PendingEmbed&&);
@@ -275,6 +284,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
     viz::LocalSurfaceId local_surface_id;
     gfx::Size size;
     double scale;
+    double zoom;
     EmbedCallback callback;
   };
 

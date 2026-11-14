@@ -52,6 +52,7 @@ impl Compositor for Recorded {
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
                 adaptive_sync: crate::engine::AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             }],
             vec![
                 Window {

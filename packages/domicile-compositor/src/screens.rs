@@ -18,7 +18,7 @@ use domicile_config::{
 use domicile_protocol::{AdaptiveSync as WireAdaptiveSync, DisplayInfo, DisplayTransform, Scale};
 use domicile_scene::{Bounds, Point};
 
-use crate::engine::{AdaptiveSync, Connector, Display, Pointer, VirtualDisplay};
+use crate::engine::{AdaptiveSync, Connector, Display, Hdr, Pointer, VirtualDisplay};
 use crate::pnp_ids::Vendors;
 
 /// The `wl_output` physical size for an output with no known size.
@@ -81,6 +81,9 @@ pub struct Advertised {
     /// Whether it scans out with a variable refresh rate. Only the engine's
     /// displays can.
     pub adaptive_sync: AdaptiveSync,
+    /// Whether it is driven in HDR10, and how bright its panel gets. Only the
+    /// engine's displays can be.
+    pub hdr: Hdr,
 }
 
 impl Advertised {
@@ -231,6 +234,7 @@ impl Screens {
                         physical_mm: UNKNOWN_PHYSICAL_MM,
                         refresh_mhz: UNKNOWN_REFRESH_MHZ,
                         adaptive_sync: AdaptiveSync::Unsupported,
+                        hdr: Default::default(),
                     }
                 })
                 .collect(),
@@ -296,6 +300,8 @@ impl Screens {
                         mode: None,
                         refresh_mhz: None,
                         adaptive_sync: false,
+                        hdr: false,
+                        sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                     })
                     .collect(),
                 ..Screens::as_the_engine_placed(&monitors, vendors)
@@ -323,6 +329,7 @@ impl Screens {
                     physical_mm: display.physical_mm,
                     refresh_mhz: display.refresh_mhz,
                     adaptive_sync: display.adaptive_sync,
+                    hdr: display.hdr,
                 }
             })
             .collect();
@@ -376,6 +383,7 @@ impl Screens {
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             }],
             size: logical,
         }
@@ -409,6 +417,8 @@ impl Screens {
                     mode: display.mode,
                     refresh_mhz: display.refresh_mhz,
                     adaptive_sync: display.adaptive_sync,
+                    hdr: display.hdr,
+                    sdr_white: display.sdr_white,
                 })
                 .collect(),
             outputs: layout
@@ -434,6 +444,7 @@ impl Screens {
                         physical_mm: display.physical_mm,
                         refresh_mhz: display.refresh_mhz,
                         adaptive_sync: display.adaptive_sync,
+                        hdr: display.hdr,
                     }
                 })
                 .collect(),
@@ -540,6 +551,8 @@ impl Screens {
                 mode: None,
                 refresh_mhz: None,
                 adaptive_sync: false,
+                hdr: false,
+                sdr_white: domicile_config::DEFAULT_SDR_WHITE,
             });
             let logical = (as_coordinate(logical.0), as_coordinate(logical.1));
             self.outputs.push(Advertised {
@@ -554,6 +567,7 @@ impl Screens {
                 physical_mm: display.physical_mm,
                 refresh_mhz: display.refresh_mhz,
                 adaptive_sync: display.adaptive_sync,
+                hdr: display.hdr,
             });
             row_end += mode.0;
             next_left += logical.0;
@@ -1000,7 +1014,7 @@ fn engine_pixel_on(connector: &Connector, (x, y): (f64, f64)) -> Option<(f64, f6
 mod tests {
     use super::*;
 
-    use crate::engine::Mode;
+    use crate::engine::{HdrState, Mode};
     use domicile_config::{Config, Desk};
 
     fn desktop(text: &str) -> Desktop {
@@ -1047,6 +1061,7 @@ mod tests {
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Advertised {
                     logical: (2560, 1440),
@@ -1060,6 +1075,7 @@ mod tests {
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );
@@ -1155,6 +1171,7 @@ mod tests {
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         let panicked = std::panic::catch_unwind({
             let bogus = bogus.clone();
@@ -1185,6 +1202,7 @@ mod tests {
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         let panicked = std::panic::catch_unwind(move || squashed.described())
             .expect_err("a negative height must not be described to the chrome");
@@ -1209,6 +1227,7 @@ mod tests {
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         let panicked = std::panic::catch_unwind(move || inverted.described())
             .expect_err("a negative density must not be described to the chrome");
@@ -1388,6 +1407,7 @@ mod tests {
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
 
         let panicked = std::panic::catch_unwind(move || past_the_end.bounds())
@@ -1498,6 +1518,7 @@ mod tests {
                     refresh_mhz: 59_997,
                     modes: Vec::new(),
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Display {
                     id: 2,
@@ -1509,6 +1530,7 @@ mod tests {
                     refresh_mhz: 0,
                     modes: Vec::new(),
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ],
             &unspelled(),
@@ -1532,6 +1554,7 @@ mod tests {
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Advertised {
                     logical: (1920, 1080),
@@ -1545,6 +1568,7 @@ mod tests {
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );
@@ -1567,6 +1591,7 @@ mod tests {
             refresh_mhz: 59_997,
             modes: Vec::new(),
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         }]
     }
 
@@ -1664,6 +1689,7 @@ mod tests {
                 refresh_mhz: 0,
                 modes: Vec::new(),
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             },
         ]
     }
@@ -1822,6 +1848,7 @@ mod tests {
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Advertised {
                     logical: (1920, 1280),
@@ -1835,6 +1862,7 @@ mod tests {
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
                     adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );
@@ -1870,6 +1898,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
                 Connector {
                     id: 1,
@@ -1886,6 +1916,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
             ]
         );
@@ -2007,6 +2039,43 @@ mod tests {
             asked.outputs().next().map(|output| output.adaptive_sync),
             Some(AdaptiveSync::On),
             "the desktop changed, so the chrome is told"
+        );
+    }
+
+    #[test]
+    fn a_profile_asks_for_hdr_and_the_desktop_says_whether_it_took() {
+        let bright = output(
+            r#"{ "output": { "profiles": [{ "name": "bright",
+                  "displays": [{ "display": "drm-1", "hdr": true, "sdr_white": 240 }] }] } }"#,
+        );
+        let asked = Screens::nested()
+            .replugged_into(&plugged_in(), &bright, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert!(asked.scanout()[0].hdr, "the engine is asked for it");
+        assert_eq!(asked.scanout()[0].sdr_white, 240);
+
+        // The engine reports whether the panel took it.
+        let on = Hdr {
+            state: HdrState::On,
+            max_luminance: 600,
+            max_average_luminance: 350,
+            min_luminance: 500,
+            sdr_white: 240,
+        };
+        let lit: Vec<Display> = plugged_in()
+            .into_iter()
+            .map(|display| Display { hdr: on, ..display })
+            .collect();
+        let after = asked
+            .replugged_into(&lit, &bright, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(after.outputs().next().map(|output| output.hdr), Some(on));
+        assert_ne!(
+            asked.outputs().next().map(|output| output.hdr),
+            Some(on),
+            "the desktop changed, so clients are told"
         );
     }
 
@@ -2187,6 +2256,7 @@ mod tests {
                 refresh_mhz: 59_997,
                 modes: Vec::new(),
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             },
             Display {
                 id: 2,
@@ -2198,6 +2268,7 @@ mod tests {
                 refresh_mhz: 0,
                 modes: Vec::new(),
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             },
         ]
     }
@@ -2244,6 +2315,7 @@ mod tests {
             refresh_mhz: 60_000,
             modes: Vec::new(),
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         }
     }
 
@@ -2286,6 +2358,7 @@ mod tests {
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             })
         );
         assert_eq!(
@@ -2310,6 +2383,8 @@ mod tests {
                 mode: None,
                 refresh_mhz: None,
                 adaptive_sync: false,
+                hdr: false,
+                sdr_white: domicile_config::DEFAULT_SDR_WHITE,
             })
         );
     }
@@ -2348,6 +2423,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(1),
@@ -2363,6 +2440,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
             ]
         );
@@ -2399,6 +2478,7 @@ mod tests {
             refresh_mhz: 60_000,
             modes: Vec::new(),
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         }
     }
 
@@ -2440,6 +2520,7 @@ mod tests {
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             })
         );
         assert_eq!(screens.size(), (2920, 1080));
@@ -2459,6 +2540,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(2),
@@ -2473,6 +2556,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
             ]
         );
@@ -2512,6 +2597,8 @@ mod tests {
             mode: None,
             refresh_mhz: None,
             adaptive_sync: false,
+            hdr: false,
+            sdr_white: domicile_config::DEFAULT_SDR_WHITE,
         };
         let near_the_top_left = (500.0 + 10.0, 20.0);
         assert_eq!(
@@ -2579,6 +2666,8 @@ mod tests {
                 mode: None,
                 refresh_mhz: None,
                 adaptive_sync: false,
+                hdr: false,
+                sdr_white: domicile_config::DEFAULT_SDR_WHITE,
             })
         );
         assert_eq!(
@@ -2671,6 +2760,7 @@ mod tests {
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             }]
         );
         assert_eq!(screens.size(), (1280, 800));

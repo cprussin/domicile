@@ -25,6 +25,7 @@ FrameSinkBroker::PendingEmbed::PendingEmbed(
     const viz::LocalSurfaceId& local_surface_id,
     const gfx::Size& size,
     double scale,
+    double zoom,
     EmbedCallback callback)
     : requester(requester),
       app_id(app_id),
@@ -32,6 +33,7 @@ FrameSinkBroker::PendingEmbed::PendingEmbed(
       local_surface_id(local_surface_id),
       size(size),
       scale(scale),
+      zoom(zoom),
       callback(std::move(callback)) {}
 
 FrameSinkBroker::PendingEmbed::PendingEmbed(PendingEmbed&&) = default;
@@ -99,6 +101,7 @@ void FrameSinkBroker::Embed(uint64_t requester,
                             const viz::LocalSurfaceId& local_surface_id,
                             const gfx::Size& size,
                             double scale,
+                            double zoom,
                             EmbedCallback callback) {
   // Sent before the page heard its compositor went away.
   if (disconnected_embed_tokens_.contains(local_surface_id.embed_token())) {
@@ -110,12 +113,12 @@ void FrameSinkBroker::Embed(uint64_t requester,
     // The <app> element can exist before its client connects, as on a shell
     // reload. Wait for this app's sink, not whichever is brokered next.
     pending_embeds_.emplace_back(requester, app_id, parent_frame_sink_id,
-                                 local_surface_id, size, scale,
+                                 local_surface_id, size, scale, zoom,
                                  std::move(callback));
     return;
   }
 
-  frame_sink->Embed(parent_frame_sink_id, local_surface_id, size, scale);
+  frame_sink->Embed(parent_frame_sink_id, local_surface_id, size, scale, zoom);
   embed_tokens_[frame_sink->frame_sink_id()].insert(
       local_surface_id.embed_token());
   std::move(callback).Run(frame_sink->frame_sink_id());
@@ -159,7 +162,7 @@ void FrameSinkBroker::CreateFrameSink(
       continue;
     }
     raw_frame_sink->Embed(embed.parent_frame_sink_id, embed.local_surface_id,
-                          embed.size, embed.scale);
+                          embed.size, embed.scale, embed.zoom);
     embed_tokens_[frame_sink_id].insert(embed.local_surface_id.embed_token());
     std::move(embed.callback).Run(frame_sink_id);
   }
@@ -177,6 +180,20 @@ void FrameSinkBroker::DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) {
     return;
   }
   EraseFrameSink(iter, mojom::FrameSinkEnd::kClosed);
+}
+
+void FrameSinkBroker::EmbedFrameSink(const viz::FrameSinkId& child,
+                                     const viz::FrameSinkId& parent,
+                                     const viz::LocalSurfaceId& local_surface_id,
+                                     const gfx::Size& size,
+                                     double scale) {
+  BrokeredFrameSink* embedded = OwnedFrameSink(child);
+  if (!embedded || !OwnedFrameSink(parent)) {
+    return;
+  }
+  // `scale` already carries the parent window's zoom (its client's logical
+  // units in device pixels), so the subsurface is embedded unzoomed.
+  embedded->Embed(parent, local_surface_id, size, scale, /*zoom=*/1.0);
 }
 
 void FrameSinkBroker::WaitForEnd(const viz::FrameSinkId& frame_sink_id,
@@ -209,6 +226,7 @@ void FrameSinkBroker::ImportBuffer(const viz::FrameSinkId& frame_sink_id,
                                    gfx::GpuMemoryBufferHandle handle,
                                    const gfx::Size& size,
                                    uint32_t fourcc,
+                                   const gfx::ColorSpace& color_space,
                                    ImportBufferCallback callback) {
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
   if (!frame_sink) {
@@ -217,7 +235,8 @@ void FrameSinkBroker::ImportBuffer(const viz::FrameSinkId& frame_sink_id,
   }
   std::optional<gpu::ExportedSharedImage> exported;
   const uint64_t buffer_id =
-      frame_sink->ImportBuffer(std::move(handle), size, fourcc, &exported);
+      frame_sink->ImportBuffer(std::move(handle), size, fourcc,
+                               color_space, &exported);
   std::move(callback).Run(buffer_id, std::move(exported));
 }
 

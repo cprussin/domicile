@@ -34,6 +34,7 @@
 #include "base/types/expected.h"
 #include "components/domicile/browser/context_menu.h"
 #include "components/domicile/browser/desk_downloads.h"
+#include "components/domicile/browser/desk_faults.h"
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/page_matches.h"
 #include "components/domicile/browser/placeholder_stage.h"
@@ -1197,6 +1198,50 @@ void WebViewGuest::WithdrawPrompt(int id) {
   client_->PromptWithdrawn();
 }
 
+int WebViewGuest::AskIdentity(mojom::WebViewIdentityRequestPtr request,
+                              IdentityAnswered answered) {
+  const int id = ++last_identity_;
+  open_identity_ = id;
+  // Logged before asking; the sign-in-with guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s page signs in with an identity "
+               "provider; asking the shell to show its "
+            << request->step << " step.";
+  // Wrapped, as in AskPrompt: unanswered is kNone.
+  client_->IdentityRequested(
+      std::move(request),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(
+              [](base::WeakPtr<WebViewGuest> guest, int id,
+                 IdentityAnswered answered,
+                 mojom::WebViewIdentityAction action, int32_t index) {
+                if (guest && guest->open_identity_ == id) {
+                  guest->open_identity_ = 0;
+                }
+                // Logged for the sign-in-with guard.
+                LOG(INFO) << "domicile: a <webview>'s sign-in step was "
+                             "answered: "
+                          << action << ".";
+                std::move(answered).Run(action, index);
+              },
+              weak_factory_.GetWeakPtr(), id, std::move(answered)),
+          mojom::WebViewIdentityAction::kNone, 0));
+  return id;
+}
+
+void WebViewGuest::WithdrawIdentity(int id) {
+  if (open_identity_ != id || id == 0) {
+    return;
+  }
+  open_identity_ = 0;
+  // The sign-in-with guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s sign-in step was withdrawn.";
+  client_->IdentityWithdrawn();
+}
+
+WebViewGuest* WebViewGuest::OpenWindowAt(const GURL& url) {
+  return Host().Open(*guest_contents_->GetBrowserContext(), url, partition());
+}
+
 void WebViewGuest::BindPagePicker(
     content::RenderFrameHost& frame,
     mojo::PendingReceiver<mojom::PagePicker> receiver) {
@@ -2248,6 +2293,11 @@ namespace {
 constexpr int32_t kChromeInternalWorld =
     content::ISOLATED_WORLD_ID_CONTENT_END + 3;
 
+// How long a page has to leave fullscreen once the engine takes it out. The
+// renderer leaves as soon as its visual properties drop the grant, which is
+// within a frame or two; a page that has not after this stays in.
+constexpr base::TimeDelta kLeavesFullscreenWithin = base::Seconds(2);
+
 // A page's description: its first `<meta name="description">`, with the name
 // matched without case.
 constexpr char16_t kReadDescription[] =
@@ -2684,7 +2734,7 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
   LOG(INFO) << "domicile: opened a browser window at "
             << target_url.possibly_invalid_spec() << " with no opener.";
 
-  Host().Open(*guest_contents_->GetBrowserContext(), target_url, partition());
+  OpenWindowAt(target_url);
 }
 
 void WebViewGuest::CloseContents(content::WebContents* source) {
@@ -2758,6 +2808,50 @@ void WebViewGuest::SetPageFullscreen(bool fullscreen) {
       ->GetWidget()
       ->SynchronizeVisualProperties();
   client_->PageFullscreenChanged(fullscreen);
+  if (fullscreen) {
+    left_fullscreen_check_.Stop();
+  } else {
+    left_fullscreen_check_.Start(
+        FROM_HERE, kLeavesFullscreenWithin,
+        base::BindOnce(&WebViewGuest::CheckLeftFullscreen,
+                       weak_factory_.GetWeakPtr()));
+  }
+}
+
+void WebViewGuest::CheckLeftFullscreen() {
+  CHECK(!page_fullscreen_);
+  content::RenderFrameHost& frame = *guest_contents_->GetPrimaryMainFrame();
+  // The main frame's document holds the <iframe> when a frame in it is
+  // fullscreen, so one read covers the whole page.
+  frame.ExecuteJavaScriptInIsolatedWorld(
+      u"document.fullscreenElement !== null",
+      base::BindOnce(&WebViewGuest::FullscreenChecked,
+                     weak_factory_.GetWeakPtr(), frame.GetWeakDocumentPtr()),
+      kChromeInternalWorld);
+}
+
+void WebViewGuest::FullscreenChecked(content::WeakDocumentPtr document,
+                                     base::Value held) {
+  if (page_fullscreen_ ||
+      document.AsRenderFrameHostIfValid() !=
+          guest_contents_->GetPrimaryMainFrame() ||
+      held != base::Value(true)) {
+    return;
+  }
+  // What the renderer was last told, for the report: whether the grant it
+  // waits on went out, and the size it lays the page out at.
+  content::RenderWidgetHostView* view =
+      guest_contents_->GetPrimaryMainFrame()->GetView();
+  LOG(ERROR) << "domicile: a <webview>'s page is still fullscreen "
+             << kLeavesFullscreenWithin << " after it left. Its widget is "
+             << (view ? view->GetViewBounds().size().ToString()
+                      : std::string("gone"))
+             << (view && view->IsShowing() ? ", showing" : ", hidden")
+             << "; the renderer leaves when its visual properties drop the "
+                "grant, so they never reached it or it never applied them.";
+  DeskFaults::Get().Report(
+      "A page stayed in fullscreen after leaving it, so its window may look "
+      "stuck.");
 }
 
 void WebViewGuest::ScreenWakeLockChanged(content::WebContents* source,
@@ -2773,6 +2867,13 @@ void WebViewGuest::ScreenWakeLockChanged(content::WebContents* source,
 void WebViewGuest::ActivateContents(content::WebContents* contents) {
   LOG(INFO) << "domicile: a <webview>'s page asked to be in front.";
   client_->FocusRequested();
+}
+
+content::PictureInPictureResult WebViewGuest::EnterPictureInPicture(
+    content::WebContents* web_contents) {
+  LOG(INFO) << "domicile: a <webview>'s page put a video in "
+               "picture-in-picture.";
+  return content::PictureInPictureResult::kSuccess;
 }
 
 void WebViewGuest::EnableAutoResize() {
