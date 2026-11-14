@@ -49,6 +49,13 @@ struct EngineDisplay {
   // Whether it scans out with a variable refresh rate: one of the
   // `DOMICILE_ADAPTIVE_SYNC_*` values in domicile_engine.h.
   int32_t adaptive_sync = 0;
+  // Whether it is driven in HDR10: one of the `DOMICILE_HDR_*` values in
+  // domicile_engine.h. Then its panel's luminances in cd/m².
+  int32_t hdr = 0;
+  float max_luminance = 0.f;
+  float max_average_luminance = 0.f;
+  float min_luminance = 0.f;
+  float sdr_white_nits = 0.f;
 };
 
 // One of the browser's windows.

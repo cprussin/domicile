@@ -361,6 +361,23 @@ dock.
    `linear-gradient(black, white)`). It should show no bands.
 3. A monitor that reports 8 bits should look as before.
 
+## HDR on an HDR10 monitor
+
+Needs a monitor that takes HDR10 (`edid-decode` on its EDID lists "HDR Static
+Metadata Data Block" with "SMPTE ST2084"), that passes the 10-bit scanout check
+above, with HDR allowed in the monitor's own menu.
+
+1. With no `hdr` in the profile, the monitor should look as before.
+2. Add `"hdr": true` to its profile entry and reload. The monitor should
+   flicker once and its OSD should say it is in HDR. Windows and the shell
+   should look about as bright and as colored as before, not washed out or
+   oversaturated.
+3. Play an HDR video in a browser tab (for example an HDR test clip on
+   YouTube): its highlights should be brighter than the page's white.
+4. Set `"sdr_white": 300` and reload: windows should get brighter, and the
+   HDR video's highlights should not.
+5. Remove `hdr` and reload. The monitor should leave HDR and look as in 1.
+
 ## A cursor an app draws itself
 
 Needs an app that sets its own cursor image, such as GIMP with a brush tool,
