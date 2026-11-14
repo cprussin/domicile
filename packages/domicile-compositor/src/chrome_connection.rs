@@ -14,7 +14,7 @@ use domicile_protocol::{
     negotiate, ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemRequest, Theme,
     PROTOCOL_VERSION,
 };
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::chrome_hub::{Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
@@ -690,6 +690,14 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::Activity { input }) => {
                 hub.send_request(ClientRequest::Activity { input });
+                Vec::new()
+            }
+            Ok(ChromeMessage::EngineFault { what }) => {
+                error!(what, "the engine caught itself in a bug");
+                hub.notifications
+                    .get()
+                    .expect("the notification server is handed to the hub before chromes connect")
+                    .warn_of_an_engine_fault(&what);
                 Vec::new()
             }
             Ok(ChromeMessage::DeskPointer { at, windows }) => {
