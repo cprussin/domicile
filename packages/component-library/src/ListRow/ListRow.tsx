@@ -50,6 +50,11 @@ type Common = {
 type Props = Common &
   (
     | {
+        /**
+         * Buttons beside the row's own button rather than in it, such as a
+         * pin, after `end`.
+         */
+        actions?: ReactNode | undefined;
         /** While its request is out. */
         busy?: boolean | undefined;
         /** Names the button, when its text alone would not. */
@@ -57,7 +62,12 @@ type Props = Common &
         /** Makes the whole row one button. Its `end` must not be a control. */
         onPress: () => void;
       }
-    | { busy?: undefined; name?: undefined; onPress?: undefined }
+    | {
+        actions?: undefined;
+        busy?: undefined;
+        name?: undefined;
+        onPress?: undefined;
+      }
   );
 
 /**
@@ -69,6 +79,7 @@ type Props = Common &
  * so rows keep one height.
  */
 export const ListRow = ({
+  actions,
   busy,
   children,
   detail,
@@ -136,15 +147,17 @@ export const ListRow = ({
       {onPress === undefined ? (
         <div className={rowStyles({ pressable: false })}>{face}</div>
       ) : (
-        <button
-          aria-busy={busy === true ? true : undefined}
-          aria-label={name}
-          className={rowStyles({ pressable: true })}
-          onClick={onPress}
-          type="button"
-        >
-          {face}
-        </button>
+        <Beside actions={actions}>
+          <button
+            aria-busy={busy === true ? true : undefined}
+            aria-label={name}
+            className={rowStyles({ pressable: true })}
+            onClick={onPress}
+            type="button"
+          >
+            {face}
+          </button>
+        </Beside>
       )}
       {folds ? (
         <Collapsible.Panel className={drawerStyles}>{under}</Collapsible.Panel>
@@ -172,6 +185,23 @@ export const ListRow = ({
     </LeavingRow>
   );
 };
+
+/** A pressed row's button, with its `actions` beside it when it has any. */
+const Beside = ({
+  actions,
+  children,
+}: {
+  actions: ReactNode;
+  children: ReactNode;
+}) =>
+  actions === undefined ? (
+    children
+  ) : (
+    <div className={pressedStyles}>
+      {children}
+      <span className={actionsStyles}>{actions}</span>
+    </div>
+  );
 
 /** A panel's list of {@link ListRow}s. */
 export const List = ({
@@ -244,6 +274,18 @@ const rowStyles = cva({
       },
     },
   },
+});
+
+// A pressed row's button, and its actions beside it. The button lights alone
+// under the pointer.
+const pressedStyles = flex({ align: "center", minInlineSize: 0 });
+
+// Inset as the row's own end is, so its buttons line up with other rows'.
+const actionsStyles = flex({
+  align: "center",
+  flexShrink: 0,
+  gap: 1,
+  paddingInlineEnd: 2,
 });
 
 // Only there to hold the disclosure's state; the item lays out its parts.

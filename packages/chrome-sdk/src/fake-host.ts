@@ -45,6 +45,7 @@ const CHANGED: Readonly<
   focusedWindow: "focusedwindowchanged",
   highContrast: "appearancechanged",
   idle: "idlechanged",
+  installedExtensions: "installedextensionschanged",
   locked: "lockedchanged",
   metaKey: "modifierschanged",
   notifications: "notificationschanged",
@@ -72,6 +73,7 @@ const UNDESCRIBED: DomicileState = {
   focusedWindow: null,
   highContrast: null,
   idle: null,
+  installedExtensions: null,
   locked: null,
   metaKey: null,
   notifications: null,
@@ -134,11 +136,14 @@ export const describedWindow = (
 
 /** The methods that return a promise. The fake's never settle. */
 const ASKS = new Set([
+  "configureExtension",
   "confinePointer",
   "countBrowserWindowMatches",
   "fetchWithCookies",
   "searchFiles",
+  "setExtensionEnabled",
   "startCasting",
+  "uninstallExtension",
 ]);
 
 export class FakeDomicileHost {

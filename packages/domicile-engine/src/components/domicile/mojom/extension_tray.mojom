@@ -3,7 +3,8 @@
 
 module domicile.mojom;
 
-// Extension actions for the shell's tray.
+// Extensions for the shell's tray: their actions, and every installed
+// extension for a menu that switches and configures them.
 //
 // A separate interface from ControlChannel because action state lives in the
 // browser process (ExtensionActionManager), not the compositor.
@@ -36,6 +37,51 @@ struct TrayExtension {
   bool enabled;
 };
 
+// Where an extension runs on the sites it asks for, as chrome://extensions'
+// "Site access" offers.
+enum SiteAccess {
+  // Only on a site where its action was clicked (activeTab).
+  kOnClick,
+  // Only on ExtensionSettings.sites.
+  kSpecificSites,
+  // Everywhere it asks to.
+  kAllSites,
+};
+
+// An extension's chrome://extensions settings. Each is null where it is not
+// being set, or where the extension cannot use it.
+struct ExtensionSettings {
+  // Runs in private windows.
+  bool? in_private;
+  // Runs on file:// pages.
+  bool? file_access;
+  // May use chrome.userScripts.
+  bool? user_scripts;
+  SiteAccess? site_access;
+  // With kSpecificSites: hosts, each also as `*.host` for its subdomains.
+  array<string> sites;
+};
+
+// One extension installed in the shell's profile, switched on or off, for a
+// menu that manages them. Apps, themes and Chrome's own are left out, as
+// chrome://extensions leaves them out.
+struct InstalledExtension {
+  string id;
+  string name;
+  // The manifest's icon as data:image/png;base64,..., at the page's device
+  // scale factor. Chrome's placeholder until the icon loads.
+  string icon;
+  bool enabled;
+  ExtensionSettings settings;
+  // The settings the desk's config sets, each true or false as set. Only the
+  // config changes these: Configure refuses them.
+  ExtensionSettings config_settings;
+  // The config installed it, so only the config uninstalls it.
+  bool from_config;
+  // Empty if it has no options page.
+  string options_url;
+};
+
 // Renderer -> browser, bound per document.
 interface ExtensionTray {
   // Sets the list's receiver. The list is sent immediately, so a reloaded page
@@ -49,6 +95,19 @@ interface ExtensionTray {
   // itself. An unknown or disabled id is ignored; the click may have raced an
   // uninstall.
   Activate(string id);
+
+  // Switches extension `id` on or off, as its user would on
+  // chrome://extensions. Answers with why not, or an empty string.
+  SetEnabled(string id, bool enabled) => (string error);
+
+  // Sets each of `settings` that is set on extension `id`. Answers with why
+  // not, or an empty string; then none is set. A setting the extension
+  // cannot use, or the config sets, is refused.
+  Configure(string id, ExtensionSettings settings) => (string error);
+
+  // Uninstalls extension `id`, as its user would. Answers with why not, or an
+  // empty string. One the config installed is refused.
+  Uninstall(string id) => (string error);
 };
 
 // Browser -> renderer.
@@ -56,6 +115,10 @@ interface ExtensionTrayClient {
   // The full list on every change, not a delta, so a missed message cannot
   // leave the page wrong.
   ExtensionsChanged(array<TrayExtension> extensions);
+
+  // Every installed extension, on SetClient and on every change: one
+  // installed, uninstalled, switched on or off, or reconfigured.
+  InstalledChanged(array<InstalledExtension> extensions);
 
   // Extension `id` called `action.openPopup()`. The shell opens `popup` as it
   // opens a clicked action's. `popup` is carried because the extension may

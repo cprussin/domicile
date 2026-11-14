@@ -46,6 +46,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 784, and it was 783 — the tray menu's extension entries are one more
+# case. Before that
 # 783, and it was 771 — an Electron app's webRequest listeners are six more
 # ElectronProtocol cases and six more ElectronApp ones. Before that
 # 771, and it was 762 — Electron apps' own schemes, registered at start, are
@@ -259,7 +261,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=783
+FLOOR=784
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

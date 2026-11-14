@@ -251,6 +251,27 @@
   [CallWith=ScriptState, RaisesException] undefined activateExtension(
       DOMString id);
 
+  // Switch installed extension `id` on or off, as chrome://extensions does.
+  // Resolves once switched; `installedExtensions` and `extensions` follow.
+  // Rejects with an OperationError saying why, in words to show, when it is
+  // not. Over the tray's pipe, as activateExtension().
+  [CallWith=ScriptState, RaisesException] Promise<undefined>
+      setExtensionEnabled(DOMString id, boolean enabled);
+
+  // Set each of `settings` present on installed extension `id`, or none.
+  // Rejects with an OperationError saying why, in words to show: a setting
+  // the extension cannot use, one the desk's config sets (its `configured`),
+  // or a site that is not a host. Throws a TypeError for a `siteAccess` that
+  // is not one of its three, or `sites` without "specific_sites".
+  [CallWith=ScriptState, RaisesException] Promise<undefined>
+      configureExtension(DOMString id, DomicileExtensionSettings settings);
+
+  // Uninstall extension `id`, as its user would. Rejects with an
+  // OperationError saying why, in words to show: one the config installed
+  // (its `fromConfig`) is only the config's to remove.
+  [CallWith=ScriptState, RaisesException] Promise<undefined>
+      uninstallExtension(DOMString id);
+
   // No input forwarding: an <app> sends its client what lands on it, and the
   // page's keys go to the window with the keyboard. See HTMLAppElement.
 
@@ -325,6 +346,14 @@
   // opens a clicked action's. Not held for a late listener: a popup the user
   // did not see asked for is not one to open later.
   attribute EventHandler onextensionpopuprequested;
+  // Every extension installed in the shell's profile, switched on or off,
+  // with its settings, for a menu that manages them. Null until the browser
+  // lists them, which it does as soon as this page listens. No [SameObject],
+  // for `displays`' reason.
+  readonly attribute FrozenArray<DomicileInstalledExtension>? installedExtensions;
+  // Fires when one is installed, uninstalled, switched on or off, or
+  // reconfigured, or its icon loads.
+  attribute EventHandler oninstalledextensionschanged;
   readonly attribute boolean? idle;
   attribute EventHandler onidlechanged;
   readonly attribute boolean? locked;

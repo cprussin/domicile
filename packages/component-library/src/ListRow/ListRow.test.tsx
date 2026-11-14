@@ -127,6 +127,36 @@ describe(ListRow, () => {
       expect(await pressed).toBe(true);
     });
 
+    it("puts its actions beside its button, not in it", async () => {
+      const pressed: string[] = [];
+      render(
+        <List>
+          <ListRow
+            actions={
+              <Button
+                onClick={() => {
+                  pressed.push("pin");
+                }}
+              >
+                Pin
+              </Button>
+            }
+            label="Dark Reader"
+            onPress={() => {
+              pressed.push("row");
+            }}
+          />
+        </List>,
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "Pin" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Dark Reader" }),
+      );
+
+      expect(pressed).toStrictEqual(["pin", "row"]);
+    });
+
     it("says it is busy while its request is out", () => {
       render(
         <List>

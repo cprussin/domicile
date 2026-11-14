@@ -54,6 +54,7 @@ TOGETHER=(
   guard-extension-installer
   guard-extension-in-private
   guard-extension-tray
+  guard-extension-menu
   guard-extension-open-popup
   guard-extension-side-panel
   guard-webview-keyboard

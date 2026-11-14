@@ -45,6 +45,7 @@ const EVENT_NAMES = [
   "notificationschanged",
   "extensionschanged",
   "extensionpopuprequested",
+  "installedextensionschanged",
   "idlechanged",
   "lockedchanged",
   "themechanged",

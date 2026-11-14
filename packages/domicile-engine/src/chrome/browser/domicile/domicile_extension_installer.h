@@ -13,6 +13,7 @@
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/extension_installer.h"
 
+class PrefChangeRegistrar;
 class PrefRegistrySimple;
 class Profile;
 
@@ -54,6 +55,11 @@ base::expected<void, std::string> UninstallFrom(Profile& profile,
 
 // The ids of the extensions the config added to `profile`.
 std::vector<std::string> ConfigExtensionsOf(Profile& profile);
+
+// Calls `changed` whenever the config's extensions, or the settings it sets
+// on them, change.
+void WatchConfigExtensions(PrefChangeRegistrar& registrar,
+                           const base::RepeatingClosure& changed);
 
 // Every extension in `profile`, for the Settings app: no apps, themes or
 // Chrome's own components, as `chrome.management` lists them.
