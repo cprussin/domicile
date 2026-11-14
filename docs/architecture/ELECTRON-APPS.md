@@ -202,7 +202,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: preload, `contextBridge`, `ipcRenderer` `send`/`on`/`invoke`, `webContents.send`
 - [x] `electron-host`: `webPreferences.preload`, `ipcMain`, `webContents.send`
 - [x] engine: `sendSync`, message ports
-- [ ] `electron-host`: `sendSync`, `postMessage`, `MessageChannelMain`
+- [x] `electron-host`: `sendSync`, `postMessage`, `MessageChannelMain`
 - [ ] engine: `protocol.handle`, per-app partition, `session` and `webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
