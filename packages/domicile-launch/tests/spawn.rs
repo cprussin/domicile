@@ -27,6 +27,7 @@ fn runtime() -> Runtime {
         broker: PathBuf::from("/run/d/broker"),
         chrome_socket: PathBuf::from("/run/d/chrome.sock"),
         command: PathBuf::from("/run/d/command.sock"),
+        electron: PathBuf::from("/run/d/electron.sock"),
         control: PathBuf::from("/run/d/domicile-ipc.4242.sock"),
         profile: PathBuf::from("/run/d/profile"),
         shims: PathBuf::from("/run/d/bin"),
@@ -102,6 +103,43 @@ fn the_engine_takes_commands_on_a_socket_of_this_runs_own() {
     assert!(
         args.contains(&"--domicile-command-socket=/run/d/command.sock".to_string()),
         "{args:?}"
+    );
+}
+
+#[test]
+fn the_engine_takes_electron_apps_on_a_socket_of_this_runs_own() {
+    // Without it an Electron app's `electron-host` has nowhere to open its
+    // windows. See docs/architecture/ELECTRON-APPS.md.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--domicile-electron-socket=/run/d/electron.sock".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
+fn apps_find_the_electron_socket_in_their_environment() {
+    // The compositor starts apps, so an Electron app's `electron-host`
+    // inherits it from there.
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
+        Path::new("/d/share"),
+        &runtime(),
+        None,
+        false,
+        &|_| None,
+    );
+    assert_eq!(
+        env_of(&spawned, "DOMICILE_ELECTRON_SOCK").unwrap(),
+        "/run/d/electron.sock"
     );
 }
 

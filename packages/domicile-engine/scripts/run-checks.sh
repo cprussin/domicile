@@ -118,6 +118,7 @@ TOGETHER=(
   guard-domicile-fetch
   guard-shell-pdf
   guard-app-module
+  guard-electron-socket
   guard-video-codecs
   guard-browser-brand
 )
@@ -139,6 +140,7 @@ ONCE=(
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch
+  guard-electron-socket
   guard-held-moments
   guard-portal-requests
   guard-shell-handover

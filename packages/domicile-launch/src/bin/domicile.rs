@@ -685,6 +685,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         broker: runtime.join("broker"),
         chrome_socket: runtime.join("chrome.sock"),
         command: runtime.join("command.sock"),
+        electron: runtime.join("electron.sock"),
         control: address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id()),
         profile: profile.path.clone(),
         shims: runtime.join("bin"),

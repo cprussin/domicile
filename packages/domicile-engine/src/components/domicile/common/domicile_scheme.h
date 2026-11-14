@@ -50,6 +50,13 @@ inline constexpr char kDomicileControlSocketSwitch[] =
 inline constexpr char kDomicileCommandSocketSwitch[] =
     "domicile-command-socket";
 
+// The engine's Electron socket: a unix stream the engine binds and each
+// `electron-host` dials, one connection per running Electron app, JSON lines
+// both ways. See `components/domicile/browser/electron_protocol.h`. Absent
+// unless the supervisor passes it.
+inline constexpr char kDomicileElectronSocketSwitch[] =
+    "domicile-electron-socket";
+
 // Path to the shell's JavaScript module. There is no manifest: the shell
 // provides everything through its exports once running.
 inline constexpr char kDomicileShellModuleSwitch[] = "domicile-shell-module";
