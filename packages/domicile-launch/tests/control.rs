@@ -17,8 +17,9 @@ use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
-    AdaptiveSync, DesktopStatus, DisplayHdr, DisplayInfo, DisplayTransform, ListedDisplay,
-    ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, Theme, WindowKind,
+    AdaptiveSync, DesktopStatus, DisplayHdr, DisplayInfo, DisplayTransform, InputConnection,
+    InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding,
+    ShellCommandHelp, Theme, WindowKind,
 };
 
 #[test]
@@ -431,6 +432,27 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         ),
         Response::ShellBindings {
             bindings: vec![binding]
+        }
+    );
+    let keyboard = ListedInput {
+        id: 4,
+        name: "AT Translated Set 2 keyboard".to_string(),
+        kind: InputKind::Keyboard,
+        connection: InputConnection::Internal,
+        sys_path: String::new(),
+        vendor: 1,
+        product: 1,
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"inputs\"}",
+            &Desktop {
+                inputs: &|| Ok(vec![keyboard.clone()]),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Inputs {
+            inputs: vec![keyboard]
         }
     );
     let status = DesktopStatus {
@@ -1139,6 +1161,7 @@ fn nothing_dialed() -> Desktop<'static> {
         status: &|| panic!("only status asks how the desktop is"),
         shell_commands: &|| panic!("only shell_commands lists the shell's commands"),
         shell_bindings: &|| panic!("only shell_bindings lists the shell's bindings"),
+        inputs: &|| panic!("only inputs lists the input devices"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),

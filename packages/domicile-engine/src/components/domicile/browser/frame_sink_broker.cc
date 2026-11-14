@@ -424,6 +424,22 @@ void FrameSinkBroker::OnBrowserWindowsChanged(
   }
 }
 
+void FrameSinkBroker::ObserveInputDevices(
+    mojo::PendingRemote<mojom::InputDeviceListObserver> observer) {
+  const mojo::RemoteSetElementId id =
+      input_device_observers_.Add(std::move(observer));
+  input_device_observers_.Get(id)->OnInputDevicesChanged(
+      mojo::Clone(input_devices_));
+}
+
+void FrameSinkBroker::OnInputDevicesChanged(
+    std::vector<mojom::ListedInputDevicePtr> devices) {
+  input_devices_ = std::move(devices);
+  for (auto& observer : input_device_observers_) {
+    observer->OnInputDevicesChanged(mojo::Clone(input_devices_));
+  }
+}
+
 void FrameSinkBroker::CaptureDisplay(
     int64_t display_id,
     const gfx::Size& size,

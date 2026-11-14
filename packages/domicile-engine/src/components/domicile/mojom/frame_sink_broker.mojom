@@ -283,6 +283,47 @@ interface BrowserWindowListObserver {
   OnBrowserWindowsChanged(array<ListedBrowserWindow> windows);
 };
 
+// What an input device is. A device can be more than one, and is then listed
+// once for each.
+enum InputDeviceKind {
+  kKeyboard,
+  kMouse,
+  kTouchpad,
+  kTouchscreen,
+  kPointingStick,
+  kGraphicsTablet,
+  // Read for its keys or switches alone, like a power button or a lid.
+  kOther,
+};
+
+// How an input device is attached. Mirrors ui::InputDeviceType.
+enum InputDeviceConnection {
+  kUnknown,
+  kInternal,
+  kUsb,
+  kBluetooth,
+};
+
+// An input device the browser reads, as `domicile list-inputs` lists it.
+struct ListedInputDevice {
+  // ui::InputDevice::id, which holds while the device stays plugged in.
+  int32 id;
+  string name;
+  InputDeviceKind kind;
+  InputDeviceConnection connection;
+  // Its device under /sys, or empty.
+  string sys_path;
+  uint16 vendor_id;
+  uint16 product_id;
+};
+
+// Tells a producer which input devices the browser reads, so it can list them.
+interface InputDeviceListObserver {
+  // The full list, in the order the browser found them. Sent on observing,
+  // and when a device is plugged or unplugged.
+  OnInputDevicesChanged(array<ListedInputDevice> devices);
+};
+
 // Which clipboard: the Ctrl-C clipboard or the primary selection.
 enum Clipboard {
   kCopy,
@@ -537,6 +578,10 @@ interface FrameSinkBroker {
   // Registers a producer's browser window list observer. It hears the list
   // at once, then every change.
   ObserveBrowserWindows(pending_remote<BrowserWindowListObserver> observer);
+
+  // Registers a producer's input device list observer. It hears the list at
+  // once, then every change.
+  ObserveInputDevices(pending_remote<InputDeviceListObserver> observer);
 
   // Captures what a display shows, for a screen cast. Viz runs a
   // FrameSinkVideoCapturer on the root frame sink of the browser window on

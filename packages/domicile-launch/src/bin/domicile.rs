@@ -32,8 +32,8 @@ use domicile_launch::command_socket::{
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{
-    displays, monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
-    shell_commands, status, theme, windows,
+    displays, inputs, monitors, power_displays, screen_record, screenshot, send_shell,
+    shell_bindings, shell_commands, status, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -49,7 +49,7 @@ use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::listing::{
-    bindings_table, displays_table, shell_commands_table, status_table, windows_table,
+    bindings_table, displays_table, inputs_table, shell_commands_table, status_table, windows_table,
 };
 use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
@@ -579,7 +579,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Windows { .. }
         | Response::Status { .. }
         | Response::ShellCommands { .. }
-        | Response::ShellBindings { .. } => Err(format!(
+        | Response::ShellBindings { .. }
+        | Response::Inputs { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -610,6 +611,8 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
         (Response::ShellCommands { commands }, true) => as_json(&commands),
         (Response::ShellBindings { bindings }, false) => bindings_table(&bindings),
         (Response::ShellBindings { bindings }, true) => as_json(&bindings),
+        (Response::Inputs { inputs }, false) => inputs_table(&inputs),
+        (Response::Inputs { inputs }, true) => as_json(&inputs),
         (Response::Refused { why }, _) => {
             eprintln!("domicile: {why}");
             return Ok(ExitCode::FAILURE);
@@ -1337,6 +1340,7 @@ fn answer_a_command(
                     shell_bindings: &|| {
                         shell_bindings(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
+                    inputs: &|| inputs(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
                 },
             )
         },

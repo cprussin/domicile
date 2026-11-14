@@ -210,6 +210,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   void OnBrowserWindowsChanged(
       std::vector<mojom::ListedBrowserWindowPtr> windows);
 
+  // Forwards the input devices the browser reads to observers, and stores
+  // them for observers that connect later.
+  void OnInputDevicesChanged(std::vector<mojom::ListedInputDevicePtr> devices);
+
   // mojom::FrameSinkBroker implementation.
   void CreateFrameSink(
       mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
@@ -259,6 +263,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       mojo::PendingRemote<mojom::CompositingObserver> observer) override;
   void ObserveBrowserWindows(
       mojo::PendingRemote<mojom::BrowserWindowListObserver> observer) override;
+  void ObserveInputDevices(
+      mojo::PendingRemote<mojom::InputDeviceListObserver> observer) override;
   void CaptureDisplay(
       int64_t display_id,
       const gfx::Size& size,
@@ -394,6 +400,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   mojo::RemoteSet<mojom::BrowserWindowListObserver> browser_window_observers_;
   // The last browser window list. See OnBrowserWindowsChanged.
   std::vector<mojom::ListedBrowserWindowPtr> browser_windows_;
+
+  mojo::RemoteSet<mojom::InputDeviceListObserver> input_device_observers_;
+  // The last input device list. See OnInputDevicesChanged.
+  std::vector<mojom::ListedInputDevicePtr> input_devices_;
 };
 
 }  // namespace domicile

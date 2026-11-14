@@ -251,6 +251,9 @@ impl DomicileCompositor {
                     let listed = self.foreign_toplevels.browser_windows(&windows);
                     self.browser_toplevels_listed(listed);
                 }
+                engine::Event::InputDevices(inputs) => {
+                    self.hub.host.lock().unwrap().input_devices(inputs);
+                }
                 engine::Event::GammaSizes(sizes) => self.gamma_sizes_reported(sizes),
                 // Acted on at the next hello, which is the new engine's.
                 engine::Event::Disconnected => {

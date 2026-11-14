@@ -46,6 +46,9 @@
 #include "ui/display/display_observer.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/display/screen.h"
+#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device.h"
+#include "ui/events/devices/input_device_event_observer.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "third_party/skia/include/core/SkM44.h"
 #include "mojo/public/cpp/bindings/message.h"
@@ -428,7 +431,48 @@ void SetColorMatrix(int64_t display_id,
 // The socket path is the only access control. A FrameSinkBroker pipe can
 // allocate any frame sink in viz. Renderers cannot get the invitation, and the
 // ExternalSurfaceProvider they do get cannot allocate.
-class DomicileBrowserService : public content::GpuDataManagerObserver {
+// How `device` is attached, for the producer.
+domicile::mojom::InputDeviceConnection ConnectionOf(
+    const ui::InputDevice& device) {
+  switch (device.type) {
+    case ui::INPUT_DEVICE_INTERNAL:
+      return domicile::mojom::InputDeviceConnection::kInternal;
+    case ui::INPUT_DEVICE_USB:
+      return domicile::mojom::InputDeviceConnection::kUsb;
+    case ui::INPUT_DEVICE_BLUETOOTH:
+      return domicile::mojom::InputDeviceConnection::kBluetooth;
+    case ui::INPUT_DEVICE_UNKNOWN:
+      return domicile::mojom::InputDeviceConnection::kUnknown;
+  }
+}
+
+// Every input device the browser reads, kind by kind, each in the order the
+// browser found it.
+std::vector<domicile::mojom::ListedInputDevicePtr> ListedInputDevices() {
+  const ui::DeviceDataManager* manager = ui::DeviceDataManager::GetInstance();
+  std::vector<domicile::mojom::ListedInputDevicePtr> listed;
+  // Each list holds its own subclass of ui::InputDevice.
+  const auto add = [&listed](const auto& devices,
+                             domicile::mojom::InputDeviceKind kind) {
+    for (const ui::InputDevice& device : devices) {
+      listed.push_back(domicile::mojom::ListedInputDevice::New(
+          device.id, device.name, kind, ConnectionOf(device),
+          device.sys_path.value(), device.vendor_id, device.product_id));
+    }
+  };
+  using Kind = domicile::mojom::InputDeviceKind;
+  add(manager->GetKeyboardDevices(), Kind::kKeyboard);
+  add(manager->GetMouseDevices(), Kind::kMouse);
+  add(manager->GetTouchpadDevices(), Kind::kTouchpad);
+  add(manager->GetTouchscreenDevices(), Kind::kTouchscreen);
+  add(manager->GetPointingStickDevices(), Kind::kPointingStick);
+  add(manager->GetGraphicsTabletDevices(), Kind::kGraphicsTablet);
+  add(manager->GetUncategorizedDevices(), Kind::kOther);
+  return listed;
+}
+
+class DomicileBrowserService : public content::GpuDataManagerObserver,
+                               public ui::InputDeviceEventObserver {
  public:
   DomicileBrowserService()
       : broker_(GetHostFrameSinkManager(),
@@ -464,6 +508,10 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
         &DomicileBrowserService::BrowserWindowsChanged,
         base::Unretained(this)));
     BrowserWindowsChanged();
+    // `domicile list-inputs` lists the devices. Never removed: this is a
+    // NoDestructor.
+    ui::DeviceDataManager::GetInstance()->AddObserver(this);
+    InputDevicesChanged();
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();
     // Only on DRM or a headless desk. A nested run's screen is the host's
@@ -498,6 +546,12 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
         content::GpuDataManagerImpl::GetInstance()->IsGpuCompositingDisabled());
   }
 
+  // ui::InputDeviceEventObserver implementation.
+  void OnInputDeviceConfigurationChanged(uint8_t input_device_types) override {
+    InputDevicesChanged();
+  }
+  void OnDeviceListsComplete() override { InputDevicesChanged(); }
+
   void Bind(
       mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver,
       uint32_t renderer_client_id) {
@@ -525,6 +579,11 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
           window.off_the_record));
     }
     broker_.OnBrowserWindowsChanged(std::move(windows));
+  }
+
+  // Forwards the input devices the browser reads to the producer.
+  void InputDevicesChanged() {
+    broker_.OnInputDevicesChanged(ListedInputDevices());
   }
 
   // Binding the socket does blocking I/O, so it runs off the UI thread.

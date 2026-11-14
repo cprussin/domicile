@@ -989,6 +989,81 @@ class BrowserWindows : public mojom::BrowserWindowListObserver {
   mojo::Receiver<mojom::BrowserWindowListObserver> receiver_{this};
 };
 
+// The DomicileInputDeviceKind for `kind`.
+uint8_t InputDeviceKindOf(mojom::InputDeviceKind kind) {
+  switch (kind) {
+    case mojom::InputDeviceKind::kKeyboard:
+      return DOMICILE_INPUT_DEVICE_KEYBOARD;
+    case mojom::InputDeviceKind::kMouse:
+      return DOMICILE_INPUT_DEVICE_MOUSE;
+    case mojom::InputDeviceKind::kTouchpad:
+      return DOMICILE_INPUT_DEVICE_TOUCHPAD;
+    case mojom::InputDeviceKind::kTouchscreen:
+      return DOMICILE_INPUT_DEVICE_TOUCHSCREEN;
+    case mojom::InputDeviceKind::kPointingStick:
+      return DOMICILE_INPUT_DEVICE_POINTING_STICK;
+    case mojom::InputDeviceKind::kGraphicsTablet:
+      return DOMICILE_INPUT_DEVICE_GRAPHICS_TABLET;
+    case mojom::InputDeviceKind::kOther:
+      return DOMICILE_INPUT_DEVICE_OTHER;
+  }
+}
+
+// The DomicileInputDeviceConnection for `connection`.
+uint8_t InputDeviceConnectionOf(mojom::InputDeviceConnection connection) {
+  switch (connection) {
+    case mojom::InputDeviceConnection::kUnknown:
+      return DOMICILE_INPUT_CONNECTION_UNKNOWN;
+    case mojom::InputDeviceConnection::kInternal:
+      return DOMICILE_INPUT_CONNECTION_INTERNAL;
+    case mojom::InputDeviceConnection::kUsb:
+      return DOMICILE_INPUT_CONNECTION_USB;
+    case mojom::InputDeviceConnection::kBluetooth:
+      return DOMICILE_INPUT_CONNECTION_BLUETOOTH;
+  }
+}
+
+// Forwards the input devices the browser reads to the compositor, for
+// `domicile list-inputs`.
+class InputDevices : public mojom::InputDeviceListObserver {
+ public:
+  explicit InputDevices(EngineEventQueue* queue) : queue_(queue) {}
+
+  InputDevices(const InputDevices&) = delete;
+  InputDevices& operator=(const InputDevices&) = delete;
+
+  ~InputDevices() override = default;
+
+  mojo::PendingRemote<mojom::InputDeviceListObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // Reset on the binding thread, like Displays::Unbind.
+  void Unbind() { receiver_.reset(); }
+
+  // mojom::InputDeviceListObserver implementation.
+  void OnInputDevicesChanged(
+      std::vector<mojom::ListedInputDevicePtr> devices) override {
+    EngineEvent event{.type = EngineEvent::Type::kInputDevices};
+    event.input_devices.reserve(devices.size());
+    for (mojom::ListedInputDevicePtr& device : devices) {
+      event.input_devices.push_back(EngineInputDevice{
+          .name = std::move(device->name),
+          .sys_path = std::move(device->sys_path),
+          .id = device->id,
+          .vendor_id = device->vendor_id,
+          .product_id = device->product_id,
+          .kind = InputDeviceKindOf(device->kind),
+          .connection = InputDeviceConnectionOf(device->connection)});
+    }
+    queue_->Push(event);
+  }
+
+ private:
+  const raw_ptr<EngineEventQueue> queue_;
+  mojo::Receiver<mojom::InputDeviceListObserver> receiver_{this};
+};
+
 // Converts a client's dmabuf for mojo. Duplicates the fds; the caller keeps
 // the originals.
 gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
@@ -1355,6 +1430,27 @@ struct DomicileEngine {
             }
             callbacks_.browser_windows(callbacks_.user_data, records.data(),
                                        static_cast<uint32_t>(records.size()));
+          }
+          break;
+        case domicile::EngineEvent::Type::kInputDevices:
+          if (callbacks_.input_devices) {
+            // `event` owns the strings until the loop ends, as for display
+            // names.
+            std::vector<DomicileInputDevice> records;
+            records.reserve(event.input_devices.size());
+            for (const domicile::EngineInputDevice& device :
+                 event.input_devices) {
+              records.push_back(
+                  DomicileInputDevice{.name = device.name.c_str(),
+                                      .sys_path = device.sys_path.c_str(),
+                                      .id = device.id,
+                                      .vendor_id = device.vendor_id,
+                                      .product_id = device.product_id,
+                                      .kind = device.kind,
+                                      .connection = device.connection});
+            }
+            callbacks_.input_devices(callbacks_.user_data, records.data(),
+                                     static_cast<uint32_t>(records.size()));
           }
           break;
       }
@@ -1952,6 +2048,8 @@ struct DomicileEngine {
       // And the browser's windows, which capture tools list beside the
       // compositor's own.
       broker_->ObserveBrowserWindows(browser_windows_.BindRemote());
+      // And the input devices, for `domicile list-inputs`.
+      broker_->ObserveInputDevices(input_devices_.BindRemote());
     }
     *connected = broker_.is_bound();
   }
@@ -2282,6 +2380,7 @@ struct DomicileEngine {
     copies_.Unbind();
     compositing_.Unbind();
     browser_windows_.Unbind();
+    input_devices_.Unbind();
   }
 
   void RunOnThreadAndWait(base::OnceClosure task) {
@@ -2303,6 +2402,7 @@ struct DomicileEngine {
   domicile::Copies copies_{&queue_};
   domicile::Compositing compositing_{&queue_};
   domicile::BrowserWindows browser_windows_{&queue_};
+  domicile::InputDevices input_devices_{&queue_};
   base::Thread thread_;
   std::unique_ptr<mojo::core::ScopedIPCSupport> ipc_support_;
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;

@@ -194,6 +194,31 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
 `app`, `pid`, `size`, `focused`, `urgent`, `url` (a browser window's address,
 `null` for a native window) and `private` per window.
 
+## `domicile list-inputs [--json]`
+
+Print each keyboard, pointer and touch device the desktop reads, in the order
+it found them.
+
+```
+ID  KIND         CONNECTION  VENDOR:PRODUCT  NAME
+4   keyboard     internal    0001:0001       AT Translated Set 2 keyboard
+9   mouse        bluetooth   046d:4082       Logitech MX Master 3
+11  touchpad     internal    -               SYNA8004:00 06CB:CD8B Touchpad
+```
+
+- `ID` holds while the device stays plugged in. A device that is two kinds,
+  like a keyboard with a touchpad, is one row per kind under one id.
+- `KIND` is `keyboard`, `mouse`, `touchpad`, `touchscreen`, `pointing-stick`,
+  `tablet`, or `other` for one read only for its keys or switches, like a
+  power button.
+- `CONNECTION` is `internal`, `usb`, `bluetooth` or `unknown`.
+- `VENDOR:PRODUCT` are its USB or Bluetooth ids, as `lsusb` prints them, or
+  `-` when it has none.
+
+`--json` prints a JSON array instead, for scripts, with `id`, `name`, `kind`,
+`connection`, `sys_path` (its device under `/sys`, or empty), `vendor` and
+`product` per device.
+
 ## `domicile status [--json]`
 
 Print how the desktop is: the shell it serves, theme, keymap, whether it is
@@ -255,8 +280,8 @@ that `send-shell --help` prints the shell's own commands.
 
 `screenshot`, `screen-record` and `send-shell` are refused while the desktop
 is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
-`wake-displays`, `list-displays`, `list-windows`, `status`, `list-shell-commands` and
-`list-bindings` work, and a `monitor` added before keeps resizing.
+`wake-displays`, `list-displays`, `list-windows`, `list-inputs`, `status`,
+`list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

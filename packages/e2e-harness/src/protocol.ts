@@ -634,6 +634,31 @@ const shellBindingListSchema = z.looseObject({
   type: z.literal("shell_binding_list"),
 });
 
+// The input devices the engine reads. Answers `which_inputs` on the asking
+// connection only, for `domicile list-inputs`.
+const inputListSchema = z.looseObject({
+  inputs: z.array(
+    z.looseObject({
+      connection: z.enum(["internal", "usb", "bluetooth", "unknown"]),
+      id: z.number(),
+      kind: z.enum([
+        "keyboard",
+        "mouse",
+        "touchpad",
+        "touchscreen",
+        "pointing-stick",
+        "tablet",
+        "other",
+      ]),
+      name: z.string(),
+      product: z.number(),
+      sys_path: z.string(),
+      vendor: z.number(),
+    }),
+  ),
+  type: z.literal("input_list"),
+});
+
 const boundShortcutSchema = z.looseObject({
   app_id: z.string(),
   chord: z.string(),
@@ -891,6 +916,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   statusSchema,
   shellCommandListSchema,
   shellBindingListSchema,
+  inputListSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -951,6 +977,7 @@ export type WindowListMessage = z.infer<typeof windowListSchema>;
 export type StatusMessage = z.infer<typeof statusSchema>;
 export type ShellCommandListMessage = z.infer<typeof shellCommandListSchema>;
 export type ShellBindingListMessage = z.infer<typeof shellBindingListSchema>;
+export type InputListMessage = z.infer<typeof inputListSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DesktopStatus, ListedDisplay, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp,
-    Theme,
+    DesktopStatus, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding,
+    ShellCommandHelp, Theme,
 };
 use serde::{Deserialize, Serialize};
 
@@ -140,6 +140,8 @@ pub enum Request {
     ShellCommands,
     /// Report the keys and gestures the shell binds, in each binding mode.
     ShellBindings,
+    /// Report the keyboards, pointers and touch devices the engine reads.
+    Inputs,
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by any name a profile matches it by, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -321,6 +323,9 @@ pub enum Response {
 
     /// Answers `shell_bindings`.
     ShellBindings { bindings: Vec<ShellBinding> },
+
+    /// Answers `inputs`.
+    Inputs { inputs: Vec<ListedInput> },
 
     /// The compositor turned the monitors off or on.
     Powered,
@@ -526,6 +531,11 @@ pub type ListShellCommands<'a> = &'a dyn Fn() -> Result<Vec<ShellCommandHelp>, S
 /// tests.
 pub type ListShellBindings<'a> = &'a dyn Fn() -> Result<Vec<ShellBinding>, String>;
 
+/// Asks the compositor which input devices the engine reads.
+///
+/// [`crate::compositor_socket::inputs`] in a desktop; a closure in tests.
+pub type ListInputs<'a> = &'a dyn Fn() -> Result<Vec<ListedInput>, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -566,6 +576,7 @@ pub struct Desktop<'a> {
     pub status: AskStatus<'a>,
     pub shell_commands: ListShellCommands<'a>,
     pub shell_bindings: ListShellBindings<'a>,
+    pub inputs: ListInputs<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -755,6 +766,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::ShellBindings) => to_line(&match (desktop.shell_bindings)() {
             Ok(bindings) => Response::ShellBindings { bindings },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Inputs) => to_line(&match (desktop.inputs)() {
+            Ok(inputs) => Response::Inputs { inputs },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SleepDisplays { display }) => {

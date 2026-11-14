@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use domicile_protocol::{
-    DesktopStatus, ListedDisplay, ListedWindow, ShellBinding, ShellCommandHelp,
+    DesktopStatus, ListedDisplay, ListedInput, ListedWindow, ShellBinding, ShellCommandHelp,
 };
 use serde::Serialize;
 
@@ -180,6 +180,48 @@ pub fn bindings_table(bindings: &[ShellBinding]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Every input device as one row of an aligned table, its USB or Bluetooth ids
+/// as `lsusb` prints them.
+pub fn inputs_table(inputs: &[ListedInput]) -> String {
+    let header = ["ID", "KIND", "CONNECTION", "VENDOR:PRODUCT", "NAME"].map(str::to_string);
+    let rows: Vec<[String; 5]> = std::iter::once(header)
+        .chain(inputs.iter().map(|input| {
+            [
+                input.id.to_string(),
+                wire_word(input.kind),
+                wire_word(input.connection),
+                match (input.vendor, input.product) {
+                    (0, 0) => "-".to_string(),
+                    (vendor, product) => format!("{vendor:04x}:{product:04x}"),
+                },
+                input.name.clone(),
+            ]
+        }))
+        .collect();
+    let widths: Vec<usize> = (0..4)
+        .map(|column| {
+            rows.iter()
+                .map(|row| row[column].chars().count())
+                .max()
+                .expect("the header is a row")
+        })
+        .collect();
+    rows.iter()
+        .map(|row| {
+            let padded: String = widths
+                .iter()
+                .zip(row)
+                .map(|(width, cell)| format!("{cell:<width$}  "))
+                .collect();
+            format!(
+                "{padded}{}
+",
+                row[4]
+            )
+        })
+        .collect()
 }
 
 /// How the wire spells `value`, such as `rotate-90` or `native`.

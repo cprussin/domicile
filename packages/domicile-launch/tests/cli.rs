@@ -84,6 +84,13 @@ fn a_listing_prints_a_table_or_with_json_what_the_desktop_said() {
             json: true
         })
     );
+    assert_eq!(
+        run(&["list-inputs"]),
+        Ok(Invocation::List {
+            listing: Listing::Inputs,
+            json: false
+        })
+    );
     // The shell's commands are what `send-shell` takes, so its help is them.
     assert_eq!(
         run(&["send-shell", "--help"]),
@@ -577,6 +584,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "monitor",
         "list-shell-commands",
         "list-bindings",
+        "list-inputs",
         "help",
     ] {
         assert!(
