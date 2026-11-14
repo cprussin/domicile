@@ -365,6 +365,19 @@ interface FrameSinkBroker {
       string app_id)
       => (viz.mojom.FrameSinkId frame_sink_id);
 
+  // Embeds the producer's sink `child` in its sink `parent`, as a page's
+  // <app> embeds a window: registers the hierarchy and tells `child`'s
+  // observer `local_surface_id`. For a window's subsurfaces, which the
+  // producer draws into the window's own frames.
+  //
+  // The producer allocates `local_surface_id`, since it embeds the surface.
+  // A sink this producer did not create is a bad message.
+  EmbedFrameSink(viz.mojom.FrameSinkId child,
+                 viz.mojom.FrameSinkId parent,
+                 viz.mojom.LocalSurfaceId local_surface_id,
+                 gfx.mojom.Size size,
+                 double scale);
+
   // Imports a dmabuf and returns its id, or 0 on failure.
   //
   // This is zwp_linux_dmabuf_v1. The browser does what

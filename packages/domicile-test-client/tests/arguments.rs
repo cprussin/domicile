@@ -345,6 +345,15 @@ fn a_client_can_be_asked_to_scroll_its_window_under_a_bubble() {
 }
 
 #[test]
+fn a_client_can_be_asked_to_move_its_scrolling_bubble_a_frame_late() {
+    let asked = given(&["--scrolling-bubble", "--late-bubble"])
+        .expect("a client whose bubble scrolls a frame late");
+    assert!(asked.scrolling_bubble);
+    assert!(asked.late_bubble);
+    assert!(!given(&["--scrolling-bubble"]).unwrap().late_bubble);
+}
+
+#[test]
 fn a_client_can_be_asked_to_open_a_dialog_for_its_window() {
     assert!(given(&["--dialog"]).expect("a client with a dialog").dialog);
     assert!(!given(&[]).unwrap().dialog);

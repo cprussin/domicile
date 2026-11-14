@@ -295,6 +295,8 @@ struct Client {
     bubble: Option<Bubble>,
     /// See [`crate::arguments::Arguments::scrolling_bubble`].
     scrolls: bool,
+    /// See [`crate::arguments::Arguments::late_bubble`].
+    late_bubble: bool,
     /// See [`crate::arguments::Arguments::bubble_without_input`].
     bubble_without_input: bool,
     /// Whether to open a dialog once the window is up. See
@@ -586,6 +588,7 @@ impl Client {
             wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
             bubble: None,
             scrolls: asked.scrolling_bubble,
+            late_bubble: asked.late_bubble,
             bubble_without_input: asked.bubble_without_input,
             wants_dialog: asked.dialog,
             dialog: None,
@@ -1174,8 +1177,13 @@ impl Client {
                             .bubble
                             .as_ref()
                             .and_then(|bubble| bubble.subsurface.as_ref());
+                        let at = if self.late_bubble {
+                            scrolled_to(self.frame.saturating_sub(1))
+                        } else {
+                            top
+                        };
                         if let Some(subsurface) = subsurface {
-                            subsurface.set_position(SCROLLING_BUBBLE.0, top);
+                            subsurface.set_position(SCROLLING_BUBBLE.0, at);
                         }
                     }
                     Paint::Opaque | Paint::Translucent | Paint::Halves => {
