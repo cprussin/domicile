@@ -175,6 +175,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     act_on_window: &|_, _| {
                         panic!("a question about this desktop reaches no compositor")
                     },
+                    configure_display: &|_, _| {
+                        panic!("a question about this desktop reaches no compositor")
+                    },
                     permissions: &|| panic!("a question about this desktop reaches no engine"),
                     set_permission: &|_| panic!("a question about this desktop reaches no engine"),
                     load_unpacked: &|_| panic!("a question about this desktop reaches no engine"),

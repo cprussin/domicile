@@ -32,8 +32,8 @@ use domicile_launch::command_socket::{
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{
-    act_on_window, displays, inputs, lock, monitors, power_displays, screen_record, screenshot,
-    send_shell, shell_bindings, shell_commands, status, theme, windows,
+    act_on_window, configure_display, displays, inputs, lock, monitors, power_displays,
+    screen_record, screenshot, send_shell, shell_bindings, shell_commands, status, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -94,6 +94,11 @@ const LOAD_WITHIN: Duration = Duration::from_secs(10);
 /// How long a screenshot may take: the compositor reads back every monitor
 /// and encodes a PNG, which for several 4K monitors takes seconds.
 const CAPTURE_WITHIN: Duration = Duration::from_secs(10);
+
+/// How long the supervisor waits for the compositor to lay the desktop out
+/// again after `configure-display`. Longer than the compositor's own 5s, so
+/// its refusal reaches the terminal rather than a timeout.
+const CONFIGURE_WITHIN: Duration = Duration::from_secs(8);
 
 /// How long the compositor may take to send a shell command. Shorter than the
 /// client waits for the supervisor, so the compositor's failure reaches the
@@ -518,6 +523,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         // Longer than the supervisor waits for the engine, so why a shell
         // did not run reaches this terminal rather than a timeout.
         Request::LoadShell { .. } => Some(LOAD_WITHIN + ANSWER_WITHIN),
+        Request::ConfigureDisplay { .. } => Some(CONFIGURE_WITHIN + ANSWER_WITHIN),
         _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
@@ -1376,6 +1382,12 @@ fn answer_a_command(
                     lock: &|| lock(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
                     act_on_window: &|id, act| {
                         act_on_window(chrome, id, act, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())?
+                    },
+                    // The compositor waits up to 5s for the desktop to be laid
+                    // out again.
+                    configure_display: &|display, change| {
+                        configure_display(chrome, display, change, Some(CONFIGURE_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
                     monitors: &|| {

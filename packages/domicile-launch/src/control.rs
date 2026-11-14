@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DesktopStatus, HostMessage, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale,
-    ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
+    DesktopStatus, DisplayChange, HostMessage, ListedDisplay, ListedInput, ListedWindow,
+    MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
 };
 use serde::{Deserialize, Serialize};
 
@@ -173,6 +173,12 @@ pub enum Request {
     /// Focus, close or kill the native window `id`, as `domicile
     /// list-windows` prints it.
     ActOnWindow { id: String, act: WindowAct },
+    /// Change how the monitor `display` is set up until the desktop
+    /// restarts. See `domicile configure-display`.
+    ConfigureDisplay {
+        display: String,
+        change: DisplayChange,
+    },
     /// Hear about `topics` for as long as the connection is open: each
     /// topic's answer at once, then again whenever it changes, each as a
     /// [`Response::Heard`]. See `domicile subscribe`.
@@ -529,6 +535,12 @@ pub type Locking<'a> = &'a dyn Fn() -> Result<(), String>;
 /// tests.
 pub type ActingOnWindows<'a> = &'a dyn Fn(&str, WindowAct) -> Result<(), String>;
 
+/// Asks the compositor to change how a monitor is set up.
+///
+/// [`crate::compositor_socket::configure_display`] in a desktop; a closure in
+/// tests.
+pub type ConfiguringDisplays<'a> = &'a dyn Fn(&str, &DisplayChange) -> Result<(), String>;
+
 /// Asks the compositor for the lit monitors.
 ///
 /// [`crate::compositor_socket::monitors`] in a desktop; a closure in tests.
@@ -602,6 +614,7 @@ pub struct Desktop<'a> {
     pub power_displays: PowerDisplays<'a>,
     pub lock: Locking<'a>,
     pub act_on_window: ActingOnWindows<'a>,
+    pub configure_display: ConfiguringDisplays<'a>,
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
@@ -821,6 +834,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
+        Ok(Request::ConfigureDisplay { display, change }) => {
+            to_line(&match (desktop.configure_display)(&display, &change) {
+                Ok(()) => Response::Done,
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::SleepDisplays { display }) => {
             powered(DisplayPower::Asleep, display, desktop.power_displays)
         }

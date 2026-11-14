@@ -17,9 +17,9 @@ use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
-    AdaptiveSync, DesktopStatus, DisplayHdr, DisplayInfo, DisplayTransform, InputConnection,
-    InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding,
-    ShellCommandHelp, Theme, WindowAct, WindowKind,
+    AdaptiveSync, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo, DisplayTransform,
+    InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo,
+    ShellBinding, ShellCommandHelp, Theme, WindowAct, WindowKind,
 };
 
 #[test]
@@ -432,6 +432,28 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         ),
         Response::ShellBindings {
             bindings: vec![binding]
+        }
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"configure_display\",\"display\":\"DP-1\",\"change\":{\"scale\":1.5}}",
+            &Desktop {
+                configure_display: &|display, change| {
+                    assert_eq!(display, "DP-1");
+                    assert_eq!(
+                        change,
+                        &DisplayChange {
+                            scale: Some(1.5),
+                            ..DisplayChange::default()
+                        }
+                    );
+                    Err("no monitor DP-1 is plugged in".to_string())
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "no monitor DP-1 is plugged in".to_string()
         }
     );
     assert_eq!(
@@ -1182,6 +1204,7 @@ fn nothing_dialed() -> Desktop<'static> {
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
         lock: &|| panic!("only lock locks the desktop"),
         act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
+        configure_display: &|_, _| panic!("only configure_display configures a display"),
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
         windows: &|| panic!("only windows lists the windows"),

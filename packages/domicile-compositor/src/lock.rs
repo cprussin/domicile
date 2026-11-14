@@ -428,7 +428,10 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ResizeVirtualMonitor { .. }
             // Queued by a `SystemRequest::SleepDisplays` or `WakeDisplays`
             // the lock already judged.
-            | ClientRequest::PowerDisplays { .. },
+            | ClientRequest::PowerDisplays { .. }
+            // Like `sleep-displays`: arranging the monitors shows nothing the
+            // lock hides, and docking a locked laptop may need it.
+            | ClientRequest::ConfigureDisplay { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SetTheme { .. }

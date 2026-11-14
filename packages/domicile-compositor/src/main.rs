@@ -81,6 +81,7 @@ mod color_management;
 mod compositor_casts;
 mod config_adoption;
 mod configure_answers;
+mod configured_displays;
 mod cursor_surface;
 mod decorations;
 mod display_sleep;
@@ -337,6 +338,9 @@ struct DomicileCompositor {
     /// Kept so a config reload can be matched against the current monitors, not
     /// only a hotplug.
     engine_displays: Vec<engine::Display>,
+    /// What `domicile configure-display` changed, until the desktop restarts.
+    /// See [`configured_displays`].
+    display_overrides: Vec<domicile_config::DisplayOverride>,
     /// The virtual monitors pages added, in the order they were. See
     /// [`virtual_monitors`].
     virtual_displays: Vec<engine::VirtualDisplay>,
@@ -1363,6 +1367,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         outputs,
         config: ConfigStore::new(config.clone()),
         engine_displays: Vec::new(),
+        display_overrides: Vec::new(),
         virtual_displays: Vec::new(),
         vendors,
         // Toolkits request cursors by name here, which map onto CSS cursor
@@ -1684,12 +1689,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     // Processes started after the reload get the new one.
                     domicile_host::desk_terminal::set(data.state.config.current().terminal.clone());
                     let restated = Restatement::between(&was, data.state.config.current());
-                    let rebuilt = data.state.screens.reloaded_into(
-                        &data.state.config.current().output,
-                        &data.state.engine_displays,
-                        &data.state.vendors,
-                        &data.state.virtual_displays,
-                    );
+                    let rebuilt = data.state.output_settings().and_then(|output| {
+                        data.state.screens.reloaded_into(
+                            &output,
+                            &data.state.engine_displays,
+                            &data.state.vendors,
+                            &data.state.virtual_displays,
+                        )
+                    });
                     match rebuilt {
                         // No change: an undescribed config with no monitors
                         // read. The window controls the desktop, and rebuilding

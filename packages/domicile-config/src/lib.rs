@@ -27,8 +27,8 @@ pub use input_devices::{
 };
 pub use pointers::{PointerConfig, PointerTarget};
 pub use profile::{
-    Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform,
-    DEFAULT_SDR_WHITE,
+    Connected, Desk, DisplayOverride, DisplayPlacement, Layout, Placed, Profile, Scanout,
+    Transform, CONFIGURED_PROFILE, DEFAULT_SDR_WHITE,
 };
 pub use startup::StartupConfig;
 
@@ -483,6 +483,20 @@ impl OutputConfig {
     /// Called on each hotplug.
     pub fn layout(&self, connected: &[Connected]) -> Result<Option<Layout>, ConfigError> {
         profile::layout(&self.profiles, connected)
+    }
+
+    /// This config with `overrides` laid over the profile that matches
+    /// `connected`, for `domicile configure-display`. See
+    /// [`DisplayOverride`].
+    pub fn overridden(
+        &self,
+        connected: &[Connected],
+        overrides: &[DisplayOverride],
+    ) -> Result<OutputConfig, ConfigError> {
+        Ok(OutputConfig {
+            profiles: profile::overridden(&self.profiles, connected, overrides)?,
+            ..self.clone()
+        })
     }
 
     fn validate(&self) -> Result<(), ConfigError> {

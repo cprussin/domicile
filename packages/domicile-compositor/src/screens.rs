@@ -957,7 +957,7 @@ pub fn name_of(display: &Display) -> String {
 
 /// The engine's displays under the names a config matches. A virtual display
 /// is none of them: it lives only as long as its cast.
-fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
+pub(crate) fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
     displays
         .iter()
         .filter(|display| !display.is_virtual())

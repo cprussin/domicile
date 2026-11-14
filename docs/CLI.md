@@ -171,6 +171,37 @@ drm-1 (lit)
 `--json` prints a JSON array instead, for scripts: each display's fields as
 shells get them in `domicile.displays`, plus `names` and `lit`.
 
+## `domicile configure-display <display> <change>...`
+
+Change a monitor until the desktop restarts, like `swaymsg output`: the
+config file is left alone, and editing it later keeps these changes over it.
+The display is any name `list-displays` prints or a profile matches. The
+changes, in any order:
+
+- `mode <W>x<H>[@Hz]`: a mode the monitor offers, like `2560x1440@144`.
+- `scale <S>`: like `1.25`.
+- `position <X>,<Y>`: its top-left corner in logical pixels, like `1920,0`.
+- `transform normal|90|180|270`: content turned counterclockwise, as in a
+  profile.
+- `adaptive-sync on|off`, `hdr on|off`, `sdr-white <nits>`.
+- `enable` or `disable`: light it, or turn it off and leave it out of the
+  desktop.
+- `reset`: drop this monitor's earlier changes, back to the config. Changes
+  after it on the same line still apply.
+
+```sh
+domicile configure-display DP-1 mode 2560x1440@144 scale 1.25 position 1920,0
+domicile configure-display eDP-1 disable
+domicile configure-display eDP-1 reset
+```
+
+It changes the profile that matches the plugged-in monitors, as
+[DISPLAYS.md](DISPLAYS.md) describes. With no matching profile, it starts one
+of every plugged-in monitor at its defaults. A change that makes a profile the
+config would refuse, such as turning off the last monitor, is refused and
+changes nothing. A config that describes the desktop with `output.displays`
+sets its monitors there, so this refuses them.
+
 ## `domicile list-windows [--json]`
 
 Print each window: native windows in the order they opened, then the browser
@@ -338,8 +369,8 @@ that `send-shell --help` prints the shell's own commands.
 `screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`
 and `kill-window` are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
-`list-inputs`, `status`, `subscribe`, `list-shell-commands` and
-`list-bindings` work, and a `monitor` added before keeps resizing.
+`list-inputs`, `status`, `subscribe`, `configure-display`,
+`list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

@@ -186,6 +186,23 @@ pub struct DisplayPlacement {
 }
 
 impl DisplayPlacement {
+    /// An entry for `display` with every field at its default: enabled, at
+    /// its native mode, unscaled, unturned, and placed in the row.
+    fn at_its_defaults(display: &str) -> DisplayPlacement {
+        DisplayPlacement {
+            display: display.to_string(),
+            enabled: true,
+            mode: None,
+            refresh: None,
+            adaptive_sync: false,
+            hdr: false,
+            sdr_white: None,
+            position: None,
+            scale: unscaled(),
+            transform: Transform::default(),
+        }
+    }
+
     /// The connected display this entry names, or `None` if it is not
     /// connected.
     ///
@@ -338,7 +355,7 @@ impl Connected {
     ///
     /// An empty name never matches: every monitor with no EDID name shares
     /// the empty description.
-    pub(crate) fn is_named(&self, name: &str) -> bool {
+    pub fn is_named(&self, name: &str) -> bool {
         [
             &self.name,
             &self.description,
@@ -880,6 +897,132 @@ pub(crate) fn validate(profiles: &[Profile]) -> Result<(), ConfigError> {
         profile.validate(index, &profiles[..index])?;
     }
     Ok(())
+}
+
+/// What `domicile configure-display` changes about one monitor until the
+/// desktop restarts. Each field left `None` stays as the config has it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DisplayOverride {
+    /// The monitor, by any name a profile matches it by.
+    pub display: String,
+    pub enabled: Option<bool>,
+    pub mode: Option<(u32, u32)>,
+    pub refresh: Option<f64>,
+    pub adaptive_sync: Option<bool>,
+    pub hdr: Option<bool>,
+    pub sdr_white: Option<u32>,
+    pub position: Option<(i32, i32)>,
+    pub scale: Option<f64>,
+    pub transform: Option<Transform>,
+}
+
+impl DisplayOverride {
+    /// This one with `later` laid over it: each field `later` sets wins.
+    pub fn and_then(self, later: DisplayOverride) -> DisplayOverride {
+        DisplayOverride {
+            display: later.display,
+            enabled: later.enabled.or(self.enabled),
+            mode: later.mode.or(self.mode),
+            refresh: later.refresh.or(self.refresh),
+            adaptive_sync: later.adaptive_sync.or(self.adaptive_sync),
+            hdr: later.hdr.or(self.hdr),
+            sdr_white: later.sdr_white.or(self.sdr_white),
+            position: later.position.or(self.position),
+            scale: later.scale.or(self.scale),
+            transform: later.transform.or(self.transform),
+        }
+    }
+
+    fn apply(&self, placement: &mut DisplayPlacement) {
+        if let Some(enabled) = self.enabled {
+            placement.enabled = enabled;
+        }
+        if let Some(mode) = self.mode {
+            placement.mode = Some(mode);
+        }
+        if let Some(refresh) = self.refresh {
+            placement.refresh = Some(refresh);
+        }
+        if let Some(adaptive_sync) = self.adaptive_sync {
+            placement.adaptive_sync = adaptive_sync;
+        }
+        if let Some(hdr) = self.hdr {
+            placement.hdr = hdr;
+        }
+        if let Some(white) = self.sdr_white {
+            placement.sdr_white = Some(white);
+        }
+        if let Some(position) = self.position {
+            placement.position = Some(position);
+        }
+        if let Some(scale) = self.scale {
+            placement.scale = scale;
+        }
+        if let Some(transform) = self.transform {
+            placement.transform = transform;
+        }
+    }
+}
+
+/// What the profile `domicile configure-display` makes is called, when no
+/// profile of the config's matches the monitors.
+pub const CONFIGURED_PROFILE: &str = "domicile configure-display";
+
+/// `profiles` with `overrides` laid over the one that matches `connected`.
+///
+/// When none matches, a profile of every connected monitor in the engine's
+/// order, each at the defaults, is put first to take them, so a monitor no
+/// profile names can still be configured.
+///
+/// An override for a monitor that is not connected is kept for when it is,
+/// and changes nothing now. Errs when the result is not a valid profile, such
+/// as one that turns every monitor off.
+pub(crate) fn overridden(
+    profiles: &[Profile],
+    connected: &[Connected],
+    overrides: &[DisplayOverride],
+) -> Result<Vec<Profile>, ConfigError> {
+    let mut profiles = profiles.to_vec();
+    if overrides.is_empty() {
+        return Ok(profiles);
+    }
+    let matching = match profiles
+        .iter()
+        .position(|profile| profile.resolve(connected).is_some())
+    {
+        Some(matching) => matching,
+        None => {
+            profiles.insert(
+                0,
+                Profile {
+                    name: CONFIGURED_PROFILE.to_string(),
+                    displays: connected
+                        .iter()
+                        .map(|display| DisplayPlacement::at_its_defaults(&display.name))
+                        .collect(),
+                },
+            );
+            0
+        }
+    };
+    for change in overrides {
+        let Some(monitor) = connected
+            .iter()
+            .find(|display| display.is_named(&change.display))
+        else {
+            continue;
+        };
+        for placement in &mut profiles[matching].displays {
+            if placement
+                .connected_in(connected)
+                .is_some_and(|placed| placed.name == monitor.name)
+            {
+                change.apply(placement);
+            }
+        }
+    }
+    validate(&profiles)?;
+    Ok(profiles)
 }
 
 /// Displays are enabled by default.

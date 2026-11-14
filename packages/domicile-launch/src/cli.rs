@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use domicile_protocol::{Scale, WatchTopic, WindowAct};
+use domicile_protocol::{DisplayChange, DisplayTransform, Scale, WatchTopic, WindowAct};
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
@@ -59,6 +59,13 @@ Ask the running desktop:
   domicile kill-window <id>             Kill a window's process
   domicile inhibit-idle -- <command>... Run a command, keeping the screens on
                                         until it exits
+  domicile configure-display <display> <change>...
+                                        Change a monitor until the desktop
+                                        restarts: mode <W>x<H>[@Hz], scale <S>,
+                                        position <X>,<Y>, transform
+                                        normal|90|180|270, adaptive-sync on|off,
+                                        hdr on|off, sdr-white <nits>, enable,
+                                        disable, reset
   domicile subscribe [windows|displays|inputs|status]...
                                         Print each as a JSON line, then again
                                         whenever it changes, until stopped
@@ -201,6 +208,28 @@ pub enum CliError {
          domicile inhibit-idle -- mpv film.mkv\n"
     )]
     NothingToRun,
+    #[error(
+        "configure-display takes a display, as domicile list-displays prints it, \
+         and what to change, and was given nothing:\n\n    \
+         domicile configure-display DP-1 mode 2560x1440@144 scale 1.25 position 1920,0\n"
+    )]
+    NoDisplayToConfigure,
+    #[error(
+        "configure-display {display} takes what to change: mode, scale, position, \
+         transform, adaptive-sync, hdr, sdr-white, enable, disable or reset."
+    )]
+    NothingToConfigure { display: String },
+    #[error("configure-display takes {expected} after {setting}, and was given {said}.")]
+    NotADisplaySetting {
+        setting: String,
+        said: String,
+        expected: &'static str,
+    },
+    #[error(
+        "{said} is not something configure-display changes: mode, scale, position, \
+         transform, adaptive-sync, hdr, sdr-white, enable, disable or reset."
+    )]
+    NotADisplayChange { said: String },
     #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
@@ -499,6 +528,16 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     extra,
                 }),
             },
+            Verb::Configuring => {
+                let display = args.next().ok_or(CliError::NoDisplayToConfigure)?;
+                let change = display_change(args)?;
+                if change == DisplayChange::default() {
+                    return Err(CliError::NothingToConfigure { display });
+                }
+                Ok(Invocation::Ask {
+                    request: Request::ConfigureDisplay { display, change },
+                })
+            }
             Verb::Inhibiting => {
                 let mut command: Vec<String> = args.collect();
                 // `--` ends the options, which this takes none of.
@@ -648,6 +687,8 @@ enum Verb {
     Acting(WindowAct),
     /// `inhibit-idle`, which takes a command.
     Inhibiting,
+    /// `configure-display`, which takes a display and what to change.
+    Configuring,
     /// `sleep-displays` or `wake-displays`, which take a display or nothing.
     Sleeping(DisplayPower),
     /// `list-displays`, `list-windows` or `status`, which take `--json` or
@@ -683,6 +724,7 @@ fn verb(word: &str) -> Option<Verb> {
         "close-window" => Some(Verb::Acting(WindowAct::Close)),
         "kill-window" => Some(Verb::Acting(WindowAct::Kill)),
         "inhibit-idle" => Some(Verb::Inhibiting),
+        "configure-display" => Some(Verb::Configuring),
         "list-displays" => Some(Verb::Listing(Listing::Displays)),
         "list-windows" => Some(Verb::Listing(Listing::Windows)),
         "status" => Some(Verb::Listing(Listing::Status)),
@@ -747,6 +789,88 @@ pub fn monitor_mode(said: &str) -> Option<MonitorMode> {
         refresh_mhz,
         scale,
     })
+}
+
+/// Reads one `configure-display` setting's value into a change, or `None`
+/// when it is not one.
+type ReadSetting = fn(&str, &mut DisplayChange) -> Option<()>;
+
+/// What `configure-display <display>`'s other words change, like `mode
+/// 2560x1440@144 scale 1.25`. A later word for the same setting wins.
+fn display_change(mut words: impl Iterator<Item = String>) -> Result<DisplayChange, CliError> {
+    let mut change = DisplayChange::default();
+    while let Some(setting) = words.next() {
+        match setting.as_str() {
+            "reset" => change.reset = true,
+            "enable" => change.enabled = Some(true),
+            "disable" => change.enabled = Some(false),
+            _ => {
+                let (expected, read): (&'static str, ReadSetting) = match setting.as_str() {
+                    "mode" => ("a mode like 2560x1440 or 2560x1440@144", |said, change| {
+                        let ((width, height), refresh_mhz) = monitor_size(said)?;
+                        change.mode = Some((width, height));
+                        change.refresh =
+                            said.contains('@').then(|| f64::from(refresh_mhz) / 1000.0);
+                        Some(())
+                    }),
+                    "scale" => ("a scale like 2 or 1.25", |said, change| {
+                        change.scale = Some(scale_of(said)?.get());
+                        Some(())
+                    }),
+                    "position" => ("a position like 1920,0", |said, change| {
+                        let (x, y) = said.split_once(',')?;
+                        change.position = Some((x.parse().ok()?, y.parse().ok()?));
+                        Some(())
+                    }),
+                    "transform" => ("normal, 90, 180 or 270", |said, change| {
+                        change.transform = Some(match said {
+                            "normal" | "0" => DisplayTransform::Normal,
+                            "90" => DisplayTransform::Rotate90,
+                            "180" => DisplayTransform::Rotate180,
+                            "270" => DisplayTransform::Rotate270,
+                            _ => return None,
+                        });
+                        Some(())
+                    }),
+                    "adaptive-sync" => ("on or off", |said, change| {
+                        change.adaptive_sync = Some(on_or_off(said)?);
+                        Some(())
+                    }),
+                    "hdr" => ("on or off", |said, change| {
+                        change.hdr = Some(on_or_off(said)?);
+                        Some(())
+                    }),
+                    "sdr-white" => ("a brightness in nits like 203", |said, change| {
+                        change.sdr_white = Some(said.parse().ok().filter(|nits| *nits > 0)?);
+                        Some(())
+                    }),
+                    _ => return Err(CliError::NotADisplayChange { said: setting }),
+                };
+                let said = words.next().unwrap_or_default();
+                if said.is_empty() || read(&said, &mut change).is_none() {
+                    return Err(CliError::NotADisplaySetting {
+                        setting,
+                        said: if said.is_empty() {
+                            "nothing".to_string()
+                        } else {
+                            said
+                        },
+                        expected,
+                    });
+                }
+            }
+        }
+    }
+    Ok(change)
+}
+
+/// `on` or `off`, as true or false.
+fn on_or_off(said: &str) -> Option<bool> {
+    match said {
+        "on" => Some(true),
+        "off" => Some(false),
+        _ => None,
+    }
 }
 
 /// The scale `said` names, a number above zero like `2` or `1.5`.

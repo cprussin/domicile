@@ -390,6 +390,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         | ClientRequest::AddVirtualMonitor { .. }
         | ClientRequest::RemoveVirtualMonitor { .. }
         | ClientRequest::ResizeVirtualMonitor { .. }
+        // A command, maybe a script's, not a hand.
+        | ClientRequest::ConfigureDisplay { .. }
         // A key or a click, which already counted.
         | ClientRequest::SelectKeymap { .. }
         | ClientRequest::SwitchShortcutsInhibitor { .. }

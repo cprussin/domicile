@@ -666,6 +666,13 @@ const windowActedSchema = z.looseObject({
   type: z.literal("window_acted"),
 });
 
+// Answers `configure_display` on the asking connection only, for `domicile
+// configure-display`: why not, or nothing.
+const displayConfiguredSchema = z.looseObject({
+  refused: z.string().optional(),
+  type: z.literal("display_configured"),
+});
+
 const boundShortcutSchema = z.looseObject({
   app_id: z.string(),
   chord: z.string(),
@@ -925,6 +932,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   shellBindingListSchema,
   inputListSchema,
   windowActedSchema,
+  displayConfiguredSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -987,6 +995,7 @@ export type ShellCommandListMessage = z.infer<typeof shellCommandListSchema>;
 export type ShellBindingListMessage = z.infer<typeof shellBindingListSchema>;
 export type InputListMessage = z.infer<typeof inputListSchema>;
 export type WindowActedMessage = z.infer<typeof windowActedSchema>;
+export type DisplayConfiguredMessage = z.infer<typeof displayConfiguredSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

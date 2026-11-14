@@ -11,13 +11,14 @@ use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, System};
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
-    negotiate, ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemRequest, Theme,
-    WindowAct, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, DisplayChange, HostMessage, SystemError, SystemErrorKind,
+    SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
 };
 use tracing::{debug, error, warn};
 
 use crate::chrome_hub::{broadcast_focus_request, Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
+use crate::configured_displays::Answer;
 use crate::grepped;
 use crate::lock::Asked;
 use crate::locking::say_what_the_lock_refused;
@@ -465,14 +466,22 @@ fn read_chrome_messages(
             Ok(ChromeMessage::WhichInputs) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichInputs)
             }
-            // For `domicile subscribe`. Not checked against the lock: each
-            // topic is one a `which_*` answers while locked. The writer thread
-            // sends the answers, so this thread never waits on them.
             Ok(ChromeMessage::ActOnWindow { id, act }) => {
                 vec![HostMessage::WindowActed {
                     refused: act_on_window(hub, &id, act).err(),
                 }]
             }
+            // Waits on the Wayland thread, which alone knows the monitors.
+            // Only `domicile configure-display` sends it, on a connection of
+            // its own, so no chrome's input waits behind it.
+            Ok(ChromeMessage::ConfigureDisplay { display, change }) => {
+                vec![HostMessage::DisplayConfigured {
+                    refused: configure_display(hub, display, change).err(),
+                }]
+            }
+            // For `domicile subscribe`. Not checked against the lock: each
+            // topic is one a `which_*` answers while locked. The writer thread
+            // sends the answers, so this thread never waits on them.
             Ok(ChromeMessage::Watch { topics }) => {
                 hub.watchers.watch(writer.clone(), &topics);
                 hub.outbound.watched();
@@ -867,6 +876,27 @@ fn act_on_window(hub: &ChromeHub, id: &str, act: WindowAct) -> Result<(), String
         }
     }
     Ok(())
+}
+
+/// How long `domicile configure-display` waits for the Wayland thread to lay
+/// the desktop out again.
+const CONFIGURING_A_DISPLAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Ask the Wayland thread to change a monitor's setup, and wait for its word.
+fn configure_display(
+    hub: &ChromeHub,
+    display: String,
+    change: DisplayChange,
+) -> Result<(), String> {
+    let (answer, answered) = Answer::new();
+    hub.send_request(ClientRequest::ConfigureDisplay {
+        display,
+        change,
+        answer,
+    });
+    answered
+        .recv_timeout(CONFIGURING_A_DISPLAY)
+        .map_err(|_| "the desktop did not answer in time".to_string())?
 }
 
 /// Answer a message from an app's connection: a system call it may make, or

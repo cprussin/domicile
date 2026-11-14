@@ -432,6 +432,16 @@ pub enum ChromeMessage {
     /// `kill-window`.
     ActOnWindow { id: String, act: WindowAct },
 
+    /// Change how the monitor `display` is set up until the desktop restarts,
+    /// over what its config's profile says, like `swaymsg output`. `display`
+    /// is a name `domicile list-displays` prints or a profile matches.
+    /// Answered with [`HostMessage::DisplayConfigured`] on this connection
+    /// only. Sent by `domicile configure-display`.
+    ConfigureDisplay {
+        display: String,
+        change: DisplayChange,
+    },
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -870,6 +880,13 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::ActOnWindow`] on the asking connection only:
     /// why it was not done, or nothing when it was.
     WindowActed {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// Answers [`ChromeMessage::ConfigureDisplay`] on the asking connection
+    /// only: why it was not done, or nothing when the desktop took it.
+    DisplayConfigured {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         refused: Option<String>,
     },
@@ -2888,6 +2905,38 @@ pub enum WindowAct {
     Close,
     /// Kill its client's process with `SIGKILL`, and every window it has.
     Kill,
+}
+
+/// What a [`ChromeMessage::ConfigureDisplay`] changes about a monitor. Each
+/// field left out stays as before; `reset` first drops every earlier change,
+/// back to what the config says.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DisplayChange {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reset: bool,
+    /// Lit, or turned off and left out of the desktop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// Width and height in pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<(u32, u32)>,
+    /// In Hz.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<f64>,
+    /// Its top-left corner in the desktop, in logical pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<(i32, i32)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<DisplayTransform>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adaptive_sync: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hdr: Option<bool>,
+    /// The nits SDR white is shown at with HDR on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sdr_white: Option<u32>,
 }
 
 /// What a [`ChromeMessage::Watch`] hears about.

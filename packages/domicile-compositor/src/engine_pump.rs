@@ -36,12 +36,15 @@ impl DomicileCompositor {
     /// defines the desktop. `adopt_the_desktop` does nothing for an unchanged
     /// list, which a modeset-triggered hotplug reports.
     pub fn lay_out_the_engines_displays(&mut self) {
-        match self.screens.replugged_into(
-            &self.engine_displays,
-            &self.config.current().output,
-            &self.vendors,
-            &self.virtual_displays,
-        ) {
+        let laid_out = self.output_settings().and_then(|output| {
+            self.screens.replugged_into(
+                &self.engine_displays,
+                &output,
+                &self.vendors,
+                &self.virtual_displays,
+            )
+        });
+        match laid_out {
             // The desktop stays: the config describes it, or the engine is
             // mid-update. A monitor that arrives while the screens are dark
             // comes up lit, so darken it again.

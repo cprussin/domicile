@@ -1140,6 +1140,7 @@ impl Host {
             | ChromeMessage::WhichInputs
             | ChromeMessage::Watch { .. }
             | ChromeMessage::ActOnWindow { .. }
+            | ChromeMessage::ConfigureDisplay { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

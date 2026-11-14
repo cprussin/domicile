@@ -7,7 +7,7 @@ use domicile_launch::cli::{
 };
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
-use domicile_protocol::{Scale, WatchTopic, WindowAct};
+use domicile_protocol::{DisplayChange, DisplayTransform, Scale, WatchTopic, WindowAct};
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -591,6 +591,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "close-window",
         "kill-window",
         "inhibit-idle",
+        "configure-display",
         "help",
     ] {
         assert!(
@@ -918,4 +919,95 @@ fn inhibit_idle_runs_what_follows_the_dashes() {
         })
     );
     assert_eq!(run(&["inhibit-idle", "--"]), Err(CliError::NothingToRun));
+}
+
+#[test]
+fn configure_display_reads_every_change() {
+    assert_eq!(
+        run(&[
+            "configure-display",
+            "DP-1",
+            "mode",
+            "2560x1440@143.912",
+            "scale",
+            "1.25",
+            "position",
+            "-1920,0",
+            "transform",
+            "270",
+            "adaptive-sync",
+            "on",
+            "hdr",
+            "off",
+            "sdr-white",
+            "240",
+            "enable",
+        ]),
+        Ok(Invocation::Ask {
+            request: Request::ConfigureDisplay {
+                display: "DP-1".to_string(),
+                change: DisplayChange {
+                    reset: false,
+                    enabled: Some(true),
+                    mode: Some((2560, 1440)),
+                    refresh: Some(143.912),
+                    scale: Some(1.25),
+                    position: Some((-1920, 0)),
+                    transform: Some(DisplayTransform::Rotate270),
+                    adaptive_sync: Some(true),
+                    hdr: Some(false),
+                    sdr_white: Some(240),
+                },
+            }
+        })
+    );
+}
+
+#[test]
+fn configure_display_leaves_the_refresh_alone_without_one() {
+    let Ok(Invocation::Ask {
+        request: Request::ConfigureDisplay { change, .. },
+    }) = run(&["configure-display", "eDP-1", "mode", "1920x1080", "reset"])
+    else {
+        panic!("not a display change");
+    };
+    assert_eq!(change.mode, Some((1920, 1080)));
+    assert_eq!(change.refresh, None);
+    assert!(change.reset);
+}
+
+#[test]
+fn configure_display_names_what_it_could_not_read() {
+    assert_eq!(
+        run(&["configure-display"]),
+        Err(CliError::NoDisplayToConfigure)
+    );
+    assert_eq!(
+        run(&["configure-display", "DP-1"]),
+        Err(CliError::NothingToConfigure {
+            display: "DP-1".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["configure-display", "DP-1", "scale"]),
+        Err(CliError::NotADisplaySetting {
+            setting: "scale".to_string(),
+            said: "nothing".to_string(),
+            expected: "a scale like 2 or 1.25",
+        })
+    );
+    assert_eq!(
+        run(&["configure-display", "DP-1", "transform", "45"]),
+        Err(CliError::NotADisplaySetting {
+            setting: "transform".to_string(),
+            said: "45".to_string(),
+            expected: "normal, 90, 180 or 270",
+        })
+    );
+    assert_eq!(
+        run(&["configure-display", "DP-1", "brightness", "50"]),
+        Err(CliError::NotADisplayChange {
+            said: "brightness".to_string()
+        })
+    );
 }

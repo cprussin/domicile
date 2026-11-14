@@ -14,9 +14,9 @@ use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    ChromeMessage, DesktopStatus, HostMessage, ListedDisplay, ListedInput, ListedWindow,
-    MonitorInfo, ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind, SystemReply,
-    SystemRequest, Theme, WatchTopic, WindowAct,
+    ChromeMessage, DesktopStatus, DisplayChange, HostMessage, ListedDisplay, ListedInput,
+    ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind,
+    SystemReply, SystemRequest, Theme, WatchTopic, WindowAct,
 };
 
 use crate::cli::MonitorMode;
@@ -176,6 +176,31 @@ pub fn act_on_window(
     )?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::WindowActed { refused }) => Ok(refused.map_or(Ok(()), Err)),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Tells the compositor at `socket` to make `change` to the monitor
+/// `display`. The outer error is the compositor's; the inner, why it refused.
+pub fn configure_display(
+    socket: &Path,
+    display: &str,
+    change: &DisplayChange,
+    patience: Option<Duration>,
+) -> Result<Result<(), String>, CompositorError> {
+    let said = exchanged(
+        socket,
+        &[ChromeMessage::ConfigureDisplay {
+            display: display.to_owned(),
+            change: change.clone(),
+        }],
+        patience,
+    )?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::DisplayConfigured { refused }) => Ok(refused.map_or(Ok(()), Err)),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

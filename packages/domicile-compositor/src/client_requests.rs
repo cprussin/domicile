@@ -204,6 +204,13 @@ pub enum ClientRequest {
         /// One monitor's `wl_output` name, or `None` for every one.
         display: Option<String>,
     },
+    /// `domicile configure-display` asked to change a monitor's setup. See
+    /// [`DomicileCompositor::configure_display`].
+    ConfigureDisplay {
+        display: String,
+        change: domicile_protocol::DisplayChange,
+        answer: crate::configured_displays::Answer,
+    },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
         app_id: String,
@@ -721,6 +728,11 @@ impl DomicileCompositor {
             ClientRequest::PowerDisplays { power, display } => {
                 self.power_the_displays(power, display.as_deref());
             }
+            ClientRequest::ConfigureDisplay {
+                display,
+                change,
+                answer,
+            } => answer.give(self.configure_display(&display, &change)),
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
             ClientRequest::Spawn { command } => spawn_client(
