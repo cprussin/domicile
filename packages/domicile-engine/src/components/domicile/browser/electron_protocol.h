@@ -7,9 +7,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/web_view_partition.h"
@@ -27,7 +29,9 @@ namespace domicile {
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"open_window","window":1,"url":"https://claude.ai/",
-//    "preload":"...the preload's source..."}       ("preload" may be left out)
+//    "preload":"...the preload's source...",       ("preload" may be left out)
+//    "session":"persist:cowork"}           (Electron's partition; left out
+//                                           or "" is the app's own session)
 //   -> {"type":"window_opened","window":1}
 //   -> {"type":"window_refused","window":1,"why":"..."}
 //
@@ -44,6 +48,20 @@ namespace domicile {
 //   {"type":"port_post","window":1,"port":"r1","data":...}
 //                                          (a port's postMessage)
 //   {"type":"port_close","window":1,"port":"m1"}
+//   {"type":"handle_protocol","session":"","scheme":"app"}
+//   {"type":"unhandle_protocol","session":"","scheme":"app"}
+//                                          (protocol.handle and unhandle)
+//   {"type":"protocol_response","request":5,"status":200,
+//    "headers":[["content-type","text/html"]],
+//    "body":"<base64>"}                    (the whole body)
+//   {"type":"protocol_response","request":5,"status":200,"headers":[],
+//    "file":"/abs/path"}                   (a file the engine reads)
+//   {"type":"protocol_response","request":5,"status":200,"headers":[],
+//    "stream":true}                        (the body follows in pieces:)
+//   {"type":"protocol_data","request":5,"data":"<base64>"}
+//   {"type":"protocol_end","request":5}    (or with "error":"...")
+//   {"type":"protocol_response","request":5,"error":"..."}
+//                                          (the handler failed)
 //
 // The engine also says, on its own:
 //
@@ -66,10 +84,25 @@ namespace domicile {
 //   {"type":"page_gone","window":1}        (a new document replaced the
 //                                           page: its ports and listeners
 //                                           are gone)
+//   {"type":"protocol_request","request":5,"session":"",
+//    "url":"app://localhost/","method":"GET","headers":[["accept","*/*"]],
+//    "body":"<base64>"}                    (a page's request for a scheme
+//                                           its session handles; answer
+//                                           with protocol_response. "body"
+//                                           only when it has one)
 //
-// The host picks window numbers. Only http and https URLs open: content
-// loads no other scheme in a guest. An app's own files and protocols arrive
-// with the protocol handlers.
+// The host picks window numbers. A window opens http and https URLs, and
+// file: and the app's own schemes once its session handles them: the app
+// serves those, file: included, as Electron's protocol.handle does. An
+// http or https request goes to the network unless the session handles
+// that scheme too.
+//
+// Sessions are Electron's partitions inside the app's own: "persist:x" is
+// kept on disk, as in Electron, and no session reaches another app's or the
+// profile's storage.
+//
+// Protocol bodies are base64, and headers are [name, value] pairs, so a
+// name may repeat. A request's number is the engine's, counted per app.
 //
 // IPC arguments and results are JSON, not structured clones: a Map, a Set or
 // bytes do not survive the trip. An invoke's number is the engine's, counted
@@ -101,6 +134,8 @@ struct ElectronOpenWindow {
   GURL url;
   // The preload's source; empty for none.
   std::string preload;
+  // Its Electron partition; empty for the app's own session.
+  std::string session;
 };
 
 struct ElectronLoadUrl {
@@ -149,6 +184,60 @@ struct ElectronPortClose {
   std::string port;
 };
 
+// Headers as [name, value] pairs, in order.
+using ElectronHeaders = std::vector<std::pair<std::string, std::string>>;
+
+// protocol.handle, or unhandle when `handle` is false: session `session`'s
+// pages' requests for `scheme` go to the app.
+struct ElectronHandleProtocol {
+  std::string session;
+  std::string scheme;
+  bool handle = true;
+};
+
+// A response whose body follows in protocol_data lines.
+struct ElectronStreamedBody {
+  friend bool operator==(const ElectronStreamedBody&,
+                         const ElectronStreamedBody&) = default;
+};
+
+// A response's body: all of it, a file the engine reads, or pieces to come.
+using ElectronResponseBody =
+    std::variant<std::string, base::FilePath, ElectronStreamedBody>;
+
+struct ElectronResponse {
+  int status = 200;
+  ElectronHeaders headers;
+  ElectronResponseBody body;
+};
+
+// A protocol handler's answer to request `request`, or why it failed.
+struct ElectronProtocolResponse {
+  int request;
+  base::expected<ElectronResponse, std::string> response;
+};
+
+// A piece of a streamed response's body.
+struct ElectronProtocolData {
+  int request;
+  std::string bytes;
+};
+
+// A streamed response's end: complete, or why it broke off.
+struct ElectronProtocolEnd {
+  int request;
+  std::optional<std::string> error;
+};
+
+// A page's request that its session's handler answers.
+struct ElectronFetch {
+  GURL url;
+  std::string method;
+  ElectronHeaders headers;
+  // Its body, when it has one.
+  std::optional<std::string> body;
+};
+
 // An ipcMain handler's answer to invoke `invoke`: its result, or why it
 // failed.
 struct ElectronReply {
@@ -166,17 +255,35 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronPostToPage,
                                      ElectronPortPost,
                                      ElectronPortClose,
-                                     ElectronReply>;
+                                     ElectronReply,
+                                     ElectronHandleProtocol,
+                                     ElectronProtocolResponse,
+                                     ElectronProtocolData,
+                                     ElectronProtocolEnd>;
 
-// Why a line is not a request, and which window it was for when it names
-// one, so the app hears of it as that window's.
+// Why a line is not a request, and which window or protocol request it was
+// for when it names one, so the app hears of it as that window's and the
+// page's request fails with it.
 struct ElectronRefusal {
   std::string why;
   std::optional<ElectronWindow> window;
+  std::optional<int> request;
 
   friend bool operator==(const ElectronRefusal&,
                          const ElectronRefusal&) = default;
 };
+
+// Whether an app may handle `scheme`: http, https, file, or a scheme of
+// its own. Never one the engine or the web gives a meaning (about:, data:,
+// chrome:, domicile: and their kind).
+bool IsElectronHandleableScheme(std::string_view scheme);
+
+// The partition of session `session` of an app whose own is `app`: the app's
+// for "", otherwise one inside it, kept on disk for "persist:" as Electron
+// does. Or why `session` names none.
+base::expected<WebViewPartition, std::string> ElectronSessionPartition(
+    const WebViewPartition& app,
+    std::string_view session);
 
 // The request on `line`, or why it is not one.
 base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
@@ -210,6 +317,9 @@ std::string ElectronPortMessage(ElectronWindow window,
                                 const base::Value& data);
 std::string ElectronPortClosed(ElectronWindow window, std::string_view port);
 std::string ElectronPageGone(ElectronWindow window);
+std::string ElectronProtocolRequest(int request,
+                                    std::string_view session,
+                                    const ElectronFetch& fetch);
 
 }  // namespace domicile
 

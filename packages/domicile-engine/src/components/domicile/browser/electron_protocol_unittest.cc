@@ -7,7 +7,9 @@
 #include <variant>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/json/json_writer.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
@@ -65,11 +67,14 @@ TEST(ElectronProtocolTest, OpenWindowCarriesTheHostsNumberAndUrl) {
   EXPECT_EQ(open->url, GURL("https://claude.ai/"));
 }
 
-TEST(ElectronProtocolTest, AFileUrlIsRefused) {
-  // Content loads no file: URL in a guest, so the window would stay blank.
-  EXPECT_EQ(WhyRefused(R"({"type":"load_url","window":1,)"
-                       R"("url":"file:///opt/app/index.html"})"),
-            "file: URLs do not open in an app window");
+TEST(ElectronProtocolTest, AFileUrlParsesForTheAppToServe) {
+  // Whether it opens is the app's: its session serves file: or nothing does.
+  const auto request = ParseElectronRequest(
+      R"({"type":"load_url","window":1,"url":"file:///opt/app/index.html"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronLoadUrl>(*request).url,
+            GURL("file:///opt/app/index.html"));
 }
 
 TEST(ElectronProtocolTest, OtherSchemesDoNotOpenAndTheRefusalIsTheWindows) {
@@ -80,6 +85,178 @@ TEST(ElectronProtocolTest, OtherSchemesDoNotOpenAndTheRefusalIsTheWindows) {
   EXPECT_EQ(request.error(),
             (ElectronRefusal{.why = "chrome: URLs do not open in an app window",
                              .window = 2}));
+}
+
+TEST(ElectronProtocolTest, OpenWindowNamesItsSession) {
+  const auto own = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  const auto named = ParseElectronRequest(
+      R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+      R"("session":"persist:cowork"})");
+
+  ASSERT_TRUE(own.has_value() && named.has_value());
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*own).session, "");
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*named).session, "persist:cowork");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","session":1})"),
+            "\"session\" must be a string");
+}
+
+TEST(ElectronProtocolTest, ASessionIsAPartitionInsideTheApps) {
+  const WebViewPartition app{.name = "electron-claude", .persist = true};
+
+  EXPECT_EQ(ElectronSessionPartition(app, ""), app);
+  EXPECT_EQ(
+      ElectronSessionPartition(app, "persist:cowork"),
+      (WebViewPartition{.name = "electron-claude:cowork", .persist = true}));
+  EXPECT_EQ(
+      ElectronSessionPartition(app, "cache"),
+      (WebViewPartition{.name = "electron-claude:cache", .persist = false}));
+  EXPECT_FALSE(ElectronSessionPartition(app, "persist:").has_value());
+}
+
+TEST(ElectronProtocolTest, AnAppHandlesTheWebsSchemesAndItsOwn) {
+  EXPECT_TRUE(IsElectronHandleableScheme("https"));
+  EXPECT_TRUE(IsElectronHandleableScheme("http"));
+  EXPECT_TRUE(IsElectronHandleableScheme("file"));
+  EXPECT_TRUE(IsElectronHandleableScheme("app"));
+  EXPECT_TRUE(IsElectronHandleableScheme("cowork-artifact"));
+  EXPECT_TRUE(IsElectronHandleableScheme("vscode-file"));
+  EXPECT_FALSE(IsElectronHandleableScheme(""));
+  EXPECT_FALSE(IsElectronHandleableScheme("App"));
+  EXPECT_FALSE(IsElectronHandleableScheme("1app"));
+  EXPECT_FALSE(IsElectronHandleableScheme("a b"));
+  for (const char* scheme :
+       {"about", "blob", "chrome", "chrome-extension", "chrome-untrusted",
+        "data", "devtools", "domicile", "filesystem", "javascript",
+        "view-source", "ws", "wss"}) {
+    EXPECT_FALSE(IsElectronHandleableScheme(scheme)) << scheme;
+  }
+}
+
+TEST(ElectronProtocolTest, HandleProtocolNamesASessionAndAScheme) {
+  const auto handle = ParseElectronRequest(
+      R"({"type":"handle_protocol","session":"persist:x","scheme":"app"})");
+  const auto unhandle = ParseElectronRequest(
+      R"({"type":"unhandle_protocol","session":"","scheme":"file"})");
+
+  ASSERT_TRUE(handle.has_value() && unhandle.has_value());
+  const auto& handled = std::get<ElectronHandleProtocol>(*handle);
+  EXPECT_EQ(handled.session, "persist:x");
+  EXPECT_EQ(handled.scheme, "app");
+  EXPECT_TRUE(handled.handle);
+  EXPECT_FALSE(std::get<ElectronHandleProtocol>(*unhandle).handle);
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"handle_protocol","session":"","scheme":"data"})"),
+      "an app cannot handle data:");
+  EXPECT_EQ(WhyRefused(R"({"type":"handle_protocol","scheme":"app"})"),
+            "\"session\" must be a string");
+}
+
+TEST(ElectronProtocolTest, AResponseIsABodyAFileOrAStream) {
+  const auto body = ParseElectronRequest(
+      R"({"type":"protocol_response","request":4,"status":201,)"
+      R"("headers":[["content-type","text/plain"],["x-a","1"],["x-a","2"]],)"
+      R"("body":"aGk="})");
+  const auto file = ParseElectronRequest(
+      R"({"type":"protocol_response","request":5,"status":200,"headers":[],)"
+      R"("file":"/opt/app/index.html"})");
+  const auto stream = ParseElectronRequest(
+      R"({"type":"protocol_response","request":6,"status":200,"headers":[],)"
+      R"("stream":true})");
+  const auto failed = ParseElectronRequest(
+      R"({"type":"protocol_response","request":7,"error":"no such file"})");
+
+  ASSERT_TRUE(body.has_value()) << body.error().why;
+  const auto& whole = std::get<ElectronProtocolResponse>(*body);
+  EXPECT_EQ(whole.request, 4);
+  ASSERT_TRUE(whole.response.has_value());
+  EXPECT_EQ(whole.response->status, 201);
+  EXPECT_EQ(whole.response->headers,
+            (ElectronHeaders{
+                {"content-type", "text/plain"}, {"x-a", "1"}, {"x-a", "2"}}));
+  EXPECT_EQ(std::get<std::string>(whole.response->body), "hi");
+  ASSERT_TRUE(file.has_value() && stream.has_value() && failed.has_value());
+  EXPECT_EQ(std::get<base::FilePath>(
+                std::get<ElectronProtocolResponse>(*file).response->body),
+            base::FilePath("/opt/app/index.html"));
+  EXPECT_TRUE(std::holds_alternative<ElectronStreamedBody>(
+      std::get<ElectronProtocolResponse>(*stream).response->body));
+  EXPECT_EQ(std::get<ElectronProtocolResponse>(*failed).response,
+            base::unexpected("no such file"));
+}
+
+TEST(ElectronProtocolTest, ABadResponseIsRefusedAsItsRequests) {
+  const auto refusal = [](std::string_view line) {
+    const auto request = ParseElectronRequest(line);
+    EXPECT_FALSE(request.has_value()) << line;
+    return request.has_value() ? ElectronRefusal() : request.error();
+  };
+
+  EXPECT_EQ(refusal(R"({"type":"protocol_response","request":4,"status":700,)"
+                    R"("headers":[],"body":""})"),
+            (ElectronRefusal{.why = "\"status\" must be from 100 to 599",
+                             .request = 4}));
+  EXPECT_EQ(refusal(R"({"type":"protocol_response","request":4,"status":200,)"
+                    R"("headers":[["bad name","x"]],"body":""})"),
+            (ElectronRefusal{.why = "\"bad name\" is not a header name",
+                             .request = 4}));
+  EXPECT_EQ(
+      refusal(R"({"type":"protocol_response","request":4,"status":200,)"
+              R"("headers":[["x","a\r\nb"]],"body":""})"),
+      (ElectronRefusal{.why = "header x has a value no response can carry",
+                       .request = 4}));
+  EXPECT_EQ(refusal(R"({"type":"protocol_response","request":4,"status":200,)"
+                    R"("headers":[],"body":"!!"})"),
+            (ElectronRefusal{.why = "\"body\" must be base64", .request = 4}));
+  EXPECT_EQ(
+      refusal(R"({"type":"protocol_response","request":4,"status":200,)"
+              R"("headers":[],"body":"","file":"/a"})"),
+      (ElectronRefusal{
+          .why = "a response has one of \"body\", \"file\" and \"stream\"",
+          .request = 4}));
+  EXPECT_EQ(refusal(R"({"type":"protocol_response","request":4,"status":200,)"
+                    R"("headers":[],"file":"relative/a"})"),
+            (ElectronRefusal{.why = "\"file\" must be an absolute path",
+                             .request = 4}));
+  EXPECT_EQ(
+      refusal(R"({"type":"protocol_response","request":0})"),
+      (ElectronRefusal{.why = "\"request\" must be a whole number from 1"}));
+}
+
+TEST(ElectronProtocolTest, AStreamedBodyComesInPiecesThenEnds) {
+  const auto data = ParseElectronRequest(
+      R"({"type":"protocol_data","request":6,"data":"aGk="})");
+  const auto end =
+      ParseElectronRequest(R"({"type":"protocol_end","request":6})");
+  const auto broken = ParseElectronRequest(
+      R"({"type":"protocol_end","request":6,"error":"disk"})");
+
+  ASSERT_TRUE(data.has_value() && end.has_value() && broken.has_value());
+  EXPECT_EQ(std::get<ElectronProtocolData>(*data).bytes, "hi");
+  EXPECT_EQ(std::get<ElectronProtocolEnd>(*end).error, std::nullopt);
+  EXPECT_EQ(std::get<ElectronProtocolEnd>(*broken).error, "disk");
+}
+
+TEST(ElectronProtocolTest, AProtocolRequestIsOneLine) {
+  EXPECT_EQ(
+      ElectronProtocolRequest(5, "persist:x",
+                              ElectronFetch{.url = GURL("app://localhost/a"),
+                                            .method = "POST",
+                                            .headers = {{"accept", "*/*"}},
+                                            .body = "hi"}),
+      R"({"body":"aGk=","headers":[["accept","*/*"]],"method":"POST",)"
+      R"("request":5,"session":"persist:x","type":"protocol_request",)"
+      R"("url":"app://localhost/a"})"
+      "\n");
+  EXPECT_EQ(ElectronProtocolRequest(6, "",
+                                    ElectronFetch{.url = GURL("file:///a"),
+                                                  .method = "GET",
+                                                  .headers = {},
+                                                  .body = std::nullopt}),
+            R"({"headers":[],"method":"GET","request":6,"session":"",)"
+            R"("type":"protocol_request","url":"file:///a"})"
+            "\n");
 }
 
 TEST(ElectronProtocolTest, AWindowNumberIsAWholeNumberFromOne) {

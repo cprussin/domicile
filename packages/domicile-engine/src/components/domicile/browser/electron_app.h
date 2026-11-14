@@ -5,7 +5,9 @@
 #define COMPONENTS_DOMICILE_BROWSER_ELECTRON_APP_H_
 
 #include <map>
+#include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,6 +19,7 @@
 #include "base/values.h"
 #include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/electron_protocol.h"
+#include "components/domicile/browser/web_view_partition.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -49,19 +52,73 @@ struct ElectronPageCalls {
   base::RepeatingClosure gone;
 };
 
+// Where a page's protocol request is answered: the loader that made it. The
+// app calls Respond or Fail once; after a streamed Respond, Data until End.
+// Destroying a responder that has not finished fails its request, as when
+// the app goes.
+class ElectronResponder {
+ public:
+  virtual ~ElectronResponder() = default;
+
+  virtual void Respond(ElectronResponse response) = 0;
+  // Why the app's handler failed, instead of a response.
+  virtual void Fail(const std::string& why) = 0;
+  // A piece of a streamed body.
+  virtual void Data(std::string bytes) = 0;
+  // A streamed body is complete, or broke off for `error`.
+  virtual void End(const std::optional<std::string>& error) = 0;
+};
+
+class ElectronApp;
+
+// One of an app's sessions, as its pages' loaders see it: which schemes the
+// app handles there, and the way to its handlers. Lives as long as its app.
+class ElectronSession {
+ public:
+  ElectronSession(ElectronApp& app, std::string name);
+  ElectronSession(const ElectronSession&) = delete;
+  ElectronSession& operator=(const ElectronSession&) = delete;
+  ~ElectronSession();
+
+  // Whether the app handles `scheme`'s requests in this session.
+  bool Handles(std::string_view scheme) const;
+  // The schemes it handles that the network does not: file: and the app's
+  // own, which a document needs a loader for before it asks.
+  std::vector<std::string> LocalSchemes() const;
+  // Asks the app's handler for `fetch`, a request in a scheme it handles.
+  void Fetch(ElectronFetch fetch, std::unique_ptr<ElectronResponder> responder);
+
+  const std::string& name() const { return name_; }
+  base::WeakPtr<ElectronSession> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
+ private:
+  friend class ElectronApp;
+
+  const raw_ref<ElectronApp> app_;
+  const std::string name_;
+  std::set<std::string> schemes_;
+  base::WeakPtrFactory<ElectronSession> weak_factory_{this};
+};
+
 // What an Electron app's windows are on the desk: app windows, named by the
 // desk's own window ids. //chrome implements it over its browser windows.
 class ElectronDesk {
  public:
   virtual ~ElectronDesk() = default;
 
-  // Opens an app window at `url` for `hello`'s app, whose pages run
-  // `preload` (none when empty) and make `calls`. Returns its id, or nothing
-  // when there is no shell to open it in.
-  virtual std::optional<std::string> Open(const GURL& url,
-                                          const ElectronHello& hello,
-                                          const std::string& preload,
-                                          ElectronPageCalls calls) = 0;
+  // Opens an app window at `url` for app `app_id`, in `partition`, whose
+  // pages run `preload` (none when empty), make `calls` and load through
+  // `session`. Returns its id, or nothing when there is no shell to open it
+  // in.
+  virtual std::optional<std::string> Open(
+      const GURL& url,
+      const std::string& app_id,
+      const WebViewPartition& partition,
+      const std::string& preload,
+      ElectronPageCalls calls,
+      base::WeakPtr<ElectronSession> session) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
   // Closes window `id` once its page agrees.
@@ -113,10 +170,38 @@ class ElectronApp {
   void Loaded(const std::string& id);
 
  private:
+  friend class ElectronSession;
+
   struct Window {
     std::string id;
     std::string title;
+    // Its session, by its Electron partition.
+    std::string session;
   };
+
+  // A page's protocol request, waiting on the app's handler.
+  struct Pending {
+    std::unique_ptr<ElectronResponder> responder;
+    // Responded with a body that follows in pieces.
+    bool streaming = false;
+  };
+
+  // Session `name`, made the first time the app names it.
+  ElectronSession& SessionNamed(const std::string& name);
+  void HandleProtocol(const ElectronHandleProtocol& handle);
+  void StartFetch(const std::string& session,
+                  ElectronFetch fetch,
+                  std::unique_ptr<ElectronResponder> responder);
+  void Respond(ElectronProtocolResponse response);
+  void ReceiveData(ElectronProtocolData data);
+  void EndBody(const ElectronProtocolEnd& end);
+  // Fails protocol request `request` for the app's bad line, `why`.
+  void FailRequest(int request, const std::string& why);
+  // Whether `url` opens in session `session`'s windows, or else refuses
+  // window `number`'s request.
+  bool Opens(ElectronWindow number,
+             const std::string& session,
+             const GURL& url);
 
   void Open(const ElectronOpenWindow& open);
   void Reply(ElectronReply reply);
@@ -150,6 +235,11 @@ class ElectronApp {
   // The pages' invokes waiting on the app's handlers, by number.
   std::map<int, ElectronAnswer> invokes_;
   int next_invoke_ = 1;
+  // The app's sessions, by Electron partition, "" its own.
+  std::map<std::string, std::unique_ptr<ElectronSession>> sessions_;
+  // The pages' protocol requests waiting on the app, by number.
+  std::map<int, Pending> fetches_;
+  int next_fetch_ = 1;
   base::WeakPtrFactory<ElectronApp> weak_factory_{this};
 };
 

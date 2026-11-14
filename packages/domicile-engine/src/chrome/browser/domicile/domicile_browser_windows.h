@@ -71,11 +71,13 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 // `partition`, whose pages run `preload` (none when empty) and make `calls`.
 // Returns the window's id. Nothing when there is no shell to own it. See
 // docs/architecture/ELECTRON-APPS.md.
-std::optional<std::string> OpenElectronWindow(const GURL& url,
-                                              const std::string& app_id,
-                                              const WebViewPartition& partition,
-                                              const std::string& preload,
-                                              ElectronPageCalls calls);
+std::optional<std::string> OpenElectronWindow(
+    const GURL& url,
+    const std::string& app_id,
+    const WebViewPartition& partition,
+    const std::string& preload,
+    ElectronPageCalls calls,
+    base::WeakPtr<ElectronSession> session);
 
 // Electron window `id`'s page, for the app's IPC to it, or null after
 // logging when no such window is open or its page has no preload.

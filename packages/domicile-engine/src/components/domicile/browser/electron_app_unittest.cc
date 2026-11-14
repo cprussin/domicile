@@ -4,12 +4,18 @@
 #include "components/domicile/browser/electron_app.h"
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <variant>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ref.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/types/expected.h"
 #include "base/values.h"
@@ -26,17 +32,22 @@ constexpr char kHello[] =
 // A desk that numbers its windows from 10 and writes down each call.
 class FakeDesk final : public ElectronDesk {
  public:
-  std::optional<std::string> Open(const GURL& url,
-                                  const ElectronHello& hello,
-                                  const std::string& preload,
-                                  ElectronPageCalls page_calls) override {
+  std::optional<std::string> Open(
+      const GURL& url,
+      const std::string& app_id,
+      const WebViewPartition& partition,
+      const std::string& preload,
+      ElectronPageCalls page_calls,
+      base::WeakPtr<ElectronSession> session) override {
     if (!has_shell) {
       return std::nullopt;
     }
-    calls.push_back("open " + url.spec() + " as " + hello.app_id +
+    calls.push_back("open " + url.spec() + " as " + app_id +
                     (preload.empty() ? "" : " with " + preload));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
+    partitions.emplace(id, partition);
+    sessions.emplace(id, std::move(session));
     return id;
   }
   void Load(const std::string& id, const GURL& url) override {
@@ -74,6 +85,9 @@ class FakeDesk final : public ElectronDesk {
   bool has_shell = true;
   // What each window's page may call, by id.
   std::map<std::string, ElectronPageCalls> pages;
+  // Each window's partition and session, by id.
+  std::map<std::string, WebViewPartition> partitions;
+  std::map<std::string, base::WeakPtr<ElectronSession>> sessions;
   int next_id = 10;
   std::vector<std::string> calls;
 };
@@ -424,6 +438,238 @@ TEST_F(ElectronAppTest, TheAppsPortsReachItsWindowsPage) {
   EXPECT_EQ(sent_, Lines{R"({"type":"window_refused","why":"window 3 is not )"
                          R"(open","window":3})"
                          "\n"});
+}
+
+// A page's loader that writes down what the app answers.
+class FakeResponder final : public ElectronResponder {
+ public:
+  explicit FakeResponder(std::vector<std::string>& log) : log_(log) {}
+  ~FakeResponder() override { log_->push_back("gone"); }
+
+  void Respond(ElectronResponse response) override {
+    std::string line = "respond " + base::NumberToString(response.status);
+    for (const auto& [name, value] : response.headers) {
+      line += " " + name + "=" + value;
+    }
+    if (const auto* body = std::get_if<std::string>(&response.body)) {
+      line += " body " + *body;
+    } else if (const auto* file = std::get_if<base::FilePath>(&response.body)) {
+      line += " file " + file->value();
+    } else {
+      line += " streamed";
+    }
+    log_->push_back(line);
+  }
+  void Fail(const std::string& why) override { log_->push_back("fail " + why); }
+  void Data(std::string bytes) override { log_->push_back("data " + bytes); }
+  void End(const std::optional<std::string>& error) override {
+    log_->push_back(error.has_value() ? "end " + *error : "end");
+  }
+
+ private:
+  const raw_ref<std::vector<std::string>> log_;
+};
+
+ElectronFetch Get(std::string_view url) {
+  return ElectronFetch{.url = GURL(url),
+                       .method = "GET",
+                       .headers = {{"accept", "*/*"}},
+                       .body = std::nullopt};
+}
+
+constexpr char kOpenOwn[] =
+    R"({"type":"open_window","window":1,"url":"https://a.test/"})";
+
+TEST_F(ElectronAppTest, AWindowOpensInItsSessionsPartition) {
+  Hello();
+
+  app_->Take(kOpenOwn);
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("session":"persist:cowork"})");
+
+  EXPECT_EQ(desk_.partitions.at("10"),
+            (WebViewPartition{.name = "electron-claude", .persist = true}));
+  EXPECT_EQ(
+      desk_.partitions.at("11"),
+      (WebViewPartition{.name = "electron-claude:cowork", .persist = true}));
+  ASSERT_TRUE(desk_.sessions.at("10") && desk_.sessions.at("11"));
+  EXPECT_EQ(desk_.sessions.at("10")->name(), "");
+  EXPECT_EQ(desk_.sessions.at("11")->name(), "persist:cowork");
+}
+
+TEST_F(ElectronAppTest, ASessionThatNamesNoPartitionRefusesItsWindow) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("session":"persist:"})");
+
+  EXPECT_EQ(sent_, Lines{R"({"type":"window_refused","why":"a partition of )"
+                         R"(\"persist:\" names no partition to keep",)"
+                         R"("window":2})"
+                         "\n"});
+  EXPECT_TRUE(desk_.calls.empty());
+}
+
+TEST_F(ElectronAppTest, AFileOpensOnceItsSessionHandlesFile) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"file:///opt/a.html"})");
+  app_->Take(R"({"type":"handle_protocol","session":"","scheme":"file"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"file:///opt/a.html"})");
+  app_->Take(R"({"type":"open_window","window":3,"url":"file:///opt/a.html",)"
+             R"("session":"other"})");
+
+  EXPECT_EQ(sent_,
+            (Lines{R"({"type":"window_refused","why":"file: URLs open once )"
+                   R"(the app handles file:","window":1})"
+                   "\n",
+                   "{\"type\":\"window_opened\",\"window\":2}\n",
+                   R"({"type":"window_refused","why":"file: URLs open once )"
+                   R"(the app handles file:","window":3})"
+                   "\n"}));
+  EXPECT_EQ(desk_.calls,
+            Lines{"open file:///opt/a.html as com.anthropic.Claude"});
+}
+
+TEST_F(ElectronAppTest, ALoadIsCheckedAgainstItsWindowsSession) {
+  Hello();
+  app_->Take(kOpenOwn);
+  sent_.clear();
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"load_url","window":1,"url":"app://localhost/"})");
+  app_->Take(R"({"type":"handle_protocol","session":"","scheme":"app"})");
+  app_->Take(R"({"type":"load_url","window":1,"url":"app://localhost/"})");
+
+  EXPECT_EQ(sent_, Lines{R"({"type":"window_refused","why":"app: URLs open )"
+                         R"(once the app handles app:","window":1})"
+                         "\n"});
+  EXPECT_EQ(desk_.calls, Lines{"load 10 app://localhost/"});
+}
+
+TEST_F(ElectronAppTest, ASessionHandlesWhatTheAppHandlesThere) {
+  Hello();
+  app_->Take(kOpenOwn);
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("session":"other"})");
+
+  app_->Take(R"({"type":"handle_protocol","session":"","scheme":"https"})");
+  app_->Take(R"({"type":"handle_protocol","session":"","scheme":"file"})");
+  app_->Take(R"({"type":"handle_protocol","session":"","scheme":"app"})");
+  app_->Take(R"({"type":"unhandle_protocol","session":"","scheme":"app"})");
+
+  const ElectronSession& own = *desk_.sessions.at("10");
+  const ElectronSession& other = *desk_.sessions.at("11");
+  EXPECT_TRUE(own.Handles("https"));
+  EXPECT_TRUE(own.Handles("file"));
+  EXPECT_FALSE(own.Handles("app"));
+  EXPECT_FALSE(own.Handles("http"));
+  EXPECT_EQ(own.LocalSchemes(), std::vector<std::string>{"file"});
+  EXPECT_FALSE(other.Handles("https"));
+  EXPECT_TRUE(other.LocalSchemes().empty());
+}
+
+TEST_F(ElectronAppTest, AFetchIsAnsweredByTheAppsResponse) {
+  Hello();
+  app_->Take(kOpenOwn);
+  app_->Take(R"({"type":"handle_protocol","session":"","scheme":"file"})");
+  sent_.clear();
+  std::vector<std::string> log;
+
+  desk_.sessions.at("10")->Fetch(Get("file:///opt/a.html"),
+                                 std::make_unique<FakeResponder>(log));
+  app_->Take(R"({"type":"protocol_response","request":1,"status":200,)"
+             R"("headers":[["content-type","text/html"]],"body":"aGk="})");
+
+  EXPECT_EQ(sent_, Lines{R"({"headers":[["accept","*/*"]],"method":"GET",)"
+                         R"("request":1,"session":"",)"
+                         R"("type":"protocol_request",)"
+                         R"("url":"file:///opt/a.html"})"
+                         "\n"});
+  EXPECT_EQ(log, (Lines{"respond 200 content-type=text/html body hi", "gone"}));
+}
+
+TEST_F(ElectronAppTest, AStreamedBodyComesInPiecesUntilItEnds) {
+  Hello();
+  app_->Take(kOpenOwn);
+  std::vector<std::string> log;
+  desk_.sessions.at("10")->Fetch(Get("file:///a"),
+                                 std::make_unique<FakeResponder>(log));
+  sent_.clear();
+
+  app_->Take(R"({"type":"protocol_response","request":1,"status":206,)"
+             R"("headers":[],"stream":true})");
+  app_->Take(R"({"type":"protocol_data","request":1,"data":"aGk="})");
+  app_->Take(R"({"type":"protocol_data","request":1,"data":"IQ=="})");
+  app_->Take(R"({"type":"protocol_end","request":1})");
+  app_->Take(R"({"type":"protocol_data","request":1,"data":"IQ=="})");
+
+  EXPECT_EQ(
+      log, (Lines{"respond 206 streamed", "data hi", "data !", "end", "gone"}));
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"no protocol request 1 )"
+                         R"(is waiting"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AFailedHandlerFailsTheRequest) {
+  Hello();
+  std::vector<std::string> log;
+  app_->Take(kOpenOwn);
+  desk_.sessions.at("10")->Fetch(Get("app://localhost/"),
+                                 std::make_unique<FakeResponder>(log));
+
+  app_->Take(
+      R"({"type":"protocol_response","request":1,"error":"no such page"})");
+
+  EXPECT_EQ(log, (Lines{"fail no such page", "gone"}));
+}
+
+TEST_F(ElectronAppTest, ABadResponseFailsItsRequestAndIsRefused) {
+  Hello();
+  std::vector<std::string> log;
+  app_->Take(kOpenOwn);
+  desk_.sessions.at("10")->Fetch(Get("app://localhost/"),
+                                 std::make_unique<FakeResponder>(log));
+  sent_.clear();
+
+  app_->Take(R"({"type":"protocol_response","request":1,"status":99,)"
+             R"("headers":[],"body":""})");
+
+  EXPECT_EQ(log, (Lines{R"(fail "status" must be from 100 to 599)", "gone"}));
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"\"status\" must be )"
+                         R"(from 100 to 599"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, PiecesOfABodyNotStreamedAreRefused) {
+  Hello();
+  std::vector<std::string> log;
+  app_->Take(kOpenOwn);
+  desk_.sessions.at("10")->Fetch(Get("app://localhost/"),
+                                 std::make_unique<FakeResponder>(log));
+  sent_.clear();
+
+  app_->Take(R"({"type":"protocol_data","request":1,"data":"aGk="})");
+
+  EXPECT_EQ(log, (Lines{"fail the app sent a body's piece before a streamed "
+                        "response",
+                        "gone"}));
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"the app sent a body's )"
+                         R"(piece before a streamed response"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AnAppThatGoesDropsItsPagesRequests) {
+  Hello();
+  std::vector<std::string> log;
+  app_->Take(kOpenOwn);
+  base::WeakPtr<ElectronSession> session = desk_.sessions.at("10");
+  session->Fetch(Get("app://localhost/"), std::make_unique<FakeResponder>(log));
+
+  app_.reset();
+
+  EXPECT_EQ(log, Lines{"gone"});
+  EXPECT_FALSE(session);
 }
 
 }  // namespace

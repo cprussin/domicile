@@ -4,7 +4,10 @@
 #include "components/domicile/browser/electron_app.h"
 
 #include <algorithm>
+#include <iterator>
+#include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,6 +20,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/types/expected.h"
+#include "url/url_constants.h"
 
 namespace domicile {
 namespace {
@@ -28,7 +32,34 @@ std::string Json(const base::Value& value) {
   return json;
 }
 
+// The schemes whose requests go to the network unless the app handles them.
+bool IsNetworkScheme(std::string_view scheme) {
+  return scheme == url::kHttpScheme || scheme == url::kHttpsScheme;
+}
+
 }  // namespace
+
+ElectronSession::ElectronSession(ElectronApp& app, std::string name)
+    : app_(app), name_(std::move(name)) {}
+
+ElectronSession::~ElectronSession() = default;
+
+bool ElectronSession::Handles(std::string_view scheme) const {
+  return schemes_.contains(std::string(scheme));
+}
+
+std::vector<std::string> ElectronSession::LocalSchemes() const {
+  std::vector<std::string> local;
+  std::ranges::copy_if(
+      schemes_, std::back_inserter(local),
+      [](const std::string& scheme) { return !IsNetworkScheme(scheme); });
+  return local;
+}
+
+void ElectronSession::Fetch(ElectronFetch fetch,
+                            std::unique_ptr<ElectronResponder> responder) {
+  app_->StartFetch(name_, std::move(fetch), std::move(responder));
+}
 
 ElectronApp::ElectronApp(ElectronDesk& desk, Send send)
     : desk_(desk), send_(std::move(send)) {}
@@ -45,6 +76,8 @@ void ElectronApp::Take(std::string_view line) {
   if (!request.has_value() && request.error().window.has_value()) {
     send_.Run(
         ElectronWindowRefused(*request.error().window, request.error().why));
+  } else if (!request.has_value() && request.error().request.has_value()) {
+    FailRequest(*request.error().request, request.error().why);
   } else if (!request.has_value()) {
     send_.Run(ElectronRefused(request.error().why));
   } else if (const auto* hello = std::get_if<ElectronHello>(&*request)) {
@@ -59,7 +92,9 @@ void ElectronApp::Take(std::string_view line) {
   } else if (const auto* open = std::get_if<ElectronOpenWindow>(&*request)) {
     Open(*open);
   } else if (const auto* load = std::get_if<ElectronLoadUrl>(&*request)) {
-    if (const std::optional<std::string> id = IdOf(load->window)) {
+    if (const std::optional<std::string> id = IdOf(load->window);
+        id.has_value() &&
+        Opens(load->window, windows_.at(load->window).session, load->url)) {
       desk_->Load(*id, load->url);
     }
   } else if (const auto* focus = std::get_if<ElectronFocusWindow>(&*request)) {
@@ -89,6 +124,15 @@ void ElectronApp::Take(std::string_view line) {
     }
   } else if (auto* reply = std::get_if<ElectronReply>(&*request)) {
     Reply(std::move(*reply));
+  } else if (auto* handle = std::get_if<ElectronHandleProtocol>(&*request)) {
+    HandleProtocol(*handle);
+  } else if (auto* response =
+                 std::get_if<ElectronProtocolResponse>(&*request)) {
+    Respond(std::move(*response));
+  } else if (auto* data = std::get_if<ElectronProtocolData>(&*request)) {
+    ReceiveData(std::move(*data));
+  } else if (auto* end = std::get_if<ElectronProtocolEnd>(&*request)) {
+    EndBody(*end);
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -132,6 +176,14 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
                                    " is already open"})));
     return;
   }
+  base::expected<WebViewPartition, std::string> partition =
+      ElectronSessionPartition(hello_->partition, open.session);
+  if (!partition.has_value()) {
+    send_.Run(ElectronWindowRefused(open.window, partition.error()));
+    return;
+  } else if (!Opens(open.window, open.session, open.url)) {
+    return;
+  }
   ElectronPageCalls calls{
       .sent = base::BindRepeating(&ElectronApp::PageSent,
                                   weak_factory_.GetWeakPtr(), open.window),
@@ -153,12 +205,15 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
                                   weak_factory_.GetWeakPtr(), open.window),
   };
   const std::optional<std::string> id =
-      desk_->Open(open.url, *hello_, open.preload, std::move(calls));
+      desk_->Open(open.url, hello_->app_id, *partition, open.preload,
+                  std::move(calls), SessionNamed(open.session).GetWeakPtr());
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
   } else {
-    windows_.emplace(open.window, Window{.id = *id, .title = std::string()});
+    windows_.emplace(
+        open.window,
+        Window{.id = *id, .title = std::string(), .session = open.session});
     send_.Run(ElectronWindowOpened(open.window));
   }
 }
@@ -226,6 +281,120 @@ void ElectronApp::PageGone(ElectronWindow number) {
   if (windows_.contains(number)) {
     send_.Run(ElectronPageGone(number));
   }
+}
+
+ElectronSession& ElectronApp::SessionNamed(const std::string& name) {
+  std::unique_ptr<ElectronSession>& session = sessions_[name];
+  if (!session) {
+    session = std::make_unique<ElectronSession>(*this, name);
+  }
+  return *session;
+}
+
+void ElectronApp::HandleProtocol(const ElectronHandleProtocol& handle) {
+  // A session's partition is checked here too, so a handler never waits on
+  // a session no window can open in.
+  base::expected<WebViewPartition, std::string> partition =
+      ElectronSessionPartition(hello_->partition, handle.session);
+  if (!partition.has_value()) {
+    send_.Run(ElectronRefused(partition.error()));
+    return;
+  }
+  std::set<std::string>& schemes = SessionNamed(handle.session).schemes_;
+  if (handle.handle) {
+    schemes.insert(handle.scheme);
+  } else {
+    schemes.erase(handle.scheme);
+  }
+}
+
+bool ElectronApp::Opens(ElectronWindow number,
+                        const std::string& session,
+                        const GURL& url) {
+  if (IsNetworkScheme(url.scheme()) ||
+      SessionNamed(session).Handles(url.scheme())) {
+    return true;
+  }
+  send_.Run(ElectronWindowRefused(
+      number, base::StrCat({url.scheme(), ": URLs open once the app handles ",
+                            url.scheme(), ":"})));
+  return false;
+}
+
+void ElectronApp::StartFetch(const std::string& session,
+                             ElectronFetch fetch,
+                             std::unique_ptr<ElectronResponder> responder) {
+  const int request = next_fetch_++;
+  fetches_.emplace(request, Pending{.responder = std::move(responder)});
+  send_.Run(ElectronProtocolRequest(request, session, fetch));
+}
+
+void ElectronApp::Respond(ElectronProtocolResponse response) {
+  auto pending = fetches_.find(response.request);
+  if (pending == fetches_.end()) {
+    send_.Run(ElectronRefused(
+        base::StrCat({"no protocol request ",
+                      base::NumberToString(response.request), " is waiting"})));
+    return;
+  } else if (pending->second.streaming) {
+    FailRequest(response.request, "a protocol request has one response");
+    return;
+  }
+  if (!response.response.has_value()) {
+    pending->second.responder->Fail(response.response.error());
+    fetches_.erase(pending);
+  } else if (std::holds_alternative<ElectronStreamedBody>(
+                 response.response->body)) {
+    pending->second.streaming = true;
+    pending->second.responder->Respond(std::move(*response.response));
+  } else {
+    pending->second.responder->Respond(std::move(*response.response));
+    fetches_.erase(pending);
+  }
+}
+
+void ElectronApp::ReceiveData(ElectronProtocolData data) {
+  auto pending = fetches_.find(data.request);
+  if (pending == fetches_.end()) {
+    send_.Run(ElectronRefused(
+        base::StrCat({"no protocol request ",
+                      base::NumberToString(data.request), " is waiting"})));
+  } else if (!pending->second.streaming) {
+    FailRequest(data.request,
+                "the app sent a body's piece before a streamed response");
+  } else {
+    pending->second.responder->Data(std::move(data.bytes));
+  }
+}
+
+void ElectronApp::EndBody(const ElectronProtocolEnd& end) {
+  auto pending = fetches_.find(end.request);
+  if (pending == fetches_.end()) {
+    send_.Run(ElectronRefused(
+        base::StrCat({"no protocol request ", base::NumberToString(end.request),
+                      " is waiting"})));
+  } else if (!pending->second.streaming) {
+    FailRequest(end.request, "the app ended a body before a streamed response");
+  } else {
+    pending->second.responder->End(end.error);
+    fetches_.erase(pending);
+  }
+}
+
+void ElectronApp::FailRequest(int request, const std::string& why) {
+  send_.Run(ElectronRefused(why));
+  auto pending = fetches_.find(request);
+  if (pending == fetches_.end()) {
+    return;
+  }
+  // A streamed body that broke off ends with the error; one that never
+  // started fails.
+  if (pending->second.streaming) {
+    pending->second.responder->End(why);
+  } else {
+    pending->second.responder->Fail(why);
+  }
+  fetches_.erase(pending);
 }
 
 std::optional<std::string> ElectronApp::IdOf(ElectronWindow number) {

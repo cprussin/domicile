@@ -42,10 +42,12 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 14, ElectronProtocol 22, ElectronApp 24,
+# PictureInPictureVideos 14, ElectronProtocol 30, ElectronApp 35,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
-# 741, and it was 726 — a mouse's unaccelerated motion is five
+# 760, and it was 741 — an Electron app's sessions and protocol handlers
+# are eight more ElectronProtocol cases and eleven more ElectronApp ones.
+# Before that 741, and it was 726 — a mouse's unaccelerated motion is five
 # UnacceleratedMotion cases, the warp a game must not feel four WarpLanding
 # ones, a confinement's boxes four PointerConfinementBoxes ones, and the
 # channel's confinement and its region two ControlChannel ones. Before that
@@ -249,7 +251,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=741
+FLOOR=760
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
