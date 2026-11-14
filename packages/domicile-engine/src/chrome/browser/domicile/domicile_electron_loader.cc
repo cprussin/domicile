@@ -11,6 +11,7 @@
 #include <variant>
 #include <vector>
 
+#include "base/byte_size.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
@@ -164,7 +165,7 @@ class ElectronURLLoader final : public network::mojom::URLLoader,
   std::unique_ptr<mojo::DataPipeProducer> producer_;
   bool writing_ = false;
   std::optional<int> ended_;
-  int64_t body_length_ = 0;
+  uint64_t body_length_ = 0;
 
   base::WeakPtrFactory<ElectronURLLoader> weak_factory_{this};
 };
@@ -333,7 +334,8 @@ void ElectronURLLoader::Respond(ElectronResponse response) {
   auto head = network::mojom::URLResponseHead::New();
   std::string mime_type;
   std::string charset;
-  if (headers->GetMimeTypeAndCharset(&mime_type, &charset)) {
+  headers->GetMimeTypeAndCharset(&mime_type, &charset);
+  if (!mime_type.empty()) {
     head->mime_type = mime_type;
     head->charset = charset;
   } else if (!net::GetWellKnownMimeTypeFromFile(
@@ -420,8 +422,8 @@ void ElectronURLLoader::Wrote(MojoResult result) {
 
 void ElectronURLLoader::Complete(int error) {
   network::URLLoaderCompletionStatus status(error);
-  status.decoded_body_length = body_length_;
-  status.encoded_body_length = body_length_;
+  status.decoded_body_length = base::ByteSize(body_length_);
+  status.encoded_body_length = base::ByteSize(body_length_);
   client_->OnComplete(status);
   delete this;
 }
