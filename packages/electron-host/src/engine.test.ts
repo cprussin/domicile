@@ -94,6 +94,30 @@ describe(connectEngine, () => {
     expect(await heard).toEqual(request);
   });
 
+  it("passes on each webRequest event", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const heard = new Promise((resolve) =>
+      engine.events.on("webRequest", resolve),
+    );
+    const event = {
+      ask: 2,
+      event: "before_request",
+      id: 7,
+      method: "GET",
+      referrer: "",
+      resource_type: "mainFrame",
+      session: "",
+      type: "web_request",
+      url: "https://a.test/",
+      window: 1,
+    };
+
+    fake.say(event);
+
+    expect(await heard).toEqual(event);
+  });
+
   it("says when the engine goes", async () => {
     fake = await startFakeEngine();
     const engine = await connected(fake);

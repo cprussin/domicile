@@ -20,6 +20,7 @@ import {
 } from "./electron/protocol";
 import { createSessions } from "./electron/session";
 import { ELECTRON_VERSION } from "./electron/version";
+import { createWebRequests } from "./electron/web-request";
 import { connectEngine } from "./engine";
 import { readEnvironment } from "./environment";
 import { mirrorResources } from "./mirror";
@@ -74,10 +75,16 @@ const main = async ([resources, ...args]: string[]) => {
     engine.events.on("protocol", (request) => {
       void protocols.answer(request);
     });
-    const session = createSessions(protocols);
+    const webRequests = createWebRequests(
+      engine.send,
+      (window) => BrowserWindow.fromId(window)?.webContents,
+    );
+    engine.events.on("webRequest", webRequests.hear);
+    const session = createSessions(protocols, webRequests);
+    const BrowserWindow = createBrowserWindow(engine, app, ipc, session);
     const electron = {
       app,
-      BrowserWindow: createBrowserWindow(engine, app, ipc, session),
+      BrowserWindow,
       ipcMain,
       MessageChannelMain,
       MessagePortMain,

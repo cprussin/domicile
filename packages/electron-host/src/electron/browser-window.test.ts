@@ -10,6 +10,7 @@ import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
 import { createProtocols } from "./protocol";
 import { createSessions } from "./session";
+import { createWebRequests } from "./web-request";
 
 const setUp = () => {
   const sent: EngineRequest[] = [];
@@ -37,6 +38,10 @@ const setUp = () => {
   const { ipcMain, ...ipc } = createIpcMain();
   const sessions = createSessions(
     createProtocols((request) => sent.push(request)),
+    createWebRequests(
+      (message) => sent.push(message),
+      () => undefined,
+    ),
   );
   // The default session's file: handler, which every test would start with.
   sent.length = 0;

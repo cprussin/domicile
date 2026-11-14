@@ -9,6 +9,10 @@ import { z } from "zod";
 
 import type { PortRequest } from "./electron/message-port-main";
 import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
+import type {
+  IncomingWebRequest,
+  WebRequestMessage,
+} from "./electron/web-request";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -57,7 +61,8 @@ export type EngineRequest =
       readonly ports: string[];
     }
   | PortRequest
-  | ProtocolRequest;
+  | ProtocolRequest
+  | WebRequestMessage;
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ready") }),
@@ -123,6 +128,35 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("protocol_request"),
     url: z.string(),
   }),
+  z.object({
+    ask: z.number().optional(),
+    error: z.string().optional(),
+    event: z.enum([
+      "before_request",
+      "before_send_headers",
+      "send_headers",
+      "headers_received",
+      "response_started",
+      "before_redirect",
+      "completed",
+      "error_occurred",
+    ]),
+    from_cache: z.boolean().optional(),
+    id: z.number(),
+    ip: z.string().optional(),
+    method: z.string(),
+    redirect_url: z.string().optional(),
+    referrer: z.string(),
+    request_headers: z.array(z.tuple([z.string(), z.string()])).optional(),
+    resource_type: z.string(),
+    response_headers: z.array(z.tuple([z.string(), z.string()])).optional(),
+    session: z.string(),
+    status_code: z.number().optional(),
+    status_line: z.string().optional(),
+    type: z.literal("web_request"),
+    url: z.string(),
+    window: z.number().optional(),
+  }),
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;
@@ -142,6 +176,8 @@ export type Engine = {
     window: [event: WindowEvent];
     /** A page's request that its session's protocol handler answers. */
     protocol: [request: IncomingRequest];
+    /** An event of a page's request, for its session's webRequest. */
+    webRequest: [request: IncomingWebRequest];
   }>;
 };
 
@@ -184,6 +220,8 @@ export const connectEngine = (
         events.emit("refused", parsed.data.why);
       } else if (parsed.data.type === "protocol_request") {
         events.emit("protocol", parsed.data);
+      } else if (parsed.data.type === "web_request") {
+        events.emit("webRequest", parsed.data);
       } else if ("window" in parsed.data) {
         events.emit("window", parsed.data);
       } else {
