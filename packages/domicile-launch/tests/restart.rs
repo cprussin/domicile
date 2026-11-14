@@ -599,6 +599,7 @@ fn runtime(directory: &std::path::Path) -> Runtime {
         broker: directory.join("broker"),
         chrome_socket: directory.join("chrome.sock"),
         command: directory.join("command.sock"),
+        electron: directory.join("electron.sock"),
         control: directory.join("domicile-ipc.1.sock"),
         profile: directory.join("profile"),
         shims: directory.join("bin"),

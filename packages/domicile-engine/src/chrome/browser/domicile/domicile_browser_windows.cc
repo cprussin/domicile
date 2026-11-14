@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -69,6 +70,15 @@ namespace domicile {
 namespace {
 
 constexpr char kWindowsUserDataKey[] = "domicile_browser_windows";
+
+// Each browser window's page that finished loading, by the window's id. See
+// WatchBrowserWindowLoads.
+base::RepeatingCallbackList<void(const std::string&)>& BrowserWindowLoads() {
+  static base::NoDestructor<
+      base::RepeatingCallbackList<void(const std::string&)>>
+      loads;
+  return *loads;
+}
 
 // Returns the shell's WebContents in `context`, or null when it has none.
 //
@@ -139,7 +149,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
             const std::optional<WebViewPartition>& partition) {
     return Make([&](WebViewGuest& guest) { guest.Navigate(url); },
                 /*popup_window=*/std::nullopt, 0, 0, private_browsing,
-                /*app=*/false, partition);
+                /*app=*/false, partition)
+        .has_value();
   }
 
   // Opens a window with a copy of `source`'s history and takes `step` there,
@@ -149,10 +160,11 @@ class DeskWindows final : public base::SupportsUserData::Data,
                        HistoryStep step,
                        bool private_browsing,
                        const std::optional<WebViewPartition>& partition) {
-    return Make(
-        [&](WebViewGuest& guest) { guest.TakeHistoryStep(source, step); },
-        /*popup_window=*/std::nullopt, 0, 0, private_browsing,
-        /*app=*/false, partition);
+    const std::optional<std::string> id =
+        Make([&](WebViewGuest& guest) { guest.TakeHistoryStep(source, step); },
+             /*popup_window=*/std::nullopt, 0, 0, private_browsing,
+             /*app=*/false, partition);
+    return id.has_value();
   }
 
   // Opens an app window at `url`: a window of the desk's own window that the
@@ -179,7 +191,20 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return Make([&](WebViewGuest& guest) { guest.Navigate(url); },
                 /*popup_window=*/std::nullopt, 0, 0,
                 /*private_browsing=*/false, /*app=*/true,
-                /*partition=*/std::nullopt, /*app_host=*/std::string(), app_id);
+                /*partition=*/std::nullopt, /*app_host=*/std::string(), app_id)
+        .has_value();
+  }
+
+  // Opens an app window at `url` for an Electron app, with `app_id`, in its
+  // own `partition`. Returns its id, or nothing when the profile has no shell
+  // to own it.
+  std::optional<std::string> OpenElectron(const GURL& url,
+                                          const std::string& app_id,
+                                          const WebViewPartition& partition) {
+    return Make([&](WebViewGuest& guest) { guest.Navigate(url); },
+                /*popup_window=*/std::nullopt, 0, 0,
+                /*private_browsing=*/false, /*app=*/true, partition,
+                /*app_host=*/std::string(), app_id);
   }
 
   // Opens an app window at an app module's `url`, pinned to `app_host`. See
@@ -188,7 +213,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return Make([&](WebViewGuest& guest) { guest.Navigate(url); },
                 /*popup_window=*/std::nullopt, 0, 0,
                 /*private_browsing=*/false, /*app=*/true,
-                /*partition=*/std::nullopt, app_host);
+                /*partition=*/std::nullopt, app_host)
+        .has_value();
   }
 
   // Makes the page of a window a page opened, for content to hold until
@@ -213,7 +239,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
         WebViewGuest::AdoptOpenedWindow(std::move(contents));
     const std::string id = guest->window_id();
     auto watch = std::make_unique<Watch>(
-        guest->contents(),
+        guest->contents(), id,
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
     windows_.push_back(Window{
         id, std::move(guest), std::move(watch), size.width(), size.height(),
@@ -225,7 +251,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
   bool OpenPopupWindow(int window_id, const GURL& url, int width, int height) {
     return Make([&](WebViewGuest& guest) { guest.Navigate(url); }, window_id,
                 width, height, /*private_browsing=*/false,
-                /*app=*/false, /*partition=*/std::nullopt);
+                /*app=*/false, /*partition=*/std::nullopt)
+        .has_value();
   }
 
   // The off-the-record profile a new private page lives in, made on first
@@ -365,11 +392,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
   }
 
  private:
-  // Reports a change to a page's address or title.
+  // Reports a change to a page's address or title, and its loads.
   class Watch final : public content::WebContentsObserver {
    public:
-    Watch(content::WebContents& contents, base::RepeatingClosure changed)
-        : WebContentsObserver(&contents), changed_(std::move(changed)) {}
+    Watch(content::WebContents& contents,
+          std::string id,
+          base::RepeatingClosure changed)
+        : WebContentsObserver(&contents),
+          id_(std::move(id)),
+          changed_(std::move(changed)) {}
+
+    void DocumentOnLoadCompletedInPrimaryMainFrame() override {
+      BrowserWindowLoads().Notify(id_);
+    }
 
     void TitleWasSet(content::NavigationEntry* entry) override {
       changed_.Run();
@@ -381,6 +416,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
 
    private:
+    const std::string id_;
     base::RepeatingClosure changed_;
   };
 
@@ -400,23 +436,25 @@ class DeskWindows final : public base::SupportsUserData::Data,
     int captures = 0;
   };
 
-  // Makes a window and gives it its first page with `load`.
-  bool Make(base::FunctionRef<void(WebViewGuest&)> load,
-            std::optional<int> popup_window,
-            int width,
-            int height,
-            bool private_browsing,
-            bool app,
-            const std::optional<WebViewPartition>& partition,
-            const std::string& app_host = std::string(),
-            const std::string& app_id = std::string()) {
+  // Makes a window and gives it its first page with `load`. Returns its id, or
+  // nothing when the profile has no shell to own it.
+  std::optional<std::string> Make(
+      base::FunctionRef<void(WebViewGuest&)> load,
+      std::optional<int> popup_window,
+      int width,
+      int height,
+      bool private_browsing,
+      bool app,
+      const std::optional<WebViewPartition>& partition,
+      const std::string& app_host = std::string(),
+      const std::string& app_id = std::string()) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
     content::WebContents* shell = ShellContentsIn(profile_);
     if (shell == nullptr) {
       LOG(WARNING) << "domicile: no shell to open a browser window in.";
-      return false;
+      return std::nullopt;
     }
     const std::string id = base::NumberToString(next_id_++);
     std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
@@ -424,7 +462,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
         base::BindRepeating(app ? &AttachAppTabHelpers : &AttachTabHelpers));
     // `windows_` owns `guest` and the watch from here.
     auto watch = std::make_unique<Watch>(
-        guest->contents(),
+        guest->contents(), id,
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
     if (!app_host.empty()) {
       guest->PinToApp(app_host);
@@ -433,7 +471,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     windows_.push_back(Window{id, std::move(guest), std::move(watch), width,
                               height, app, app_id});
     Changed();
-    return true;
+    return id;
   }
 
   // Destroys a closed window's page once its linger is over. A profile
@@ -789,6 +827,70 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host) {
   return DeskWindows::For(
              Profile::FromBrowserContext(shell->GetBrowserContext()))
       .OpenAppModule(url, app_host);
+}
+
+namespace {
+
+// The desk's windows in the shell's profile, or null while there is no shell.
+DeskWindows* ShellDeskWindows() {
+  content::WebContents* shell = ShellContentsIn(nullptr);
+  if (shell == nullptr) {
+    return nullptr;
+  }
+  return &DeskWindows::For(
+      Profile::FromBrowserContext(shell->GetBrowserContext()));
+}
+
+}  // namespace
+
+std::optional<std::string> OpenElectronWindow(
+    const GURL& url,
+    const std::string& app_id,
+    const WebViewPartition& partition) {
+  DeskWindows* windows = ShellDeskWindows();
+  if (windows == nullptr) {
+    return std::nullopt;
+  }
+  return windows->OpenElectron(url, app_id, partition);
+}
+
+void LoadBrowserWindow(const std::string& id, const GURL& url) {
+  DeskWindows* windows = ShellDeskWindows();
+  WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);
+  if (guest == nullptr) {
+    LOG(WARNING) << "domicile: asked to load browser window " << id
+                 << ", which is not open.";
+  } else {
+    guest->Navigate(url);
+  }
+}
+
+void FocusBrowserWindow(const std::string& id) {
+  DeskWindows* windows = ShellDeskWindows();
+  WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);
+  if (guest == nullptr) {
+    LOG(WARNING) << "domicile: asked to focus browser window " << id
+                 << ", which is not open.";
+  } else {
+    guest->RequestFocus();
+  }
+}
+
+void AskToCloseBrowserWindow(const std::string& id) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->AskToClose(id);
+  }
+}
+
+void CloseBrowserWindow(const std::string& id) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->Close(id);
+  }
+}
+
+base::CallbackListSubscription WatchBrowserWindowLoads(
+    base::RepeatingCallback<void(const std::string& id)> loaded) {
+  return BrowserWindowLoads().Add(std::move(loaded));
 }
 
 content::WebContents* DeskShellContents() {
