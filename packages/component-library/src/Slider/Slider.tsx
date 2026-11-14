@@ -125,6 +125,8 @@ const trackStyles = css({
 // where easing would lag the pointer.
 const indicatorStyles = css({
   "&:not([data-dragging])": {
+    // main-thread animation: base-ui sizes the indicator by width; it eases
+    // only on a jump, never while dragged.
     transition: "inline-size {durations.normal} {easings.outQuart}",
   },
   backgroundColor: "currentcolor",
@@ -139,6 +141,8 @@ const thumbStyles = css({
     outlineOffset: 0.5,
   },
   "&:not([data-dragging])": {
+    // main-thread animation: base-ui places the thumb by inset; it eases only
+    // on a jump, never while dragged.
     transition:
       "inset-inline-start {durations.normal} {easings.outQuart}, scale {durations.fast} {easings.out}",
   },

@@ -438,8 +438,9 @@ const ringStyles = cva({
     outlineStyle: "solid",
     outlineWidth: "2px",
     position: "absolute",
-    // Sizes ease only where they differ, as across monitors at other scales.
     transitionDuration: "slower",
+    // main-thread animation: sizes ease only where two tiles differ, as across
+    // monitors at other scales; within one, only `translate` changes.
     transitionProperty: "translate, block-size, inline-size",
     transitionTimingFunction: "emphasized",
   },
