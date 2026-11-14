@@ -115,25 +115,6 @@ TEST(ElectronProtocolTest, ASessionIsAPartitionInsideTheApps) {
   EXPECT_FALSE(ElectronSessionPartition(app, "persist:").has_value());
 }
 
-TEST(ElectronProtocolTest, AnAppHandlesTheWebsSchemesAndItsOwn) {
-  EXPECT_TRUE(IsElectronHandleableScheme("https"));
-  EXPECT_TRUE(IsElectronHandleableScheme("http"));
-  EXPECT_TRUE(IsElectronHandleableScheme("file"));
-  EXPECT_TRUE(IsElectronHandleableScheme("app"));
-  EXPECT_TRUE(IsElectronHandleableScheme("cowork-artifact"));
-  EXPECT_TRUE(IsElectronHandleableScheme("vscode-file"));
-  EXPECT_FALSE(IsElectronHandleableScheme(""));
-  EXPECT_FALSE(IsElectronHandleableScheme("App"));
-  EXPECT_FALSE(IsElectronHandleableScheme("1app"));
-  EXPECT_FALSE(IsElectronHandleableScheme("a b"));
-  for (const char* scheme :
-       {"about", "blob", "chrome", "chrome-extension", "chrome-untrusted",
-        "data", "devtools", "domicile", "filesystem", "javascript",
-        "view-source", "ws", "wss"}) {
-    EXPECT_FALSE(IsElectronHandleableScheme(scheme)) << scheme;
-  }
-}
-
 TEST(ElectronProtocolTest, HandleProtocolNamesASessionAndAScheme) {
   const auto handle = ParseElectronRequest(
       R"({"type":"handle_protocol","session":"persist:x","scheme":"app"})");
@@ -289,8 +270,16 @@ TEST(ElectronProtocolTest, ALineThatIsNotAnObjectIsRefused) {
   EXPECT_EQ(WhyRefused("{}"), "a request must have a \"type\"");
 }
 
+TEST(ElectronProtocolTest, ReadySaysWhichSchemesTheEngineRegistered) {
+  EXPECT_EQ(ElectronReady({{.scheme = "app", .standard = true, .secure = true},
+                           {.scheme = "claude-media"}}),
+            "{\"schemes\":[{\"privileges\":[\"standard\",\"secure\"],"
+            "\"scheme\":\"app\"},{\"privileges\":[],\"scheme\":"
+            "\"claude-media\"}],\"type\":\"ready\"}\n");
+}
+
 TEST(ElectronProtocolTest, EventsAreOneLineEach) {
-  EXPECT_EQ(ElectronReady(), "{\"type\":\"ready\"}\n");
+  EXPECT_EQ(ElectronReady({}), "{\"schemes\":[],\"type\":\"ready\"}\n");
   EXPECT_EQ(ElectronRefused("no"), "{\"type\":\"refused\",\"why\":\"no\"}\n");
   EXPECT_EQ(ElectronWindowOpened(1),
             "{\"type\":\"window_opened\",\"window\":1}\n");

@@ -119,7 +119,22 @@ using Lines = std::vector<std::string>;
 TEST_F(ElectronAppTest, HelloIsAnsweredReady) {
   app_->Take(kHello);
 
-  EXPECT_EQ(sent_, Lines{"{\"type\":\"ready\"}\n"});
+  EXPECT_EQ(sent_, Lines{"{\"schemes\":[],\"type\":\"ready\"}\n"});
+}
+
+TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
+  app_.emplace(desk_,
+               base::BindRepeating(
+                   [](std::vector<std::string>* sent, std::string line) {
+                     sent->push_back(std::move(line));
+                   },
+                   &sent_),
+               std::vector<ElectronScheme>{{.scheme = "app", .secure = true}});
+
+  app_->Take(kHello);
+
+  EXPECT_EQ(sent_, Lines{"{\"schemes\":[{\"privileges\":[\"secure\"],"
+                         "\"scheme\":\"app\"}],\"type\":\"ready\"}\n"});
 }
 
 TEST_F(ElectronAppTest, NothingOpensBeforeHello) {
