@@ -65,7 +65,10 @@ const Meter = ({
       data-muted={muted ? "" : undefined}
       role="meter"
     >
-      <span className={meterFillStyles} style={{ inlineSize: `${percent}%` }} />
+      <span
+        className={meterFillStyles}
+        style={{ transform: `translateX(${String(percent - 100)}%)` }}
+      />
     </span>
   );
 };
@@ -99,12 +102,15 @@ const meterStyles = css({
   position: "absolute",
 });
 
-// A short transition, since levels arrive twenty times a second.
+// A short transition, since levels arrive twenty times a second. Slid in from
+// the start rather than widened, so a new level skips layout.
+// `translateX` is physical: a transform takes no logical direction.
 const meterFillStyles = css({
   backgroundColor: "success",
   blockSize: "100%",
   display: "block",
-  transition: "inline-size {durations.fastest} {easings.linear}",
+  inlineSize: "100%",
+  transition: "transform {durations.fastest} {easings.linear}",
 });
 
 const trackStyles = css({
