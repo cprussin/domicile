@@ -40,6 +40,9 @@ to it by name, then set its scale, position and rotation, or switch it off.
 - `"adaptive_sync": true` turns on variable refresh (FreeSync or G-Sync
   Compatible) on a monitor that supports it, which smooths out games and
   video when the computer can't keep up with the monitor.
+- `"hdr": true` turns on HDR on a monitor that supports it, for brighter,
+  richer HDR video and photos. If everything else looks too dim, raise
+  `"sdr_white"` from its default of 203, for example to 250.
 
 <!-- /tabs -->
 

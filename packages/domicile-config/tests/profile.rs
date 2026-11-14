@@ -1043,6 +1043,36 @@ fn adaptive_sync_is_off_unless_a_profile_asks_for_it() {
 }
 
 #[test]
+fn hdr_is_off_unless_a_profile_asks_for_it() {
+    let asked = layout(
+        r#"{ "output": { "profiles": [{ "name": "bright",
+              "displays": [{ "display": "drm-1", "hdr": true, "sdr_white": 240 }] }] } }"#,
+        &[offering(LAPTOP, PANEL_MODES)],
+    );
+    assert!(asked.scanout()[0].hdr, "the engine is asked for it");
+    assert_eq!(asked.scanout()[0].sdr_white, 240);
+    let unasked = layout(ONE_PANEL, &[offering(LAPTOP, PANEL_MODES)]);
+    assert!(!unasked.scanout()[0].hdr, "off by default");
+    assert_eq!(
+        unasked.scanout()[0].sdr_white,
+        domicile_config::DEFAULT_SDR_WHITE,
+        "BT.2408's reference white"
+    );
+}
+
+#[test]
+fn an_sdr_white_outside_what_pq_encodes_is_refused() {
+    for white in [0, 10_001] {
+        let config = format!(
+            r#"{{ "output": {{ "profiles": [{{ "name": "bright",
+                  "displays": [{{ "display": "drm-1", "hdr": true, "sdr_white": {white} }}] }}] }} }}"#
+        );
+        let error = Config::parse(&config).expect_err("a white PQ cannot encode is refused");
+        assert!(error.to_string().contains("sdr_white"), "{error}");
+    }
+}
+
+#[test]
 fn a_rate_alone_keeps_the_monitor_at_its_size() {
     let layout = layout(
         r#"{ "output": { "profiles": [{ "name": "fast",

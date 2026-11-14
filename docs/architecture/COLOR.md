@@ -92,7 +92,7 @@ color descriptions, the protocol, and the config. Tracks
 - [x] engine: 10-bit framebuffers and `max bpc` where the EDID and planes take 10 bits
 - [x] engine: buffer color descriptions on import (`gfx::ColorSpace`, `gfx::HDRMetadata`)
 - [x] compositor: `wp_color_management_v1` with output and surface descriptions and preferred feedback. Every display describes itself as sRGB with gamma 2.2 until the HDR step gives each its own
-- [ ] engine: HDR10 display color spaces from the EDID and the layout; `Colorspace`, `HDR_OUTPUT_METADATA`
-- [ ] config: `hdr` and SDR white per placement; HDR capability reported per display
+- [x] engine: HDR10 display color spaces from the EDID and the layout; `Colorspace`, `HDR_OUTPUT_METADATA`
+- [x] config: `hdr` and SDR white per placement; HDR capability reported per display to the compositor
 - [ ] engine + compositor: night light as a viz color matrix on HDR displays; `wlr-gamma-control` fails there
-- [ ] Settings: HDR switch and SDR brightness for HDR displays (mockup first)
+- [ ] Settings: HDR switch and SDR brightness for HDR displays (mockup first); the shell sees each display's HDR state

@@ -3,6 +3,8 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
 
+#include <drm_fourcc.h>
+
 #include <limits>
 #include <memory>
 #include <optional>
@@ -21,6 +23,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/hdr_static_metadata.h"
 
 namespace ui {
 namespace {
@@ -52,6 +55,18 @@ class SnapshotBuilder {
     adaptive_sync_ = state;
     return *this;
   }
+  // A 10-bit panel on 10-bit planes whose EDID takes PQ and peaks at
+  // `peak_nits`.
+  SnapshotBuilder& Hdr(double peak_nits) {
+    color_info_.bits_per_channel = 10;
+    color_info_.hdr_static_metadata = gfx::HDRStaticMetadata(
+        peak_nits, peak_nits / 2, 0.05,
+        gfx::HDRStaticMetadata::EotfMask(
+            {gfx::HDRStaticMetadata::Eotf::kGammaSdrRange,
+             gfx::HDRStaticMetadata::Eotf::kPq}));
+    formats_ = {{DRM_FORMAT_XRGB8888, {}}, {DRM_FORMAT_XBGR2101010, {}}};
+    return *this;
+  }
   // Another advertised mode, after the native one.
   SnapshotBuilder& AlsoOffers(const gfx::Size& size,
                               float refresh_hz,
@@ -78,13 +93,12 @@ class SnapshotBuilder {
         /*path_topology=*/std::vector<uint64_t>(),
         /*is_aspect_preserving_scaling=*/false, /*has_overscan=*/false,
         display::PrivacyScreenState::kNotSupported,
-        /*has_content_protection_key=*/false,
-        display::DisplaySnapshot::ColorInfo(), "a panel", base::FilePath(),
+        /*has_content_protection_key=*/false, color_info_, "a panel",
+        base::FilePath(),
         std::move(modes), display::PanelOrientation::kNormal,
         /*edid=*/std::vector<uint8_t>(),
         /*current_mode=*/native, native, /*product_code=*/0,
-        /*year_of_manufacture=*/0, gfx::Size(), adaptive_sync_,
-        display::DrmFormatsAndModifiers());
+        /*year_of_manufacture=*/0, gfx::Size(), adaptive_sync_, formats_);
   }
 
  private:
@@ -94,6 +108,8 @@ class SnapshotBuilder {
       display::VariableRefreshRateState::kVrrNotCapable;
   std::optional<gfx::Size> native_mode_size_ = gfx::Size(1920, 1080);
   float native_refresh_hz_ = 60.f;
+  display::DisplaySnapshot::ColorInfo color_info_;
+  display::DrmFormatsAndModifiers formats_;
   struct Other {
     gfx::Size size;
     float refresh_hz;
@@ -404,6 +420,58 @@ TEST(DrmModesetTest, ARateOrAdaptiveSyncChangingIsWorthTellingTheList) {
   EXPECT_FALSE(PanelChangedUnseen(off, off));
   EXPECT_TRUE(PanelChangedUnseen(off, on));
   EXPECT_TRUE(PanelChangedUnseen(off, faster));
+}
+
+// A 10-bit panel whose EDID takes PQ and peaks at 600 cd/m².
+std::unique_ptr<display::DisplaySnapshot> AnHdrPanel() {
+  return SnapshotBuilder().Id(5).Hdr(600).Build();
+}
+
+TEST(DrmModesetTest, AProfileAsksAnHdrPanelForHdr) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(AnHdrPanel());
+
+  const auto asked = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 5, .enabled = true, .hdr = true}});
+  const auto unasked =
+      ModesetParamsFromSnapshots(Pointers(owned), {{.id = 5, .enabled = true}});
+
+  ASSERT_EQ(asked.size(), 1u);
+  EXPECT_TRUE(asked[0].domicile_hdr);
+  ASSERT_EQ(unasked.size(), 1u);
+  EXPECT_FALSE(unasked[0].domicile_hdr) << "HDR is off by default";
+  EXPECT_FALSE(ModesetParamsFromSnapshots(Pointers(owned), {})[0].domicile_hdr);
+}
+
+TEST(DrmModesetTest, APanelWithoutPqIsNotAskedForHdr) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder().Id(5).Build());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 5, .enabled = true, .hdr = true}});
+
+  ASSERT_EQ(params.size(), 1u);
+  EXPECT_FALSE(params[0].domicile_hdr);
+  EXPECT_EQ(PanelFromSnapshot(*owned[0], {{.id = 5, .hdr = true}}).hdr,
+            DomicileHdr::kUnsupported);
+}
+
+TEST(DrmModesetTest, APanelSaysWhetherItIsInHdrAndHowBrightItGets) {
+  const std::unique_ptr<display::DisplaySnapshot> panel = AnHdrPanel();
+
+  const DomicilePanel off = PanelFromSnapshot(*panel, {});
+  const DomicilePanel on = PanelFromSnapshot(
+      *panel,
+      {{.id = 5, .enabled = true, .hdr = true, .sdr_white_nits = 250.f}});
+
+  EXPECT_EQ(off.hdr, DomicileHdr::kOff);
+  EXPECT_FLOAT_EQ(off.max_luminance, 600.f);
+  EXPECT_FLOAT_EQ(off.max_average_luminance, 300.f);
+  EXPECT_FLOAT_EQ(off.min_luminance, 0.05f);
+  EXPECT_EQ(on.hdr, DomicileHdr::kOn);
+  EXPECT_FLOAT_EQ(on.sdr_white_nits, 250.f);
+  EXPECT_TRUE(PanelChangedUnseen(off, on))
+      << "display::DisplayList compares no HDR state";
 }
 
 TEST(DrmModesetTest, ALayoutCanLeaveAConnectorDark) {

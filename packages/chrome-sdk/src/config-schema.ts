@@ -94,6 +94,7 @@ export const displayPlacementSchema = z.strictObject({
   adaptive_sync: z.boolean().prefault(false),
   display: z.string(),
   enabled: z.boolean().prefault(true),
+  hdr: z.boolean().prefault(false),
   mode: z
     .tuple([
       z.number().int().min(1).max(4_294_967_295),
@@ -115,6 +116,13 @@ export const displayPlacementSchema = z.strictObject({
     .nullish()
     .transform((value) => value ?? undefined),
   scale: z.number().gt(0).prefault(1),
+  sdr_white: z
+    .number()
+    .int()
+    .min(1)
+    .max(10_000)
+    .nullish()
+    .transform((value) => value ?? undefined),
   transform: transformSchema.prefault("normal"),
 });
 

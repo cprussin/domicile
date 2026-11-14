@@ -109,6 +109,10 @@ constexpr base::TimeDelta kProbePatience = base::Seconds(30);
 // ui/ozone/platform/drm/domicile/drm_clipboard.h).
 constexpr char kClipboardText[] = "text/plain;charset=utf-8";
 
+// SDR content's white on an HDR display, in cd/m²: the BT.2408 reference
+// white, and `ui::DomicileDisplayLayout::sdr_white_nits`'s default.
+constexpr float kReferenceWhiteNits = 203.f;
+
 // Initializes the AtExitManager and mojo core once per process.
 //
 // The compositor is not a Chromium process, so the library provides both. They
@@ -826,6 +830,18 @@ class Displays : public mojom::DisplayListObserver {
     }
   }
 
+  // A switch rather than a cast, so a new state is a compile error here.
+  static int32_t HdrOf(mojom::Hdr hdr) {
+    switch (hdr) {
+      case mojom::Hdr::kUnsupported:
+        return DOMICILE_HDR_UNSUPPORTED;
+      case mojom::Hdr::kOff:
+        return DOMICILE_HDR_OFF;
+      case mojom::Hdr::kOn:
+        return DOMICILE_HDR_ON;
+    }
+  }
+
   // mojom::DisplayListObserver implementation.
   void OnDisplaysChanged(std::vector<mojom::DisplayPtr> displays) override {
     EngineEvent event{.type = EngineEvent::Type::kDisplays};
@@ -843,7 +859,12 @@ class Displays : public mojom::DisplayListObserver {
                         .refresh_mhz = one->refresh_mhz,
                         .connector = one->connector,
                         .gamma_size = one->gamma_size,
-                        .adaptive_sync = AdaptiveSyncOf(one->adaptive_sync)});
+                        .adaptive_sync = AdaptiveSyncOf(one->adaptive_sync),
+                        .hdr = HdrOf(one->hdr),
+                        .max_luminance = one->max_luminance,
+                        .max_average_luminance = one->max_average_luminance,
+                        .min_luminance = one->min_luminance,
+                        .sdr_white_nits = one->sdr_white_nits});
       for (const mojom::DisplayModePtr& mode : one->modes) {
         event.displays.back().modes.push_back(
             {.width = mode->size.width(),
@@ -1148,7 +1169,8 @@ struct DomicileEngine {
           // The strings belong to `event`, which lives in the drained vector
           // until the loop ends, so they outlive the callback as the header
           // promises.
-          if (callbacks_.adaptive_displays || callbacks_.moded_displays) {
+          if (callbacks_.hdr_displays || callbacks_.adaptive_displays ||
+              callbacks_.moded_displays) {
             // Every display's modes first, so the records can point into a
             // vector that no longer grows.
             std::vector<DomicileDisplayMode> modes;
@@ -1172,14 +1194,29 @@ struct DomicileEngine {
                   .mode_count = static_cast<uint32_t>(display.modes.size())});
               first += display.modes.size();
             }
-            if (callbacks_.adaptive_displays) {
-              std::vector<DomicileAdaptiveDisplay> adaptive;
-              adaptive.reserve(records.size());
-              for (size_t index = 0; index < records.size(); ++index) {
-                adaptive.push_back(DomicileAdaptiveDisplay{
-                    .moded = records[index],
-                    .adaptive_sync = event.displays[index].adaptive_sync});
+            std::vector<DomicileAdaptiveDisplay> adaptive;
+            adaptive.reserve(records.size());
+            for (size_t index = 0; index < records.size(); ++index) {
+              adaptive.push_back(DomicileAdaptiveDisplay{
+                  .moded = records[index],
+                  .adaptive_sync = event.displays[index].adaptive_sync});
+            }
+            if (callbacks_.hdr_displays) {
+              std::vector<DomicileHdrDisplay> hdr;
+              hdr.reserve(adaptive.size());
+              for (size_t index = 0; index < adaptive.size(); ++index) {
+                const domicile::EngineDisplay& display = event.displays[index];
+                hdr.push_back(DomicileHdrDisplay{
+                    .adaptive = adaptive[index],
+                    .hdr = display.hdr,
+                    .max_luminance = display.max_luminance,
+                    .max_average_luminance = display.max_average_luminance,
+                    .min_luminance = display.min_luminance,
+                    .sdr_white_nits = display.sdr_white_nits});
               }
+              callbacks_.hdr_displays(callbacks_.user_data, hdr.data(),
+                                      static_cast<uint32_t>(hdr.size()));
+            } else if (callbacks_.adaptive_displays) {
               callbacks_.adaptive_displays(
                   callbacks_.user_data, adaptive.data(),
                   static_cast<uint32_t>(adaptive.size()));
@@ -1470,7 +1507,31 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
-  // One moded layout record as mojom, with adaptive sync off.
+  // As ConfigureAdaptiveDisplays, with whether each wants HDR10.
+  void ConfigureHdrDisplays(const DomicileHdrLayout* layout, uint32_t count) {
+    std::vector<domicile::mojom::DisplayLayoutPtr> wanted;
+    wanted.reserve(count);
+    // SAFETY: as in ConfigureDisplays; `domicile_displays_configure_hdr` has
+    // refused a null pointer with a nonzero count.
+    const auto records =
+        UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
+    for (const DomicileHdrLayout& display : records) {
+      domicile::mojom::DisplayLayoutPtr one =
+          ModedLayoutOf(display.adaptive.moded);
+      one->adaptive_sync = display.adaptive.adaptive_sync != 0;
+      one->hdr = display.hdr != 0;
+      if (display.sdr_white_nits > 0) {
+        one->sdr_white_nits = display.sdr_white_nits;
+      }
+      wanted.push_back(std::move(one));
+    }
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::ConfigureDisplaysOnThread,
+                       base::Unretained(this), std::move(wanted)));
+  }
+
+  // One moded layout record as mojom, with adaptive sync and HDR off.
   static domicile::mojom::DisplayLayoutPtr ModedLayoutOf(
       const DomicileModedLayout& display) {
     domicile::mojom::DisplayLayoutPtr one = LayoutOf(display.layout);
@@ -1489,7 +1550,8 @@ struct DomicileEngine {
         domicile::TransformOf(display.transform), display.scale,
         gfx::Rect(display.desk_x, display.desk_y, display.desk_width,
                   display.desk_height),
-        std::nullopt, 0, /*adaptive_sync=*/false);
+        std::nullopt, 0, /*adaptive_sync=*/false, /*hdr=*/false,
+        domicile::kReferenceWhiteNits);
   }
 
   // Copies the records before posting: the ABI borrows them only for the call,
@@ -2484,6 +2546,15 @@ void domicile_displays_configure_adaptive(DomicileEngine* engine,
   // As domicile_displays_configure.
   if (engine && (layout || count == 0)) {
     engine->ConfigureAdaptiveDisplays(layout, count);
+  }
+}
+
+void domicile_displays_configure_hdr(DomicileEngine* engine,
+                                     const DomicileHdrLayout* layout,
+                                     uint32_t count) {
+  // As domicile_displays_configure.
+  if (engine && (layout || count == 0)) {
+    engine->ConfigureHdrDisplays(layout, count);
   }
 }
 

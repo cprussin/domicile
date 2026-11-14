@@ -476,6 +476,8 @@ pub fn darkened(displays: &[Display], scanout: &[Connector]) -> Vec<Connector> {
                 mode: None,
                 refresh_mhz: None,
                 adaptive_sync: false,
+                hdr: false,
+                sdr_white: domicile_config::DEFAULT_SDR_WHITE,
             }
         })
         .collect()
@@ -589,6 +591,7 @@ mod tests {
             refresh_mhz: 60_000,
             modes: Vec::new(),
             adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         }
     }
 
@@ -1083,6 +1086,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
                 Connector {
                     id: 7,
@@ -1094,6 +1099,8 @@ mod tests {
                     mode: None,
                     refresh_mhz: None,
                     adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
             ]
         );
@@ -1112,6 +1119,8 @@ mod tests {
             mode: None,
             refresh_mhz: None,
             adaptive_sync: false,
+            hdr: false,
+            sdr_white: domicile_config::DEFAULT_SDR_WHITE,
         };
         assert_eq!(
             darkened(&[monitor(7, (1920, 0))], &[lit]),
