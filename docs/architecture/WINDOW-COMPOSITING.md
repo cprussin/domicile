@@ -394,9 +394,14 @@ a memfd of the window's (`memory_frames.rs`) and imports it with
 The submit takes a damage rectangle in box pixels, where empty means the whole
 box. `engine_damage.rs` maps the client's damage onto the box when the engine
 shows the window's previous commit at the same box, from the same crop of a
-buffer of the same size, and nothing turns or scales either commit's buffer. Where the crop
-is stretched to another size, the damage grows a texel each way for the
-engine's filtering. Every other commit damages the whole box, as do popups and
+buffer of the same size, and nothing turns either commit's buffer. Where the crop
+is stretched to another size, as a `wp_viewport` at a fractional scale does,
+the damage grows a texel each way for the engine's filtering.
+
+- **Buffer damage** (`damage_buffer`, Chromium's) is already in buffer pixels.
+- **Surface damage** is scaled, or mapped through the viewport's source
+  (`client_damage.rs`). Under a destination with no source it is the whole
+  buffer. Every other commit damages the whole box, as do popups and
 subsurfaces, whose box size the compositor does not know.
 
 Unverified on a screen: a wrong rectangle leaves stale pixels, and no check

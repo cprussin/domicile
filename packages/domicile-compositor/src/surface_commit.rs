@@ -30,7 +30,7 @@ use smithay::{
 use tracing::debug;
 
 use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
-use crate::client_damage::take_damage;
+use crate::client_damage::{exact_damage, take_damage};
 use crate::clients::ClientState;
 use crate::dmabuf_import::DmabufImporter;
 use crate::engine::NEWEST_BOX;
@@ -270,7 +270,7 @@ impl DomicileCompositor {
                 let callbacks = std::mem::take(&mut attrs.frame_callbacks);
                 // Clear the accumulated damage, or it grows by a rectangle per
                 // commit for the window's life.
-                let damage = take_damage(&mut attrs.damage, attrs.buffer_scale);
+                let damage = take_damage(&mut attrs.damage, attrs.buffer_scale, viewport);
                 // The scale this buffer was drawn at. Read now; a client
                 // mid-scale-change may commit the next one differently.
                 let scale = attrs.buffer_scale;
@@ -418,24 +418,15 @@ impl DomicileCompositor {
                     let pixels_a_point =
                         buffer_size.map_or((1.0, 1.0), |size| mapping.pixels_a_point(size));
                     self.cast_frame(app_id, &buffer, sampled, pixels_a_point, damage);
-                    // Surface damage maps to buffer pixels by the scale alone
-                    // only when nothing turns or scales the buffer.
-                    let upright =
-                        buffer_transform == Transform::Normal && viewport == Viewport::default();
+                    // A turned buffer's pixels land elsewhere on screen.
+                    let upright = buffer_transform == Transform::Normal;
                     let commit = Commit {
                         surface,
                         buffer: &buffer,
                         sampled,
                         at_box,
                         box_size,
-                        damage: damage.filter(|_| upright).map(|region| {
-                            (
-                                region.x as i32,
-                                region.y as i32,
-                                region.width as i32,
-                                region.height as i32,
-                            )
-                        }),
+                        damage: exact_damage(damage, buffer_transform),
                     };
                     // Before the submit, which numbers this commit's frame.
                     let last = self
