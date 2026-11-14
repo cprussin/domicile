@@ -7,9 +7,9 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     Bus, ChromeMessage, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
-    ListedKeymap, PreviewedWindow, ResizeEdges, Scale, ShellCommandHelp, Signal, Stream, SystemEnd,
-    SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal,
-    WindowRequest, WindowState,
+    ListedKeymap, PreviewedWindow, ResizeEdges, Scale, ShellBinding, ShellCommandHelp, Signal,
+    Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
+    UnlockRefusal, WindowRequest, WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -474,7 +474,8 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
         ChromeMessage::SystemRequest {
             id: 12,
             request: SystemRequest::ShellCommands {
-                commands: Vec::new()
+                commands: Vec::new(),
+                bindings: Vec::new(),
             },
         }
     );
@@ -488,7 +489,8 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                 commands: vec![ShellCommandHelp {
                     usage: "lock".into(),
                     description: "Lock the desktop.".into(),
-                }]
+                }],
+                bindings: Vec::new(),
             },
         }
     );
@@ -501,6 +503,7 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
             request: SystemRequest::AnswerShellCommand {
                 sent: 4,
                 refused: Some("no command `x`".into()),
+                output: None,
             },
         }
     );
@@ -518,9 +521,34 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
     assert_eq!(
         host(&HostMessage::SystemReply {
             id: 1,
-            reply: SystemReply::Sent,
+            reply: SystemReply::Sent { output: None },
         }),
         r#"{"type":"system_reply","id":1,"reply":{"kind":"sent"}}"#
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 1,
+            reply: SystemReply::Sent {
+                output: Some("[]".into())
+            },
+        }),
+        r#"{"type":"system_reply","id":1,"reply":{"kind":"sent","output":"[]"}}"#
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","bindings":[{"mode":"default","chord":"Meta+l","action":"send-shell lock"}]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: vec![ShellBinding {
+                    mode: "default".into(),
+                    chord: "Meta+l".into(),
+                    action: "send-shell lock".into(),
+                }],
+            },
+        }
     );
     assert_eq!(
         host(&HostMessage::SystemEvent {

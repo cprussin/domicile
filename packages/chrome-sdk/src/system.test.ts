@@ -633,7 +633,12 @@ describe("shell commands", () => {
   it("streams each command `domicile send-shell` sends until it is stopped", async () => {
     const host = new FakeHost();
     const lock = { description: "Lock the desktop.", usage: "lock" };
-    const listening = system(host).shellCommands([lock]);
+    const bound = {
+      action: "send-shell lock",
+      chord: "Meta+l",
+      mode: "default",
+    };
+    const listening = system(host).shellCommands([lock], [bound]);
     host.reply(1, { kind: "started" });
     const commands = started(await listening);
     host.event(1, {
@@ -645,7 +650,7 @@ describe("shell commands", () => {
     host.end(1, { kind: "stopped" });
 
     expect(host.calls).toStrictEqual([
-      [1, { call: "shell_commands", commands: [lock] }],
+      [1, { bindings: [bound], call: "shell_commands", commands: [lock] }],
       [1, { call: "unwatch" }],
     ]);
     expect(await Array.fromAsync(commands.items)).toStrictEqual([
@@ -653,19 +658,23 @@ describe("shell commands", () => {
     ]);
   });
 
-  it("says whether this page ran a command, and why not", async () => {
+  it("says whether this page ran a command, what it printed, and why not", async () => {
     const host = new FakeHost();
     const calls = system(host);
-    const ran = calls.answerShellCommand(4, undefined);
+    const ran = calls.answerShellCommand(4, Ok("ran"));
     host.reply(1, { kind: "set" });
-    const refused = calls.answerShellCommand(5, "no command `x`");
+    const refused = calls.answerShellCommand(5, Err("no command `x`"));
     host.reply(2, { kind: "set" });
+    const printed = calls.answerShellCommand(6, Ok({ output: "[]" }));
+    host.reply(3, { kind: "set" });
 
     expect(await ran).toStrictEqual(Ok("set"));
     expect(await refused).toStrictEqual(Ok("set"));
+    expect(await printed).toStrictEqual(Ok("set"));
     expect(host.calls).toStrictEqual([
       [1, { call: "answer_shell_command", sent: 4 }],
       [2, { call: "answer_shell_command", refused: "no command `x`", sent: 5 }],
+      [3, { call: "answer_shell_command", output: "[]", sent: 6 }],
     ]);
   });
 });

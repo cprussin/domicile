@@ -831,15 +831,17 @@ bindKeys(
   keys are in by then; `unbind` runs any still armed. Gestures cannot hold an
   action. For example, `"Meta+Tab": KeyAction.Hold(SendShell(["peek"]),
   SendShell(["unpeek"]))`.
-- `onCommand` returns `Ok("ran")`, or `Err(why)` for a command the shell does
-  not run. A pressed binding's `Err` goes to `reportRefusal`, which logs by
+- `onCommand` returns `Ok("ran")`, `Ok({ output })` for a command that
+  answers (a query's JSON, which `domicile send-shell` prints), or `Err(why)`
+  for a command the shell does not run. A pressed binding's `Err` goes to `reportRefusal`, which logs by
   default.
 - `domicile send-shell <word>…` from a terminal reaches `onCommand` too, on
   every page bound. `send-shell` fails with the `Err`, or when no page answers
   within a second. A page that cannot listen calls `report`, which logs by
   default.
 - `commands` describes what `onCommand` runs: `domicile list-shell-commands`
-  (and `send-shell --help`) prints it.
+  (and `send-shell --help`) prints it. `domicile list-bindings` prints your
+  keybindings, which `bindKeys` describes for you.
 - It returns `{ setMode, unbind }`. `setMode` keeps one mode across a desktop
   of several pages.
 - Command meanings are yours. Describe them in `commands`, and in your README,

@@ -18,7 +18,7 @@ use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
     AdaptiveSync, DesktopStatus, DisplayHdr, DisplayInfo, DisplayTransform, ListedDisplay,
-    ListedWindow, MonitorInfo, ShellCommandHelp, Theme, WindowKind,
+    ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, Theme, WindowKind,
 };
 
 #[test]
@@ -301,7 +301,7 @@ fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
         "{\"type\":\"send_shell\",\"command\":[\"focus\",\"right\"]}",
         &|command| {
             told.set(Some(command.to_vec()));
-            Ok(())
+            Ok(Some("[]".to_string()))
         },
     );
 
@@ -309,7 +309,13 @@ fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
         told.take(),
         Some(vec!["focus".to_string(), "right".to_string()])
     );
-    assert_eq!(answered, Response::Sent);
+    // What the shell printed reaches the terminal.
+    assert_eq!(
+        answered,
+        Response::Sent {
+            output: Some("[]".to_string())
+        }
+    );
 }
 
 #[test]
@@ -406,6 +412,23 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         ),
         Response::ShellCommands {
             commands: vec![lock]
+        }
+    );
+    let binding = ShellBinding {
+        mode: "default".to_string(),
+        chord: "Meta+l".to_string(),
+        action: "send-shell lock".to_string(),
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"shell_bindings\"}",
+            &Desktop {
+                shell_bindings: &|| Ok(vec![binding.clone()]),
+                ..nothing_dialed()
+            },
+        ),
+        Response::ShellBindings {
+            bindings: vec![binding]
         }
     );
     let status = DesktopStatus {
@@ -1113,6 +1136,7 @@ fn nothing_dialed() -> Desktop<'static> {
         windows: &|| panic!("only windows lists the windows"),
         status: &|| panic!("only status asks how the desktop is"),
         shell_commands: &|| panic!("only shell_commands lists the shell's commands"),
+        shell_bindings: &|| panic!("only shell_bindings lists the shell's bindings"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),

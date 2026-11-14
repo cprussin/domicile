@@ -57,6 +57,7 @@ import type { Wallpapers } from "@domicile-desktop/manganese-wallpaper/wallpaper
 import { desktopClientIcons } from "@domicile-desktop/manganese-window-management/client-icons";
 import type { Direction } from "@domicile-desktop/manganese-window-management/direction";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
+import { answerQuery } from "@domicile-desktop/manganese-window-management/keyboard/query";
 import { useKeybindings } from "@domicile-desktop/manganese-window-management/keyboard/useKeybindings";
 import { useModifiers } from "@domicile-desktop/manganese-window-management/keyboard/useModifiers";
 import { OverviewBackdrop } from "@domicile-desktop/manganese-window-management/overview/OverviewBackdrop";
@@ -708,6 +709,7 @@ export const Desktop = ({
 
   // The binding mode is desk-wide.
   useKeybindings({
+    answer: (query) => answerQuery(query, windows),
     domicile,
     keybindings,
     launcherOpen: windows.launcherOpen,

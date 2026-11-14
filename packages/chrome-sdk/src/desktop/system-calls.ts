@@ -17,7 +17,12 @@ import type { KeymapChoice, Keymaps } from "../keymap-choice";
 import { wireKeymapChoice } from "../keymap-choice";
 import type { PreviewedWindow } from "../previewed-window";
 import { PreviewedWindowKind } from "../previewed-window";
-import type { ShellCommand, ShellCommandHelp } from "../shell-command";
+import type {
+  CommandRan,
+  ShellBinding,
+  ShellCommand,
+  ShellCommandHelp,
+} from "../shell-command";
 import type {
   ByteRange,
   DbusBody,
@@ -119,18 +124,20 @@ export type System = {
    * Hear each command `domicile send-shell` sends. Every page listening hears
    * every command, and answers each with `answerShellCommand`; `send-shell`
    * fails when no page ran it. `commands` describes what this page runs, for
-   * `domicile list-shell-commands`. Allowed while the desktop is locked.
+   * `domicile list-shell-commands`, and `bindings` the keys that run them, for
+   * `domicile list-bindings`. Allowed while the desktop is locked.
    */
   shellCommands: (
     commands: readonly ShellCommandHelp[],
+    bindings: readonly ShellBinding[],
   ) => Promise<Result<Listening<ShellCommand>, SystemError>>;
   /**
-   * Say that this page ran the command numbered `sent`, or with `refused`, why
-   * it did not.
+   * Say that this page ran the command numbered `sent`, with what
+   * `domicile send-shell` prints if anything, or with `Err`, why it did not.
    */
   answerShellCommand: (
     sent: number,
-    refused: string | undefined,
+    ran: Result<CommandRan, string>,
   ) => Promise<Result<"set", SystemError>>;
   /**
    * Hear `true` once nobody has been at the desk for `seconds`, and `false`
@@ -256,13 +263,17 @@ export const system = (host: SystemHost): System => {
   const calls = callsOn(host);
   return {
     addVirtualMonitor: (mode) => addVirtualMonitor(calls, mode),
-    answerShellCommand: (sent, refused) =>
+    answerShellCommand: (sent, ran) =>
       oneShot(
         calls,
         {
           call: "answer_shell_command",
-          // Left out when the page ran it.
-          ...(refused === undefined ? {} : { refused }),
+          // `refused` is left out when the page ran it, and `output` when it
+          // printed nothing.
+          ...ran.match<{ refused?: string; output?: string }>({
+            Err: (refused) => ({ refused }),
+            Ok: (done) => (done === "ran" ? {} : { output: done.output }),
+          }),
           sent,
         },
         (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
@@ -413,11 +424,14 @@ export const system = (host: SystemHost): System => {
         },
         (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
-    shellCommands: (commands) =>
-      listening(calls, { call: "shell_commands", commands }, (event) =>
-        event.kind === "shell_command"
-          ? { sent: event.sent, words: event.command }
-          : unexpected(event),
+    shellCommands: (commands, bindings) =>
+      listening(
+        calls,
+        { bindings, call: "shell_commands", commands },
+        (event) =>
+          event.kind === "shell_command"
+            ? { sent: event.sent, words: event.command }
+            : unexpected(event),
       ),
     sleepDisplays: (display) =>
       oneShot(

@@ -408,6 +408,11 @@ pub enum ChromeMessage {
     /// only. Sent by `domicile list-shell-commands`.
     WhichShellCommands,
 
+    /// Report the keys and gestures the shell's pages bind. Answered with
+    /// [`HostMessage::ShellBindingList`] on this connection only. Sent by
+    /// `domicile list-bindings`.
+    WhichShellBindings,
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -833,6 +838,11 @@ pub enum HostMessage {
     /// only: what each listening page said it runs, once each, in the order
     /// the pages started listening.
     ShellCommandList { commands: Vec<ShellCommandHelp> },
+
+    /// Answers [`ChromeMessage::WhichShellBindings`] on the asking connection
+    /// only: each listening page's bindings, in the order the pages started
+    /// listening.
+    ShellBindingList { bindings: Vec<ShellBinding> },
 
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
@@ -2192,10 +2202,13 @@ pub enum SystemRequest {
     /// it.
     ///
     /// `commands` describes what the page runs, for
-    /// `domicile list-shell-commands`, while it listens.
+    /// `domicile list-shell-commands`, and `bindings` the keys and gestures
+    /// that run them, for `domicile list-bindings`, while it listens.
     ShellCommands {
         #[serde(default)]
         commands: Vec<ShellCommandHelp>,
+        #[serde(default)]
+        bindings: Vec<ShellBinding>,
     },
     /// Send `command` to every page listening with
     /// [`SystemRequest::ShellCommands`], as a `send-shell` keybinding would
@@ -2204,11 +2217,15 @@ pub enum SystemRequest {
     /// `domicile send-shell` sends this.
     SendShell { command: Vec<String> },
     /// Say whether this page ran the [`SystemEvent::ShellCommand`] numbered
-    /// `sent`: `refused` says why not. Answered with [`SystemReply::Set`].
+    /// `sent`: `refused` says why not. A command that ran may answer with
+    /// `output`, such as a query's JSON, which `domicile send-shell` prints.
+    /// Answered with [`SystemReply::Set`].
     AnswerShellCommand {
         sent: u64,
         #[serde(default)]
         refused: Option<String>,
+        #[serde(default)]
+        output: Option<String>,
     },
     /// Report when nobody has been at the desktop for `seconds`, and when
     /// somebody is again. Answered with [`SystemReply::Started`], then a
@@ -2474,8 +2491,11 @@ pub enum SystemReply {
     Copied,
     /// A window's frame, as a `data:` URL of a PNG.
     Preview { frame: String },
-    /// A page ran the command.
-    Sent,
+    /// A page ran the command, and what it printed, if anything.
+    Sent {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+    },
     /// The window's states were replaced, or the color temperature set.
     Set,
     /// The virtual monitor was added, as the `wl_output` named `output`.
@@ -2757,6 +2777,19 @@ pub struct ShellCommandHelp {
     pub usage: String,
     /// What it does, in a sentence.
     pub description: String,
+}
+
+/// One key or gesture a shell binds, as `domicile list-bindings` prints it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShellBinding {
+    /// The binding mode it is in; `default` until a binding changes mode.
+    pub mode: String,
+    /// The chord (`Meta+Shift+l`), touchpad gesture (`swipe:3:left`) or
+    /// touchscreen edge swipe (`edge:left`), in the shell's one spelling.
+    pub chord: String,
+    /// What it runs, as words: `send-shell focus left`, `mode resize`, or
+    /// `hold <press> / <release>`.
+    pub action: String,
 }
 
 /// How the desktop is, as `domicile status` prints it. See

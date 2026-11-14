@@ -3,7 +3,9 @@
 
 use std::path::Path;
 
-use domicile_protocol::{DesktopStatus, ListedDisplay, ListedWindow, ShellCommandHelp};
+use domicile_protocol::{
+    DesktopStatus, ListedDisplay, ListedWindow, ShellBinding, ShellCommandHelp,
+};
 use serde::Serialize;
 
 /// Each display as a block: its names, mode, layout and color.
@@ -147,6 +149,36 @@ pub fn shell_commands_table(commands: &[ShellCommandHelp]) -> String {
         .iter()
         .map(|command| format!("{:<width$}  {}\n", command.usage, command.description))
         .collect()
+}
+
+/// Each binding, mode by mode, its chord lined up before what it runs.
+pub fn bindings_table(bindings: &[ShellBinding]) -> String {
+    if bindings.is_empty() {
+        return "The shell binds no keys.\n".to_string();
+    }
+    let width = bindings
+        .iter()
+        .map(|binding| binding.chord.chars().count())
+        .max()
+        .unwrap_or(0);
+    let mut modes: Vec<&str> = Vec::new();
+    for binding in bindings {
+        if !modes.contains(&binding.mode.as_str()) {
+            modes.push(&binding.mode);
+        }
+    }
+    modes
+        .iter()
+        .map(|mode| {
+            let rows: String = bindings
+                .iter()
+                .filter(|binding| binding.mode == *mode)
+                .map(|binding| format!("  {:<width$}  {}\n", binding.chord, binding.action))
+                .collect();
+            format!("{mode}\n{rows}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// How the wire spells `value`, such as `rotate-90` or `native`.

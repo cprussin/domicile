@@ -133,6 +133,18 @@ type Heard =
   | readonly ["report", unknown]
   | readonly ["refused", string];
 
+/** DESK's bindings, as `domicile list-bindings` prints them. */
+const DESK_BOUND = [
+  { action: "send-shell terminal", chord: "Meta+Return", mode: "default" },
+  { action: "mode resize", chord: "Meta+r", mode: "default" },
+  { action: "mode default", chord: "Meta+Escape", mode: "resize" },
+  {
+    action: "send-shell resize grow right",
+    chord: "Meta+Return",
+    mode: "resize",
+  },
+];
+
 /** The commands the shell in these tests describes. */
 const HELP = [{ description: "Open a terminal.", usage: "terminal" }];
 
@@ -149,7 +161,17 @@ const bound = (own: ShellKeybindings = DESK) => {
     commands: HELP,
     onCommand: (args) => {
       heard.push(["command", args]);
-      return args[0] === "nonsense" ? Err("no command `nonsense`") : Ok("ran");
+      switch (args[0]) {
+        case "nonsense": {
+          return Err("no command `nonsense`");
+        }
+        case "get-tree": {
+          return Ok({ output: "[]" });
+        }
+        default: {
+          return Ok("ran");
+        }
+      }
     },
     onModeChanged: (mode) => {
       heard.push(["mode", mode]);
@@ -273,10 +295,27 @@ describe("bindKeys", () => {
       await host.settled();
 
       expect(host.calls).toStrictEqual([
-        [1, { call: "shell_commands", commands: HELP }],
+        [1, { bindings: DESK_BOUND, call: "shell_commands", commands: HELP }],
         [2, { call: "answer_shell_command", sent: 4 }],
       ]);
       expect(heard).toStrictEqual([["command", ["focus", "right"]]]);
+    });
+
+    it("answers with what a command printed, such as a query's JSON", async () => {
+      const { host } = bound();
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      host.answer({
+        event: { command: ["get-tree"], kind: "shell_command", sent: 6 },
+        type: "system_event",
+      });
+      await host.settled();
+
+      expect(host.calls.at(-1)).toStrictEqual([
+        2,
+        { call: "answer_shell_command", output: "[]", sent: 6 },
+      ]);
     });
 
     it("says why it did not run a command it does not know", async () => {

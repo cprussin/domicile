@@ -916,10 +916,11 @@ impl System {
                     })
                 })
             }
-            SystemRequest::ShellCommands { commands } => self.starting(id, |system| {
+            SystemRequest::ShellCommands { commands, bindings } => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system.shell_commands.listen(
                     commands,
+                    bindings,
                     Arc::new(move |(command, sent): &(Vec<String>, u64)| {
                         let Some(running) = running.upgrade() else {
                             return;
@@ -940,8 +941,12 @@ impl System {
                 );
                 Ok((Running::Listening(listener), Box::new(|| {})))
             }),
-            SystemRequest::AnswerShellCommand { sent, refused } => {
-                self.shell_commands.answer(sent, refused);
+            SystemRequest::AnswerShellCommand {
+                sent,
+                refused,
+                output,
+            } => {
+                self.shell_commands.answer(sent, refused, output);
                 (self.tell)(HostMessage::SystemReply {
                     id,
                     reply: SystemReply::Set,
@@ -979,7 +984,7 @@ impl System {
                     &command,
                     Box::new(move |outcome| {
                         let reply = match outcome {
-                            Ok(()) => SystemReply::Sent,
+                            Ok(output) => SystemReply::Sent { output },
                             Err(message) => failed(SystemError {
                                 kind: SystemErrorKind::Other,
                                 message,

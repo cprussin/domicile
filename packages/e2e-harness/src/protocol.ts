@@ -622,6 +622,15 @@ const shellCommandListSchema = z.looseObject({
   type: z.literal("shell_command_list"),
 });
 
+// The keys and gestures the shell's pages bind. Answers `which_shell_bindings`
+// on the asking connection only, for `domicile list-bindings`.
+const shellBindingListSchema = z.looseObject({
+  bindings: z.array(
+    z.looseObject({ action: z.string(), chord: z.string(), mode: z.string() }),
+  ),
+  type: z.literal("shell_binding_list"),
+});
+
 const boundShortcutSchema = z.looseObject({
   app_id: z.string(),
   chord: z.string(),
@@ -878,6 +887,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   windowListSchema,
   statusSchema,
   shellCommandListSchema,
+  shellBindingListSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -937,6 +947,7 @@ export type DisplayListMessage = z.infer<typeof displayListSchema>;
 export type WindowListMessage = z.infer<typeof windowListSchema>;
 export type StatusMessage = z.infer<typeof statusSchema>;
 export type ShellCommandListMessage = z.infer<typeof shellCommandListSchema>;
+export type ShellBindingListMessage = z.infer<typeof shellBindingListSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

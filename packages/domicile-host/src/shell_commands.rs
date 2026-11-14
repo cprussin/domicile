@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use domicile_protocol::ShellCommandHelp;
+use domicile_protocol::{ShellBinding, ShellCommandHelp};
 
 use crate::fanout::{Hear, Listener};
 
@@ -17,8 +17,9 @@ use crate::fanout::{Hear, Listener};
 /// the terminal rather than a timeout.
 const ANSWER_WITHIN: Duration = Duration::from_secs(1);
 
-/// How a sent command ended: run by a page, or why not.
-pub type Outcome = Result<(), String>;
+/// How a sent command ended: run by a page, with what it printed if
+/// anything, or why not.
+pub type Outcome = Result<Option<String>, String>;
 
 /// Hears how a sent command ended, once.
 type Done = Box<dyn FnOnce(Outcome) + Send>;
@@ -39,10 +40,12 @@ struct Shared {
     waiting: HashMap<u64, Waiting>,
 }
 
-/// A page listening, with the commands it said it runs.
+/// A page listening, with the commands it said it runs and the bindings that
+/// run them.
 struct Page {
     hear: Hear<(Vec<String>, u64)>,
     commands: Vec<ShellCommandHelp>,
+    bindings: Vec<ShellBinding>,
 }
 
 /// A sent command no page has run yet.
@@ -70,16 +73,25 @@ impl ShellCommands {
     }
 
     /// Calls `hear` with each command and its number until the [`Listener`]
-    /// drops. `commands` describes what the page runs meanwhile.
+    /// drops. `commands` describes what the page runs meanwhile, and
+    /// `bindings` the keys and gestures that run them.
     pub(crate) fn listen(
         &self,
         commands: Vec<ShellCommandHelp>,
+        bindings: Vec<ShellBinding>,
         hear: Hear<(Vec<String>, u64)>,
     ) -> Listener {
         let mut shared = self.shared.lock().unwrap();
         let key = shared.next_page;
         shared.next_page += 1;
-        shared.pages.insert(key, Page { hear, commands });
+        shared.pages.insert(
+            key,
+            Page {
+                hear,
+                commands,
+                bindings,
+            },
+        );
         let stopping = Arc::clone(&self.shared);
         Listener::stopping(move || {
             stopping.lock().unwrap().pages.remove(&key);
@@ -125,10 +137,10 @@ impl ShellCommands {
         true
     }
 
-    /// A page ran the command numbered `sent`, or refused it for `refused`.
-    /// An answer after the command ended is dropped: another page ran it, or
-    /// the wait was over.
-    pub(crate) fn answer(&self, sent: u64, refused: Option<String>) {
+    /// A page ran the command numbered `sent`, printing `output` if any, or
+    /// refused it for `refused`. An answer after the command ended is
+    /// dropped: another page ran it, or the wait was over.
+    pub(crate) fn answer(&self, sent: u64, refused: Option<String>, output: Option<String>) {
         let ended = {
             let mut shared = self.shared.lock().unwrap();
             let Some(waiting) = shared.waiting.get_mut(&sent) else {
@@ -139,7 +151,7 @@ impl ShellCommands {
                 None => shared
                     .waiting
                     .remove(&sent)
-                    .map(|waiting| (waiting, Ok(()))),
+                    .map(|waiting| (waiting, Ok(output))),
                 Some(why) => {
                     if !waiting.refusals.contains(&why) {
                         waiting.refusals.push(why);
@@ -177,17 +189,28 @@ impl ShellCommands {
     /// Every command the listening pages run, once each, in the order the
     /// pages started listening.
     pub fn described(&self) -> Vec<ShellCommandHelp> {
+        self.each_page(|page| &page.commands)
+    }
+
+    /// Every binding the listening pages hold, once each, in the order the
+    /// pages started listening.
+    pub fn bindings(&self) -> Vec<ShellBinding> {
+        self.each_page(|page| &page.bindings)
+    }
+
+    /// What `of` gives for each page, in listen order, without repeats.
+    fn each_page<T: Clone + PartialEq>(&self, of: impl Fn(&Page) -> &Vec<T>) -> Vec<T> {
         let shared = self.shared.lock().unwrap();
         let mut pages: Vec<_> = shared.pages.iter().collect();
         pages.sort_by_key(|(key, _)| **key);
-        let mut described: Vec<ShellCommandHelp> = Vec::new();
+        let mut all: Vec<T> = Vec::new();
         for (_, page) in pages {
-            for command in &page.commands {
-                if !described.contains(command) {
-                    described.push(command.clone());
+            for item in of(page) {
+                if !all.contains(item) {
+                    all.push(item.clone());
                 }
             }
         }
-        described
+        all
     }
 }

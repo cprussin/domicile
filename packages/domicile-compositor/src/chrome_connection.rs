@@ -40,6 +40,7 @@ pub enum ConnectionRequest {
     WhichWindows,
     WhichStatus,
     WhichShellCommands,
+    WhichShellBindings,
 }
 
 /// Write a message's responses to the connection that asked, in order.
@@ -455,6 +456,9 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::WhichShellCommands) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichShellCommands)
+            }
+            Ok(ChromeMessage::WhichShellBindings) => {
+                answer_on_the_connection(hub, ConnectionRequest::WhichShellBindings)
             }
             // The Wayland thread runs the theme turnover and its deadline
             // timer.
@@ -895,6 +899,10 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
         // For `domicile list-shell-commands`: what `send-shell` takes.
         ConnectionRequest::WhichShellCommands => vec![HostMessage::ShellCommandList {
             commands: hub.shell_commands.described(),
+        }],
+        // For `domicile list-bindings`.
+        ConnectionRequest::WhichShellBindings => vec![HostMessage::ShellBindingList {
+            bindings: hub.shell_commands.bindings(),
         }],
         // A page has no filesystem, so the compositor searches for it. Safe
         // because `search_files` names no path; this side decides what is read.

@@ -65,9 +65,10 @@ edge, `edge:left`. See
 domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─────────────────▶ every page
                        (control socket)               (system_request send_shell)    (system_event shell_command
                                                                                        ─▶ bindKeys onCommand)
-                    ◀─ sent, or why not ◀──────────── first page that ran it ◀─────── answer_shell_command
+                    ◀─ sent (+ output), or why not ◀─ first page that ran it ◀─────── answer_shell_command
 
 domicile list-shell-commands ─▶ ... ─▶ compositor (which_shell_commands): what every listening page described
+domicile list-bindings       ─▶ ... ─▶ compositor (which_shell_bindings): every listening page's bindings
 ```
 
 | Piece | Where | Does |
@@ -75,7 +76,7 @@ domicile list-shell-commands ─▶ ... ─▶ compositor (which_shell_commands)
 | Verb | `domicile-launch` (`cli.rs`, `control.rs`) | `send-shell <word>…`; every word after it is the command |
 | Supervisor | `domicile-launch` (`compositor_socket::send_shell`) | Sends `send_shell` on the compositor's chrome socket without `hello`, as `domicile screenshot` does |
 | Fan-out | `domicile_host::shell_commands`, `domicile_host::system` | Tells every page listening with `shell_commands`, numbered; answers `sent` once a page ran it, or fails with the pages' reasons, after one second unanswered, or when none listens |
-| Listener | `domicile.shell.commands(help)`, `domicile.shell.answer`, `bindKeys` | `bindKeys` listens while bound, describes `commands`, passes each command to `onCommand` and answers with its `Result` |
+| Listener | `domicile.shell.commands(help, bindings)`, `domicile.shell.answer`, `bindKeys` | `bindKeys` listens while bound, describes `commands` and its bindings, passes each command to `onCommand` and answers with its `Result`, carrying any `output` |
 
 ## Key decisions
 

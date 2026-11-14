@@ -73,9 +73,10 @@ export const Shell = async (root, domicile) => {
 - `keyboard.keymaps()` streams the config's keymaps and the active one;
   `keyboard.selectKeymap()` switches to another
   ([SHELL-CONFIG.md](SHELL-CONFIG.md#keyboard)).
-- `shell.commands(help)` streams each command `domicile send-shell` sends,
-  numbered, and describes the commands the page runs; `shell.answer(sent,
-  why)` says whether it ran one. `bindKeys` does both for you; see
+- `shell.commands(help, bindings)` streams each command `domicile
+  send-shell` sends, numbered, and describes the commands the page runs and
+  the keys that run them; `shell.answer(sent, ran)` says whether it ran one,
+  with any output `send-shell` prints. `bindKeys` does both for you; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
 - `session.unlockRefusals()` streams why each passphrase did not unlock the desktop
   ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#drawing-the-lock-screen)).

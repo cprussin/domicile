@@ -90,6 +90,12 @@ Manganese-only commands:
   than `default`.
 - `domicile send-shell <command>` runs a command from a terminal:
   `domicile send-shell workspace 2`.
+- Two queries answer from a terminal with JSON, for scripts:
+  `domicile send-shell get-workspaces` lists each workspace with its screen,
+  whether it shows, whether it has the keyboard, and its windows;
+  `domicile send-shell get-tree` gives the screens, each workspace's tiling
+  and floats, and every window. They run even while the launcher or overview
+  is open.
 - An unknown command logs to the console and does nothing.
 - While the launcher is open, only the `launcher` command and mode changes
   run.
