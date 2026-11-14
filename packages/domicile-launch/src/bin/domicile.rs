@@ -32,8 +32,8 @@ use domicile_launch::command_socket::{
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{
-    displays, monitors, power_displays, screen_record, screenshot, send_shell, status, theme,
-    windows,
+    displays, monitors, power_displays, screen_record, screenshot, send_shell, shell_commands,
+    status, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -48,7 +48,7 @@ use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
-use domicile_launch::listing::{displays_table, status_table, windows_table};
+use domicile_launch::listing::{displays_table, shell_commands_table, status_table, windows_table};
 use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
@@ -568,7 +568,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         // `listed` asks for these.
         | Response::Displays { .. }
         | Response::Windows { .. }
-        | Response::Status { .. } => Err(format!(
+        | Response::Status { .. }
+        | Response::ShellCommands { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -595,6 +596,8 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
         (Response::Status { shell, status }, true) => {
             as_json(&serde_json::json!({ "shell": shell, "status": status }))
         }
+        (Response::ShellCommands { commands }, false) => shell_commands_table(&commands),
+        (Response::ShellCommands { commands }, true) => as_json(&commands),
         (Response::Refused { why }, _) => {
             eprintln!("domicile: {why}");
             return Ok(ExitCode::FAILURE);
@@ -1316,6 +1319,9 @@ fn answer_a_command(
                         windows(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                     status: &|| status(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
+                    shell_commands: &|| {
+                        shell_commands(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
                 },
             )
         },

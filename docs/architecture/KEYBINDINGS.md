@@ -16,7 +16,7 @@ bindKeys(domicile, {
       "Meta+Escape": KeyAction.Mode("default"),
     },
   },
-}, { onCommand, onModeChanged });
+}, { commands, onCommand, onModeChanged });
 ```
 
 Manganese takes the same shape as `runManganese({ keybindings })`, built with
@@ -65,14 +65,17 @@ edge, `edge:left`. See
 domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─────────────────▶ every page
                        (control socket)               (system_request send_shell)    (system_event shell_command
                                                                                        ─▶ bindKeys onCommand)
+                    ◀─ sent, or why not ◀──────────── first page that ran it ◀─────── answer_shell_command
+
+domicile list-shell-commands ─▶ ... ─▶ compositor (which_shell_commands): what every listening page described
 ```
 
 | Piece | Where | Does |
 |---|---|---|
 | Verb | `domicile-launch` (`cli.rs`, `control.rs`) | `send-shell <word>…`; every word after it is the command |
 | Supervisor | `domicile-launch` (`compositor_socket::send_shell`) | Sends `send_shell` on the compositor's chrome socket without `hello`, as `domicile screenshot` does |
-| Fan-out | `domicile_host::shell_commands`, `domicile_host::system` | Tells every page listening with `shell_commands`; answers `sent`, or fails when none listens |
-| Listener | `domicile.shell.commands()`, `bindKeys` | `bindKeys` listens while bound and passes each command to `onCommand` |
+| Fan-out | `domicile_host::shell_commands`, `domicile_host::system` | Tells every page listening with `shell_commands`, numbered; answers `sent` once a page ran it, or fails with the pages' reasons, after one second unanswered, or when none listens |
+| Listener | `domicile.shell.commands(help)`, `domicile.shell.answer`, `bindKeys` | `bindKeys` listens while bound, describes `commands`, passes each command to `onCommand` and answers with its `Result` |
 
 ## Key decisions
 
@@ -96,6 +99,11 @@ domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor �
   `HostMessage` would need a fork change and an engine release.
 - **Every page listening hears a terminal command.** The compositor does not
   know which page the user is looking at.
+- **A command nobody runs fails loudly.** One page running it is enough; a
+  typo in a script or binding is an error with the shell's reason, not a
+  silent no-op.
+- **The shell describes its commands while it listens.** Commands are the
+  shell's, so only it can list them; one listening request carries both.
 - **A locked desktop refuses `send_shell` but allows `shell_commands`.** A
   page reloaded while locked still hears commands after unlock. See
   [LOCK.md](../LOCK.md).

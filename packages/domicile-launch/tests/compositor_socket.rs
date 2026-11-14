@@ -9,8 +9,8 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    displays, monitors, power_displays, screen_record, screenshot, send_shell, status, theme,
-    virtual_monitor, windows, CompositorError,
+    displays, monitors, power_displays, screen_record, screenshot, send_shell, shell_commands,
+    status, theme, virtual_monitor, windows, CompositorError,
 };
 use domicile_launch::control::Shot;
 use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme};
@@ -424,6 +424,17 @@ fn the_compositor_is_asked_its_displays_and_windows_and_says_them() {
         (status.locked, status.held_awake_by),
         (true, vec!["mpv".to_string()])
     );
+    heard.join().expect("the compositor was listening");
+
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_shell_commands",
+        "{\"type\":\"shell_command_list\",\"commands\":[{\"usage\":\"lock\",\
+         \"description\":\"Lock the desktop.\"}]}\n",
+    );
+    let commands = shell_commands(&path, Some(BRIEFLY)).expect("the compositor said");
+    assert_eq!(commands[0].usage, "lock");
     heard.join().expect("the compositor was listening");
 }
 

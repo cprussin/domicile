@@ -71,6 +71,21 @@ fn a_listing_prints_a_table_or_with_json_what_the_desktop_said() {
         })
     );
     assert_eq!(
+        run(&["list-shell-commands"]),
+        Ok(Invocation::List {
+            listing: Listing::ShellCommands,
+            json: false
+        })
+    );
+    // The shell's commands are what `send-shell` takes, so its help is them.
+    assert_eq!(
+        run(&["send-shell", "--help"]),
+        Ok(Invocation::List {
+            listing: Listing::ShellCommands,
+            json: false
+        })
+    );
+    assert_eq!(
         run(&["list-windows", "--yaml"]),
         Err(CliError::Extra {
             verb: "list-windows".to_string(),
@@ -498,13 +513,7 @@ fn sleep_and_wake_displays_take_a_display_or_nothing() {
 
 #[test]
 fn help_is_asked_for_by_flag_word_or_after_a_verb() {
-    for line in [
-        &["--help"][..],
-        &["-h"],
-        &["help"],
-        &["theme", "--help"],
-        &["send-shell", "-h"],
-    ] {
+    for line in [&["--help"][..], &["-h"], &["help"], &["theme", "--help"]] {
         assert_eq!(run(line), Ok(Invocation::Help), "{line:?}");
     }
 }
@@ -559,6 +568,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "reboot",
         "log-out",
         "monitor",
+        "list-shell-commands",
         "help",
     ] {
         assert!(

@@ -1143,6 +1143,7 @@
       "name": "@domicile-desktop/shell-simple",
       "version": "0.0.4",
       "dependencies": {
+        "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",

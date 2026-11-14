@@ -808,14 +808,33 @@ mod previews {
 }
 
 /// `domicile send-shell` commands, sent on one connection and heard on every
-/// connection listening.
+/// connection listening, each answered by the pages that heard it.
 mod shell_commands {
+    use std::time::Duration;
+
     use domicile_host::shell_commands::ShellCommands;
+    use domicile_protocol::ShellCommandHelp;
 
     use super::*;
 
     fn focus_right() -> Vec<String> {
         vec!["focus".into(), "right".into()]
+    }
+
+    /// Commands that wait `BRIEFLY` for an answer, so a test of the wait is
+    /// quick.
+    fn commands() -> ShellCommands {
+        ShellCommands::answered_within(Duration::from_millis(50))
+    }
+
+    fn listening(commands: Vec<ShellCommandHelp>) -> SystemRequest {
+        SystemRequest::ShellCommands { commands }
+    }
+
+    fn send() -> SystemRequest {
+        SystemRequest::SendShell {
+            command: focus_right(),
+        }
     }
 
     /// Two systems sharing `commands`, as two chrome connections do.
@@ -837,61 +856,95 @@ mod shell_commands {
         )
     }
 
+    /// The `sent` of the command `heard` was told next.
+    fn heard_sent(heard: &Receiver<HostMessage>) -> u64 {
+        match next(heard) {
+            HostMessage::SystemEvent {
+                event: SystemEvent::ShellCommand { command, sent },
+                ..
+            } if command == focus_right() => sent,
+            other => panic!("expected focus right, heard {other:?}"),
+        }
+    }
+
     #[test]
-    fn a_command_sent_on_one_connection_is_heard_on_every_page_listening() {
-        let commands = ShellCommands::default();
+    fn a_command_is_sent_once_a_page_listening_ran_it() {
+        let commands = commands();
         let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
-        page.handle(7, SystemRequest::ShellCommands);
+        page.handle(7, listening(Vec::new()));
         assert_eq!(reply(&page_heard, 7), SystemReply::Started);
 
-        sender.handle(
-            1,
-            SystemRequest::SendShell {
-                command: focus_right(),
+        sender.handle(1, send());
+        let sent = heard_sent(&page_heard);
+        page.handle(
+            8,
+            SystemRequest::AnswerShellCommand {
+                sent,
+                refused: None,
             },
         );
 
+        assert_eq!(reply(&page_heard, 8), SystemReply::Set);
         assert_eq!(reply(&sender_heard, 1), SystemReply::Sent);
-        assert_eq!(
-            next(&page_heard),
-            HostMessage::SystemEvent {
-                id: 7,
-                event: SystemEvent::ShellCommand {
-                    command: focus_right()
-                },
-            }
+    }
+
+    #[test]
+    fn a_command_every_page_refused_fails_with_why() {
+        // Loud, so a typo in a binding or a script is not silently dropped.
+        let commands = commands();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, listening(Vec::new()));
+        reply(&page_heard, 7);
+
+        sender.handle(1, send());
+        let sent = heard_sent(&page_heard);
+        page.handle(
+            8,
+            SystemRequest::AnswerShellCommand {
+                sent,
+                refused: Some("no command `focus right`".into()),
+            },
         );
+
+        match reply(&sender_heard, 1) {
+            SystemReply::Failed { error } => {
+                assert_eq!(error.message, "no command `focus right`")
+            }
+            other => panic!("expected a failure, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_command_no_page_answers_fails_once_the_wait_is_over() {
+        let commands = commands();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, listening(Vec::new()));
+        reply(&page_heard, 7);
+
+        sender.handle(1, send());
+
+        assert_eq!(failure(reply(&sender_heard, 1)), SystemErrorKind::Other);
     }
 
     #[test]
     fn a_command_nobody_listens_for_says_so() {
-        let commands = ShellCommands::default();
+        let commands = commands();
         let (_, (sender, sender_heard)) = two_pages(&commands);
 
-        sender.handle(
-            1,
-            SystemRequest::SendShell {
-                command: focus_right(),
-            },
-        );
+        sender.handle(1, send());
 
         assert_eq!(failure(reply(&sender_heard, 1)), SystemErrorKind::Other);
     }
 
     #[test]
     fn a_page_that_stopped_listening_hears_no_more() {
-        let commands = ShellCommands::default();
+        let commands = commands();
         let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
-        page.handle(7, SystemRequest::ShellCommands);
+        page.handle(7, listening(Vec::new()));
         reply(&page_heard, 7);
 
         page.handle(7, SystemRequest::Unwatch);
-        sender.handle(
-            1,
-            SystemRequest::SendShell {
-                command: focus_right(),
-            },
-        );
+        sender.handle(1, send());
 
         assert_eq!(
             next(&page_heard),
@@ -905,33 +958,55 @@ mod shell_commands {
 
     #[test]
     fn a_page_that_went_away_hears_no_more() {
-        let commands = ShellCommands::default();
+        let commands = commands();
         let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
-        page.handle(7, SystemRequest::ShellCommands);
+        page.handle(7, listening(Vec::new()));
         reply(&page_heard, 7);
 
         drop(page);
-        sender.handle(
-            1,
-            SystemRequest::SendShell {
-                command: focus_right(),
-            },
-        );
+        sender.handle(1, send());
 
         assert_eq!(failure(reply(&sender_heard, 1)), SystemErrorKind::Other);
+    }
+
+    #[test]
+    fn the_commands_pages_listen_for_are_described_once_each_while_they_listen() {
+        // `domicile list-shell-commands`. Every monitor's page of one shell
+        // describes the same commands.
+        let commands = commands();
+        let ((first, first_heard), (second, second_heard)) = two_pages(&commands);
+        let focus = ShellCommandHelp {
+            usage: "focus left|right|up|down".into(),
+            description: "Move focus.".into(),
+        };
+        let lock = ShellCommandHelp {
+            usage: "lock".into(),
+            description: "Lock the desktop.".into(),
+        };
+        first.handle(7, listening(vec![focus.clone()]));
+        reply(&first_heard, 7);
+        second.handle(7, listening(vec![focus.clone(), lock.clone()]));
+        reply(&second_heard, 7);
+
+        assert_eq!(commands.described(), vec![focus.clone(), lock]);
+
+        second.handle(7, SystemRequest::Unwatch);
+        assert_eq!(commands.described(), vec![focus]);
     }
 
     /// A reloaded page listens again while the desktop is locked, so commands
     /// still reach it once it unlocks.
     #[test]
-    fn listening_is_its_own_reach_and_sending_acts() {
-        assert_eq!(reach(&SystemRequest::ShellCommands), Reach::Listens);
+    fn listening_is_its_own_reach_answering_listens_and_sending_acts() {
+        assert_eq!(reach(&listening(Vec::new())), Reach::Listens);
         assert_eq!(
-            reach(&SystemRequest::SendShell {
-                command: focus_right()
+            reach(&SystemRequest::AnswerShellCommand {
+                sent: 1,
+                refused: None
             }),
-            Reach::Acts
+            Reach::Listens
         );
+        assert_eq!(reach(&send()), Reach::Acts);
     }
 }
 
@@ -1830,9 +1905,15 @@ mod apps {
             SystemRequest::PreviewWindow {
                 window: PreviewedWindow::App { id: "app-1".into() },
             },
-            SystemRequest::ShellCommands,
+            SystemRequest::ShellCommands {
+                commands: Vec::new(),
+            },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
+            },
+            SystemRequest::AnswerShellCommand {
+                sent: 1,
+                refused: None,
             },
             SystemRequest::IdleAfter { seconds: 1 },
             SystemRequest::IdleBeforeBlanking { seconds: 1 },

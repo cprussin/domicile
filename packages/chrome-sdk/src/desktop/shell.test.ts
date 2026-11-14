@@ -23,17 +23,28 @@ describe("shell", () => {
     expect(() => desktop(fake.host).shell.options).toThrow();
   });
 
-  it("listens for commands through the compositor", async () => {
+  it("listens for commands through the compositor, and answers them", async () => {
     const fake = new FakeDomicileHost();
-    desktop(fake.host)
-      .shell.commands()
-      .catch(() => {
-        /* never answered */
-      });
+    const shell = desktop(fake.host).shell;
+    shell.commands([]).catch(() => {
+      /* never answered */
+    });
+    shell.answer(4, undefined).catch(() => {
+      /* never answered */
+    });
     await Promise.resolve();
 
     expect(fake.calls).toStrictEqual([
-      ["callSystem", 1, JSON.stringify({ call: "shell_commands" })],
+      [
+        "callSystem",
+        1,
+        JSON.stringify({ call: "shell_commands", commands: [] }),
+      ],
+      [
+        "callSystem",
+        2,
+        JSON.stringify({ call: "answer_shell_command", sent: 4 }),
+      ],
     ]);
   });
 

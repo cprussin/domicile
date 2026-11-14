@@ -1053,6 +1053,7 @@ impl Host {
             | ChromeMessage::WhichDisplays
             | ChromeMessage::WhichWindows
             | ChromeMessage::WhichStatus
+            | ChromeMessage::WhichShellCommands
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }
