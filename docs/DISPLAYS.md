@@ -232,6 +232,7 @@ A monitor's `wl_output` name is:
 A profile's `display` matches any of:
 
 - the `wl_output` name;
+- the connector, `DP-1`;
 - the description, `"<MAKE> <MODEL> <SERIAL>"`, as kanshi and sway use;
 - the description with the maker's full name.
 

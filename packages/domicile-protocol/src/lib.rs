@@ -2237,8 +2237,8 @@ pub enum SystemRequest {
     /// [`HostMessage::AppInhibitsShortcuts`] follows each change. See
     /// `docs/architecture/KEYBINDINGS.md`.
     ShortcutsInhibitor { action: InhibitorAction },
-    /// Draw `display`, a [`DisplayInfo::name`], or every monitor when
-    /// `None`, as if its white were a light of `kelvin`, as a night light
+    /// Draw `display`, any name a profile matches it by, or every monitor
+    /// when `None`, as if its white were a light of `kelvin`, as a night light
     /// does; `6500` draws colors as they are. Every monitor's replaces each
     /// one's. Answered with [`SystemReply::Set`],
     /// [`SystemErrorKind::InvalidInput`] outside 1000 to 6500, or
@@ -2252,8 +2252,8 @@ pub enum SystemRequest {
     },
     /// Turn every monitor off now, keeping the desktop as it is. Input more
     /// than a second later, or [`SystemRequest::WakeDisplays`], lights them
-    /// again. With `display`, a [`DisplayInfo::name`], turn only that one
-    /// off; it keeps its place and windows, and sleeps through input until
+    /// again. With `display`, any name a profile matches it by, turn only
+    /// that one off; it keeps its place and windows, and sleeps through input until
     /// woken. Answered with [`SystemReply::Set`], or
     /// [`SystemErrorKind::NotFound`] for a display the desktop does not have.
     /// See `docs/IDLE.md#sleeping-on-demand`.
@@ -2671,8 +2671,9 @@ pub enum AdaptiveSync {
 /// [`HostMessage::Monitors`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MonitorInfo {
-    /// Every name a profile's `display` matches it by: its output name, and
-    /// its EDID name with the maker as a three-letter code and spelled out.
+    /// Every name a profile's `display` matches it by: its output name first,
+    /// then its connector, and its EDID name with the maker as a three-letter
+    /// code and spelled out.
     pub names: Vec<String>,
     /// Whether it is driven in HDR10.
     pub hdr: DisplayHdr,

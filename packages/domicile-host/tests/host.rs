@@ -1159,6 +1159,65 @@ fn the_displays_are_answered_after_the_welcome() {
     );
 }
 
+#[test]
+fn a_display_is_found_by_any_name_a_profile_calls_it() {
+    // A person names a monitor by its connector or panel, not by the
+    // `drm-<id>` it is advertised as.
+    let mut host = Host::new();
+    host.describe_monitors(vec![laptop(), monitor(&["HDMI-A-1"])]);
+
+    assert_eq!(host.display_named("drm-1"), Ok("drm-1"));
+    assert_eq!(host.display_named("eDP-1"), Ok("drm-1"));
+    assert_eq!(host.display_named("BOE NE135A1M-NY1"), Ok("drm-1"));
+    assert_eq!(host.display_named("HDMI-A-1"), Ok("HDMI-A-1"));
+}
+
+#[test]
+fn a_display_not_found_lists_every_display_by_its_names() {
+    let mut host = Host::new();
+    host.describe_monitors(vec![laptop(), monitor(&["HDMI-A-1"])]);
+
+    assert_eq!(
+        host.display_named("DP-1"),
+        Err(
+            r#"no display "DP-1"; displays: "drm-1" / "eDP-1" / "BOE NE135A1M-NY1", "HDMI-A-1""#
+                .to_string()
+        )
+    );
+}
+
+#[test]
+fn a_name_two_displays_share_finds_neither() {
+    // Identical monitors with no serial share a panel name.
+    let mut host = Host::new();
+    host.describe_monitors(vec![
+        monitor(&["drm-1", "DP-1", "DEL DELL U2720Q"]),
+        monitor(&["drm-2", "DP-2", "DEL DELL U2720Q"]),
+    ]);
+
+    assert_eq!(host.display_named("drm-2"), Ok("drm-2"));
+    assert_eq!(
+        host.display_named("DEL DELL U2720Q"),
+        Err(
+            r#"2 displays are "DEL DELL U2720Q"; displays: "drm-1" / "DP-1" / "DEL DELL U2720Q", "drm-2" / "DP-2" / "DEL DELL U2720Q""#
+                .to_string()
+        )
+    );
+}
+
+/// The laptop panel, advertised as `drm-1`.
+fn laptop() -> MonitorInfo {
+    monitor(&["drm-1", "eDP-1", "BOE NE135A1M-NY1"])
+}
+
+/// A monitor answering to `names`, the first its output name.
+fn monitor(names: &[&str]) -> MonitorInfo {
+    MonitorInfo {
+        names: names.iter().map(|name| name.to_string()).collect(),
+        hdr: DisplayHdr::Unsupported,
+    }
+}
+
 // ---- theme ----------------------------------------------------------------
 
 #[test]

@@ -75,6 +75,9 @@ pub struct Advertised {
     /// maker as a three-letter code, or empty. Profiles match it as well as
     /// [`description`](Advertised::description).
     pub edid: String,
+    /// The connector it is plugged into, as the kernel names it (`eDP-1`), or
+    /// empty. Profiles match it too.
+    pub connector: String,
     /// The engine display it shows, by [`Display::id`]. `None` on a described
     /// or nested desktop.
     pub display: Option<i64>,
@@ -139,7 +142,7 @@ impl Advertised {
     /// Settings.
     pub fn monitor(&self) -> MonitorInfo {
         let mut names = vec![self.name.clone()];
-        for name in [&self.edid, &self.description] {
+        for name in [&self.connector, &self.edid, &self.description] {
             if !name.is_empty() && !names.contains(name) {
                 names.push(name.clone());
             }
@@ -264,6 +267,7 @@ impl Screens {
                         transform: Transform::Normal,
                         description: String::new(),
                         edid: String::new(),
+                        connector: String::new(),
                         display: None,
                         physical_mm: UNKNOWN_PHYSICAL_MM,
                         refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -360,6 +364,7 @@ impl Screens {
                     transform: Transform::Normal,
                     description: advertised_description(display, vendors),
                     edid: display.description.clone(),
+                    connector: display.connector.clone(),
                     display: Some(display.id),
                     physical_mm: display.physical_mm,
                     refresh_mhz: display.refresh_mhz,
@@ -415,6 +420,7 @@ impl Screens {
                 transform: Transform::Normal,
                 description: String::new(),
                 edid: String::new(),
+                connector: String::new(),
                 display: None,
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -477,6 +483,7 @@ impl Screens {
                         transform: placed.transform,
                         description: advertised_description(display, vendors),
                         edid: display.description.clone(),
+                        connector: display.connector.clone(),
                         display: Some(display.id),
                         physical_mm: display.physical_mm,
                         refresh_mhz: display.refresh_mhz,
@@ -601,6 +608,7 @@ impl Screens {
                 transform: Transform::Normal,
                 description: display.description.clone(),
                 edid: display.description.clone(),
+                connector: display.connector.clone(),
                 display: Some(display.id),
                 physical_mm: display.physical_mm,
                 refresh_mhz: display.refresh_mhz,
@@ -959,6 +967,7 @@ fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
             spelled_out: vendors
                 .spelled_out(&display.description)
                 .unwrap_or_default(),
+            connector: display.connector.clone(),
             mode: display.size,
             modes: display.modes.iter().fold(Vec::new(), |mut sizes, mode| {
                 // One entry per size: a profile picks the size, and the
@@ -1111,6 +1120,7 @@ mod tests {
                     transform: Transform::Normal,
                     description: String::new(),
                     edid: String::new(),
+                    connector: String::new(),
                     display: None,
                     // A described display is not a panel, so neither value is
                     // known.
@@ -1128,6 +1138,7 @@ mod tests {
                     transform: Transform::Normal,
                     description: String::new(),
                     edid: String::new(),
+                    connector: String::new(),
                     display: None,
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -1228,6 +1239,7 @@ mod tests {
             transform: Transform::Normal,
             description: String::new(),
             edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -1260,6 +1272,7 @@ mod tests {
             transform: Transform::Normal,
             description: String::new(),
             edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -1286,6 +1299,7 @@ mod tests {
             transform: Transform::Normal,
             description: String::new(),
             edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -1467,6 +1481,7 @@ mod tests {
             transform: Transform::Normal,
             description: String::new(),
             edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -1613,6 +1628,7 @@ mod tests {
                     // A laptop panel has an EDID name; a projector has none.
                     description: "BOE NE135A1M-NY1".into(),
                     edid: "BOE NE135A1M-NY1".into(),
+                    connector: String::new(),
                     display: Some(1),
                     // The panel's values pass through, and so do the second
                     // display's zeros.
@@ -1630,6 +1646,7 @@ mod tests {
                     transform: Transform::Normal,
                     description: String::new(),
                     edid: String::new(),
+                    connector: String::new(),
                     display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -1707,7 +1724,7 @@ mod tests {
         "name": "presenting",
         "displays": [
           {{ "display": "{PROJECTOR_CONNECTOR}", "position": [0, 0] }},
-          {{ "display": "{LAPTOP_PANEL}", "enabled": false }}
+          {{ "display": "eDP-1", "enabled": false }}
         ]
       }}
     ]
@@ -1911,6 +1928,7 @@ mod tests {
                     // display.
                     description: DESK_MONITOR.into(),
                     edid: DESK_MONITOR.into(),
+                    connector: String::new(),
                     display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
@@ -1926,6 +1944,7 @@ mod tests {
                     transform: Transform::Normal,
                     description: LAPTOP_PANEL.into(),
                     edid: LAPTOP_PANEL.into(),
+                    connector: String::new(),
                     display: Some(1),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
@@ -2278,6 +2297,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_monitor_answers_to_its_connector() {
+        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled(), &[]);
+
+        assert_eq!(
+            screens
+                .outputs()
+                .map(|output| output.monitor().names)
+                .collect::<Vec<_>>(),
+            vec![
+                vec![
+                    "drm-1".to_string(),
+                    "eDP-1".to_string(),
+                    LAPTOP_PANEL.to_string()
+                ],
+                vec![PROJECTOR_CONNECTOR.to_string()],
+            ]
+        );
+    }
+
     /// A table that names the desk monitor's maker but not the laptop panel's.
     fn desk_vendors() -> Vendors {
         Vendors::listed_in("DEL\tDell Inc.\n")
@@ -2470,6 +2509,7 @@ mod tests {
                 transform: Transform::Normal,
                 description: "Living Room TV".into(),
                 edid: "Living Room TV".into(),
+                connector: "virtual-1".into(),
                 display: Some(VirtualDisplay::id_of(1)),
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
@@ -2633,6 +2673,7 @@ mod tests {
                 transform: Transform::Normal,
                 description: "Pane".into(),
                 edid: "Pane".into(),
+                connector: "virtual-2".into(),
                 display: Some(VirtualDisplay::id_of(2)),
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
@@ -2873,6 +2914,7 @@ mod tests {
                 transform: Transform::Normal,
                 description: String::new(),
                 edid: String::new(),
+                connector: String::new(),
                 display: None,
                 // A window has no physical size or refresh rate.
                 physical_mm: UNKNOWN_PHYSICAL_MM,

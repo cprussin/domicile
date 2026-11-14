@@ -292,16 +292,9 @@ fn read_chrome_messages(
             // Checked here so the page hears of a bad name. A monitor
             // unplugged before the Wayland thread gets this keeps the white
             // point for when it is back.
-            if let Some(name) = &display {
-                if hub.host.lock().unwrap().display(name).is_none() {
-                    return Err(SystemError {
-                        kind: SystemErrorKind::NotFound,
-                        message: format!("no display {name}"),
-                    });
-                }
-            }
+            let output = output_named(&hub, display)?;
             hub.send_request(ClientRequest::SetWhitePoint {
-                output: display,
+                output,
                 white_point,
             });
             Ok(())
@@ -312,14 +305,7 @@ fn read_chrome_messages(
         move |power, display| {
             // Checked here so the page hears of a bad name, as for a white
             // point.
-            if let Some(name) = &display {
-                if hub.host.lock().unwrap().display(name).is_none() {
-                    return Err(SystemError {
-                        kind: SystemErrorKind::NotFound,
-                        message: format!("no display {name}"),
-                    });
-                }
-            }
+            let display = output_named(&hub, display)?;
             hub.send_request(ClientRequest::PowerDisplays { power, display });
             Ok(())
         }
@@ -756,6 +742,25 @@ fn read_chrome_messages(
             return;
         }
     }
+}
+
+/// The output name of the monitor a shell or the CLI called `display`, which
+/// may be any of its names (see [`domicile_host::Host::display_named`]).
+/// `None` stays `None`: every monitor.
+fn output_named(hub: &ChromeHub, display: Option<String>) -> Result<Option<String>, SystemError> {
+    display
+        .map(|name| {
+            hub.host
+                .lock()
+                .unwrap()
+                .display_named(&name)
+                .map(str::to_string)
+                .map_err(|message| SystemError {
+                    kind: SystemErrorKind::NotFound,
+                    message,
+                })
+        })
+        .transpose()
 }
 
 /// Answer a connection request, unless the desktop is locked.

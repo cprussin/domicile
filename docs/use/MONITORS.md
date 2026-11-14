@@ -29,8 +29,9 @@ to it by name, then set its scale, position and rotation, or switch it off.
 }
 ```
 
-- A monitor is named by its maker, model and serial number, as above, or by
-  its name on the desktop, such as `drm-1`.
+- A monitor is named by its maker, model and serial number, as above, by the
+  port it is plugged into, such as `DP-1`, or by its name on the desktop, such
+  as `drm-1`.
 - A monitor without a `position` goes to the right of the others.
 - `rotate-270` is for a monitor turned a quarter to the left, `rotate-90` to
   the right.

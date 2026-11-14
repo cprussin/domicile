@@ -35,8 +35,8 @@ impl Profile {
     /// monitor would stay dark; if an overlap matched, windows could land on a
     /// missing screen.
     ///
-    /// An entry can name a monitor by output (`drm-3`) or by panel
-    /// (`DEL DELL U3219Q G3MS413`), so two entries can resolve to the same
+    /// An entry can name a monitor by output (`drm-3`), connector (`DP-1`)
+    /// or panel (`DEL DELL U3219Q G3MS413`), so two entries can resolve to the same
     /// monitor. Comparing counts is not enough; each entry must find a
     /// different monitor.
     fn resolve<'a>(&self, connected: &'a [Connected]) -> Option<Vec<&'a Connected>> {
@@ -109,7 +109,7 @@ pub struct DisplayPlacement {
     ///
     /// On a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)
     /// for a monitor with no EDID name. Ozone derives the id from the EDID, so
-    /// it survives a replug. A panel name also matches.
+    /// it survives a replug. A panel name or connector (`DP-1`) also matches.
     pub display: String,
     /// Whether the display is part of the desktop.
     ///
@@ -190,9 +190,9 @@ impl DisplayPlacement {
     /// connected.
     ///
     /// Any of the display's names match, as in kanshi: the output name is
-    /// always present, and the panel name is what a person can read off a
-    /// running desktop. The vendor may be spelled as in the EDID or as in
-    /// hwdata; see [`Connected::spelled_out`]. `validate` refuses an empty
+    /// always present, the panel name is what a person can read off a
+    /// running desktop, and the connector is what the kernel calls it. The
+    /// vendor may be spelled as in the EDID or as in hwdata; see [`Connected::spelled_out`]. `validate` refuses an empty
     /// `display`, which [`Connected::is_named`] never matches.
     fn connected_in<'a>(&self, connected: &'a [Connected]) -> Option<&'a Connected> {
         connected
@@ -323,6 +323,9 @@ pub struct Connected {
     /// sway and kanshi print this form. Both forms match, so either spelling
     /// works in a config.
     pub spelled_out: String,
+    /// The connector it is plugged into, as the kernel names it (`eDP-1`), or
+    /// empty if the engine reports none.
+    pub connector: String,
     /// The mode the connector is scanning out, in physical pixels.
     pub mode: (u32, u32),
     /// Every mode size the monitor offers, in physical pixels. Empty when the
@@ -336,9 +339,14 @@ impl Connected {
     /// An empty name never matches: every monitor with no EDID name shares
     /// the empty description.
     pub(crate) fn is_named(&self, name: &str) -> bool {
-        [&self.name, &self.description, &self.spelled_out]
-            .into_iter()
-            .any(|own| !own.is_empty() && own == name)
+        [
+            &self.name,
+            &self.description,
+            &self.spelled_out,
+            &self.connector,
+        ]
+        .into_iter()
+        .any(|own| !own.is_empty() && own == name)
     }
 }
 

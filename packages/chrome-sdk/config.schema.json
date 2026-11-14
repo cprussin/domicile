@@ -107,7 +107,7 @@
           "type": "boolean"
         },
         "display": {
-          "description": "The connected display this entry places, matched by exact name.\n\nOn a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)\nfor a monitor with no EDID name. Ozone derives the id from the EDID, so\nit survives a replug. A panel name also matches.",
+          "description": "The connected display this entry places, matched by exact name.\n\nOn a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)\nfor a monitor with no EDID name. Ozone derives the id from the EDID, so\nit survives a replug. A panel name or connector (`DP-1`) also matches.",
           "type": "string"
         },
         "enabled": {

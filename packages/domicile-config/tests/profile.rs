@@ -34,6 +34,7 @@ fn spelled_out(name: &str, description: &str, spelled_out: &str, mode: (u32, u32
         name: name.to_owned(),
         description: description.to_owned(),
         spelled_out: spelled_out.to_owned(),
+        connector: String::new(),
         mode,
         modes: Vec::new(),
     }
@@ -204,6 +205,32 @@ fn a_scale_of_exactly_one_may_be_written_as_an_integer() {
             .logical,
         DESK_MODE,
         "scale 1 is the mode itself"
+    );
+}
+
+#[test]
+fn a_profile_can_name_a_monitor_by_its_connector() {
+    let layout = layout(
+        r#"
+{
+  "output": {
+    "profiles": [
+      { "name": "desk", "displays": [{ "display": "DP-3", "scale": 2 }] }
+    ]
+  }
+}
+"#,
+        &[Connected {
+            connector: "DP-3".to_owned(),
+            ..described(CENTER, "DEL DELL U3219Q G3MS413", DESK_MODE)
+        }],
+    );
+    assert_eq!(
+        layout
+            .placed()
+            .map(|placed| placed.name.as_str())
+            .collect::<Vec<_>>(),
+        vec![CENTER]
     );
 }
 

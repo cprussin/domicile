@@ -161,7 +161,8 @@ export type System = {
     states: readonly WindowState[],
   ) => Promise<Result<"set", SystemError>>;
   /**
-   * Draw `display` (a display's `name`), or every monitor when it is left
+   * Draw `display` (a display's `name`, connector or panel name, as a
+   * profile matches it), or every monitor when it is left
    * out, as if its white were a light of `kelvin`, 1000 to 6500, as a
    * night light does; 6500 draws colors as they are. Every monitor's replaces
    * each one's. Lasts until the shell sets another, across reloads. Changes
@@ -175,7 +176,8 @@ export type System = {
   /**
    * Turn every monitor off now, keeping windows and workspaces as they are.
    * Input more than a second later lights them again, as does
-   * {@link System.wakeDisplays}. With `display` (a display's `name`), turn
+   * {@link System.wakeDisplays}. With `display` (a display's `name`, connector
+   * or panel name, as a profile matches it), turn
    * only that one off: it keeps its place and windows, and sleeps through
    * input until woken. Fails {@link SystemErrorKind.NotFound} for a display
    * the desktop does not have. Allowed while the desktop is locked. See

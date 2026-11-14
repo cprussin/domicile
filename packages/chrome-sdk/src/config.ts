@@ -125,7 +125,7 @@ export type DisplayPlacement = {
    *
    * On a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)
    * for a monitor with no EDID name. Ozone derives the id from the EDID, so
-   * it survives a replug. A panel name also matches.
+   * it survives a replug. A panel name or connector (`DP-1`) also matches.
    */
   display: string;
   /**

@@ -366,9 +366,44 @@ impl Host {
         self.browser_windows = windows;
     }
 
-    /// The display named `name`, if the desktop has it.
-    pub fn display(&self, name: &str) -> Option<&DisplayInfo> {
-        self.displays.iter().find(|display| display.name == name)
+    /// The output name of the monitor `name` calls, which may be any name a
+    /// profile matches: its output name, connector or panel.
+    ///
+    /// Errs with a message listing every monitor's names when no monitor, or
+    /// more than one, answers to `name`: identical monitors with no serial
+    /// share a panel name.
+    pub fn display_named(&self, name: &str) -> Result<&str, String> {
+        let named: Vec<&MonitorInfo> = self
+            .monitors
+            .iter()
+            .filter(|monitor| monitor.names.iter().any(|own| own == name))
+            .collect();
+        match named.as_slice() {
+            [monitor] => Ok(monitor.names[0].as_str()),
+            [] => Err(format!("no display {name:?}; {}", self.listed_displays())),
+            several => Err(format!(
+                "{} displays are {name:?}; {}",
+                several.len(),
+                self.listed_displays()
+            )),
+        }
+    }
+
+    /// Every monitor by its names, for an error that names none or several.
+    fn listed_displays(&self) -> String {
+        let displays: Vec<String> = self
+            .monitors
+            .iter()
+            .map(|monitor| {
+                monitor
+                    .names
+                    .iter()
+                    .map(|own| format!("{own:?}"))
+                    .collect::<Vec<_>>()
+                    .join(" / ")
+            })
+            .collect();
+        format!("displays: {}", displays.join(", "))
     }
 
     /// The displays message, sent on handshake and broadcast on change.

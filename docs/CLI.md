@@ -98,9 +98,12 @@ again, as does `wake-displays`. Input in the first second is ignored, so
 letting go of Enter or of the keybinding that ran it does not undo it. In
 manganese, bind `exec domicile sleep-displays`.
 
-With a display, by its output name (`DP-1`, `drm-12345`), turn only that one
-off. It keeps its windows and workspace, the pointer does not enter it, and it
-stays off through input until `wake-displays` names it or names none. See
+With a display, by any name a profile matches it by (its connector `eDP-1`,
+its panel `BOE NE135A1M-NY1`, or its output name `drm-12345`), turn only that
+one off. A name no display, or more than one, answers to fails, listing every
+display's names. It keeps its windows and workspace, the pointer does not
+enter it, and it stays off through input until `wake-displays` names it or
+names none. See
 [IDLE.md](IDLE.md#sleeping-on-demand).
 
 ## `domicile wake-displays [display]`

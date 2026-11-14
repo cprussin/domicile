@@ -362,6 +362,7 @@ mod tests {
                 transform: Transform::Normal,
                 description: String::new(),
                 edid: String::new(),
+                connector: String::new(),
                 display: None,
                 physical_mm: (0, 0),
                 refresh_mhz: 0,

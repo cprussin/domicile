@@ -544,6 +544,7 @@ Any of these match:
 
 - the `wl_output` name: on a tty, `drm-<id>`, or the connector (`HDMI-A-1`)
   for a monitor with no EDID make, model or serial
+- the connector, e.g. `DP-1` or `eDP-1`
 - the EDID description `"<MAKE> <MODEL> <SERIAL>"`, e.g.
   `DEL DELL U3219Q 2ZLS413`
 - the description with the maker's full name from hwdata's `pnp.ids`, e.g.
