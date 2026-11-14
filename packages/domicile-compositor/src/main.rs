@@ -77,6 +77,7 @@ mod client_damage;
 mod client_requests;
 mod clients;
 mod clipboard;
+mod color_management;
 mod compositor_casts;
 mod config_adoption;
 mod configure_answers;
@@ -144,6 +145,7 @@ mod shm_upload;
 mod shortcuts_inhibit;
 mod spawning;
 mod spike_probes;
+mod subsurfaces;
 mod surface_commit;
 mod swipe;
 mod synced_moves;
@@ -193,11 +195,11 @@ use crate::lock::{Lock, Verdict, Verifier};
 use crate::modifiers::Held;
 use crate::once_per_window::OncePerWindow;
 use crate::outputs::{advertise_output, screens_at_startup, LiveOutput};
-use crate::popups::Bubble;
 use crate::portals::{shell_appearance, Selection};
 use crate::restatement::Restatement;
 use crate::screens::{Advertised, Screens};
 use crate::spawning::{chrome_display, home_directory, spawn_client};
+use crate::subsurfaces::Subsurface;
 use crate::surface_commit::{LastBuffer, Role};
 use crate::windows::SizeLimits;
 use domicile_config::{Config, ConfigError, ConfigStore};
@@ -451,6 +453,10 @@ struct DomicileCompositor {
     /// keeps its last box here; input and casts read
     /// [`HeldFrames::shown`].
     app_bounds: HashMap<String, domicile_scene::Bounds>,
+    /// Each window's CSS `zoom`, from the engine's configure. Multiplies the
+    /// scale it draws at, and its popups', so a zoomed window stays sharp. A
+    /// window not here is at 1. See [`crate::scale::zoomed`].
+    app_zoom: HashMap<String, f64>,
     /// Each monitor's night light and gamma-control client
     /// (`SystemRequest::SetColorTemperature`, `zwlr_gamma_control_v1`), sent
     /// again to an engine that reports its displays, since a new engine
@@ -482,13 +488,12 @@ struct DomicileCompositor {
     /// They have the keyboard while open. Focus moving anywhere but their
     /// window dismisses them all; see `ClientRequest::KeyboardFocus`.
     grabbing: Vec<PopupSurface>,
-    /// Every announced bubble: a subsurface of a window or popup, placed as a
-    /// popup is.
-    ///
-    /// Chromium draws its bubbles this way, extension popups among them.
-    /// Announced once it has a buffer; see `place_the_bubbles`.
-    bubbles: Vec<Bubble>,
-    /// Bubble moves of the commit transaction being applied, held so each
+    /// Every subsurface of a window, a popup or another subsurface, which
+    /// its parent's frames draw. See `crate::subsurfaces`.
+    subsurfaces: Vec<Subsurface>,
+    /// The number of the last subsurface, for its id.
+    next_subsurface: u64,
+    /// Popup moves of the commit transaction being applied, held so each
     /// names the frames it shows with. See `surface_commit`.
     synced_moves: crate::synced_moves::SyncedMoves,
     /// The app the pointer is currently over, so a `set_cursor` request can be
@@ -498,7 +503,7 @@ struct DomicileCompositor {
     /// asked for one. See `crate::cursor_surface`.
     cursor_surface: Option<WlSurface>,
     /// The surface of `pointer_app` the pointer is over: the window, or a
-    /// bubble over it that takes input. See
+    /// subsurface of it that takes input. See
     /// [`DomicileCompositor::input_target`].
     pointer_surface: Option<WlSurface>,
     /// Pointer buttons the seat was told are down, in the order pressed.
@@ -568,7 +573,7 @@ struct DomicileCompositor {
     /// See `announce_a_new_window`.
     unannounced: HashSet<String>,
     /// Every announced surface's app id and role, kept in step with
-    /// `toplevels`, `popups` and `bubbles`, so a commit finds its window
+    /// `toplevels`, `popups` and `subsurfaces`, so a commit finds its window
     /// without searching them.
     by_surface: HashMap<WlSurface, (String, Role)>,
 
@@ -857,6 +862,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     screencopy::advertise(&dh);
     // Night-light tools such as gammastep and wl-gammarelay-rs.
     gamma_control::advertise(&dh);
+    color_management::advertise(&dh);
     let foreign_toplevels = foreign_toplevels::ForeignToplevels::new(&dh);
     // Input methods compose text into native windows.
     let text_input = text_input::TextInput::advertise(&dh);
@@ -1232,6 +1238,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Requests for the casts Wayland capture clients take.
     let (screen_copy_requests, heard_screen_copy_requests) = channel::<casting::ToPipewire>();
 
+    // An engine on the CPU shows only 8-bit frames from memory.
+    let shm_formats = gpu
+        .as_ref()
+        .filter(|_| !arguments.software_compositing)
+        .map(|gpu| shm_upload::shm_formats(&gpu.renderer))
+        .unwrap_or_default();
+
     let mut dmabuf_state = DmabufState::new();
     // An engine on the CPU shows no dmabuf, so clients are offered only
     // `wl_shm`. Mesa then draws GL clients in memory too.
@@ -1330,7 +1343,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         keyboard_shortcuts_inhibit_state: KeyboardShortcutsInhibitState::new::<DomicileCompositor>(
             &dh,
         ),
-        shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
+        shm_state: ShmState::new::<DomicileCompositor>(&dh, shm_formats),
         seat_state,
         data_device_state,
         primary_selection_state,
@@ -1365,6 +1378,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         launched: launched.clone(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
+        app_zoom: HashMap::new(),
         gamma: gamma::Ramps::default(),
         held_frames: HeldFrames::new(),
         suspended: HashSet::new(),
@@ -1374,7 +1388,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         clock: Clock::new(),
         popups: Vec::new(),
         grabbing: Vec::new(),
-        bubbles: Vec::new(),
+        subsurfaces: Vec::new(),
+        next_subsurface: 0,
         synced_moves: Default::default(),
         pointer_app: None,
         cursor_surface: None,

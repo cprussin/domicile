@@ -92,6 +92,13 @@ impl Profile {
     }
 }
 
+/// SDR content's white on an HDR monitor when a profile states none, in cd/m²:
+/// the reference white of ITU-R BT.2408.
+pub const DEFAULT_SDR_WHITE: u32 = 203;
+
+/// The brightest luminance the PQ curve encodes, in cd/m².
+const MAX_PQ_NITS: u32 = 10_000;
+
 /// One display of a profile: which monitor, and what to do with it.
 ///
 /// Every field but `display` defaults to leaving the monitor as it is.
@@ -141,6 +148,21 @@ pub struct DisplayPlacement {
     /// mode without it. Each display reports whether it took.
     #[serde(default)]
     pub adaptive_sync: bool,
+    /// Whether to drive the monitor in HDR (HDR10: BT.2020 primaries with the
+    /// PQ curve), so HDR video and images reach its full brightness and
+    /// color.
+    ///
+    /// Off by default. Asked for only where the monitor's EDID says it takes
+    /// PQ and the connector scans out in 10 bits; elsewhere it stays SDR.
+    #[serde(default)]
+    pub hdr: bool,
+    /// In HDR, how bright ordinary (SDR) content's white is, in cd/m² (nits).
+    /// Raise it if SDR windows look dim beside the monitor in SDR.
+    ///
+    /// Absent is 203, the reference white of ITU-R BT.2408. Ignored in SDR.
+    #[serde(default)]
+    #[schemars(range(min = 1, max = MAX_PQ_NITS))]
+    pub sdr_white: Option<u32>,
     /// The top-left corner in the profile's coordinate space. May be negative.
     ///
     /// Absent puts the display in a row right of the positioned ones, in
@@ -218,6 +240,16 @@ impl DisplayPlacement {
                 return Err(ConfigError::Validation(format!(
                     "{at} refresh for {} is {refresh}, which is not a rate a \
                      monitor scans out at",
+                    self.display
+                )));
+            }
+        }
+        // PQ ends at 10,000 cd/m², and zero is no white at all.
+        if let Some(white) = self.sdr_white {
+            if !(1..=MAX_PQ_NITS).contains(&white) {
+                return Err(ConfigError::Validation(format!(
+                    "{at} sdr_white for {} is {white}, and an HDR white is \
+                     between 1 and {MAX_PQ_NITS} cd/m²",
                     self.display
                 )));
             }
@@ -445,6 +477,11 @@ pub struct Scanout {
     pub refresh_mhz: Option<u32>,
     /// Whether the profile asks for a variable refresh rate.
     pub adaptive_sync: bool,
+    /// Whether the profile asks for HDR.
+    pub hdr: bool,
+    /// In HDR, SDR content's white in cd/m²: [`DisplayPlacement::sdr_white`]
+    /// or [`DEFAULT_SDR_WHITE`].
+    pub sdr_white: u32,
     /// Where the profile put this display on the desktop, or `None` if it is
     /// dark.
     ///
@@ -615,6 +652,8 @@ fn scanout(
                     .refresh
                     .map(|hertz| (hertz * 1000.0).round() as u32),
                 adaptive_sync: placement.adaptive_sync,
+                hdr: placement.hdr,
+                sdr_white: placement.sdr_white.unwrap_or(DEFAULT_SDR_WHITE),
                 desk: placed
                     .iter()
                     .find(|placed| placed.name == display.name)

@@ -137,6 +137,15 @@ export type DisplayPlacement = {
    */
   enabled?: boolean;
   /**
+   * Whether to drive the monitor in HDR (HDR10: BT.2020 primaries with the
+   * PQ curve), so HDR video and images reach its full brightness and
+   * color.
+   *
+   * Off by default. Asked for only where the monitor's EDID says it takes
+   * PQ and the connector scans out in 10 bits; elsewhere it stays SDR.
+   */
+  hdr?: boolean;
+  /**
    * The mode to scan out, in physical pixels. Absent means the monitor's
    * native mode.
    *
@@ -173,6 +182,13 @@ export type DisplayPlacement = {
    * logical size.
    */
   scale?: number;
+  /**
+   * In HDR, how bright ordinary (SDR) content's white is, in cd/m² (nits).
+   * Raise it if SDR windows look dim beside the monitor in SDR.
+   *
+   * Absent is 203, the reference white of ITU-R BT.2408. Ignored in SDR.
+   */
+  sdr_white?: number | null;
   /** Which way up the monitor is. */
   transform?: Transform;
 };

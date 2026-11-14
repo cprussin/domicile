@@ -123,6 +123,58 @@ typedef struct DomicileShmBuffer {
   uint32_t fourcc;
 } DomicileShmBuffer;
 
+// The primaries a client's pixels are encoded in, as
+// wp_color_manager_v1.primaries names them.
+typedef uint32_t DomicilePrimaries;
+
+#define DOMICILE_PRIMARIES_SRGB 0u
+#define DOMICILE_PRIMARIES_BT2020 1u
+#define DOMICILE_PRIMARIES_DISPLAY_P3 2u
+#define DOMICILE_PRIMARIES_ADOBE_RGB 3u
+
+// The transfer function a client's pixels are encoded with, as
+// wp_color_manager_v1.transfer_function names it.
+typedef uint32_t DomicileTransfer;
+
+// The sRGB piecewise curve (compound_power_2_4).
+#define DOMICILE_TRANSFER_SRGB 0u
+#define DOMICILE_TRANSFER_GAMMA22 1u
+// BT.1886: a pure 2.4 power.
+#define DOMICILE_TRANSFER_BT1886 2u
+// Linear, extended past 1.0, with 1.0 at the reference white.
+#define DOMICILE_TRANSFER_EXT_LINEAR 3u
+#define DOMICILE_TRANSFER_PQ 4u
+#define DOMICILE_TRANSFER_HLG 5u
+// Windows scRGB: linear, extended, with 1.0 at 80 cd/m².
+#define DOMICILE_TRANSFER_SCRGB 6u
+
+// One CIE 1931 xy chromaticity.
+typedef struct DomicileChromaticity {
+  float x;
+  float y;
+} DomicileChromaticity;
+
+// How a client's pixels encode color: its wp_image_description_v1. Luminances
+// are in cd/m²; a zero means the client did not say.
+typedef struct DomicileColor {
+  DomicilePrimaries primaries;
+  DomicileTransfer transfer;
+  // The luminance of the reference white, for HDR content. Zero for the
+  // transfer function's own.
+  float reference_luminance;
+  // The mastering display (SMPTE ST 2086). Unset when `has_mastering` is 0.
+  uint32_t has_mastering;
+  DomicileChromaticity mastering_red;
+  DomicileChromaticity mastering_green;
+  DomicileChromaticity mastering_blue;
+  DomicileChromaticity mastering_white;
+  float mastering_min_luminance;
+  float mastering_max_luminance;
+  // CTA-861.3.
+  float max_cll;
+  float max_fall;
+} DomicileColor;
+
 // A capture id, of a display or a browser window. Zero is never valid and is
 // the failure return of domicile_display_capture_start and
 // domicile_browser_window_capture_start.
@@ -249,6 +301,29 @@ typedef struct DomicileAdaptiveDisplay {
   int32_t adaptive_sync;
 } DomicileAdaptiveDisplay;
 
+// Whether a display's connector is driven in HDR10 (BT.2020 with PQ).
+// Its panel's EDID takes no PQ, or the connector cannot scan out in 10 bits.
+#define DOMICILE_HDR_UNSUPPORTED 0
+// It can, and is not.
+#define DOMICILE_HDR_OFF 1
+// It is.
+#define DOMICILE_HDR_ON 2
+
+// An adaptive display, whether it is driven in HDR10, and its panel's
+// luminances, for `hdr_displays`.
+typedef struct DomicileHdrDisplay {
+  DomicileAdaptiveDisplay adaptive;
+  // One of the `DOMICILE_HDR_*` values.
+  int32_t hdr;
+  // The panel's luminances from its EDID, in cd/m², zero where unreported.
+  float max_luminance;
+  float max_average_luminance;
+  float min_luminance;
+  // In HDR, the luminance SDR content's white is shown at, in cd/m²; zero
+  // otherwise.
+  float sdr_white_nits;
+} DomicileHdrDisplay;
+
 // A browser window, for `browser_windows`: a page the browser holds, which a
 // capture tool may pick on ext-foreign-toplevel-list-v1 and capture alone
 // with domicile_browser_window_capture_start.
@@ -312,6 +387,18 @@ typedef struct DomicileAdaptiveLayout {
   // display then reports `DOMICILE_ADAPTIVE_SYNC_OFF`.
   int32_t adaptive_sync;
 } DomicileAdaptiveLayout;
+
+// An adaptive layout and whether to drive it in HDR10, for
+// `domicile_displays_configure_hdr`.
+typedef struct DomicileHdrLayout {
+  DomicileAdaptiveLayout adaptive;
+  // Nonzero to drive the connector in HDR10 where its panel takes it. The
+  // display reports `DOMICILE_HDR_UNSUPPORTED` where it does not.
+  int32_t hdr;
+  // In HDR, the luminance to show SDR content's white at, in cd/m². Zero or
+  // less is 203, the BT.2408 reference white.
+  float sdr_white_nits;
+} DomicileHdrLayout;
 
 // A tablet or touchscreen and the display it covers, for
 // `domicile_pointers_configure`.
@@ -535,6 +622,28 @@ typedef struct DomicileEngineCallbacks {
   void (*adaptive_displays)(void* user_data,
                             const DomicileAdaptiveDisplay* displays,
                             uint32_t count);
+  // Like `configure_box`, plus the embedding element's CSS `zoom`. Configure
+  // the client at `width` x `height` over `scale` times `zoom`, and have it
+  // draw at that product: its buffer still fills the box, `zoom` times denser.
+  // 1 for an unzoomed element.
+  //
+  // Called instead of `configure_box` when set. An older engine ignores it.
+  void (*configure_zoomed)(void* user_data,
+                           DomicileSurfaceId surface,
+                           uint32_t width,
+                           uint32_t height,
+                           double scale,
+                           double zoom,
+                           uint64_t box);
+  // Like `adaptive_displays`, plus whether each display is driven in HDR10
+  // and its panel's luminances. `displays` points at `count` records borrowed
+  // for the call.
+  //
+  // Called instead of `adaptive_displays` and the older display callbacks
+  // when set. An older engine ignores it.
+  void (*hdr_displays)(void* user_data,
+                       const DomicileHdrDisplay* displays,
+                       uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
@@ -572,6 +681,16 @@ domicile_surface_create(DomicileEngine* engine, const char* app_id);
 // Drops the surface and the frame sink behind it.
 DOMICILE_ENGINE_EXPORT void domicile_surface_destroy(DomicileEngine* engine,
                                                      DomicileSurfaceId surface);
+
+// Sets how `surface`'s pixels encode color (wp_color_management_surface_v1).
+// Buffers imported after this, by any domicile_surface_import call, are drawn
+// in it; buffers imported before keep the color they were imported with, so
+// import a buffer again to show it in a new color. A null `color` is sRGB, as
+// every surface starts.
+DOMICILE_ENGINE_EXPORT void domicile_surface_set_color(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    const DomicileColor* color);
 
 // Imports a client's dmabuf (zwp_linux_dmabuf_v1). Returns the buffer id, or
 // zero if the browser refused.
@@ -715,6 +834,37 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_sync(DomicileEngine* engine,
                                                   DomicileSurfaceId surface,
                                                   uint32_t frame);
 
+// One of a surface's subsurfaces (wl_subsurface), in logical pixels from the
+// top left of the surface's crop.
+typedef struct DomicileSubsurface {
+  DomicileSurfaceId surface;
+  double x;
+  double y;
+  double width;
+  double height;
+  // Nonzero when it is drawn over the surface, zero when under it.
+  uint8_t above;
+} DomicileSubsurface;
+
+// Sets `surface`'s subsurfaces, bottom to top, which its frames draw with it:
+// each frame embeds each subsurface's newest frame at its place. Replaces the
+// last set; applies from the surface's next frame.
+//
+// A subsurface takes frames once the engine embeds it, which it reports as
+// `configure` with its size in device pixels. Submit to it at the newest box.
+// A subsurface whose surface is gone is left out.
+DOMICILE_ENGINE_EXPORT void domicile_surface_set_children(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    const DomicileSubsurface* children,
+    uint32_t count);
+
+// Sends `surface`'s last frame again, to show subsurfaces set since with no
+// new buffer of its own. Does nothing while a newer frame of it is on its
+// way, which shows them. The frame answers no `frame_done` or `presented`.
+DOMICILE_ENGINE_EXPORT void domicile_surface_redraw(DomicileEngine* engine,
+                                                    DomicileSurfaceId surface);
+
 // Tells the browser which connectors to light and where, in answer to the
 // `displays` callback.
 //
@@ -744,6 +894,14 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_configure_modes(
 DOMICILE_ENGINE_EXPORT void domicile_displays_configure_adaptive(
     DomicileEngine* engine,
     const DomicileAdaptiveLayout* layout,
+    uint32_t count);
+
+// Like `domicile_displays_configure_adaptive`, with whether to drive each
+// connector in HDR10 and the SDR white to draw it at. A compositor that finds
+// no such symbol has an older engine, which drives every connector in SDR.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure_hdr(
+    DomicileEngine* engine,
+    const DomicileHdrLayout* layout,
     uint32_t count);
 
 // Tells the browser which display each tablet or touchscreen covers.

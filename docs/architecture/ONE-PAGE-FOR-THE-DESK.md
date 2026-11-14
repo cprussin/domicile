@@ -136,8 +136,26 @@ the display holding most of it, as in sway. Other monitors resample its buffer.
   `wl_output.scale` of the displays it entered.
 - A window the shell has not reported, or one in a gap, is on every display at
   the densest scale.
+- CSS `zoom` on an `<app>` multiplies its density (#1976). The engine sends
+  the element's zoom (its effective zoom over the page's layout zoom factor)
+  with each box. The compositor configures the client at the box over the
+  page's scale times the zoom, and sends `preferred_scale` as the display's
+  scale times the zoom. The buffer still fills the box, so viz does not
+  resample it. Frames keep the page's scale.
+  - Surface: CSS `zoom`, not a `domicile.windows` setter. Layout already
+    carries it, and it applies to popups the same way.
+  - Not clamped, unlike scroll's 0.2–4: the shell zooms the popups itself,
+    so the compositor must use the same factor. The browser refuses a zoom
+    that is not a positive number.
+  - A client without fractional scale draws at the display's whole-number
+    scale and is resampled.
+  - Not `transform: scale()`: that animates per frame and would reconfigure
+    the client each frame. It resamples.
 - A popup (a menu, nested or not) takes its window's box moved by where the
-  menu sits over the window, at the size it was configured to. It enters the
+  menu sits over the window, at the size it was configured to. It shares its
+  window's zoom: its offset and size are multiplied by it, it draws at its
+  display's scale times it, and it is kept on screen in its window's zoomed
+  units. So is an input method's candidate list. It enters the
   displays that box overlaps, at the scale of the one with the largest overlap,
   and is placed again when its window moves or it repositions. A popup over a
   window the shell has not reported, or a layer surface's, is on every display

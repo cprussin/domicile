@@ -592,6 +592,7 @@ source_set("web_view_guest") {
   public_deps = [
     ":context_menu",
     ":desk_downloads",
+    ":desk_faults",
     ":file_choice",
     ":guest_dialogs",
     ":page_matches",
@@ -647,6 +648,30 @@ source_set("guest_dialogs") {
   ]
 
   deps = [ "//base" ]
+}
+
+# A site's "Sign in with" (FedCM) dialogs, asked of the shell. Its own target
+# for the reason :file_choice is one: it needs no guest, which is where its
+# tests are. //chrome/browser/domicile gives it the guest to ask.
+source_set("identity_dialog") {
+  sources = [
+    "browser/identity_dialog.cc",
+    "browser/identity_dialog.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+    "//content/public/browser",
+  ]
+
+  deps = [
+    "//skia",
+    "//ui/gfx",
+    # The provider's icon and an account's picture, sent as PNG data: URLs.
+    "//ui/gfx/codec",
+    "//url",
+  ]
 }
 
 # Ids for the devices a <webview>'s device chooser offers. Its own target for
@@ -997,6 +1022,18 @@ source_set("desk_activity") {
   public_deps = [ "//base" ]
 }
 
+# Bugs the engine catches in itself, from wherever it caught one to a control
+# channel, which tells the compositor. Its own target for :desk_activity's
+# reason.
+source_set("desk_faults") {
+  sources = [
+    "browser/desk_faults.cc",
+    "browser/desk_faults.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # The touchpad gestures the shell grabs, from the platform's input to one
 # control channel. Its own target for :desk_activity's reason.
 source_set("desk_gestures") {
@@ -1069,6 +1106,25 @@ source_set("pointer_hiding") {
     ":desk_pointer_hiding",
     "//base",
     "//ui/events",
+  ]
+}
+
+# The videos in picture-in-picture, as the shell lists and shows them. Its
+# own target for :pointer_warp's reason: the list and the shown surfaces are
+# here, where a test reaches them with no browser, and Chrome's sessions are
+# in //chrome/browser/domicile.
+source_set("picture_in_picture_videos") {
+  sources = [
+    "browser/picture_in_picture_videos.cc",
+    "browser/picture_in_picture_videos.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+    "//components/viz/common",
+    "//mojo/public/cpp/bindings",
+    "//ui/gfx/geometry",
   ]
 }
 
@@ -1149,6 +1205,7 @@ source_set("control_channel") {
     ":common",
     ":cursor_shape",
     ":desk_activity",
+    ":desk_faults",
     ":desk_gestures",
     ":desk_lock",
     ":desk_modifier_taps",
@@ -1191,6 +1248,7 @@ source_set("unit_tests") {
     "browser/context_menu_unittest.cc",
     "browser/control_channel_unittest.cc",
     "browser/desk_activity_unittest.cc",
+    "browser/desk_faults_unittest.cc",
     "browser/desk_gestures_unittest.cc",
     "browser/desk_modifier_taps_unittest.cc",
     "browser/desk_pointer_hiding_unittest.cc",
@@ -1210,11 +1268,13 @@ source_set("unit_tests") {
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/guest_dialogs_unittest.cc",
+    "browser/identity_dialog_unittest.cc",
     "browser/input_method_lines_unittest.cc",
     "browser/line_framer_unittest.cc",
     "browser/notification_window_unittest.cc",
     "browser/page_matches_unittest.cc",
     "browser/placeholder_stage_unittest.cc",
+    "browser/picture_in_picture_videos_unittest.cc",
     "browser/pointer_hiding_unittest.cc",
     "browser/pointer_warp_unittest.cc",
     "browser/portal_request_unittest.cc",
@@ -1278,6 +1338,7 @@ source_set("unit_tests") {
     ":control_channel",
     ":cursor_shape",
     ":desk_activity",
+    ":desk_faults",
     ":desk_geometry",
     ":desk_gestures",
     ":desk_modifier_taps",
@@ -1297,11 +1358,13 @@ source_set("unit_tests") {
     ":forwarded_keys",
     ":guest_dialogs",
     ":held_chords",
+    ":identity_dialog",
     ":input_method_lines",
     ":keyboard_layout",
     ":line_framer",
     ":notification_window",
     ":page_matches",
+    ":picture_in_picture_videos",
     ":placeholder_stage",
     ":pointer_hiding",
     ":pointer_warp",
@@ -1330,6 +1393,7 @@ source_set("unit_tests") {
     "//cc/domicile:display_regions",
     "//cc/domicile:unit_tests",
     "//components/domicile/mojom",
+    "//components/domicile/engine:buffer_color_unit_tests",
     "//components/domicile/engine:event_queue_unit_tests",
     "//components/domicile/engine:probe_wait_unit_tests",
     "//components/domicile/engine:surface_alpha_unit_tests",
@@ -1374,6 +1438,9 @@ source_set("unit_tests") {
     "//ui/events:event_constants",
     "//ui/events/keycodes:xkb",
     "//ui/events/ozone/layout",
+    # The provider data :identity_dialog's tests build.
+    "//ui/gfx",
+    "//url",
     "//ui/gfx/geometry",
     # The pointer's colors are views' and live beside it, not here: //ui may
     # not depend on //components. Its tests run with the fork's anyway.

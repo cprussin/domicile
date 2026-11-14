@@ -27,6 +27,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
+#include "ui/ozone/platform/drm/domicile/hdr_output.h"
 
 namespace ui {
 namespace {
@@ -129,6 +130,7 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
                                !refused.contains(snapshot->display_id());
     params.emplace_back(snapshot->display_id(), origins[index],
                         ModeForLayout(*snapshot, wanted), adaptive_sync);
+    params.back().domicile_hdr = DrivesHdr(*snapshot, wanted);
   }
   return params;
 }
