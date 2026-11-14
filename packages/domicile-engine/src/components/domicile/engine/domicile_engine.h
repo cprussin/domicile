@@ -123,6 +123,58 @@ typedef struct DomicileShmBuffer {
   uint32_t fourcc;
 } DomicileShmBuffer;
 
+// The primaries a client's pixels are encoded in, as
+// wp_color_manager_v1.primaries names them.
+typedef uint32_t DomicilePrimaries;
+
+#define DOMICILE_PRIMARIES_SRGB 0u
+#define DOMICILE_PRIMARIES_BT2020 1u
+#define DOMICILE_PRIMARIES_DISPLAY_P3 2u
+#define DOMICILE_PRIMARIES_ADOBE_RGB 3u
+
+// The transfer function a client's pixels are encoded with, as
+// wp_color_manager_v1.transfer_function names it.
+typedef uint32_t DomicileTransfer;
+
+// The sRGB piecewise curve (compound_power_2_4).
+#define DOMICILE_TRANSFER_SRGB 0u
+#define DOMICILE_TRANSFER_GAMMA22 1u
+// BT.1886: a pure 2.4 power.
+#define DOMICILE_TRANSFER_BT1886 2u
+// Linear, extended past 1.0, with 1.0 at the reference white.
+#define DOMICILE_TRANSFER_EXT_LINEAR 3u
+#define DOMICILE_TRANSFER_PQ 4u
+#define DOMICILE_TRANSFER_HLG 5u
+// Windows scRGB: linear, extended, with 1.0 at 80 cd/m².
+#define DOMICILE_TRANSFER_SCRGB 6u
+
+// One CIE 1931 xy chromaticity.
+typedef struct DomicileChromaticity {
+  float x;
+  float y;
+} DomicileChromaticity;
+
+// How a client's pixels encode color: its wp_image_description_v1. Luminances
+// are in cd/m²; a zero means the client did not say.
+typedef struct DomicileColor {
+  DomicilePrimaries primaries;
+  DomicileTransfer transfer;
+  // The luminance of the reference white, for HDR content. Zero for the
+  // transfer function's own.
+  float reference_luminance;
+  // The mastering display (SMPTE ST 2086). Unset when `has_mastering` is 0.
+  uint32_t has_mastering;
+  DomicileChromaticity mastering_red;
+  DomicileChromaticity mastering_green;
+  DomicileChromaticity mastering_blue;
+  DomicileChromaticity mastering_white;
+  float mastering_min_luminance;
+  float mastering_max_luminance;
+  // CTA-861.3.
+  float max_cll;
+  float max_fall;
+} DomicileColor;
+
 // A capture id, of a display or a browser window. Zero is never valid and is
 // the failure return of domicile_display_capture_start and
 // domicile_browser_window_capture_start.
@@ -585,6 +637,16 @@ domicile_surface_create(DomicileEngine* engine, const char* app_id);
 // Drops the surface and the frame sink behind it.
 DOMICILE_ENGINE_EXPORT void domicile_surface_destroy(DomicileEngine* engine,
                                                      DomicileSurfaceId surface);
+
+// Sets how `surface`'s pixels encode color (wp_color_management_surface_v1).
+// Buffers imported after this, by any domicile_surface_import call, are drawn
+// in it; buffers imported before keep the color they were imported with, so
+// import a buffer again to show it in a new color. A null `color` is sRGB, as
+// every surface starts.
+DOMICILE_ENGINE_EXPORT void domicile_surface_set_color(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    const DomicileColor* color);
 
 // Imports a client's dmabuf (zwp_linux_dmabuf_v1). Returns the buffer id, or
 // zero if the browser refused.

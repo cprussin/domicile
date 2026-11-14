@@ -77,6 +77,7 @@ mod client_damage;
 mod client_requests;
 mod clients;
 mod clipboard;
+mod color_management;
 mod compositor_casts;
 mod config_adoption;
 mod configure_answers;
@@ -861,6 +862,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     screencopy::advertise(&dh);
     // Night-light tools such as gammastep and wl-gammarelay-rs.
     gamma_control::advertise(&dh);
+    color_management::advertise(&dh);
     let foreign_toplevels = foreign_toplevels::ForeignToplevels::new(&dh);
     // Input methods compose text into native windows.
     let text_input = text_input::TextInput::advertise(&dh);
