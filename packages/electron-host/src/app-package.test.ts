@@ -15,11 +15,12 @@ const appWith = async (manifest: string) => {
 describe(readAppPackage, () => {
   it("reads the app's name, product name, version and main", async () => {
     const app = await appWith(
-      `{"name":"@ant/desktop","productName":"Claude","version":"5.1.0","main":".vite/build/index.pre.js"}`,
+      `{"name":"@ant/desktop","productName":"Claude","version":"5.1.0","main":".vite/build/index.pre.js","desktopName":"com.anthropic.Claude.desktop"}`,
     );
 
     expect(await readAppPackage(app)).toEqual(
       Ok({
+        appId: "com.anthropic.Claude",
         main: join(app, ".vite/build/index.pre.js"),
         name: "@ant/desktop",
         productName: "Claude",
@@ -33,6 +34,7 @@ describe(readAppPackage, () => {
 
     expect(await readAppPackage(app)).toEqual(
       Ok({
+        appId: "notes",
         main: join(app, "index.js"),
         name: "notes",
         productName: "notes",

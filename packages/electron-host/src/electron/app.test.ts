@@ -18,6 +18,7 @@ const make = (exit: (code: number) => void = () => undefined) =>
     exit,
     paths,
     pkg: {
+      appId: "com.anthropic.Claude",
       main: "/cache/x/resources/app.asar/main.js",
       name: "@ant/desktop",
       productName: "Claude",

@@ -3,6 +3,8 @@
 import { z } from "zod";
 
 const schema = z.object({
+  /** The engine's Electron socket, which the desktop names to its apps. */
+  DOMICILE_ELECTRON_SOCK: z.string().optional(),
   XDG_CACHE_HOME: z.string().optional(),
   XDG_CONFIG_HOME: z.string().optional(),
 });
