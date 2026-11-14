@@ -4,6 +4,7 @@
 #include "components/domicile/browser/frame_sink_broker.h"
 
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -495,6 +496,8 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordInputConfig,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordRedraw,
+                            base::Unretained(this)),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordColorMatrix,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
@@ -564,6 +567,12 @@ class FrameSinkBrokerTest : public testing::Test {
     redraws_.emplace_back(display_id, gamma_.size());
   }
 
+  // Fake for the browser's windows' compositors.
+  void RecordColorMatrix(int64_t display_id,
+                         const FrameSinkBroker::ColorMatrix& matrix) {
+    color_matrices_.emplace_back(display_id, matrix);
+  }
+
   // Fake for the ozone platform that owns the clipboard.
   void RecordClipboard(mojom::Clipboard clipboard,
                        const FrameSinkBroker::ClipboardContents& contents) {
@@ -593,6 +602,9 @@ class FrameSinkBrokerTest : public testing::Test {
   std::vector<std::pair<int64_t, mojom::GammaRampPtr>> gamma_;
   // Every display redrawn, in order, with the count of ramps set before it.
   std::vector<std::pair<int64_t, size_t>> redraws_;
+  // Every color matrix the producer set, in order.
+  std::vector<std::pair<int64_t, FrameSinkBroker::ColorMatrix>>
+      color_matrices_;
   std::vector<mojom::DeskInputPtr> inputs_;
   std::vector<std::string> input_configs_;
 
@@ -1448,6 +1460,46 @@ TEST_F(FrameSinkBrokerTest, ARampRedrawsItsDisplayOnceItIsSet) {
 
   // After the ramp, so the frame it asks for carries it.
   EXPECT_EQ(redraws_, (std::vector<std::pair<int64_t, size_t>>{{7, 1u}}));
+}
+
+TEST_F(FrameSinkBrokerTest, AProducersColorMatrixReachesItsDisplay) {
+  // A night light on a display driven in HDR: less blue and green, in linear
+  // light.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->SetColorMatrix(7, {1, 0, 0, 0, 0.8f, 0, 0, 0, 0.5f});
+  RunUntilIdle();
+
+  ASSERT_EQ(color_matrices_.size(), 1u);
+  EXPECT_EQ(color_matrices_[0].first, 7);
+  EXPECT_EQ(color_matrices_[0].second,
+            (FrameSinkBroker::ColorMatrix{1, 0, 0, 0, 0.8f, 0, 0, 0, 0.5f}));
+}
+
+TEST_F(FrameSinkBrokerTest, AColorMatrixOfTheWrongSizeIsABadMessage) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  mojo::test::BadMessageObserver bad_message;
+  remote->SetColorMatrix(7, {1, 0, 0, 0, 1, 0, 0, 0});
+
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("nine finite numbers"));
+  EXPECT_TRUE(color_matrices_.empty());
+}
+
+TEST_F(FrameSinkBrokerTest, AColorMatrixThatIsNotFiniteIsABadMessage) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  mojo::test::BadMessageObserver bad_message;
+  remote->SetColorMatrix(
+      7, {1, 0, 0, 0, std::numeric_limits<float>::quiet_NaN(), 0, 0, 0, 1});
+
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("nine finite numbers"));
+  EXPECT_TRUE(color_matrices_.empty());
 }
 
 TEST_F(FrameSinkBrokerTest, AProducersEmulatedInputReachesTheDesk) {
