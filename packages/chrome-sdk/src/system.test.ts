@@ -632,19 +632,40 @@ describe("window previews", () => {
 describe("shell commands", () => {
   it("streams each command `domicile send-shell` sends until it is stopped", async () => {
     const host = new FakeHost();
-    const listening = system(host).shellCommands();
+    const lock = { description: "Lock the desktop.", usage: "lock" };
+    const listening = system(host).shellCommands([lock]);
     host.reply(1, { kind: "started" });
     const commands = started(await listening);
-    host.event(1, { command: ["focus", "right"], kind: "shell_command" });
+    host.event(1, {
+      command: ["focus", "right"],
+      kind: "shell_command",
+      sent: 4,
+    });
     commands.stop();
     host.end(1, { kind: "stopped" });
 
     expect(host.calls).toStrictEqual([
-      [1, { call: "shell_commands" }],
+      [1, { call: "shell_commands", commands: [lock] }],
       [1, { call: "unwatch" }],
     ]);
     expect(await Array.fromAsync(commands.items)).toStrictEqual([
-      ["focus", "right"],
+      { sent: 4, words: ["focus", "right"] },
+    ]);
+  });
+
+  it("says whether this page ran a command, and why not", async () => {
+    const host = new FakeHost();
+    const calls = system(host);
+    const ran = calls.answerShellCommand(4, undefined);
+    host.reply(1, { kind: "set" });
+    const refused = calls.answerShellCommand(5, "no command `x`");
+    host.reply(2, { kind: "set" });
+
+    expect(await ran).toStrictEqual(Ok("set"));
+    expect(await refused).toStrictEqual(Ok("set"));
+    expect(host.calls).toStrictEqual([
+      [1, { call: "answer_shell_command", sent: 4 }],
+      [2, { call: "answer_shell_command", refused: "no command `x`", sent: 5 }],
     ]);
   });
 });

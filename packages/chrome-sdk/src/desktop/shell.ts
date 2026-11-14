@@ -19,8 +19,13 @@ export type ShellNamespace = {
    * says. Check them against the shell's declaration with `watchShellOptions`.
    */
   readonly options: Readonly<Record<string, unknown>> | undefined;
-  /** Hear each command `domicile send-shell` sends, as its words. */
+  /**
+   * Hear each command `domicile send-shell` sends, describing the commands
+   * this page runs. Answer each with `answer`.
+   */
   commands: System["shellCommands"];
+  /** Say this page ran the command numbered `sent`, or why not. */
+  answer: System["answerShellCommand"];
   on: On<ShellListeners>;
 };
 
@@ -31,13 +36,14 @@ export type ShellHost = Pick<
 
 export const shell = (
   host: ShellHost,
-  calls: Pick<System, "shellCommands">,
+  calls: Pick<System, "shellCommands" | "answerShellCommand">,
 ): ShellNamespace => {
   const optionsOf = memoizeLast((text: string | null) =>
     text === null ? undefined : optionsSchema.parse(JSON.parse(text)),
   );
   return {
-    commands: () => calls.shellCommands(),
+    answer: (sent, refused) => calls.answerShellCommand(sent, refused),
+    commands: (help) => calls.shellCommands(help),
     on: on<ShellListeners>({
       optionschange: (listener) =>
         hostEvent(host, "shelloptionschanged", () => listener()),

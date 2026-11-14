@@ -11,7 +11,9 @@
 use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
-use domicile_protocol::{DesktopStatus, ListedDisplay, ListedWindow, MonitorInfo, Scale, Theme};
+use domicile_protocol::{
+    DesktopStatus, ListedDisplay, ListedWindow, MonitorInfo, Scale, ShellCommandHelp, Theme,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -132,6 +134,9 @@ pub enum Request {
     /// Report the shell, the theme, the lock, the keymap, whether the screens
     /// are off, and what holds them on or captures the desktop.
     Status,
+    /// Report the commands the shell runs for [`Request::SendShell`], as its
+    /// pages described them.
+    ShellCommands,
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by any name a profile matches it by, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -305,6 +310,9 @@ pub enum Response {
         shell: PathBuf,
         status: DesktopStatus,
     },
+
+    /// Answers `shell_commands`.
+    ShellCommands { commands: Vec<ShellCommandHelp> },
 
     /// The compositor turned the monitors off or on.
     Powered,
@@ -498,6 +506,12 @@ pub type ListWindows<'a> = &'a dyn Fn() -> Result<Vec<ListedWindow>, String>;
 /// [`crate::compositor_socket::status`] in a desktop; a closure in tests.
 pub type AskStatus<'a> = &'a dyn Fn() -> Result<DesktopStatus, String>;
 
+/// Asks the compositor which commands the shell runs.
+///
+/// [`crate::compositor_socket::shell_commands`] in a desktop; a closure in
+/// tests.
+pub type ListShellCommands<'a> = &'a dyn Fn() -> Result<Vec<ShellCommandHelp>, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -536,6 +550,7 @@ pub struct Desktop<'a> {
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
     pub status: AskStatus<'a>,
+    pub shell_commands: ListShellCommands<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -717,6 +732,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 shell: desktop.module.to_path_buf(),
                 status,
             },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ShellCommands) => to_line(&match (desktop.shell_commands)() {
+            Ok(commands) => Response::ShellCommands { commands },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SleepDisplays { display }) => {

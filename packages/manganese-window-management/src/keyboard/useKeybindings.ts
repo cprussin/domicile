@@ -6,7 +6,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 
 import type { WindowAction } from "../window-state";
 import { WindowActionKind } from "../window-state";
-import { parseCommand } from "./command";
+import { COMMAND_HELP, parseCommand } from "./command";
 
 /** Report an unknown command. */
 const logToConsole = (error: string): void => {
@@ -57,18 +57,22 @@ export const useKeybindings = ({
 }: Options): void => {
   const binding = useRef<KeyBinding | undefined>(undefined);
 
-  const onCommand = useEffectEvent((args: readonly string[]) => {
-    parseCommand(args).match({
-      Err: report,
-      Ok: (action) => {
-        if (
-          (!launcherOpen || heardOverLauncher(action)) &&
-          (!overviewOpen || HEARD_OVER_OVERVIEW.has(action.kind))
-        ) {
-          onAction(action);
-        }
-      },
-    });
+  // A known command the launcher or overview holds back still counts as run:
+  // it is the shell's to hold back.
+  const onCommand = useEffectEvent((args: readonly string[]) =>
+    parseCommand(args).map((action) => {
+      if (
+        (!launcherOpen || heardOverLauncher(action)) &&
+        (!overviewOpen || HEARD_OVER_OVERVIEW.has(action.kind))
+      ) {
+        onAction(action);
+      }
+      return "ran" as const;
+    }),
+  );
+
+  const reportRefusal = useEffectEvent((why: string) => {
+    report(why);
   });
 
   const modeChanged = useEffectEvent((entered: string) => {
@@ -77,8 +81,12 @@ export const useKeybindings = ({
 
   useEffect(() => {
     const bound = bindKeys(domicile, keybindings, {
+      commands: COMMAND_HELP,
       onCommand,
       onModeChanged: modeChanged,
+      reportRefusal: (why) => {
+        reportRefusal(why);
+      },
     });
     binding.current = bound;
     return bound.unbind;

@@ -29,6 +29,7 @@
 {"type":"display_list","displays":[{"name":"drm-1","position":[0,0],"size":[1128,752],"scale":2,"mode":[2256,1504],"refresh_mhz":59999,"adaptive_sync":"off","hdr":"unsupported","peak_luminance":0,"sdr_white":0,"transform":"normal","names":["drm-1","eDP-1","BOE NE135A1M-NY1"],"lit":true}]}
 {"type":"window_list","windows":[{"id":"kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA","kind":"native","title":"notes.org","app":"emacs","pid":4242,"size":[640.0,480.0],"focused":true,"urgent":false},{"id":"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE","kind":"browser","title":"Inbox","app":null,"pid":null,"size":null,"focused":false,"urgent":false}]}
 {"type":"status","theme":"dark","locked":false,"keymap":"dvorak","screens_off":false,"held_awake_by":["Firefox"],"capturing":[{"id":2,"app_id":"org.example.Remote","kind":"input_capture","body":{"devices":{"keyboard":false,"pointer":false,"touchscreen":false}}}]}
+{"type":"shell_command_list","commands":[{"usage":"focus left|right|up|down","description":"Move focus to the neighboring window."}]}
 {"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
 {"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"],"settings":{"ddkjiahejlhfcafbddmgiahcphecmpfh":{"private":true,"file_access":false,"site_access":["github.com","*.example.com"]},"eimadpbcbfnmbkopoojfekhnkhdbieeh":{"user_scripts":true,"site_access":"on_click"}}}
 {"type":"force_dark","sites":["mail.google.com"]}
@@ -70,7 +71,7 @@
 {"type":"system_reply","id":10,"reply":{"kind":"failed","error":{"kind":"dbus","message":"org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable"}}}
 {"type":"system_event","id":9,"event":{"kind":"signal","sender":":1.4","path":"/org/mpris/MediaPlayer2","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","signature":"sa{sv}as","body":"[\"org.mpris.MediaPlayer2.Player\",{},[]]"}}
 {"type":"system_reply","id":11,"reply":{"kind":"sent"}}
-{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"]}}
+{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"],"sent":4}}
 {"type":"system_event","id":13,"event":{"kind":"unlock_refused","refusal":"too_soon","failures":3,"retry_in_ms":5000}}
 {"type":"system_reply","id":13,"reply":{"kind":"set"}}
 {"type":"system_event","id":14,"event":{"kind":"window_request","app_id":"app-1","request":{"kind":"maximize"}}}

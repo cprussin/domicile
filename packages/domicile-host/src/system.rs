@@ -290,7 +290,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
             true => Reach::Readout,
             false => Reach::Acts,
         },
-        SystemRequest::ShellCommands
+        // Answering a command is part of listening for it.
+        SystemRequest::ShellCommands { .. }
+        | SystemRequest::AnswerShellCommand { .. }
         | SystemRequest::IdleAfter { .. }
         | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
@@ -337,7 +339,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::Screenshot { .. }
         | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
-        | SystemRequest::ShellCommands
+        | SystemRequest::ShellCommands { .. }
+        | SystemRequest::AnswerShellCommand { .. }
         | SystemRequest::IdleAfter { .. }
         | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
@@ -392,7 +395,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         SystemRequest::Screenshot { .. }
         | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
-        | SystemRequest::ShellCommands
+        | SystemRequest::ShellCommands { .. }
+        | SystemRequest::AnswerShellCommand { .. }
         | SystemRequest::SendShell { .. }
         | SystemRequest::IdleAfter { .. }
         | SystemRequest::IdleBeforeBlanking { .. }
@@ -912,26 +916,38 @@ impl System {
                     })
                 })
             }
-            SystemRequest::ShellCommands => self.starting(id, |system| {
+            SystemRequest::ShellCommands { commands } => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
-                let listener = system.shell_commands.listen(Arc::new(move |command| {
-                    let Some(running) = running.upgrade() else {
-                        return;
-                    };
-                    // Under the lock, so no command is told before the reply
-                    // or after `Unwatch` ends it.
-                    let running = running.lock().unwrap();
-                    if matches!(running.get(&id), Some(Running::Listening(_))) {
-                        tell(HostMessage::SystemEvent {
-                            id,
-                            event: SystemEvent::ShellCommand {
-                                command: command.to_vec(),
-                            },
-                        });
-                    }
-                }));
+                let listener = system.shell_commands.listen(
+                    commands,
+                    Arc::new(move |(command, sent): &(Vec<String>, u64)| {
+                        let Some(running) = running.upgrade() else {
+                            return;
+                        };
+                        // Under the lock, so no command is told before the reply
+                        // or after `Unwatch` ends it.
+                        let running = running.lock().unwrap();
+                        if matches!(running.get(&id), Some(Running::Listening(_))) {
+                            tell(HostMessage::SystemEvent {
+                                id,
+                                event: SystemEvent::ShellCommand {
+                                    command: command.clone(),
+                                    sent: *sent,
+                                },
+                            });
+                        }
+                    }),
+                );
                 Ok((Running::Listening(listener), Box::new(|| {})))
             }),
+            SystemRequest::AnswerShellCommand { sent, refused } => {
+                self.shell_commands.answer(sent, refused);
+                (self.tell)(HostMessage::SystemReply {
+                    id,
+                    reply: SystemReply::Set,
+                });
+                Handled::Done
+            }
             SystemRequest::UnlockRefusals => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system.unlock_refusals.listen(Arc::new(move |refused| {
@@ -958,16 +974,31 @@ impl System {
                 Mark::BeforeBlanking(Duration::from_secs(seconds)),
             ),
             SystemRequest::SendShell { command } => {
-                let reply = match self.shell_commands.send(&command) {
-                    0 => failed(SystemError {
-                        kind: SystemErrorKind::Other,
-                        message: "no page of this desktop listens for commands; a shell hears \
-                                  them through bindKeys"
-                            .into(),
+                let tell = self.tell.clone();
+                let sent = self.shell_commands.send(
+                    &command,
+                    Box::new(move |outcome| {
+                        let reply = match outcome {
+                            Ok(()) => SystemReply::Sent,
+                            Err(message) => failed(SystemError {
+                                kind: SystemErrorKind::Other,
+                                message,
+                            }),
+                        };
+                        tell(HostMessage::SystemReply { id, reply });
                     }),
-                    _ => SystemReply::Sent,
-                };
-                (self.tell)(HostMessage::SystemReply { id, reply });
+                );
+                if !sent {
+                    (self.tell)(HostMessage::SystemReply {
+                        id,
+                        reply: failed(SystemError {
+                            kind: SystemErrorKind::Other,
+                            message: "no page of this desktop listens for commands; a shell \
+                                      hears them through bindKeys"
+                                .into(),
+                        }),
+                    });
+                }
                 Handled::Done
             }
             SystemRequest::SetWindowStates { app_id, states } => {

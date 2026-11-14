@@ -15,7 +15,7 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     ChromeMessage, DesktopStatus, HostMessage, ListedDisplay, ListedWindow, MonitorInfo,
-    SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
+    ShellCommandHelp, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
 };
 
 use crate::cli::MonitorMode;
@@ -214,6 +214,21 @@ pub fn status(socket: &Path, patience: Option<Duration>) -> Result<DesktopStatus
     let said = exchanged(socket, &[ChromeMessage::WhichStatus], patience)?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::Status(status)) => Ok(status),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Asks the compositor at `socket` which commands the shell runs.
+pub fn shell_commands(
+    socket: &Path,
+    patience: Option<Duration>,
+) -> Result<Vec<ShellCommandHelp>, CompositorError> {
+    let said = exchanged(socket, &[ChromeMessage::WhichShellCommands], patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::ShellCommandList { commands }) => Ok(commands),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

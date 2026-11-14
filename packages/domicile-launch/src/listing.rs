@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use domicile_protocol::{DesktopStatus, ListedDisplay, ListedWindow};
+use domicile_protocol::{DesktopStatus, ListedDisplay, ListedWindow, ShellCommandHelp};
 use serde::Serialize;
 
 /// Each display as a block: its names, mode, layout and color.
@@ -130,6 +130,22 @@ pub fn status_table(shell: &Path, status: &DesktopStatus) -> String {
     lines
         .iter()
         .map(|(question, answer)| format!("{question:<10}  {answer}\n"))
+        .collect()
+}
+
+/// Each command the shell runs, its usage lined up before what it does.
+pub fn shell_commands_table(commands: &[ShellCommandHelp]) -> String {
+    if commands.is_empty() {
+        return "The shell describes no commands.\n".to_string();
+    }
+    let width = commands
+        .iter()
+        .map(|command| command.usage.chars().count())
+        .max()
+        .unwrap_or(0);
+    commands
+        .iter()
+        .map(|command| format!("{:<width$}  {}\n", command.usage, command.description))
         .collect()
 }
 

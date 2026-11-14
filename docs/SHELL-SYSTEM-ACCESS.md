@@ -73,8 +73,9 @@ export const Shell = async (root, domicile) => {
 - `keyboard.keymaps()` streams the config's keymaps and the active one;
   `keyboard.selectKeymap()` switches to another
   ([SHELL-CONFIG.md](SHELL-CONFIG.md#keyboard)).
-- `shell.commands()` streams each command `domicile send-shell` sends.
-  `bindKeys` listens for you and passes them to `onCommand`; see
+- `shell.commands(help)` streams each command `domicile send-shell` sends,
+  numbered, and describes the commands the page runs; `shell.answer(sent,
+  why)` says whether it ran one. `bindKeys` does both for you; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
 - `session.unlockRefusals()` streams why each passphrase did not unlock the desktop
   ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#drawing-the-lock-screen)).
@@ -162,7 +163,7 @@ recorded output.
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
-  `dbus_call`, `dbus_match`, `screenshot`, `screen_record`, `preview_window`, `shell_commands`, `send_shell`,
+  `dbus_call`, `dbus_match`, `screenshot`, `screen_record`, `preview_window`, `shell_commands`, `answer_shell_command`, `send_shell`,
   `idle_after`, `idle_before_blanking`, `idle_holds`, `unlock_refusals`, `set_window_states`, `window_requests`,
   `virtual_monitor`, `keymaps`, `select_keymap`, `set_color_temperature`)
   or
@@ -207,7 +208,7 @@ that trust from reaching anything else.
       and `system-bluetooth`'s watch, matched field by field, so a lock screen
       shows the battery and Bluetooth and sets the brightness and volume
       ([LOCK.md](LOCK.md#lock-screen-readouts))
-    - `shell_commands` and `window_requests`, so a page reloaded while
+    - `shell_commands`, `answer_shell_command` and `window_requests`, so a page reloaded while
       locked hears them after unlock
     - `idle_after` and `idle_before_blanking`, so a lock screen can dim
     - `idle_holds`, like `idle_after`

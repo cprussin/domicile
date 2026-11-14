@@ -612,6 +612,16 @@ const statusSchema = z.looseObject({
   type: z.literal("status"),
 });
 
+// The commands the shell's pages run for `domicile send-shell`. Answers
+// `which_shell_commands` on the asking connection only, for
+// `domicile list-shell-commands`.
+const shellCommandListSchema = z.looseObject({
+  commands: z.array(
+    z.looseObject({ description: z.string(), usage: z.string() }),
+  ),
+  type: z.literal("shell_command_list"),
+});
+
 const boundShortcutSchema = z.looseObject({
   app_id: z.string(),
   chord: z.string(),
@@ -779,6 +789,7 @@ const systemEventSchema = z.looseObject({
     z.looseObject({
       command: z.array(z.string()),
       kind: z.literal("shell_command"),
+      sent: z.number(),
     }),
     z.looseObject({
       idle: z.boolean(),
@@ -866,6 +877,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   displayListSchema,
   windowListSchema,
   statusSchema,
+  shellCommandListSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -924,6 +936,7 @@ export type MonitorsMessage = z.infer<typeof monitorsSchema>;
 export type DisplayListMessage = z.infer<typeof displayListSchema>;
 export type WindowListMessage = z.infer<typeof windowListSchema>;
 export type StatusMessage = z.infer<typeof statusSchema>;
+export type ShellCommandListMessage = z.infer<typeof shellCommandListSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

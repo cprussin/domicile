@@ -82,8 +82,26 @@ path is printed. Exits 1 if it is dismissed or discarded.
 
 Run a shell command, as a keybinding bound to it does:
 `domicile send-shell workspace 2`. Manganese's commands are in
-[KEYS.md](/packages/manganese-window-management/docs/KEYS.md#commands). It fails
-when no page listens for commands.
+[KEYS.md](/packages/manganese-window-management/docs/KEYS.md#commands), and
+`list-shell-commands` prints whichever shell is running's. It fails, with the
+shell's reason, when no page listens for commands, when every page refuses
+the command (an unknown command or a wrong argument), or when none says it ran
+it within a second.
+
+## `domicile list-shell-commands [--json]`
+
+Print the commands `send-shell` takes, as the running shell describes them,
+each with what it does. `send-shell --help` prints the same.
+
+```
+focus left|right|up|down  Move focus to the neighboring window.
+workspace <name>          Show workspace <name>, creating it if needed.
+```
+
+A shell describes its commands when it listens for them (`bindKeys`'s
+`commands`; see
+[WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md)). `--json` prints the array of
+`{usage, description}` instead, for scripts.
 
 ## `domicile theme [light|dark|toggle]`
 
@@ -203,13 +221,14 @@ compositor would refuse it. home-manager runs it on the file it writes.
 
 ## `domicile help`
 
-Print the commands. `--help` and `-h` do the same, also after a verb.
+Print the commands. `--help` and `-h` do the same, also after a verb, except
+that `send-shell --help` prints the shell's own commands.
 
 ## While locked
 
 `screenshot`, `screen-record` and `send-shell` are refused while the desktop
 is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
-`wake-displays`, `list-displays`, `list-windows` and `status` work, and a `monitor` added before keeps resizing.
+`wake-displays`, `list-displays`, `list-windows`, `status` and `list-shell-commands` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

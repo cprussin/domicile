@@ -776,7 +776,8 @@ const Keys = () => {
   useEffect(
     () =>
       bindKeys(domicile, KEYS, {
-        onCommand: (args) => run(args), // ["focus", "right"]
+        commands: [{ usage: "focus left|right", description: "Move focus." }],
+        onCommand: (args) => run(args), // ["focus", "right"] -> Ok("ran") or Err(why)
         onModeChanged: setMode, // "resize", "default"
       }).unbind,
     [domicile],
@@ -806,7 +807,8 @@ bindKeys(
     },
   },
   {
-    onCommand: (args) => run(args),        // ["focus", "right"]
+    commands: [{ usage: "focus left|right", description: "Move focus." }],
+    onCommand: (args) => run(args),        // ["focus", "right"] -> Ok("ran") or Err(why)
     onModeChanged: (mode) => show(mode),   // "resize", "default"
   },
 );
@@ -829,13 +831,19 @@ bindKeys(
   keys are in by then; `unbind` runs any still armed. Gestures cannot hold an
   action. For example, `"Meta+Tab": KeyAction.Hold(SendShell(["peek"]),
   SendShell(["unpeek"]))`.
-- `domicile send-shell <word>…` from a terminal reaches `onCommand` too, on
-  every page bound. A page that cannot listen calls `report`, which logs by
+- `onCommand` returns `Ok("ran")`, or `Err(why)` for a command the shell does
+  not run. A pressed binding's `Err` goes to `reportRefusal`, which logs by
   default.
+- `domicile send-shell <word>…` from a terminal reaches `onCommand` too, on
+  every page bound. `send-shell` fails with the `Err`, or when no page answers
+  within a second. A page that cannot listen calls `report`, which logs by
+  default.
+- `commands` describes what `onCommand` runs: `domicile list-shell-commands`
+  (and `send-shell --help`) prints it.
 - It returns `{ setMode, unbind }`. `setMode` keeps one mode across a desktop
   of several pages.
-- Command meanings are yours. Document them in your README, as
-  [manganese does](/packages/shell-manganese/README.md). Manganese takes keys
+- Command meanings are yours. Describe them in `commands`, and in your README,
+  as [manganese does](/packages/shell-manganese/README.md). Manganese takes keys
   from `runManganese({ keybindings })`, defaulting to sway's.
 - While bound, a key bound in any mode is taken from every client. `unbind`
   gives the chords back (`domicile.keyboard.ungrab`). Each `grab` needs its

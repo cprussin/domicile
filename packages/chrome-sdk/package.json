@@ -178,6 +178,10 @@
       "types": "./dist/key-action.d.ts",
       "default": "./dist/key-action.js"
     },
+    "./shell-command": {
+      "types": "./dist/shell-command.d.ts",
+      "default": "./dist/shell-command.js"
+    },
     "./inhibitor-action": {
       "types": "./dist/inhibitor-action.d.ts",
       "default": "./dist/inhibitor-action.js"

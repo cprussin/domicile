@@ -367,8 +367,9 @@ running one. The first argument decides which.
 - The supervisor answers and routes. `load-shell` and `open`'s web links
   and apps go to the engine. `screenshot` and `send-shell` go to the compositor's chrome socket
   as the `screenshot` and `send_shell` system calls a page makes, and
-  `list-displays`, `list-windows` and `status` as `which_displays`,
-  `which_windows` and `which_status`
+  `list-displays`, `list-windows`, `status` and `list-shell-commands` as
+  `which_displays`, `which_windows`, `which_status` and
+  `which_shell_commands`
   (`domicile_launch::compositor_socket`). The connection never says `hello`,
   so it is not a chrome. See
   [KEYBINDINGS.md](KEYBINDINGS.md#commands-from-a-terminal) for where a

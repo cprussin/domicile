@@ -2,10 +2,10 @@
 
 use std::path::Path;
 
-use domicile_launch::listing::{displays_table, status_table, windows_table};
+use domicile_launch::listing::{displays_table, shell_commands_table, status_table, windows_table};
 use domicile_protocol::{
     AdaptiveSync, Capturing, CapturingKind, DesktopStatus, Devices, DisplayHdr, DisplayInfo,
-    DisplayTransform, ListedDisplay, ListedWindow, Theme, WindowKind,
+    DisplayTransform, ListedDisplay, ListedWindow, ShellCommandHelp, Theme, WindowKind,
 };
 
 #[test]
@@ -160,5 +160,27 @@ screens     off
 held awake  -
 capturing   -
 "
+    );
+}
+
+#[test]
+fn the_shells_commands_print_with_their_usage_lined_up() {
+    let help = |usage: &str, description: &str| ShellCommandHelp {
+        usage: usage.to_string(),
+        description: description.to_string(),
+    };
+    assert_eq!(
+        shell_commands_table(&[
+            help("focus left|right|up|down", "Move focus."),
+            help("lock", "Lock the desktop."),
+        ]),
+        "\
+focus left|right|up|down  Move focus.
+lock                      Lock the desktop.
+"
+    );
+    assert_eq!(
+        shell_commands_table(&[]),
+        "The shell describes no commands.\n"
     );
 }

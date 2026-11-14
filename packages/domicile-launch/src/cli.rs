@@ -37,6 +37,9 @@ Ask the running desktop:
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does
+  domicile list-shell-commands [--json] Print the commands send-shell takes,
+                                        as the shell describes them; also
+                                        send-shell --help
   domicile theme [light|dark|toggle]    Set the theme, or print it
   domicile sleep-displays [display]     Turn every monitor off until input,
                                         or one until it is woken
@@ -261,6 +264,7 @@ pub enum Listing {
     Displays,
     Windows,
     Status,
+    ShellCommands,
 }
 
 impl Listing {
@@ -270,6 +274,7 @@ impl Listing {
             Self::Displays => Request::Displays,
             Self::Windows => Request::Windows,
             Self::Status => Request::Status,
+            Self::ShellCommands => Request::ShellCommands,
         }
     }
 }
@@ -302,6 +307,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
     {
         return match (first.as_str(), args.next()) {
             ("help", Some(extra)) => Err(CliError::Extra { verb: first, extra }),
+            // What `send-shell` takes is up to the shell, so ask it.
+            ("send-shell", _) => Ok(Invocation::List {
+                listing: Listing::ShellCommands,
+                json: false,
+            }),
             _ => Ok(Invocation::Help),
         };
     }
@@ -585,6 +595,7 @@ fn verb(word: &str) -> Option<Verb> {
         "list-displays" => Some(Verb::Listing(Listing::Displays)),
         "list-windows" => Some(Verb::Listing(Listing::Windows)),
         "status" => Some(Verb::Listing(Listing::Status)),
+        "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
         _ => None,
     }
 }

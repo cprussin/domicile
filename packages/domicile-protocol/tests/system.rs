@@ -7,9 +7,9 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     Bus, ChromeMessage, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
-    ListedKeymap, PreviewedWindow, ResizeEdges, Scale, Signal, Stream, SystemEnd, SystemError,
-    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal, WindowRequest,
-    WindowState,
+    ListedKeymap, PreviewedWindow, ResizeEdges, Scale, ShellCommandHelp, Signal, Stream, SystemEnd,
+    SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal,
+    WindowRequest, WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -473,7 +473,35 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
         chrome(r#"{"type":"system_request","id":12,"request":{"call":"shell_commands"}}"#),
         ChromeMessage::SystemRequest {
             id: 12,
-            request: SystemRequest::ShellCommands,
+            request: SystemRequest::ShellCommands {
+                commands: Vec::new()
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","commands":[{"usage":"lock","description":"Lock the desktop."}]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ShellCommands {
+                commands: vec![ShellCommandHelp {
+                    usage: "lock".into(),
+                    description: "Lock the desktop.".into(),
+                }]
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":13,"request":{"call":"answer_shell_command","sent":4,"refused":"no command `x`"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 13,
+            request: SystemRequest::AnswerShellCommand {
+                sent: 4,
+                refused: Some("no command `x`".into()),
+            },
         }
     );
     assert_eq!(
@@ -499,9 +527,10 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
             id: 12,
             event: SystemEvent::ShellCommand {
                 command: vec!["focus".into(), "right".into()],
+                sent: 4,
             },
         }),
-        r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"]}}"#
+        r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"],"sent":4}}"#
     );
 }
 
