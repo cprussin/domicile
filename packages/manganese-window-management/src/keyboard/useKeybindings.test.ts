@@ -8,6 +8,7 @@ import { Direction } from "../direction";
 import type { WindowAction as Action } from "../window-state";
 import { WindowAction } from "../window-state";
 import { MediaKey } from "./media-key";
+import { Query } from "./query";
 import { useKeybindings } from "./useKeybindings";
 
 /** A sample of manganese's bindings. */
@@ -19,6 +20,7 @@ const KEYS: ShellKeybindings = {
     "Meta+r": KeyAction.Mode("resize"),
     "Meta+Shift+l": KeyAction.SendShell(["move", "right"]),
     "Meta+space": KeyAction.SendShell(["launcher"]),
+    "Meta+t": KeyAction.SendShell(["get-tree"]),
     "Meta+v": KeyAction.SendShell(["clipboard"]),
     "Meta+x": KeyAction.SendShell(["teleport"]),
     XF86AudioRaiseVolume: KeyAction.SendShell(["volume", "up"]),
@@ -47,9 +49,14 @@ const bound = (launcherOpen = false, overviewOpen = false) => {
   const acted: Action[] = [];
   const modes: string[] = [];
   const reported: string[] = [];
+  const asked: Query[] = [];
   const { rerender } = renderHook(
     ({ mode }: { mode: string }) => {
       useKeybindings({
+        answer: (query) => {
+          asked.push(query);
+          return "{}";
+        },
         domicile,
         keybindings: KEYS,
         launcherOpen,
@@ -68,7 +75,7 @@ const bound = (launcherOpen = false, overviewOpen = false) => {
     },
     { initialProps: { mode: "default" } },
   );
-  return { acted, modes, presses, reported, rerender };
+  return { acted, asked, modes, presses, reported, rerender };
 };
 
 describe("useKeybindings", () => {
@@ -118,6 +125,16 @@ describe("useKeybindings", () => {
 
     expect(acted).toStrictEqual([]);
     expect(reported).toStrictEqual(["manganese: no command `teleport`"]);
+  });
+
+  it("answers a query without acting, even over the launcher", () => {
+    const { acted, asked, presses, reported } = bound(true);
+
+    presses("Meta+t");
+
+    expect(asked).toStrictEqual([Query.Tree]);
+    expect(acted).toStrictEqual([]);
+    expect(reported).toStrictEqual([]);
   });
 
   it("says when a key enters a mode", () => {

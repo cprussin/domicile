@@ -2,10 +2,13 @@
 
 use std::path::Path;
 
-use domicile_launch::listing::{displays_table, shell_commands_table, status_table, windows_table};
+use domicile_launch::listing::{
+    bindings_table, displays_table, shell_commands_table, status_table, windows_table,
+};
 use domicile_protocol::{
     AdaptiveSync, Capturing, CapturingKind, DesktopStatus, Devices, DisplayHdr, DisplayInfo,
-    DisplayTransform, ListedDisplay, ListedWindow, ShellCommandHelp, Theme, WindowKind,
+    DisplayTransform, ListedDisplay, ListedWindow, ShellBinding, ShellCommandHelp, Theme,
+    WindowKind,
 };
 
 #[test]
@@ -183,4 +186,29 @@ lock                      Lock the desktop.
         shell_commands_table(&[]),
         "The shell describes no commands.\n"
     );
+}
+
+#[test]
+fn the_shells_bindings_print_mode_by_mode() {
+    let binding = |mode: &str, chord: &str, action: &str| ShellBinding {
+        mode: mode.to_string(),
+        chord: chord.to_string(),
+        action: action.to_string(),
+    };
+    assert_eq!(
+        bindings_table(&[
+            binding("default", "Meta+Left", "send-shell focus left"),
+            binding("default", "Meta+r", "mode resize"),
+            binding("resize", "Escape", "mode default"),
+        ]),
+        "\
+default
+  Meta+Left  send-shell focus left
+  Meta+r     mode resize
+
+resize
+  Escape     mode default
+"
+    );
+    assert_eq!(bindings_table(&[]), "The shell binds no keys.\n");
 }

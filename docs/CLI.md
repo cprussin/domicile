@@ -88,6 +88,14 @@ shell's reason, when no page listens for commands, when every page refuses
 the command (an unknown command or a wrong argument), or when none says it ran
 it within a second.
 
+A command may answer, and `send-shell` prints the answer. Manganese's queries
+answer with JSON, as `swaymsg -t get_workspaces` and `get_tree` do:
+
+```
+domicile send-shell get-workspaces | jq '.[] | select(.visible) | .name'
+domicile send-shell get-tree
+```
+
 ## `domicile list-shell-commands [--json]`
 
 Print the commands `send-shell` takes, as the running shell describes them,
@@ -102,6 +110,23 @@ A shell describes its commands when it listens for them (`bindKeys`'s
 `commands`; see
 [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md)). `--json` prints the array of
 `{usage, description}` instead, for scripts.
+
+## `domicile list-bindings [--json]`
+
+Print the running shell's keys and gestures in each binding mode, and what
+each runs.
+
+```
+default
+  Meta+Left    send-shell focus left
+  Meta+r       mode resize
+
+resize
+  Escape       mode default
+```
+
+Chords are in one spelling (`Shift+Meta+l` prints as `Meta+Shift+l`).
+`--json` prints the array of `{mode, chord, action}` instead, for scripts.
 
 ## `domicile theme [light|dark|toggle]`
 
@@ -228,7 +253,8 @@ that `send-shell --help` prints the shell's own commands.
 
 `screenshot`, `screen-record` and `send-shell` are refused while the desktop
 is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
-`wake-displays`, `list-displays`, `list-windows`, `status` and `list-shell-commands` work, and a `monitor` added before keeps resizing.
+`wake-displays`, `list-displays`, `list-windows`, `status`, `list-shell-commands` and
+`list-bindings` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

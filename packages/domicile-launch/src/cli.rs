@@ -36,10 +36,13 @@ Ask the running desktop:
   domicile open --which <file|url>      Print the app open would use
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
   domicile screen-record                Record the screen until the toolbar stops it
-  domicile send-shell <word>...         Run a shell command, as a keybinding does
+  domicile send-shell <word>...         Run a shell command, as a keybinding does,
+                                        and print what it answers
   domicile list-shell-commands [--json] Print the commands send-shell takes,
                                         as the shell describes them; also
                                         send-shell --help
+  domicile list-bindings [--json]       Print the shell's keys and gestures in
+                                        each binding mode, and what they run
   domicile theme [light|dark|toggle]    Set the theme, or print it
   domicile sleep-displays [display]     Turn every monitor off until input,
                                         or one until it is woken
@@ -265,6 +268,7 @@ pub enum Listing {
     Windows,
     Status,
     ShellCommands,
+    Bindings,
 }
 
 impl Listing {
@@ -275,6 +279,7 @@ impl Listing {
             Self::Windows => Request::Windows,
             Self::Status => Request::Status,
             Self::ShellCommands => Request::ShellCommands,
+            Self::Bindings => Request::ShellBindings,
         }
     }
 }
@@ -596,6 +601,7 @@ fn verb(word: &str) -> Option<Verb> {
         "list-windows" => Some(Verb::Listing(Listing::Windows)),
         "status" => Some(Verb::Listing(Listing::Status)),
         "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
+        "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         _ => None,
     }
 }

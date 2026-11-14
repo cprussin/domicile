@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DesktopStatus, ListedDisplay, ListedWindow, MonitorInfo, Scale, ShellCommandHelp, Theme,
+    DesktopStatus, ListedDisplay, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp,
+    Theme,
 };
 use serde::{Deserialize, Serialize};
 
@@ -137,6 +138,8 @@ pub enum Request {
     /// Report the commands the shell runs for [`Request::SendShell`], as its
     /// pages described them.
     ShellCommands,
+    /// Report the keys and gestures the shell binds, in each binding mode.
+    ShellBindings,
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by any name a profile matches it by, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -244,10 +247,12 @@ pub enum Response {
     /// dialog, so no file was saved.
     Copied,
 
-    /// The compositor sent the command to every page listening for one.
-    ///
-    /// The shell does not report whether it knew the command.
-    Sent,
+    /// A page of the shell ran the command, and printed `output` if it said
+    /// anything, such as a query's JSON.
+    Sent {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+    },
 
     /// Answers `settings_files`.
     SettingsFiles { files: SettingsFiles },
@@ -314,6 +319,9 @@ pub enum Response {
     /// Answers `shell_commands`.
     ShellCommands { commands: Vec<ShellCommandHelp> },
 
+    /// Answers `shell_bindings`.
+    ShellBindings { bindings: Vec<ShellBinding> },
+
     /// The compositor turned the monitors off or on.
     Powered,
 
@@ -376,7 +384,7 @@ pub type ScreenRecord<'a> = &'a dyn Fn() -> Result<Option<PathBuf>, String>;
 /// Tells the compositor to send the shell a command.
 ///
 /// [`crate::compositor_socket::send_shell`] in a desktop; a closure in tests.
-pub type SendShell<'a> = &'a dyn Fn(&[String]) -> Result<(), String>;
+pub type SendShell<'a> = &'a dyn Fn(&[String]) -> Result<Option<String>, String>;
 
 /// Asks the engine for every permission's default and every site's own
 /// setting.
@@ -512,6 +520,12 @@ pub type AskStatus<'a> = &'a dyn Fn() -> Result<DesktopStatus, String>;
 /// tests.
 pub type ListShellCommands<'a> = &'a dyn Fn() -> Result<Vec<ShellCommandHelp>, String>;
 
+/// Asks the compositor which keys and gestures the shell binds.
+///
+/// [`crate::compositor_socket::shell_bindings`] in a desktop; a closure in
+/// tests.
+pub type ListShellBindings<'a> = &'a dyn Fn() -> Result<Vec<ShellBinding>, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -551,6 +565,7 @@ pub struct Desktop<'a> {
     pub windows: ListWindows<'a>,
     pub status: AskStatus<'a>,
     pub shell_commands: ListShellCommands<'a>,
+    pub shell_bindings: ListShellBindings<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -616,7 +631,7 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SendShell { command }) => to_line(&match (desktop.send)(&command) {
-            Ok(()) => Response::Sent,
+            Ok(output) => Response::Sent { output },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SettingsFiles) => to_line(&Response::SettingsFiles {
@@ -736,6 +751,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::ShellCommands) => to_line(&match (desktop.shell_commands)() {
             Ok(commands) => Response::ShellCommands { commands },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ShellBindings) => to_line(&match (desktop.shell_bindings)() {
+            Ok(bindings) => Response::ShellBindings { bindings },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SleepDisplays { display }) => {

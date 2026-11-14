@@ -813,7 +813,7 @@ mod shell_commands {
     use std::time::Duration;
 
     use domicile_host::shell_commands::ShellCommands;
-    use domicile_protocol::ShellCommandHelp;
+    use domicile_protocol::{ShellBinding, ShellCommandHelp};
 
     use super::*;
 
@@ -828,7 +828,10 @@ mod shell_commands {
     }
 
     fn listening(commands: Vec<ShellCommandHelp>) -> SystemRequest {
-        SystemRequest::ShellCommands { commands }
+        SystemRequest::ShellCommands {
+            commands,
+            bindings: Vec::new(),
+        }
     }
 
     fn send() -> SystemRequest {
@@ -881,11 +884,62 @@ mod shell_commands {
             SystemRequest::AnswerShellCommand {
                 sent,
                 refused: None,
+                output: None,
             },
         );
 
         assert_eq!(reply(&page_heard, 8), SystemReply::Set);
-        assert_eq!(reply(&sender_heard, 1), SystemReply::Sent);
+        assert_eq!(reply(&sender_heard, 1), SystemReply::Sent { output: None });
+    }
+
+    #[test]
+    fn what_the_page_that_ran_a_command_printed_reaches_the_sender() {
+        // A query such as Manganese's `get-tree` answers with its JSON.
+        let commands = commands();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, listening(Vec::new()));
+        reply(&page_heard, 7);
+
+        sender.handle(1, send());
+        let sent = heard_sent(&page_heard);
+        page.handle(
+            8,
+            SystemRequest::AnswerShellCommand {
+                sent,
+                refused: None,
+                output: Some("[]".into()),
+            },
+        );
+
+        assert_eq!(
+            reply(&sender_heard, 1),
+            SystemReply::Sent {
+                output: Some("[]".into())
+            }
+        );
+    }
+
+    #[test]
+    fn each_listening_page_s_bindings_are_listed_until_it_stops() {
+        let commands = commands();
+        let ((page, page_heard), _) = two_pages(&commands);
+        let lock = ShellBinding {
+            mode: "default".into(),
+            chord: "Meta+l".into(),
+            action: "send-shell lock".into(),
+        };
+        page.handle(
+            7,
+            SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: vec![lock.clone()],
+            },
+        );
+        reply(&page_heard, 7);
+        assert_eq!(commands.bindings(), vec![lock]);
+
+        page.handle(7, SystemRequest::Unwatch);
+        assert_eq!(commands.bindings(), Vec::new());
     }
 
     #[test]
@@ -903,6 +957,7 @@ mod shell_commands {
             SystemRequest::AnswerShellCommand {
                 sent,
                 refused: Some("no command `focus right`".into()),
+                output: None,
             },
         );
 
@@ -1002,7 +1057,8 @@ mod shell_commands {
         assert_eq!(
             reach(&SystemRequest::AnswerShellCommand {
                 sent: 1,
-                refused: None
+                refused: None,
+                output: None,
             }),
             Reach::Listens
         );
@@ -1907,6 +1963,7 @@ mod apps {
             },
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
+                bindings: Vec::new(),
             },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
@@ -1914,6 +1971,7 @@ mod apps {
             SystemRequest::AnswerShellCommand {
                 sent: 1,
                 refused: None,
+                output: None,
             },
             SystemRequest::IdleAfter { seconds: 1 },
             SystemRequest::IdleBeforeBlanking { seconds: 1 },

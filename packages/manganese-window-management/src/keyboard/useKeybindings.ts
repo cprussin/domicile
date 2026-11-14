@@ -1,12 +1,20 @@
+import type { Result } from "@cprussin/option-result";
+import { Ok } from "@cprussin/option-result";
 import type { KeyBinding } from "@domicile-desktop/sdk/bind-keys";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
+import type { CommandRan } from "@domicile-desktop/sdk/shell-command";
 import { useEffect, useEffectEvent, useRef } from "react";
-
 import type { WindowAction } from "../window-state";
 import { WindowActionKind } from "../window-state";
+
 import { COMMAND_HELP, parseCommand } from "./command";
+import type { Query } from "./query";
+import { parseQuery, QUERY_HELP } from "./query";
+
+/** Every command and query, for `domicile list-shell-commands`. */
+const HELP = [...COMMAND_HELP, ...QUERY_HELP];
 
 /** Report an unknown command. */
 const logToConsole = (error: string): void => {
@@ -28,6 +36,8 @@ type Options = {
   onAction: (action: WindowAction) => void;
   /** Called when a key on this page enters a binding mode. */
   onModeChanged: (mode: string) => void;
+  /** Answers a query such as `get-tree` with JSON. */
+  answer: (query: Query) => string;
   /** Reports unknown commands. Injectable for tests. */
   report?: typeof logToConsole;
 };
@@ -46,6 +56,7 @@ type Options = {
  * Binds once per host and keybindings, not per render.
  */
 export const useKeybindings = ({
+  answer,
   domicile,
   keybindings,
   launcherOpen,
@@ -58,17 +69,24 @@ export const useKeybindings = ({
   const binding = useRef<KeyBinding | undefined>(undefined);
 
   // A known command the launcher or overview holds back still counts as run:
-  // it is the shell's to hold back.
-  const onCommand = useEffectEvent((args: readonly string[]) =>
-    parseCommand(args).map((action) => {
-      if (
-        (!launcherOpen || heardOverLauncher(action)) &&
-        (!overviewOpen || HEARD_OVER_OVERVIEW.has(action.kind))
-      ) {
-        onAction(action);
+  // it is the shell's to hold back. A query changes nothing, so it always
+  // answers.
+  const onCommand = useEffectEvent(
+    (args: readonly string[]): Result<CommandRan, string> => {
+      const query = parseQuery(args);
+      if (query !== undefined) {
+        return Ok({ output: answer(query) });
       }
-      return "ran" as const;
-    }),
+      return parseCommand(args).map((action) => {
+        if (
+          (!launcherOpen || heardOverLauncher(action)) &&
+          (!overviewOpen || HEARD_OVER_OVERVIEW.has(action.kind))
+        ) {
+          onAction(action);
+        }
+        return "ran" as const;
+      });
+    },
   );
 
   const reportRefusal = useEffectEvent((why: string) => {
@@ -81,7 +99,7 @@ export const useKeybindings = ({
 
   useEffect(() => {
     const bound = bindKeys(domicile, keybindings, {
-      commands: COMMAND_HELP,
+      commands: HELP,
       onCommand,
       onModeChanged: modeChanged,
       reportRefusal: (why) => {

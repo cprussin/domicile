@@ -15,7 +15,8 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     ChromeMessage, DesktopStatus, HostMessage, ListedDisplay, ListedWindow, MonitorInfo,
-    ShellCommandHelp, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
+    ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind, SystemReply, SystemRequest,
+    Theme,
 };
 
 use crate::cli::MonitorMode;
@@ -101,18 +102,18 @@ pub fn screen_record(socket: &Path) -> Result<Option<PathBuf>, CompositorError> 
 }
 
 /// Tells the compositor at `socket` to send `command` to every page listening
-/// for shell commands.
+/// for shell commands. Returns what the page that ran it printed, if anything.
 pub fn send_shell(
     socket: &Path,
     command: &[String],
     patience: Option<Duration>,
-) -> Result<(), CompositorError> {
+) -> Result<Option<String>, CompositorError> {
     let request = SystemRequest::SendShell {
         command: command.to_vec(),
     };
     let answer = called(socket, request, patience)?;
     match answer.reply {
-        SystemReply::Sent => Ok(()),
+        SystemReply::Sent { output } => Ok(output),
         reply => Err(not_done(socket, reply, answer.said)),
     }
 }
@@ -229,6 +230,21 @@ pub fn shell_commands(
     let said = exchanged(socket, &[ChromeMessage::WhichShellCommands], patience)?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::ShellCommandList { commands }) => Ok(commands),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Asks the compositor at `socket` which keys and gestures the shell binds.
+pub fn shell_bindings(
+    socket: &Path,
+    patience: Option<Duration>,
+) -> Result<Vec<ShellBinding>, CompositorError> {
+    let said = exchanged(socket, &[ChromeMessage::WhichShellBindings], patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::ShellBindingList { bindings }) => Ok(bindings),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

@@ -174,6 +174,7 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
         3,
         SystemRequest::ShellCommands {
             commands: Vec::new(),
+            bindings: Vec::new(),
         },
     );
     assert_eq!(reply(&mut chrome, 3), SystemReply::Started);
@@ -214,6 +215,7 @@ fn a_command_sent_on_the_socket_reaches_every_page_listening() {
             7,
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
+                bindings: Vec::new(),
             },
         );
         assert_eq!(reply(page, 7), SystemReply::Started);
@@ -256,6 +258,7 @@ fn a_command_sent_on_the_socket_reaches_every_page_listening() {
         SystemRequest::AnswerShellCommand {
             sent,
             refused: None,
+            output: None,
         },
     );
     let mut answer = String::new();

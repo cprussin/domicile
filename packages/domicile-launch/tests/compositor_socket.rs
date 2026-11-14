@@ -9,8 +9,8 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    displays, monitors, power_displays, screen_record, screenshot, send_shell, shell_commands,
-    status, theme, virtual_monitor, windows, CompositorError,
+    displays, monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
+    shell_commands, status, theme, virtual_monitor, windows, CompositorError,
 };
 use domicile_launch::control::Shot;
 use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme};
@@ -245,16 +245,20 @@ fn the_compositor_is_told_to_send_the_command_and_says_it_did() {
     let heard = a_compositor(
         &path,
         Duration::ZERO,
-        Some("{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"sent\"}}\n"),
+        Some(
+            "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"sent\",\
+             \"output\":\"done\"}}\n",
+        ),
     );
 
+    // What the shell printed comes back, for `domicile send-shell` to print.
     assert_eq!(
         send_shell(
             &path,
             &["focus".to_string(), "right".to_string()],
             Some(BRIEFLY)
         ),
-        Ok(())
+        Ok(Some("done".to_string()))
     );
     assert_eq!(
         heard.join().expect("the compositor was listening"),
@@ -435,6 +439,17 @@ fn the_compositor_is_asked_its_displays_and_windows_and_says_them() {
     );
     let commands = shell_commands(&path, Some(BRIEFLY)).expect("the compositor said");
     assert_eq!(commands[0].usage, "lock");
+    heard.join().expect("the compositor was listening");
+
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_shell_bindings",
+        "{\"type\":\"shell_binding_list\",\"bindings\":[{\"mode\":\"default\",\
+         \"chord\":\"Meta+l\",\"action\":\"send-shell lock\"}]}\n",
+    );
+    let bindings = shell_bindings(&path, Some(BRIEFLY)).expect("the compositor said");
+    assert_eq!(bindings[0].chord, "Meta+l");
     heard.join().expect("the compositor was listening");
 }
 

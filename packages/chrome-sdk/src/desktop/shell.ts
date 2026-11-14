@@ -21,10 +21,13 @@ export type ShellNamespace = {
   readonly options: Readonly<Record<string, unknown>> | undefined;
   /**
    * Hear each command `domicile send-shell` sends, describing the commands
-   * this page runs. Answer each with `answer`.
+   * this page runs and the keys that run them. Answer each with `answer`.
    */
   commands: System["shellCommands"];
-  /** Say this page ran the command numbered `sent`, or why not. */
+  /**
+   * Say this page ran the command numbered `sent`, with what it printed if
+   * anything, or why not.
+   */
   answer: System["answerShellCommand"];
   on: On<ShellListeners>;
 };
@@ -42,8 +45,8 @@ export const shell = (
     text === null ? undefined : optionsSchema.parse(JSON.parse(text)),
   );
   return {
-    answer: (sent, refused) => calls.answerShellCommand(sent, refused),
-    commands: (help) => calls.shellCommands(help),
+    answer: (sent, ran) => calls.answerShellCommand(sent, ran),
+    commands: (help, bindings) => calls.shellCommands(help, bindings),
     on: on<ShellListeners>({
       optionschange: (listener) =>
         hostEvent(host, "shelloptionschanged", () => listener()),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { Ok } from "@cprussin/option-result";
 import { FakeDomicileHost } from "../fake-host";
 import { desktop } from "./desktop";
 
@@ -26,10 +27,10 @@ describe("shell", () => {
   it("listens for commands through the compositor, and answers them", async () => {
     const fake = new FakeDomicileHost();
     const shell = desktop(fake.host).shell;
-    shell.commands([]).catch(() => {
+    shell.commands([], []).catch(() => {
       /* never answered */
     });
-    shell.answer(4, undefined).catch(() => {
+    shell.answer(4, Ok("ran")).catch(() => {
       /* never answered */
     });
     await Promise.resolve();
@@ -38,7 +39,7 @@ describe("shell", () => {
       [
         "callSystem",
         1,
-        JSON.stringify({ call: "shell_commands", commands: [] }),
+        JSON.stringify({ bindings: [], call: "shell_commands", commands: [] }),
       ],
       [
         "callSystem",

@@ -36,6 +36,7 @@
     "./grab-cursor-styles": "./src/grab-cursor-styles.ts",
     "./keyboard/commands": "./src/keyboard/commands.ts",
     "./keyboard/media-key": "./src/keyboard/media-key.ts",
+    "./keyboard/query": "./src/keyboard/query.ts",
     "./keyboard/useKeybindings": "./src/keyboard/useKeybindings.ts",
     "./keyboard/useModifiers": "./src/keyboard/useModifiers.ts",
     "./overview/OverviewBackdrop": "./src/overview/OverviewBackdrop.tsx",
