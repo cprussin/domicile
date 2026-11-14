@@ -1,5 +1,13 @@
 # @domicile-desktop/builder
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [3600d3b]
+- Updated dependencies [4799f21]
+  - @domicile-desktop/component-library@2.1.1
+
 ## 0.1.2
 
 ### Patch Changes

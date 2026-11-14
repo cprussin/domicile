@@ -1,5 +1,23 @@
 # @domicile-desktop/manganese-quick-settings
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [3600d3b]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [4799f21]
+  - @domicile-desktop/component-library@2.1.1
+  - @domicile-desktop/react@0.2.0
+  - @domicile-desktop/manganese-bar-module-battery@1.1.3
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.3
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.3
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.3
+  - @domicile-desktop/manganese-bar-module-network@1.1.3
+  - @domicile-desktop/manganese-bar-module-volume@2.0.3
+  - @domicile-desktop/manganese-bar@1.1.3
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.3
+
 ## 1.0.2
 
 ### Patch Changes

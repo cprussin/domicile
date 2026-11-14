@@ -1,5 +1,50 @@
 # @domicile-desktop/app-settings
 
+## 0.2.0
+
+### Minor Changes
+
+- 60e7c7e: Settings shows "Not supported" in place of the HDR switch for a plugged-in monitor that can't show HDR. It learns which monitors those are from the new `which_monitors` question, which the compositor answers with each lit monitor's names and HDR state.
+- 8ff882e: Extensions can run in private windows. Each extension's chrome://extensions settings are now yours to set: whether it runs in private windows and on local files, whether it may run user scripts, and which sites it runs on (when you click it, on specific sites, or on all sites). Set them in the config's `extensions.settings`, by extension id, or in the Settings app, which shows the ones an extension can use while it is on and moves Options and Uninstall to the bottom of its row. A setting the config drops goes back to Chrome's default.
+
+### Patch Changes
+
+- 04baee9: Settings' Displays page can turn on HDR for each monitor in a profile and set
+  how bright everyday content looks while it's on. On a narrow window, each
+  monitor's settings stack into labeled lines.
+- c454256: A display profile can drive a monitor in HDR (HDR10) with `hdr: true`, and set how bright ordinary content's white is there with `sdr_white` (203 cd/m² by default). It is off by default and used only where the monitor's EDID takes PQ and its connector scans out in 10 bits. The SDK's config types gain both fields, and Settings reads profiles that set them instead of refusing them.
+- 94e5909: Settings reads every key the compositor reads, such as `input.mouse`, `input.touchpad` and `terminal`, instead of refusing the config. Its schema is now `@domicile-desktop/sdk/config-schema`, a Zod schema generated from the compositor's config with its defaults filled in.
+- 996cc29: A shell can hear when nobody has been at the desk for a time it chooses (`session.idleAfter`), or a time before the screens blank (`session.idleBeforeBlanking`). These replace `session.idleWarnings` and the `idle.warn_before_seconds` setting, which are gone.
+- e821d1f: A display profile can turn on adaptive sync (variable refresh rate, FreeSync, G-Sync Compatible) per monitor with `adaptive_sync: true`. It is off by default, asked for only where the monitor and driver report support, and retried without it when the driver refuses the modeset. The SDK's `Display` gains `adaptiveSync` (`unsupported`, `off` or `on`), which says what the hardware is doing. Settings now reads profiles that set `refresh` or `adaptive_sync` instead of refusing them.
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [c454256]
+- Updated dependencies [d566f68]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [87ac040]
+- Updated dependencies [3600d3b]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [3e37020]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [4799f21]
+- Updated dependencies [2a1913f]
+- Updated dependencies [94e5909]
+- Updated dependencies [da632d6]
+- Updated dependencies [a5ade39]
+- Updated dependencies [0a4d218]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [8c477cc]
+- Updated dependencies [996cc29]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [8ff882e]
+- Updated dependencies [25522ef]
+- Updated dependencies [e821d1f]
+- Updated dependencies [19cc2c5]
+  - @domicile-desktop/sdk@2.3.0
+  - @domicile-desktop/component-library@2.1.1
+  - @domicile-desktop/react@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes
