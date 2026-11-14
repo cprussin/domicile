@@ -16,6 +16,7 @@ const RESTACKING = {
 // The new depth is set at 51% so it lands right after the furthest point.
 // Interpolated from 50% to 100%, it would change too late, after the windows
 // overlap again.
+// main-thread animation: steps the depth once at 51%; nothing eases.
 const RESTACKING_DEPTH = {
   "0%, 50%": { zIndex: "var(--restack-from)" },
   "51%, 100%": { zIndex: "var(--restack-to)" },
@@ -110,6 +111,9 @@ export const windowManagementPreset = definePreset({
         },
         // Fades in as the contents start to shrink, so the shadow does not
         // appear in one frame.
+        // main-thread animation: the tab edge is drawn on the window element
+        // itself, which holds no layer to fade instead; it runs only while a
+        // tab opens or closes.
         windowClosingTabEdge: {
           "0%": { boxShadow: "none" },
           "30%": { boxShadow: TAB_EDGE },
@@ -121,6 +125,8 @@ export const windowManagementPreset = definePreset({
         // Both hold a fixed depth throughout (see `placement.ts`). Otherwise
         // the hidden tab would keep the shown tab's depth until the fade ends
         // (`settlingStyles`) and could draw over the tab being revealed.
+        // main-thread animation: holds a fixed depth for the motion; the value
+        // never changes, so nothing repaints.
         windowConcealing: {
           "0%": { zIndex: "-1" },
           "100%": { zIndex: "-1" },
@@ -130,6 +136,8 @@ export const windowManagementPreset = definePreset({
         // tab a switch reveals, keep it while the other tab fades over or
         // under them, whatever `settlingStyles` does with their depth, so no
         // other hidden tab shows through.
+        // main-thread animation: holds a fixed depth for the motion; the value
+        // never changes, so nothing repaints.
         windowHeldTiled: {
           "0%": { zIndex: "0" },
           "100%": { zIndex: "0" },
@@ -174,6 +182,9 @@ export const windowManagementPreset = definePreset({
         },
         // Fades out as the contents settle, so the shadow does not vanish in
         // one frame.
+        // main-thread animation: the tab edge is drawn on the window element
+        // itself, which holds no layer to fade instead; it runs only while a
+        // tab opens or closes.
         windowOpeningTabEdge: {
           "0%": { boxShadow: TAB_EDGE },
           "70%": { boxShadow: TAB_EDGE },

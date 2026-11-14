@@ -280,7 +280,6 @@ export const domicilePreset = definePreset({
             transition: `
               color {durations.fastest} {easings.linear},
               border-color {durations.fastest} {easings.linear},
-              box-shadow {durations.fastest} {easings.linear},
               background-color {durations.fastest} {easings.linear},
               outline-color {durations.fast} {easings.linear},
               opacity {durations.slow} {easings.out},

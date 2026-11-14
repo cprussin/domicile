@@ -460,6 +460,8 @@ export const settlingStyles = cva({
           "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
       },
       true: {
+        // main-thread animation: a lowered depth steps once at the end;
+        // nothing eases.
         transition:
           "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, z-index {durations.fast} step-end",
       },

@@ -276,6 +276,8 @@ const drawerStyles = css({
   },
   blockSize: "var(--collapsible-panel-height)",
   overflow: "hidden",
+  // main-thread animation: opens to its details' height once, moving what is
+  // below.
   transition: "block-size {durations.normal} {easings.out}",
 });
 
