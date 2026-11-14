@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/mojom/electron_frame.mojom.h"
@@ -30,11 +31,17 @@ class ElectronPage final : public content::WebContentsObserver,
   ElectronPage& operator=(const ElectronPage&) = delete;
   ~ElectronPage() override;
 
-  // Makes `contents` an Electron window's page whose documents run `preload`
-  // and make `calls`. Before its first navigation.
+  // Makes `contents` an Electron window's page whose documents run `preload`,
+  // make `calls` and load through `session`. Before its first navigation.
   static void Attach(content::WebContents& contents,
                      std::string preload,
-                     ElectronPageCalls calls);
+                     ElectronPageCalls calls,
+                     base::WeakPtr<ElectronSession> session);
+
+  // The session `contents` loads through when it is an Electron window's
+  // page and its app still runs; otherwise null.
+  static base::WeakPtr<ElectronSession> SessionOf(
+      content::WebContents& contents);
 
   // The app's IPC to the page, each dropped while no document with the
   // preload is up, as nothing in the page could hear it. webContents.send:
@@ -70,7 +77,8 @@ class ElectronPage final : public content::WebContentsObserver,
 
   ElectronPage(content::WebContents* contents,
                std::string preload,
-               ElectronPageCalls calls);
+               ElectronPageCalls calls,
+               base::WeakPtr<ElectronSession> session);
 
   // The page's arguments as a list, or nothing after reporting the renderer.
   std::optional<base::ListValue> ArgsFrom(const std::string& args_json);
@@ -85,6 +93,7 @@ class ElectronPage final : public content::WebContentsObserver,
 
   const std::string preload_;
   const ElectronPageCalls calls_;
+  const base::WeakPtr<ElectronSession> session_;
   // The document that last committed with the preload, or is about to.
   mojo::AssociatedRemote<mojom::ElectronFrame> frame_;
   mojo::AssociatedReceiver<mojom::ElectronFrameHost> receiver_{this};

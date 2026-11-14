@@ -59,12 +59,15 @@ bool ConnectedByUs(const net::UnixDomainServerSocket::Credentials& peer) {
 // The desk as an Electron app sees it: the shell profile's browser windows.
 class ChromeElectronDesk final : public ElectronDesk {
  public:
-  std::optional<std::string> Open(const GURL& url,
-                                  const ElectronHello& hello,
-                                  const std::string& preload,
-                                  ElectronPageCalls calls) override {
-    return OpenElectronWindow(url, hello.app_id, hello.partition, preload,
-                              std::move(calls));
+  std::optional<std::string> Open(
+      const GURL& url,
+      const std::string& app_id,
+      const WebViewPartition& partition,
+      const std::string& preload,
+      ElectronPageCalls calls,
+      base::WeakPtr<ElectronSession> session) override {
+    return OpenElectronWindow(url, app_id, partition, preload, std::move(calls),
+                              std::move(session));
   }
   void Load(const std::string& id, const GURL& url) override {
     LoadBrowserWindow(id, url);
