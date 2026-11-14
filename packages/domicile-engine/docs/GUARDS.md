@@ -31,6 +31,7 @@ inside the toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)
 | `under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU, the only setup that can import a dmabuf |
 | `guard_webview_devtools.py` | sends keys and clicks to a running engine over the debugging port |
 | `guard-shell-pdf-viewer.py` | asks Chrome's PDF viewer frame, over the debugging port, whether it started |
+| `guard-pdf-after-hiding.py` | screenshots the shell over the debugging port, hides and shows its `<webview>`, and counts a PDF page's white pixels either side |
 | `guard-webview-guest-page.py` | the guest page for the keyboard and click guards |
 | `lib-annotate.sh` | reports where a guard stopped as a GitHub annotation |
 | `lib-last-words.sh` | prints the end of an engine's log, reaching back to a crash's fatal line |
@@ -87,6 +88,7 @@ Headless.
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
 | `guard-shell-pdf.sh` | Chrome's PDF viewer starts on a PDF from `domicile://home/` in the shell's `<iframe>`, as the launcher's preview shows one (patch 0154) |
+| `guard-pdf-after-hiding.sh` | a PDF in a `<webview>` draws its page again after the `<webview>` is hidden and shown, as a tab switched away and back: the viewer frame un-throttles the page's frame (patch 0213) |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
 | `guard-browser-brand.sh` | sites are told the engine is Google Chrome in `navigator.userAgentData` and `Sec-CH-UA` (patch 0157); `Chromium` is the control |
 | `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
