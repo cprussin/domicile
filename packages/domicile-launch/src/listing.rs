@@ -55,6 +55,7 @@ pub fn windows_table(windows: &[ListedWindow]) -> String {
                 (false, true) => " (urgent)",
                 (false, false) => "",
             };
+            let private = if window.private { " (private)" } else { "" };
             [
                 window.id.clone(),
                 wire_word(window.kind),
@@ -66,7 +67,7 @@ pub fn windows_table(windows: &[ListedWindow]) -> String {
                     || "-".to_string(),
                     |[width, height]| format!("{}x{}", width.round(), height.round()),
                 ),
-                format!("{title}{state}"),
+                format!("{title}{state}{private}"),
             ]
         }))
         .collect();

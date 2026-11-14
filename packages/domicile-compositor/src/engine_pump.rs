@@ -243,6 +243,8 @@ impl DomicileCompositor {
                                 id: window.id.clone(),
                                 title: window.title.clone(),
                                 app_id: window.app_id.clone(),
+                                url: window.url.clone(),
+                                private: window.private,
                             })
                             .collect(),
                     );

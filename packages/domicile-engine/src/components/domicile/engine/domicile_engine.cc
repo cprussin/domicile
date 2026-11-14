@@ -977,7 +977,9 @@ class BrowserWindows : public mojom::BrowserWindowListObserver {
       event.browser_windows.push_back(
           EngineBrowserWindow{.id = std::move(window->id),
                               .title = std::move(window->title),
-                              .app_id = std::move(window->app_id)});
+                              .app_id = std::move(window->app_id),
+                              .url = std::move(window->url),
+                              .off_the_record = window->off_the_record});
     }
     queue_->Push(event);
   }
@@ -1323,9 +1325,25 @@ struct DomicileEngine {
           }
           break;
         case domicile::EngineEvent::Type::kBrowserWindows:
-          if (callbacks_.browser_windows) {
-            // `event` owns the strings until the loop ends, as for display
-            // names.
+          // `event` owns the strings until the loop ends, as for display
+          // names.
+          if (callbacks_.listed_browser_windows) {
+            std::vector<DomicileListedBrowserWindow> records;
+            records.reserve(event.browser_windows.size());
+            for (const domicile::EngineBrowserWindow& window :
+                 event.browser_windows) {
+              records.push_back(DomicileListedBrowserWindow{
+                  .id = window.id.c_str(),
+                  .title = window.title.c_str(),
+                  .app_id = window.app_id.c_str(),
+                  .url = window.url.c_str(),
+                  .off_the_record =
+                      static_cast<uint8_t>(window.off_the_record ? 1 : 0)});
+            }
+            callbacks_.listed_browser_windows(
+                callbacks_.user_data, records.data(),
+                static_cast<uint32_t>(records.size()));
+          } else if (callbacks_.browser_windows) {
             std::vector<DomicileBrowserWindow> records;
             records.reserve(event.browser_windows.size());
             for (const domicile::EngineBrowserWindow& window :

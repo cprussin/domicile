@@ -2840,6 +2840,10 @@ pub struct ListedWindow {
     pub focused: bool,
     /// It asked for the keyboard and was refused.
     pub urgent: bool,
+    /// A browser window's address, or the one it is opening.
+    pub url: Option<String>,
+    /// A browser window in the off-the-record profile.
+    pub private: bool,
 }
 
 /// Whether a monitor is driven in HDR10: BT.2020 primaries with the PQ

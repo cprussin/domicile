@@ -218,6 +218,8 @@ mod tests {
             id: id.into(),
             title: title.into(),
             app_id: String::new(),
+            url: String::new(),
+            private: false,
         }
     }
 

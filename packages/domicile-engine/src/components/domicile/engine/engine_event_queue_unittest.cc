@@ -137,7 +137,11 @@ TEST(EngineEventQueueTest, TheBrowserWindowsArriveWholeAcrossTheQueue) {
   EngineEventQueue queue;
   EngineEvent pushed{.type = EngineEvent::Type::kBrowserWindows};
   pushed.browser_windows.push_back(
-      EngineBrowserWindow{.id = "3", .title = "Inbox", .app_id = "mail"});
+      EngineBrowserWindow{.id = "3",
+                          .title = "Inbox",
+                          .app_id = "mail",
+                          .url = "https://mail.example/",
+                          .off_the_record = true});
   pushed.browser_windows.push_back(EngineBrowserWindow{.id = "5"});
   queue.Push(pushed);
 
@@ -149,6 +153,9 @@ TEST(EngineEventQueueTest, TheBrowserWindowsArriveWholeAcrossTheQueue) {
   EXPECT_EQ(drained[0].browser_windows[0].id, "3");
   EXPECT_EQ(drained[0].browser_windows[0].title, "Inbox");
   EXPECT_EQ(drained[0].browser_windows[0].app_id, "mail");
+  EXPECT_EQ(drained[0].browser_windows[0].url, "https://mail.example/");
+  EXPECT_TRUE(drained[0].browser_windows[0].off_the_record);
+  EXPECT_FALSE(drained[0].browser_windows[1].off_the_record);
   EXPECT_EQ(drained[0].browser_windows[1].id, "5");
   EXPECT_EQ(drained[0].browser_windows[1].title, "");
 }

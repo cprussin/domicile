@@ -179,7 +179,7 @@ and app windows.
 ```
 ID                                KIND     APP    PID   SIZE     TITLE
 kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x480  notes.org (focused)
-Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox
+Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
 ```
 
 - `ID` is the window's `ext-foreign-toplevel-list-v1` identifier, which
@@ -188,9 +188,11 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox
 - `focused` marks the native window with the keyboard. The shell's page holds
   the keyboard for browser windows, so none is marked.
 - `urgent` marks a window that asked for the keyboard and was refused.
+- `private` marks a private browser window.
 
 `--json` prints a JSON array instead, for scripts, with `kind`, `title`,
-`app`, `pid`, `size`, `focused` and `urgent` per window.
+`app`, `pid`, `size`, `focused`, `urgent`, `url` (a browser window's address,
+`null` for a native window) and `private` per window.
 
 ## `domicile status [--json]`
 

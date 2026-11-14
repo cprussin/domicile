@@ -77,6 +77,8 @@ fn windows_print_as_one_table_whoever_draws_them() {
         size: Some([640.0, 480.5]),
         focused: true,
         urgent: false,
+        url: None,
+        private: false,
     };
     let terminal = ListedWindow {
         id: "nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7".to_string(),
@@ -96,6 +98,8 @@ fn windows_print_as_one_table_whoever_draws_them() {
         size: None,
         focused: false,
         urgent: false,
+        url: Some("https://mail.example/".to_string()),
+        private: true,
     };
 
     assert_eq!(
@@ -104,7 +108,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
 ID                                KIND     APP    PID   SIZE     TITLE
 kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x481  notes.org (focused)
 nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7  native   -      7     640x481  - (urgent)
-Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox
+Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
 "
     );
 }

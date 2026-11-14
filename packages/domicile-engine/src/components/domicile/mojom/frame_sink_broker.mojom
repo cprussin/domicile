@@ -269,6 +269,10 @@ struct ListedBrowserWindow {
   string title;
   // The app window's id, or empty for any other window.
   string app_id;
+  // The address it shows, or the one it is opening.
+  string url;
+  // Whether it is a private window.
+  bool off_the_record;
 };
 
 // Tells a producer which browser windows are open, so it can list them for

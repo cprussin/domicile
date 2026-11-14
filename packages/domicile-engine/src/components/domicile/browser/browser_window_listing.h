@@ -22,6 +22,11 @@ struct ListedBrowserWindow {
   std::string title;
   // The app window's id, or empty for any other window.
   std::string app_id;
+  // The address it shows, or the one it is opening before its first
+  // navigation commits.
+  std::string url;
+  // Whether it is a private window, in the off-the-record profile.
+  bool off_the_record = false;
 
   friend bool operator==(const ListedBrowserWindow&,
                          const ListedBrowserWindow&) = default;

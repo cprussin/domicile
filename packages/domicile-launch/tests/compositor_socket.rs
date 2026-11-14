@@ -410,10 +410,14 @@ fn the_compositor_is_asked_its_displays_and_windows_and_says_them() {
         "which_windows",
         "{\"type\":\"window_list\",\"windows\":[{\"id\":\"kD3m\",\"kind\":\"browser\",\
          \"title\":\"Inbox\",\"app\":null,\"pid\":null,\"size\":null,\"focused\":false,\
-         \"urgent\":false}]}\n",
+         \"urgent\":false,\"url\":\"https://mail.example/\",\"private\":true}]}\n",
     );
     let windows = windows(&path, Some(BRIEFLY)).expect("the compositor listed them");
     assert_eq!(windows[0].title, "Inbox");
+    assert_eq!(
+        (windows[0].url.as_deref(), windows[0].private),
+        (Some("https://mail.example/"), true)
+    );
     heard.join().expect("the compositor was listening");
 
     let (_scratch, path) = scratch();

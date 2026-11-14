@@ -521,7 +521,8 @@ class DomicileBrowserService : public content::GpuDataManagerObserver {
          domicile::ListedBrowserWindows()) {
       windows.push_back(domicile::mojom::ListedBrowserWindow::New(
           std::move(window.id), std::move(window.title),
-          std::move(window.app_id)));
+          std::move(window.app_id), std::move(window.url),
+          window.off_the_record));
     }
     broker_.OnBrowserWindowsChanged(std::move(windows));
   }

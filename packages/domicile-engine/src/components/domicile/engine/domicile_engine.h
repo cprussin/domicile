@@ -337,6 +337,18 @@ typedef struct DomicileBrowserWindow {
   const char* app_id;
 } DomicileBrowserWindow;
 
+// Like DomicileBrowserWindow, plus its address and whether it is private, for
+// `listed_browser_windows`.
+typedef struct DomicileListedBrowserWindow {
+  const char* id;
+  const char* title;
+  const char* app_id;
+  // The address it shows, or the one it is opening.
+  const char* url;
+  // Nonzero for a private window, in the off-the-record profile.
+  uint8_t off_the_record;
+} DomicileListedBrowserWindow;
+
 // How the compositor wants one display's connector driven.
 //
 // The reverse of DomicileDisplay: the compositor's config decides, but the
@@ -644,6 +656,14 @@ typedef struct DomicileEngineCallbacks {
   void (*hdr_displays)(void* user_data,
                        const DomicileHdrDisplay* displays,
                        uint32_t count);
+  // Like `browser_windows`, plus each window's address and whether it is
+  // private. `windows` points at `count` records, their strings borrowed for
+  // the call.
+  //
+  // Called instead of `browser_windows` when set. An older engine ignores it.
+  void (*listed_browser_windows)(void* user_data,
+                                 const DomicileListedBrowserWindow* windows,
+                                 uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
