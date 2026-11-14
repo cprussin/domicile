@@ -237,11 +237,14 @@ asks the shell instead (the sections above). `RefuseChromeDialogs`
 - Payment Request is off (`payment_request_enabled` in patch `0183`'s
   `OverrideWebPreferences`), since it asks with a Chrome sheet. A site falls
   back to its own checkout form.
-- Patch `0183`: picture-in-picture video is off
-  (`picture_in_picture_enabled`), since Chrome floats it in a window of its
-  own. A video has no picture-in-picture button and
-  `requestPictureInPicture()` is refused. Document picture-in-picture stays:
-  its window is the page's own, and a `<webview>` opens it as a shell window.
+- Picture-in-picture video is the shell's (patch `0213`,
+  `domicile_picture_in_picture.cc`). Chrome floats it in a window of its own;
+  here each video is listed in `DomicileHost.pictureInPictureVideos`, the
+  shell draws it in an `<app picture-in-picture="id">`, and
+  `actOnPictureInPictureVideo` plays, pauses, skips, goes back to the page or
+  closes it. The video's frame sink is made a child of the shell's while the
+  element shows it. Document picture-in-picture stays: its window is the
+  page's own, and a `<webview>` opens it as a shell window.
 
 ## Host shortcuts when nested
 
@@ -301,7 +304,8 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-resend-form.sh`: sending a form again.
 - `guard-webview-page-picker.sh`: pickers.
 - `guard-webview-sign-in-with.sh`: "Sign in with" asks the shell.
-- `guard-webview-chrome-sheets.sh`: Payment Request and picture-in-picture
-  are off.
+- `guard-webview-chrome-sheets.sh`: Payment Request is off.
+- `guard-webview-video-picture-in-picture.sh`: picture-in-picture video is
+  listed to the shell, and its controls reach the page.
 - `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.

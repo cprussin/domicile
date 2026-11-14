@@ -8,10 +8,10 @@
 # Headless with software compositing, like guard-webview-click.sh: nothing here
 # is measured in pixels, and nothing is pressed.
 #
-# Payment Request asks with a Chrome sheet, and picture-in-picture video floats
-# in a Chrome window. The engine turns both off, so a site falls back to its
-# own forms, and a video has no picture-in-picture button. FedCM ("Sign in
-# with") asks the shell instead: see guard-webview-sign-in-with.sh.
+# Payment Request asks with a Chrome sheet. The engine turns it off, so a site
+# falls back to its own forms. FedCM ("Sign in with") asks the shell instead
+# (guard-webview-sign-in-with.sh), and the shell draws picture-in-picture video
+# (guard-webview-video-picture-in-picture.sh).
 #
 # The page is guard-webview-chrome-sheets-server.py's: /probe reads what it
 # has and sends it to /report, which the server prints.
@@ -26,7 +26,6 @@
 #                                     absent API is the engine's doing and
 #                                     not the probe's (the control)
 #   no Payment Request               PaymentRequest is undefined
-#   no picture-in-picture video      document.pictureInPictureEnabled is false
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -158,12 +157,11 @@ SAW_REPORT=$(saw "$REPORT_LINE")
 SAW_APIS=$(grep -F "$REPORT_LINE" "$HTTP_LOG" | grep -F "credentials=object" |
   grep -qF "docpip=object" && echo 1 || echo 0)
 SAW_NO_PAYMENT=$(saw "payment=undefined")
-SAW_NO_PIP=$(saw "pip=false")
 
 echo
 grep -F "$REPORT_LINE" "$HTTP_LOG" || true
 echo "shell=$SAW_SHELL report=$SAW_REPORT apis=$SAW_APIS"
-echo "no payment=$SAW_NO_PAYMENT no pip=$SAW_NO_PIP"
+echo "no payment=$SAW_NO_PAYMENT"
 echo
 
 # The verdict: names the component to blame. Checks run in dependency order.
@@ -185,13 +183,9 @@ elif [ "$SAW_NO_PAYMENT" != "1" ]; then
   FAILURE="the page has PaymentRequest, whose only UI is Chrome's sheet. \
 OverrideWebPreferences did not turn payment_request_enabled off (Blink reads \
 that setting for PaymentRequest, over --disable-blink-features)"
-elif [ "$SAW_NO_PIP" != "1" ]; then
-  FAILURE="the page has picture-in-picture video, which Chrome floats in a \
-window of its own. OverrideWebPreferences did not turn \
-picture_in_picture_enabled off"
 else
-  PASSED="a page in a <webview> has no Payment Request and no \
-picture-in-picture video, and keeps the APIs around them"
+  PASSED="a page in a <webview> has no Payment Request, and keeps the APIs \
+around it"
 fi
 
 if [ -n "$PASSED" ]; then
