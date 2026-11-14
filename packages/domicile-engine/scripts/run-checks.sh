@@ -29,6 +29,7 @@ FIRST=(
   guard-client-window-in-memory
   guard-two-windows
   guard-buffer-transform
+  guard-buffer-formats
   guard-scrolling-bubble
   guard-webview-permissions
   guard-app-survives-load-shell
@@ -160,6 +161,7 @@ ONCE=(
 UNDER_WAYLAND=(
   guard-app-survives-compositor-restart
   guard-app-survives-load-shell
+  guard-buffer-formats
   guard-buffer-transform
   guard-client-window
   guard-scrolling-bubble

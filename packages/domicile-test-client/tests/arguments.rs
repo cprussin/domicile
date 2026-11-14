@@ -6,7 +6,8 @@
 use std::ffi::OsString;
 
 use domicile_test_client::arguments::{
-    arguments, ArgumentError, Arguments, AskForFocus, AskTo, HoldTheScreensOn, TakeTheShortcuts,
+    arguments, ArgumentError, Arguments, AskForFocus, AskTo, DeepFormat, HoldTheScreensOn,
+    TakeTheShortcuts,
 };
 use wayland_client::protocol::wl_output::Transform;
 
@@ -445,6 +446,33 @@ fn a_turn_wl_output_has_no_name_for_is_refused() {
         given(&["--buffer-transform", "45"]),
         Err(ArgumentError::NotATransform {
             value: "45".to_string(),
+        })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_draw_in_a_deep_format() {
+    for (value, format) in [
+        ("abgr2101010", DeepFormat::Abgr2101010),
+        ("xbgr2101010", DeepFormat::Xbgr2101010),
+        ("abgr16161616f", DeepFormat::Abgr16161616f),
+        ("xbgr16161616f", DeepFormat::Xbgr16161616f),
+    ] {
+        assert_eq!(given(&["--format", value]).unwrap().format, Some(format));
+    }
+    assert_eq!(
+        given(&[]).unwrap().format,
+        None,
+        "and in 8 bits unless asked"
+    );
+}
+
+#[test]
+fn a_format_without_more_than_8_bits_is_refused() {
+    assert_eq!(
+        given(&["--format", "argb8888"]),
+        Err(ArgumentError::NotADeepFormat {
+            value: "argb8888".to_string(),
         })
     );
 }

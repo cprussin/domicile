@@ -194,6 +194,21 @@ pub struct Arguments {
     /// each enter, traces what an input method sends it, and moves its text
     /// cursor ([`crate::CARET`]) as text is committed.
     pub text_input: bool,
+
+    /// The 10-bit or half-float `wl_shm` format to draw in, if any.
+    ///
+    /// The window is [`crate::window::DEEP_COLOR`] in that format, so a check
+    /// can read back that the format reached the page in the right colors.
+    pub format: Option<DeepFormat>,
+}
+
+/// A `wl_shm` format with more than 8 bits a channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeepFormat {
+    Abgr2101010,
+    Xbgr2101010,
+    Abgr16161616f,
+    Xbgr16161616f,
 }
 
 /// An `xdg_toplevel` request about the window's state.
@@ -286,6 +301,11 @@ pub enum ArgumentError {
     #[error("--constrain-pointer wants lock or confine, not {value}")]
     NotAConstraint { value: String },
 
+    #[error(
+        "--format wants abgr2101010, xbgr2101010, abgr16161616f or xbgr16161616f, not {value}"
+    )]
+    NotADeepFormat { value: String },
+
     #[error("unknown argument {argument}")]
     Unknown { argument: String },
 }
@@ -329,6 +349,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut wl_seat_v7 = None;
     let mut no_touch = None;
     let mut text_input = None;
+    let mut format = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -457,6 +478,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--viewport-to" => {
                 take(&mut viewport_to, &flag, size(&mut args, &flag)?)?;
             }
+            "--format" => {
+                take(&mut format, &flag, deep_format(&mut args, &flag)?)?;
+            }
             "--buffer-transform" => {
                 take(&mut buffer_transform, &flag, turn(&mut args, &flag)?)?;
             }
@@ -519,6 +543,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         wl_seat_v7: wl_seat_v7.unwrap_or(false),
         no_touch: no_touch.unwrap_or(false),
         text_input: text_input.unwrap_or(false),
+        format,
     })
 }
 
@@ -571,6 +596,21 @@ fn turn(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<Transfo
         "flipped-180" => Ok(Transform::Flipped180),
         "flipped-270" => Ok(Transform::Flipped270),
         _ => Err(ArgumentError::NotATransform { value: stated }),
+    }
+}
+
+/// The format named after a flag.
+fn deep_format(
+    args: &mut impl Iterator<Item = OsString>,
+    flag: &str,
+) -> Result<DeepFormat, ArgumentError> {
+    let stated = value(args, flag)?;
+    match stated.as_str() {
+        "abgr2101010" => Ok(DeepFormat::Abgr2101010),
+        "xbgr2101010" => Ok(DeepFormat::Xbgr2101010),
+        "abgr16161616f" => Ok(DeepFormat::Abgr16161616f),
+        "xbgr16161616f" => Ok(DeepFormat::Xbgr16161616f),
+        _ => Err(ArgumentError::NotADeepFormat { value: stated }),
     }
 }
 
