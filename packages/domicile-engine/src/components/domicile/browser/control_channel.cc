@@ -187,6 +187,7 @@ ControlChannel::ControlChannel(
     mojo::PendingReceiver<mojom::ControlChannel> receiver,
     KeymapSink keymap_sink,
     PointerWarpSink warp_sink,
+    PointerConfineSink confine_sink,
     ThemeSink theme_sink,
     ExtensionsSink extensions_sink,
     CursorThemeSink cursor_theme_sink,
@@ -195,13 +196,14 @@ ControlChannel::ControlChannel(
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
       warp_sink_(std::move(warp_sink)),
+      confine_sink_(std::move(confine_sink)),
       theme_sink_(std::move(theme_sink)),
       extensions_sink_(std::move(extensions_sink)),
       cursor_theme_sink_(std::move(cursor_theme_sink)),
       force_dark_sink_(std::move(force_dark_sink)),
       receiver_(this, std::move(receiver)),
-      read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
-          kReadBufferSize)) {
+      read_buffer_(
+          base::MakeRefCounted<net::IOBufferWithSize>(kReadBufferSize)) {
   // The page going away takes this with it; nothing else owns it.
   receiver_.set_disconnect_handler(
       base::BindOnce([](ControlChannel* self) { delete self; },
@@ -702,6 +704,14 @@ void ControlChannel::WarpPointer(double x,
   warp_sink_.Run(x, y, unless_over);
 }
 
+// Nothing is sent, for WarpPointer's reason. The answer comes back from the UI
+// thread, and the page's callback must run on this one.
+void ControlChannel::ConfinePointer(const std::vector<gfx::RectF>& boxes,
+                                    ConfinePointerCallback confined) {
+  confine_sink_.Run(boxes,
+                    base::BindPostTaskToCurrentDefault(std::move(confined)));
+}
+
 // Nothing is sent, for WarpPointer's reason: the compositor does not swap
 // shells. What the page says goes to the `load_shell` waiting on it.
 void ControlChannel::ShellRan(const std::string& serial) {
@@ -851,10 +861,14 @@ void ControlChannel::PointerMotion(const std::string& app_id,
 
 void ControlChannel::PointerRelative(const std::string& app_id,
                                      double dx,
-                                     double dy) {
+                                     double dy,
+                                     double dx_unaccel,
+                                     double dy_unaccel) {
   base::DictValue message = ForApp("pointer_relative", app_id);
   message.Set("dx", dx);
   message.Set("dy", dy);
+  message.Set("dx_unaccel", dx_unaccel);
+  message.Set("dy_unaccel", dy_unaccel);
   SendMessage(std::move(message));
 }
 
@@ -1538,7 +1552,28 @@ void ControlChannel::DispatchLine(const std::string& line,
     } else if (named && !named->is_none()) {
       return;
     }
-    client_->AppPointerConstraint(*app_id, constraint);
+    // `null` for the whole window. A box that is not one is a compositor bug,
+    // so the message is dropped rather than read as some other region.
+    std::optional<std::vector<gfx::RectF>> region;
+    if (const base::ListValue* boxes = message.FindList("region")) {
+      region.emplace();
+      for (const base::Value& box : *boxes) {
+        const base::DictValue* sides = box.GetIfDict();
+        const std::optional<int> x = sides ? sides->FindInt("x") : std::nullopt;
+        const std::optional<int> y = sides ? sides->FindInt("y") : std::nullopt;
+        const std::optional<int> width =
+            sides ? sides->FindInt("width") : std::nullopt;
+        const std::optional<int> height =
+            sides ? sides->FindInt("height") : std::nullopt;
+        if (!x || !y || !width || !height || *width < 0 || *height < 0) {
+          LOG(ERROR) << "domicile: the compositor sent a pointer region box "
+                        "that is not one; dropped.";
+          return;
+        }
+        region->emplace_back(*x, *y, *width, *height);
+      }
+    }
+    client_->AppPointerConstraint(*app_id, constraint, std::move(region));
     return;
   }
 
@@ -1950,6 +1985,7 @@ void ControlChannel::DispatchLine(const std::string& line,
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
                         PointerWarpSink warp_sink,
+                        PointerConfineSink confine_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
                         CursorThemeSink cursor_theme_sink,
@@ -1970,9 +2006,10 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // Owns itself: it lives until the page drops the pipe or the compositor is
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
-                     std::move(warp_sink), std::move(theme_sink),
-                     std::move(extensions_sink), std::move(cursor_theme_sink),
-                     std::move(force_dark_sink), page);
+                     std::move(warp_sink), std::move(confine_sink),
+                     std::move(theme_sink), std::move(extensions_sink),
+                     std::move(cursor_theme_sink), std::move(force_dark_sink),
+                     page);
 }
 
 }  // namespace domicile

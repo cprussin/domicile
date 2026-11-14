@@ -68,11 +68,15 @@ class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
                                 bool moved) = 0;
   // A hand moved the pointer over `app_id` by `movement`, in the page's CSS
   // pixels, to `on_page` in the page; `size` is the element's, as for
-  // `AppPointerMotion`. Sent after that motion.
-  virtual void AppPointerRelative(const String& app_id,
-                                  const gfx::Vector2dF& movement,
-                                  const gfx::PointF& on_page,
-                                  const gfx::SizeF& size) = 0;
+  // `AppPointerMotion`. Sent after that motion. `unaccelerated` is the
+  // device's motion before pointer acceleration, in physical pixels, when it
+  // said (PointerEvent::UnacceleratedMovement).
+  virtual void AppPointerRelative(
+      const String& app_id,
+      const gfx::Vector2dF& movement,
+      const std::optional<gfx::Vector2dF>& unaccelerated,
+      const gfx::PointF& on_page,
+      const gfx::SizeF& size) = 0;
   // A Linux button code (input-event-codes.h), going down or coming up.
   virtual void AppPointerButton(const String& app_id,
                                 uint32_t button,

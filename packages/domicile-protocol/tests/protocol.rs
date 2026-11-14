@@ -6,7 +6,8 @@
 use domicile_protocol::{
     negotiate, AdaptiveSync, AppCursorImage, AppFrame, Appearance, ChromeMessage, ClipboardEntry,
     CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayHdr, DisplayInfo, DisplayTransform,
-    HostMessage, Owner, Passphrase, PointerConstraint, PointerOverWindow, PROTOCOL_VERSION,
+    HostMessage, Owner, Passphrase, PointerConstraint, PointerOverWindow, SurfaceRect,
+    PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -92,16 +93,20 @@ fn chrome_messages_round_trip() {
         app_id: "term".into(),
         dx: 3.5,
         dy: -2.0,
+        dx_unaccel: 1.25,
+        dy_unaccel: -0.5,
     });
     assert_eq!(
         serde_json::from_str::<ChromeMessage>(
-            r#"{"type":"pointer_relative","app_id":"term","dx":3.5,"dy":-2.0}"#
+            r#"{"type":"pointer_relative","app_id":"term","dx":3.5,"dy":-2.0,"dx_unaccel":1.25,"dy_unaccel":-0.5}"#
         )
         .unwrap(),
         ChromeMessage::PointerRelative {
             app_id: "term".into(),
             dx: 3.5,
             dy: -2.0,
+            dx_unaccel: 1.25,
+            dy_unaccel: -0.5,
         },
         "the engine's line parses"
     );
@@ -536,12 +541,34 @@ fn a_pointer_constraint_goes_out_by_name() {
         let message = HostMessage::AppPointerConstraint {
             app_id: "game".into(),
             constraint,
+            region: None,
         };
         host_round_trip(&message);
         let v = serde_json::to_value(&message).unwrap();
         assert_eq!(v["type"], "app_pointer_constraint");
         assert_eq!(v["constraint"], wire);
+        assert_eq!(v["region"], serde_json::Value::Null);
     }
+}
+
+/// The engine reads a constraint's region as rectangles of the surface.
+#[test]
+fn a_pointer_constraint_region_goes_out_as_rectangles() {
+    let message = HostMessage::AppPointerConstraint {
+        app_id: "game".into(),
+        constraint: Some(PointerConstraint::Confine),
+        region: Some(vec![SurfaceRect {
+            x: 10,
+            y: 20,
+            width: 300,
+            height: 200,
+        }]),
+    };
+    host_round_trip(&message);
+    assert_eq!(
+        serde_json::to_value(&message).unwrap()["region"],
+        serde_json::json!([{ "x": 10, "y": 20, "width": 300, "height": 200 }])
+    );
 }
 
 /// The browser process reads `cursor` off `appearance` by these names.

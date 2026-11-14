@@ -65,6 +65,8 @@ source_set("domicile") {
     "domicile_picture_in_picture.h",
     "domicile_pointer_hiding.cc",
     "domicile_pointer_hiding.h",
+    "domicile_pointer_confinement.cc",
+    "domicile_pointer_confinement.h",
     "domicile_pointer_warp.cc",
     "domicile_pointer_warp.h",
     "domicile_printing.cc",

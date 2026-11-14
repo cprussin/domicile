@@ -633,8 +633,11 @@ void HTMLAppElement::ForwardMotion(AppInputClient& client,
     const bool moved = event.movementX() != 0 || event.movementY() != 0;
     client.AppPointerMotion(app_id, point, size, moved);
     if (moved) {
+      // A pinch's wheel event carries no motion of its own device.
+      const auto* pointer = DynamicTo<PointerEvent>(event);
       client.AppPointerRelative(
           app_id, gfx::Vector2dF(event.movementX(), event.movementY()),
+          pointer ? pointer->UnacceleratedMovement() : std::nullopt,
           gfx::PointF(event.clientX(), event.clientY()), size);
     }
   }

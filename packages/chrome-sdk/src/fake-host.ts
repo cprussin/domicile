@@ -116,6 +116,7 @@ export const describedWindow = (
   pid: null,
   pidfdInode: null,
   pointerConstraint: null,
+  pointerRegion: null,
   sandboxAppId: null,
   sandboxEngine: null,
   sandboxed: null,
@@ -133,6 +134,7 @@ export const describedWindow = (
 
 /** The methods that return a promise. The fake's never settle. */
 const ASKS = new Set([
+  "confinePointer",
   "countBrowserWindowMatches",
   "fetchWithCookies",
   "searchFiles",

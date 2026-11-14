@@ -21,6 +21,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
@@ -142,13 +143,21 @@ class FakeClient : public mojom::ControlChannelClient {
   }
   void AppPointerConstraint(
       const std::string& app_id,
-      std::optional<mojom::PointerConstraint> constraint) override {
+      std::optional<mojom::PointerConstraint> constraint,
+      const std::optional<std::vector<gfx::RectF>>& region) override {
     const char* name = "none";
     if (constraint) {
       name =
           *constraint == mojom::PointerConstraint::kLock ? "lock" : "confine";
     }
-    heard_.push_back("constraint " + app_id + " " + name);
+    std::string heard = "constraint " + app_id + " " + name;
+    if (region) {
+      heard += " in";
+      for (const gfx::RectF& box : *region) {
+        heard += " " + box.ToString();
+      }
+    }
+    heard_.push_back(heard);
   }
   void AppSuspended(const std::string& app_id, bool suspended) override {
     heard_.push_back((suspended ? "suspended " : "resumed ") + app_id);
@@ -244,7 +253,14 @@ class ControlChannelTest : public testing::Test {
     // Self-owned, like every channel: dropping `control_` deletes it.
     new ControlChannel(path, control_.BindNewPipeAndPassReceiver(),
                        keymap_.GetRepeatingCallback<const std::string&>(),
-                       base::DoNothing(), base::DoNothing(), base::DoNothing(),
+                       base::DoNothing(),
+                       base::BindLambdaForTesting(
+                           [this](const std::vector<gfx::RectF>& boxes,
+                                  base::OnceCallback<void(bool)> confined) {
+                             confined_to_ = boxes;
+                             std::move(confined).Run(true);
+                           }),
+                       base::DoNothing(), base::DoNothing(),
                        cursor_theme_.GetRepeatingCallback(),
                        force_dark_.GetRepeatingCallback(), Page{});
 
@@ -313,6 +329,7 @@ class ControlChannelTest : public testing::Test {
   base::test::TestFuture<std::string> keymap_;
   base::test::TestFuture<std::optional<ui::DeskCursorTheme>> cursor_theme_;
   base::test::TestFuture<std::vector<std::string>> force_dark_;
+  std::vector<gfx::RectF> confined_to_;
   FakeClient client_;
   LineFramer framer_;
   std::vector<std::string> lines_;
@@ -787,15 +804,33 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
   }
 }
 
-// A hand's relative motion reaches the compositor as its deltas.
+// A hand's relative motion reaches the compositor as its deltas, accelerated
+// and not.
 TEST_F(ControlChannelTest, RelativeMotionReachesTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
   EXPECT_EQ(Heard(), kHello);
-  control_->PointerRelative("app", 3.5, -2);
+  control_->PointerRelative("app", 3.5, -2, 1.25, -0.5);
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(),
-            R"({"app_id":"app","dx":3.5,"dy":-2.0,"type":"pointer_relative"})");
+  EXPECT_EQ(Heard(), R"({"app_id":"app","dx":3.5,"dx_unaccel":1.25,"dy":-2.0,)"
+                     R"("dy_unaccel":-0.5,"type":"pointer_relative"})");
+}
+
+// A page confining the pointer stops in the browser, which draws the pointer,
+// and hears whether the platform holds it.
+TEST_F(ControlChannelTest, ConfiningThePointerStopsInTheBrowser) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  base::test::TestFuture<bool> confined;
+  control_->ConfinePointer({gfx::RectF(10, 20, 300, 200)},
+                           confined.GetCallback());
+  EXPECT_TRUE(confined.Get());
+  ASSERT_EQ(confined_to_.size(), 1u);
+  EXPECT_EQ(confined_to_[0].x(), 10);
+  EXPECT_EQ(confined_to_[0].y(), 20);
+  EXPECT_EQ(confined_to_[0].width(), 300);
+  EXPECT_EQ(confined_to_[0].height(), 200);
 }
 
 // A window's ask to lock or confine the pointer reaches the page, `null`
@@ -818,6 +853,26 @@ TEST_F(ControlChannelTest, APointerConstraintReachesThePage) {
             (std::vector<std::string>{"constraint game lock",
                                       "constraint game confine",
                                       "constraint game none", "locked false"}));
+}
+
+// A confinement's region reaches the page as boxes, and a box that is not one
+// drops the message.
+TEST_F(ControlChannelTest, APointerRegionReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"confine\",\"region\":[{\"x\":10,\"y\":20,"
+      "\"width\":300,\"height\":200},{\"x\":0,\"y\":220,\"width\":40,"
+      "\"height\":10}]}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"confine\",\"region\":[{\"x\":10}]}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "constraint game confine in 10,20 300x200 0,220 40x10",
+                "locked false"}));
 }
 
 // The page taking and letting go of the pointer reaches the compositor.

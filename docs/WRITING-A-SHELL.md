@@ -428,6 +428,15 @@ Each entry in `domicile.windows.list` describes one client window.
   ask goes away. Escape does not end a lock, since games use it; leaving the
   user a way out, such as a chord that moves the keyboard, is the shell's job.
   Manganese's `followPointerLock` does all of this.
+- **Pointer confinement:** for `"confine"`, call
+  `pointer.confine(boxes)` with the boxes in the page that hold the pointer:
+  the window's `<app>` box, or its `pointerRegion` (boxes in the window's own
+  coordinates, which `width` and `height` measure) scaled into it. Then call
+  `windows.pointerConstrained(appId, true)`. Call `confine` again as the
+  window moves, and `confine([])` plus `pointerConstrained(appId, false)` once
+  it loses the keyboard or the ask goes away. A box may reach onto another
+  monitor. Nested or headless, `confine` resolves `false` and the pointer is
+  not held. Manganese's `usePointerConfinement` does all of this.
 - **Size:** the `<app>` element's layout box is the window size. The engine
   sends it to the client. Resize a window by styling its element. Set
   `resizing` on the element while the user drags an edge; see
