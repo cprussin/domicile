@@ -2,22 +2,43 @@
 // the desk, opened over the engine's Electron socket.
 
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { Engine, WindowEvent } from "../engine";
+import type { Engine, EngineRequest, WindowEvent } from "../engine";
 import type { ElectronApp } from "./app";
+import type { createIpcMain } from "./ipc-main";
+
+export type WebPreferences = {
+  readonly preload?: string | undefined;
+  readonly nodeIntegration?: boolean | undefined;
+  readonly contextIsolation?: boolean | undefined;
+};
 
 export type BrowserWindowOptions = {
   readonly show?: boolean | undefined;
   readonly title?: string | undefined;
+  readonly webPreferences?: WebPreferences | undefined;
 };
+
+/** Where the windows' pages' IPC goes: the host's side of `ipcMain`. */
+export type IpcRoutes = Pick<
+  ReturnType<typeof createIpcMain>,
+  "invoke" | "receive"
+>;
 
 /**
  * Makes the `BrowserWindow` class for an app on `engine`. The engine's window
- * events reach the window they name.
+ * events reach the window they name, and its pages' IPC reaches `ipc`.
+ * `readPreload` reads a preload's source.
  */
-export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
+export const createBrowserWindow = (
+  engine: Engine,
+  app: ElectronApp,
+  ipc: IpcRoutes,
+  readPreload: (path: string) => string = (path) => readFileSync(path, "utf8"),
+) => {
   const windows = new Map<number, BrowserWindow>();
   let nextId = 1;
 
@@ -47,6 +68,20 @@ export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
     readonly isDestroyed = () => this.owner.isDestroyed();
     readonly loadFile = (path: string) => this.owner.loadFile(path);
     readonly loadURL = (url: string) => this.owner.loadURL(url);
+
+    /**
+     * Sends `args` on `channel` to the page's `ipcRenderer`. They travel as
+     * JSON, so what JSON can't carry doesn't arrive.
+     */
+    readonly send = (channel: string, ...args: unknown[]) => {
+      this.owner.assertAlive();
+      engine.send({
+        args: JSON.parse(JSON.stringify(args)),
+        channel,
+        type: "ipc_send",
+        window: this.owner.id,
+      });
+    };
   }
 
   class BrowserWindow extends EventEmitter {
@@ -63,9 +98,23 @@ export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
     #shown = false;
     #destroyed = false;
     #loads: { resolve: () => void; reject: (why: Error) => void }[] = [];
+    readonly #preload: string | undefined;
 
     constructor(options: BrowserWindowOptions = {}) {
       super();
+      const preferences = options.webPreferences ?? {};
+      if (
+        preferences.nodeIntegration === true ||
+        preferences.contextIsolation === false
+      ) {
+        throw new Error(
+          "this window's page needs Node.js or the preload's world, which Domicile's engine doesn't give a page",
+        );
+      }
+      this.#preload =
+        preferences.preload === undefined
+          ? undefined
+          : readPreload(preferences.preload);
       this.#title = options.title ?? app.getName();
       windows.set(this.id, this);
     }
@@ -75,7 +124,7 @@ export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
      * windows. Resolves once the page loads, as Electron's does.
      */
     readonly loadURL = (url: string) => {
-      this.#assertAlive();
+      this.assertAlive();
       this.url = url;
       const loaded = new Promise<void>((resolve, reject) => {
         this.#loads.push({ reject, resolve });
@@ -84,7 +133,12 @@ export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
         engine.send({ type: "load_url", url, window: this.id });
       } else {
         this.#opened = true;
-        engine.send({ type: "open_window", url, window: this.id });
+        engine.send({
+          type: "open_window",
+          url,
+          window: this.id,
+          ...(this.#preload === undefined ? {} : { preload: this.#preload }),
+        });
       }
       return loaded;
     };
@@ -101,7 +155,7 @@ export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
     };
 
     readonly focus = () => {
-      this.#assertAlive();
+      this.assertAlive();
       if (this.#opened) {
         engine.send({ type: "focus_window", window: this.id });
       }
@@ -157,6 +211,33 @@ export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
         }
       } else if (event.type === "window_refused") {
         this.#refused(event.why);
+      } else if (event.type === "ipc_message") {
+        ipc.receive(this.webContents, event.channel, event.args);
+      } else if (event.type === "ipc_invoke") {
+        ipc
+          .invoke(this.webContents, event.channel, event.args)
+          .then((answer) => {
+            engine.send(
+              answer.match<EngineRequest>({
+                Err: (error) => ({
+                  error,
+                  invoke: event.invoke,
+                  type: "ipc_reply",
+                }),
+                Ok: ({ result }) => ({
+                  invoke: event.invoke,
+                  result,
+                  type: "ipc_reply",
+                }),
+              }),
+            );
+          })
+          .catch((error: unknown) => {
+            // Only the engine's connection failing gets here, and losing it
+            // ends the app on its own.
+            // biome-ignore lint/suspicious/noConsole: why a page's invoke went unanswered, for the supervisor's log
+            console.error("electron-host: couldn't answer an invoke", error);
+          });
       } else {
         this.#closed();
       }
@@ -197,7 +278,8 @@ export const createBrowserWindow = (engine: Engine, app: ElectronApp) => {
       }
     };
 
-    readonly #assertAlive = () => {
+    /** Throws as Electron does for a window that's gone. */
+    readonly assertAlive = () => {
       if (this.#destroyed) {
         throw new Error("Object has been destroyed");
       }
