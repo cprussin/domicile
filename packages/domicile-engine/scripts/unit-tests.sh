@@ -42,9 +42,11 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 13, ElectronProtocol 17, ElectronApp 20,
+# PictureInPictureVideos 13, ElectronProtocol 22, ElectronApp 24,
 # ContextBridge 11.
 #
+# 712, and it was 703 — an Electron window's sendSync and message ports are
+# five more ElectronProtocol cases and four more ElectronApp ones. Before that
 # 703, and it was 681 — an Electron window's preload and IPC are five more
 # ElectronProtocol cases, six more ElectronApp ones and eleven ContextBridge
 # ones. Before that 681, and it was 680 — each display's HDR state reaching the page is one
@@ -241,7 +243,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=703
+FLOOR=712
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

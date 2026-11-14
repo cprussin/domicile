@@ -19,6 +19,16 @@
 #include "base/types/expected.h"
 
 namespace domicile {
+namespace {
+
+std::string Json(const base::Value& value) {
+  std::string json;
+  // Parsed from the app's JSON, so it writes.
+  CHECK(base::JSONWriter::Write(value, &json));
+  return json;
+}
+
+}  // namespace
 
 ElectronApp::ElectronApp(ElectronDesk& desk, Send send)
     : desk_(desk), send_(std::move(send)) {}
@@ -62,10 +72,20 @@ void ElectronApp::Take(std::string_view line) {
     }
   } else if (auto* send = std::get_if<ElectronSendToPage>(&*request)) {
     if (const std::optional<std::string> id = IdOf(send->window)) {
-      std::string args_json;
-      // Parsed from JSON, so it writes.
-      CHECK(base::JSONWriter::Write(send->args, &args_json));
-      desk_->SendToPage(*id, send->channel, args_json);
+      desk_->SendToPage(*id, send->channel,
+                        Json(base::Value(send->args.Clone())));
+    }
+  } else if (auto* post = std::get_if<ElectronPostToPage>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(post->window)) {
+      desk_->PostToPage(*id, post->channel, Json(post->message), post->ports);
+    }
+  } else if (auto* port = std::get_if<ElectronPortPost>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(port->window)) {
+      desk_->PostToPort(*id, port->port, Json(port->data));
+    }
+  } else if (auto* close_port = std::get_if<ElectronPortClose>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(close_port->window)) {
+      desk_->ClosePort(*id, close_port->port);
     }
   } else if (auto* reply = std::get_if<ElectronReply>(&*request)) {
     Reply(std::move(*reply));
@@ -115,8 +135,22 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
   ElectronPageCalls calls{
       .sent = base::BindRepeating(&ElectronApp::PageSent,
                                   weak_factory_.GetWeakPtr(), open.window),
-      .invoked = base::BindRepeating(&ElectronApp::PageInvoked,
-                                     weak_factory_.GetWeakPtr(), open.window),
+      .invoked =
+          base::BindRepeating(&ElectronApp::PageInvoked,
+                              weak_factory_.GetWeakPtr(), open.window, false),
+      .sent_sync =
+          base::BindRepeating(&ElectronApp::PageInvoked,
+                              weak_factory_.GetWeakPtr(), open.window, true),
+      .posted = base::BindRepeating(&ElectronApp::PagePosted,
+                                    weak_factory_.GetWeakPtr(), open.window),
+      .port_posted =
+          base::BindRepeating(&ElectronApp::PagePortPosted,
+                              weak_factory_.GetWeakPtr(), open.window),
+      .port_closed =
+          base::BindRepeating(&ElectronApp::PagePortClosed,
+                              weak_factory_.GetWeakPtr(), open.window),
+      .gone = base::BindRepeating(&ElectronApp::PageGone,
+                                  weak_factory_.GetWeakPtr(), open.window),
   };
   const std::optional<std::string> id =
       desk_->Open(open.url, *hello_, open.preload, std::move(calls));
@@ -151,6 +185,7 @@ void ElectronApp::PageSent(ElectronWindow number,
 }
 
 void ElectronApp::PageInvoked(ElectronWindow number,
+                              bool sync,
                               std::string channel,
                               base::ListValue args,
                               ElectronAnswer answer) {
@@ -160,7 +195,37 @@ void ElectronApp::PageInvoked(ElectronWindow number,
   }
   const int invoke = next_invoke_++;
   invokes_.emplace(invoke, std::move(answer));
-  send_.Run(ElectronIpcInvoke(number, invoke, channel, args));
+  send_.Run(sync ? ElectronIpcSendSync(number, invoke, channel, args)
+                 : ElectronIpcInvoke(number, invoke, channel, args));
+}
+
+void ElectronApp::PagePosted(ElectronWindow number,
+                             std::string channel,
+                             base::Value message,
+                             std::vector<std::string> ports) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronIpcPost(number, channel, message, ports));
+  }
+}
+
+void ElectronApp::PagePortPosted(ElectronWindow number,
+                                 std::string port,
+                                 base::Value data) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronPortMessage(number, port, data));
+  }
+}
+
+void ElectronApp::PagePortClosed(ElectronWindow number, std::string port) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronPortClosed(number, port));
+  }
+}
+
+void ElectronApp::PageGone(ElectronWindow number) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronPageGone(number));
+  }
 }
 
 std::optional<std::string> ElectronApp::IdOf(ElectronWindow number) {

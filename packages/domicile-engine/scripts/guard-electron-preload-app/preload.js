@@ -8,7 +8,19 @@ window.secret = "the preload's";
 
 contextBridge.exposeInMainWorld("guard", {
   ask: (n) => ipcRenderer.invoke("double", n),
+  askNow: (n) => ipcRenderer.sendSync("triple", n),
   onPing: (callback) =>
     ipcRenderer.on("ping", (_event, value) => callback(value)),
   send: (channel, value) => ipcRenderer.send(channel, value),
 });
+
+// A port the app hands over: each number on it comes back one more.
+ipcRenderer.on("port", (event) => {
+  const [port] = event.ports;
+  port.onmessage = (message) => port.postMessage(message.data + 1);
+});
+
+// A port handed to the app: each number on it comes back ten times over.
+const { port1, port2 } = new MessageChannel();
+port1.onmessage = (message) => port1.postMessage(message.data * 10);
+ipcRenderer.postMessage("mine", "a port", [port2]);

@@ -2,7 +2,8 @@
 # An Electron window's preload and IPC: the preload runs in its own world
 # before the page's scripts and exposes an API with contextBridge, the page's
 # ipcRenderer.send and invoke reach the app over the Electron socket, and the
-# app's webContents.send reaches the page. See
+# app's webContents.send reaches the page; ipcRenderer.sendSync waits for the
+# app's answer, and message ports carry messages both ways. See
 # docs/architecture/ELECTRON-APPS.md.
 #
 #   nix develop .#full --command \
@@ -17,7 +18,10 @@
 #   isolated     the page sees neither `require` nor the preload's globals, and
 #                cannot replace the exposed API
 #   invoked      ipcRenderer.invoke reached the app and its reply came back
+#   synced       ipcRenderer.sendSync returned the app's reply to the page
 #   delivered    the app's ipc_send reached the page's ipcRenderer listener
+#   ported       a port the app posted, and one the preload posted, each
+#                carried a message to the preload and its answer back
 #   unpreloaded  the control: window 2, opened without a preload, has no API
 set -u
 
@@ -159,6 +163,10 @@ def hear_until(wanted):
         if event.get("type") == "ipc_invoke" and event.get("channel") == "double":
             send({"type": "ipc_reply", "invoke": event["invoke"],
                   "result": event["args"][0] * 2})
+        if (event.get("type") == "ipc_send_sync" and
+                event.get("channel") == "triple"):
+            send({"type": "ipc_reply", "invoke": event["invoke"],
+                  "result": event["args"][0] * 3})
         if wanted(event):
             return event
     return None
@@ -174,7 +182,7 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0 0 0 0 0", flush=True)
+    print("measured: 0 0 0 0 0 0 0 0", flush=True)
     sys.exit(0)
 reader = connection.makefile("r", encoding="utf-8")
 
@@ -185,37 +193,59 @@ send({"type": "open_window", "window": 1, "url": page, "preload": preload})
 said = hear_until(message(1, "page"))
 seen = said["args"][0] if said and said.get("args") else {}
 answered = hear_until(message(1, "answered"))
+synced = hear_until(message(1, "synced"))
 send({"type": "ipc_send", "window": 1, "channel": "ping", "args": ["back"]})
 pinged = hear_until(lambda e: e.get("type") == "title_changed" and
                     e.get("window") == 1 and e.get("title") == "pinged back")
+
+def on_port(name):
+    return lambda e: (e.get("type") == "port_message" and
+                      e.get("window") == 1 and e.get("port") == name)
+
+# The app's port: posted to the page, then a number on it.
+send({"type": "ipc_post", "window": 1, "channel": "port", "message": None,
+      "ports": ["m1"]})
+send({"type": "port_post", "window": 1, "port": "m1", "data": 1})
+from_mine = hear_until(on_port("m1"))
+# The preload's port: it posted one as the page started.
+posted = hear_until(lambda e: e.get("type") == "ipc_post" and
+                    e.get("window") == 1 and e.get("channel") == "mine")
+theirs = (posted or {}).get("ports") or [""]
+send({"type": "port_post", "window": 1, "port": theirs[0], "data": 5})
+from_theirs = hear_until(on_port(theirs[0]))
 send({"type": "open_window", "window": 2, "url": page})
 control = hear_until(lambda e: e.get("type") == "title_changed" and
                      e.get("window") == 2 and e.get("title") == "no preload")
 
-print("measured: %d %d %d %d %d %d" % (
+print("measured: %d %d %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     said is not None,
     seen == {"require": "undefined", "secret": "undefined", "kept": True},
     answered is not None and answered.get("args") == [4],
+    synced is not None and synced.get("args") == [9],
     pinged is not None,
+    from_mine is not None and from_mine.get("data") == 2 and
+    posted is not None and posted.get("message") == "a port" and
+    from_theirs is not None and from_theirs.get("data") == 50,
     control is not None), flush=True)
 PY
 
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready preloaded isolated invoked delivered unpreloaded)"
+echo "  (ready preloaded isolated invoked synced delivered ported unpreloaded)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-preload-guard.sh`
 # runs this block directly. MEASURED is "<ready> <preloaded> <isolated>
-# <invoked> <delivered> <unpreloaded>".
+# <invoked> <synced> <delivered> <ported> <unpreloaded>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1 1 1")
+"1 1 1 1 1 1 1 1")
   PASSED="an Electron window's preload ran before its page in its own world, \
-its exposed API reached the app with send and invoke, the app's send reached \
-the page, and a window without a preload had none"
+its exposed API reached the app with send, invoke and sendSync, the app's \
+send reached the page, ports carried messages both ways, and a window \
+without a preload had none"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello -- \
@@ -224,9 +254,9 @@ guard-electron-socket.sh is the guard for that"
 "1 0 "*)
   FAILURE="the page never sent what it saw: the preload did not run before \
 the page's script (ElectronPage::ReadyToCommitNavigation must send Preload, \
-ElectronPreload::DidCreateDocumentElement run it), contextBridge did not \
-expose the API, or ipcRenderer.send did not reach the app (ElectronFrameHost \
-Send, ElectronApp::PageSent) -- the engine's log has any console error"
+ElectronPreload::RunAtDocumentStart run it), contextBridge did not expose \
+the API, or ipcRenderer.send did not reach the app (ElectronFrameHost Send, \
+ElectronApp::PageSent) -- the engine's log has any console error"
   ;;
 "1 1 0 "*)
   FAILURE="THE PAGE SAW INTO THE PRELOAD'S WORLD, or could replace its API: \
@@ -239,10 +269,21 @@ ElectronApp::PageInvoked, ipc_reply, or ElectronPreload::Answered and the \
 bootstrap's settle"
   ;;
 "1 1 1 1 0 "*)
-  FAILURE="the app's ipc_send never reached the page's listener: \
-SendToElectronWindow, ElectronPage::SendTo, or ElectronPreload::Deliver"
+  FAILURE="ipcRenderer.sendSync never returned the app's reply: \
+ElectronFrameHost SendSync, ElectronApp::PageInvoked's ipc_send_sync, or \
+ElectronPreload::SendSync"
   ;;
-"1 1 1 1 1 0")
+"1 1 1 1 1 0 "*)
+  FAILURE="the app's ipc_send never reached the page's listener: \
+ElectronPageOf, ElectronPage::Deliver, or ElectronPreload::Deliver"
+  ;;
+"1 1 1 1 1 1 0 "*)
+  FAILURE="a message port did not carry a message both ways: ipc_post and \
+ElectronPage::DeliverPost, the bootstrap's relay, port_post and \
+ElectronPreload::DeliverToPort, or ElectronFrameHost PostToPort -- the app's \
+log has what it heard"
+  ;;
+"1 1 1 1 1 1 1 0")
   FAILURE="A WINDOW OPENED WITHOUT A PRELOAD GOT ONE, or its page never \
 loaded: ElectronPage must send Preload only for its own window, and only \
 when the app gave one"

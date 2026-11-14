@@ -5,6 +5,7 @@
 
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "base/json/json_writer.h"
 #include "base/values.h"
@@ -198,6 +199,93 @@ TEST(ElectronProtocolTest, IpcEventsAreOneLineEach) {
             R"({"args":[1,"a"],"channel":"get","invoke":7,)"
             R"("type":"ipc_invoke","window":2})"
             "\n");
+}
+
+TEST(ElectronProtocolTest, APortIsNamedByWhoMadeItAndANumber) {
+  EXPECT_TRUE(IsElectronPortName("m1"));
+  EXPECT_TRUE(IsElectronPortName("r42"));
+  EXPECT_FALSE(IsElectronPortName("m"));
+  EXPECT_FALSE(IsElectronPortName("x1"));
+  EXPECT_FALSE(IsElectronPortName("m1a"));
+  EXPECT_FALSE(IsElectronPortName("m-1"));
+  EXPECT_FALSE(IsElectronPortName("m12345678901234567"));
+}
+
+TEST(ElectronProtocolTest, IpcPostCarriesItsMessageAndTheMainProcesssPorts) {
+  const auto posted =
+      ParseElectronRequest(R"({"type":"ipc_post","window":2,"channel":"port",)"
+                           R"("message":{"a":1},"ports":["m1","m2"]})");
+  ASSERT_TRUE(posted.has_value()) << posted.error().why;
+  const auto& post = std::get<ElectronPostToPage>(*posted);
+  EXPECT_EQ(post.window, 2);
+  EXPECT_EQ(post.channel, "port");
+  EXPECT_EQ(base::WriteJson(post.message), R"({"a":1})");
+  EXPECT_EQ(post.ports, (std::vector<std::string>{"m1", "m2"}));
+
+  const auto bare = ParseElectronRequest(
+      R"({"type":"ipc_post","window":2,"channel":"c","message":null})");
+  ASSERT_TRUE(bare.has_value()) << bare.error().why;
+  EXPECT_TRUE(std::get<ElectronPostToPage>(*bare).ports.empty());
+}
+
+TEST(ElectronProtocolTest, IpcPostRefusesThePagesPortsAndRepeats) {
+  const auto pages = ParseElectronRequest(
+      R"({"type":"ipc_post","window":2,"channel":"c","message":1,)"
+      R"("ports":["r1"]})");
+  ASSERT_FALSE(pages.has_value());
+  EXPECT_EQ(pages.error().window, 2);
+  EXPECT_EQ(pages.error().why,
+            "\"ports\" must name the main process's own ports: \"m\", then a "
+            "number");
+  EXPECT_EQ(WhyRefused(R"({"type":"ipc_post","window":2,"channel":"c",)"
+                       R"("message":1,"ports":["m1","m1"]})"),
+            "a port is posted once");
+  EXPECT_EQ(WhyRefused(R"({"type":"ipc_post","window":2,"channel":"c"})"),
+            "\"message\" is missing");
+  EXPECT_EQ(WhyRefused(R"({"type":"ipc_post","window":2,"channel":"c",)"
+                       R"("message":1,"ports":"m1"})"),
+            "\"ports\" must be an array");
+}
+
+TEST(ElectronProtocolTest, PortRequestsNameTheirPort) {
+  const auto posted = ParseElectronRequest(
+      R"({"type":"port_post","window":1,"port":"r3","data":[1]})");
+  ASSERT_TRUE(posted.has_value()) << posted.error().why;
+  const auto& post = std::get<ElectronPortPost>(*posted);
+  EXPECT_EQ(post.window, 1);
+  EXPECT_EQ(post.port, "r3");
+  EXPECT_EQ(base::WriteJson(post.data), "[1]");
+
+  const auto closed =
+      ParseElectronRequest(R"({"type":"port_close","window":1,"port":"m2"})");
+  ASSERT_TRUE(closed.has_value()) << closed.error().why;
+  EXPECT_EQ(std::get<ElectronPortClose>(*closed).port, "m2");
+
+  EXPECT_EQ(WhyRefused(R"({"type":"port_close","window":1,"port":"2"})"),
+            "\"port\" must name a port: \"m\" or \"r\", then a number");
+  EXPECT_EQ(WhyRefused(R"({"type":"port_post","window":1,"port":"m2"})"),
+            "\"data\" is missing");
+}
+
+TEST(ElectronProtocolTest, SyncPortAndPageEventsAreOneLineEach) {
+  base::ListValue args;
+  args.Append(1);
+  EXPECT_EQ(ElectronIpcSendSync(1, 3, "get", args),
+            R"({"args":[1],"channel":"get","invoke":3,)"
+            R"("type":"ipc_send_sync","window":1})"
+            "\n");
+  EXPECT_EQ(ElectronIpcPost(1, "port", base::Value("hi"), {"r1"}),
+            R"({"channel":"port","message":"hi","ports":["r1"],)"
+            R"("type":"ipc_post","window":1})"
+            "\n");
+  EXPECT_EQ(ElectronPortMessage(1, "m1", base::Value(2)),
+            R"({"data":2,"port":"m1","type":"port_message","window":1})"
+            "\n");
+  EXPECT_EQ(ElectronPortClosed(1, "r1"),
+            R"({"port":"r1","type":"port_closed","window":1})"
+            "\n");
+  EXPECT_EQ(ElectronPageGone(1), R"({"type":"page_gone","window":1})"
+                                 "\n");
 }
 
 }  // namespace

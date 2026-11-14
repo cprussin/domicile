@@ -27,6 +27,7 @@
 #include "base/task/bind_post_task.h"
 #include "base/threading/sequence_bound.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
+#include "chrome/browser/domicile/domicile_electron_page.h"
 #include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/browser/electron_protocol.h"
@@ -76,7 +77,29 @@ class ChromeElectronDesk final : public ElectronDesk {
   void SendToPage(const std::string& id,
                   const std::string& channel,
                   const std::string& args_json) override {
-    SendToElectronWindow(id, channel, args_json);
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->Deliver(channel, args_json);
+    }
+  }
+  void PostToPage(const std::string& id,
+                  const std::string& channel,
+                  const std::string& message_json,
+                  const std::vector<std::string>& ports) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->DeliverPost(channel, message_json, ports);
+    }
+  }
+  void PostToPort(const std::string& id,
+                  const std::string& port,
+                  const std::string& data_json) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->DeliverToPort(port, data_json);
+    }
+  }
+  void ClosePort(const std::string& id, const std::string& port) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->ClosePort(port);
+    }
   }
 };
 
