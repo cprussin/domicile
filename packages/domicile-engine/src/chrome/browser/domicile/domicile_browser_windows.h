@@ -11,6 +11,7 @@
 #include "base/callback_list.h"
 #include "base/functional/callback.h"
 #include "components/domicile/browser/desk_pointer.h"
+#include "components/domicile/browser/electron_app.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/mojom/browser_windows.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -65,12 +66,19 @@ bool OpenAppWindow(const GURL& url,
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 
 // Opens an app window at `url` for an Electron app, with `app_id`, in its own
-// `partition`, and returns the window's id. Nothing when there is no shell to
-// own it. See docs/architecture/ELECTRON-APPS.md.
-std::optional<std::string> OpenElectronWindow(
-    const GURL& url,
-    const std::string& app_id,
-    const WebViewPartition& partition);
+// `partition`, whose pages run `preload` (none when empty) and make `calls`.
+// Returns the window's id. Nothing when there is no shell to own it. See
+// docs/architecture/ELECTRON-APPS.md.
+std::optional<std::string> OpenElectronWindow(const GURL& url,
+                                              const std::string& app_id,
+                                              const WebViewPartition& partition,
+                                              const std::string& preload,
+                                              ElectronPageCalls calls);
+
+// webContents.send: `args_json` on `channel` to Electron window `id`'s page.
+void SendToElectronWindow(const std::string& id,
+                          const std::string& channel,
+                          const std::string& args_json);
 
 // Loads `url` in browser window `id` of the shell's profile.
 void LoadBrowserWindow(const std::string& id, const GURL& url);

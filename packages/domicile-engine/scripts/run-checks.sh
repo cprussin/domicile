@@ -124,6 +124,7 @@ TOGETHER=(
   guard-pdf-after-hiding
   guard-app-module
   guard-electron-socket
+  guard-electron-preload
   guard-video-codecs
   guard-browser-brand
 )
@@ -145,6 +146,7 @@ ONCE=(
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch
+  guard-electron-preload
   guard-electron-socket
   guard-held-moments
   guard-pdf-scaled-text

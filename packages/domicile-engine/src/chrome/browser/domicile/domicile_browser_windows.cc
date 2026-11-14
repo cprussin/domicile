@@ -31,6 +31,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
@@ -198,12 +199,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // to own it.
   std::optional<std::string> OpenElectron(const GURL& url,
                                           const std::string& app_id,
-                                          const WebViewPartition& partition) {
-    WebViewGuest* made =
-        Make([&](WebViewGuest& guest) { guest.Navigate(url); },
-             /*popup_window=*/std::nullopt, 0, 0,
-             /*private_browsing=*/false, /*app=*/true, partition,
-             /*app_host=*/std::string(), app_id);
+                                          const WebViewPartition& partition,
+                                          const std::string& preload,
+                                          ElectronPageCalls calls) {
+    WebViewGuest* made = Make(
+        [&](WebViewGuest& guest) {
+          // Before the first navigation, which runs the preload too.
+          ElectronPage::Attach(guest.contents(), preload, std::move(calls));
+          guest.Navigate(url);
+        },
+        /*popup_window=*/std::nullopt, 0, 0,
+        /*private_browsing=*/false, /*app=*/true, partition,
+        /*app_host=*/std::string(), app_id);
     if (made == nullptr) {
       return std::nullopt;
     }
@@ -846,15 +853,30 @@ DeskWindows* ShellDeskWindows() {
 
 }  // namespace
 
-std::optional<std::string> OpenElectronWindow(
-    const GURL& url,
-    const std::string& app_id,
-    const WebViewPartition& partition) {
+std::optional<std::string> OpenElectronWindow(const GURL& url,
+                                              const std::string& app_id,
+                                              const WebViewPartition& partition,
+                                              const std::string& preload,
+                                              ElectronPageCalls calls) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {
     return std::nullopt;
   }
-  return windows->OpenElectron(url, app_id, partition);
+  return windows->OpenElectron(url, app_id, partition, preload,
+                               std::move(calls));
+}
+
+void SendToElectronWindow(const std::string& id,
+                          const std::string& channel,
+                          const std::string& args_json) {
+  DeskWindows* windows = ShellDeskWindows();
+  WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);
+  if (guest == nullptr) {
+    LOG(WARNING) << "domicile: asked to send to browser window " << id
+                 << ", which is not open.";
+  } else {
+    ElectronPage::SendTo(guest->contents(), channel, args_json);
+  }
 }
 
 void LoadBrowserWindow(const std::string& id, const GURL& url) {

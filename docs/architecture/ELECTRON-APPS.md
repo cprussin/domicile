@@ -94,10 +94,19 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   before the page's own scripts, with `contextBridge` and `ipcRenderer` bound
   in, as in a sandboxed Electron page. The preload has no `require` beyond
   `electron`.
+  The host sends the preload's source with `open_window`; the browser hands
+  it to the window's main frame before each navigation commits, and the
+  renderer runs it when the document's element is made
+  ([`electron_preload.h`](../../packages/domicile-engine/src/components/domicile/renderer/electron_preload.h)).
+- **`contextBridge.exposeInMainWorld`** copies the API into the page:
+  objects, arrays, dates, errors and bytes are copied, functions and promises
+  are wrapped so they run and settle in their own world
+  ([`context_bridge.h`](../../packages/domicile-engine/src/components/domicile/renderer/context_bridge.h)).
 - **IPC** runs page ─▶ engine ─▶ Electron socket ─▶ host and back: `send`,
   `invoke`/`handle`, `postMessage` with ports, and `sendSync`. `sendSync`
   blocks only the calling page, on a sync Mojo call that the browser process
-  answers when the host replies.
+  answers when the host replies. Arguments travel as JSON, not structured
+  clones, so a `Map` or bytes do not survive the trip.
 
 ### Requests
 
@@ -184,7 +193,9 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: resolve the app, mirror its resources, the `electron` hook, `app` lifecycle and paths
 - [x] engine: the Electron socket and windows (`BrowserWindow` create, load, title, show, close)
 - [x] `electron-host`: `BrowserWindow` over the Electron socket
-- [ ] engine: preload, `contextBridge`, `ipcRenderer`, `invoke`, `sendSync`, message ports
+- [x] engine: preload, `contextBridge`, `ipcRenderer` `send`/`on`/`invoke`, `webContents.send`
+- [ ] `electron-host`: `webPreferences.preload`, `ipcMain`, `webContents.send`
+- [ ] engine: `sendSync`, message ports
 - [ ] engine: `protocol.handle`, per-app partition, `session` and `webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
