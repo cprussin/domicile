@@ -788,6 +788,39 @@ source_set("web_view_partition") {
   public_deps = [ "//base" ]
 }
 
+# One running Electron app on the Electron socket: its requests to the desk and
+# its windows' events. Its own target for the reason :file_choice is one: it
+# needs no browser, which is where its tests are.
+source_set("electron_app") {
+  sources = [
+    "browser/electron_app.cc",
+    "browser/electron_app.h",
+  ]
+
+  public_deps = [
+    ":browser_window_listing",
+    ":electron_protocol",
+    "//base",
+    "//url",
+  ]
+}
+
+# The Electron socket's protocol, which `electron-host` speaks for an Electron
+# app's windows. Its own target for the reason :file_choice is one: it needs no
+# browser, which is where its tests are.
+source_set("electron_protocol") {
+  sources = [
+    "browser/electron_protocol.cc",
+    "browser/electron_protocol.h",
+  ]
+
+  public_deps = [
+    ":web_view_partition",
+    "//base",
+    "//url",
+  ]
+}
+
 # Which of a <webview>'s navigations ask the shell first. Its own target beside
 # :will_navigate_throttle for the reason :file_choice is one: it needs no
 # browser, which is where its tests are.
@@ -1261,6 +1294,8 @@ source_set("unit_tests") {
     "browser/display_capture_unittest.cc",
     "browser/display_list_unittest.cc",
     "browser/download_list_unittest.cc",
+    "browser/electron_app_unittest.cc",
+    "browser/electron_protocol_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_settings_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
@@ -1350,6 +1385,8 @@ source_set("unit_tests") {
     ":display_capture_target",
     ":display_transform",
     ":download_list",
+    ":electron_app",
+    ":electron_protocol",
     ":extension_installer",
     ":extension_settings",
     ":extension_tray_entry",

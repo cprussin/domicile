@@ -65,10 +65,12 @@ the fallback for an app Bun can't run, and becomes required in phase 2.
 ### The Electron socket
 
 `--domicile-electron-socket <path>` makes the engine bind a Unix socket that
-each `electron-host` keeps open for the app's life.
+each `electron-host` keeps open for the app's life. The desktop passes it and
+names it to apps in `DOMICILE_ELECTRON_SOCK`.
 
-- Frames are a length, a JSON header and an optional binary body, so a
-  protocol response streams without base64.
+- Each line is one JSON object, both ways
+  ([`electron_protocol.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_protocol.h)).
+  A binary body, for a protocol response, comes with the protocol handlers.
 - One connection is one app. Closing it closes the app's windows.
 - A request the engine needs answered (a protocol request, `sendSync`)
   carries an id; the host replies with that id.
@@ -180,7 +182,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 ## Plan
 
 - [ ] `electron-host`: resolve the app, mirror its resources, the `electron` hook, `app` lifecycle and paths
-- [ ] engine: the Electron socket and windows (`BrowserWindow` create, load, title, show, close)
+- [x] engine: the Electron socket and windows (`BrowserWindow` create, load, title, show, close)
 - [ ] engine: preload, `contextBridge`, `ipcRenderer`, `invoke`, `sendSync`, message ports
 - [ ] engine: `protocol.handle`, per-app partition, `session` and `webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
