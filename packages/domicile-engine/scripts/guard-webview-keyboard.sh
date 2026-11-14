@@ -27,6 +27,9 @@
 #     and not the shell's document      guest's hook reports
 #   an unclaimed chord came back        Ctrl+R returns to the shell as
 #     and a plain key did not           `domicile-guest-keydown`
+#   each unclaimed key was delivered    `domicile-key-delivered` once for the
+#     and the chord was not             plain key and once for Ctrl+R, not for
+#                                        Alt+Tab
 #   the requested zoom arrives          the shell answers Ctrl+R with
 #                                        setZoom(1.5); the element reports it
 #                                        and the page's width changes
@@ -285,6 +288,8 @@ SAW_GUEST_CHORD=$(saw "GUARD guest-chord key=$UNCLAIMED_KEY code=$UNCLAIMED_CODE
 SAW_PLAIN_CHORD=$(saw "GUARD guest-chord key=$PLAIN_KEY")
 SAW_ZOOM=$(saw "GUARD zoom factor=1.5")
 SAW_ZOOM_DRAWN=$(saw "GUARD guest-resized")
+# The plain key and Ctrl+R; a third is the claimed chord.
+DELIVERED=$(grep -cF "GUARD key-delivered" "$ENGINE_LOG")
 
 echo
 echo "claimed=$SAW_CLAIM loaded=$SAW_PAGE focused=$SAW_FOCUS relayed=$SAW_RELAY"
@@ -292,6 +297,7 @@ echo "shortcut=$SAW_SHORTCUT release=$SAW_RELEASE modifiers=$SAW_MODIFIERS hook-
 echo "the shell's document saw: before=$SAW_SHELL_KEY after=$SAW_DOCUMENT_KEY"
 echo "the page in the window saw: after=$SAW_GUEST_KEY"
 echo "handed back: chord=$SAW_GUEST_CHORD plain=$SAW_PLAIN_CHORD; zoom=$SAW_ZOOM drawn=$SAW_ZOOM_DRAWN"
+echo "delivered: $DELIVERED of 2"
 echo
 
 # The verdict. `packages/domicile-engine/tests/test-webview-keyboard-guard.sh` runs this block
@@ -356,6 +362,12 @@ elif [ "$SAW_PLAIN_CHORD" = "1" ]; then
   FAILURE="a plain key was handed back to the shell as domicile-guest-keydown. \
 Only chords may be: this is every keystroke typed into a page, a password's \
 included, copied into the shell's document"
+elif [ "$DELIVERED" != "2" ]; then
+  FAILURE="the shell heard domicile-key-delivered $DELIVERED times where the \
+plain key and Ctrl+R owed 2. Fewer: WebViewGuest::PreHandleKeyboardEvent did \
+not send KeyDelivered for an unclaimed key, or the element did not dispatch \
+it, so typing in a browser window does not end a selection around it. More: \
+the claimed chord was counted as typing in the page"
 elif [ "$SAW_ZOOM" != "1" ]; then
   FAILURE="the shell asked for 150% and the element never reported it. \
 Either SetZoom never reached the browser, or HostZoomMap set it and ReportZoom \

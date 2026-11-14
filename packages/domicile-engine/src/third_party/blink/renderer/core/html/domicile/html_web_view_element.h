@@ -321,6 +321,10 @@ class CORE_EXPORT HTMLWebViewElement final
                         bool meta_key,
                         bool repeat) override;
 
+  // Dispatches `domicile-key-delivered`, which names no key. See KeyDelivered
+  // in components/domicile/mojom/web_view_guest.mojom.
+  void KeyDelivered() override;
+
   void ZoomChanged(double factor) override;
 
   void ZoomRequested(bool zoom_in) override;

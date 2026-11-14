@@ -61,6 +61,7 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
     SAW_PLAIN_CHORD=0
     SAW_ZOOM=1
     SAW_ZOOM_DRAWN=1
+    DELIVERED=2
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -96,6 +97,7 @@ reason() { # $1 NEGATIVE, then NAME=value overrides
     SAW_PLAIN_CHORD=0
     SAW_ZOOM=1
     SAW_ZOOM_DRAWN=1
+    DELIVERED=2
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -186,6 +188,19 @@ expect "a plain key handed back is a failure" "fail" \
   "$(verdict 0 SAW_PLAIN_CHORD=1)"
 expect "a plain key handed back names what it copies" "yes" \
   "$(blames "keystroke" 0 SAW_PLAIN_CHORD=1)"
+
+echo
+echo "keys delivered to the page, which the shell hears without their keys"
+expect "no key delivered is a failure" "fail" "$(verdict 0 DELIVERED=0)"
+expect "no key delivered blames the delegate" "yes" \
+  "$(blames "KeyDelivered" 0 DELIVERED=0)"
+# A claimed chord is the shell's own key, not typing in the page.
+expect "the claimed chord delivered is a failure" "fail" \
+  "$(verdict 0 DELIVERED=3)"
+expect "the claimed chord delivered names the chord" "yes" \
+  "$(blames "claimed chord" 0 DELIVERED=3)"
+expect "no key delivered is not the control's business" "pass" \
+  "$(verdict 1 SAW_SHORTCUT=0 DELIVERED=0)"
 
 echo
 echo "the zoom the first handed-back chord asks for"

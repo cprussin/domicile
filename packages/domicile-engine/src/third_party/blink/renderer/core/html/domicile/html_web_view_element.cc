@@ -70,6 +70,8 @@ constexpr char kPageChangeEvent[] = "domicile-page-change";
 // listeners do not mistake it for a key in the shell's document. The zoom
 // requests encode direction in the name, so they stay plain Events.
 constexpr char kGuestKeydownEvent[] = "domicile-guest-keydown";
+// A key press reached the guest, which `<app>` also dispatches for its client.
+constexpr char kKeyDeliveredEvent[] = "domicile-key-delivered";
 constexpr char kZoomChangeEvent[] = "domicile-zoom-change";
 constexpr char kZoomInRequestEvent[] = "domicile-zoom-in-request";
 constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
@@ -924,6 +926,10 @@ void HTMLWebViewElement::PageFailureChanged(
   }
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kPageFailureChangeEvent)));
+}
+
+void HTMLWebViewElement::KeyDelivered() {
+  DispatchEvent(*Event::CreateBubble(AtomicString(kKeyDeliveredEvent)));
 }
 
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {

@@ -103,6 +103,8 @@ constexpr char kFocusReleaseRequested[] = "domicile-focus-release-requested";
 constexpr char kPresented[] = "domicile-presented";
 constexpr char kSuspended[] = "domicile-suspended";
 constexpr char kResumed[] = "domicile-resumed";
+// A key press reached the window, as `<webview>` also dispatches for its guest.
+constexpr char kKeyDelivered[] = "domicile-key-delivered";
 
 // Something happened on the page: a key went down or up, a press, a blur.
 class PageHeard final : public NativeEventListener {
@@ -1453,6 +1455,14 @@ void DomicileHost::ForwardKeyDown(Event* event) {
   forwarded_keys_.Forward(keycode, app_id);
   if (EnsureBound()) {
     channel_->Key(app_id, keycode, true);
+  }
+  // Names no key, so typed text stays the client's. `KeyboardTarget` dropped a
+  // window whose <app> left the page, so the element is there.
+  if (!ui::KeycodeConverter::IsDomKeyForModifier(
+          ui::KeycodeConverter::KeyStringToDomKey(key->key().Utf8()))) {
+    HTMLAppElement* app = AppElement(app_id);
+    CHECK(app);
+    app->DispatchEvent(*Event::CreateBubble(AtomicString(kKeyDelivered)));
   }
 }
 

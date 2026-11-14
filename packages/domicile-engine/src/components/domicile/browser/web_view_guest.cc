@@ -1564,9 +1564,13 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
 
   // A matched chord is HANDLED so the page never sees it and cannot override a
   // desktop shortcut.
-  return ShortcutRegistry::Get().Press(chord, page)
-             ? content::KeyboardEventProcessingResult::HANDLED
-             : content::KeyboardEventProcessingResult::NOT_HANDLED;
+  if (ShortcutRegistry::Get().Press(chord, page)) {
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+  if (!ui::KeycodeConverter::IsDomKeyForModifier(key)) {
+    client_->KeyDelivered();
+  }
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool WebViewGuest::HandleKeyboardEvent(

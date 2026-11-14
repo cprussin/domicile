@@ -578,6 +578,13 @@ interface WebViewGuestClient {
   UnhandledKeyDown(string key, string code, bool alt_key, bool ctrl_key,
                    bool shift_key, bool meta_key, bool repeat);
 
+  // A key press reached the page: not a modifier, not a repeat, and not a
+  // chord the shell grabbed. So the shell can tell typing in a window from
+  // keys it handled, such as to end a selection around the window.
+  //
+  // Carries no key, so typed text, passwords included, stays in the guest.
+  KeyDelivered();
+
   // The page's zoom factor; 1 is 100%.
   //
   // From HostZoomMap, keyed by host as in Chrome, so it also changes when
