@@ -8,11 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/types/expected.h"
-
-namespace base {
-class CommandLine;
-}  // namespace base
 
 namespace domicile {
 
