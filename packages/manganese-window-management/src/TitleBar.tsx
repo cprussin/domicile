@@ -189,6 +189,16 @@ export const TitleBar = ({
   window,
 }: Props) => {
   const hidden = strip !== undefined && !strip.open;
+  // A bar is raised unless it rests; a tab only while it is the open one.
+  const lit = strip === undefined ? focus !== "resting" : !hidden;
+  const fill = {
+    hoverable: hidden,
+    leaf: strip === undefined && focus === "leaf",
+    lit,
+  };
+  // The open tab's edge follows its strip's: stronger on a well. See
+  // `TabStrip`. A bar's own edge never changes, so it stays on the bar.
+  const edge = strip === undefined ? "none" : edgeOf(strip);
   const element = useRef<HTMLDivElement>(null);
   // A tab opening or closing turns about its strip's start, as the tabs after
   // it ease along. Anything else turns about its whole window's middle.
@@ -272,7 +282,7 @@ export const TitleBar = ({
             strip === undefined
               ? cx(
                   barStyles({ focus }),
-                  !fullscreen && edgeStyles,
+                  !fullscreen && cx(edgeStyles, barEdgeStyles),
                   !fullscreen && !hanging && topCornerStyles,
                 )
               : tabStyles({
@@ -281,17 +291,22 @@ export const TitleBar = ({
                   nested: strip.nested,
                   open: !hidden,
                 }),
-            settlingStyles(),
           )}
           data-face
         >
+          <Fill {...fill} edge={edge} />
           <span className={leadStyles} {...{ [UPRIGHT]: "" }}>
             {group !== undefined && (
               <GroupMark layout={group.layout} windows={group.windows.length} />
             )}
             {/* Keyed so a new icon gets another try after one fails to load. */}
             <WindowIcon icon={icon} key={icon} />
-            <span className={titleStyles}>{title}</span>
+            <span
+              className={titleStyles({ hoverable: fill.hoverable, lit })}
+              data-title={title}
+            >
+              <span>{title}</span>
+            </span>
           </span>
           {/*
         A press on a button must not start a drag: drag pointer capture would
@@ -304,6 +319,7 @@ export const TitleBar = ({
             }}
             {...{ [UPRIGHT]: "" }}
           >
+            <Fill {...fill} edge="none" />
             {/*
             A hidden tab only offers to close, as in a browser. A narrow bar
             drops these too. A tab shows its buttons only under the pointer or
@@ -382,6 +398,10 @@ const TabTooltip = ({
       />
     </PopupBoundary>
   );
+
+/** The open tab's edge in `strip`. */
+const edgeOf = (strip: StripPlace): FillProps["edge"] =>
+  strip.nested ? "nested" : "strong";
 
 /** Whether a tab plays `motion` along its strip, opening or closing. */
 const alongStrip = (motion: WindowMotion): boolean =>
@@ -498,6 +518,114 @@ const tabSlotStyles = cva({
   },
 });
 
+/** What a window's bar and a tab share. */
+const faceStyles = {
+  containerType: "inline-size",
+  flex: 1,
+  // See `fauxMedium`.
+  fontWeight: "normal",
+  gap: 1.5,
+  // Over its `Fill`, which sits under everything else in it.
+  isolation: "isolate",
+  justify: "space-between",
+  minInlineSize: 0,
+  overflow: "hidden",
+  position: "relative",
+} as const;
+
+type FillProps = {
+  /** The raised layer's edge: a tab's, or none for a bar, which has its own. */
+  edge: "nested" | "none" | "strong";
+  /** A hidden tab, which lifts toward the open tab's color under the pointer. */
+  hoverable: boolean;
+  /** The keyboard's own bar inside a selected group, washed in the accent. */
+  leaf: boolean;
+  /** Raised to the address bar's surface: an open tab, or a bar not resting. */
+  lit: boolean;
+};
+
+/**
+ * A bar's colors as layers stacked under its contents: the strip's own color,
+ * always there, and over it the raised surface, the accent wash and a hidden
+ * tab's hover. A change of state fades layers in and out with `opacity`
+ * alone, which the compositor animates without painting the bar again, where
+ * easing its `background-color` would paint it on every frame. Focus follows
+ * the pointer, so these fades are frequent.
+ *
+ * The rest of the bar is clear, so its buttons carry their own, over the
+ * title running under them as the bar settles.
+ */
+const Fill = ({ edge, hoverable, leaf, lit }: FillProps) => (
+  <>
+    <span className={fillStyles({ layer: "rail" })} data-fill="rail" />
+    <span
+      className={fillStyles({ edge, layer: "raised", shown: lit })}
+      data-fill="raised"
+    />
+    <span
+      className={fillStyles({ layer: "leaf", shown: leaf })}
+      data-fill="leaf"
+    />
+    <span
+      className={fillStyles({ hoverable, layer: "hover", shown: false })}
+      data-fill="hover"
+    />
+  </>
+);
+
+const fillStyles = cva({
+  base: {
+    borderRadius: "inherit",
+    inset: 0,
+    pointerEvents: "none",
+    position: "absolute",
+    transition: "opacity {durations.fast} {easings.out}",
+    zIndex: -1,
+  },
+  defaultVariants: { edge: "none", hoverable: false, shown: true },
+  variants: {
+    edge: {
+      nested: {
+        borderBlockEndWidth: 0,
+        borderBlockStartWidth: "1px",
+        borderColor:
+          "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
+        borderInlineWidth: "1px",
+        borderStyle: "solid",
+      },
+      none: {},
+      strong: {
+        borderBlockEndWidth: 0,
+        borderBlockStartWidth: "1px",
+        borderColor: "borderStrong",
+        borderInlineWidth: "1px",
+        borderStyle: "solid",
+      },
+    },
+    hoverable: {
+      false: {},
+      true: { "[data-face]:hover &": { opacity: 1 } },
+    },
+    layer: {
+      hover: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.chrome} 60%, {colors.tabRail})",
+      },
+      leaf: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.accent} 45%, {colors.chrome})",
+      },
+      // Opaque, not clear: a hidden tab broken out of its group grows into a
+      // bar, and from clear the desktop would show through.
+      rail: { backgroundColor: "tabRail" },
+      // One surface with the address bar, which it meets. It stands out from
+      // the strip's `tabRail`.
+      raised: { backgroundColor: "chrome" },
+    },
+    shown: { false: { opacity: 0 }, true: { opacity: 1 } },
+  },
+});
+
 /**
  * A heavier look for the title being worked in. A stroke under the glyphs
  * rather than a heavier weight, whose wider letters would shift the title
@@ -515,62 +643,15 @@ const fauxMedium = {
  */
 const tabStyles = cva({
   base: hstack.raw({
-    borderBlockEndWidth: 0,
-    borderBlockStartWidth: "1px",
-    borderInlineWidth: "1px",
+    ...faceStyles,
     borderStartEndRadius: "md",
     borderStartStartRadius: "md",
-    borderStyle: "solid",
-    containerType: "inline-size",
-    flex: 1,
-    // See `fauxMedium`.
-    fontWeight: "normal",
-    gap: 1.5,
-    justify: "space-between",
-    minInlineSize: 0,
-    overflow: "hidden",
-    paddingInlineEnd: 0.5,
-    paddingInlineStart: 2,
+    // Room for the open tab's edge, which its raised layer draws (see
+    // `Fill`), so opening a tab moves nothing.
+    paddingBlockStart: "1px",
+    paddingInlineEnd: "calc({spacing.0.5} + 1px)",
+    paddingInlineStart: "calc({spacing.2} + 1px)",
   }),
-  // The background follows both variants, so each pair sets it once.
-  compoundVariants: [
-    {
-      // One surface with the address bar, which it meets. It stands out from
-      // the strip's `tabRail`.
-      css: { backgroundColor: "chrome" },
-      focus: ["focused", "leaf", "resting", "selected"],
-      open: true,
-    },
-    // The strip's own color, not clear: a hidden tab broken out of its group
-    // eases into a bar's color, and from clear the desktop shows through.
-    {
-      css: {
-        _hover: {
-          backgroundColor:
-            "color-mix(in oklab, {colors.chrome} 60%, {colors.tabRail})",
-          color: "foreground",
-        },
-        backgroundColor: "tabRail",
-      },
-      focus: ["focused", "leaf", "resting", "selected"],
-      open: false,
-    },
-    // The open tab's edge follows its strip's: stronger on a well. See
-    // `TabStrip`.
-    {
-      css: { borderColor: "borderStrong" },
-      nested: false,
-      open: true,
-    },
-    {
-      css: {
-        borderColor:
-          "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
-      },
-      nested: true,
-      open: true,
-    },
-  ],
   variants: {
     // Weight as well as color, for users who cannot tell the colors apart.
     focus: {
@@ -588,71 +669,40 @@ const tabStyles = cva({
     nested: { false: {}, true: {} },
     open: {
       // A press opens a hidden tab.
-      false: { borderColor: "transparent", color: "muted", cursor: "pointer" },
-      true: {
-        color: "foreground",
-      },
+      false: { cursor: "pointer" },
+      true: {},
     },
   },
 });
 
 /**
- * Bar colors for sway's three client states plus `leaf`.
- *
- * The glow around the focused window is the main focus indicator (see
- * `FocusGlow`), so the bar only adds the open tab's surface and a heavier
- * weight. No state uses an accent edge.
- *
- * Each state sets all its colors instead of overriding one: two rules on one
- * property would depend on Panda's emit order.
+ * A window's own bar, in sway's three client states plus `leaf`. Its colors
+ * are `Fill`'s layers.
  */
 const barStyles = cva({
   base: hstack.raw({
-    borderBlockEndColor: "transparent",
-    borderBlockEndWidth: "1px",
-    containerType: "inline-size",
-    flex: 1,
-    // See `fauxMedium`.
-    fontWeight: "normal",
-    gap: 1.5,
-    justify: "space-between",
-    minInlineSize: 0,
-    overflow: "hidden",
+    ...faceStyles,
     // Just enough for the title to clear the rounded corner.
     paddingInlineEnd: 0.5,
     paddingInlineStart: 2,
   }),
   variants: {
+    // Weight as well as color, for users who cannot tell the colors apart.
     focus: {
-      focused: {
-        backgroundColor: "chrome",
-        color: "foreground",
-        // Weight as well as color, for users who cannot tell the colors
-        // apart.
-        ...fauxMedium,
-      },
-      // The focused window inside a `focus parent` selection. The group's
-      // bars use the open tab's background, so this one mixes in the accent.
-      leaf: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.accent} 45%, {colors.chrome})",
-        color: "foreground",
-        ...fauxMedium,
-      },
-      // The strip's color, so a title bar reads as a strip with one tab.
-      resting: {
-        backgroundColor: "tabRail",
-        color: "muted",
-      },
-      // A bar in the `focus parent` selection.
-      selected: {
-        backgroundColor: "chrome",
-        color: "foreground",
-        ...fauxMedium,
-      },
+      focused: fauxMedium,
+      leaf: fauxMedium,
+      resting: {},
+      selected: fauxMedium,
     },
   },
 });
+
+/**
+ * No edge along the bottom, over the row of the window's surface tucked under
+ * the bar (see `SURFACE_TUCK`), but padding in its place, so `Fill` covers
+ * that row: a bar's layers fill only inside its edges.
+ */
+const barEdgeStyles = css({ borderBlockEndWidth: 0, paddingBlockEnd: "1px" });
 
 /**
  * Rounds only the top corners. The contents round the bottom ones (see
@@ -671,8 +721,10 @@ const topCornerStyles = css({
  * buttons.
  */
 const controlStyles = hstack({
-  backgroundColor: "inherit",
   gap: 0,
+  // Over the title, with its own `Fill` beneath its buttons.
+  isolation: "isolate",
+  position: "relative",
   transformOrigin: "right center",
 });
 
@@ -729,18 +781,48 @@ const iconImageStyles = css({
   width: "16px",
 });
 
-const titleStyles = css({
-  flex: 1,
-  // 13px, the desktop's text size, matching the address bar.
-  fontSize: "ui",
-  overflow: "hidden",
-  // Centered on its capitals, not its line box, whose extra room below the
-  // baseline left the title riding high. Even padding keeps descenders clear
-  // of the clip without moving the center.
-  paddingBlock: "0.25em",
-  textBox: "trim-both cap alphabetic",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+/**
+ * The title, in two copies stacked in one cell: its own text in `muted` and,
+ * over it, an `::after` copy in `foreground` that the screen reader skips.
+ * Raising the bar crossfades them, with `opacity` alone, as `Fill` does its
+ * colors.
+ */
+const titleStyles = cva({
+  base: {
+    _after: { color: "foreground", content: 'attr(data-title) / ""' },
+    "& > *": { color: "muted" },
+    "& > *, &::after": {
+      gridArea: "1 / 1",
+      overflow: "hidden",
+      // Centered on its capitals, not its line box, whose extra room below
+      // the baseline left the title riding high. Even padding keeps
+      // descenders clear of the clip without moving the center.
+      paddingBlock: "0.25em",
+      textBox: "trim-both cap alphabetic",
+      textOverflow: "ellipsis",
+      transition: "opacity {durations.fast} {easings.out}",
+      whiteSpace: "nowrap",
+    },
+    display: "grid",
+    flex: 1,
+    // 13px, the desktop's text size, matching the address bar.
+    fontSize: "ui",
+    minInlineSize: 0,
+  },
+  variants: {
+    hoverable: {
+      false: {},
+      // As `Fill`'s hover layer.
+      true: {
+        "[data-face]:hover & > *": { opacity: 0 },
+        "[data-face]:hover &::after": { opacity: 1 },
+      },
+    },
+    lit: {
+      false: { _after: { opacity: 0 }, "& > *": { opacity: 1 } },
+      true: { _after: { opacity: 1 }, "& > *": { opacity: 0 } },
+    },
+  },
 });
 
 const summaryStyles = vstack({ alignItems: "stretch", gap: 0.5 });
