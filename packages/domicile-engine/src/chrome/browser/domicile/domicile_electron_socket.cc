@@ -33,6 +33,7 @@
 #include "components/domicile/browser/electron_protocol.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/common/domicile_scheme.h"
+#include "components/domicile/common/electron_schemes.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
@@ -110,7 +111,9 @@ class ChromeElectronDesk final : public ElectronDesk {
 class AppOnUIThread {
  public:
   explicit AppOnUIThread(ElectronApp::Send send)
-      : app_(desk_, std::move(send)),
+      : app_(desk_,
+             std::move(send),
+             ElectronSchemesIn(*base::CommandLine::ForCurrentProcess())),
         listing_(WatchBrowserWindowListing(
             base::BindRepeating(&AppOnUIThread::Listed,
                                 base::Unretained(this)))),

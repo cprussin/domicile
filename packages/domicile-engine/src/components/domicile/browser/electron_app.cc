@@ -61,8 +61,10 @@ void ElectronSession::Fetch(ElectronFetch fetch,
   app_->StartFetch(name_, std::move(fetch), std::move(responder));
 }
 
-ElectronApp::ElectronApp(ElectronDesk& desk, Send send)
-    : desk_(desk), send_(std::move(send)) {}
+ElectronApp::ElectronApp(ElectronDesk& desk,
+                         Send send,
+                         std::vector<ElectronScheme> schemes)
+    : desk_(desk), send_(std::move(send)), schemes_(std::move(schemes)) {}
 
 ElectronApp::~ElectronApp() {
   for (const auto& [number, window] : windows_) {
@@ -85,7 +87,7 @@ void ElectronApp::Take(std::string_view line) {
       send_.Run(ElectronRefused("this app already said hello"));
     } else {
       hello_ = *hello;
-      send_.Run(ElectronReady());
+      send_.Run(ElectronReady(schemes_));
     }
   } else if (!hello_.has_value()) {
     send_.Run(ElectronRefused("an app says hello first"));
