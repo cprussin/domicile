@@ -349,6 +349,44 @@ typedef struct DomicileListedBrowserWindow {
   uint8_t off_the_record;
 } DomicileListedBrowserWindow;
 
+// What a `DomicileInputDevice` is. A device that is more than one is listed
+// once for each, under one id.
+typedef enum DomicileInputDeviceKind {
+  DOMICILE_INPUT_DEVICE_KEYBOARD = 0,
+  DOMICILE_INPUT_DEVICE_MOUSE = 1,
+  DOMICILE_INPUT_DEVICE_TOUCHPAD = 2,
+  DOMICILE_INPUT_DEVICE_TOUCHSCREEN = 3,
+  DOMICILE_INPUT_DEVICE_POINTING_STICK = 4,
+  DOMICILE_INPUT_DEVICE_GRAPHICS_TABLET = 5,
+  // Read for its keys or switches alone, like a power button or a lid.
+  DOMICILE_INPUT_DEVICE_OTHER = 6,
+} DomicileInputDeviceKind;
+
+// How a `DomicileInputDevice` is attached.
+typedef enum DomicileInputDeviceConnection {
+  DOMICILE_INPUT_CONNECTION_UNKNOWN = 0,
+  DOMICILE_INPUT_CONNECTION_INTERNAL = 1,
+  DOMICILE_INPUT_CONNECTION_USB = 2,
+  DOMICILE_INPUT_CONNECTION_BLUETOOTH = 3,
+} DomicileInputDeviceConnection;
+
+// An input device the browser reads, for `input_devices`.
+typedef struct DomicileInputDevice {
+  // What its driver calls it.
+  const char* name;
+  // Its device under /sys, or empty.
+  const char* sys_path;
+  // The browser's id for it, which holds while it stays plugged in.
+  int32_t id;
+  // Its USB or Bluetooth ids, or 0.
+  uint16_t vendor_id;
+  uint16_t product_id;
+  // A DomicileInputDeviceKind.
+  uint8_t kind;
+  // A DomicileInputDeviceConnection.
+  uint8_t connection;
+} DomicileInputDevice;
+
 // How the compositor wants one display's connector driven.
 //
 // The reverse of DomicileDisplay: the compositor's config decides, but the
@@ -664,6 +702,15 @@ typedef struct DomicileEngineCallbacks {
   void (*listed_browser_windows)(void* user_data,
                                  const DomicileListedBrowserWindow* windows,
                                  uint32_t count);
+  // The input devices the browser reads, for `domicile list-inputs`.
+  // `devices` points at `count` records, their strings borrowed for the call.
+  // Sent once the browser connects, and when a device is plugged or
+  // unplugged.
+  //
+  // An older engine ignores it.
+  void (*input_devices)(void* user_data,
+                        const DomicileInputDevice* devices,
+                        uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls

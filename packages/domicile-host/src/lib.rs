@@ -11,8 +11,8 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DesktopStatus, DisplayInfo,
-    ExtensionSettings, HostMessage, ListedDisplay, ListedWindow, MonitorInfo, Notification, Owner,
-    PortalRequest, PortalWallpaper, Theme, TrayItem, WindowKind,
+    ExtensionSettings, HostMessage, ListedDisplay, ListedInput, ListedWindow, MonitorInfo,
+    Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem, WindowKind,
 };
 
 pub mod app_names;
@@ -256,6 +256,8 @@ pub struct Host {
     browser_toplevel_ids: BTreeMap<String, String>,
     /// The browser windows, in the engine's order.
     browser_windows: Vec<BrowserWindow>,
+    /// The input devices, in the engine's order.
+    inputs: Vec<ListedInput>,
     /// Which monitors are off.
     darkness: Darkness,
 }
@@ -395,6 +397,18 @@ impl Host {
     /// Replace the browser windows, as the engine reports them.
     pub fn browser_windows(&mut self, windows: Vec<BrowserWindow>) {
         self.browser_windows = windows;
+    }
+
+    /// Replace the input devices, as the engine reports them.
+    pub fn input_devices(&mut self, inputs: Vec<ListedInput>) {
+        self.inputs = inputs;
+    }
+
+    /// Every input device the engine reads, answering `which_inputs`.
+    pub fn list_inputs(&self) -> HostMessage {
+        HostMessage::InputList {
+            inputs: self.inputs.clone(),
+        }
     }
 
     /// The output name of the monitor `name` calls, which may be any name a
@@ -1099,6 +1113,7 @@ impl Host {
             | ChromeMessage::WhichStatus
             | ChromeMessage::WhichShellCommands
             | ChromeMessage::WhichShellBindings
+            | ChromeMessage::WhichInputs
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

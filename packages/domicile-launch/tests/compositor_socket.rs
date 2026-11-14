@@ -9,8 +9,8 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    displays, monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
-    shell_commands, status, theme, virtual_monitor, windows, CompositorError,
+    displays, inputs, monitors, power_displays, screen_record, screenshot, send_shell,
+    shell_bindings, shell_commands, status, theme, virtual_monitor, windows, CompositorError,
 };
 use domicile_launch::control::Shot;
 use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme};
@@ -454,6 +454,18 @@ fn the_compositor_is_asked_its_displays_and_windows_and_says_them() {
     );
     let bindings = shell_bindings(&path, Some(BRIEFLY)).expect("the compositor said");
     assert_eq!(bindings[0].chord, "Meta+l");
+    heard.join().expect("the compositor was listening");
+
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_inputs",
+        "{\"type\":\"input_list\",\"inputs\":[{\"id\":4,\"name\":\"Keyboard\",\
+         \"kind\":\"keyboard\",\"connection\":\"usb\",\"sys_path\":\"\",\
+         \"vendor\":1133,\"product\":49948}]}\n",
+    );
+    let inputs = inputs(&path, Some(BRIEFLY)).expect("the compositor said");
+    assert_eq!(inputs[0].vendor, 0x046d);
     heard.join().expect("the compositor was listening");
 }
 

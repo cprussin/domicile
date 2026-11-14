@@ -21,6 +21,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/unguessable_token.h"
@@ -302,6 +303,30 @@ class FakeBrowserWindowListObserver : public mojom::BrowserWindowListObserver {
 
  private:
   mojo::Receiver<mojom::BrowserWindowListObserver> receiver_{this};
+};
+
+// Fake producer input device list observer.
+class FakeInputDeviceListObserver : public mojom::InputDeviceListObserver {
+ public:
+  mojo::PendingRemote<mojom::InputDeviceListObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // mojom::InputDeviceListObserver implementation.
+  void OnInputDevicesChanged(
+      std::vector<mojom::ListedInputDevicePtr> devices) override {
+    std::vector<std::string> names;
+    for (const mojom::ListedInputDevicePtr& device : devices) {
+      names.push_back(base::NumberToString(device->id) + " " + device->name);
+    }
+    lists_.push_back(std::move(names));
+  }
+
+  // Every list sent, in order, each as "<id> <name>".
+  std::vector<std::vector<std::string>> lists_;
+
+ private:
+  mojo::Receiver<mojom::InputDeviceListObserver> receiver_{this};
 };
 
 // Fake producer display capture observer. These tests send no frames.
@@ -1707,6 +1732,27 @@ TEST_F(FrameSinkBrokerTest, AnObserverHearsTheBrowserWindowsThenEachChange) {
   EXPECT_EQ(observer.lists_, (std::vector<std::vector<std::string>>{
                                  {"1 Mail https://mail.example/ private"},
                                  {}}));
+}
+
+TEST_F(FrameSinkBrokerTest, AnObserverHearsTheInputDevicesThenEachChange) {
+  std::vector<mojom::ListedInputDevicePtr> devices;
+  devices.push_back(mojom::ListedInputDevice::New(
+      4, "Keyboard", mojom::InputDeviceKind::kKeyboard,
+      mojom::InputDeviceConnection::kUsb, "/sys/devices/input4", 0x046d,
+      0xc31c));
+  broker()->OnInputDevicesChanged(std::move(devices));
+
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeInputDeviceListObserver observer;
+  remote->ObserveInputDevices(observer.BindRemote());
+  RunUntilIdle();
+
+  broker()->OnInputDevicesChanged({});
+  RunUntilIdle();
+
+  EXPECT_EQ(observer.lists_,
+            (std::vector<std::vector<std::string>>{{"4 Keyboard"}, {}}));
 }
 
 TEST_F(FrameSinkBrokerTest, ADisplayWithAWindowIsCaptured) {

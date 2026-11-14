@@ -160,6 +160,33 @@ TEST(EngineEventQueueTest, TheBrowserWindowsArriveWholeAcrossTheQueue) {
   EXPECT_EQ(drained[0].browser_windows[1].title, "");
 }
 
+TEST(EngineEventQueueTest, TheInputDevicesArriveWholeAcrossTheQueue) {
+  EngineEventQueue queue;
+  EngineEvent pushed{.type = EngineEvent::Type::kInputDevices};
+  pushed.input_devices.push_back(EngineInputDevice{
+      .name = "Logitech MX Master 3",
+      .sys_path = "/sys/devices/input9",
+      .id = 9,
+      .vendor_id = 0x046d,
+      .product_id = 0x4082,
+      // DOMICILE_INPUT_DEVICE_MOUSE and DOMICILE_INPUT_CONNECTION_BLUETOOTH.
+      .kind = 1,
+      .connection = 3});
+  queue.Push(pushed);
+
+  const std::vector<EngineEvent> drained = queue.Drain();
+  ASSERT_EQ(drained.size(), 1u);
+  EXPECT_EQ(drained[0].type, EngineEvent::Type::kInputDevices);
+  ASSERT_EQ(drained[0].input_devices.size(), 1u);
+  // The C ABI points into these strings, so the queue must keep them.
+  EXPECT_EQ(drained[0].input_devices[0].name, "Logitech MX Master 3");
+  EXPECT_EQ(drained[0].input_devices[0].sys_path, "/sys/devices/input9");
+  EXPECT_EQ(drained[0].input_devices[0].id, 9);
+  EXPECT_EQ(drained[0].input_devices[0].vendor_id, 0x046d);
+  EXPECT_EQ(drained[0].input_devices[0].kind, 1);
+  EXPECT_EQ(drained[0].input_devices[0].connection, 3);
+}
+
 // The compositor dispatches once per wakeup, so a drain must return every
 // queued event or the rest wait for an unrelated wakeup.
 TEST(EngineEventQueueTest, DrainTakesEverythingQueuedAndThenSleeps) {

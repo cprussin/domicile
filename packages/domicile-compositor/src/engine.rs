@@ -20,7 +20,7 @@ use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::eis::DeskInput;
 use domicile_config::{Desk, Transform};
 use domicile_host::clipboard::{Contents, TEXT_MIMES};
-use domicile_protocol::Scale;
+use domicile_protocol::{InputConnection, InputKind, ListedInput, Scale};
 use libloading::{Library, Symbol};
 use smithay::utils::Transform as BufferTransform;
 use thiserror::Error;
@@ -523,6 +523,12 @@ pub enum Event {
     /// window opens, closes or changes its title. An older engine never sends
     /// it.
     BrowserWindows(Vec<BrowserWindow>),
+
+    /// The keyboards, pointers and touch devices the engine reads, in the
+    /// order it found them, for `domicile list-inputs`. Sent once the browser
+    /// connects, and when one is plugged or unplugged. An older engine never
+    /// sends it.
+    InputDevices(Vec<ListedInput>),
 }
 
 /// One of the browser's windows: a page it holds, which the shell draws with
@@ -611,6 +617,22 @@ struct Callbacks {
     configure_zoomed: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64, f64, u64)>,
     hdr_displays: Option<extern "C" fn(*mut c_void, *const RawHdrDisplay, u32)>,
     listed_browser_windows: Option<extern "C" fn(*mut c_void, *const RawListedBrowserWindow, u32)>,
+    input_devices: Option<extern "C" fn(*mut c_void, *const RawInputDevice, u32)>,
+}
+
+/// `DomicileInputDevice`, laid out as in the C header. Its strings are
+/// borrowed for the call it crosses in, and never null.
+#[repr(C)]
+struct RawInputDevice {
+    name: *const c_char,
+    sys_path: *const c_char,
+    id: i32,
+    vendor_id: u16,
+    product_id: u16,
+    /// A `DomicileInputDeviceKind`.
+    kind: u8,
+    /// A `DomicileInputDeviceConnection`.
+    connection: u8,
 }
 
 /// `DomicileBrowserWindow`, laid out as in the C header. Its strings are
@@ -2048,6 +2070,7 @@ fn join(
         configure_zoomed: Some(on_configure_zoomed),
         hdr_displays: Some(on_hdr_displays),
         listed_browser_windows: Some(on_listed_browser_windows),
+        input_devices: Some(on_input_devices),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2432,6 +2455,73 @@ fn listed_browser_windows_from(records: &[RawListedBrowserWindow]) -> Vec<Browse
             private: record.off_the_record != 0,
         })
         .collect()
+}
+
+extern "C" fn on_input_devices(user_data: *mut c_void, devices: *const RawInputDevice, count: u32) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the ABI says `devices` points at `count` records, valid for
+        // this call. `inputs_from` copies them.
+        unsafe { std::slice::from_raw_parts(devices, count as usize) }
+    };
+    push(user_data, Event::InputDevices(inputs_from(records)));
+}
+
+/// Copies the input devices out of their records.
+fn inputs_from(records: &[RawInputDevice]) -> Vec<ListedInput> {
+    records
+        .iter()
+        .map(|record| ListedInput {
+            id: record.id,
+            // SAFETY: the ABI's strings are non-null and valid for the call.
+            name: unsafe { copied(record.name) },
+            kind: input_kind(record.kind),
+            connection: input_connection(record.connection),
+            // SAFETY: as for `name`.
+            sys_path: unsafe { copied(record.sys_path) },
+            vendor: record.vendor_id,
+            product: record.product_id,
+        })
+        .collect()
+}
+
+/// A `DomicileInputDeviceKind`. A kind this compositor does not know is from a
+/// newer engine, and listed as other rather than dropped.
+fn input_kind(kind: u8) -> InputKind {
+    match kind {
+        0 => InputKind::Keyboard,
+        1 => InputKind::Mouse,
+        2 => InputKind::Touchpad,
+        3 => InputKind::Touchscreen,
+        4 => InputKind::PointingStick,
+        5 => InputKind::Tablet,
+        6 => InputKind::Other,
+        unknown => {
+            tracing::error!(
+                kind = unknown,
+                "the engine listed an input device of an unknown kind"
+            );
+            InputKind::Other
+        }
+    }
+}
+
+/// A `DomicileInputDeviceConnection`, as [`input_kind`] reads a kind.
+fn input_connection(connection: u8) -> InputConnection {
+    match connection {
+        0 => InputConnection::Unknown,
+        1 => InputConnection::Internal,
+        2 => InputConnection::Usb,
+        3 => InputConnection::Bluetooth,
+        unknown => {
+            tracing::error!(
+                connection = unknown,
+                "the engine listed an input device on an unknown connection"
+            );
+            InputConnection::Unknown
+        }
+    }
 }
 
 extern "C" fn on_frame_done(user_data: *mut c_void, surface: SurfaceId, frame: u64) {
@@ -2862,10 +2952,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_twenty_two_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `listed_browser_windows` is
-        // last, as in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 23 * 8);
+    fn the_callbacks_are_the_user_data_and_twenty_three_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `input_devices` is last, as in
+        // the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 24 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2883,6 +2973,75 @@ mod tests {
         assert_eq!(
             std::mem::offset_of!(Callbacks, listed_browser_windows),
             22 * 8
+        );
+        assert_eq!(std::mem::offset_of!(Callbacks, input_devices), 23 * 8);
+    }
+
+    #[test]
+    fn an_input_device_is_two_strings_and_its_numbers_as_in_the_c_header() {
+        // 2 strings (16), id (4), vendor and product (4), kind and connection
+        // (2), then tail padding to 8.
+        assert_eq!(std::mem::size_of::<RawInputDevice>(), 32);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, sys_path), 8);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, id), 16);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, vendor_id), 20);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, product_id), 22);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, kind), 24);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, connection), 25);
+    }
+
+    #[test]
+    fn the_input_devices_are_copied_out_of_their_records() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        let records = [
+            RawInputDevice {
+                name: c"Logitech MX Master 3".as_ptr(),
+                sys_path: c"/sys/devices/usb1/input/input9".as_ptr(),
+                id: 9,
+                vendor_id: 0x046d,
+                product_id: 0x4082,
+                kind: 1,
+                connection: 3,
+            },
+            RawInputDevice {
+                name: c"Power Button".as_ptr(),
+                sys_path: c"".as_ptr(),
+                id: 2,
+                vendor_id: 0,
+                product_id: 0,
+                kind: 200,
+                connection: 200,
+            },
+        ];
+        on_input_devices(queue, records.as_ptr(), 2);
+        on_input_devices(queue, std::ptr::null(), 0);
+
+        assert_eq!(
+            events.into_inner(),
+            vec![
+                Event::InputDevices(vec![
+                    ListedInput {
+                        id: 9,
+                        name: "Logitech MX Master 3".into(),
+                        kind: InputKind::Mouse,
+                        connection: InputConnection::Bluetooth,
+                        sys_path: "/sys/devices/usb1/input/input9".into(),
+                        vendor: 0x046d,
+                        product: 0x4082,
+                    },
+                    ListedInput {
+                        id: 2,
+                        name: "Power Button".into(),
+                        kind: InputKind::Other,
+                        connection: InputConnection::Unknown,
+                        sys_path: String::new(),
+                        vendor: 0,
+                        product: 0,
+                    },
+                ]),
+                Event::InputDevices(Vec::new()),
+            ]
         );
     }
 

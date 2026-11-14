@@ -3,12 +3,12 @@
 use std::path::Path;
 
 use domicile_launch::listing::{
-    bindings_table, displays_table, shell_commands_table, status_table, windows_table,
+    bindings_table, displays_table, inputs_table, shell_commands_table, status_table, windows_table,
 };
 use domicile_protocol::{
     AdaptiveSync, Capturing, CapturingKind, DesktopStatus, Devices, DisplayHdr, DisplayInfo,
-    DisplayTransform, ListedDisplay, ListedWindow, ShellBinding, ShellCommandHelp, Theme,
-    WindowKind,
+    DisplayTransform, InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow,
+    ShellBinding, ShellCommandHelp, Theme, WindowKind,
 };
 
 #[test]
@@ -215,4 +215,55 @@ resize
 "
     );
     assert_eq!(bindings_table(&[]), "The shell binds no keys.\n");
+}
+
+#[test]
+fn the_inputs_print_one_row_each_with_ids_as_lsusb_prints_them() {
+    let input =
+        |id: i32, kind: InputKind, connection: InputConnection, ids: (u16, u16), name: &str| {
+            ListedInput {
+                id,
+                name: name.to_string(),
+                kind,
+                connection,
+                sys_path: String::new(),
+                vendor: ids.0,
+                product: ids.1,
+            }
+        };
+    assert_eq!(
+        inputs_table(&[
+            input(
+                4,
+                InputKind::Keyboard,
+                InputConnection::Internal,
+                (1, 1),
+                "AT Translated Set 2 keyboard"
+            ),
+            input(
+                9,
+                InputKind::Mouse,
+                InputConnection::Bluetooth,
+                (0x046d, 0x4082),
+                "Logitech MX Master 3"
+            ),
+            input(
+                11,
+                InputKind::PointingStick,
+                InputConnection::Internal,
+                (0, 0),
+                "TPPS/2 IBM TrackPoint"
+            ),
+        ]),
+        "\
+ID  KIND            CONNECTION  VENDOR:PRODUCT  NAME
+4   keyboard        internal    0001:0001       AT Translated Set 2 keyboard
+9   mouse           bluetooth   046d:4082       Logitech MX Master 3
+11  pointing-stick  internal    -               TPPS/2 IBM TrackPoint
+"
+    );
+    assert_eq!(
+        inputs_table(&[]),
+        "ID  KIND  CONNECTION  VENDOR:PRODUCT  NAME\n"
+    );
 }

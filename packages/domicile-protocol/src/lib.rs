@@ -413,6 +413,11 @@ pub enum ChromeMessage {
     /// `domicile list-bindings`.
     WhichShellBindings,
 
+    /// Report the keyboards, pointers and touch devices the engine reads.
+    /// Answered with [`HostMessage::InputList`] on this connection only. Sent
+    /// by `domicile list-inputs`.
+    WhichInputs,
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -843,6 +848,10 @@ pub enum HostMessage {
     /// only: each listening page's bindings, in the order the pages started
     /// listening.
     ShellBindingList { bindings: Vec<ShellBinding> },
+
+    /// Answers [`ChromeMessage::WhichInputs`] on the asking connection only,
+    /// in the order the engine found the devices.
+    InputList { inputs: Vec<ListedInput> },
 
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
@@ -2844,6 +2853,50 @@ pub struct ListedWindow {
     pub url: Option<String>,
     /// A browser window in the off-the-record profile.
     pub private: bool,
+}
+
+/// An input device as `domicile list-inputs` prints it. See
+/// [`HostMessage::InputList`]. A device that is both, like a keyboard with a
+/// touchpad, is listed once for each kind under one id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListedInput {
+    /// The engine's id for it, while it stays plugged in.
+    pub id: i32,
+    /// What its driver calls it.
+    pub name: String,
+    pub kind: InputKind,
+    pub connection: InputConnection,
+    /// Its device under `/sys`, or empty when unknown.
+    pub sys_path: String,
+    /// Its USB or Bluetooth vendor id, or 0.
+    pub vendor: u16,
+    /// Its USB or Bluetooth product id, or 0.
+    pub product: u16,
+}
+
+/// What an input device is. See [`ListedInput`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InputKind {
+    Keyboard,
+    Mouse,
+    Touchpad,
+    Touchscreen,
+    PointingStick,
+    Tablet,
+    /// Read for its keys or switches alone, like a power button or a lid.
+    Other,
+}
+
+/// How an input device is attached. See [`ListedInput`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InputConnection {
+    /// Built into the machine.
+    Internal,
+    Usb,
+    Bluetooth,
+    Unknown,
 }
 
 /// Whether a monitor is driven in HDR10: BT.2020 primaries with the PQ

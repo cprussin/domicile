@@ -50,6 +50,8 @@ Ask the running desktop:
   domicile list-displays [--json]       Print each display: the names
                                         sleep-displays takes, mode, layout
   domicile list-windows [--json]        Print each window, native and browser
+  domicile list-inputs [--json]         Print each keyboard, pointer and touch
+                                        device
   domicile status [--json]              Print the shell, theme, keymap, lock,
                                         and what keeps the screens on or
                                         captures the desktop
@@ -269,6 +271,7 @@ pub enum Listing {
     Status,
     ShellCommands,
     Bindings,
+    Inputs,
 }
 
 impl Listing {
@@ -280,6 +283,7 @@ impl Listing {
             Self::Status => Request::Status,
             Self::ShellCommands => Request::ShellCommands,
             Self::Bindings => Request::ShellBindings,
+            Self::Inputs => Request::Inputs,
         }
     }
 }
@@ -602,6 +606,7 @@ fn verb(word: &str) -> Option<Verb> {
         "status" => Some(Verb::Listing(Listing::Status)),
         "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
+        "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
         _ => None,
     }
 }

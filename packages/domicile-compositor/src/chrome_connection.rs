@@ -41,6 +41,7 @@ pub enum ConnectionRequest {
     WhichStatus,
     WhichShellCommands,
     WhichShellBindings,
+    WhichInputs,
 }
 
 /// Write a message's responses to the connection that asked, in order.
@@ -459,6 +460,9 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::WhichShellBindings) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichShellBindings)
+            }
+            Ok(ChromeMessage::WhichInputs) => {
+                answer_on_the_connection(hub, ConnectionRequest::WhichInputs)
             }
             // The Wayland thread runs the theme turnover and its deadline
             // timer.
@@ -904,6 +908,8 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
         ConnectionRequest::WhichShellBindings => vec![HostMessage::ShellBindingList {
             bindings: hub.shell_commands.bindings(),
         }],
+        // For `domicile list-inputs`.
+        ConnectionRequest::WhichInputs => vec![hub.host.lock().unwrap().list_inputs()],
         // A page has no filesystem, so the compositor searches for it. Safe
         // because `search_files` names no path; this side decides what is read.
         //

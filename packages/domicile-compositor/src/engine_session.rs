@@ -773,7 +773,8 @@ impl EngineSession {
                 | Event::Presented { .. }
                 | Event::Disconnected
                 | Event::Compositing { .. }
-                | Event::BrowserWindows(_) => {}
+                | Event::BrowserWindows(_)
+                | Event::InputDevices(_) => {}
             }
         }
         dispatched.events = events;

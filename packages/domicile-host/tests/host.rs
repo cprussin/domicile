@@ -9,8 +9,9 @@ use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Appearances, BrowserWindow, Host, Mapped};
 use domicile_protocol::{
     AdaptiveSync, AppFrame, Appearance, Capturing, CapturingKind, ChromeMessage, CursorTheme,
-    DesktopStatus, Devices, DisplayHdr, DisplayInfo, DisplayTransform, HostMessage, ListedDisplay,
-    ListedWindow, MonitorInfo, Owner, Theme, WindowKind, PROTOCOL_VERSION,
+    DesktopStatus, Devices, DisplayHdr, DisplayInfo, DisplayTransform, HostMessage,
+    InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Owner,
+    Theme, WindowKind, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -1412,4 +1413,30 @@ fn drawn(host: &mut Host) -> AppId {
     let app = host.app_created(OWNER, LISTED.to_string());
     host.app_mapped(&app, mapped());
     app
+}
+
+#[test]
+fn the_inputs_listed_are_the_engines_last_report() {
+    let mut host = Host::new();
+    assert_eq!(
+        host.list_inputs(),
+        HostMessage::InputList { inputs: Vec::new() }
+    );
+
+    let keyboard = ListedInput {
+        id: 4,
+        name: "AT Translated Set 2 keyboard".into(),
+        kind: InputKind::Keyboard,
+        connection: InputConnection::Internal,
+        sys_path: "/sys/devices/platform/i8042/serio0/input/input4".into(),
+        vendor: 1,
+        product: 1,
+    };
+    host.input_devices(vec![keyboard.clone()]);
+    assert_eq!(
+        host.list_inputs(),
+        HostMessage::InputList {
+            inputs: vec![keyboard]
+        }
+    );
 }

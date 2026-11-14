@@ -70,6 +70,22 @@ struct EngineBrowserWindow {
   bool off_the_record = false;
 };
 
+// An input device the browser reads.
+//
+// Mirrors DomicileInputDevice in domicile_engine.h, except the strings, as
+// for EngineDisplay.
+struct EngineInputDevice {
+  std::string name;
+  std::string sys_path;
+  int32_t id = 0;
+  uint16_t vendor_id = 0;
+  uint16_t product_id = 0;
+  // A DomicileInputDeviceKind.
+  uint8_t kind = 0;
+  // A DomicileInputDeviceConnection.
+  uint8_t connection = 0;
+};
+
 // One frame of a display capture.
 //
 // Mirrors DomicileCapturedFrame in domicile_engine.h, except the fds: the
@@ -138,6 +154,8 @@ struct EngineEvent {
     kCompositing,
     // The browser's windows, for capture tools to list.
     kBrowserWindows,
+    // The input devices the browser reads.
+    kInputDevices,
   };
 
   Type type = Type::kConfigure;
@@ -176,6 +194,8 @@ struct EngineEvent {
   bool in_memory = false;
   // kBrowserWindows: the whole list, in open order.
   std::vector<EngineBrowserWindow> browser_windows;
+  // kInputDevices: the whole list, in the order the browser found them.
+  std::vector<EngineInputDevice> input_devices;
 };
 
 // Queue of engine events with a pollable fd.
