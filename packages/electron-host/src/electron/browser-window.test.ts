@@ -5,6 +5,7 @@ import type { Engine, EngineRequest, WindowEvent } from "../engine";
 import { electronPaths } from "../paths";
 import { createApp } from "./app";
 import { createBrowserWindow } from "./browser-window";
+import { createIpcMain } from "./ipc-main";
 
 const setUp = () => {
   const sent: EngineRequest[] = [];
@@ -29,12 +30,15 @@ const setUp = () => {
       version: "1.0.0",
     },
   });
+  const { ipcMain, ...ipc } = createIpcMain();
   const BrowserWindow = createBrowserWindow(
     { events, send: (request) => sent.push(request) },
     app,
+    ipc,
+    (path) => `source of ${path}`,
   );
   const say = (event: WindowEvent) => events.emit("window", event);
-  return { app, BrowserWindow, exits, say, sent };
+  return { app, BrowserWindow, exits, ipcMain, say, sent };
 };
 
 describe(createBrowserWindow, () => {
@@ -199,5 +203,100 @@ describe(createBrowserWindow, () => {
     expect(() => window.loadURL("https://a.test/")).toThrow(
       "Object has been destroyed",
     );
+  });
+  it("opens a window with its preload's source", () => {
+    const { BrowserWindow, sent } = setUp();
+
+    void new BrowserWindow({
+      webPreferences: { preload: "/app/preload.js" },
+    }).loadURL("https://notes.test/");
+
+    expect(sent).toEqual([
+      {
+        preload: "source of /app/preload.js",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
+    ]);
+  });
+
+  it("refuses a window whose page needs Node.js", () => {
+    const { BrowserWindow } = setUp();
+
+    expect(
+      () => new BrowserWindow({ webPreferences: { nodeIntegration: true } }),
+    ).toThrow("needs Node.js");
+    expect(
+      () => new BrowserWindow({ webPreferences: { contextIsolation: false } }),
+    ).toThrow("needs Node.js");
+  });
+
+  it("gives its page's send to ipcMain, from its webContents", () => {
+    const { BrowserWindow, ipcMain, say } = setUp();
+    const window = new BrowserWindow();
+    const heard: unknown[] = [];
+    ipcMain.on("save", (event: { sender: unknown }, ...args: unknown[]) =>
+      heard.push(event.sender, ...args),
+    );
+
+    say({ args: [1], channel: "save", type: "ipc_message", window: 1 });
+
+    expect(heard).toEqual([window.webContents, 1]);
+  });
+
+  it("answers its page's invoke with the handler's result or failure", async () => {
+    const { BrowserWindow, ipcMain, say, sent } = setUp();
+    void new BrowserWindow();
+    ipcMain.handle("double", (_event, n) => Number(n) * 2);
+    const answered = new Promise<void>((resolve) => {
+      const count = sent.length;
+      const check = () =>
+        sent.length >= count + 2 ? resolve() : setTimeout(check, 1);
+      check();
+    });
+
+    say({
+      args: [2],
+      channel: "double",
+      invoke: 1,
+      type: "ipc_invoke",
+      window: 1,
+    });
+    say({
+      args: [],
+      channel: "none",
+      invoke: 2,
+      type: "ipc_invoke",
+      window: 1,
+    });
+    await answered;
+
+    // Each answers when its handler does, so in either order.
+    expect(sent).toHaveLength(2);
+    expect(sent).toContainEqual({ invoke: 1, result: 4, type: "ipc_reply" });
+    expect(sent).toContainEqual({
+      error: "No handler registered for 'none'",
+      invoke: 2,
+      type: "ipc_reply",
+    });
+  });
+
+  it("sends to its page as JSON", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    sent.length = 0;
+
+    window.webContents.send("ping", { at: new Date(0) }, undefined);
+
+    expect(sent).toEqual([
+      {
+        args: [{ at: "1970-01-01T00:00:00.000Z" }, null],
+        channel: "ping",
+        type: "ipc_send",
+        window: 1,
+      },
+    ]);
   });
 });
