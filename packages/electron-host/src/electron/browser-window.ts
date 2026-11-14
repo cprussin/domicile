@@ -11,9 +11,14 @@ import type { ElectronApp } from "./app";
 import type { createIpcMain } from "./ipc-main";
 import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
+import type { createSessions, Session } from "./session";
+import { sessionPartition } from "./session";
 
 export type WebPreferences = {
   readonly preload?: string | undefined;
+  /** Electron's partition string; the app's own session when left out. */
+  readonly partition?: string | undefined;
+  readonly session?: Session | undefined;
   readonly nodeIntegration?: boolean | undefined;
   readonly contextIsolation?: boolean | undefined;
 };
@@ -32,13 +37,14 @@ export type IpcRoutes = Pick<
 
 /**
  * Makes the `BrowserWindow` class for an app on `engine`. The engine's window
- * events reach the window they name, and its pages' IPC reaches `ipc`.
- * `readPreload` reads a preload's source.
+ * events reach the window they name, and its pages' IPC reaches `ipc`. Its
+ * pages load through `sessions`. `readPreload` reads a preload's source.
  */
 export const createBrowserWindow = (
   engine: Engine,
   app: ElectronApp,
   ipc: IpcRoutes,
+  sessions: ReturnType<typeof createSessions>,
   readPreload: (path: string) => string = (path) => readFileSync(path, "utf8"),
 ) => {
   const windows = new Map<number, BrowserWindow>();
@@ -64,6 +70,10 @@ export const createBrowserWindow = (
 
     get id() {
       return this.owner.id;
+    }
+
+    get session() {
+      return this.owner.session;
     }
 
     readonly getTitle = () => this.owner.getTitle();
@@ -121,6 +131,8 @@ export const createBrowserWindow = (
     #destroyed = false;
     #loads: { resolve: () => void; reject: (why: Error) => void }[] = [];
     readonly #preload: string | undefined;
+    /** Its page's session. */
+    readonly session: Session;
 
     constructor(options: BrowserWindowOptions = {}) {
       super();
@@ -137,6 +149,9 @@ export const createBrowserWindow = (
         preferences.preload === undefined
           ? undefined
           : readPreload(preferences.preload);
+      this.session =
+        preferences.session ??
+        sessions.fromPartition(preferences.partition ?? "");
       this.#title = options.title ?? app.getName();
       windows.set(this.id, this);
     }
@@ -155,11 +170,13 @@ export const createBrowserWindow = (
         engine.send({ type: "load_url", url, window: this.id });
       } else {
         this.#opened = true;
+        const session = sessionPartition(this.session);
         engine.send({
           type: "open_window",
           url,
           window: this.id,
           ...(this.#preload === undefined ? {} : { preload: this.#preload }),
+          ...(session === "" ? {} : { session }),
         });
       }
       return loaded;

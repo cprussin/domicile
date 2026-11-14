@@ -74,6 +74,26 @@ describe(connectEngine, () => {
     });
   });
 
+  it("passes on each protocol request", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const heard = new Promise((resolve) =>
+      engine.events.on("protocol", resolve),
+    );
+    const request = {
+      headers: [["accept", "*/*"]],
+      method: "GET",
+      request: 3,
+      session: "",
+      type: "protocol_request",
+      url: "file:///a",
+    };
+
+    fake.say(request);
+
+    expect(await heard).toEqual(request);
+  });
+
   it("says when the engine goes", async () => {
     fake = await startFakeEngine();
     const engine = await connected(fake);

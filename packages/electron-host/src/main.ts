@@ -14,6 +14,11 @@ import {
   MessageChannelMain,
   MessagePortMain,
 } from "./electron/message-port-main";
+import {
+  createProtocols,
+  registerSchemesAsPrivileged,
+} from "./electron/protocol";
+import { createSessions } from "./electron/session";
 import { ELECTRON_VERSION } from "./electron/version";
 import { connectEngine } from "./engine";
 import { readEnvironment } from "./environment";
@@ -65,12 +70,22 @@ const main = async ([resources, ...args]: string[]) => {
       fail(`the engine refused a request: ${why}`),
     );
     const { ipcMain, ...ipc } = createIpcMain();
+    const protocols = createProtocols(engine.send);
+    engine.events.on("protocol", (request) => {
+      void protocols.answer(request);
+    });
+    const session = createSessions(protocols);
     const electron = {
       app,
-      BrowserWindow: createBrowserWindow(engine, app, ipc),
+      BrowserWindow: createBrowserWindow(engine, app, ipc, session),
       ipcMain,
       MessageChannelMain,
       MessagePortMain,
+      protocol: {
+        ...session.defaultSession.protocol,
+        registerSchemesAsPrivileged,
+      },
+      session,
     };
     Bun.plugin({
       name: "electron",

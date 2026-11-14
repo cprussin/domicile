@@ -8,6 +8,7 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 import type { PortRequest } from "./electron/message-port-main";
+import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -24,6 +25,8 @@ export type EngineRequest =
       readonly url: string;
       /** The preload's source, run before each page's own scripts. */
       readonly preload?: string;
+      /** Its session's Electron partition; the app's own when left out. */
+      readonly session?: string;
     }
   | { readonly type: "load_url"; readonly window: number; readonly url: string }
   | { readonly type: "focus_window"; readonly window: number }
@@ -53,7 +56,8 @@ export type EngineRequest =
       /** The names of the app's ports that go with it, each "m" and a number. */
       readonly ports: string[];
     }
-  | PortRequest;
+  | PortRequest
+  | ProtocolRequest;
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ready") }),
@@ -110,6 +114,15 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("page_gone"), window: z.number() }),
+  z.object({
+    body: z.string().optional(),
+    headers: z.array(z.tuple([z.string(), z.string()])),
+    method: z.string(),
+    request: z.number(),
+    session: z.string(),
+    type: z.literal("protocol_request"),
+    url: z.string(),
+  }),
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;
@@ -127,6 +140,8 @@ export type Engine = {
     lost: [why: string];
     refused: [why: string];
     window: [event: WindowEvent];
+    /** A page's request that its session's protocol handler answers. */
+    protocol: [request: IncomingRequest];
   }>;
 };
 
@@ -167,6 +182,8 @@ export const connectEngine = (
         );
       } else if (parsed.data.type === "refused") {
         events.emit("refused", parsed.data.why);
+      } else if (parsed.data.type === "protocol_request") {
+        events.emit("protocol", parsed.data);
       } else if ("window" in parsed.data) {
         events.emit("window", parsed.data);
       } else {

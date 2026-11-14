@@ -8,6 +8,8 @@ import { createBrowserWindow } from "./browser-window";
 import { createIpcMain } from "./ipc-main";
 import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
+import { createProtocols } from "./protocol";
+import { createSessions } from "./session";
 
 const setUp = () => {
   const sent: EngineRequest[] = [];
@@ -33,17 +35,60 @@ const setUp = () => {
     },
   });
   const { ipcMain, ...ipc } = createIpcMain();
+  const sessions = createSessions(
+    createProtocols((request) => sent.push(request)),
+  );
+  // The default session's file: handler, which every test would start with.
+  sent.length = 0;
   const BrowserWindow = createBrowserWindow(
     { events, send: (request) => sent.push(request) },
     app,
     ipc,
+    sessions,
     (path) => `source of ${path}`,
   );
   const say = (event: WindowEvent) => events.emit("window", event);
-  return { app, BrowserWindow, exits, ipcMain, say, sent };
+  return { app, BrowserWindow, exits, ipcMain, say, sent, sessions };
 };
 
 describe(createBrowserWindow, () => {
+  it("opens a window in the app's own session unless it names another", () => {
+    const { BrowserWindow, sent, sessions } = setUp();
+    const own = new BrowserWindow();
+    const named = new BrowserWindow({
+      webPreferences: { partition: "persist:cowork" },
+    });
+    const given = new BrowserWindow({
+      webPreferences: { session: sessions.fromPartition("persist:cowork") },
+    });
+
+    void own.loadURL("https://notes.test/");
+    void named.loadURL("https://notes.test/");
+    void given.loadURL("https://notes.test/");
+
+    expect(own.webContents.session).toBe(sessions.defaultSession);
+    expect(named.webContents.session).toBe(
+      sessions.fromPartition("persist:cowork"),
+    );
+    expect(given.webContents.session).toBe(named.webContents.session);
+    expect(sent).toEqual([
+      { scheme: "file", session: "persist:cowork", type: "handle_protocol" },
+      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        session: "persist:cowork",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 2,
+      },
+      {
+        session: "persist:cowork",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 3,
+      },
+    ]);
+  });
+
   it("opens the window with its first page and loads the next in it", () => {
     const { BrowserWindow, sent } = setUp();
     const window = new BrowserWindow();

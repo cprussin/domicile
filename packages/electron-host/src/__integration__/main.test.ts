@@ -3,6 +3,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env } from "node:process";
+import { fileURLToPath } from "node:url";
 
 import { writeAsar } from "../asar-fixture";
 import type { FakeEngine } from "../engine-fixture";
@@ -126,15 +127,28 @@ describe("electron-host", () => {
         content: `{"main":"main.js","name":"notes","desktopName":"com.example.Notes.desktop","version":"1.2.3"}`,
       },
     });
-    engine = await startFakeEngine((request) =>
-      request.type === "hello"
-        ? [{ type: "ready" }]
-        : [
-            { type: "window_opened", window: 1 },
-            { title: "Notes", type: "title_changed", window: 1 },
-            { type: "window_loaded", window: 1 },
-          ],
-    );
+    engine = await startFakeEngine((request) => {
+      if (request.type === "hello") {
+        return [{ type: "ready" }];
+      } else if (request.type === "open_window") {
+        return [
+          { type: "window_opened", window: 1 },
+          // The page asks for itself, as a file: navigation does.
+          {
+            headers: [],
+            method: "GET",
+            request: 1,
+            session: "",
+            type: "protocol_request",
+            url: (request as unknown as { url: string }).url,
+          },
+          { title: "Notes", type: "title_changed", window: 1 },
+          { type: "window_loaded", window: 1 },
+        ];
+      } else {
+        return [];
+      }
+    });
 
     const { code, stderr, stdout } = await run(resources, home, [], engine);
 
@@ -146,10 +160,22 @@ describe("electron-host", () => {
       type: "hello",
       version: 1,
     });
-    expect(engine.heard[1]).toMatchObject({ type: "open_window", window: 1 });
-    expect((engine.heard[1] as { url: string }).url).toEndWith(
-      "/app.asar/index.html",
-    );
+    expect(engine.heard[1]).toEqual({
+      scheme: "file",
+      session: "",
+      type: "handle_protocol",
+    });
+    expect(engine.heard[2]).toMatchObject({ type: "open_window", window: 1 });
+    const { url } = engine.heard[2] as { url: string };
+    expect(url).toEndWith("/app.asar/index.html");
+    // loadFile's page comes from the app's mirror, read by the engine.
+    expect(engine.heard).toContainEqual({
+      file: fileURLToPath(url),
+      headers: [],
+      request: 1,
+      status: 200,
+      type: "protocol_response",
+    });
   });
 
   it("says why when there is no desktop to open windows on", async () => {
