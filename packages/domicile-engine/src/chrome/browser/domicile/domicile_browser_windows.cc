@@ -866,17 +866,15 @@ std::optional<std::string> OpenElectronWindow(const GURL& url,
                                std::move(calls));
 }
 
-void SendToElectronWindow(const std::string& id,
-                          const std::string& channel,
-                          const std::string& args_json) {
+ElectronPage* ElectronPageOf(const std::string& id) {
   DeskWindows* windows = ShellDeskWindows();
   WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);
   if (guest == nullptr) {
-    LOG(WARNING) << "domicile: asked to send to browser window " << id
+    LOG(WARNING) << "domicile: asked to message browser window " << id
                  << ", which is not open.";
-  } else {
-    ElectronPage::SendTo(guest->contents(), channel, args_json);
+    return nullptr;
   }
+  return ElectronPage::FromWebContents(&guest->contents());
 }
 
 void LoadBrowserWindow(const std::string& id, const GURL& url) {

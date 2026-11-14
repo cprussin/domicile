@@ -8,10 +8,12 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 #include "components/domicile/renderer/context_bridge.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/converter.h"
@@ -66,6 +68,22 @@ constexpr char kBootstrap[] = R"JS(
   const unsupported = (what) => () => {
     throw new Error(`${what} does not work on Domicile yet`);
   };
+  // Each port the app holds an end of, by name, with this world's end of the
+  // pipe to it: what arrives there goes to the app, and the app's to it.
+  const ports = new Map();
+  let nextPort = 1;
+  const relay = (name, port) => {
+    ports.set(name, port);
+    port.onmessage = (event) => {
+      native.portPost(name, JSON.stringify(event.data) ?? 'null');
+    };
+    port.addEventListener('close', () => {
+      if (ports.get(name) === port) {
+        ports.delete(name);
+        native.portClose(name);
+      }
+    });
+  };
   const ipcRenderer = {
     send(channel, ...args) {
       native.send(String(channel), JSON.stringify(args));
@@ -105,8 +123,24 @@ constexpr char kBootstrap[] = R"JS(
     listenerCount(channel) {
       return listeners.get(String(channel))?.length ?? 0;
     },
-    sendSync: unsupported('ipcRenderer.sendSync'),
-    postMessage: unsupported('ipcRenderer.postMessage'),
+    sendSync(channel, ...args) {
+      return JSON.parse(native.sendSync(String(channel), JSON.stringify(args)));
+    },
+    postMessage(channel, message, transfer = []) {
+      const names = [];
+      for (const port of transfer) {
+        if (!(port instanceof MessagePort)) {
+          throw new TypeError('ipcRenderer.postMessage transfers only ' +
+                              'MessagePorts');
+        }
+      }
+      for (const port of transfer) {
+        const name = `r${nextPort++}`;
+        relay(name, port);
+        names.push(name);
+      }
+      native.post(String(channel), JSON.stringify(message) ?? 'null', names);
+    },
     sendToHost: unsupported('ipcRenderer.sendToHost'),
   };
   ipcRenderer.addListener = ipcRenderer.on;
@@ -140,19 +174,41 @@ constexpr char kBootstrap[] = R"JS(
   } catch (error) {
     report(error);
   }
+  const emit = (channel, event, args) => {
+    const list = listeners.get(channel);
+    if (!list) return;
+    for (const entry of [...list]) {
+      if (entry.once) ipcRenderer.removeListener(channel, entry.listener);
+      try {
+        entry.listener(event, ...args);
+      } catch (error) {
+        report(error);
+      }
+    }
+  };
   return {
     deliver(channel, json) {
-      const list = listeners.get(channel);
-      if (!list) return;
-      const args = JSON.parse(json);
-      const event = { sender: ipcRenderer, senderId: 0, ports: [] };
-      for (const entry of [...list]) {
-        if (entry.once) ipcRenderer.removeListener(channel, entry.listener);
-        try {
-          entry.listener(event, ...args);
-        } catch (error) {
-          report(error);
-        }
+      emit(channel, { sender: ipcRenderer, senderId: 0, ports: [] },
+           JSON.parse(json));
+    },
+    deliverPost(channel, json, joined) {
+      const names = joined === '' ? [] : joined.split(',');
+      const given = names.map((name) => {
+        const pipe = new MessageChannel();
+        relay(name, pipe.port1);
+        return pipe.port2;
+      });
+      emit(channel, { sender: ipcRenderer, senderId: 0, ports: given },
+           [JSON.parse(json)]);
+    },
+    toPort(name, json) {
+      ports.get(name)?.postMessage(JSON.parse(json));
+    },
+    closePort(name) {
+      const port = ports.get(name);
+      if (port) {
+        ports.delete(name);
+        port.close();
       }
     },
     settle(id, ok, answer) {
@@ -210,8 +266,7 @@ void ElectronPreload::Bind(
 void ElectronPreload::ReadyToCommitNavigation(
     blink::WebDocumentLoader* document_loader) {
   ++document_;
-  deliver_.Reset();
-  settle_.Reset();
+  bootstrap_.Reset();
   host_.reset();
   to_run_.reset();
   if (next_.has_value()) {
@@ -244,16 +299,53 @@ void ElectronPreload::Preload(
 
 void ElectronPreload::Deliver(const std::string& channel,
                               const std::string& args_json) {
-  if (deliver_.IsEmpty()) {
+  if (bootstrap_.IsEmpty()) {
     // No preload ran in this document, so nothing listens.
     return;
   }
-  blink::WebLocalFrame& frame = *render_frame()->GetWebFrame();
-  v8::Isolate* isolate = IsolateOf(frame);
+  v8::Isolate* isolate = IsolateOf(*render_frame()->GetWebFrame());
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Value> argv[] = {gin::StringToV8(isolate, channel),
                                  gin::StringToV8(isolate, args_json)};
-  Call(deliver_, static_cast<int>(std::size(argv)), argv);
+  Call("deliver", argv);
+}
+
+void ElectronPreload::DeliverPost(const std::string& channel,
+                                  const std::string& message_json,
+                                  const std::vector<std::string>& ports) {
+  if (bootstrap_.IsEmpty()) {
+    return;
+  }
+  v8::Isolate* isolate = IsolateOf(*render_frame()->GetWebFrame());
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Value> argv[] = {
+      gin::StringToV8(isolate, channel), gin::StringToV8(isolate, message_json),
+      // Port names are letters and digits, so a
+      // comma joins them, without a context.
+      gin::StringToV8(isolate, base::JoinString(ports, ","))};
+  Call("deliverPost", argv);
+}
+
+void ElectronPreload::DeliverToPort(const std::string& port,
+                                    const std::string& data_json) {
+  if (bootstrap_.IsEmpty()) {
+    return;
+  }
+  v8::Isolate* isolate = IsolateOf(*render_frame()->GetWebFrame());
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Value> argv[] = {gin::StringToV8(isolate, port),
+                                 gin::StringToV8(isolate, data_json)};
+  Call("toPort", argv);
+}
+
+void ElectronPreload::ClosePort(const std::string& port) {
+  if (bootstrap_.IsEmpty()) {
+    return;
+  }
+  v8::Isolate* isolate = IsolateOf(*render_frame()->GetWebFrame());
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Value> argv[] = {gin::StringToV8(isolate, port)};
+  Call("closePort", argv);
 }
 
 bool ElectronPreload::Run(const std::string& source) {
@@ -299,6 +391,10 @@ bool ElectronPreload::Run(const std::string& source) {
   add("send", &ElectronPreload::Send);
   add("invoke", &ElectronPreload::Invoke);
   add("expose", &ElectronPreload::Expose);
+  add("sendSync", &ElectronPreload::SendSync);
+  add("post", &ElectronPreload::Post);
+  add("portPost", &ElectronPreload::PortPost);
+  add("portClose", &ElectronPreload::PortClose);
   v8::Local<v8::Value> argv[] = {natives, preload};
   v8::Local<v8::Value> made;
   // The preload is the app's script, and may end the frame, this with it.
@@ -318,37 +414,41 @@ bool ElectronPreload::Run(const std::string& source) {
     return true;
   }
   v8::Local<v8::Object> calls = made.As<v8::Object>();
-  v8::Local<v8::Value> deliver;
-  v8::Local<v8::Value> settle;
-  CHECK(calls->Get(world, gin::StringToSymbol(isolate, "deliver"))
-            .ToLocal(&deliver) &&
-        deliver->IsFunction());
-  CHECK(calls->Get(world, gin::StringToSymbol(isolate, "settle"))
-            .ToLocal(&settle) &&
-        settle->IsFunction());
-  deliver_.Reset(isolate, deliver.As<v8::Function>());
-  settle_.Reset(isolate, settle.As<v8::Function>());
+  // The bootstrap is ours, so a call missing from it is the engine's bug.
+  for (const char* name :
+       {"deliver", "deliverPost", "toPort", "closePort", "settle"}) {
+    v8::Local<v8::Value> call;
+    CHECK(
+        calls->Get(world, gin::StringToSymbol(isolate, name)).ToLocal(&call) &&
+        call->IsFunction())
+        << "domicile: the Electron preload's bootstrap has no " << name;
+  }
+  bootstrap_.Reset(isolate, calls);
   return true;
 }
 
-void ElectronPreload::Call(const v8::Global<v8::Function>& function,
-                           int argc,
-                           v8::Local<v8::Value> argv[]) {
+void ElectronPreload::Call(const char* name,
+                           base::span<v8::Local<v8::Value>> argv) {
   blink::WebLocalFrame& frame = *render_frame()->GetWebFrame();
   v8::Isolate* isolate = IsolateOf(frame);
   v8::Local<v8::Context> world =
       frame.GetScriptContextFromWorldId(isolate, kElectronPreloadWorld);
   v8::Context::Scope scope(world);
+  v8::Local<v8::Value> function =
+      bootstrap_.Get(isolate)
+          ->Get(world, gin::StringToSymbol(isolate, name))
+          .ToLocalChecked();
   // What a listener throws, the bootstrap already reported.
   std::ignore = frame.CallFunctionEvenIfScriptDisabled(
-      function.Get(isolate), v8::Undefined(isolate), argc, argv);
+      function.As<v8::Function>(), v8::Undefined(isolate),
+      static_cast<int>(argv.size()), argv.data());
 }
 
 void ElectronPreload::Answered(uint64_t document,
                                double id,
                                bool ok,
                                const std::string& answer) {
-  if (document != document_ || settle_.IsEmpty()) {
+  if (document != document_ || bootstrap_.IsEmpty()) {
     return;
   }
   blink::WebLocalFrame& frame = *render_frame()->GetWebFrame();
@@ -357,7 +457,7 @@ void ElectronPreload::Answered(uint64_t document,
   v8::Local<v8::Value> argv[] = {v8::Number::New(isolate, id),
                                  v8::Boolean::New(isolate, ok),
                                  gin::StringToV8(isolate, answer)};
-  Call(settle_, static_cast<int>(std::size(argv)), argv);
+  Call("settle", argv);
 }
 
 // static
@@ -405,6 +505,76 @@ void ElectronPreload::Invoke(const v8::FunctionCallbackInfo<v8::Value>& info) {
       channel, args_json,
       base::BindOnce(&ElectronPreload::Answered,
                      self->weak_factory_.GetWeakPtr(), self->document_, id));
+}
+
+// static
+void ElectronPreload::SendSync(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  std::string channel;
+  std::string args_json;
+  CHECK(gin::ConvertFromV8(isolate, info[0], &channel) &&
+        gin::ConvertFromV8(isolate, info[1], &args_json));
+  bool ok = false;
+  std::string answer;
+  if (self == nullptr || !self->host_.is_bound() ||
+      !self->host_->SendSync(channel, args_json, &ok, &answer)) {
+    answer = "this window's app is gone";
+  }
+  if (!ok) {
+    isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
+        isolate, base::StrCat({"Error sending synchronous message '", channel,
+                               "': ", answer}))));
+    return;
+  }
+  info.GetReturnValue().Set(gin::StringToV8(isolate, answer));
+}
+
+// static
+void ElectronPreload::Post(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  std::string channel;
+  std::string message_json;
+  std::vector<std::string> ports;
+  // The bootstrap is the only caller: two strings and the ports' names.
+  CHECK(gin::ConvertFromV8(isolate, info[0], &channel) &&
+        gin::ConvertFromV8(isolate, info[1], &message_json) &&
+        gin::ConvertFromV8(isolate, info[2], &ports));
+  if (self == nullptr || !self->host_.is_bound()) {
+    isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
+        isolate, "this window's app is gone, so ipcRenderer sends nothing")));
+    return;
+  }
+  self->host_->Post(channel, message_json, ports);
+}
+
+// static
+void ElectronPreload::PortPost(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  std::string port;
+  std::string data_json;
+  CHECK(gin::ConvertFromV8(isolate, info[0], &port) &&
+        gin::ConvertFromV8(isolate, info[1], &data_json));
+  // A port whose app is gone takes messages nowhere, as a closed one does.
+  if (self != nullptr && self->host_.is_bound()) {
+    self->host_->PostToPort(port, data_json);
+  }
+}
+
+// static
+void ElectronPreload::PortClose(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  std::string port;
+  CHECK(gin::ConvertFromV8(isolate, info[0], &port));
+  if (self != nullptr && self->host_.is_bound()) {
+    self->host_->PortClosed(port);
+  }
 }
 
 // static

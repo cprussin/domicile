@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "base/containers/span.h"
 #include "base/memory/weak_ptr.h"
 #include "components/domicile/mojom/electron_frame.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
@@ -57,6 +59,12 @@ class ElectronPreload final
       mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host) override;
   void Deliver(const std::string& channel,
                const std::string& args_json) override;
+  void DeliverPost(const std::string& channel,
+                   const std::string& message_json,
+                   const std::vector<std::string>& ports) override;
+  void DeliverToPort(const std::string& port,
+                     const std::string& data_json) override;
+  void ClosePort(const std::string& port) override;
 
  private:
   struct Next {
@@ -69,10 +77,8 @@ class ElectronPreload final
   void Bind(mojo::PendingAssociatedReceiver<mojom::ElectronFrame> receiver);
   // False when the preload ended the frame, and this with it.
   [[nodiscard]] bool Run(const std::string& source);
-  // Calls `function`, one of the bootstrap's, in the preload's world.
-  void Call(const v8::Global<v8::Function>& function,
-            int argc,
-            v8::Local<v8::Value> argv[]);
+  // Calls the bootstrap's `name`, in the preload's world.
+  void Call(const char* name, base::span<v8::Local<v8::Value>> argv);
   void Answered(uint64_t document,
                 double id,
                 bool ok,
@@ -83,6 +89,10 @@ class ElectronPreload final
   static void Send(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void Invoke(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void Expose(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void SendSync(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void Post(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void PortPost(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void PortClose(const v8::FunctionCallbackInfo<v8::Value>& info);
 
   mojo::AssociatedReceiver<mojom::ElectronFrame> receiver_{this};
   // The preload for the navigation about to commit.
@@ -92,9 +102,8 @@ class ElectronPreload final
   // Counts documents, so an answer for one that went is dropped.
   uint64_t document_ = 0;
   mojo::AssociatedRemote<mojom::ElectronFrameHost> host_;
-  // The bootstrap's: what the app sends, and invoke's answers.
-  v8::Global<v8::Function> deliver_;
-  v8::Global<v8::Function> settle_;
+  // What the bootstrap gave back: the calls the browser's messages make.
+  v8::Global<v8::Object> bootstrap_;
   base::WeakPtrFactory<ElectronPreload> weak_factory_{this};
 };
 
