@@ -10,6 +10,10 @@ import { readAppPackage } from "./app-package";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
 import { createIpcMain } from "./electron/ipc-main";
+import {
+  MessageChannelMain,
+  MessagePortMain,
+} from "./electron/message-port-main";
 import { ELECTRON_VERSION } from "./electron/version";
 import { connectEngine } from "./engine";
 import { readEnvironment } from "./environment";
@@ -65,6 +69,8 @@ const main = async ([resources, ...args]: string[]) => {
       app,
       BrowserWindow: createBrowserWindow(engine, app, ipc),
       ipcMain,
+      MessageChannelMain,
+      MessagePortMain,
     };
     Bun.plugin({
       name: "electron",

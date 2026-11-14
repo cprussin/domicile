@@ -6,6 +6,8 @@ import { electronPaths } from "../paths";
 import { createApp } from "./app";
 import { createBrowserWindow } from "./browser-window";
 import { createIpcMain } from "./ipc-main";
+import type { MessagePortMain } from "./message-port-main";
+import { MessageChannelMain } from "./message-port-main";
 
 const setUp = () => {
   const sent: EngineRequest[] = [];
@@ -298,5 +300,80 @@ describe(createBrowserWindow, () => {
         window: 1,
       },
     ]);
+  });
+
+  it("answers its page's sendSync with the returnValue a listener sets", async () => {
+    const { BrowserWindow, ipcMain, say, sent } = setUp();
+    void new BrowserWindow();
+    const answered = new Promise<void>((resolve) => {
+      ipcMain.on("triple", (event: { returnValue: unknown }, n: number) => {
+        event.returnValue = n * 3;
+        queueMicrotask(resolve);
+      });
+    });
+
+    say({
+      args: [3],
+      channel: "triple",
+      invoke: 4,
+      type: "ipc_send_sync",
+      window: 1,
+    });
+    await answered;
+    await Promise.resolve();
+
+    expect(sent).toEqual([{ invoke: 4, result: 9, type: "ipc_reply" }]);
+  });
+
+  it("posts to its page with ports, and carries what goes over them", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    sent.length = 0;
+    const { port1, port2 } = new MessageChannelMain();
+
+    window.webContents.postMessage("port", { a: 1 }, [port2]);
+    port1.postMessage(2);
+
+    expect(sent).toEqual([
+      {
+        channel: "port",
+        message: { a: 1 },
+        ports: ["m1"],
+        type: "ipc_post",
+        window: 1,
+      },
+      { data: 2, port: "m1", type: "port_post", window: 1 },
+    ]);
+  });
+
+  it("gives its page's postMessage to ipcMain with ports that end with the page", async () => {
+    const { BrowserWindow, ipcMain, say } = setUp();
+    void new BrowserWindow();
+    const posted = new Promise<[MessagePortMain[], unknown]>((resolve) => {
+      ipcMain.on(
+        "mine",
+        (event: { ports: MessagePortMain[] }, message: unknown) =>
+          resolve([event.ports, message]),
+      );
+    });
+
+    say({
+      channel: "mine",
+      message: "a port",
+      ports: ["r1"],
+      type: "ipc_post",
+      window: 1,
+    });
+    const [[port], message] = await posted;
+    const heard: unknown[] = [];
+    port?.on("message", (event: { data: unknown }) => heard.push(event.data));
+    port?.on("close", () => heard.push("closed"));
+    port?.start();
+    say({ data: 50, port: "r1", type: "port_message", window: 1 });
+    say({ type: "page_gone", window: 1 });
+
+    expect(message).toBe("a port");
+    expect(heard).toEqual([50, "closed"]);
   });
 });

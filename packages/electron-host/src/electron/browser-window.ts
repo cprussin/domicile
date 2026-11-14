@@ -9,6 +9,8 @@ import { pathToFileURL } from "node:url";
 import type { Engine, EngineRequest, WindowEvent } from "../engine";
 import type { ElectronApp } from "./app";
 import type { createIpcMain } from "./ipc-main";
+import type { MessagePortMain } from "./message-port-main";
+import { createPagePorts } from "./message-port-main";
 
 export type WebPreferences = {
   readonly preload?: string | undefined;
@@ -25,7 +27,7 @@ export type BrowserWindowOptions = {
 /** Where the windows' pages' IPC goes: the host's side of `ipcMain`. */
 export type IpcRoutes = Pick<
   ReturnType<typeof createIpcMain>,
-  "invoke" | "receive"
+  "invoke" | "post" | "receive" | "sendSync"
 >;
 
 /**
@@ -40,6 +42,7 @@ export const createBrowserWindow = (
   readPreload: (path: string) => string = (path) => readFileSync(path, "utf8"),
 ) => {
   const windows = new Map<number, BrowserWindow>();
+  const ports = createPagePorts(engine.send);
   let nextId = 1;
 
   /** The event object Electron passes first to a window listener. */
@@ -79,6 +82,25 @@ export const createBrowserWindow = (
         args: JSON.parse(JSON.stringify(args)),
         channel,
         type: "ipc_send",
+        window: this.owner.id,
+      });
+    };
+
+    /**
+     * Posts `message` to the page's `ipcRenderer`, with `transfer`, ends of
+     * MessageChannelMains, as `event.ports`. The message travels as JSON.
+     */
+    readonly postMessage = (
+      channel: string,
+      message: unknown,
+      transfer: readonly MessagePortMain[] = [],
+    ) => {
+      this.owner.assertAlive();
+      engine.send({
+        channel,
+        message: JSON.parse(JSON.stringify([message]))[0],
+        ports: ports.give(this.owner.id, transfer),
+        type: "ipc_post",
         window: this.owner.id,
       });
     };
@@ -192,55 +214,100 @@ export const createBrowserWindow = (
 
     /** Takes what the engine said of this window. */
     readonly take = (event: WindowEvent) => {
-      if (event.type === "window_opened") {
-        // Its first page is loading; `window_loaded` says when it's done.
-      } else if (event.type === "window_loaded") {
-        this.webContents.emit("did-finish-load");
-        if (!this.#shown) {
-          this.#shown = true;
-          this.emit("ready-to-show");
+      switch (event.type) {
+        case "window_opened": {
+          // Its first page is loading; `window_loaded` says when it's done.
+          break;
         }
-        for (const load of this.#loads.splice(0)) {
-          load.resolve();
+        case "window_loaded": {
+          this.webContents.emit("did-finish-load");
+          if (!this.#shown) {
+            this.#shown = true;
+            this.emit("ready-to-show");
+          }
+          for (const load of this.#loads.splice(0)) {
+            load.resolve();
+          }
+          break;
         }
-      } else if (event.type === "title_changed") {
-        const titleEvent = eventObject();
-        this.emit("page-title-updated", titleEvent, event.title, false);
-        if (!titleEvent.defaultPrevented) {
-          this.#title = event.title;
+        case "title_changed": {
+          const titleEvent = eventObject();
+          this.emit("page-title-updated", titleEvent, event.title, false);
+          if (!titleEvent.defaultPrevented) {
+            this.#title = event.title;
+          }
+          break;
         }
-      } else if (event.type === "window_refused") {
-        this.#refused(event.why);
-      } else if (event.type === "ipc_message") {
-        ipc.receive(this.webContents, event.channel, event.args);
-      } else if (event.type === "ipc_invoke") {
-        ipc
-          .invoke(this.webContents, event.channel, event.args)
-          .then((answer) => {
-            engine.send(
-              answer.match<EngineRequest>({
-                Err: (error) => ({
-                  error,
-                  invoke: event.invoke,
-                  type: "ipc_reply",
-                }),
-                Ok: ({ result }) => ({
-                  invoke: event.invoke,
-                  result,
-                  type: "ipc_reply",
-                }),
-              }),
-            );
-          })
-          .catch((error: unknown) => {
-            // Only the engine's connection failing gets here, and losing it
-            // ends the app on its own.
-            // biome-ignore lint/suspicious/noConsole: why a page's invoke went unanswered, for the supervisor's log
-            console.error("electron-host: couldn't answer an invoke", error);
-          });
-      } else {
-        this.#closed();
+        case "window_refused": {
+          this.#refused(event.why);
+          break;
+        }
+        case "window_closed": {
+          this.#closed();
+          break;
+        }
+        case "ipc_message": {
+          ipc.receive(this.webContents, event.channel, event.args);
+          break;
+        }
+        case "ipc_invoke": {
+          this.#answer(
+            event.invoke,
+            ipc.invoke(this.webContents, event.channel, event.args),
+          );
+          break;
+        }
+        case "ipc_send_sync": {
+          this.#answer(
+            event.invoke,
+            ipc.sendSync(this.webContents, event.channel, event.args),
+          );
+          break;
+        }
+        case "ipc_post": {
+          ipc.post(
+            this.webContents,
+            event.channel,
+            event.message,
+            ports.take(this.id, event.ports),
+          );
+          break;
+        }
+        case "port_message": {
+          ports.message(this.id, event.port, event.data);
+          break;
+        }
+        case "port_closed": {
+          ports.closed(this.id, event.port);
+          break;
+        }
+        case "page_gone": {
+          ports.gone(this.id);
+          break;
+        }
       }
+    };
+
+    /** Answers invoke or sendSync `invoke` with `answer`, once it settles. */
+    readonly #answer = (
+      invoke: number,
+      answer: ReturnType<IpcRoutes["invoke"]>,
+    ) => {
+      answer
+        .then((settled) => {
+          engine.send(
+            settled.match<EngineRequest>({
+              Err: (error) => ({ error, invoke, type: "ipc_reply" }),
+              Ok: ({ result }) => ({ invoke, result, type: "ipc_reply" }),
+            }),
+          );
+        })
+        .catch((error: unknown) => {
+          // Only the engine's connection failing gets here, and losing it
+          // ends the app on its own.
+          // biome-ignore lint/suspicious/noConsole: why a page's invoke went unanswered, for the supervisor's log
+          console.error("electron-host: couldn't answer an invoke", error);
+        });
     };
 
     /** Ends a window that was never opened at once; asks the engine otherwise. */
@@ -267,6 +334,7 @@ export const createBrowserWindow = (
       if (!this.#destroyed) {
         this.#destroyed = true;
         windows.delete(this.id);
+        ports.gone(this.id);
         for (const load of this.#loads.splice(0)) {
           load.reject(new Error("the window closed before its page loaded"));
         }

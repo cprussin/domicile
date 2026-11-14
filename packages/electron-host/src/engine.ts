@@ -7,6 +7,8 @@ import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
+import type { PortRequest } from "./electron/message-port-main";
+
 export const PROTOCOL_VERSION = 1;
 
 export type EngineRequest =
@@ -42,7 +44,16 @@ export type EngineRequest =
       readonly type: "ipc_reply";
       readonly invoke: number;
       readonly error: string;
-    };
+    }
+  | {
+      readonly type: "ipc_post";
+      readonly window: number;
+      readonly channel: string;
+      readonly message: unknown;
+      /** The names of the app's ports that go with it, each "m" and a number. */
+      readonly ports: string[];
+    }
+  | PortRequest;
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ready") }),
@@ -73,6 +84,32 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("ipc_invoke"),
     window: z.number(),
   }),
+  z.object({
+    args: z.array(z.unknown()),
+    channel: z.string(),
+    invoke: z.number(),
+    type: z.literal("ipc_send_sync"),
+    window: z.number(),
+  }),
+  z.object({
+    channel: z.string(),
+    message: z.unknown(),
+    ports: z.array(z.string()),
+    type: z.literal("ipc_post"),
+    window: z.number(),
+  }),
+  z.object({
+    data: z.unknown(),
+    port: z.string(),
+    type: z.literal("port_message"),
+    window: z.number(),
+  }),
+  z.object({
+    port: z.string(),
+    type: z.literal("port_closed"),
+    window: z.number(),
+  }),
+  z.object({ type: z.literal("page_gone"), window: z.number() }),
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;

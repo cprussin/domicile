@@ -5,6 +5,8 @@ import { EventEmitter } from "node:events";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 
+import type { MessagePortMain } from "./message-port-main";
+
 /** The page a message came from: its window's `webContents`. */
 export type IpcSender = {
   readonly id: number;
@@ -29,9 +31,20 @@ export const createIpcMain = () => {
     invoke: (sender: IpcSender, channel: string, args: unknown[]) =>
       ipcMain.invoked(sender, channel, args),
     ipcMain,
+    /** A page's `ipcRenderer.postMessage`, with the ports that came with it. */
+    post: (
+      sender: IpcSender,
+      channel: string,
+      message: unknown,
+      ports: readonly MessagePortMain[],
+    ) => {
+      ipcMain.emit(channel, { ...messageEvent(sender), ports }, message);
+    },
     receive: (sender: IpcSender, channel: string, args: unknown[]) => {
       ipcMain.emit(channel, messageEvent(sender), ...args);
     },
+    sendSync: (sender: IpcSender, channel: string, args: unknown[]) =>
+      ipcMain.sentSync(sender, channel, args),
   };
 };
 
@@ -85,6 +98,24 @@ export class IpcMain extends EventEmitter {
       }
     }
   };
+
+  /**
+   * A page's `sendSync`, answered with the first `returnValue` a listener
+   * sets, whenever it sets it: the page waits until then, as in Electron.
+   * One nobody listens for fails, as nothing could answer it.
+   */
+  readonly sentSync = (
+    sender: IpcSender,
+    channel: string,
+    args: unknown[],
+  ): Promise<Result<{ readonly result: unknown }, string>> =>
+    this.listenerCount(channel) === 0
+      ? Promise.resolve(
+          Err(`Nothing listens for '${channel}' to set its returnValue`),
+        )
+      : new Promise((resolve) => {
+          this.emit(channel, syncEvent(sender, resolve), ...args);
+        });
 }
 
 const invokeEvent = (sender: IpcSender) => ({
@@ -99,6 +130,22 @@ const messageEvent = (sender: IpcSender) => ({
   reply: (channel: string, ...args: unknown[]) => {
     sender.send(channel, ...args);
   },
-  /** For `sendSync`, which the engine doesn't carry yet. */
-  returnValue: undefined as unknown,
 });
+
+/** A `sendSync`'s event: setting its `returnValue` answers the page. */
+const syncEvent = (
+  sender: IpcSender,
+  answer: (result: Result<{ readonly result: unknown }, string>) => void,
+) => {
+  const set: { value?: unknown } = {};
+  return {
+    ...messageEvent(sender),
+    get returnValue(): unknown {
+      return set.value;
+    },
+    set returnValue(result: unknown) {
+      set.value = result;
+      answer(Ok({ result }));
+    },
+  };
+};

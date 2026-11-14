@@ -4,6 +4,7 @@ import type { Result } from "@cprussin/option-result";
 
 import type { IpcSender } from "./ipc-main";
 import { createIpcMain } from "./ipc-main";
+import { MessageChannelMain } from "./message-port-main";
 
 const page = () => {
   const sent: [string, unknown[]][] = [];
@@ -92,5 +93,45 @@ describe(createIpcMain, () => {
       value: "first",
     });
     expect((await invoke(page().sender, "once", [])).isErr()).toBe(true);
+  });
+
+  describe("sendSync", () => {
+    it("answers with the returnValue a listener sets, even later", async () => {
+      const { ipcMain, sendSync } = createIpcMain();
+      ipcMain.on("now", (event: { returnValue: unknown }, n: number) =>
+        queueMicrotask(() => {
+          event.returnValue = n * 3;
+        }),
+      );
+
+      const answer = await sendSync(page().sender, "now", [3]);
+
+      expect(outcome(answer)).toEqual({ value: 9 });
+    });
+
+    it("fails one nobody listens for, as nothing could answer it", async () => {
+      const { sendSync } = createIpcMain();
+
+      const answer = await sendSync(page().sender, "missing", []);
+
+      expect(outcome(answer)).toEqual({
+        error: "Nothing listens for 'missing' to set its returnValue",
+      });
+    });
+  });
+
+  it("gives a page's postMessage to the listeners, with its ports", () => {
+    const { ipcMain, post } = createIpcMain();
+    const { port1 } = new MessageChannelMain();
+    const heard: unknown[] = [];
+    ipcMain.on(
+      "port",
+      (event: { ports: unknown[]; sender: IpcSender }, message: unknown) =>
+        heard.push(event.sender.id, event.ports, message),
+    );
+
+    post(page().sender, "port", "hi", [port1]);
+
+    expect(heard).toEqual([3, [port1], "hi"]);
   });
 });
