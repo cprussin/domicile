@@ -452,6 +452,10 @@ struct DomicileCompositor {
     /// keeps its last box here; input and casts read
     /// [`HeldFrames::shown`].
     app_bounds: HashMap<String, domicile_scene::Bounds>,
+    /// Each window's CSS `zoom`, from the engine's configure. Multiplies the
+    /// scale it draws at, and its popups', so a zoomed window stays sharp. A
+    /// window not here is at 1. See [`crate::scale::zoomed`].
+    app_zoom: HashMap<String, f64>,
     /// Each monitor's night light and gamma-control client
     /// (`SystemRequest::SetColorTemperature`, `zwlr_gamma_control_v1`), sent
     /// again to an engine that reports its displays, since a new engine
@@ -1365,6 +1369,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         launched: launched.clone(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
+        app_zoom: HashMap::new(),
         gamma: gamma::Ramps::default(),
         held_frames: HeldFrames::new(),
         suspended: HashSet::new(),

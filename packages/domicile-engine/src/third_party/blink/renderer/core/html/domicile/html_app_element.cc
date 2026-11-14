@@ -198,11 +198,12 @@ void HTMLAppElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
 }
 
-void HTMLAppElement::SurfaceBoxChanged(const gfx::Size& size) {
-  if (size == configured_size_) {
+void HTMLAppElement::SurfaceBoxChanged(const gfx::Size& size, double zoom) {
+  if (size == configured_size_ && zoom == configured_zoom_) {
     return;
   }
   configured_size_ = size;
+  configured_zoom_ = zoom;
   Embed();
 }
 
@@ -264,7 +265,7 @@ void HTMLAppElement::Embed() {
       configured_size_,
       // The box is in device pixels and the client is configured in logical
       // ones. Each monitor's page has its own scale, so the page sends it.
-      frame->LayoutZoomFactor(),
+      frame->LayoutZoomFactor(), configured_zoom_,
       reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
                     : ExternalSurfaceEmbedder::Allocation::kAdopt,
       // WrapWeakPersistent: the embedder owns this callback too. A strong
