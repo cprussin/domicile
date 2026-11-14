@@ -15,6 +15,7 @@
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/web_view_partition.h"
+#include "components/domicile/common/electron_schemes.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -25,7 +26,10 @@ namespace domicile {
 //
 //   {"type":"hello","version":1,"app_id":"com.anthropic.Claude",
 //    "partition":"persist:electron-claude"}
-//   -> {"type":"ready"}
+//   -> {"type":"ready","schemes":[{"scheme":"app",
+//                                  "privileges":["standard","secure"]}]}
+//        (the apps' own schemes the engine registered as it started; see
+//        components/domicile/common/electron_schemes.h)
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"open_window","window":1,"url":"https://claude.ai/",
@@ -273,11 +277,6 @@ struct ElectronRefusal {
                          const ElectronRefusal&) = default;
 };
 
-// Whether an app may handle `scheme`: http, https, file, or a scheme of
-// its own. Never one the engine or the web gives a meaning (about:, data:,
-// chrome:, domicile: and their kind).
-bool IsElectronHandleableScheme(std::string_view scheme);
-
 // The partition of session `session` of an app whose own is `app`: the app's
 // for "", otherwise one inside it, kept on disk for "persist:" as Electron
 // does. Or why `session` names none.
@@ -290,7 +289,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     std::string_view line);
 
 // The lines the engine sends, each ending in a newline.
-std::string ElectronReady();
+// `schemes` are the apps' own schemes the engine registered as it started.
+std::string ElectronReady(const std::vector<ElectronScheme>& schemes);
 std::string ElectronRefused(std::string_view why);
 std::string ElectronWindowOpened(ElectronWindow window);
 std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);

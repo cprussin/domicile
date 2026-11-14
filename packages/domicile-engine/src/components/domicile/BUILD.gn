@@ -190,6 +190,19 @@ source_set("common") {
   sources = [ "common/domicile_scheme.h" ]
 }
 
+# Electron apps' own schemes, which every process registers as it starts from
+# the switch the supervisor passes. Its own target beside :common, which is
+# Domicile's scheme and nothing else: the browser, the renderer and
+# chrome/common's scheme registration all read it, and it needs //base.
+source_set("electron_schemes") {
+  sources = [
+    "common/electron_schemes.cc",
+    "common/electron_schemes.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # The cursors a client can ask for, and the codec between their wire names and
 # the enum.
 #
@@ -859,6 +872,7 @@ source_set("electron_protocol") {
   ]
 
   public_deps = [
+    ":electron_schemes",
     ":web_view_partition",
     "//base",
     "//url",
@@ -1342,6 +1356,7 @@ source_set("unit_tests") {
     "browser/download_list_unittest.cc",
     "browser/electron_app_unittest.cc",
     "browser/electron_protocol_unittest.cc",
+    "common/electron_schemes_unittest.cc",
     "renderer/context_bridge_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_settings_unittest.cc",
@@ -1436,6 +1451,7 @@ source_set("unit_tests") {
     ":download_list",
     ":electron_app",
     ":electron_protocol",
+    ":electron_schemes",
     ":context_bridge",
     ":extension_installer",
     ":extension_settings",

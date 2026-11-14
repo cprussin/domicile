@@ -4,7 +4,6 @@
 #include "components/domicile/browser/electron_protocol.h"
 
 #include <algorithm>
-#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -401,39 +400,6 @@ std::string Written(base::DictValue event) {
 
 }  // namespace
 
-bool IsElectronHandleableScheme(std::string_view scheme) {
-  // The schemes content, Blink and the engine give their own meaning. An
-  // app's handler for one would either never run or take over something
-  // that is not the app's.
-  static constexpr std::string_view kReserved[] = {"about",
-                                                   "blob",
-                                                   "chrome",
-                                                   "chrome-error",
-                                                   "chrome-extension",
-                                                   "chrome-native",
-                                                   "chrome-search",
-                                                   "chrome-untrusted",
-                                                   "data",
-                                                   "devtools",
-                                                   "domicile",
-                                                   "filesystem",
-                                                   "googlechrome",
-                                                   "intent",
-                                                   "isolated-app",
-                                                   "javascript",
-                                                   "view-source",
-                                                   "ws",
-                                                   "wss"};
-  return !scheme.empty() && base::IsAsciiLower(scheme[0]) &&
-         std::ranges::all_of(scheme,
-                             [](char c) {
-                               return base::IsAsciiLower(c) ||
-                                      base::IsAsciiDigit(c) || c == '+' ||
-                                      c == '-' || c == '.';
-                             }) &&
-         std::ranges::find(kReserved, scheme) == std::end(kReserved);
-}
-
 base::expected<WebViewPartition, std::string> ElectronSessionPartition(
     const WebViewPartition& app,
     std::string_view session) {
@@ -528,9 +494,20 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
   }
 }
 
-std::string ElectronReady() {
+std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
+  base::ListValue registered;
+  for (const ElectronScheme& scheme : schemes) {
+    base::ListValue privileges;
+    for (std::string& privilege : ElectronSchemePrivileges(scheme)) {
+      privileges.Append(std::move(privilege));
+    }
+    registered.Append(base::DictValue()
+                          .Set("scheme", scheme.scheme)
+                          .Set("privileges", std::move(privileges)));
+  }
   base::DictValue event;
   event.Set("type", "ready");
+  event.Set("schemes", std::move(registered));
   return Line(std::move(event));
 }
 

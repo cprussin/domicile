@@ -151,7 +151,11 @@ class ElectronApp {
  public:
   using Send = base::RepeatingCallback<void(std::string line)>;
 
-  ElectronApp(ElectronDesk& desk, Send send);
+  // `schemes` are the apps' own schemes the engine registered as it
+  // started, which hello's answer names.
+  ElectronApp(ElectronDesk& desk,
+              Send send,
+              std::vector<ElectronScheme> schemes = {});
   ElectronApp(const ElectronApp&) = delete;
   ElectronApp& operator=(const ElectronApp&) = delete;
   // Closes the app's windows: an app whose main process is gone cannot run
@@ -228,6 +232,7 @@ class ElectronApp {
 
   const raw_ref<ElectronDesk> desk_;
   const Send send_;
+  const std::vector<ElectronScheme> schemes_;
   // Set by the app's hello.
   std::optional<ElectronHello> hello_;
   // The app's open windows, by the numbers it gave them.

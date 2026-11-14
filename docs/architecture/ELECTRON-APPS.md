@@ -134,9 +134,17 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 - **`http` and `https`** go to the network unless the session handles them;
   the app then answers before anything else sees the request, as in Electron.
 - **An app's own schemes** (`app://`, `cowork-artifact://`) are registered
-  when the engine starts, because Chromium registers schemes only then: from
-  the quirks table and from schemes the app registered on earlier runs. An
-  app that brings a new scheme runs on its own Electron until the next login.
+  when the engine starts, because Chromium registers schemes only as each
+  process starts: from the quirks table and from schemes apps registered on
+  earlier runs. The supervisor passes them as
+  `--domicile-electron-schemes=app:standard,secure;…`, with Electron's names
+  for the privileges, and the browser hands the switch to every child
+  process. `standard`, `secure`, `bypassCSP`, `corsEnabled` and
+  `supportFetchAPI` are granted; `stream`, `codeCache` and
+  `allowServiceWorkers` are not yet. `ready` names the schemes registered
+  and their privileges, so the host sees one the engine lacks, and an app
+  that brings a new scheme runs on its own Electron until the next login
+  ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
 - **Not yet:** a handler's redirect (the load fails loudly), a request body
   that is a file or a stream, and requests from an Electron page's workers,
   which go to the network.
@@ -224,7 +232,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: `sendSync`, message ports
 - [x] `electron-host`: `sendSync`, `postMessage`, `MessageChannelMain`
 - [x] engine: `protocol.handle`, `loadFile` and sessions
-- [ ] engine: an app's own schemes, registered at start
+- [x] engine: an app's own schemes, registered at start
 - [ ] engine: `webRequest`, cookies, permission handlers, storage clearing
 - [ ] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`

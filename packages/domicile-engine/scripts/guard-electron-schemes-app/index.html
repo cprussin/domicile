@@ -1,0 +1,20 @@
+<!doctype html>
+<title>served</title>
+<!-- Served by the guard's app for guard://app/. The title says everything at
+     once, as the desk may report only its last: this page's origin, whether
+     it is a secure context, what fetch() of its own data.txt read, and the
+     origin of a scheme nobody registered. -->
+<script>
+  const done = (fetched) => {
+    document.title = [
+      "done",
+      location.origin,
+      String(window.isSecureContext),
+      fetched,
+      new URL("plain://app/x").origin,
+    ].join("|");
+  };
+  fetch("data.txt")
+    .then((response) => response.text())
+    .then(done, (error) => done("failed " + error));
+</script>
