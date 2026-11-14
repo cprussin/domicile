@@ -30,6 +30,9 @@
 //                                 produce one
 //   GUARD zoom factor=…           the zoom the browser reports after the first
 //                                 guest chord set 150%
+//   GUARD key-delivered           a key press reached the guest page, as
+//                                 `domicile-key-delivered`. Once for each
+//                                 unclaimed key; never for a claimed chord
 //
 // The engine's document calls `HostShell` once the module loads.
 
@@ -158,6 +161,10 @@ export const HostShell = (_root, desktop) => {
       zoomed = true;
       view.setZoom(1.5);
     }
+  });
+
+  view.addEventListener("domicile-key-delivered", () => {
+    say("key-delivered");
   });
 
   view.addEventListener("domicile-zoom-change", () => {

@@ -65,6 +65,8 @@ Event names and full types are in `src/app-element.ts` and
 - **Keyboard:** the engine sends the keystrokes `document` hears to the window
   that has the keyboard. `domicile.windows.focus(appId)` and `domicile.windows.focusShell()`
   move it in code, both in the compositor's seat and for the page's keys.
+  Each press sent (not a modifier, a repeat or a grabbed chord) fires
+  `domicile-key-delivered` on the `<app>`: a plain `Event` that names no key.
 - **Focus events** (both cancelable; call `preventDefault()` to decide focus
   yourself):
   - `domicile-focus-requested`: a click on a window, before it is focused. A
