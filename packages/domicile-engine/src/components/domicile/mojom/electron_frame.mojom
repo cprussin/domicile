@@ -21,6 +21,16 @@ interface ElectronFrame {
   // webContents.send: the app's main process sent `args_json`, a JSON
   // array, on `channel`.
   Deliver(string channel, string args_json);
+
+  // webContents.postMessage: `message_json` on `channel`, with a new port
+  // for each of the main process's `ports`, in order.
+  DeliverPost(string channel, string message_json, array<string> ports);
+
+  // `data_json` arrived on port `port`, from the main process's end.
+  DeliverToPort(string port, string data_json);
+
+  // The main process closed port `port`.
+  ClosePort(string port);
 };
 
 // The renderer to the browser, for the document that ran the preload.
@@ -31,4 +41,19 @@ interface ElectronFrameHost {
   // ipcRenderer.invoke. `args_json` is a JSON array. The answer is the
   // handler's result as JSON when `ok`, or why it failed.
   Invoke(string channel, string args_json) => (bool ok, string answer);
+
+  // ipcRenderer.sendSync: as Invoke, but the page waits for the answer, as
+  // Electron's does.
+  [Sync]
+  SendSync(string channel, string args_json) => (bool ok, string answer);
+
+  // ipcRenderer.postMessage. `ports` name the page's ports that went with
+  // it, each "r" and a number.
+  Post(string channel, string message_json, array<string> ports);
+
+  // `data_json` on port `port`, to the main process's end.
+  PostToPort(string port, string data_json);
+
+  // The page closed port `port`.
+  PortClosed(string port);
 };

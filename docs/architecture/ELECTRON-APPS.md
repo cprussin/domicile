@@ -107,6 +107,12 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   blocks only the calling page, on a sync Mojo call that the browser process
   answers when the host replies. Arguments travel as JSON, not structured
   clones, so a `Map` or bytes do not survive the trip.
+- **Message ports:** each port the main process holds an end of is a relay.
+  The preload's world keeps the page-side end of a pipe and forwards what
+  arrives on it over the socket as `port_message`; the host's `port_post`
+  goes the other way. A port's name says who made it (`m1` by the main
+  process, `r1` by the page), and `page_gone` tells the host that a new
+  document took the old one's ports.
 
 ### Requests
 
@@ -195,7 +201,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `BrowserWindow` over the Electron socket
 - [x] engine: preload, `contextBridge`, `ipcRenderer` `send`/`on`/`invoke`, `webContents.send`
 - [x] `electron-host`: `webPreferences.preload`, `ipcMain`, `webContents.send`
-- [ ] engine: `sendSync`, message ports
+- [x] engine: `sendSync`, message ports
+- [ ] `electron-host`: `sendSync`, `postMessage`, `MessageChannelMain`
 - [ ] engine: `protocol.handle`, per-app partition, `session` and `webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard

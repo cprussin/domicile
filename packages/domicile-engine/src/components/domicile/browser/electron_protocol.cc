@@ -3,16 +3,19 @@
 
 #include "components/domicile/browser/electron_protocol.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "url/gurl.h"
@@ -100,7 +103,68 @@ base::expected<ElectronRequest, std::string> ParseHello(
 bool IsWindowRequest(std::string_view type) {
   return type == "open_window" || type == "load_url" ||
          type == "focus_window" || type == "close_window" ||
-         type == "destroy_window" || type == "ipc_send";
+         type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
+         type == "port_post" || type == "port_close";
+}
+
+// The "port" a port request names, or why it names none.
+base::expected<std::string, std::string> PortIn(
+    const base::DictValue& request) {
+  const std::string* port = request.FindString("port");
+  if (port == nullptr || !IsElectronPortName(*port)) {
+    return base::unexpected(
+        "\"port\" must name a port: \"m\" or \"r\", then a number");
+  }
+  return base::ok(*port);
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParsePostToPage(
+    base::DictValue& request,
+    ElectronWindow window) {
+  const std::string* channel = request.FindString("channel");
+  const base::ListValue* ports = request.FindList("ports");
+  if (channel == nullptr) {
+    return Refuse("\"channel\" must be a string", window);
+  } else if (!request.contains("message")) {
+    return Refuse("\"message\" is missing", window);
+  }
+  std::vector<std::string> names;
+  if (ports != nullptr) {
+    for (const base::Value& port : *ports) {
+      // The main process posts only ports it made: the page's own are
+      // already the page's.
+      if (!port.is_string() || !IsElectronPortName(port.GetString()) ||
+          port.GetString()[0] != 'm') {
+        return Refuse(
+            "\"ports\" must name the main process's own ports: \"m\", then "
+            "a number",
+            window);
+      } else if (std::ranges::find(names, port.GetString()) != names.end()) {
+        return Refuse("a port is posted once", window);
+      }
+      names.push_back(port.GetString());
+    }
+  } else if (request.contains("ports")) {
+    return Refuse("\"ports\" must be an array", window);
+  }
+  return ElectronPostToPage{.window = window,
+                            .channel = *channel,
+                            .message = *request.Extract("message"),
+                            .ports = std::move(names)};
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParsePortPost(
+    base::DictValue& request,
+    ElectronWindow window) {
+  base::expected<std::string, std::string> port = PortIn(request);
+  if (!port.has_value()) {
+    return Refuse(std::move(port.error()), window);
+  } else if (!request.contains("data")) {
+    return Refuse("\"data\" is missing", window);
+  }
+  return ElectronPortPost{.window = window,
+                          .port = std::move(*port),
+                          .data = *request.Extract("data")};
 }
 
 base::expected<ElectronRequest, ElectronRefusal> ParseReply(
@@ -151,7 +215,23 @@ std::string WithChannel(base::DictValue event,
   return line;
 }
 
+std::string Written(base::DictValue event) {
+  std::string line;
+  // Its values came from JSON, the page's or the app's, so it writes.
+  CHECK(base::JSONWriter::Write(event, &line));
+  line.push_back('\n');
+  return line;
+}
+
 }  // namespace
+
+bool IsElectronPortName(std::string_view name) {
+  // Short enough that no count reaches it, and a name is never a number
+  // that overflows anything that reads it.
+  return name.size() >= 2 && name.size() <= 16 &&
+         (name[0] == 'm' || name[0] == 'r') &&
+         std::ranges::all_of(name.substr(1), base::IsAsciiDigit<char>);
+}
 
 base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     std::string_view line) {
@@ -196,6 +276,16 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ElectronCloseWindow{.window = *window};
   } else if (*type == "ipc_send") {
     return ParseSendToPage(*request, *window);
+  } else if (*type == "ipc_post") {
+    return ParsePostToPage(*request, *window);
+  } else if (*type == "port_post") {
+    return ParsePortPost(*request, *window);
+  } else if (*type == "port_close") {
+    base::expected<std::string, std::string> port = PortIn(*request);
+    if (!port.has_value()) {
+      return Refuse(std::move(port.error()), *window);
+    }
+    return ElectronPortClose{.window = *window, .port = std::move(*port)};
   } else {
     CHECK_EQ(*type, "destroy_window");
     return ElectronDestroyWindow{.window = *window};
@@ -253,6 +343,49 @@ std::string ElectronIpcInvoke(ElectronWindow window,
   base::DictValue event = Event("ipc_invoke", window);
   event.Set("invoke", invoke);
   return WithChannel(std::move(event), channel, args);
+}
+
+std::string ElectronIpcSendSync(ElectronWindow window,
+                                int invoke,
+                                std::string_view channel,
+                                const base::ListValue& args) {
+  base::DictValue event = Event("ipc_send_sync", window);
+  event.Set("invoke", invoke);
+  return WithChannel(std::move(event), channel, args);
+}
+
+std::string ElectronIpcPost(ElectronWindow window,
+                            std::string_view channel,
+                            const base::Value& message,
+                            const std::vector<std::string>& ports) {
+  base::DictValue event = Event("ipc_post", window);
+  event.Set("channel", channel);
+  event.Set("message", message.Clone());
+  base::ListValue names;
+  for (const std::string& port : ports) {
+    names.Append(port);
+  }
+  event.Set("ports", std::move(names));
+  return Written(std::move(event));
+}
+
+std::string ElectronPortMessage(ElectronWindow window,
+                                std::string_view port,
+                                const base::Value& data) {
+  base::DictValue event = Event("port_message", window);
+  event.Set("port", port);
+  event.Set("data", data.Clone());
+  return Written(std::move(event));
+}
+
+std::string ElectronPortClosed(ElectronWindow window, std::string_view port) {
+  base::DictValue event = Event("port_closed", window);
+  event.Set("port", port);
+  return Line(std::move(event));
+}
+
+std::string ElectronPageGone(ElectronWindow window) {
+  return Line(Event("page_gone", window));
 }
 
 }  // namespace domicile

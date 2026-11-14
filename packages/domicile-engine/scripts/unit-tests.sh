@@ -42,9 +42,11 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 14, ElectronProtocol 17, ElectronApp 20,
+# PictureInPictureVideos 14, ElectronProtocol 22, ElectronApp 24,
 # ContextBridge 11, ContextMenu 13.
 #
+# 726, and it was 717 — an Electron window's sendSync and message ports are
+# five more ElectronProtocol cases and four more ElectronApp ones. Before that
 # 717, and it was 703 — the context menu's cases, which were built and never
 # run, are thirteen ContextMenu cases, and a seek of a picture-in-picture
 # video is one PictureInPictureVideos case. Before that 703, and it was 681 — an Electron window's preload and IPC are five more
@@ -243,7 +245,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=717
+FLOOR=726
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

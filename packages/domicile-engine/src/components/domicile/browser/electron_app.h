@@ -33,6 +33,20 @@ struct ElectronPageCalls {
   base::RepeatingCallback<
       void(std::string channel, base::ListValue args, ElectronAnswer answer)>
       invoked;
+  // ipcRenderer.sendSync: as invoked, while the page waits.
+  base::RepeatingCallback<
+      void(std::string channel, base::ListValue args, ElectronAnswer answer)>
+      sent_sync;
+  // ipcRenderer.postMessage, with the names of the page's ports that went.
+  base::RepeatingCallback<void(std::string channel,
+                               base::Value message,
+                               std::vector<std::string> ports)>
+      posted;
+  // A message on one of the page's ports, and the page closing one.
+  base::RepeatingCallback<void(std::string port, base::Value data)> port_posted;
+  base::RepeatingCallback<void(std::string port)> port_closed;
+  // A new document replaced the page, its ports and listeners with it.
+  base::RepeatingClosure gone;
 };
 
 // What an Electron app's windows are on the desk: app windows, named by the
@@ -59,6 +73,18 @@ class ElectronDesk {
   virtual void SendToPage(const std::string& id,
                           const std::string& channel,
                           const std::string& args_json) = 0;
+  // webContents.postMessage: `message_json` on `channel`, and a port in the
+  // page for each of `ports`.
+  virtual void PostToPage(const std::string& id,
+                          const std::string& channel,
+                          const std::string& message_json,
+                          const std::vector<std::string>& ports) = 0;
+  // `data_json` on port `port`, to its end in window `id`'s page.
+  virtual void PostToPort(const std::string& id,
+                          const std::string& port,
+                          const std::string& data_json) = 0;
+  // Closes port `port`'s end in window `id`'s page.
+  virtual void ClosePort(const std::string& id, const std::string& port) = 0;
 };
 
 // One connection to the Electron socket: one running app. Turns its request
@@ -97,10 +123,21 @@ class ElectronApp {
   void PageSent(ElectronWindow number,
                 std::string channel,
                 base::ListValue args);
+  // ipcRenderer.invoke and sendSync, which differ only in their event.
   void PageInvoked(ElectronWindow number,
+                   bool sync,
                    std::string channel,
                    base::ListValue args,
                    ElectronAnswer answer);
+  void PagePosted(ElectronWindow number,
+                  std::string channel,
+                  base::Value message,
+                  std::vector<std::string> ports);
+  void PagePortPosted(ElectronWindow number,
+                      std::string port,
+                      base::Value data);
+  void PagePortClosed(ElectronWindow number, std::string port);
+  void PageGone(ElectronWindow number);
   // The desk id of window `number`, or nothing after refusing the request.
   std::optional<std::string> IdOf(ElectronWindow number);
 

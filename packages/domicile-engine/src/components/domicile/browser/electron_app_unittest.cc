@@ -52,6 +52,24 @@ class FakeDesk final : public ElectronDesk {
                   const std::string& args_json) override {
     calls.push_back("send " + id + " " + channel + " " + args_json);
   }
+  void PostToPage(const std::string& id,
+                  const std::string& channel,
+                  const std::string& message_json,
+                  const std::vector<std::string>& ports) override {
+    std::string line = "post " + id + " " + channel + " " + message_json;
+    for (const std::string& port : ports) {
+      line += " " + port;
+    }
+    calls.push_back(line);
+  }
+  void PostToPort(const std::string& id,
+                  const std::string& port,
+                  const std::string& data_json) override {
+    calls.push_back("port " + id + " " + port + " " + data_json);
+  }
+  void ClosePort(const std::string& id, const std::string& port) override {
+    calls.push_back("close port " + id + " " + port);
+  }
 
   bool has_shell = true;
   // What each window's page may call, by id.
@@ -329,6 +347,83 @@ TEST_F(ElectronAppTest, TheAppsSendReachesItsWindowsPage) {
              R"("args":[1,"a"]})");
 
   EXPECT_EQ(desk_.calls, Lines{R"(send 10 ping [1,"a"])"});
+}
+
+TEST_F(ElectronAppTest, APagesSendSyncIsAnsweredByTheAppsReply) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+  Answer answer;
+
+  desk_.pages.at("10").sent_sync.Run("get", OneAndA(), Into(answer));
+  app_->Take(R"({"type":"ipc_reply","invoke":1,"result":"v"})");
+
+  EXPECT_EQ(sent_, Lines{R"({"args":[1,"a"],"channel":"get","invoke":1,)"
+                         R"("type":"ipc_send_sync","window":2})"
+                         "\n"});
+  ASSERT_TRUE(answer.has_value() && answer->has_value());
+  EXPECT_EQ(base::WriteJson(**answer), R"("v")");
+}
+
+TEST_F(ElectronAppTest, APagesPortsReachTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+  const ElectronPageCalls& page = desk_.pages.at("10");
+
+  page.posted.Run("port", base::Value("hi"), {"r1"});
+  page.port_posted.Run("r1", base::Value(3));
+  page.port_closed.Run("r1");
+  page.gone.Run();
+
+  EXPECT_EQ(sent_,
+            (Lines{R"({"channel":"port","message":"hi","ports":["r1"],)"
+                   R"("type":"ipc_post","window":2})"
+                   "\n",
+                   R"({"data":3,"port":"r1","type":"port_message","window":2})"
+                   "\n",
+                   R"({"port":"r1","type":"port_closed","window":2})"
+                   "\n",
+                   R"({"type":"page_gone","window":2})"
+                   "\n"}));
+}
+
+TEST_F(ElectronAppTest, AClosedWindowsPortsSayNothing) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  app_->Listed({});
+  sent_.clear();
+  Answer answer;
+
+  page.sent_sync.Run("get", base::ListValue(), Into(answer));
+  page.posted.Run("port", base::Value(), {});
+  page.port_posted.Run("r1", base::Value());
+  page.port_closed.Run("r1");
+  page.gone.Run();
+
+  ASSERT_TRUE(answer.has_value());
+  EXPECT_EQ(*answer, base::unexpected("the window is closed"));
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, TheAppsPortsReachItsWindowsPage) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(R"({"type":"ipc_post","window":2,"channel":"port",)"
+             R"("message":{"a":1},"ports":["m1","m2"]})");
+  app_->Take(R"({"type":"port_post","window":2,"port":"r1","data":[2]})");
+  app_->Take(R"({"type":"port_close","window":2,"port":"m1"})");
+  app_->Take(R"({"type":"port_close","window":3,"port":"m1"})");
+
+  EXPECT_EQ(desk_.calls, (Lines{R"(post 10 port {"a":1} m1 m2)",
+                                "port 10 r1 [2]", "close port 10 m1"}));
+  EXPECT_EQ(sent_, Lines{R"({"type":"window_refused","why":"window 3 is not )"
+                         R"(open","window":3})"
+                         "\n"});
 }
 
 }  // namespace
