@@ -155,6 +155,10 @@ pub struct BrowserWindow {
     pub title: String,
     /// The app window's id, or empty for any other window.
     pub app_id: String,
+    /// The address it shows, or the one it is opening.
+    pub url: String,
+    /// Whether it is a private window.
+    pub private: bool,
 }
 
 /// Which monitors are off. See [`Host::describe_darkness`].
@@ -341,6 +345,9 @@ impl Host {
                 size: None,
                 focused: false,
                 urgent: false,
+                // An older engine says no address.
+                url: (!window.url.is_empty()).then(|| window.url.clone()),
+                private: window.private,
             })
         });
         HostMessage::WindowList {
@@ -355,6 +362,8 @@ impl Host {
                     size: app.size.map(|(width, height)| [width, height]),
                     focused: focused.as_ref() == Some(&app.app_id),
                     urgent: app.urgent,
+                    url: None,
+                    private: false,
                 })
                 .chain(browser)
                 .collect(),

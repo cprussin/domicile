@@ -533,10 +533,16 @@ class DeskWindows final : public base::SupportsUserData::Data,
   std::vector<ListedBrowserWindow> Listing() const {
     std::vector<ListedBrowserWindow> listing;
     for (const Window& window : windows_) {
+      content::WebContents& contents = window.guest->contents();
+      const GURL& committed = contents.GetLastCommittedURL();
       listing.push_back(ListedBrowserWindow{
           .id = window.id,
-          .title = base::UTF16ToUTF8(window.guest->contents().GetTitle()),
-          .app_id = window.app_id});
+          .title = base::UTF16ToUTF8(contents.GetTitle()),
+          .app_id = window.app_id,
+          .url = (committed.is_empty() ? window.opened_at : committed)
+                     .possibly_invalid_spec(),
+          .off_the_record =
+              contents.GetBrowserContext()->IsOffTheRecord()});
     }
     return listing;
   }

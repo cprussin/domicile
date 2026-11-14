@@ -291,7 +291,8 @@ class FakeBrowserWindowListObserver : public mojom::BrowserWindowListObserver {
       std::vector<mojom::ListedBrowserWindowPtr> windows) override {
     std::vector<std::string> titles;
     for (const mojom::ListedBrowserWindowPtr& window : windows) {
-      titles.push_back(window->id + " " + window->title);
+      titles.push_back(window->id + " " + window->title + " " + window->url +
+                       (window->off_the_record ? " private" : ""));
     }
     lists_.push_back(std::move(titles));
   }
@@ -1689,7 +1690,9 @@ TEST_F(FrameSinkBrokerTest, AnUnchangedCompositingModeIsNotSentAgain) {
 
 TEST_F(FrameSinkBrokerTest, AnObserverHearsTheBrowserWindowsThenEachChange) {
   std::vector<mojom::ListedBrowserWindowPtr> windows;
-  windows.push_back(mojom::ListedBrowserWindow::New("1", "Mail", ""));
+  windows.push_back(mojom::ListedBrowserWindow::New("1", "Mail", "",
+                                                    "https://mail.example/",
+                                                    true));
   broker()->OnBrowserWindowsChanged(std::move(windows));
 
   mojo::Remote<mojom::FrameSinkBroker> remote;
@@ -1702,7 +1705,8 @@ TEST_F(FrameSinkBrokerTest, AnObserverHearsTheBrowserWindowsThenEachChange) {
   RunUntilIdle();
 
   EXPECT_EQ(observer.lists_, (std::vector<std::vector<std::string>>{
-                                 {"1 Mail"}, {}}));
+                                 {"1 Mail https://mail.example/ private"},
+                                 {}}));
 }
 
 TEST_F(FrameSinkBrokerTest, ADisplayWithAWindowIsCaptured) {

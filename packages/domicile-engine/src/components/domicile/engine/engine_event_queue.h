@@ -66,6 +66,8 @@ struct EngineBrowserWindow {
   std::string id;
   std::string title;
   std::string app_id;
+  std::string url;
+  bool off_the_record = false;
 };
 
 // One frame of a display capture.

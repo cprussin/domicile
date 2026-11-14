@@ -373,6 +373,8 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         size: None,
         focused: false,
         urgent: false,
+        url: None,
+        private: false,
     };
     assert_eq!(
         reply_to(

@@ -105,11 +105,15 @@ fn every_window_is_listed_native_and_browser_alike() {
             id: "3".into(),
             title: "Inbox".into(),
             app_id: "mail".into(),
+            url: "https://mail.example/".into(),
+            private: false,
         },
         BrowserWindow {
             id: "7".into(),
             title: "Example".into(),
             app_id: String::new(),
+            url: "https://example.com/".into(),
+            private: true,
         },
     ]);
     host.browser_toplevel_ids(BTreeMap::from([
@@ -136,6 +140,8 @@ fn every_window_is_listed_native_and_browser_alike() {
                     size: Some(SIZE),
                     focused: true,
                     urgent: false,
+                    url: None,
+                    private: false,
                 },
                 ListedWindow {
                     id: "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".into(),
@@ -146,6 +152,8 @@ fn every_window_is_listed_native_and_browser_alike() {
                     size: None,
                     focused: false,
                     urgent: false,
+                    url: Some("https://mail.example/".into()),
+                    private: false,
                 },
                 ListedWindow {
                     id: "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".into(),
@@ -156,6 +164,8 @@ fn every_window_is_listed_native_and_browser_alike() {
                     size: None,
                     focused: false,
                     urgent: false,
+                    url: Some("https://example.com/".into()),
+                    private: true,
                 },
             ]
         }

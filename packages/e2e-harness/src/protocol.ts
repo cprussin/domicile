@@ -370,9 +370,12 @@ const windowListSchema = z.looseObject({
       id: z.string().min(1),
       kind: z.enum(["native", "browser"]),
       pid: z.int().nullable(),
+      private: z.boolean(),
       size: sizeSchema.nullable(),
       title: z.string(),
       urgent: z.boolean(),
+      // A browser window's address.
+      url: z.string().nullable(),
     }),
   ),
 });
