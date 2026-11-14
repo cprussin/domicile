@@ -66,7 +66,8 @@ use wayland_protocols_misc::server_decoration::client::{
 
 use crate::anchor_protocol::{domicile_anchor_manager_v1, domicile_toplevel_anchor_v1};
 use crate::arguments::{
-    Arguments, AskForFocus, AskTo, AskToDrag, ConstrainPointer, HoldTheScreensOn, TakeTheShortcuts,
+    Arguments, AskForFocus, AskTo, AskToDrag, ConstrainPointer, DeepFormat, HoldTheScreensOn,
+    TakeTheShortcuts,
 };
 
 /// Why the client stopped.
@@ -180,6 +181,12 @@ const fn translucent(color: u32) -> u32 {
     (alpha << 24) | (red << 16) | (green << 8) | blue
 }
 
+/// The color a `--format` window draws, as 8-bit `0x00RRGGBB`.
+///
+/// Public because `guard-buffer-formats.sh` reads it back from the page. Its
+/// channels differ, so a swap shows.
+pub const DEEP_COLOR: u32 = 0x00_33_66_cc;
+
 /// The two halves of a `--buffer-transform` window's buffer, left then right
 /// as drawn, before the turn.
 ///
@@ -208,6 +215,63 @@ const fn shm_format(translucent: bool) -> wl_shm::Format {
     } else {
         wl_shm::Format::Xrgb8888
     }
+}
+
+/// The `wl_shm` format `format` names.
+const fn deep_shm_format(format: DeepFormat) -> wl_shm::Format {
+    match format {
+        DeepFormat::Abgr2101010 => wl_shm::Format::Abgr2101010,
+        DeepFormat::Xbgr2101010 => wl_shm::Format::Xbgr2101010,
+        DeepFormat::Abgr16161616f => wl_shm::Format::Abgr16161616f,
+        DeepFormat::Xbgr16161616f => wl_shm::Format::Xbgr16161616f,
+    }
+}
+
+/// One pixel of 8-bit `0x00RRGGBB` `color` in `format`, little-endian.
+///
+/// The padding of a format without alpha is left zero, so a compositor that
+/// reads it as alpha draws the window transparent.
+fn deep_pixel(format: DeepFormat, color: u32) -> Vec<u8> {
+    let channel = |shift: u32| (color >> shift) & 0xff;
+    let (red, green, blue) = (channel(16), channel(8), channel(0));
+    let ten = |value: u32| (value * 1023 + 127) / 255;
+    let half = |value: u32| u64::from(half_float(value as f32 / 255.0));
+    match format {
+        DeepFormat::Abgr2101010 | DeepFormat::Xbgr2101010 => {
+            let alpha = if format == DeepFormat::Abgr2101010 {
+                3
+            } else {
+                0
+            };
+            ((alpha << 30) | (ten(blue) << 20) | (ten(green) << 10) | ten(red))
+                .to_le_bytes()
+                .to_vec()
+        }
+        DeepFormat::Abgr16161616f | DeepFormat::Xbgr16161616f => {
+            let alpha = if format == DeepFormat::Abgr16161616f {
+                u64::from(half_float(1.0))
+            } else {
+                0
+            };
+            ((alpha << 48) | (half(blue) << 32) | (half(green) << 16) | half(red))
+                .to_le_bytes()
+                .to_vec()
+        }
+    }
+}
+
+/// `value`, from 0 to 1, as an IEEE half float, rounded to nearest.
+fn half_float(value: f32) -> u16 {
+    if value == 0.0 {
+        return 0;
+    }
+    let bits = value.to_bits();
+    let exponent = ((bits >> 23) & 0xff) as i32 - 127 + 15;
+    let mantissa = bits & 0x7f_ffff;
+    // The mantissa's top 10 bits, rounded on the 11th; a carry steps the
+    // exponent, as it should.
+    let rounded = (mantissa + 0x1000) >> 13;
+    ((exponent as u32) << 10).wrapping_add(rounded) as u16
 }
 
 /// The buffer for a `size` window drawn with `transform`: on its side for a
@@ -311,6 +375,8 @@ struct Client {
     /// See [`crate::arguments::Arguments::translucent`]. Kept because buffers
     /// are remade on every rescale and resize.
     translucent: bool,
+    /// See [`crate::arguments::Arguments::format`]. Kept for the same reason.
+    format: Option<DeepFormat>,
     /// See [`crate::arguments::Arguments::buffer_transform`]. Kept for the
     /// same reason.
     buffer_transform: Option<wl_output::Transform>,
@@ -503,6 +569,30 @@ enum Paint {
     /// [`striped`] at [`scrolled_to`] the frame, drawn anew each frame, for a
     /// `--scrolling-bubble` window. Opaque.
     Scrolled,
+    /// [`DEEP_COLOR`] in a `--format` window's format, every frame.
+    Deep(DeepFormat),
+}
+
+impl Paint {
+    /// The `wl_shm` format the buffers hold.
+    ///
+    /// `Xrgb8888` has no alpha, so an ordinary window is always opaque (see
+    /// the compositor's `xrgb_forces_opaque_alpha`).
+    const fn shm_format(self) -> wl_shm::Format {
+        match self {
+            Paint::Deep(format) => deep_shm_format(format),
+            Paint::Translucent => shm_format(true),
+            Paint::Opaque | Paint::Halves | Paint::Scrolled => shm_format(false),
+        }
+    }
+
+    /// Bytes a pixel.
+    const fn bytes_per_pixel(self) -> u32 {
+        match self {
+            Paint::Deep(DeepFormat::Abgr16161616f | DeepFormat::Xbgr16161616f) => 8,
+            _ => 4,
+        }
+    }
 }
 
 /// Two buffers in one shared file, used alternately.
@@ -596,6 +686,7 @@ impl Client {
             min_size: asked.min_size,
             max_size: asked.max_size,
             translucent: asked.translucent,
+            format: asked.format,
             buffer_transform: asked.buffer_transform,
             follow_configure: asked.follow_configure,
             resize_to: asked.resize_to,
@@ -1136,6 +1227,9 @@ impl Client {
 
     /// What the window's buffers hold.
     fn paint(&self) -> Paint {
+        if let Some(format) = self.format {
+            return Paint::Deep(format);
+        }
         match (self.scrolls, self.buffer_transform, self.translucent) {
             (true, _, _) => Paint::Scrolled,
             (false, Some(_), _) => Paint::Halves,
@@ -1186,7 +1280,7 @@ impl Client {
                             subsurface.set_position(SCROLLING_BUBBLE.0, at);
                         }
                     }
-                    Paint::Opaque | Paint::Translucent | Paint::Halves => {
+                    Paint::Opaque | Paint::Translucent | Paint::Halves | Paint::Deep(_) => {
                         window.pixels.fill(index, color)?;
                     }
                 }
@@ -1216,8 +1310,8 @@ impl Pixels {
         (width, height): (u32, u32),
         paint: Paint,
     ) -> Result<Pixels, ClientError> {
-        let translucent = paint == Paint::Translucent;
-        let each = (width as usize) * (height as usize) * 4;
+        let bytes_per_pixel = paint.bytes_per_pixel();
+        let each = (width as usize) * (height as usize) * bytes_per_pixel as usize;
         let file = anonymous(each * 2)
             .map_err(|err| ClientError::NoBuffer(format!("no memory to draw in: {err}")))?;
         let pool = shm.create_pool(file.as_fd(), (each * 2) as i32, handle, ());
@@ -1226,8 +1320,8 @@ impl Pixels {
                 (index * each) as i32,
                 width as i32,
                 height as i32,
-                (width * 4) as i32,
-                shm_format(translucent),
+                (width * bytes_per_pixel) as i32,
+                paint.shm_format(),
                 handle,
                 index,
             )
@@ -1249,6 +1343,10 @@ impl Pixels {
             Paint::Opaque => flat(COLORS),
             Paint::Translucent => flat(TRANSLUCENT_COLORS),
             Paint::Halves => [halves(width, height), halves(width, height)],
+            Paint::Deep(format) => {
+                let frame = deep_pixel(format, DEEP_COLOR).repeat(each / bytes_per_pixel as usize);
+                [frame.clone(), frame]
+            }
             // Drawn anew each frame by `write`.
             Paint::Scrolled => [Vec::new(), Vec::new()],
         };
@@ -3178,9 +3276,9 @@ mod tests {
     use std::os::fd::AsFd as _;
 
     use super::{
-        access_mode, buffer_size, first_group_name, halves, scrolled_to, shm_format, striped,
-        COLORS, SCROLLING_BUBBLE, SCROLL_STEP, SIZE, STRIPE_COLOR, TRANSLUCENT_ALPHA,
-        TRANSLUCENT_COLORS, TURNED_COLORS,
+        access_mode, buffer_size, deep_pixel, first_group_name, half_float, halves, scrolled_to,
+        shm_format, striped, DeepFormat, COLORS, SCROLLING_BUBBLE, SCROLL_STEP, SIZE, STRIPE_COLOR,
+        TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS, TURNED_COLORS,
     };
 
     #[test]
@@ -3303,6 +3401,61 @@ mod tests {
         // `Argb8888`.
         assert_eq!(shm_format(true), wl_shm::Format::Argb8888);
         assert_eq!(shm_format(false), wl_shm::Format::Xrgb8888);
+    }
+
+    #[test]
+    fn a_10_bit_pixel_is_red_in_its_lowest_bits() {
+        let pixel = u32::from_le_bytes(
+            deep_pixel(DeepFormat::Abgr2101010, 0x00_ff_00_00)
+                .try_into()
+                .unwrap(),
+        );
+
+        assert_eq!(pixel, (3 << 30) | 1023);
+    }
+
+    #[test]
+    fn a_10_bit_pixel_without_alpha_leaves_its_padding_zero() {
+        let pixel = u32::from_le_bytes(
+            deep_pixel(DeepFormat::Xbgr2101010, 0x00_00_00_ff)
+                .try_into()
+                .unwrap(),
+        );
+
+        assert_eq!(pixel, 1023 << 20);
+    }
+
+    #[test]
+    fn each_8_bit_channel_survives_10_bits() {
+        for value in 0..=255u32 {
+            let ten = u32::from_le_bytes(
+                deep_pixel(DeepFormat::Xbgr2101010, value << 16)
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!((ten * 255 + 511) / 1023, value);
+        }
+    }
+
+    #[test]
+    fn a_half_float_pixel_is_red_alpha_last() {
+        let pixel = u64::from_le_bytes(
+            deep_pixel(DeepFormat::Abgr16161616f, 0x00_ff_00_00)
+                .try_into()
+                .unwrap(),
+        );
+
+        // 1.0 is 0x3c00.
+        assert_eq!(pixel, (0x3c00 << 48) | 0x3c00);
+    }
+
+    #[test]
+    fn half_floats_round_to_the_nearest() {
+        assert_eq!(half_float(0.0), 0);
+        assert_eq!(half_float(1.0), 0x3c00);
+        assert_eq!(half_float(0.5), 0x3800);
+        // 0x33 / 255 = 0.2, nearest half 0x3266.
+        assert_eq!(half_float(0x33 as f32 / 255.0), 0x3266);
     }
 }
 

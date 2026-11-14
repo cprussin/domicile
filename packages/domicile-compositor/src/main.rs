@@ -1236,6 +1236,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Requests for the casts Wayland capture clients take.
     let (screen_copy_requests, heard_screen_copy_requests) = channel::<casting::ToPipewire>();
 
+    // An engine on the CPU shows only 8-bit frames from memory.
+    let shm_formats = gpu
+        .as_ref()
+        .filter(|_| !arguments.software_compositing)
+        .map(|gpu| shm_upload::shm_formats(&gpu.renderer))
+        .unwrap_or_default();
+
     let mut dmabuf_state = DmabufState::new();
     // An engine on the CPU shows no dmabuf, so clients are offered only
     // `wl_shm`. Mesa then draws GL clients in memory too.
@@ -1334,7 +1341,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         keyboard_shortcuts_inhibit_state: KeyboardShortcutsInhibitState::new::<DomicileCompositor>(
             &dh,
         ),
-        shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
+        shm_state: ShmState::new::<DomicileCompositor>(&dh, shm_formats),
         seat_state,
         data_device_state,
         primary_selection_state,

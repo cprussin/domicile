@@ -26,6 +26,7 @@
 #include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/external_surface_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -49,6 +50,7 @@
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -385,6 +387,23 @@ class FrameSinkBrokerTest : public testing::Test {
     return {buffer_id,
             gpu::ClientSharedImage::ImportUnowned(std::move(exported).value())
                 ->mailbox()};
+  }
+
+  // Imports a dmabuf of `fourcc` into `frame_sink_id` and returns its
+  // SharedImage, or nullptr if the import was refused.
+  scoped_refptr<gpu::ClientSharedImage> ImportAs(
+      mojo::Remote<mojom::FrameSinkBroker>& remote,
+      const viz::FrameSinkId& frame_sink_id,
+      uint32_t fourcc) {
+    base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
+        future;
+    remote->ImportBuffer(frame_sink_id, ADmabuf(kBufferSize), kBufferSize,
+                         fourcc, future.GetCallback());
+    auto [buffer_id, exported] = future.Take();
+    if (!exported.has_value()) {
+      return nullptr;
+    }
+    return gpu::ClientSharedImage::ImportUnowned(std::move(exported).value());
   }
 
   // Imports `region` into `frame_sink_id` as an ARGB8888 window of
@@ -1742,6 +1761,76 @@ TEST_F(FrameSinkBrokerTest, FencingABufferNeverImportedIsRefused) {
 
   EXPECT_FALSE(fenced.Get().has_value());
   EXPECT_TRUE(sii_->fenced().empty());
+}
+
+// Each fourcc a client may draw in, as the SharedImage viz samples. DRM names
+// channels from the most significant bit and viz in memory order. A format
+// with no alpha channel is opaque, whatever its padding bits hold.
+TEST_F(FrameSinkBrokerTest, EachFourccIsImportedInItsOwnFormat) {
+  struct Expected {
+    uint32_t fourcc;
+    viz::SharedImageFormat format;
+    SkAlphaType alpha;
+  };
+  const Expected kExpected[] = {
+      {0x34325241, viz::SinglePlaneFormat::kBGRA_8888, kPremul_SkAlphaType},
+      {0x34325258, viz::SinglePlaneFormat::kBGRX_8888, kOpaque_SkAlphaType},
+      {0x34324241, viz::SinglePlaneFormat::kRGBA_8888, kPremul_SkAlphaType},
+      {0x34324258, viz::SinglePlaneFormat::kRGBX_8888, kOpaque_SkAlphaType},
+      {0x30335241, viz::SinglePlaneFormat::kBGRA_1010102, kPremul_SkAlphaType},
+      {0x30334241, viz::SinglePlaneFormat::kRGBA_1010102, kPremul_SkAlphaType},
+      {0x48344241, viz::SinglePlaneFormat::kRGBA_F16, kPremul_SkAlphaType},
+  };
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+
+  for (const Expected& expected : kExpected) {
+    SCOPED_TRACE(testing::Message() << "fourcc 0x" << std::hex
+                                    << expected.fourcc);
+    const scoped_refptr<gpu::ClientSharedImage> image =
+        ImportAs(remote, frame_sink_id, expected.fourcc);
+    ASSERT_TRUE(image);
+    EXPECT_EQ(image->format(), expected.format);
+    EXPECT_EQ(image->alpha_type(), expected.alpha);
+  }
+}
+
+// A format the engine does not list would draw with permuted channels.
+TEST_F(FrameSinkBrokerTest, AnUnlistedFourccIsRefused) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+
+  // DRM_FORMAT_RGB565.
+  EXPECT_FALSE(ImportAs(remote, frame_sink_id, 0x36314752));
+}
+
+// Viz has no 10-bit or half-float format without alpha. Its twin with alpha
+// draws the padding bits as alpha, even marked opaque, so a window whose
+// padding is zero would draw transparent.
+TEST_F(FrameSinkBrokerTest, ADeepFourccWithoutAlphaIsRefused) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+
+  // DRM_FORMAT_XRGB2101010, XBGR2101010 and XBGR16161616F.
+  for (const uint32_t fourcc : {0x30335258u, 0x30334258u, 0x48344258u}) {
+    SCOPED_TRACE(testing::Message() << "fourcc 0x" << std::hex << fourcc);
+    EXPECT_FALSE(ImportAs(remote, frame_sink_id, fourcc));
+  }
 }
 
 // A window drawn into shared memory, on a browser that composites in
