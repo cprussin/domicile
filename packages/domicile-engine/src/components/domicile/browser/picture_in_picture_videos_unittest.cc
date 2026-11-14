@@ -43,9 +43,11 @@ viz::SurfaceId Surface(uint32_t client, uint32_t sequence) {
 class RecordingControls : public PictureInPictureVideos::Controls {
  public:
   void Act(Action action) override { acts.push_back(action); }
+  void Seek(double seconds) override { seeks.push_back(seconds); }
   void Resized(const gfx::Size& size) override { sizes.push_back(size); }
 
   std::vector<Action> acts;
+  std::vector<double> seeks;
   std::vector<gfx::Size> sizes;
 };
 
@@ -214,17 +216,34 @@ TEST_F(PictureInPictureVideosTest, TheShellsControlsReachTheVideosPage) {
 
   shell->Act("1", Action::kPause);
   shell->Act("1", Action::kBackToPage);
+  shell->Seek("1", 42.5);
   shell->Resize("1", gfx::Size(320, 180));
   // A video that left raced the act, which does nothing.
   shell->Act("9", Action::kClose);
+  shell->Seek("9", 1);
   shell->Resize("9", gfx::Size(1, 1));
   RunUntilIdle();
 
   EXPECT_THAT(controls_.acts,
               testing::ElementsAre(Action::kPause, Action::kBackToPage));
+  EXPECT_THAT(controls_.seeks, testing::ElementsAre(42.5));
   EXPECT_THAT(controls_.sizes, testing::ElementsAre(gfx::Size(320, 180)));
   EXPECT_TRUE(other.acts.empty());
+  EXPECT_TRUE(other.seeks.empty());
   EXPECT_TRUE(other.sizes.empty());
+}
+
+TEST_F(PictureInPictureVideosTest, ASeekBeforeTheStartIsABadMessage) {
+  std::unique_ptr<PictureInPictureVideos::Listing> listing =
+      videos_.List("4", &controls_);
+  mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
+
+  mojo::test::BadMessageObserver bad_message;
+  shell->Seek("1", -1);
+
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("seek to a time that is not one"));
+  EXPECT_TRUE(controls_.seeks.empty());
 }
 
 TEST_F(PictureInPictureVideosTest, AShownVideoDrawsUnderTheShellsFrameSink) {

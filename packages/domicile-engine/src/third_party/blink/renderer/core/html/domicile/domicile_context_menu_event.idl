@@ -24,6 +24,9 @@
   readonly attribute DOMString mediaType;
   // Whether an image has pixels to copy. A broken image has none.
   readonly attribute boolean hasImageContents;
+  // Whether a video can go into picture-in-picture, and whether it is in it.
+  readonly attribute boolean canPictureInPicture;
+  readonly attribute boolean inPictureInPicture;
 
   // The selected text; the empty string for none.
   readonly attribute DOMString selectionText;
@@ -41,9 +44,10 @@
 
   // Do `action` for this menu: "undo", "redo", "cut", "copy", "paste",
   // "paste-and-match-style", "delete", "select-all", "copy-link-address",
-  // "save-link-as", "copy-image", "copy-media-address", "save-media-as" or
-  // "inspect". Throws TypeError for any other word, NotSupportedError for an
-  // action this menu does not offer (a link action with no link), and
-  // InvalidStateError once a newer menu replaced this one.
+  // "save-link-as", "copy-image", "copy-media-address", "save-media-as",
+  // "picture-in-picture" (enters, or leaves when in) or "inspect". Throws
+  // TypeError for any other word, NotSupportedError for an action this menu
+  // does not offer (a link action with no link), and InvalidStateError once a
+  // newer menu replaced this one.
   [RaisesException] undefined run(DOMString action);
 };

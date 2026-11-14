@@ -242,9 +242,11 @@ asks the shell instead (the sections above). `RefuseChromeDialogs`
   here each video is listed in `DomicileHost.pictureInPictureVideos`, the
   shell draws it in an `<app picture-in-picture="id">`, and
   `actOnPictureInPictureVideo` plays, pauses, skips, goes back to the page or
-  closes it. The video's frame sink is made a child of the shell's while the
-  element shows it. Document picture-in-picture stays: its window is the
-  page's own, and a `<webview>` opens it as a shell window.
+  closes it. `seekPictureInPictureVideo` moves it. A `<webview>`'s context
+  menu offers `picture-in-picture` over a video Blink can float. The video's
+  frame sink is made a child of the shell's while the element shows it.
+  Document picture-in-picture stays: its window is the page's own, and a
+  `<webview>` opens it as a shell window.
 
 ## Host shortcuts when nested
 
@@ -305,7 +307,8 @@ The engine leaves out Chrome's own UI, which the shell replaces.
 - `guard-webview-page-picker.sh`: pickers.
 - `guard-webview-sign-in-with.sh`: "Sign in with" asks the shell.
 - `guard-webview-chrome-sheets.sh`: Payment Request is off.
-- `guard-webview-video-picture-in-picture.sh`: picture-in-picture video is
-  listed to the shell, and its controls reach the page.
+- `guard-webview-video-picture-in-picture.sh`: the context menu puts a video
+  in picture-in-picture, it is listed to the shell, and its controls reach the
+  page.
 - `guard-browser-brand.sh`: the Google Chrome brand.
 - No guard reads the browser's offers.

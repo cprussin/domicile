@@ -69,6 +69,10 @@ interface PictureInPictureVideos {
   // and does nothing.
   Act(string id, PictureInPictureAction action);
 
+  // Moves video `id` to `seconds` in, as its progress bar does. Seconds that
+  // are negative or not finite are a bad message. An unknown id does nothing.
+  Seek(string id, double seconds);
+
   // The shell shows video `id` `size` big, in CSS pixels; the page hears it as
   // its PictureInPictureWindow's size. An unknown id does nothing.
   Resize(string id, gfx.mojom.Size size);

@@ -1,5 +1,6 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
+import { Slider } from "@domicile-desktop/component-library/Slider";
 import type { PictureInPicture } from "@domicile-desktop/sdk/desktop/picture-in-picture";
 import type {
   DomicilePictureInPictureAction,
@@ -328,7 +329,15 @@ const Float = ({
             </IconButton>
           )}
         </div>
-        {video.duration > 0 && <Progress ticking={hovered} video={video} />}
+        {video.duration > 0 && (
+          <Progress
+            onSeek={(seconds) => {
+              pictureInPicture.seek(id, seconds);
+            }}
+            ticking={hovered}
+            video={video}
+          />
+        )}
       </div>
       {GRIPS.map(({ grip, name }) => (
         <div
@@ -346,18 +355,27 @@ const Float = ({
   );
 };
 
-/** Whether a press on `target` landed on one of the float's buttons. */
+/**
+ * Whether a press on `target` landed on one of the float's buttons or its
+ * progress bar.
+ */
 const onControl = (target: EventTarget): boolean =>
-  target instanceof Element && target.closest("button") !== null;
+  target instanceof Element &&
+  target.closest("button, [data-picture-in-picture-progress]") !== null;
 
 /** How often the time moves on while it shows. */
 const TICK_MS = 1000;
 
-/** The video's time and how far it is, moved on by the shell's clock. */
+/**
+ * The video's time and how far it is, moved on by the shell's clock. Moving
+ * the bar moves the video once it is let go.
+ */
 const Progress = ({
+  onSeek,
   ticking,
   video,
 }: {
+  onSeek: (seconds: number) => void;
   ticking: boolean;
   video: DomicilePictureInPictureVideo;
 }) => {
@@ -386,17 +404,25 @@ const Progress = ({
       return undefined;
     }
   }, [playing, ticking]);
-  const at = playheadAt(heard, Math.max(now, heard.at));
+  // Where the bar is held, while it is.
+  const [held, setHeld] = useState<number | undefined>(undefined);
+  const at = held ?? playheadAt(heard, Math.max(now, heard.at));
   return (
     <>
       <span className={clockStyles}>
         {`${clockOf(at)} / ${clockOf(duration)}`}
       </span>
-      <div className={trackStyles}>
-        <div
-          className={playedStyles}
-          // Inline: how far is a runtime value.
-          style={{ inlineSize: `${((at / duration) * 100).toString()}%` }}
+      <div className={progressStyles} data-picture-in-picture-progress="">
+        <Slider
+          label="Position"
+          max={duration}
+          min={0}
+          onValueChange={setHeld}
+          onValueCommitted={(seconds) => {
+            setHeld(undefined);
+            onSeek(seconds);
+          }}
+          value={at}
         />
       </div>
     </>
@@ -481,24 +507,17 @@ const middleStyles = css({
 const clockStyles = css({
   fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
-  insetBlockEnd: 3.5,
+  insetBlockEnd: 5,
   insetInlineStart: 2,
   position: "absolute",
 });
 
-const trackStyles = css({
-  backgroundColor: "color-mix(in oklab, {colors.onPhoto} 30%, transparent)",
-  blockSize: 0.75,
-  borderRadius: "full",
-  insetBlockEnd: 2,
+// Clear of the bottom edge's resize grip.
+const progressStyles = css({
+  display: "flex",
+  insetBlockEnd: 1.5,
   insetInline: 2,
-  overflow: "hidden",
   position: "absolute",
-});
-
-const playedStyles = css({
-  backgroundColor: "onPhoto",
-  blockSize: "100%",
 });
 
 // Edges grab 1.5 (6px) into the float, and corners 2 (8px) each way: short

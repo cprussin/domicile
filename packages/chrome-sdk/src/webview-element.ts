@@ -335,6 +335,8 @@ export const WEBVIEW_CONTEXT_MENU_EVENT = "domicile-context-menu";
  * - Over a link: `copy-link-address`, `save-link-as`.
  * - Over an image with pixels, or a canvas: `copy-image`.
  * - Over an image, video or audio: `copy-media-address`, `save-media-as`.
+ * - Over a video that can go into picture-in-picture: `picture-in-picture`,
+ *   which enters it, or leaves it when it is in.
  * - Anywhere: `inspect`, DevTools on the element under the click.
  *
  * A save asks {@link WEBVIEW_FILE_CHOOSER_EVENT} where.
@@ -353,6 +355,7 @@ export const WEBVIEW_CONTEXT_MENU_ACTIONS = [
   "copy-image",
   "copy-media-address",
   "save-media-as",
+  "picture-in-picture",
   "inspect",
 ] as const;
 
@@ -1008,6 +1011,9 @@ declare global {
     readonly mediaType: string;
     /** Whether an image has pixels to copy. A broken image has none. */
     readonly hasImageContents: boolean;
+    /** Whether a video can go into picture-in-picture, and whether it is in it. */
+    readonly canPictureInPicture: boolean;
+    readonly inPictureInPicture: boolean;
     /** The selected text, or `""`. */
     readonly selectionText: string;
     /** Whether the click was in an editable element. */

@@ -84,6 +84,7 @@
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
+#include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -92,6 +93,7 @@
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
+#include "third_party/blink/public/mojom/frame/media_player_action.mojom.h"
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
@@ -1711,6 +1713,18 @@ void WebViewGuest::RunContextMenuAction(
                  /*is_subresource=*/!params.is_image_media_plugin_document);
       }
       return;
+    // As Chrome's ExecPictureInPicture: enters, or leaves when it is in.
+    case mojom::WebViewContextMenuAction::kPictureInPicture: {
+      const bool in_picture_in_picture =
+          (params.media_flags &
+           blink::ContextMenuData::kMediaPictureInPicture) != 0;
+      frame->ExecuteMediaPlayerActionAtLocation(
+          gfx::Point(params.x, params.y),
+          blink::mojom::MediaPlayerAction(
+              blink::mojom::MediaPlayerActionType::kPictureInPicture,
+              /*enable=*/!in_picture_in_picture));
+      return;
+    }
     case mojom::WebViewContextMenuAction::kInspect:
       Inspector().Run(*frame, gfx::Point(params.x, params.y));
       return;

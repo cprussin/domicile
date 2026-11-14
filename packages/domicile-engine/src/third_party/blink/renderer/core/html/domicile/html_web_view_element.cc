@@ -236,6 +236,7 @@ bool IsEdit(domicile::mojom::blink::WebViewContextMenuAction action) {
     case domicile::mojom::blink::WebViewContextMenuAction::kCopyImage:
     case domicile::mojom::blink::WebViewContextMenuAction::kCopyMediaAddress:
     case domicile::mojom::blink::WebViewContextMenuAction::kSaveMediaAs:
+    case domicile::mojom::blink::WebViewContextMenuAction::kPictureInPicture:
     case domicile::mojom::blink::WebViewContextMenuAction::kInspect:
       return false;
   }

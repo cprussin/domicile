@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { DomicilePictureInPictureVideo } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { PictureInPictureFloats } from "./PictureInPictureFloats";
 
@@ -226,6 +227,38 @@ describe("PictureInPictureFloats", () => {
     floating({ ...VIDEO, playing: false });
 
     expect(screen.getByText("1:42 / 4:30")).toBeDefined();
+  });
+
+  it("moves the video to where its progress bar is moved", async () => {
+    const { fake } = floating({ ...VIDEO, playing: false });
+    act(() => {
+      screen.getByRole("slider", { name: "Position" }).focus();
+    });
+    await userEvent.keyboard("{ArrowRight}");
+
+    expect(fake.calls).toContainEqual(["seekPictureInPictureVideo", "1", 103]);
+  });
+
+  it("does not move when its progress bar is pressed", () => {
+    const { container } = floating({ ...VIDEO, playing: false });
+    const float = shown(container).parentElement;
+    fireEvent.pointerDown(screen.getByRole("slider", { name: "Position" }), {
+      buttons: 1,
+      clientX: 1500,
+      clientY: 1000,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, {
+      buttons: 1,
+      clientX: 1000,
+      clientY: 500,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(float?.style.insetInlineStart).toBe(
+      `${(1920 - 24 - 480).toString()}px`,
+    );
   });
 
   it("shows no progress for a live stream", () => {

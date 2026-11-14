@@ -16,9 +16,9 @@
 # `actOnPictureInPictureVideo`.
 #
 # The shell module opens guard-webview-video-picture-in-picture-server.py's
-# /video in a browser window. Once the video plays, the guard asks for
-# picture-in-picture with a user gesture over the debugging port. The shell
-# shows each listed video and then closes it.
+# /video in a browser window. Once the video plays, the guard right-clicks the
+# video over the debugging port, and the shell runs its context menu's
+# "picture-in-picture". The shell shows each listed video and then closes it.
 #
 # Assertions, in order; each is meaningful only if the previous one holds:
 #
@@ -26,7 +26,9 @@
 #   the shell drew the window        its page has somewhere to play
 #   the video played                 a video with frames, which the request
 #                                     needs (the control)
-#   the page entered                 the request was granted
+#   the menu offered it              the right click's menu could put the
+#                                     video in picture-in-picture
+#   the page entered                 the menu's request was granted
 #   the shell heard it               listed, for the window it drew
 #   the shell's close reached it     the page left, paused
 #   the listing went                 the shell's list emptied
@@ -62,7 +64,7 @@ FOR_SECONDS="${FOR_SECONDS:-90}"
 
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-video-picture-in-picture-engine.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-video-picture-in-picture-http.log}"
-CLICK_LOG="${CLICK_LOG:-/tmp/domicile-webview-video-picture-in-picture-ask.log}"
+CLICK_LOG="${CLICK_LOG:-/tmp/domicile-webview-video-picture-in-picture-click.log}"
 
 # What the server writes for the page's reports and for nothing else. The
 # `GUARD` prefix keeps the server's banner from matching.
@@ -118,8 +120,7 @@ echo "serving the video at $SITE/video"
 
 # 2. The engine, on a domicile:// document, because the browser binds
 #    WebViewGuestHost and PictureInPictureVideos for that origin only. The
-#    request goes in over `--remote-debugging-port`; see
-#    guard-webview-video-picture-in-picture-ask.py.
+#    right click goes in over `--remote-debugging-port`.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -148,13 +149,14 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
 }
 echo "the shell is up"
 
-# 3. The video plays, then the request.
+# 3. The video plays, then the right click on it. The module draws the window
+#    at the shell's top left, and the video sits in the page's top left.
 wait_for_line "$TRIES" "event=playing" "$HTTP_LOG" ||
   echo "the video never played" >&2
-python3 "$SCRIPTS/guard-webview-video-picture-in-picture-ask.py" \
-  --port "$DEBUG_PORT" --ending "/video" --tries "$TRIES" \
+python3 "$SCRIPTS/guard-webview-click-mouse.py" \
+  --port "$DEBUG_PORT" --x 60 --y 40 --button right \
   >"$CLICK_LOG" 2>&1 ||
-  echo "the request could not be driven; see $CLICK_LOG" >&2
+  echo "the right click could not be driven; see $CLICK_LOG" >&2
 
 # 4. The shell hears the video, shows it, and closes it.
 wait_for_line "$TRIES" "GUARD pip-none" "$ENGINE_LOG" ||
@@ -169,6 +171,7 @@ saw() { # $1 pattern, $2 file
 SAW_SHELL=$(saw "GUARD shell-loaded" "$ENGINE_LOG")
 SAW_WINDOW=$(saw "GUARD window id=" "$ENGINE_LOG")
 SAW_PLAYING=$(saw "event=playing" "$HTTP_LOG")
+SAW_MENU=$(saw "GUARD menu-picture-in-picture" "$ENGINE_LOG")
 SAW_ENTERED=$(saw "event=entered" "$HTTP_LOG")
 SAW_LISTED=$(saw "ours=true" "$ENGINE_LOG")
 if [ "$(saw "event=left" "$HTTP_LOG")" = 1 ] &&
@@ -183,7 +186,8 @@ echo
 cat "$CLICK_LOG" 2>/dev/null || true
 grep -F "$REPORT_LINE" "$HTTP_LOG" || true
 grep -F "GUARD pip" "$ENGINE_LOG" || true
-echo "shell=$SAW_SHELL window=$SAW_WINDOW playing=$SAW_PLAYING"
+grep -F "GUARD menu" "$ENGINE_LOG" || true
+echo "shell=$SAW_SHELL window=$SAW_WINDOW playing=$SAW_PLAYING menu=$SAW_MENU"
 echo "entered=$SAW_ENTERED listed=$SAW_LISTED left paused=$SAW_LEFT_PAUSED unlisted=$SAW_UNLISTED"
 echo
 
@@ -201,10 +205,16 @@ play. That is the guard's module or openBrowserWindow, not picture-in-picture"
 elif [ "$SAW_PLAYING" != "1" ]; then
   FAILURE="the video never played, so there was nothing to put in \
 picture-in-picture. That is the guest's page or its canvas stream"
+elif [ "$SAW_MENU" != "1" ]; then
+  FAILURE="the right click on the video gave the shell no menu that could \
+put it in picture-in-picture (see the menu above). The click missed the \
+video, or AsWebViewContextMenu did not read kMediaCanPictureInPicture from \
+the params' media_flags"
 elif [ "$SAW_ENTERED" != "1" ]; then
-  FAILURE="the page's requestPictureInPicture was not granted (see what it \
-said above). Blink's pictureInPictureEnabled is off, or \
-WebViewGuest::EnterPictureInPicture did not answer kSuccess"
+  FAILURE="the menu's picture-in-picture was not granted. The \
+kPictureInPicture media player action never reached the video, Blink's \
+pictureInPictureEnabled is off, or WebViewGuest::EnterPictureInPicture did \
+not answer kSuccess"
 elif [ "$SAW_LISTED" != "1" ]; then
   FAILURE="the page entered picture-in-picture but the shell never heard it \
 for the window it drew. ShellVideoOverlayWindow::ShowInactive did not list \
