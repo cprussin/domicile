@@ -274,7 +274,7 @@ mod tests {
     }
 
     // A format the renderer imports but the engine refuses must not be
-    // advertised: imv picked XR30 and none of its frames were drawn.
+    // advertised: the client would pick it and none of its frames would draw.
     #[test]
     fn only_what_the_engine_imports_is_advertised() {
         let renderer_imports = [
@@ -282,7 +282,9 @@ mod tests {
             format(Fourcc::Xrgb8888),
             format(Fourcc::Abgr8888),
             format(Fourcc::Xbgr8888),
+            format(Fourcc::Argb2101010),
             format(Fourcc::Xrgb2101010),
+            format(Fourcc::Rgb565),
             format(Fourcc::Nv12),
         ];
 
@@ -297,6 +299,7 @@ mod tests {
             Fourcc::Xrgb8888,
             Fourcc::Abgr8888,
             Fourcc::Xbgr8888,
+            Fourcc::Argb2101010,
         ];
         expected.sort_by_key(|code| *code as u32);
         assert_eq!(advertised, expected);
