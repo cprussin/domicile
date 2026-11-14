@@ -297,6 +297,7 @@ impl DomicileCompositor {
                         .virtual_monitors
                         .set_extendable(self.config.current().output.desktop().is_none());
                     self.lay_out_the_engines_displays();
+                    self.gamma_hdr_reported();
                     // After the layout, which names the monitors the night
                     // light is set for.
                     self.restate_the_gamma();
