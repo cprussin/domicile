@@ -20,11 +20,29 @@ export type EngineRequest =
       readonly type: "open_window";
       readonly window: number;
       readonly url: string;
+      /** The preload's source, run before each page's own scripts. */
+      readonly preload?: string;
     }
   | { readonly type: "load_url"; readonly window: number; readonly url: string }
   | { readonly type: "focus_window"; readonly window: number }
   | { readonly type: "close_window"; readonly window: number }
-  | { readonly type: "destroy_window"; readonly window: number };
+  | { readonly type: "destroy_window"; readonly window: number }
+  | {
+      readonly type: "ipc_send";
+      readonly window: number;
+      readonly channel: string;
+      readonly args: unknown[];
+    }
+  | {
+      readonly type: "ipc_reply";
+      readonly invoke: number;
+      readonly result: unknown;
+    }
+  | {
+      readonly type: "ipc_reply";
+      readonly invoke: number;
+      readonly error: string;
+    };
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ready") }),
@@ -42,6 +60,19 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("window_closed"), window: z.number() }),
+  z.object({
+    args: z.array(z.unknown()),
+    channel: z.string(),
+    type: z.literal("ipc_message"),
+    window: z.number(),
+  }),
+  z.object({
+    args: z.array(z.unknown()),
+    channel: z.string(),
+    invoke: z.number(),
+    type: z.literal("ipc_invoke"),
+    window: z.number(),
+  }),
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;

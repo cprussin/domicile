@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { readAppPackage } from "./app-package";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
+import { createIpcMain } from "./electron/ipc-main";
 import { ELECTRON_VERSION } from "./electron/version";
 import { connectEngine } from "./engine";
 import { readEnvironment } from "./environment";
@@ -59,7 +60,12 @@ const main = async ([resources, ...args]: string[]) => {
     engine.events.on("refused", (why) =>
       fail(`the engine refused a request: ${why}`),
     );
-    const electron = { app, BrowserWindow: createBrowserWindow(engine, app) };
+    const { ipcMain, ...ipc } = createIpcMain();
+    const electron = {
+      app,
+      BrowserWindow: createBrowserWindow(engine, app, ipc),
+      ipcMain,
+    };
     Bun.plugin({
       name: "electron",
       setup: (build) => {
