@@ -340,6 +340,8 @@ its own menu, on DisplayPort or HDMI 2.1, and a driver that supports it
    should flicker once and come back, and `adaptiveSync` should read `"on"`.
    The monitor's own OSD (often a FreeSync or refresh counter) should show the
    rate moving with what is drawn, for example while a video plays at 24 fps.
+   With it on, the overview and workspace slides should be as smooth as with
+   it off.
 3. If it reads `"off"` instead, the log at `--v=1` should say the DRM thread
    refused a modeset with adaptive sync and tried again without it, and the
    panel should still be lit.
@@ -358,6 +360,23 @@ dock.
 2. Open a smooth gray gradient page (for example a full-screen CSS
    `linear-gradient(black, white)`). It should show no bands.
 3. A monitor that reports 8 bits should look as before.
+
+## HDR on an HDR10 monitor
+
+Needs a monitor that takes HDR10 (`edid-decode` on its EDID lists "HDR Static
+Metadata Data Block" with "SMPTE ST2084"), that passes the 10-bit scanout check
+above, with HDR allowed in the monitor's own menu.
+
+1. With no `hdr` in the profile, the monitor should look as before.
+2. Add `"hdr": true` to its profile entry and reload. The monitor should
+   flicker once and its OSD should say it is in HDR. Windows and the shell
+   should look about as bright and as colored as before, not washed out or
+   oversaturated.
+3. Play an HDR video in a browser tab (for example an HDR test clip on
+   YouTube): its highlights should be brighter than the page's white.
+4. Set `"sdr_white": 300` and reload: windows should get brighter, and the
+   HDR video's highlights should not.
+5. Remove `hdr` and reload. The monitor should leave HDR and look as in 1.
 
 ## A cursor an app draws itself
 

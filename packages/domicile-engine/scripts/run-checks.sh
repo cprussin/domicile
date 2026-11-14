@@ -29,6 +29,7 @@ FIRST=(
   guard-client-window-in-memory
   guard-two-windows
   guard-buffer-transform
+  guard-buffer-formats
   guard-scrolling-bubble
   guard-webview-permissions
   guard-app-survives-load-shell
@@ -88,6 +89,8 @@ TOGETHER=(
   guard-webview-resend-form
   guard-webview-page-picker
   guard-webview-chrome-sheets
+  guard-webview-sign-in-with
+  guard-webview-video-picture-in-picture
   guard-webview-print
   guard-webview-context-menu
   guard-webview-upload
@@ -117,7 +120,10 @@ TOGETHER=(
   guard-app-only-in-shell
   guard-domicile-fetch
   guard-shell-pdf
+  guard-pdf-scaled-text
+  guard-pdf-after-hiding
   guard-app-module
+  guard-electron-socket
   guard-video-codecs
   guard-browser-brand
 )
@@ -139,7 +145,10 @@ ONCE=(
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch
+  guard-electron-socket
   guard-held-moments
+  guard-pdf-scaled-text
+  guard-pdf-after-hiding
   guard-portal-requests
   guard-shell-handover
   guard-shell-pdf
@@ -154,6 +163,7 @@ ONCE=(
 UNDER_WAYLAND=(
   guard-app-survives-compositor-restart
   guard-app-survives-load-shell
+  guard-buffer-formats
   guard-buffer-transform
   guard-client-window
   guard-scrolling-bubble

@@ -15,6 +15,7 @@
 #include "chrome/browser/domicile/domicile_desk_functions.h"
 #include "chrome/browser/domicile/domicile_device_chooser.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
+#include "chrome/browser/domicile/domicile_electron_socket.h"
 #include "chrome/browser/domicile/domicile_external_apps.h"
 #include "chrome/browser/domicile/domicile_permissions.h"
 #include "chrome/browser/domicile/domicile_printing.h"
@@ -106,6 +107,8 @@ void StartDesk(Profile* profile) {
     RegisterDeskFunctions();
     // Browser windows: tabs opened by guests and shown by <webview window>.
     StartBrowserWindows();
+    // Electron apps, whose windows are browser windows.
+    StartElectronSocket();
     // DevTools for the context menu's "inspect" and <webview>.inspect().
     WebViewGuest::SetInspect(base::BindRepeating(&OpenDevTools));
     // The system print dialog for <webview>.print().
@@ -122,7 +125,7 @@ void StartDesk(Profile* profile) {
     // asked by the shell.
     UseTheShellForPrompts();
     // Any Chrome dialog left fails closed, and Chrome's payment and account
-    // sheets and picture-in-picture window are off.
+    // sheets are off.
     RefuseChromeDialogs();
     return true;
   }();

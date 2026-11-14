@@ -9,7 +9,8 @@ the detail, when there is one. Remove a gap when it's fixed.
   which you start yourself: [X11 apps](/docs/use/COMPATIBILITY.md#x11-apps).
   Electron, SDL and Qt apps are started in Wayland mode (`client_command` in
   `spawning.rs`).
-- **Clients only get 8-bit formats, and output is 8-bit SDR.**
+- **Output is SDR,** and every display tells clients it is sRGB with gamma 2.2,
+  whatever its panel.
   [COLOR.md](/docs/architecture/COLOR.md#plan).
 - **Games can't confine the pointer to their window yet.** A lock works:
   manganese locks the pointer for the focused window under it. A confinement
@@ -28,6 +29,9 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **An input method's candidate list does not show over pages or the
   shell:** they compose from it, but only native windows show its list.
   [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).
+- **A `wl_shm` window in 10-bit or half-float stays blank after the engine
+  falls back to software:** the engine shows only 8-bit frames from memory.
+  [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output).
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#open-questions).
 
@@ -56,9 +60,8 @@ the detail, when there is one. Remove a gap when it's fixed.
   [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md).
 - **A browser window attached while hidden is visible for a moment,** so the
   page sees `visibilitychange` twice (`WebViewGuest::AttachWindowTo`).
-- **No picture-in-picture video, payments, or "Sign in with" account
-  sheets.** Chrome draws these itself, so they are turned off until the shell
-  has its own.
+- **No payments.** Chrome draws the payment sheet itself, so it is turned off
+  until the shell has its own.
   [ENGINE-BROWSER-BEHAVIOR.md](/docs/architecture/ENGINE-BROWSER-BEHAVIOR.md#chromes-dialogs-sheets-and-floating-windows).
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#embed-deadlines).

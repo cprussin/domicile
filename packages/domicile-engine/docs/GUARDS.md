@@ -31,6 +31,8 @@ inside the toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)
 | `under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU, the only setup that can import a dmabuf |
 | `guard_webview_devtools.py` | sends keys and clicks to a running engine over the debugging port |
 | `guard-shell-pdf-viewer.py` | asks Chrome's PDF viewer frame, over the debugging port, whether it started |
+| `guard-pdf-scaled-text.py` | screenshots the shell over the debugging port and measures how evenly a PDF's thin lines keep their ink |
+| `guard-pdf-after-hiding.py` | screenshots the shell over the debugging port, hides and shows its `<webview>`, and counts a PDF page's white pixels either side |
 | `guard-webview-guest-page.py` | the guest page for the keyboard and click guards |
 | `lib-annotate.sh` | reports where a guard stopped as a GitHub annotation |
 | `lib-last-words.sh` | prints the end of an engine's log, reaching back to a crash's fatal line |
@@ -50,7 +52,8 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-client-window.sh` | a Wayland client's window appears on the page in the color it drew; `SOFTWARE=1` with the engine on the CPU and the window in shared memory (`run-checks.sh guard-client-window-in-memory`); `HEADLESS=1` that path on ozone headless, with no host compositor, as a headless desktop runs (`run-checks.sh guard-client-window-in-memory-on-headless`) |
 | `guard-two-windows.sh` | two clients' windows on one page, in one aggregation |
 | `guard-buffer-transform.sh` | a `wl_shm` buffer drawn with `wl_surface.set_buffer_transform` is shown upright |
-| `guard-scrolling-bubble.sh` | each frame of a monitor cast shows a sync bubble at the content its window scrolls, on a page that syncs frames. Control: the page places each move a step late, and the bubble is off its content |
+| `guard-buffer-formats.sh` | a window drawn in each 10-bit and half-float `wl_shm` format is on the page in its own color; the control's 8-bit window is not |
+| `guard-scrolling-bubble.sh` | each frame of a monitor cast shows a sync subsurface at the content its window scrolls, since the window's frame draws it. Control: the client moves its subsurface a frame late, and it is off its content |
 | `guard-app-survives-load-shell.sh` | a client's frames still reach the page after `load_shell`, when the new shell's `<app>` is a different size |
 | `guard-app-survives-compositor-restart.sh` | after a compositor restart under the same engine, the shell hears its window close and its watch end, watches again, hears `compositorreplaced`, and its kept `<app>` shows the next compositor's window |
 | `guard-shell.sh` | a real shell, built with vite and the SDK, showing a client's window on a desktop `domicile` started |
@@ -59,6 +62,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
 | `guard-app-only-in-shell.sh` | `<app>`, `HTMLAppElement` and `canvas.embedExternalSurface()` exist in the shell and not in a site in its `<webview>`. Headless |
 | `guard-app-module.sh` | `run_app` runs an app module: its `main` gets the layer's `AppDomicile` (no `windows`) and its `files.write` reaches the compositor after `app_hello`; it `fetch()`es its own file and not the shell's (patch 0126). Control: the app's address in an unpinned window runs nothing. Headless |
+| `guard-electron-socket.sh` | an Electron app's `electron-host` says hello on the Electron socket, opens an app window at a page served over http, hears it load, take its title and close after `destroy_window`. Control: a `chrome://` page is refused. Headless |
 | `guard-app-routes-input.sh` | `<app>` sends the pointer, wheel and keys to its client through its whole CSS transform, with no page script; a `<div>` control gets nothing |
 | `guard-native-chrome-gestures.py` | optional native Google Chrome `--app` acceptance through the engine: pinch zoom without shell zoom, cancellation on element removal, recovery, two-finger history and vertical scrolling. Requires explicit Chrome/compositor paths; see [TESTING.md](TESTING.md#native-chrome-gestures) |
 | `guard-windows-state.sh` | `windows`, `focusedWindow` and the appearance attributes follow the compositor, every event name fires, and every CSS cursor keyword reaches the page; and that a system call and its answer cross the browser. Headless |
@@ -87,6 +91,8 @@ Headless.
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
 | `guard-shell-pdf.sh` | Chrome's PDF viewer starts on a PDF from `domicile://home/` in the shell's `<iframe>`, as the launcher's preview shows one (patch 0154) |
+| `guard-pdf-scaled-text.sh` | a PDF in an `<iframe>` drawn at 0.8, as on a monitor below the desk's highest density, keeps its thin lines evenly: the viewer's bitmap is downscaled filtered, not nearest-neighbor (patch 0211) |
+| `guard-pdf-after-hiding.sh` | a PDF in a `<webview>` draws its page again after the `<webview>` is hidden and shown, as a tab switched away and back: the viewer frame un-throttles the page's frame (patch 0214) |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
 | `guard-browser-brand.sh` | sites are told the engine is Google Chrome in `navigator.userAgentData` and `Sec-CH-UA` (patch 0157); `Chromium` is the control |
 | `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
@@ -121,7 +127,9 @@ Headless.
 | `guard-webview-page-failure.sh` | a page that fails to load (an empty HTTP 500, then no answer at all) is reported to the shell as `domicile-page-failure-change` (`http` with its status, then `network` with `ERR_EMPTY_RESPONSE`) in place of Chrome's error pages (patch 0180), and the page that loads after clears it; its control loads a page that works and reports nothing |
 | `guard-webview-resend-form.sh` | reloading a page a form posted to asks the shell as `domicile-prompt` (`resend-form`, with the site and the page's title) in place of Chrome's "Confirm Form Resubmission" dialog (patch 0181), and the shell's yes posts the form again; its control says no and the form is posted once |
 | `guard-webview-page-picker.sh` | pressing a color input asks the shell as `domicile-picker` (`color`, with the value, the page's suggested color and the input's box) in place of Chrome's picker (patch 0182), and the color the shell picks reaches the page; its control cancels and the page keeps black |
-| `guard-webview-chrome-sheets.sh` | a page in a `<webview>` has no `PaymentRequest` and no `IdentityCredential` (FedCM), each of which asks with a Chrome sheet, and `document.pictureInPictureEnabled` is false (patch 0183, `RefuseChromeDialogs`); its control is the same page seeing `navigator.credentials` and document picture-in-picture |
+| `guard-webview-chrome-sheets.sh` | a page in a `<webview>` has no `PaymentRequest`, which asks with a Chrome sheet (patch 0183, `RefuseChromeDialogs`); its control is the same page seeing `navigator.credentials` and document picture-in-picture |
+| `guard-webview-sign-in-with.sh` | a page's "Sign in with" (FedCM) request asks the shell as `domicile-identity` (`accounts`, with the site, the provider, its account and what signing in shares) in place of Chrome's account chooser (patch 0212); choosing the account gets the page the provider's token, navigating away withdraws the step (`domicile-identity-withdrawn`), and dismissing rejects the request |
+| `guard-webview-video-picture-in-picture.sh` | a video a page puts in picture-in-picture is listed to the shell for its window, in place of Chrome's floating window (patch 0213); the shell shows it in an `<app picture-in-picture>`, and its close pauses the video and takes it off the list; its control is the video playing before the request |
 | `guard-webview-print.sh` | a browser window's `print()`, then its page's own `window.print()`, each start and finish a print through the system dialog, with no Print Preview |
 | `guard-webview-beforeunload.sh` | `closeBrowserWindow` on a page whose `beforeunload` asks to stay asks the shell as a `beforeunload` dialog; Cancel keeps the window and Leave closes it |
 | `guard-webview-fullscreen.sh` | a page enters fullscreen from its own button, the shell hears it as `pageFullscreen`, and Escape (typed on a swapped Caps Lock) and `exitPageFullscreen()` each take it out |
