@@ -56,12 +56,16 @@
 #include "components/viz/common/frame_timing_details_map.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
+#include "components/viz/common/quads/surface_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/surface_id.h"
+#include "components/viz/common/surfaces/surface_range.h"
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/core/embedder/scoped_ipc_support.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -73,9 +77,13 @@
 #include "mojo/public/cpp/system/invitation.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/gpu_fence_handle.h"
@@ -114,6 +122,21 @@ void EnsureMojoInitialized() {
   (void)initialized;
 }
 
+// One of a surface's subsurfaces, as the compositor last set it
+// (domicile_surface_set_children): logical pixels from the top left of the
+// surface's crop.
+struct Subsurface {
+  DomicileSurfaceId surface = 0;
+  gfx::PointF position;
+  gfx::SizeF size;
+  bool above = false;
+};
+
+class Surface;
+
+// Finds a surface by its id, or null once it is gone.
+using SurfaceFinder = base::RepeatingCallback<Surface*(DomicileSurfaceId)>;
+
 // One brokered frame sink.
 //
 // Runs entirely on the engine's mojo thread and reports to the compositor only
@@ -122,8 +145,9 @@ void EnsureMojoInitialized() {
 class Surface : public mojom::SurfaceObserver,
                 public viz::mojom::CompositorFrameSinkClient {
  public:
-  Surface(DomicileSurfaceId id, EngineEventQueue* queue)
-      : id_(id), queue_(queue) {}
+  // `find` finds the subsurfaces this surface's frames embed.
+  Surface(DomicileSurfaceId id, EngineEventQueue* queue, SurfaceFinder find)
+      : id_(id), queue_(queue), find_(std::move(find)) {}
 
   Surface(const Surface&) = delete;
   Surface& operator=(const Surface&) = delete;
@@ -196,6 +220,47 @@ class Surface : public mojom::SurfaceObserver,
   // Sends `submit` to viz, unless an earlier submit waits for its fence.
   void Submit(const SurfaceSubmit& submit) {
     Send(submits_.Push(AtFrame(submit)));
+  }
+
+  // Its frames from the next one on embed `children`, bottom to top.
+  void SetChildren(std::vector<Subsurface> children) {
+    children_ = std::move(children);
+    children_changed_ = true;
+  }
+
+  // Sends the last frame again, to show the subsurfaces set since. A newer
+  // frame on its way shows them, so it waits for that one instead.
+  void Redraw() {
+    if (!last_sent_.has_value() || !submits_.empty() || backlog_.holding() ||
+        !buffers_.contains(last_sent_->buffer)) {
+      return;
+    }
+    SubmitNow(*last_sent_, /*redraw=*/true);
+  }
+
+  // The surfaces a frame of `parent`'s embeds this one by, drawn at `size`
+  // device pixels and `scale`: the newest frame up to the box it is embedded
+  // at. Embeds it there anew, as a page embeds an <app>, when any of them
+  // changed; viz shows its last frame until one arrives at the new box.
+  viz::SurfaceRange EmbeddedIn(const viz::FrameSinkId& parent,
+                               const gfx::Size& size,
+                               float scale) {
+    if (!embedding_.has_value() || embedding_->parent != parent ||
+        embedding_->size != size || embedding_->scale != scale) {
+      embedder_.GenerateId();
+      embedding_ = Embedding{.parent = parent, .size = size, .scale = scale};
+      broker_->EmbedFrameSink(frame_sink_id_, parent,
+                              embedder_.GetCurrentLocalSurfaceId(), size,
+                              scale);
+    }
+    const viz::SurfaceId newest(frame_sink_id_,
+                                embedder_.GetCurrentLocalSurfaceId());
+    if (boxes_.empty()) {
+      return viz::SurfaceRange(std::nullopt, newest);
+    }
+    return viz::SurfaceRange(
+        viz::SurfaceId(frame_sink_id_, boxes_.front().local_surface_id),
+        newest);
   }
 
   // Holds `submit` until the browser puts its buffer's acquire fence in
@@ -272,7 +337,10 @@ class Surface : public mojom::SurfaceObserver,
   // client's buffer is drawn for the box it acked, so an old buffer stays at
   // its old size and id: viz keeps the page's frame waiting for the new one
   // rather than stretching the old one over it.
-  void SubmitNow(const SurfaceSubmit& submit) {
+  //
+  // A `redraw` sends the last frame again (Redraw), which the compositor did
+  // not submit and so is answered to no one.
+  void SubmitNow(const SurfaceSubmit& submit, bool redraw = false) {
     auto iter = buffers_.find(submit.buffer);
     if (iter == buffers_.end() || boxes_.empty() || submit.fence_refused) {
       if (submit.fence_refused) {
@@ -295,9 +363,16 @@ class Surface : public mojom::SurfaceObserver,
     // Blend buffers with alpha, such as a menu's transparent rounded corners.
     const bool opaque = !iter->second.has_alpha;
 
+    // A frame whose subsurfaces moved or changed redraws all of itself.
+    const bool whole = damage.IsEmpty() || children_changed_ || redraw;
+    children_changed_ = false;
     auto pass = viz::CompositorRenderPass::Create();
-    pass->SetNew(viz::CompositorRenderPassId{1}, rect,
-                 damage.IsEmpty() ? rect : damage, gfx::Transform());
+    pass->SetNew(viz::CompositorRenderPassId{1}, rect, whole ? rect : damage,
+                 gfx::Transform());
+    std::vector<viz::SurfaceRange> embedded;
+    // Viz draws a pass's quads front to back, so the subsurfaces over the
+    // window come first and those under it last.
+    AppendChildren(*pass, shown.scale, /*above=*/true, embedded);
 
     // Drawn in the buffer's orientation, then turned onto the box.
     const domicile::BufferQuad placed =
@@ -323,6 +398,7 @@ class Surface : public mojom::SurfaceObserver,
                  /*nearest_neighbor=*/false, /*secure_output_only=*/false,
                  gfx::ProtectedVideoType::kClear,
                  /*is_tex_coords_normalized=*/true);
+    AppendChildren(*pass, shown.scale, /*above=*/false, embedded);
 
     viz::CompositorFrame frame;
     frame.metadata.begin_frame_ack =
@@ -334,7 +410,13 @@ class Surface : public mojom::SurfaceObserver,
     // a window growing under the pointer would flash white at its new edges.
     frame.metadata.root_background_color = SkColors::kTransparent;
     frame.metadata.frame_token = ++next_frame_token_;
-    frames_.Sent(frame.metadata.frame_token);
+    // Kept alive and drawn: viz keeps only the surfaces a frame names.
+    frame.metadata.referenced_surfaces = std::move(embedded);
+    if (redraw) {
+      frames_.Redrawn();
+    } else {
+      frames_.Sent(frame.metadata.frame_token);
+    }
     viz::TransferableResource resource = iter->second.resource;
     // Viz waits on the token, which comes after the creation token on the
     // same stream, so it orders viz's read after the fence too.
@@ -348,6 +430,43 @@ class Surface : public mojom::SurfaceObserver,
         AtSyncedFrame(shown.local_surface_id, submit.frame), std::move(frame),
         std::nullopt, 0);
     holds_.Sent(submit.buffer);
+    last_sent_ = submit;
+  }
+
+  // Appends a quad embedding each subsurface `above` the window or under it,
+  // topmost first, at the `scale` of the box shown. Each one's surface range
+  // goes in `embedded`.
+  void AppendChildren(viz::CompositorRenderPass& pass,
+                      float scale,
+                      bool above,
+                      std::vector<viz::SurfaceRange>& embedded) {
+    for (auto child = children_.rbegin(); child != children_.rend(); ++child) {
+      Surface* surface = find_.Run(child->surface);
+      if (child->above != above || !surface) {
+        continue;
+      }
+      const gfx::Size size =
+          gfx::ToRoundedSize(gfx::ScaleSize(child->size, scale));
+      if (size.IsEmpty()) {
+        continue;
+      }
+      const gfx::Point at =
+          gfx::ToRoundedPoint(gfx::ScalePoint(child->position, scale));
+      const viz::SurfaceRange range =
+          surface->EmbeddedIn(frame_sink_id_, size, scale);
+      viz::SharedQuadState* state = pass.CreateAndAppendSharedQuadState();
+      state->SetAll(gfx::Transform::MakeTranslation(at.x(), at.y()),
+                    gfx::Rect(size), gfx::Rect(size), gfx::MaskFilterInfo(),
+                    /*clip=*/std::nullopt, /*contents_opaque=*/false,
+                    /*opacity_f=*/1.f, SkBlendMode::kSrcOver,
+                    /*sorting_context=*/0, /*layer_id=*/0u,
+                    /*fast_rounded_corner=*/false);
+      viz::SurfaceDrawQuad* quad =
+          pass.CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
+      quad->SetNew(state, gfx::Rect(size), gfx::Rect(size), range,
+                   SkColors::kTransparent, /*stretch_content=*/false);
+      embedded.push_back(range);
+    }
   }
 
   void OnCreated(base::OnceCallback<void(bool)> done,
@@ -410,6 +529,9 @@ class Surface : public mojom::SurfaceObserver,
     const std::optional<uint64_t> number = frames_.Acked();
     if (!number.has_value()) {
       LOG(ERROR) << "domicile: viz acked a frame this window never sent";
+      return;
+    }
+    if (*number == SurfaceFrames::kRedrawn) {
       return;
     }
     queue_->Push({.type = EngineEvent::Type::kFrameDone,
@@ -475,6 +597,7 @@ class Surface : public mojom::SurfaceObserver,
 
   const DomicileSurfaceId id_;
   const raw_ptr<EngineEventQueue> queue_;
+  const SurfaceFinder find_;
   // The engine's broker, which outlives its surfaces.
   raw_ptr<mojom::FrameSinkBroker> broker_ = nullptr;
 
@@ -504,6 +627,25 @@ class Surface : public mojom::SurfaceObserver,
   SurfaceHolds holds_;
   SurfaceSubmits submits_;
   SurfaceBacklog backlog_;
+
+  // The subsurfaces its frames embed, bottom to top.
+  std::vector<Subsurface> children_;
+  // Whether they changed since the last frame, which then redraws whole.
+  bool children_changed_ = false;
+  // The last frame sent, for Redraw.
+  std::optional<SurfaceSubmit> last_sent_;
+
+  // Where it is embedded as a subsurface: its parent's sink, and its size in
+  // device pixels and scale there.
+  struct Embedding {
+    viz::FrameSinkId parent;
+    gfx::Size size;
+    float scale = 1.f;
+  };
+  std::optional<Embedding> embedding_;
+  // Allocates its ids as a subsurface, since its parent, not a page, embeds
+  // it.
+  viz::ParentLocalSurfaceIdAllocator embedder_;
 };
 
 // The planes DomicileCapturedFrame carries.
@@ -1204,6 +1346,22 @@ struct DomicileEngine {
   }
 
   // Posted like the submits, so it applies between the ones around it.
+  void SetChildren(DomicileSurfaceId surface,
+                   std::vector<domicile::Subsurface> children) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::SetChildrenOnThread,
+                       base::Unretained(this), surface, std::move(children)));
+  }
+
+  // Posted like the submits, so it follows the ones before it.
+  void Redraw(DomicileSurfaceId surface) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::RedrawOnThread,
+                                  base::Unretained(this), surface));
+  }
+
+  // Posted like the submits, so it applies between the ones around it.
   void SyncSurface(DomicileSurfaceId surface, uint32_t frame) {
     thread_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&DomicileEngine::SyncSurfaceOnThread,
@@ -1682,7 +1840,11 @@ struct DomicileEngine {
       return;
     }
     const DomicileSurfaceId id = next_surface_id_++;
-    auto surface = std::make_unique<domicile::Surface>(id, &queue_);
+    // Unretained: the engine outlives its surfaces.
+    auto surface = std::make_unique<domicile::Surface>(
+        id, &queue_,
+        base::BindRepeating(&DomicileEngine::SurfaceById,
+                            base::Unretained(this)));
     domicile::Surface* raw = surface.get();
     surfaces_[id] = std::move(surface);
 
@@ -1792,6 +1954,27 @@ struct DomicileEngine {
     if (iter != surfaces_.end()) {
       iter->second->Submit(submit);
     }
+  }
+
+  void SetChildrenOnThread(DomicileSurfaceId surface,
+                           std::vector<domicile::Subsurface> children) {
+    auto iter = surfaces_.find(surface);
+    if (iter != surfaces_.end()) {
+      iter->second->SetChildren(std::move(children));
+    }
+  }
+
+  void RedrawOnThread(DomicileSurfaceId surface) {
+    auto iter = surfaces_.find(surface);
+    if (iter != surfaces_.end()) {
+      iter->second->Redraw();
+    }
+  }
+
+  // A surface by its id, or null once it is gone.
+  domicile::Surface* SurfaceById(DomicileSurfaceId surface) {
+    auto iter = surfaces_.find(surface);
+    return iter == surfaces_.end() ? nullptr : iter->second.get();
   }
 
   void SyncSurfaceOnThread(DomicileSurfaceId surface, uint32_t frame) {
@@ -2184,6 +2367,38 @@ void domicile_surface_sync(DomicileEngine* engine,
                            uint32_t frame) {
   if (engine) {
     engine->SyncSurface(surface, frame);
+  }
+}
+
+void domicile_surface_set_children(DomicileEngine* engine,
+                                   DomicileSurfaceId surface,
+                                   const DomicileSubsurface* children,
+                                   uint32_t count) {
+  // A null array with a nonzero count is a caller bug.
+  CHECK(children || count == 0)
+      << "domicile: subsurfaces set from a null array";
+  if (!engine) {
+    return;
+  }
+  std::vector<domicile::Subsurface> set;
+  set.reserve(count);
+  // SAFETY: the ABI says `children` points at `count` records valid for this
+  // call, and a null pointer with a nonzero count was refused above.
+  const auto records =
+      UNSAFE_BUFFERS(base::span(children, static_cast<size_t>(count)));
+  for (const DomicileSubsurface& child : records) {
+    set.push_back({.surface = child.surface,
+                   .position = gfx::PointF(child.x, child.y),
+                   .size = gfx::SizeF(child.width, child.height),
+                   .above = child.above != 0});
+  }
+  engine->SetChildren(surface, std::move(set));
+}
+
+void domicile_surface_redraw(DomicileEngine* engine,
+                             DomicileSurfaceId surface) {
+  if (engine) {
+    engine->Redraw(surface);
   }
 }
 

@@ -137,6 +137,11 @@ pub struct Arguments {
     /// See [`crate::window::SCROLLING_BUBBLE`] for its geometry.
     pub scrolling_bubble: bool,
 
+    /// Whether a `--scrolling-bubble` is moved a frame late: each commit puts
+    /// it where the stripe was the frame before, off its content. The control
+    /// of `guard-scrolling-bubble.sh`.
+    pub late_bubble: bool,
+
     /// Whether to open a second toplevel once the window is up, and make it
     /// the window's dialog (`xdg_toplevel.set_parent`) after it first draws.
     ///
@@ -311,6 +316,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut bubble = None;
     let mut bubble_without_input = None;
     let mut scrolling_bubble = None;
+    let mut late_bubble = None;
     let mut dialog = None;
     let mut min_size = None;
     let mut max_size = None;
@@ -430,6 +436,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--scrolling-bubble" => {
                 take(&mut scrolling_bubble, &flag, true)?;
             }
+            "--late-bubble" => {
+                take(&mut late_bubble, &flag, true)?;
+            }
             "--dialog" => {
                 take(&mut dialog, &flag, true)?;
             }
@@ -497,6 +506,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         bubble: bubble.unwrap_or(false),
         bubble_without_input: bubble_without_input.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),
+        late_bubble: late_bubble.unwrap_or(false),
         dialog: dialog.unwrap_or(false),
         min_size,
         max_size,
