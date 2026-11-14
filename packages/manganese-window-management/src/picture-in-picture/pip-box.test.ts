@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
-import { movedBox, openingBox, resizedBox } from "./pip-box";
+import { movedBox, openingBox, reshapedBox, resizedBox } from "./pip-box";
 
 // A 1920x1080 screen whose workspace starts under a 40px bar.
 const WORKSPACE = { height: 1040, width: 1920, x: 0, y: 40 };
@@ -31,6 +31,27 @@ describe("openingBox", () => {
       x: 1920 + 24,
       y: 600 - 24 - 119,
     });
+  });
+});
+
+describe("reshapedBox", () => {
+  it("takes the video's shape at its width, keeping its bottom-right corner", () => {
+    const square = { height: 480, width: 480, x: 1416, y: 576 };
+
+    expect(reshapedBox(square, WORKSPACE, VIDEO)).toEqual({
+      height: 270,
+      width: 480,
+      x: 1416,
+      y: 576 + 480 - 270,
+    });
+  });
+
+  it("stays on its screen", () => {
+    const wide = { height: 100, width: 1000, x: 900, y: 40 };
+
+    expect(reshapedBox(wide, WORKSPACE, { height: 1000, width: 1000 })).toEqual(
+      { height: 1000, width: 1000, x: 900, y: 40 },
+    );
   });
 });
 

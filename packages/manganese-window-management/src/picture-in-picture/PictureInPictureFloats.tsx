@@ -25,7 +25,8 @@ import { Direction } from "../direction";
 import type { Grip } from "../floating/float";
 import { followPress } from "../follow-press";
 import type { Rect } from "../rect";
-import { movedBox, openingBox, resizedBox } from "./pip-box";
+import type { Shape } from "./pip-box";
+import { movedBox, openingBox, reshapedBox, resizedBox } from "./pip-box";
 import { clockOf, playheadAt } from "./playhead";
 
 type Props = {
@@ -39,8 +40,11 @@ type Props = {
   workspaceFor: (window: string) => Rect;
 };
 
-/** Where a video floats, and the workspace it stays on. */
-type Placed = { box: Rect; workspace: Rect };
+/**
+ * Where a video floats, the workspace it stays on, and the size of the video
+ * it was placed for.
+ */
+type Placed = { box: Rect; shape: Shape; workspace: Rect };
 
 /**
  * The videos pages put in picture-in-picture, each a small float over every
@@ -62,7 +66,8 @@ export const PictureInPictureFloats = ({
     () => new Map(),
   );
   // A new video takes its opening box once, and a gone one's is dropped, so
-  // a video listed again later opens in the corner again.
+  // a video listed again later opens in the corner again. A video whose size
+  // changed, as when its page first says it, takes its new shape.
   const listed = placedFor(videos, placed, workspaceFor);
   if (listed !== placed) {
     setPlaced(listed);
@@ -92,31 +97,51 @@ export const PictureInPictureFloats = ({
     : undefined;
 };
 
-/** `placed` for `videos`, or `placed` itself when no video came or went. */
+/**
+ * `placed` for `videos`, or `placed` itself when no video came, went or
+ * changed size.
+ */
 const placedFor = (
   videos: readonly DomicilePictureInPictureVideo[],
   placed: ReadonlyMap<string, Placed>,
   workspaceFor: (window: string) => Rect,
 ): ReadonlyMap<string, Placed> => {
   const same =
-    videos.length === placed.size && videos.every(({ id }) => placed.has(id));
+    videos.length === placed.size &&
+    videos.every((video) => {
+      const was = placed.get(video.id);
+      return was !== undefined && sameShape(was.shape, video);
+    });
   return same
     ? placed
     : new Map(
         videos.map((video) => {
           const was = placed.get(video.id);
+          const shape = { height: video.height, width: video.width };
           if (was === undefined) {
             const workspace = workspaceFor(video.window);
             return [
               video.id,
-              { box: openingBox(workspace, video), workspace },
+              { box: openingBox(workspace, shape), shape, workspace },
             ] as const;
-          } else {
+          } else if (sameShape(was.shape, shape)) {
             return [video.id, was] as const;
+          } else {
+            return [
+              video.id,
+              {
+                ...was,
+                box: reshapedBox(was.box, was.workspace, shape),
+                shape,
+              },
+            ] as const;
           }
         }),
       );
 };
+
+const sameShape = (a: Shape, b: Shape): boolean =>
+  a.height === b.height && a.width === b.width;
 
 type FloatProps = {
   at: Placed;
@@ -441,13 +466,16 @@ const cornerStyles = cva({
   },
 });
 
+// Only as big as its buttons, so it covers neither the corners' buttons nor
+// the progress bar.
 const middleStyles = css({
   alignItems: "center",
   display: "flex",
   gap: 2.5,
-  inset: 0,
-  justifyContent: "center",
+  insetBlockStart: "50%",
+  insetInlineStart: "50%",
   position: "absolute",
+  translate: "-50% -50%",
 });
 
 const clockStyles = css({

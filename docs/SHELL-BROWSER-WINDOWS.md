@@ -422,6 +422,9 @@ own video, stretched to its box. Tell the page how big it is shown with
   its `<webview>`).
 - `"close"` ends it and pauses the video.
 
+A video's `width` and `height` are 0 until its page says them; keep its box
+in the shape it has now.
+
 Manganese floats each video over every window, in the bottom-right corner of
 its window's screen, with its controls under the pointer.
 

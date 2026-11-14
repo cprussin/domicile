@@ -40,6 +40,30 @@ export const openingBox = (workspace: Rect, shape: Shape): Rect => {
   };
 };
 
+/**
+ * `box` in a video's new `shape`, as when its page first says its size: as
+ * wide as it was, as far as `workspace` allows, with its bottom-right corner
+ * where it was.
+ */
+export const reshapedBox = (box: Rect, workspace: Rect, shape: Shape): Rect => {
+  const ratio = ratioOf(shape);
+  const width = Math.round(
+    Math.min(box.width, workspace.width, workspace.height * ratio),
+  );
+  const height = Math.round(width / ratio);
+  return movedBox(
+    {
+      height,
+      width,
+      x: box.x + box.width - width,
+      y: box.y + box.height - height,
+    },
+    workspace,
+    0,
+    0,
+  );
+};
+
 /** `box` dragged by (`dx`, `dy`), kept on `workspace`. */
 export const movedBox = (
   box: Rect,

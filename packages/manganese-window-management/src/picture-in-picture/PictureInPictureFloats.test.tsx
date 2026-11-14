@@ -76,6 +76,20 @@ describe("PictureInPictureFloats", () => {
     );
   });
 
+  it("takes the video's shape once the page says its size", () => {
+    const { container, fake } = floating({ ...VIDEO, height: 0, width: 0 });
+    act(() => {
+      fake.set({ pictureInPictureVideos: [VIDEO] });
+    });
+    const float = shown(container).parentElement;
+
+    expect(float?.style.inlineSize).toBe("480px");
+    expect(float?.style.blockSize).toBe("270px");
+    expect(float?.style.insetBlockStart).toBe(
+      `${(40 + 1040 - 24 - 270).toString()}px`,
+    );
+  });
+
   it("moves with a drag, and stays on its screen", () => {
     const { container } = floating();
     const float = shown(container).parentElement;
