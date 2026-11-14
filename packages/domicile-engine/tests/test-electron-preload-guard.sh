@@ -57,35 +57,41 @@ says() { # $1 MEASURED, $2 what the sentence must contain
   esac
 }
 
-# MEASURED is "<ready> <preloaded> <isolated> <invoked> <delivered>
-# <unpreloaded>".
+# MEASURED is "<ready> <preloaded> <isolated> <invoked> <synced> <delivered>
+# <ported> <unpreloaded>".
 echo "the claim — a preload and its IPC"
 expect "a preload that ran first, stayed apart and carried IPC both ways is the pass" \
-  "pass" "$(verdict "1 1 1 1 1 1")"
-expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0")"
+  "pass" "$(verdict "1 1 1 1 1 1 1 1")"
+expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0 0 0")"
 expect "and points at the socket's guard" "yes" \
-  "$(says "0 0 0 0 0 0" "guard-electron-socket.sh")"
+  "$(says "0 0 0 0 0 0 0 0" "guard-electron-socket.sh")"
 expect "a page that never heard of its preload is a failure" "fail" \
-  "$(verdict "1 0 0 0 0 1")"
+  "$(verdict "1 0 0 0 0 0 0 1")"
 expect "and names where the preload runs" "yes" \
-  "$(says "1 0 0 0 0 1" "DidCreateDocumentElement")"
+  "$(says "1 0 0 0 0 0 0 1" "RunAtDocumentStart")"
 expect "a page that saw into the preload's world is a failure" "fail" \
-  "$(verdict "1 1 0 1 1 1")"
+  "$(verdict "1 1 0 1 1 1 1 1")"
 expect "and names the isolated world" "yes" \
-  "$(says "1 1 0 1 1 1" "isolated world")"
+  "$(says "1 1 0 1 1 1 1 1" "isolated world")"
 expect "an invoke that never came back is a failure" "fail" \
-  "$(verdict "1 1 1 0 1 1")"
-expect "and names where answers go" "yes" "$(says "1 1 1 0 1 1" "Answered")"
+  "$(verdict "1 1 1 0 1 1 1 1")"
+expect "and names where answers go" "yes" "$(says "1 1 1 0 1 1 1 1" "Answered")"
+expect "a sendSync that never returned is a failure" "fail" \
+  "$(verdict "1 1 1 1 0 1 1 1")"
+expect "and names the sync call" "yes" "$(says "1 1 1 1 0 1 1 1" "SendSync")"
 expect "an app's send that never arrived is a failure" "fail" \
-  "$(verdict "1 1 1 1 0 1")"
-expect "and names delivery" "yes" "$(says "1 1 1 1 0 1" "Deliver")"
+  "$(verdict "1 1 1 1 1 0 1 1")"
+expect "and names delivery" "yes" "$(says "1 1 1 1 1 0 1 1" "Deliver")"
+expect "a port that carried nothing is a failure" "fail" \
+  "$(verdict "1 1 1 1 1 1 0 1")"
+expect "and names the relay" "yes" "$(says "1 1 1 1 1 1 0 1" "relay")"
 
 echo
 echo "the control — a window without a preload"
 expect "a window without a preload that got one is a failure" "fail" \
-  "$(verdict "1 1 1 1 1 0")"
+  "$(verdict "1 1 1 1 1 1 1 0")"
 expect "and says only the app's own window gets it" "yes" \
-  "$(says "1 1 1 1 1 0" "only for its own window")"
+  "$(says "1 1 1 1 1 1 1 0" "only for its own window")"
 expect "an empty measurement is a failure" "fail" "$(verdict "")"
 
 [ "$FAILED" -eq 0 ] && echo "all ok"

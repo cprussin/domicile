@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 #include "base/types/expected.h"
 #include "base/values.h"
@@ -38,6 +39,11 @@ namespace domicile {
 //                                          (webContents.send)
 //   {"type":"ipc_reply","invoke":3,"result":...}    (a handler's result)
 //   {"type":"ipc_reply","invoke":3,"error":"..."}   (or why it failed)
+//   {"type":"ipc_post","window":1,"channel":"c","message":...,
+//    "ports":["m1"]}                       (webContents.postMessage)
+//   {"type":"port_post","window":1,"port":"r1","data":...}
+//                                          (a port's postMessage)
+//   {"type":"port_close","window":1,"port":"m1"}
 //
 // The engine also says, on its own:
 //
@@ -49,6 +55,17 @@ namespace domicile {
 //   {"type":"ipc_invoke","window":1,"invoke":3,"channel":"c","args":[...]}
 //                                          (ipcRenderer.invoke; answer
 //                                           with ipc_reply)
+//   {"type":"ipc_send_sync","window":1,"invoke":4,"channel":"c","args":[...]}
+//                                          (ipcRenderer.sendSync; answer
+//                                           with ipc_reply, as the page
+//                                           waits until then)
+//   {"type":"ipc_post","window":1,"channel":"c","message":...,
+//    "ports":["r1"]}                       (ipcRenderer.postMessage)
+//   {"type":"port_message","window":1,"port":"m1","data":...}
+//   {"type":"port_closed","window":1,"port":"m1"}
+//   {"type":"page_gone","window":1}        (a new document replaced the
+//                                           page: its ports and listeners
+//                                           are gone)
 //
 // The host picks window numbers. Only http and https URLs open: content
 // loads no other scheme in a guest. An app's own files and protocols arrive
@@ -57,6 +74,15 @@ namespace domicile {
 // IPC arguments and results are JSON, not structured clones: a Map, a Set or
 // bytes do not survive the trip. An invoke's number is the engine's, counted
 // per app.
+//
+// Message ports: each end the main process keeps is one side of a pipe whose
+// other side is a MessagePort in the window's page. A port's name says who
+// made it: "m" and a number for the main process, "r" and a number for the
+// page. The page counts its own from 1 again in each document, which is why
+// page_gone says when the last one's went. Messages on ports are JSON too.
+
+// Whether `name` names a message port: "m" or "r", then a number.
+bool IsElectronPortName(std::string_view name);
 
 inline constexpr int kElectronProtocolVersion = 1;
 
@@ -101,6 +127,28 @@ struct ElectronSendToPage {
   base::ListValue args;
 };
 
+// webContents.postMessage: `message` and the main process's ends of `ports`
+// to window `window`'s page, on `channel`.
+struct ElectronPostToPage {
+  ElectronWindow window;
+  std::string channel;
+  base::Value message;
+  std::vector<std::string> ports;
+};
+
+// `data` on port `port`, whose other end is window `window`'s page's.
+struct ElectronPortPost {
+  ElectronWindow window;
+  std::string port;
+  base::Value data;
+};
+
+// The main process closed port `port`.
+struct ElectronPortClose {
+  ElectronWindow window;
+  std::string port;
+};
+
 // An ipcMain handler's answer to invoke `invoke`: its result, or why it
 // failed.
 struct ElectronReply {
@@ -115,6 +163,9 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronCloseWindow,
                                      ElectronDestroyWindow,
                                      ElectronSendToPage,
+                                     ElectronPostToPage,
+                                     ElectronPortPost,
+                                     ElectronPortClose,
                                      ElectronReply>;
 
 // Why a line is not a request, and which window it was for when it names
@@ -146,6 +197,19 @@ std::string ElectronIpcInvoke(ElectronWindow window,
                               int invoke,
                               std::string_view channel,
                               const base::ListValue& args);
+std::string ElectronIpcSendSync(ElectronWindow window,
+                                int invoke,
+                                std::string_view channel,
+                                const base::ListValue& args);
+std::string ElectronIpcPost(ElectronWindow window,
+                            std::string_view channel,
+                            const base::Value& message,
+                            const std::vector<std::string>& ports);
+std::string ElectronPortMessage(ElectronWindow window,
+                                std::string_view port,
+                                const base::Value& data);
+std::string ElectronPortClosed(ElectronWindow window, std::string_view port);
+std::string ElectronPageGone(ElectronWindow window);
 
 }  // namespace domicile
 

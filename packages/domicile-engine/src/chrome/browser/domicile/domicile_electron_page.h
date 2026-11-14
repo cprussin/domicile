@@ -4,8 +4,11 @@
 #ifndef CHROME_BROWSER_DOMICILE_DOMICILE_ELECTRON_PAGE_H_
 #define CHROME_BROWSER_DOMICILE_DOMICILE_ELECTRON_PAGE_H_
 
+#include <optional>
 #include <string>
+#include <vector>
 
+#include "base/values.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/mojom/electron_frame.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -33,10 +36,16 @@ class ElectronPage final : public content::WebContentsObserver,
                      std::string preload,
                      ElectronPageCalls calls);
 
-  // webContents.send to `contents`, when it is an Electron window's page.
-  static void SendTo(content::WebContents& contents,
-                     const std::string& channel,
-                     const std::string& args_json);
+  // The app's IPC to the page, each dropped while no document with the
+  // preload is up, as nothing in the page could hear it. webContents.send:
+  void Deliver(const std::string& channel, const std::string& args_json);
+  // webContents.postMessage:
+  void DeliverPost(const std::string& channel,
+                   const std::string& message_json,
+                   const std::vector<std::string>& ports);
+  // A message on a port, and the main process closing one:
+  void DeliverToPort(const std::string& port, const std::string& data_json);
+  void ClosePort(const std::string& port);
 
   // content::WebContentsObserver:
   void ReadyToCommitNavigation(content::NavigationHandle* navigation) override;
@@ -46,6 +55,15 @@ class ElectronPage final : public content::WebContentsObserver,
   void Invoke(const std::string& channel,
               const std::string& args_json,
               InvokeCallback callback) override;
+  void SendSync(const std::string& channel,
+                const std::string& args_json,
+                SendSyncCallback callback) override;
+  void Post(const std::string& channel,
+            const std::string& message_json,
+            const std::vector<std::string>& ports) override;
+  void PostToPort(const std::string& port,
+                  const std::string& data_json) override;
+  void PortClosed(const std::string& port) override;
 
  private:
   friend class content::WebContentsUserData<ElectronPage>;
@@ -56,6 +74,14 @@ class ElectronPage final : public content::WebContentsObserver,
 
   // The page's arguments as a list, or nothing after reporting the renderer.
   std::optional<base::ListValue> ArgsFrom(const std::string& args_json);
+  // The page's JSON, or nothing after reporting the renderer.
+  std::optional<base::Value> JsonFrom(const std::string& json);
+  // Whether `port` names a port the page made, after reporting the renderer
+  // when it does not.
+  bool IsPagePort(const std::string& port);
+  // Whether `port` names a port at all, after reporting the renderer when it
+  // does not.
+  bool IsPort(const std::string& port);
 
   const std::string preload_;
   const ElectronPageCalls calls_;

@@ -26,6 +26,8 @@ class WebContents;
 
 namespace domicile {
 
+class ElectronPage;
+
 // The desk's browser windows, one list per profile. The profile owns each
 // window's page, so `domicile load-shell` keeps them. See
 // components/domicile/mojom/browser_windows.mojom.
@@ -75,10 +77,9 @@ std::optional<std::string> OpenElectronWindow(const GURL& url,
                                               const std::string& preload,
                                               ElectronPageCalls calls);
 
-// webContents.send: `args_json` on `channel` to Electron window `id`'s page.
-void SendToElectronWindow(const std::string& id,
-                          const std::string& channel,
-                          const std::string& args_json);
+// Electron window `id`'s page, for the app's IPC to it, or null after
+// logging when no such window is open or its page has no preload.
+ElectronPage* ElectronPageOf(const std::string& id);
 
 // Loads `url` in browser window `id` of the shell's profile.
 void LoadBrowserWindow(const std::string& id, const GURL& url);
