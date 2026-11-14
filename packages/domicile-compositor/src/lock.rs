@@ -377,6 +377,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::Spawn { .. }
             | ClientRequest::CopyClipboardEntry { .. }
             | ClientRequest::ActivateTrayItem { .. }
+            | ClientRequest::TrayMenuClicked { .. }
             | ClientRequest::DismissNotifications { .. }
             | ClientRequest::InvokeNotificationAction { .. }
             | ClientRequest::ReplyToNotification { .. }
@@ -909,6 +910,10 @@ mod tests {
                     id: ":1.9/StatusNotifierItem".into(),
                     action: TrayAction::Primary,
                 },
+            ),
+            (
+                "a tray menu entry clicked",
+                ClientRequest::TrayMenuClicked { bus: ":1.9".into() },
             ),
             (
                 "notifications cleared",

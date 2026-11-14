@@ -409,6 +409,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         | ClientRequest::ClipboardCopied { .. }
         | ClientRequest::CopyClipboardEntry { .. }
         | ClientRequest::ActivateTrayItem { .. }
+        | ClientRequest::TrayMenuClicked { .. }
         | ClientRequest::DismissNotifications { .. }
         | ClientRequest::InvokeNotificationAction { .. }
         | ClientRequest::ReplyToNotification { .. }
@@ -1328,6 +1329,10 @@ mod tests {
                     id: ":1.9/StatusNotifierItem".into(),
                     action: TrayAction::Primary,
                 },
+            ),
+            (
+                "the shell clicking a tray menu entry",
+                ClientRequest::TrayMenuClicked { bus: ":1.9".into() },
             ),
             (
                 "the shell clearing notifications",

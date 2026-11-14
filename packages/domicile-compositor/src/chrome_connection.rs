@@ -500,6 +500,12 @@ fn read_chrome_messages(
                 answer_on_the_connection(hub, ConnectionRequest::SearchFiles { query })
             }
             Ok(ChromeMessage::SystemRequest { id, request }) => {
+                // Only a shell's menu click: an app's page draws no tray.
+                if let Some(bus) = domicile_host::tray::menu_clicked(&request) {
+                    hub.send_request(ClientRequest::TrayMenuClicked {
+                        bus: bus.to_string(),
+                    });
+                }
                 call_the_system(hub, &system, id, request)
             }
             Ok(ChromeMessage::PointerMotion {

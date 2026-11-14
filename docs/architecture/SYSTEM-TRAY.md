@@ -13,7 +13,8 @@ application ── RegisterStatusNotifierItem ──▶ compositor (org.kde.Stat
                                                    ▼
                                    shell: domicile.tray.items, "change" → icons
 shell click ─ tray.activate(id, action) ─▶ engine ─ activate_tray_item ─▶ compositor
-            ─▶ Activate / SecondaryActivate / ContextMenu on the item
+            ─▶ ProvideXdgActivationToken, then Activate / SecondaryActivate /
+               ContextMenu on the item
 shell menu ─ domicile.dbus.call / match ──────▶ compositor ─▶ com.canonical.dbusmenu on `bus`
 ```
 
@@ -53,6 +54,18 @@ shell menu ─ domicile.dbus.call / match ──────▶ compositor ─�
 - **`Passive` items are not sent.** Trays conventionally hide them.
 - **Clicks respect the lock.** They go through the Wayland thread, which
   refuses them while locked, the same as `Spawn`.
+- **Clicks carry an `xdg-activation` token**, so the app can show a window
+  that is in a hidden tab, on another screen or on another workspace.
+  - The token is handed over with `ProvideXdgActivationToken` before the
+    click, as KDE does.
+  - Apps that ignore it (Electron) ask with a token of their own, made before
+    the keyboard last moved, which is normally dropped. A click lets the
+    item's process (from `GetConnectionUnixProcessID`) ask that way once,
+    within 10 seconds, as a notification press does (`activation::invites`).
+  - A shell's D-Bus call clicking a menu entry (`com.canonical.dbusmenu`
+    `Event` `clicked`, as "Show Slack" is) gets the same, for the item on the
+    call's bus (`tray::menu_clicked`). The token is minted before the call
+    runs.
 - **Reads never block the D-Bus worker.** Each `GetAll` runs on its own thread,
   because a call waits as long as its application does.
   - An item has at most one read in flight. Signals during a read cause one

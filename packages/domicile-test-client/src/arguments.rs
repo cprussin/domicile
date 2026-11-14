@@ -49,6 +49,14 @@ pub struct Arguments {
     /// Electron, so a press can be traced back to the window.
     pub notify: Option<String>,
 
+    /// Whether to show a tray icon (`org.kde.StatusNotifierItem`) on the
+    /// session bus, as a chat app does, tracing its clicks and the tokens
+    /// handed to it.
+    ///
+    /// The bus and the Wayland socket share the client's process, as in
+    /// Electron, so a click can be traced back to the window.
+    pub tray: bool,
+
     /// Text to offer on the primary (middle-click) selection.
     ///
     /// Separate from [`copy`](Self::copy) so checks can catch a compositor that
@@ -324,6 +332,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut copy = None;
     let mut copy_primary = None;
     let mut notify = None;
+    let mut tray = None;
     let mut paste = None;
     let mut popup = None;
     let mut popup_grab = None;
@@ -414,6 +423,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             }
             "--notify" => {
                 take(&mut notify, &flag, value(&mut args, &flag)?)?;
+            }
+            "--tray" => {
+                take(&mut tray, &flag, true)?;
             }
             "--paste" => {
                 take(&mut paste, &flag, true)?;
@@ -516,6 +528,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         copy,
         copy_primary,
         notify,
+        tray: tray.unwrap_or(false),
         paste: paste.unwrap_or(false),
         popup: popup.unwrap_or(false)
             || popup_grab.unwrap_or(false)

@@ -244,6 +244,13 @@ pub enum ClientRequest {
         id: String,
         action: TrayAction,
     },
+    /// The shell's system call clicked an entry of the tray menu on `bus`,
+    /// such as "Show Slack". Gets the item a token, as an icon click does.
+    /// Sent before the call runs, so the token is minted before the app can
+    /// ask with it. Routed here so a locked desktop can refuse it.
+    TrayMenuClicked {
+        bus: String,
+    },
     /// The shell dismissed notifications. Routed here so a locked desktop can
     /// refuse it.
     DismissNotifications {
@@ -520,10 +527,18 @@ impl DomicileCompositor {
                 self.took_a_copy(clipboard, contents);
                 self.tell_the_engine_a_clipboard(clipboard);
             }
-            // Forward to the tray worker, which talks to the session bus.
+            // Forward to the tray worker, which talks to the session bus,
+            // with a token so the application can raise its window.
             ClientRequest::ActivateTrayItem { id, action } => {
                 if let Some(tray) = self.hub.tray.get() {
-                    tray.activate(id, action);
+                    let token = activation::mint(&mut self.xdg_activation_state, tray.pid(&id));
+                    tray.activate(id, action, token);
+                }
+            }
+            ClientRequest::TrayMenuClicked { bus } => {
+                if let Some(tray) = self.hub.tray.get() {
+                    let token = activation::mint(&mut self.xdg_activation_state, tray.pid_on(&bus));
+                    tray.provide(bus, token);
                 }
             }
             // Forward to the notification server's worker.

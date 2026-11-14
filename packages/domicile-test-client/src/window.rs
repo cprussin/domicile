@@ -320,6 +320,10 @@ pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
         .map_err(|err| ClientError::Lost(err.to_string()))?;
 
     client.open(&handle)?;
+    // Kept so the icon is served while the client runs.
+    let _tray = asked
+        .tray
+        .then(|| crate::tray::show().expect("the session bus takes a tray icon"));
     loop {
         queue
             .blocking_dispatch(&mut client)

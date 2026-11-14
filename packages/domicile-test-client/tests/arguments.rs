@@ -285,6 +285,12 @@ fn asking_for_the_keyboard_twice_is_refused_like_any_other_repeat() {
 }
 
 #[test]
+fn a_client_can_be_asked_to_show_a_tray_icon() {
+    assert!(!given(&[]).expect("nothing").tray);
+    assert!(given(&["--tray"]).expect("a client in the tray").tray);
+}
+
+#[test]
 fn a_client_can_be_given_something_to_copy() {
     let asked = given(&["--copy", "hello"]).expect("a client with something to copy");
 
