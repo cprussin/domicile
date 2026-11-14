@@ -491,6 +491,13 @@ interface FrameSinkBroker {
   // is. Channels of different lengths are a bad message.
   SetGamma(int64 display_id, GammaRamp ramp);
 
+  // Sets the 3x3 color matrix, row-major, that display `display_id` is drawn
+  // with, in linear light: a night light on a display driven in HDR, where a
+  // gamma ramp would bend the PQ curve. The identity undoes it. Ignored for a
+  // display no browser window shows. Anything but nine finite numbers is a bad
+  // message.
+  SetColorMatrix(int64 display_id, array<float> matrix);
+
   // Delivers emulated input to the desk, as the engine's own devices' would
   // be: the shell sees it first. Ignored where the engine reads no input of
   // its own, as nested.

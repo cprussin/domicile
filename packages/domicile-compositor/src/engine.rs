@@ -1747,6 +1747,22 @@ impl Engine {
         unsafe { f(self.handle, display, ramp.as_ptr(), (ramp.len() / 3) as u32) };
     }
 
+    /// Sets the 3x3 color matrix, row-major, display `display` draws with in
+    /// linear light: a night light on a display driven in HDR. An engine
+    /// older than `domicile_displays_set_color_matrix` ignores it.
+    pub fn set_color_matrix(&self, display: i64, matrix: &[f32; 9]) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, i64, *const f32)> = match self.symbol(
+            b"domicile_displays_set_color_matrix\0",
+            "domicile_displays_set_color_matrix",
+        ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        // SAFETY: as above, and `matrix` holds the nine numbers the engine
+        // reads and outlives the call; the engine copies them.
+        unsafe { f(self.handle, display, matrix.as_ptr()) };
+    }
+
     /// Hands one emulated event to the shell's window, on a headless desk.
     /// Returns false for an engine older than `domicile_input_inject`.
     pub fn inject_input(&self, input: DeskInput) -> bool {

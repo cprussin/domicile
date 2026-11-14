@@ -3,6 +3,9 @@
 
 #include "components/domicile/browser/frame_sink_broker.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -57,7 +60,8 @@ FrameSinkBroker::FrameSinkBroker(
     GammaSetter set_gamma,
     InputInjector inject_input,
     InputConfigSetter set_input_config,
-    DisplayRedrawer redraw_display)
+    DisplayRedrawer redraw_display,
+    ColorMatrixSetter set_color_matrix)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -73,7 +77,8 @@ FrameSinkBroker::FrameSinkBroker(
       set_gamma_(std::move(set_gamma)),
       inject_input_(std::move(inject_input)),
       set_input_config_(std::move(set_input_config)),
-      redraw_display_(std::move(redraw_display)) {
+      redraw_display_(std::move(redraw_display)),
+      set_color_matrix_(std::move(set_color_matrix)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -316,6 +321,22 @@ void FrameSinkBroker::SetGamma(int64_t display_id, mojom::GammaRampPtr ramp) {
   if (redraw_display_) {
     redraw_display_.Run(display_id);
   }
+}
+
+void FrameSinkBroker::SetColorMatrix(int64_t display_id,
+                                     const std::vector<float>& matrix) {
+  ColorMatrix entries;
+  if (matrix.size() != entries.size() ||
+      !std::ranges::all_of(matrix, [](float x) { return std::isfinite(x); })) {
+    receivers_.ReportBadMessage("A color matrix is nine finite numbers");
+    return;
+  }
+  if (!set_color_matrix_) {
+    // No windows, so no display to draw.
+    return;
+  }
+  std::ranges::copy(matrix, entries.begin());
+  set_color_matrix_.Run(display_id, entries);
 }
 
 void FrameSinkBroker::InjectInput(mojom::DeskInputPtr input) {

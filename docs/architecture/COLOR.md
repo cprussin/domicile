@@ -84,8 +84,9 @@ color descriptions, the protocol, and the config. Tracks
   `wp_color_management_output_v1` hears `image_description_changed` then too.
 - **Night light on HDR is a viz color matrix.** A gamma ramp after PQ encoding
   bends the curve the panel decodes. Viz's display color matrix applies in
-  linear light before encoding. Gamma ramps from clients assume SDR, so
-  `wlr-gamma-control` reports `failed` on an HDR display.
+  linear light (patch `0217`; upstream applies it in the output's
+  encoding). Gamma ramps from clients assume SDR, so `wlr-gamma-control`
+  reports `failed` on an HDR display.
 - **Captures are SDR.** Screenshots, casts and screencopy stay 8-bit sRGB;
   viz tone-maps the copy.
 
@@ -98,6 +99,6 @@ color descriptions, the protocol, and the config. Tracks
 - [x] compositor: each display's own description, HDR10 while in HDR, and `image_description_changed` and `preferred_changed` when it changes
 - [x] engine: HDR10 display color spaces from the EDID and the layout; `Colorspace`, `HDR_OUTPUT_METADATA`
 - [x] config: `hdr` and SDR white per placement; HDR capability reported per display to the compositor
-- [ ] engine + compositor: night light as a viz color matrix on HDR displays; `wlr-gamma-control` fails there
+- [x] engine + compositor: night light as a viz color matrix on HDR displays; `wlr-gamma-control` fails there
 - [x] Settings: HDR switch and SDR brightness per monitor (mockup first)
 - [ ] protocol: the shell sees each display's HDR state (unsupported, off, on) and luminances, so Settings offers HDR only where it works
