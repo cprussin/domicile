@@ -362,7 +362,8 @@ being typed in, just under its text cursor:
 
 To show one:
 
-- Mount an `<app>` for it at that position, above its parent.
+- Mount an `<app>` for it at that position, above its parent. For a zoomed
+  window, give it the window's `zoom` (see [Windows](#windows)).
 - Give it no frame and do not tile it. Draw it only where its window is drawn.
 - Remove it when `windows.list` drops it.
 - The engine routes a click on it to its window's keyboard.
@@ -431,6 +432,12 @@ Each entry in `domicile.windows.list` describes one client window.
   sends it to the client. Resize a window by styling its element. Set
   `resizing` on the element while the user drags an edge; see
   [ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md).
+- **Zoom:** set CSS `zoom` on a window's `<app>` to draw its content larger or
+  smaller without touching its monitor's scale, as scroll's per-window scale
+  does. It stays sharp: the client draws at the zoomed density. Give the
+  window's popups the same `zoom`. Their `x`, `y`, `width` and `height` are
+  then in zoomed pixels, which `zoom` scales for you when the popup sits in a
+  box at the window's top-left corner.
 - **On screen:** listed means drawn, not shown. Wait for
   `domicile-presented` on the `<app>` before revealing a window, for example
   to start an open animation. `domicile-suspended` and `domicile-resumed` say

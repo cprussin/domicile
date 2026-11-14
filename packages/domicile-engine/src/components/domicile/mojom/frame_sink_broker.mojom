@@ -29,9 +29,14 @@ interface SurfaceObserver {
   // `scale` is device pixels per CSS pixel, which converts back to the logical
   // pixels a client is configured in. Per embed, since each monitor's page has
   // its own scale.
+  //
+  // `zoom` is the embedding element's CSS `zoom`: the client draws `zoom`
+  // times denser than `scale`, at a logical size `zoom` times smaller, so the
+  // box stays `size` and the window stays sharp. 1 for an unzoomed element.
   OnSurfaceEmbedded(viz.mojom.LocalSurfaceId local_surface_id,
                     gfx.mojom.Size size,
-                    double scale);
+                    double scale,
+                    double zoom);
 
   // Viz no longer samples `buffer_id`, so the producer may draw into it.
   // Reusing a dmabuf viz is still reading causes tearing.

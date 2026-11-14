@@ -372,7 +372,7 @@ class Surface : public mojom::SurfaceObserver,
     std::vector<viz::SurfaceRange> embedded;
     // Viz draws a pass's quads front to back, so the subsurfaces over the
     // window come first and those under it last.
-    AppendChildren(*pass, shown.scale, /*above=*/true, embedded);
+    AppendChildren(*pass, shown.scale * shown.zoom, /*above=*/true, embedded);
 
     // Drawn in the buffer's orientation, then turned onto the box.
     const domicile::BufferQuad placed =
@@ -398,7 +398,7 @@ class Surface : public mojom::SurfaceObserver,
                  /*nearest_neighbor=*/false, /*secure_output_only=*/false,
                  gfx::ProtectedVideoType::kClear,
                  /*is_tex_coords_normalized=*/true);
-    AppendChildren(*pass, shown.scale, /*above=*/false, embedded);
+    AppendChildren(*pass, shown.scale * shown.zoom, /*above=*/false, embedded);
 
     viz::CompositorFrame frame;
     frame.metadata.begin_frame_ack =
@@ -434,7 +434,8 @@ class Surface : public mojom::SurfaceObserver,
   }
 
   // Appends a quad embedding each subsurface `above` the window or under it,
-  // topmost first, at the `scale` of the box shown. Each one's surface range
+  // topmost first, at `scale` device pixels per logical one: the box shown's
+  // scale times its zoom. Each one's surface range
   // goes in `embedded`.
   void AppendChildren(viz::CompositorRenderPass& pass,
                       float scale,
@@ -480,16 +481,19 @@ class Surface : public mojom::SurfaceObserver,
   // The page chose this id and size. Forwarded as xdg_toplevel.configure.
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size,
-                         double scale) override {
+                         double scale,
+                         double zoom) override {
     boxes_.push_back({.number = ++last_box_,
                       .local_surface_id = local_surface_id,
                       .size = size,
-                      .scale = scale > 0 ? static_cast<float>(scale) : 1.f});
+                      .scale = scale > 0 ? static_cast<float>(scale) : 1.f,
+                      .zoom = zoom > 0 ? static_cast<float>(zoom) : 1.f});
     queue_->Push({.type = EngineEvent::Type::kConfigure,
                   .surface = id_,
                   .width = static_cast<uint32_t>(size.width()),
                   .height = static_cast<uint32_t>(size.height()),
                   .scale = scale,
+                  .zoom = zoom,
                   .box = last_box_});
   }
 
@@ -611,6 +615,9 @@ class Surface : public mojom::SurfaceObserver,
     viz::LocalSurfaceId local_surface_id;
     gfx::Size size;
     float scale = 1.f;
+    // The embedding element's CSS `zoom`. The client draws `zoom` times
+    // denser, so its logical units are `scale` times `zoom` device pixels.
+    float zoom = 1.f;
   };
 
   viz::FrameSinkId frame_sink_id_;
@@ -1104,7 +1111,11 @@ struct DomicileEngine {
     for (const domicile::EngineEvent& event : queue_.Drain()) {
       switch (event.type) {
         case domicile::EngineEvent::Type::kConfigure:
-          if (callbacks_.configure_box) {
+          if (callbacks_.configure_zoomed) {
+            callbacks_.configure_zoomed(callbacks_.user_data, event.surface,
+                                        event.width, event.height, event.scale,
+                                        event.zoom, event.box);
+          } else if (callbacks_.configure_box) {
             callbacks_.configure_box(callbacks_.user_data, event.surface,
                                      event.width, event.height, event.scale,
                                      event.box);

@@ -97,6 +97,7 @@ impl DomicileCompositor {
                     height,
                     scale,
                     number,
+                    zoom,
                 } => {
                     let app_id = self
                         .engine
@@ -140,10 +141,17 @@ impl DomicileCompositor {
                     //
                     // Use the scale the engine sends with the box. The reported
                     // ratio is a fallback for older engines.
+                    //
+                    // A zoomed `<app>` is configured `zoom` times smaller and
+                    // told to draw `zoom` times denser, so it fills the box
+                    // sharp rather than resampled.
+                    if self.app_zoom.get(&app_id).copied().unwrap_or(1.0) != zoom {
+                        self.zoom_window(&app_id, &toplevel, zoom);
+                    }
                     let device_size = (width, height);
                     let (width, height) = crate::scale::logical_box(
                         device_size,
-                        scale.unwrap_or(self.device_pixel_ratio),
+                        crate::scale::zoomed(scale.unwrap_or(self.device_pixel_ratio), zoom),
                     );
                     tracing::debug!(%app_id, width, height, "engine configure -> client");
                     match number {
