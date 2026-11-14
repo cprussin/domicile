@@ -270,6 +270,11 @@ const displayInfoSchema = z.looseObject({
     .enum(["unsupported", "off", "on"])
     .nullish()
     .transform((adaptiveSync) => adaptiveSync ?? "unsupported"),
+  // Whether the monitor is driven in HDR10. See `docs/COLOR.md`.
+  hdr: z
+    .enum(["unsupported", "off", "on"])
+    .nullish()
+    .transform((hdr) => hdr ?? "unsupported"),
   // The scanout mode in physical pixels, before rotation. It cannot be derived
   // from `size` and `scale`, since `scale` is rounded to an integer.
   // Informational only; `[0, 0]` when unknown.
@@ -280,6 +285,12 @@ const displayInfoSchema = z.looseObject({
   // Non-empty: `<Screen name="…">` matches on it, and an empty name would
   // silently match nothing.
   name: z.string().min(1),
+  // The panel's peak luminance from its EDID in cd/m²; zero when unreported.
+  peak_luminance: z
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((peak) => peak ?? 0),
   // Signed, mirroring `xdg_output.logical_position`.
   position: z.tuple([z.int(), z.int()]),
   // The `wl_output` refresh rate in mHz; zero when unknown.
@@ -291,6 +302,12 @@ const displayInfoSchema = z.looseObject({
   // The integer `wl_output` scale clients draw at. The chrome renders every
   // display at one `devicePixelRatio`.
   scale: z.int().positive(),
+  // While `hdr` is `on`, the cd/m² SDR white is shown at; zero otherwise.
+  sdr_white: z
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((white) => white ?? 0),
   // Integer, unlike `sizeSchema`, which holds `f64` client sizes.
   size: z.tuple([z.int().positive(), z.int().positive()]),
   // The rotation applied to content, per the `wl_output` convention. Apply it
