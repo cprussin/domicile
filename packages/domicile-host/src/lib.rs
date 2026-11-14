@@ -11,7 +11,8 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, ExtensionSettings,
-    HostMessage, MonitorInfo, Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
+    HostMessage, ListedDisplay, ListedWindow, MonitorInfo, Notification, Owner, PortalRequest,
+    PortalWallpaper, Theme, TrayItem, WindowKind,
 };
 
 pub mod app_names;
@@ -145,6 +146,26 @@ pub struct Popup {
     pub frame: u32,
 }
 
+/// A browser window as the engine reports it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserWindow {
+    /// The engine's id for it.
+    pub id: String,
+    /// The page's title, or empty.
+    pub title: String,
+    /// The app window's id, or empty for any other window.
+    pub app_id: String,
+}
+
+/// Which monitors are off. See [`Host::describe_darkness`].
+#[derive(Debug, Clone, Default)]
+struct Darkness {
+    /// Every one: blanked or slept together.
+    all: bool,
+    /// The ones slept by name.
+    asleep: Vec<String>,
+}
+
 /// The config's look in each theme. The two differ only where the config
 /// gives a mode its own value, such as the cursor theme.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -229,6 +250,10 @@ pub struct Host {
     /// Each browser window's identifier on `ext-foreign-toplevel-list-v1`, by
     /// the engine's window id.
     browser_toplevel_ids: BTreeMap<String, String>,
+    /// The browser windows, in the engine's order.
+    browser_windows: Vec<BrowserWindow>,
+    /// Which monitors are off.
+    darkness: Darkness,
 }
 
 impl Host {
@@ -260,6 +285,85 @@ impl Host {
         HostMessage::Monitors {
             monitors: self.monitors.clone(),
         }
+    }
+
+    /// Record which monitors are off: every one when `all`, else those named
+    /// in `asleep`.
+    pub fn describe_darkness(&mut self, all: bool, asleep: Vec<String>) {
+        self.darkness = Darkness { all, asleep };
+    }
+
+    /// Every display with the names it answers to and whether it is lit,
+    /// answering `which_displays`.
+    pub fn list_displays(&self) -> HostMessage {
+        HostMessage::DisplayList {
+            displays: self
+                .displays
+                .iter()
+                .map(|display| {
+                    let names = self
+                        .monitors
+                        .iter()
+                        .find(|monitor| monitor.names.contains(&display.name))
+                        .map_or_else(
+                            || vec![display.name.clone()],
+                            |monitor| monitor.names.clone(),
+                        );
+                    let lit = !self.darkness.all
+                        && !names.iter().any(|name| self.darkness.asleep.contains(name));
+                    ListedDisplay {
+                        display: display.clone(),
+                        names,
+                        lit,
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    /// Every drawn native window in the order they opened, then every browser
+    /// window the engine listed, answering `which_windows`.
+    pub fn list_windows(&self) -> HostMessage {
+        let focused = self.focus_holder();
+        let mut native: Vec<&App> = self
+            .apps
+            .values()
+            .filter(|app| app.mapped.is_some())
+            .collect();
+        native.sort_by_key(|app| app.arrival);
+        let browser = self.browser_windows.iter().filter_map(|window| {
+            Some(ListedWindow {
+                id: self.browser_toplevel_ids.get(&window.id)?.clone(),
+                kind: WindowKind::Browser,
+                title: window.title.clone(),
+                app: (!window.app_id.is_empty()).then(|| window.app_id.clone()),
+                pid: None,
+                size: None,
+                focused: false,
+                urgent: false,
+            })
+        });
+        HostMessage::WindowList {
+            windows: native
+                .into_iter()
+                .map(|app| ListedWindow {
+                    id: app.toplevel_id.clone(),
+                    kind: WindowKind::Native,
+                    title: app.title.clone().unwrap_or_default(),
+                    app: app.desktop_id.clone(),
+                    pid: Some(app.owner.pid),
+                    size: app.size.map(|(width, height)| [width, height]),
+                    focused: focused.as_ref() == Some(&app.app_id),
+                    urgent: app.urgent,
+                })
+                .chain(browser)
+                .collect(),
+        }
+    }
+
+    /// Replace the browser windows, as the engine reports them.
+    pub fn browser_windows(&mut self, windows: Vec<BrowserWindow>) {
+        self.browser_windows = windows;
     }
 
     /// The display named `name`, if the desktop has it.
@@ -924,6 +1028,8 @@ impl Host {
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::WhichTheme
             | ChromeMessage::WhichMonitors
+            | ChromeMessage::WhichDisplays
+            | ChromeMessage::WhichWindows
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

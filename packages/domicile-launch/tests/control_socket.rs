@@ -160,6 +160,8 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                         panic!("a question about this desktop reaches no compositor")
                     },
                     monitors: &|| panic!("a question about this desktop reaches no compositor"),
+                    displays: &|| panic!("a question about this desktop reaches no compositor"),
+                    windows: &|| panic!("a question about this desktop reaches no compositor"),
                     permissions: &|| panic!("a question about this desktop reaches no engine"),
                     set_permission: &|_| panic!("a question about this desktop reaches no engine"),
                     load_unpacked: &|_| panic!("a question about this desktop reaches no engine"),

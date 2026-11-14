@@ -9,8 +9,8 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    monitors, power_displays, screen_record, screenshot, send_shell, theme, virtual_monitor,
-    CompositorError,
+    displays, monitors, power_displays, screen_record, screenshot, send_shell, theme,
+    virtual_monitor, windows, CompositorError,
 };
 use domicile_launch::control::Shot;
 use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme};
@@ -375,6 +375,42 @@ fn the_compositor_is_asked_its_monitors_and_says_them() {
         heard.join().expect("the compositor was listening"),
         vec!["{\"type\":\"which_monitors\"}\n".to_string()]
     );
+}
+
+#[test]
+fn the_compositor_is_asked_its_displays_and_windows_and_says_them() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_displays",
+        "{\"type\":\"display_list\",\"displays\":[{\"name\":\"drm-1\",\"position\":[0,0],\
+         \"size\":[1920,1080],\"scale\":1,\"names\":[\"drm-1\",\"DP-1\"],\"lit\":false}]}\n",
+    );
+    let displays = displays(&path, Some(BRIEFLY)).expect("the compositor listed them");
+    assert_eq!(
+        (
+            displays[0].display.name.as_str(),
+            displays[0].names.len(),
+            displays[0].lit
+        ),
+        ("drm-1", 2, false)
+    );
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        vec!["{\"type\":\"which_displays\"}\n".to_string()]
+    );
+
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "which_windows",
+        "{\"type\":\"window_list\",\"windows\":[{\"id\":\"kD3m\",\"kind\":\"browser\",\
+         \"title\":\"Inbox\",\"app\":null,\"pid\":null,\"size\":null,\"focused\":false,\
+         \"urgent\":false}]}\n",
+    );
+    let windows = windows(&path, Some(BRIEFLY)).expect("the compositor listed them");
+    assert_eq!(windows[0].title, "Inbox");
+    heard.join().expect("the compositor was listening");
 }
 
 #[test]

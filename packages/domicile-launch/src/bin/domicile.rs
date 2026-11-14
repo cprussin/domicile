@@ -23,7 +23,7 @@ use domicile_host::desk_terminal;
 use domicile_host::mime_apps::lists;
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
-use domicile_launch::cli::{invocation, CliError, Invocation, MonitorMode, USAGE};
+use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, USAGE};
 use domicile_launch::command_socket::{
     clear_browsing_data, clear_site_data, config_extensions, configure_extension, delete_history,
     disable_while_typing, extensions, history, load_shell, load_unpacked, media_devices, open_app,
@@ -32,7 +32,7 @@ use domicile_launch::command_socket::{
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{
-    monitors, power_displays, screen_record, screenshot, send_shell, theme,
+    displays, monitors, power_displays, screen_record, screenshot, send_shell, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -47,6 +47,7 @@ use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
+use domicile_launch::listing::{displays_table, windows_table};
 use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
@@ -154,6 +155,7 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
         Invocation::Monitor { name, mode } => monitored(name, mode),
+        Invocation::List { listing, json } => listed(listing, json),
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -561,7 +563,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Deleted
         | Response::Cleared
         | Response::SiteData { .. }
-        | Response::Monitors { .. } => Err(format!(
+        | Response::Monitors { .. }
+        // `listed` asks for these.
+        | Response::Displays { .. }
+        | Response::Windows { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -570,6 +575,39 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             Ok(ExitCode::FAILURE)
         }
     }
+}
+
+/// Asks the running desktop for `listing` and prints it as a table, or with
+/// `json` as the JSON array it answered with.
+fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let answer =
+        ask(&socket, &listing.request(), Some(ANSWER_WITHIN)).map_err(|why| why.to_string())?;
+    let printed = match (answer, json) {
+        (Response::Displays { displays }, false) => displays_table(&displays),
+        (Response::Windows { windows }, false) => windows_table(&windows),
+        (Response::Displays { displays }, true) => as_json(&displays),
+        (Response::Windows { windows }, true) => as_json(&windows),
+        (Response::Refused { why }, _) => {
+            eprintln!("domicile: {why}");
+            return Ok(ExitCode::FAILURE);
+        }
+        (answer, _) => {
+            return Err(format!(
+                "the desktop answered {answer:?} to a listing of {listing:?}"
+            ))
+        }
+    };
+    print!("{printed}");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `listed` as pretty JSON, one line per field.
+fn as_json(listed: &impl serde::Serialize) -> String {
+    let mut json = serde_json::to_string_pretty(listed).expect("a listing always serializes");
+    json.push('\n');
+    json
 }
 
 /// Adds a virtual monitor and prints its output, then resizes it to each size
@@ -1264,6 +1302,12 @@ fn answer_a_command(
                     },
                     monitors: &|| {
                         monitors(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
+                    displays: &|| {
+                        displays(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
+                    windows: &|| {
+                        windows(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                 },
             )

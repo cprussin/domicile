@@ -366,7 +366,8 @@ running one. The first argument decides which.
   interactive screenshot waits on the user.
 - The supervisor answers and routes. `load-shell` and `open`'s web links
   and apps go to the engine. `screenshot` and `send-shell` go to the compositor's chrome socket
-  as the `screenshot` and `send_shell` system calls a page makes
+  as the `screenshot` and `send_shell` system calls a page makes, and
+  `list-displays` and `list-windows` as `which_displays` and `which_windows`
   (`domicile_launch::compositor_socket`). The connection never says `hello`,
   so it is not a chrome. See
   [KEYBINDINGS.md](KEYBINDINGS.md#commands-from-a-terminal) for where a
@@ -384,6 +385,7 @@ domicile open <file> ─▶ its type's default, in the caller's place
 domicile open --app  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
+domicile list-*      ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile disable-while-typing ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile-app-host    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine   (settings_files stops at the supervisor)
 ```

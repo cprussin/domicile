@@ -344,6 +344,39 @@ const monitorsSchema = z.looseObject({
   type: z.literal("monitors"),
 });
 
+// Every display, with every name `sleep-displays` takes for it and whether it
+// is lit. Answers `which_displays` on the asking connection only, for
+// `domicile list-displays`.
+const displayListSchema = z.looseObject({
+  displays: z.array(
+    displayInfoSchema.extend({
+      lit: z.boolean(),
+      names: z.array(z.string().min(1)),
+    }),
+  ),
+  type: z.literal("display_list"),
+});
+
+// Every window, native first in the order they opened, then browser windows.
+// Answers `which_windows` on the asking connection only, for
+// `domicile list-windows`.
+const windowListSchema = z.looseObject({
+  type: z.literal("window_list"),
+  windows: z.array(
+    z.looseObject({
+      app: z.string().nullable(),
+      focused: z.boolean(),
+      // The window's `ext-foreign-toplevel-list-v1` identifier.
+      id: z.string().min(1),
+      kind: z.enum(["native", "browser"]),
+      pid: z.int().nullable(),
+      size: sizeSchema.nullable(),
+      title: z.string(),
+      urgent: z.boolean(),
+    }),
+  ),
+});
+
 // Each browser window's identifier on `ext-foreign-toplevel-list-v1`, by the
 // engine's window id. Sent after `welcome` and on every change; latest wins.
 const browserToplevelIdsSchema = z.looseObject({
@@ -807,6 +840,8 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appUrgentSchema,
   displaysSchema,
   monitorsSchema,
+  displayListSchema,
+  windowListSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   extensionsSchema,
@@ -862,6 +897,8 @@ export type AppAnchoredMessage = z.infer<typeof appAnchoredSchema>;
 export type AppUrgentMessage = z.infer<typeof appUrgentSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type MonitorsMessage = z.infer<typeof monitorsSchema>;
+export type DisplayListMessage = z.infer<typeof displayListSchema>;
+export type WindowListMessage = z.infer<typeof windowListSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

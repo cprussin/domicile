@@ -371,6 +371,16 @@ pub enum ChromeMessage {
     /// `hello` and so hears no broadcast.
     WhichMonitors,
 
+    /// Report every display with the names it answers to and whether it is
+    /// lit. Answered with [`HostMessage::DisplayList`] on this connection
+    /// only. Sent by `domicile list-displays`.
+    WhichDisplays,
+
+    /// Report every window, native and browser. Answered with
+    /// [`HostMessage::WindowList`] on this connection only. Sent by
+    /// `domicile list-windows`.
+    WhichWindows,
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -775,6 +785,13 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::WhichMonitors`] on the asking connection
     /// only, so Settings can offer HDR only where a monitor takes it.
     Monitors { monitors: Vec<MonitorInfo> },
+
+    /// Answers [`ChromeMessage::WhichDisplays`] on the asking connection only.
+    DisplayList { displays: Vec<ListedDisplay> },
+
+    /// Answers [`ChromeMessage::WhichWindows`] on the asking connection only.
+    /// Native windows first, in the order they opened, then browser windows.
+    WindowList { windows: Vec<ListedWindow> },
 
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
@@ -2659,6 +2676,51 @@ pub struct MonitorInfo {
     pub names: Vec<String>,
     /// Whether it is driven in HDR10.
     pub hdr: DisplayHdr,
+}
+
+/// A display as `domicile list-displays` prints it. See
+/// [`HostMessage::DisplayList`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListedDisplay {
+    #[serde(flatten)]
+    pub display: DisplayInfo,
+    /// Every name `sleep-displays` and a profile's `display` take for it, its
+    /// output name first.
+    pub names: Vec<String>,
+    /// Off when slept or blanked.
+    pub lit: bool,
+}
+
+/// Who draws a window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowKind {
+    /// A Wayland client.
+    Native,
+    /// The engine: a browser or app window.
+    Browser,
+}
+
+/// A window as `domicile list-windows` prints it. See
+/// [`HostMessage::WindowList`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListedWindow {
+    /// Its `ext-foreign-toplevel-list-v1` identifier.
+    pub id: String,
+    pub kind: WindowKind,
+    /// Empty when it has none.
+    pub title: String,
+    /// A native window's desktop entry id, or a browser window's app id.
+    pub app: Option<String>,
+    /// A native window's process.
+    pub pid: Option<i32>,
+    /// A native window's size, logical.
+    pub size: Option<[f64; 2]>,
+    /// It has the keyboard. Only a native window can: the shell's page holds
+    /// the keyboard for browser windows.
+    pub focused: bool,
+    /// It asked for the keyboard and was refused.
+    pub urgent: bool,
 }
 
 /// Whether a monitor is driven in HDR10: BT.2020 primaries with the PQ

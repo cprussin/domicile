@@ -41,6 +41,9 @@ Ask the running desktop:
   domicile sleep-displays [display]     Turn every monitor off until input,
                                         or one until it is woken
   domicile wake-displays [display]      Turn the monitors, or one, back on
+  domicile list-displays [--json]       Print each display: the names
+                                        sleep-displays takes, mode, layout
+  domicile list-windows [--json]        Print each window, native and browser
   domicile disable-while-typing [on|off|toggle]
                                         Set the touchpad setting, or print it
   domicile monitor <name> <W>x<H>[@Hz] [scale]
@@ -242,8 +245,28 @@ pub enum Invocation {
     Power { power: Power },
     /// Add a virtual monitor until stdin ends, resizing it to each size read.
     Monitor { name: String, mode: MonitorMode },
+    /// Ask the running desktop for a listing and print it as a table, or
+    /// with `json` as the JSON array it answered with.
+    List { listing: Listing, json: bool },
     /// Print [`USAGE`].
     Help,
+}
+
+/// What a `list-*` verb lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Listing {
+    Displays,
+    Windows,
+}
+
+impl Listing {
+    /// The request that asks for it.
+    pub fn request(self) -> Request {
+        match self {
+            Self::Displays => Request::Displays,
+            Self::Windows => Request::Windows,
+        }
+    }
 }
 
 /// Parses the command line.
@@ -398,6 +421,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 }),
                 _ => Err(CliError::NoMonitor),
             },
+            Verb::Listing(listing) => match (args.next(), args.next()) {
+                (None, _) => Ok(Invocation::List {
+                    listing,
+                    json: false,
+                }),
+                (Some(flag), None) if flag == JSON => Ok(Invocation::List {
+                    listing,
+                    json: true,
+                }),
+                (Some(flag), Some(extra)) if flag == JSON => Err(CliError::Extra {
+                    verb: format!("{first} {flag}"),
+                    extra,
+                }),
+                (Some(extra), _) => Err(CliError::Extra { verb: first, extra }),
+            },
             Verb::Checking => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NothingToCheck),
                 (Some(config), None) => Ok(Invocation::Check {
@@ -471,6 +509,9 @@ fn app_flags(
     Ok((id, reuse))
 }
 
+/// A listing's flag for printing JSON rather than a table.
+const JSON: &str = "--json";
+
 /// `open`'s flag for printing what would open it, without opening it.
 const WHICH: &str = "--which";
 
@@ -509,6 +550,8 @@ enum Verb {
     Monitoring,
     /// `sleep-displays` or `wake-displays`, which take a display or nothing.
     Sleeping(DisplayPower),
+    /// `list-displays` or `list-windows`, which take `--json` or nothing.
+    Listing(Listing),
 }
 
 /// The verb `word` names, if any.
@@ -533,6 +576,8 @@ fn verb(word: &str) -> Option<Verb> {
         "reboot" => Some(Verb::Powering(Power::Reboot)),
         "log-out" => Some(Verb::Powering(Power::LogOut)),
         "monitor" => Some(Verb::Monitoring),
+        "list-displays" => Some(Verb::Listing(Listing::Displays)),
+        "list-windows" => Some(Verb::Listing(Listing::Windows)),
         _ => None,
     }
 }

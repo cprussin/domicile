@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use domicile_launch::cli::{
-    invocation, monitor_mode, monitor_size, CliError, Invocation, MonitorMode, USAGE,
+    invocation, monitor_mode, monitor_size, CliError, Invocation, Listing, MonitorMode, USAGE,
 };
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
@@ -43,6 +43,38 @@ fn a_second_argument_is_refused_and_named() {
         run(&["./dist/shell.js", "simple"]),
         Err(CliError::TooMany {
             extra: "simple".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_listing_prints_a_table_or_with_json_what_the_desktop_said() {
+    assert_eq!(
+        run(&["list-displays"]),
+        Ok(Invocation::List {
+            listing: Listing::Displays,
+            json: false
+        })
+    );
+    assert_eq!(
+        run(&["list-windows", "--json"]),
+        Ok(Invocation::List {
+            listing: Listing::Windows,
+            json: true
+        })
+    );
+    assert_eq!(
+        run(&["list-windows", "--yaml"]),
+        Err(CliError::Extra {
+            verb: "list-windows".to_string(),
+            extra: "--yaml".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["list-displays", "--json", "drm-1"]),
+        Err(CliError::Extra {
+            verb: "list-displays --json".to_string(),
+            extra: "drm-1".to_string()
         })
     );
 }

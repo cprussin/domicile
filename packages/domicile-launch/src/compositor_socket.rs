@@ -14,8 +14,8 @@ use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    ChromeMessage, HostMessage, MonitorInfo, SystemError, SystemErrorKind, SystemReply,
-    SystemRequest, Theme,
+    ChromeMessage, HostMessage, ListedDisplay, ListedWindow, MonitorInfo, SystemError,
+    SystemErrorKind, SystemReply, SystemRequest, Theme,
 };
 
 use crate::cli::MonitorMode;
@@ -171,6 +171,37 @@ pub fn monitors(
     let said = exchanged(socket, &[ChromeMessage::WhichMonitors], patience)?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::Monitors { monitors }) => Ok(monitors),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Asks the compositor at `socket` for every display, with the names it
+/// answers to and whether it is lit.
+pub fn displays(
+    socket: &Path,
+    patience: Option<Duration>,
+) -> Result<Vec<ListedDisplay>, CompositorError> {
+    let said = exchanged(socket, &[ChromeMessage::WhichDisplays], patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::DisplayList { displays }) => Ok(displays),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Asks the compositor at `socket` for every window, native and browser.
+pub fn windows(
+    socket: &Path,
+    patience: Option<Duration>,
+) -> Result<Vec<ListedWindow>, CompositorError> {
+    let said = exchanged(socket, &[ChromeMessage::WhichWindows], patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::WindowList { windows }) => Ok(windows),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

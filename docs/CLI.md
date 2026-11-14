@@ -108,6 +108,44 @@ stays off through input until `wake-displays` names it or names none. See
 Turn the monitors back on, after `sleep-displays` or idle blanking, or only
 the display named. For a script, or over SSH.
 
+## `domicile list-displays [--json]`
+
+Print each display: every name `sleep-displays` and a display profile take for
+it, its mode, its size and position in logical pixels, scale, rotation, HDR,
+adaptive sync, and whether it is lit or off.
+
+```
+drm-1 (lit)
+  names     drm-1, eDP-1, BOE NE135A1M-NY1
+  mode      2256x1504 @ 59.999 Hz
+  layout    1128x752 at 0,0, scale 2, normal
+  color     HDR unsupported, adaptive sync off
+```
+
+`--json` prints a JSON array instead, for scripts: each display's fields as
+shells get them in `domicile.displays`, plus `names` and `lit`.
+
+## `domicile list-windows [--json]`
+
+Print each window: native windows in the order they opened, then the browser
+and app windows.
+
+```
+ID                                KIND     APP    PID   SIZE     TITLE
+kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x480  notes.org (focused)
+Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox
+```
+
+- `ID` is the window's `ext-foreign-toplevel-list-v1` identifier, which
+  capture tools see too.
+- `APP` is a native window's desktop entry id, or an app window's id.
+- `focused` marks the native window with the keyboard. The shell's page holds
+  the keyboard for browser windows, so none is marked.
+- `urgent` marks a window that asked for the keyboard and was refused.
+
+`--json` prints a JSON array instead, for scripts, with `kind`, `title`,
+`app`, `pid`, `size`, `focused` and `urgent` per window.
+
 ## `domicile disable-while-typing [on|off|toggle]`
 
 Set whether a touchpad ignores the pointer while you type, or print it. On by
@@ -148,8 +186,8 @@ Print the commands. `--help` and `-h` do the same, also after a verb.
 ## While locked
 
 `screenshot`, `screen-record` and `send-shell` are refused while the desktop
-is locked, as is adding a `monitor`. `theme`, `sleep-displays` and
-`wake-displays` work, and a `monitor` added before keeps resizing.
+is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
+`wake-displays`, `list-displays` and `list-windows` work, and a `monitor` added before keeps resizing.
 
 ## Environment
 

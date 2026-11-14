@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
-use domicile_protocol::{MonitorInfo, Scale, Theme};
+use domicile_protocol::{ListedDisplay, ListedWindow, MonitorInfo, Scale, Theme};
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -124,6 +124,11 @@ pub enum Request {
     /// by. Asked by `domicile-app-host`, so Settings offers HDR only where a
     /// monitor takes it.
     Monitors,
+    /// Report every display: its names, mode, layout and whether it is lit.
+    /// The compositor owns the displays, so this works with any shell.
+    Displays,
+    /// Report every window, native and browser.
+    Windows,
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by its `wl_output` name, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -284,6 +289,12 @@ pub enum Response {
 
     /// Answers `monitors`.
     Monitors { monitors: Vec<MonitorInfo> },
+
+    /// Answers `displays`.
+    Displays { displays: Vec<ListedDisplay> },
+
+    /// Answers `windows`.
+    Windows { windows: Vec<ListedWindow> },
 
     /// The compositor turned the monitors off or on.
     Powered,
@@ -462,6 +473,16 @@ pub type PowerDisplays<'a> = &'a dyn Fn(DisplayPower, Option<&str>) -> Result<()
 /// [`crate::compositor_socket::monitors`] in a desktop; a closure in tests.
 pub type ListMonitors<'a> = &'a dyn Fn() -> Result<Vec<MonitorInfo>, String>;
 
+/// Asks the compositor for every display.
+///
+/// [`crate::compositor_socket::displays`] in a desktop; a closure in tests.
+pub type ListDisplays<'a> = &'a dyn Fn() -> Result<Vec<ListedDisplay>, String>;
+
+/// Asks the compositor for every window.
+///
+/// [`crate::compositor_socket::windows`] in a desktop; a closure in tests.
+pub type ListWindows<'a> = &'a dyn Fn() -> Result<Vec<ListedWindow>, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -497,6 +518,8 @@ pub struct Desktop<'a> {
     pub theme: Theming<'a>,
     pub power_displays: PowerDisplays<'a>,
     pub monitors: ListMonitors<'a>,
+    pub displays: ListDisplays<'a>,
+    pub windows: ListWindows<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -663,6 +686,14 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Monitors) => to_line(&match (desktop.monitors)() {
             Ok(monitors) => Response::Monitors { monitors },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Displays) => to_line(&match (desktop.displays)() {
+            Ok(displays) => Response::Displays { displays },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Windows) => to_line(&match (desktop.windows)() {
+            Ok(windows) => Response::Windows { windows },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SleepDisplays { display }) => {

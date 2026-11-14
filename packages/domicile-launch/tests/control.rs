@@ -16,7 +16,10 @@ use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
-use domicile_protocol::{DisplayHdr, MonitorInfo, Theme};
+use domicile_protocol::{
+    AdaptiveSync, DisplayHdr, DisplayInfo, DisplayTransform, ListedDisplay, ListedWindow,
+    MonitorInfo, Theme, WindowKind,
+};
 
 #[test]
 fn a_desktop_says_which_shell_it_is_running() {
@@ -334,6 +337,73 @@ fn a_desktop_told_to_sleep_or_wake_the_displays_tells_the_compositor() {
         assert_eq!(told.take(), Some((power, display)));
         assert_eq!(answered, Response::Powered);
     }
+}
+
+#[test]
+fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
+    let display = ListedDisplay {
+        display: DisplayInfo {
+            name: "drm-1".to_string(),
+            position: [0, 0],
+            size: [1920, 1080],
+            scale: 1,
+            mode: [1920, 1080],
+            refresh_mhz: 60_000,
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: DisplayHdr::Unsupported,
+            peak_luminance: 0,
+            sdr_white: 0,
+            transform: DisplayTransform::Normal,
+        },
+        names: vec!["drm-1".to_string(), "DP-1".to_string()],
+        lit: true,
+    };
+    let window = ListedWindow {
+        id: "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".to_string(),
+        kind: WindowKind::Browser,
+        title: "Inbox".to_string(),
+        app: None,
+        pid: None,
+        size: None,
+        focused: false,
+        urgent: false,
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"displays\"}",
+            &Desktop {
+                displays: &|| Ok(vec![display.clone()]),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Displays {
+            displays: vec![display.clone()]
+        }
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"windows\"}",
+            &Desktop {
+                windows: &|| Ok(vec![window.clone()]),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Windows {
+            windows: vec![window.clone()]
+        }
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"windows\"}",
+            &Desktop {
+                windows: &|| Err("no compositor".to_string()),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "no compositor".to_string()
+        }
+    );
 }
 
 #[test]
@@ -1002,6 +1072,8 @@ fn nothing_dialed() -> Desktop<'static> {
         permissions: &|| panic!("only site_permissions lists site permissions"),
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
         monitors: &|| panic!("only monitors lists the monitors"),
+        displays: &|| panic!("only displays lists the displays"),
+        windows: &|| panic!("only windows lists the windows"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),

@@ -236,6 +236,16 @@ impl DomicileCompositor {
                 } => self.cast_captured(capture, frame, captured),
                 engine::Event::Compositing { in_memory } => self.engine_composites(in_memory),
                 engine::Event::BrowserWindows(windows) => {
+                    self.hub.host.lock().unwrap().browser_windows(
+                        windows
+                            .iter()
+                            .map(|window| domicile_host::BrowserWindow {
+                                id: window.id.clone(),
+                                title: window.title.clone(),
+                                app_id: window.app_id.clone(),
+                            })
+                            .collect(),
+                    );
                     let listed = self.foreign_toplevels.browser_windows(&windows);
                     self.browser_toplevels_listed(listed);
                 }
@@ -245,6 +255,7 @@ impl DomicileCompositor {
                     warn!("the engine this desktop was drawing through went away");
                     self.engine_disconnected = true;
                     // Its windows went with it.
+                    self.hub.host.lock().unwrap().browser_windows(Vec::new());
                     let listed = self.foreign_toplevels.browser_windows(&[]);
                     self.browser_toplevels_listed(listed);
                 }

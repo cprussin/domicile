@@ -195,6 +195,10 @@ impl DomicileCompositor {
     pub fn state_the_connectors(&self) {
         // Every blanking edge passes here.
         self.tell_the_portal_about_the_screensaver();
+        self.hub.host.lock().unwrap().describe_darkness(
+            self.the_screens_are_dark() || self.display_sleep.asleep(),
+            self.display_sleep.sleeping().to_vec(),
+        );
         let Some(session) = self.engine.as_ref() else {
             return;
         };

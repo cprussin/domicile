@@ -6,10 +6,11 @@
 use std::collections::BTreeMap;
 
 use domicile_host::ipc::apply_chrome_message;
-use domicile_host::{AppId, Appearances, Host, Mapped};
+use domicile_host::{AppId, Appearances, BrowserWindow, Host, Mapped};
 use domicile_protocol::{
     AdaptiveSync, AppFrame, Appearance, ChromeMessage, CursorTheme, DisplayHdr, DisplayInfo,
-    DisplayTransform, HostMessage, Owner, Theme, PROTOCOL_VERSION,
+    DisplayTransform, HostMessage, ListedDisplay, ListedWindow, MonitorInfo, Owner, Theme,
+    WindowKind, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -25,6 +26,141 @@ const OWNER: Owner = Owner {
 /// A window's identifier on `ext-foreign-toplevel-list-v1`, for tests about
 /// anything else.
 const LISTED: &str = "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa";
+
+// ---- listings for `domicile list-*` ----------------------------------------
+
+#[test]
+fn each_display_is_listed_with_every_name_it_answers_to_and_whether_it_is_lit() {
+    // `domicile list-displays` prints the names `sleep-displays` takes, so
+    // they come from the monitors. A display with no monitor (a nested
+    // desktop's window) answers to its own name.
+    let mut host = Host::new();
+    let laptop = lying_down("drm-1", [0, 0], [1280, 800], 2);
+    let dock = lying_down("drm-2", [1280, 0], [1920, 1080], 1);
+    let window = lying_down("domicile-0", [3200, 0], [800, 600], 1);
+    host.describe_displays(vec![laptop.clone(), dock.clone(), window.clone()]);
+    host.describe_monitors(vec![
+        MonitorInfo {
+            names: vec!["drm-1".into(), "eDP-1".into(), "BOE NE135A1M-NY1".into()],
+            hdr: DisplayHdr::Unsupported,
+        },
+        MonitorInfo {
+            names: vec!["drm-2".into(), "DP-1".into()],
+            hdr: DisplayHdr::Unsupported,
+        },
+    ]);
+    host.describe_darkness(false, vec!["DP-1".into()]);
+
+    assert_eq!(
+        host.list_displays(),
+        HostMessage::DisplayList {
+            displays: vec![
+                ListedDisplay {
+                    display: laptop,
+                    names: vec!["drm-1".into(), "eDP-1".into(), "BOE NE135A1M-NY1".into()],
+                    lit: true,
+                },
+                ListedDisplay {
+                    display: dock,
+                    names: vec!["drm-2".into(), "DP-1".into()],
+                    lit: false,
+                },
+                ListedDisplay {
+                    display: window.clone(),
+                    names: vec!["domicile-0".into()],
+                    lit: true,
+                },
+            ]
+        }
+    );
+
+    host.describe_darkness(true, Vec::new());
+    let HostMessage::DisplayList { displays } = host.list_displays() else {
+        unreachable!("list_displays answers with a display list")
+    };
+    assert!(
+        displays.iter().all(|listed| !listed.lit),
+        "blanked or slept together, none is lit: {displays:?}"
+    );
+}
+
+#[test]
+fn every_window_is_listed_native_and_browser_alike() {
+    // A script sees one list of windows, whoever draws them, each by its
+    // `ext-foreign-toplevel-list-v1` identifier. Undrawn windows are not
+    // listed, as the chromes have not heard of them.
+    let mut host = Host::new();
+    let owner = Owner { pid: 4242, ..OWNER };
+    let editor = host.app_created(owner, "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".to_string());
+    host.app_mapped(&editor, mapped());
+    host.app_titled(&editor, Some("notes.org".into()));
+    host.app_desktop_id(&editor, "emacs".into());
+    host.app_created(OWNER, "nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7".to_string());
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: editor.clone(),
+    })
+    .unwrap();
+    host.browser_windows(vec![
+        BrowserWindow {
+            id: "3".into(),
+            title: "Inbox".into(),
+            app_id: "mail".into(),
+        },
+        BrowserWindow {
+            id: "7".into(),
+            title: "Example".into(),
+            app_id: String::new(),
+        },
+    ]);
+    host.browser_toplevel_ids(BTreeMap::from([
+        (
+            "3".to_string(),
+            "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+        ),
+        (
+            "7".to_string(),
+            "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".to_string(),
+        ),
+    ]));
+
+    assert_eq!(
+        host.list_windows(),
+        HostMessage::WindowList {
+            windows: vec![
+                ListedWindow {
+                    id: "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".into(),
+                    kind: WindowKind::Native,
+                    title: "notes.org".into(),
+                    app: Some("emacs".into()),
+                    pid: Some(4242),
+                    size: Some(SIZE),
+                    focused: true,
+                    urgent: false,
+                },
+                ListedWindow {
+                    id: "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".into(),
+                    kind: WindowKind::Browser,
+                    title: "Inbox".into(),
+                    app: Some("mail".into()),
+                    pid: None,
+                    size: None,
+                    focused: false,
+                    urgent: false,
+                },
+                ListedWindow {
+                    id: "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".into(),
+                    kind: WindowKind::Browser,
+                    title: "Example".into(),
+                    app: None,
+                    pid: None,
+                    size: None,
+                    focused: false,
+                    urgent: false,
+                },
+            ]
+        }
+    );
+}
 
 // ---- app lifecycle --------------------------------------------------------
 
