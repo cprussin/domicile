@@ -2449,6 +2449,42 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   }
 }
 
+void DomicileHost::clickBrowserWindowMenu(ScriptState*,
+                                          const String& id,
+                                          int32_t command,
+                                          ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  } else if (command < 1) {
+    exception_state.ThrowTypeError(
+        "command must be a menu entry's id, a whole number from 1");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->ClickMenu(id, command);
+  }
+}
+
+void DomicileHost::answerBrowserWindowMessageBox(
+    ScriptState*,
+    const String& id,
+    int32_t response,
+    bool checkbox_checked,
+    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  } else if (response < 0) {
+    exception_state.ThrowTypeError(
+        "response must be a button's index, a whole number from 0");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->AnswerMessageBox(id, response, checkbox_checked);
+  }
+}
+
 namespace {
 
 // The browser's answer to startCasting(): the cast's route, or why there is
@@ -2688,12 +2724,18 @@ void DomicileHost::ListBrowserWindows() {
     const auto toplevel_id = browser_toplevel_ids_.find(window->id);
     listed.push_back(MakeGarbageCollected<DomicileBrowserWindow>(
         window->id, window->url.GetString(), window->title,
-        window->popup_window == 0 ? std::nullopt
-                                  : std::optional<int32_t>(window->popup_window),
+        window->popup_window == 0
+            ? std::nullopt
+            : std::optional<int32_t>(window->popup_window),
         window->width, window->height, window->private_browsing,
         window->partition, window->app, window->app_id, window->captured,
         toplevel_id == browser_toplevel_ids_.end() ? String()
-                                                   : toplevel_id->value));
+                                                   : toplevel_id->value,
+        window->parent.empty() ? String() : String(window->parent), window->x,
+        window->y, window->hidden,
+        window->menu.empty() ? String() : window->menu,
+        window->menu_bar_visible, window->menu_bar_auto_hide,
+        window->message_box.empty() ? String() : window->message_box));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

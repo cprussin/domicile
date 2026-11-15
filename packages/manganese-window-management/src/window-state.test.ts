@@ -56,13 +56,21 @@ const listed = (
   id,
   isApp: false,
   isCaptured: false,
+  isHidden: false,
   isPrivate: false,
+  menu: undefined,
+  menuBarAutoHide: false,
+  menuBarVisible: true,
+  messageBox: undefined,
+  parent: undefined,
   partition: "",
   popupWindow: popup.popupWindow === 0 ? undefined : popup.popupWindow,
   title: "",
   toplevelId: undefined,
   url,
   width: popup.width,
+  x: 0,
+  y: 0,
 });
 
 /** Screens of 1920 by 1080, left to right in the order named. */

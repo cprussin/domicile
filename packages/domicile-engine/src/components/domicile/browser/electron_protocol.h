@@ -169,6 +169,58 @@ struct ElectronOpenWindow {
   std::string preload;
   // Its Electron partition; empty for the app's own session.
   std::string session;
+  // A WebContentsView's page rather than a BrowserWindow: listed to the shell
+  // only while a window holds it (ElectronSetViews).
+  bool view = false;
+};
+
+// Where a window holds one of its views, in CSS pixels from the top left of
+// the window's page, as the app asked: the shell lays the view out there or
+// elsewhere.
+struct ElectronViewPlacement {
+  ElectronWindow view;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  bool hidden = false;
+
+  friend bool operator==(const ElectronViewPlacement&,
+                         const ElectronViewPlacement&) = default;
+};
+
+// contentView.addChildView and friends: the views `window` holds, bottom
+// first, replacing the ones it held before.
+struct ElectronSetViews {
+  ElectronWindow window;
+  std::vector<ElectronViewPlacement> views;
+};
+
+// Menu.setApplicationMenu, win.setMenu, setMenuBarVisibility and
+// setAutoHideMenuBar: the menu bar the shell draws under `window`'s tab.
+struct ElectronSetMenuBar {
+  ElectronWindow window;
+  // The menu's entries as JSON, checked and with only the keys the shell
+  // reads; empty for no menu. See ElectronMenuJson.
+  std::string menu;
+  // Whether the bar shows. With `auto_hide`, it shows while Alt is held or
+  // after Alt is tapped, as Electron's autoHideMenuBar.
+  bool visible = true;
+  bool auto_hide = false;
+};
+
+// dialog.showMessageBox: a question the shell asks over `window`, which the
+// app knows as `box` until it is answered.
+struct ElectronShowMessageBox {
+  ElectronWindow window;
+  int box = 0;
+  // The box as JSON, checked and with only the keys the shell reads: "type",
+  // "title", "message", "detail", "buttons", "defaultId" (-1 for none),
+  // "cancelId", "checkboxLabel" and "checkboxChecked".
+  std::string message_box;
+  // How many buttons it has, and the one that answers when the shell can't.
+  int buttons = 0;
+  int cancel_id = 0;
 };
 
 struct ElectronLoadUrl {
@@ -518,7 +570,10 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronWebRequestAnswer,
                                      ElectronSessionCall,
                                      ElectronPermissionHandler,
-                                     ElectronPermissionAnswer>;
+                                     ElectronPermissionAnswer,
+                                     ElectronSetViews,
+                                     ElectronSetMenuBar,
+                                     ElectronShowMessageBox>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -562,6 +617,24 @@ std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);
 std::string ElectronWindowLoaded(ElectronWindow window);
 std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
+// The size, in CSS pixels, the shell gave window or view `window`'s page.
+std::string ElectronWindowResized(ElectronWindow window, int width, int height);
+// The user clicked entry `command` of `window`'s menu bar.
+std::string ElectronMenuClicked(ElectronWindow window, int command);
+// Message box `box` over `window` was answered with button `response`, and
+// its checkbox left checked or not.
+std::string ElectronMessageBoxAnswered(ElectronWindow window,
+                                       int box,
+                                       int response,
+                                       bool checkbox_checked);
+
+// `menu`, a list of menu entries, as the JSON the shell reads, or why it is
+// not one. Each entry is an object with a whole "id" from 1, a "type"
+// (normal, separator, submenu, checkbox or radio), a string "label", true or
+// false "enabled", "visible" and "checked", and optionally a string
+// "accelerator", a PNG data: URL "icon" and a "submenu" list of entries.
+base::expected<std::string, std::string> ElectronMenuJson(
+    const base::ListValue& menu);
 std::string ElectronIpcMessage(ElectronWindow window,
                                std::string_view channel,
                                const base::ListValue& args);
