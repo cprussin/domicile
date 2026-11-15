@@ -2,8 +2,10 @@
 // settings portal with the appearance a test gives, and a notification server
 // that writes down each notification, and a tray watcher that writes down
 // each item registered with it, and a file chooser portal that answers what a
-// test tells it to.
+// test tells it to, and, unless a test says there's none, a Secret Service
+// that keeps its items in memory, never locked.
 
+import type { MessageBus } from "dbus-next";
 import {
   DBusError,
   interface as dbusInterface,
@@ -108,7 +110,114 @@ export type AskedChooser = {
 };
 
 /** Starts the bus and its services; `address` goes in DBUS_SESSION_BUS_ADDRESS. */
-export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
+const ITEMS = "/org/freedesktop/secrets/collection/login/";
+const PROMPT = "/org/freedesktop/secrets/prompt/1";
+
+/** Whether the fake keyring is locked, and whether its prompt is dismissed. */
+export type KeyringState = { locked: boolean; dismiss: boolean };
+
+/** Answers the Secret Service calls Chromium's key storage makes. */
+const serveSecrets = (
+  bus: MessageBus,
+  secrets: StoredSecret[],
+  keyring: KeyringState,
+) => {
+  const reply = (message: Message, signature: string, body: unknown[]) => {
+    bus.send(Message.newMethodReturn(message, signature, body));
+    return true;
+  };
+  const pathOf = (index: number) => `${ITEMS}${index}`;
+  bus.addMethodHandler((message: Message) => {
+    const body = message.body as unknown[];
+    switch (`${message.interface}.${message.member}`) {
+      case "org.freedesktop.Secret.Service.OpenSession":
+        return reply(message, "vo", [
+          new Variant("s", ""),
+          "/org/freedesktop/secrets/session/1",
+        ]);
+      case "org.freedesktop.Secret.Session.Close":
+        return reply(message, "", []);
+      case "org.freedesktop.Secret.Service.SearchItems": {
+        const wanted = body[0] as Record<string, string>;
+        const found = secrets.flatMap((item, index) =>
+          Object.entries(wanted).every(
+            ([key, value]) => item.attributes[key] === value,
+          )
+            ? [pathOf(index)]
+            : [],
+        );
+        return reply(
+          message,
+          "aoao",
+          keyring.locked ? [[], found] : [found, []],
+        );
+      }
+      case "org.freedesktop.Secret.Service.Unlock":
+        return reply(message, "aoo", [[], PROMPT]);
+      case "org.freedesktop.Secret.Prompt.Prompt": {
+        reply(message, "", []);
+        if (!keyring.dismiss) {
+          keyring.locked = false;
+        }
+        bus.send(
+          Message.newSignal(
+            PROMPT,
+            "org.freedesktop.Secret.Prompt",
+            "Completed",
+            "bv",
+            [keyring.dismiss, new Variant("ao", [])],
+          ),
+        );
+        return true;
+      }
+      case "org.freedesktop.Secret.Service.GetSecrets": {
+        const [paths, session] = body as [string[], string];
+        return reply(message, "a{o(oayays)}", [
+          Object.fromEntries(
+            paths.map((path) => [
+              path,
+              [
+                session,
+                Buffer.alloc(0),
+                Buffer.from(
+                  secrets[Number(path.slice(ITEMS.length))]?.secret ?? "",
+                ),
+                "text/plain",
+              ],
+            ]),
+          ),
+        ]);
+      }
+      case "org.freedesktop.Secret.Collection.CreateItem": {
+        const [properties, [, , value]] = body as [
+          Record<string, Variant>,
+          [string, Buffer, Buffer, string],
+        ];
+        secrets.push({
+          attributes: properties["org.freedesktop.Secret.Item.Attributes"]
+            ?.value as Record<string, string>,
+          label: String(properties["org.freedesktop.Secret.Item.Label"]?.value),
+          secret: Buffer.from(value).toString("utf8"),
+        });
+        return reply(message, "oo", [pathOf(secrets.length - 1), "/"]);
+      }
+      default:
+        return false;
+    }
+  });
+};
+
+/** An item in the fake Secret Service. */
+export type StoredSecret = {
+  label: string;
+  attributes: Record<string, string>;
+  secret: string;
+};
+
+export const startFakeDesktopBus = async (
+  appearance: PortalAppearance,
+  { secretService = true }: { secretService?: boolean } = {},
+) => {
   const daemon = Bun.spawn(
     ["dbus-daemon", "--session", "--nofork", "--print-address=1"],
     { stderr: "inherit", stdin: "ignore", stdout: "pipe" },
@@ -145,6 +254,12 @@ export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
     bus.send(Message.newMethodReturn(message));
     return true;
   });
+  const secrets: StoredSecret[] = [];
+  const keyring: KeyringState = { dismiss: false, locked: false };
+  if (secretService) {
+    await bus.requestName("org.freedesktop.secrets", 0);
+    serveSecrets(bus, secrets, keyring);
+  }
   const chooser = {
     /** What the portal answers next: a response, and the URIs chosen. */
     answer: { response: 0, uris: [] as string[] },
@@ -194,9 +309,13 @@ export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
       daemon.kill();
       await daemon.exited;
     },
+    /** Whether the keyring is locked, and what its unlock prompt does. */
+    keyring,
     /** Each notification the server was sent, in order. */
     notifications: notifications.sent,
     /** Each item registered with the tray, in order. */
     registered,
+    /** The Secret Service's items. */
+    secrets,
   };
 };

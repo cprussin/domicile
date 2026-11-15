@@ -27,6 +27,7 @@ import {
   createProtocols,
   registerSchemesAsPrivileged,
 } from "./electron/protocol";
+import { createSafeStorage } from "./electron/safe-storage";
 import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
 import { createShell } from "./electron/shell";
@@ -162,6 +163,9 @@ const main = async ([resources, ...args]: string[]) => {
         ...session.defaultSession.protocol,
         registerSchemesAsPrivileged,
       },
+      safeStorage: createSafeStorage({
+        password: () => desktop.safeStoragePassword(app.getName()),
+      }),
       session,
       shell: createShell(runCommand),
       Tray: createTray({

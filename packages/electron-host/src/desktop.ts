@@ -13,6 +13,7 @@ import type {
   ChooserOptions,
 } from "./electron/dialog";
 import type { NotificationsBus } from "./electron/notification";
+import type { SafeStoragePassword } from "./electron/safe-storage";
 import type { Run } from "./electron/shell";
 
 /** Runs `command`, answering its exit code and its output, both streams. */
@@ -100,6 +101,9 @@ export const connectDesktop = async (address: string) => {
         ),
       on: notifications.on.bind(notifications),
     } satisfies NotificationsBus,
+    /** The app's safe storage password, read when the app first needs it. */
+    safeStoragePassword: (application: string) =>
+      safeStoragePasswordSync(address, application),
     settings,
   };
 };
@@ -231,4 +235,39 @@ export const chooseFileSync = (
     );
   }
   return JSON.parse(child.stdout.toString()) as ChooserAnswer;
+};
+
+/** The command that reads `application`'s safe storage password, printing it as JSON. */
+export const safeStoragePasswordCommand = (
+  address: string,
+  application: string,
+) => [
+  process.execPath,
+  join(import.meta.dir, "safe-storage-password.ts"),
+  address,
+  application,
+];
+
+/**
+ * `application`'s safe storage password, blocking until the Secret Service
+ * answers, as Electron's `safeStorage` does: a child process reads it
+ * (src/safe-storage-password.ts) while this one waits on it.
+ */
+export const safeStoragePasswordSync = (
+  address: string,
+  application: string,
+): SafeStoragePassword => {
+  const child = Bun.spawnSync(
+    safeStoragePasswordCommand(address, application),
+    { stderr: "pipe", stdout: "pipe" },
+  );
+  if (child.exitCode !== 0) {
+    throw new Error(
+      `reading the safe storage password from the Secret Service failed: ${child.stderr.toString().trim()}`,
+    );
+  }
+  const { password } = JSON.parse(child.stdout.toString()) as {
+    password: string | null;
+  };
+  return { password: password ?? undefined };
 };
