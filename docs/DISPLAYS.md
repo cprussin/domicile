@@ -387,6 +387,13 @@ zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicil
 
 - `kelvin` is 1000 to 6500. 6500 is neutral: an identity ramp. An empty
   curve would leave the last ramp on the CRTC.
+- A new night light fades in from the one drawn
+  (`domicile-compositor/src/night_light.rs`), on ramps and color matrices
+  alike. The fade takes 2.5 s per whole step of the gain that changes most:
+  about 1.5 s to switch on at 3000 K, a few frames for each 15 s step of a
+  schedule's ease. The compositor sends a ramp or matrix every 16 ms during a
+  fade and nothing between fades. A `wlr-gamma-control` client's ramp is
+  drawn as it sets it.
 - A gamma ramp, not a color matrix, so it works on drivers without a CTM.
 - A client is told the CRTC's own ramp size: `GAMMA_LUT_SIZE`, or the legacy
   ramp's. The GPU process reads it into each display's report

@@ -1,6 +1,7 @@
 //! Each monitor's gamma ramp, and who owns it.
 //!
-//! The night light sets a white point, for every monitor or for one. A
+//! The night light sets a white point, for every monitor or for one
+//! ([`crate::night_light`], which fades it). A
 //! `wlr-gamma-control` client (gammastep, wl-gammarelay-rs) sets a whole ramp
 //! for one monitor. One rule decides between them:
 //!
@@ -24,15 +25,15 @@ use std::collections::{HashMap, HashSet};
 
 use domicile_host::white_point::{white_point, WhitePoint, NEUTRAL};
 
+use crate::night_light::Lights;
+
 /// Every monitor's night light and gamma-control client.
 ///
 /// `H` names a client's hold: its `zwlr_gamma_control_v1`, or a number in the
 /// tests.
 pub struct Ramps<H> {
-    /// The night light of every monitor not in `by_output`.
-    every: WhitePoint,
-    /// Night lights the shell set for one monitor, by `wl_output` name.
-    by_output: HashMap<String, WhitePoint>,
+    /// The night lights drawn.
+    lights: Lights,
     /// How many entries each engine display's ramp has. A display it leaves
     /// out has no gamma.
     sizes: HashMap<i64, u32>,
@@ -72,8 +73,7 @@ pub struct WrongLength {
 impl<H: PartialEq> Default for Ramps<H> {
     fn default() -> Self {
         Ramps {
-            every: white_point(NEUTRAL),
-            by_output: HashMap::new(),
+            lights: Lights::default(),
             sizes: HashMap::new(),
             held: HashMap::new(),
             hdr: HashSet::new(),
@@ -83,19 +83,9 @@ impl<H: PartialEq> Default for Ramps<H> {
 }
 
 impl<H: PartialEq> Ramps<H> {
-    /// Sets the night light of `output`, or of every monitor when `None`.
-    /// Every monitor's replaces each one's, as the shell's switch for the
-    /// whole desk.
-    pub fn set_white_point(&mut self, output: Option<&str>, white: WhitePoint) {
-        match output {
-            Some(output) => {
-                self.by_output.insert(output.to_owned(), white);
-            }
-            None => {
-                self.every = white;
-                self.by_output.clear();
-            }
-        }
+    /// Sets the night lights to draw.
+    pub fn set_lights(&mut self, lights: Lights) {
+        self.lights = lights;
     }
 
     /// Takes the engine's ramp sizes. Returns the holds on displays that have
@@ -195,7 +185,7 @@ impl<H: PartialEq> Ramps<H> {
         if let Some(ramp) = self.held.get(&display).and_then(|held| held.ramp.clone()) {
             return Some(ramp);
         }
-        Some(ramp_of(self.white_of(output), size))
+        Some(ramp_of(self.lights.white_of(output), size))
     }
 
     /// The 3x3 color matrix, row-major, that `display`, shown as `output`,
@@ -209,21 +199,13 @@ impl<H: PartialEq> Ramps<H> {
         let warmed_here = self.hdr.contains(&display)
             || (self.connected.contains(&display) && !self.sizes.contains_key(&display));
         let white = if warmed_here {
-            self.white_of(output)
+            self.lights.white_of(output)
         } else {
             white_point(NEUTRAL)
         };
         let light = |gain: f64| gain.powf(2.2) as f32;
         let (red, green, blue) = (light(white.red), light(white.green), light(white.blue));
         [red, 0.0, 0.0, 0.0, green, 0.0, 0.0, 0.0, blue]
-    }
-
-    /// The night light of `output`, or every monitor's.
-    fn white_of(&self, output: Option<&str>) -> WhitePoint {
-        output
-            .and_then(|output| self.by_output.get(output))
-            .copied()
-            .unwrap_or(self.every)
     }
 }
 
@@ -254,6 +236,12 @@ mod tests {
         green: 0.5,
         blue: 0.25,
     };
+
+    fn lit(output: Option<&str>, white: WhitePoint) -> Lights {
+        let mut lights = Lights::default();
+        lights.set(output, white);
+        lights
+    }
 
     fn with_sizes(sizes: &[(i64, u32)]) -> Ramps<u32> {
         let mut ramps = Ramps::default();
@@ -293,26 +281,13 @@ mod tests {
     fn one_monitors_night_light_leaves_the_others_alone() {
         let mut ramps = with_sizes(&[(7, 2), (9, 2)]);
 
-        ramps.set_white_point(Some("eDP-2"), WARM);
+        ramps.set_lights(lit(Some("eDP-2"), WARM));
 
         assert_eq!(
             ramps.ramp(7, Some("eDP-1")),
             Some(ramp_of(white_point(NEUTRAL), 2))
         );
         assert_eq!(ramps.ramp(9, Some("eDP-2")), Some(ramp_of(WARM, 2)));
-    }
-
-    #[test]
-    fn every_monitors_night_light_replaces_each_ones() {
-        let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_white_point(Some("eDP-1"), WARM);
-
-        ramps.set_white_point(None, white_point(3400));
-
-        assert_eq!(
-            ramps.ramp(7, Some("eDP-1")),
-            Some(ramp_of(white_point(3400), 2))
-        );
     }
 
     #[test]
@@ -341,7 +316,7 @@ mod tests {
     #[test]
     fn a_clients_ramp_replaces_the_night_light_rather_than_warming_it() {
         let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_white_point(None, WARM);
+        ramps.set_lights(lit(None, WARM));
         ramps.hold(Some(7), 1).unwrap();
 
         assert_eq!(ramps.set(&1, vec![1, 2, 3, 4, 5, 6]), Ok(Some(7)));
@@ -352,7 +327,7 @@ mod tests {
     #[test]
     fn a_held_monitor_keeps_its_night_light_until_the_client_sets_a_ramp() {
         let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_white_point(None, WARM);
+        ramps.set_lights(lit(None, WARM));
 
         ramps.hold(Some(7), 1).unwrap();
 
@@ -380,7 +355,7 @@ mod tests {
     #[test]
     fn a_released_monitor_goes_back_to_its_night_light() {
         let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_white_point(Some("eDP-1"), WARM);
+        ramps.set_lights(lit(Some("eDP-1"), WARM));
         ramps.hold(Some(7), 1).unwrap();
         ramps.set(&1, vec![0; 6]).unwrap();
 
@@ -412,7 +387,7 @@ mod tests {
     #[test]
     fn a_monitor_in_hdr_is_warmed_in_linear_light_and_not_by_its_ramp() {
         let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_white_point(None, WARM);
+        ramps.set_lights(lit(None, WARM));
         in_hdr(&mut ramps, &[7]);
 
         assert_eq!(
@@ -430,7 +405,7 @@ mod tests {
     #[test]
     fn a_monitor_in_hdr_with_no_gamma_is_still_warmed() {
         let mut ramps = with_sizes(&[]);
-        ramps.set_white_point(Some("DP-1"), WARM);
+        ramps.set_lights(lit(Some("DP-1"), WARM));
         in_hdr(&mut ramps, &[7]);
 
         assert_eq!(ramps.ramp(7, Some("DP-1")), None);
@@ -440,7 +415,7 @@ mod tests {
     #[test]
     fn a_monitor_in_sdr_draws_through_the_identity() {
         let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_white_point(None, WARM);
+        ramps.set_lights(lit(None, WARM));
 
         assert_eq!(ramps.matrix(7, None), IDENTITY, "its ramp warms it");
         assert_eq!(ramps.ramp(7, None), Some(ramp_of(WARM, 2)));
@@ -450,7 +425,7 @@ mod tests {
     fn a_monitor_with_no_gamma_is_warmed_in_linear_light() {
         let mut ramps = with_sizes(&[(7, 2)]);
         ramps.set_connected([7, 9].into_iter().collect());
-        ramps.set_white_point(None, WARM);
+        ramps.set_lights(lit(None, WARM));
 
         assert_eq!(ramps.ramp(9, None), None);
         assert_eq!(ramps.matrix(9, None), ramps_in_hdr_matrix(WARM));
@@ -460,7 +435,7 @@ mod tests {
     #[test]
     fn a_display_on_no_connector_is_not_warmed() {
         let mut ramps = with_sizes(&[]);
-        ramps.set_white_point(None, WARM);
+        ramps.set_lights(lit(None, WARM));
 
         assert_eq!(
             ramps.matrix(9, None),
@@ -471,7 +446,7 @@ mod tests {
 
     fn ramps_in_hdr_matrix(white: WhitePoint) -> [f32; 9] {
         let mut ramps = with_sizes(&[]);
-        ramps.set_white_point(None, white);
+        ramps.set_lights(lit(None, white));
         in_hdr(&mut ramps, &[1]);
         ramps.matrix(1, None)
     }

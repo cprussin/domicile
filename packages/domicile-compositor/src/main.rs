@@ -119,6 +119,7 @@ mod locking;
 mod logind;
 mod memory_frames;
 mod modifiers;
+mod night_light;
 mod notifications;
 mod once_per_window;
 mod outbound;
@@ -467,6 +468,11 @@ struct DomicileCompositor {
     /// again to an engine that reports its displays, since a new engine
     /// starts neutral.
     gamma: gamma::Ramps<ZwlrGammaControlV1>,
+    /// The night light the shell set, and its fade into `gamma`.
+    night_light: night_light::NightLight,
+    /// Whether the next frame of the night light's fade is due, so one timer
+    /// draws it.
+    night_light_frame_due: bool,
     /// The `wp_color_management_output_v1`s clients hold, told when their
     /// display goes into or out of HDR.
     display_colors: color_management::DisplayColors,
@@ -1390,6 +1396,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         app_bounds: HashMap::new(),
         app_zoom: HashMap::new(),
         gamma: gamma::Ramps::default(),
+        night_light: night_light::NightLight::default(),
+        night_light_frame_due: false,
         display_colors: color_management::DisplayColors::default(),
         held_frames: HeldFrames::new(),
         suspended: HashSet::new(),

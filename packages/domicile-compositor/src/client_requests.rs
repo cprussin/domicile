@@ -722,8 +722,9 @@ impl DomicileCompositor {
                 output,
                 white_point,
             } => {
-                self.gamma.set_white_point(output.as_deref(), white_point);
-                self.restate_the_gamma();
+                self.night_light
+                    .set(output.as_deref(), white_point, Instant::now());
+                self.draw_the_night_light();
             }
             ClientRequest::PowerDisplays { power, display } => {
                 self.power_the_displays(power, display.as_deref());

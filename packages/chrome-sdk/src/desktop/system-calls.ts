@@ -182,8 +182,9 @@ export type System = {
    * Draw `display` (a display's `name`, connector or panel name, as a
    * profile matches it), or every monitor when it is left
    * out, as if its white were a light of `kelvin`, 1000 to 6500, as a
-   * night light does; 6500 draws colors as they are. Every monitor's replaces
-   * each one's. Lasts until the shell sets another, across reloads. Changes
+   * night light does; 6500 draws colors as they are. Fades from the color
+   * drawn: about 1.5 s to switch a night light on, a few frames for a small
+   * step. Every monitor's replaces each one's. Lasts until the shell sets another, across reloads. Changes
    * nothing on a nested desktop, nor on a monitor a night-light app such as
    * gammastep holds. Allowed while the desktop is locked.
    */
