@@ -2673,6 +2673,9 @@
             nodes.machine = {
               imports = [ self.nixosModules.domicile ];
               programs.domicile.enable = true;
+              # Electron apps read the theme from the settings portal, as
+              # on any desktop with Domicile's portal.
+              xdg.portal.enable = true;
               virtualisation = {
                 memorySize = 4096;
                 # See `tty-on-a-card-with-no-3d`.
