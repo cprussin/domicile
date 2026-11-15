@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { MessageBus } from "dbus-next";
 import { sessionBus } from "dbus-next";
-import { chooseFile, chooseFileCommand } from "./desktop";
+import { chooseFile, chooseFileCommand, runCommandSync } from "./desktop";
 import { startFakeDesktopBus } from "./desktop-bus-fixture";
 
 describe("the file chooser", () => {
@@ -66,5 +66,28 @@ describe("the file chooser", () => {
     });
     expect(await child.exited).toBe(0);
     expect(desktopBus.chooser.asked.at(-1)?.options.current_name).toBe("b.txt");
+  });
+});
+
+describe("runCommandSync", () => {
+  it("gives a command's output, errors and exit code", () => {
+    expect(
+      runCommandSync(["sh", "-c", "cat; echo oops >&2; exit 3"], {
+        input: Buffer.from("hi"),
+        output: true,
+      }),
+    ).toEqual({ code: 3, stderr: "oops\n", stdout: Buffer.from("hi") });
+  });
+
+  it("doesn't wait on a child the command leaves running", () => {
+    const started = performance.now();
+
+    const ran = runCommandSync(["sh", "-c", "sleep 5 & echo served >&2"], {
+      output: false,
+    });
+
+    expect(ran.code).toBe(0);
+    expect(ran.stderr).toBe("served\n");
+    expect(performance.now() - started).toBeLessThan(4000);
   });
 });

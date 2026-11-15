@@ -203,7 +203,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
 | `safeStorage` | Chromium's OSCrypt for Linux, byte for byte, built in the host (`src/electron/safe-storage.ts`), so what an app encrypted on its own Electron decrypts here and back: AES-128-CBC with the PBKDF2 key of a password the Secret Service keeps as "Chromium Safe Storage" with `application` set to the app's name (`src/secret-service.ts`), prefixed `v11`. The password is read, or created, when the app first needs it, blocking on a child process (`src/safe-storage-password.ts`) as Electron blocks on libsecret, so a locked keyring asks to be unlocked then. With no Secret Service, or an unlock refused, the backend is `basic_text`: encryption needs `setUsePlainTextEncryption(true)` and uses the hardcoded `v10` key, as in Electron |
 | `desktopCapturer` | the share picker |
-| `clipboard` | the desktop clipboard |
+| `clipboard` | the desktop clipboard through `wl-paste` and `wl-copy`, which the compositor serves with data-control (docs/use/CLIPBOARD.md), built in the host (`src/electron/clipboard.ts`). Each call waits on its command, as Electron's clipboard is synchronous; `selection` is the primary selection. `wl-copy` offers one type per copy, so a `write` of several formats throws, naming them, until the host can offer several. Rich copies in pages go through the engine's own clipboard, which has no such limit. The host's package needs `wl-clipboard` on its `PATH` |
 | `nativeImage` | the image's PNG or JPEG bytes, in the host. PNGs are read and written without a library (`src/png.ts`) for `resize`, `crop` and bitmaps; a JPEG is kept as it came and can't be decoded, so those throw for one. One scale factor, 1 |
 | `autoUpdater` | off; the app's package updates it |
 
@@ -293,7 +293,9 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `dialog` file dialogs
 - [ ] `dialog` message boxes (a shell-drawn dialog)
 - [x] `electron-host`: `safeStorage`
-- [ ] `desktopCapturer`, clipboard
+- [x] `electron-host`: `clipboard`
+- [ ] `clipboard.write` of several formats at once
+- [ ] `desktopCapturer`
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
