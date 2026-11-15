@@ -454,15 +454,74 @@ the shell draws under the window's tab.
   `domicile-guest-keydown` against them. The page gets the key first, so a
   page that takes the chord keeps it.
 
+`@domicile-desktop/sdk/app-menu` reads the menu: `appMenu(window.menu)` gives
+its entries with mnemonics found, hidden ones left out and accelerators
+parsed (with a `label` such as `Ctrl+Shift+N` to show). `acceleratedBy` finds
+the entry a `domicile-guest-keydown` runs, and `openedByMnemonic` the menu Alt
+and a letter open.
+
+<!-- tab: React -->
+
+```tsx
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { acceleratedBy, appMenu } from "@domicile-desktop/sdk/app-menu";
+import { type RefObject, useEffect, useMemo } from "react";
+
+const AppMenu = ({
+  id,
+  menu,
+  view,
+}: {
+  id: string;
+  menu: string;
+  view: RefObject<HTMLElement | null>;
+}) => {
+  const { browser } = useDomicile();
+  const entries = useMemo(() => appMenu(menu), [menu]);
+  useEffect(() => {
+    const element = view.current;
+    const run = (event: KeyboardEvent) => {
+      const entry = acceleratedBy(entries, event);
+      if (entry !== undefined) {
+        browser.clickMenu(id, entry.id);
+      }
+    };
+    element?.addEventListener("domicile-guest-keydown", run);
+    return () => element?.removeEventListener("domicile-guest-keydown", run);
+  }, [browser, entries, id, view]);
+  return (
+    <MenuBar
+      entries={entries}
+      onChoose={(entry) => browser.clickMenu(id, entry.id)}
+    />
+  );
+};
+```
+
+<!-- tab: JavaScript -->
+
 ```js
+import { acceleratedBy, appMenu } from "@domicile-desktop/sdk/app-menu";
+
 for (const window of domicile.browser.windows ?? []) {
   if (window.menu !== undefined && window.menuBarVisible) {
-    drawMenuBar(window.id, JSON.parse(window.menu), (entry) => {
+    const entries = appMenu(window.menu);
+    drawMenuBar(window.id, entries, (entry) => {
       domicile.browser.clickMenu(window.id, entry.id);
+    });
+    viewOf(window.id).addEventListener("domicile-guest-keydown", (event) => {
+      const entry = acceleratedBy(entries, event);
+      if (entry !== undefined) {
+        domicile.browser.clickMenu(window.id, entry.id);
+      }
     });
   }
 }
 ```
+
+<!-- /tabs -->
+
+Manganese draws it with the component library's `MenuBar`.
 
 See "Desktop pieces" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
 

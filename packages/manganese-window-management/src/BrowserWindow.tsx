@@ -18,12 +18,17 @@ import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/
 import { usePickerRequest } from "@domicile-desktop/manganese-page-requests/usePickerRequest";
 import { usePromptRequest } from "@domicile-desktop/manganese-page-requests/usePromptRequest";
 import { useSignInRequest } from "@domicile-desktop/manganese-page-requests/useSignInRequest";
+import {
+  acceleratedBy,
+  openedByMnemonic,
+} from "@domicile-desktop/sdk/app-menu";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import {
   WEBVIEW_DIALOG_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
+  WEBVIEW_GUEST_KEYUP_EVENT,
   WEBVIEW_ZOOM_IN_REQUEST_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
@@ -33,6 +38,7 @@ import { css, cx } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { AppAddress } from "./browser/AppAddress";
+import { AppMenuBar } from "./browser/AppMenuBar";
 import { leftOrigin } from "./browser/app-origin";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FindBar } from "./browser/FindBar";
@@ -43,6 +49,7 @@ import { PagePopup } from "./browser/PagePopup";
 import { PageProblem } from "./browser/PageProblem";
 import { PageTooltip } from "./browser/PageTooltip";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
+import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
@@ -504,6 +511,34 @@ export const BrowserWindow = ({
     [findBox, focusOwn, showPopup, view],
   );
 
+  // An Electron app's menu bar, the menu open on it, and whether Alt showed a
+  // bar that hides until Alt (`autoHideMenuBar`).
+  const menuBar = useAppMenuBar(domicile, window);
+  const [openMenu, setOpenMenu] = useState<number | undefined>(undefined);
+  const [menuBarShown, setMenuBarShown] = useState(false);
+  // Whether Alt is down with nothing pressed with it, so letting it go is a
+  // tap that shows or hides an auto-hidden bar.
+  const altAlone = useRef(false);
+  const shownMenuBar =
+    menuBar?.visible === true &&
+    !pageFullscreen &&
+    (!menuBar.autoHide || menuBarShown || openMenu !== undefined)
+      ? menuBar
+      : undefined;
+  const openedMenu = useCallback((opened: number | undefined) => {
+    setOpenMenu(opened);
+    // A choice or Escape puts an auto-hidden bar away, as on Electron.
+    if (opened === undefined) {
+      setMenuBarShown(false);
+    }
+  }, []);
+  const chooseMenuEntry = useCallback(
+    (id: number) => {
+      domicile.browser.clickMenu(window, id);
+    },
+    [domicile, window],
+  );
+
   // Focuses the find bar when it opens.
   useEffect(() => {
     if (findBox !== null) {
@@ -519,9 +554,33 @@ export const BrowserWindow = ({
       return undefined;
     } else {
       const pressed = (event: KeyboardEvent) => {
+        altAlone.current =
+          event.key === "Alt" && (altAlone.current || !event.repeat);
+        // An app's accelerators come before the browser's keys, as its menu
+        // runs them in Electron, and Alt with a mnemonic opens a menu.
+        const accelerated =
+          menuBar === undefined
+            ? undefined
+            : acceleratedBy(menuBar.entries, event);
+        const mnemonic =
+          menuBar === undefined || !menuBar.visible
+            ? undefined
+            : openedByMnemonic(menuBar.entries, event);
         const command = browserCommandFor(event);
-        if (command !== undefined) {
+        if (accelerated !== undefined) {
+          chooseMenuEntry(accelerated.id);
+        } else if (mnemonic !== undefined) {
+          setOpenMenu(mnemonic.id);
+        } else if (command !== undefined) {
           run(command);
+        }
+      };
+      const released = (event: KeyboardEvent) => {
+        if (event.key === "Alt" && altAlone.current) {
+          altAlone.current = false;
+          if (menuBar?.visible === true && menuBar.autoHide) {
+            setMenuBarShown((shown) => !shown);
+          }
         }
       };
       const zoomIn = () => {
@@ -531,15 +590,17 @@ export const BrowserWindow = ({
         run(BrowserCommand.ZoomOut);
       };
       view.addEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+      view.addEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
       view.addEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
       view.addEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       return () => {
         view.removeEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+        view.removeEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
         view.removeEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
         view.removeEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       };
     }
-  }, [run, view]);
+  }, [chooseMenuEntry, menuBar, run, view]);
 
   // Gives the keyboard to the focused window's page.
   //
@@ -764,6 +825,14 @@ export const BrowserWindow = ({
             sitePermissions={sitePermissions}
             visited={shown.visited}
             zoom={zoom}
+          />
+        )}
+        {shownMenuBar !== undefined && (
+          <AppMenuBar
+            entries={shownMenuBar.entries}
+            onChoose={chooseMenuEntry}
+            onOpen={openedMenu}
+            open={openMenu}
           />
         )}
         {isApp && !pageFullscreen && leftOrigin(start, address) && (

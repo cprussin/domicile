@@ -342,6 +342,29 @@ export class FakeDomicileHost {
     });
   }
 
+  /**
+   * Browser window `id`'s Electron app set its menu bar: `menu` as the engine
+   * lists it (JSON entries), or null for none.
+   */
+  setMenuBar(
+    id: string,
+    menu: string | null,
+    { autoHide = false, visible = true } = {},
+  ): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id
+          ? {
+              ...window,
+              menu,
+              menuBarAutoHide: autoHide,
+              menuBarVisible: visible,
+            }
+          : window,
+      ),
+    });
+  }
+
   /** The engine closed browser window `id`. `closeBrowserWindow` calls this too. */
   closeBrowser(id: string): void {
     this.set({
