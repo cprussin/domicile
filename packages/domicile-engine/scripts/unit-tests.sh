@@ -46,6 +46,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 799, and it was 798 — a window that has not drawn keeping its frames
+# unthrottled is one more FrameSinkBroker case. Before that
 # 798, and it was 787 — an Electron app's session calls (cookies, storage,
 # cache, user agent) are six more ElectronProtocol cases and five more
 # ElectronApp ones. Before that
@@ -268,7 +270,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=798
+FLOOR=799
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
