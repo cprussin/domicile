@@ -198,8 +198,8 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)) |
 | `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)) |
 | `dialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
-| `nativeTheme` | the desktop theme |
-| `shell.openExternal` | `domicile open` |
+| `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
+| `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
 | `safeStorage` | Secret Service on D-Bus |
 | `desktopCapturer` | the share picker |
 | `clipboard` | the desktop clipboard |
@@ -259,6 +259,9 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
   app still gets a working app.
 - **Tray and notifications over D-Bus from the host:** the compositor already
   serves both, and Electron uses the same interfaces on Linux.
+- **`dbus-next` for the host's D-Bus:** a pure-JS client that runs under
+  Bun. Its optional native socket modules stay unbuilt; the host needs none
+  of what they add (fd passing, abstract sockets).
 
 ## Plan
 
@@ -279,7 +282,9 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: session cookies, storage clearing, `clearCache`, `setUserAgent`
 - [x] `electron-host`: `setPermissionRequestHandler`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
-- [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
+- [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
+- [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`
+- [ ] tray, notifications, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron

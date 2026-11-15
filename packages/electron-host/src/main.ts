@@ -5,8 +5,9 @@
 import { access, readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { readAppPackage } from "./app-package";
+import { watchAppearance } from "./appearance";
+import { portalSettings, runCommand } from "./desktop";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
 import { createIpcMain } from "./electron/ipc-main";
@@ -14,6 +15,8 @@ import {
   MessageChannelMain,
   MessagePortMain,
 } from "./electron/message-port-main";
+import type { Appearance } from "./electron/native-theme";
+import { createNativeTheme } from "./electron/native-theme";
 import { createPermissions } from "./electron/permissions";
 import {
   createProtocols,
@@ -21,9 +24,11 @@ import {
 } from "./electron/protocol";
 import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
+import { createShell } from "./electron/shell";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
 import { connectEngine } from "./engine";
+import type { Environment } from "./environment";
 import { readEnvironment } from "./environment";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
@@ -100,17 +105,27 @@ const main = async ([resources, ...args]: string[]) => {
       permissions,
     );
     const BrowserWindow = createBrowserWindow(engine, app, ipc, session);
+    // Read before the app's main runs, as an app reads its theme as it starts.
+    const theme: { changed?: (next: Appearance) => void } = {};
+    const { appearanceChanged, nativeTheme } = createNativeTheme(
+      await watchAppearance(await desktopSettings(env), (next) => {
+        theme.changed?.(next);
+      }),
+    );
+    theme.changed = appearanceChanged;
     const electron = {
       app,
       BrowserWindow,
       ipcMain,
       MessageChannelMain,
       MessagePortMain,
+      nativeTheme,
       protocol: {
         ...session.defaultSession.protocol,
         registerSchemesAsPrivileged,
       },
       session,
+      shell: createShell(runCommand),
     };
     Bun.plugin({
       name: "electron",
@@ -125,6 +140,22 @@ const main = async ([resources, ...args]: string[]) => {
     process.argv = [process.execPath, ...args];
     await import(pkg.main);
     markReady();
+  }
+};
+
+/** The desktop's settings portal, or the host fails, naming why. */
+const desktopSettings = async (env: Environment) => {
+  const address =
+    env.DBUS_SESSION_BUS_ADDRESS ??
+    fail(
+      "DBUS_SESSION_BUS_ADDRESS is not set, so there is no desktop session bus to read the theme from. Start the app from inside a Domicile desktop.",
+    );
+  try {
+    return await portalSettings(address);
+  } catch (error) {
+    return fail(
+      `couldn't reach the desktop's settings portal: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 };
 

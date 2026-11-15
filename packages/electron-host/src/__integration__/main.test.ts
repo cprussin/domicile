@@ -8,15 +8,17 @@ import { fileURLToPath } from "node:url";
 import { writeAsar } from "../asar-fixture";
 import type { FakeEngine } from "../engine-fixture";
 import { startFakeEngine } from "../engine-fixture";
+import { startFakePortal } from "../portal-fixture";
 
 const MAIN = join(import.meta.dir, "../main.ts");
 
 const MAIN_JS = `
-const { app } = require("electron");
+const { app, nativeTheme } = require("electron");
 app.whenReady().then(() => {
   console.log(JSON.stringify({
     appPath: app.getAppPath(),
     argv: process.argv.slice(1),
+    dark: nativeTheme.shouldUseDarkColors,
     electron: process.versions.electron,
     name: app.getName(),
     resourcesPath: process.resourcesPath,
@@ -43,11 +45,18 @@ const run = async (
   args: string[],
   engine: FakeEngine | undefined,
 ) => {
-  const { DOMICILE_ELECTRON_SOCK: _theirs, ...inherited } = env;
+  const {
+    DBUS_SESSION_BUS_ADDRESS: _theirBus,
+    DOMICILE_ELECTRON_SOCK: _theirs,
+    ...inherited
+  } = env;
   const child = Bun.spawn(["bun", MAIN, resources, ...args], {
     env: {
       ...inherited,
       ...(engine === undefined ? {} : { DOMICILE_ELECTRON_SOCK: engine.path }),
+      ...(portal === undefined
+        ? {}
+        : { DBUS_SESSION_BUS_ADDRESS: portal.address }),
       HOME: home,
       XDG_CACHE_HOME: join(home, ".cache"),
       XDG_CONFIG_HOME: join(home, ".config"),
@@ -63,10 +72,13 @@ const run = async (
 };
 
 let engine: FakeEngine | undefined;
+let portal: Awaited<ReturnType<typeof startFakePortal>> | undefined;
 
 afterEach(async () => {
   await engine?.close();
+  await portal?.close();
   engine = undefined;
+  portal = undefined;
 });
 
 describe("electron-host", () => {
@@ -81,6 +93,7 @@ describe("electron-host", () => {
     });
 
     engine = await startFakeEngine();
+    portal = await startFakePortal({ colorScheme: 1, contrast: 0 });
     const { code, stdout } = await run(
       resources,
       home,
@@ -92,6 +105,7 @@ describe("electron-host", () => {
     expect(code).toBe(0);
     expect(seen).toMatchObject({
       argv: ["--open", "x.txt"],
+      dark: true,
       electron: "45.2.1",
       name: "Notes",
       type: "browser",
@@ -150,6 +164,7 @@ describe("electron-host", () => {
       }
     });
 
+    portal = await startFakePortal({ colorScheme: 2, contrast: 0 });
     const { code, stderr, stdout } = await run(resources, home, [], engine);
 
     expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
@@ -192,5 +207,22 @@ describe("electron-host", () => {
 
     expect(code).toBe(1);
     expect(stderr).toContain("DOMICILE_ELECTRON_SOCK is not set");
+  });
+
+  it("says why when there is no session bus to read the theme from", async () => {
+    const home = await mkdtemp(join(tmpdir(), "electron-host-main-"));
+    const resources = join(home, "install/resources");
+    await writeAsar(join(resources, "app.asar"), {
+      "main.js": { content: MAIN_JS },
+      "package.json": {
+        content: `{"main":"main.js","name":"notes","version":"1.2.3"}`,
+      },
+    });
+    engine = await startFakeEngine();
+
+    const { code, stderr } = await run(resources, home, [], engine);
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("DBUS_SESSION_BUS_ADDRESS is not set");
   });
 });
