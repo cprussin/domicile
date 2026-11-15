@@ -231,3 +231,29 @@ fn a_script_naming_itself_ends() {
         Err(ElectronError::NotElectron { .. })
     ));
 }
+
+#[test]
+fn the_entry_electron_apps_wrote_gives_the_apps_own_command() {
+    let root = tempfile::tempdir().unwrap();
+    let slack = bundled(root.path());
+    let apps = root.path().join("applications");
+    write(
+        &apps,
+        "slack.desktop",
+        &entry(&format!(
+            "domicile open --electron slack.desktop -- {} -s %U",
+            slack.display()
+        )),
+    );
+
+    let found = electron_app("slack.desktop", &[], root.path(), &[apps], None).unwrap();
+
+    assert_eq!(
+        found.resources,
+        canonical(root.path().join("opt/Slack/resources"))
+    );
+    assert_eq!(
+        found.fallback,
+        Some(vec![slack.display().to_string(), "-s".into()])
+    );
+}

@@ -1051,10 +1051,41 @@ pub struct LockdownConfig {
     pub disable_sound_output: bool,
 }
 
+/// Installed Electron apps that run on the desktop's engine instead of the
+/// Electron they ship. See `docs/architecture/ELECTRON-APPS.md`.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ElectronConfig {
+    /// Desktop file ids, as `slack.desktop`. Whatever starts one of these
+    /// entries (the launcher, a link, a notification) runs it with
+    /// `domicile open --electron`. An app the engine can't run yet runs on
+    /// its own Electron, with a notification saying so.
+    pub apps: Vec<String>,
+}
+
+impl ElectronConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        match self
+            .apps
+            .iter()
+            .find(|app| app.is_empty() || app.contains('/'))
+        {
+            Some(app) => Err(ConfigError::Validation(format!(
+                "electron.apps holds {app:?}, which is no desktop file id; name the entry \
+                 as `slack.desktop`"
+            ))),
+            None => Ok(()),
+        }
+    }
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub electron: ElectronConfig,
     pub extensions: ExtensionsConfig,
     pub files: FilesConfig,
     pub idle: IdleConfig,
@@ -1124,6 +1155,7 @@ impl Config {
 
     /// Validation the deserializer cannot express.
     fn validate(&self) -> Result<(), ConfigError> {
+        self.electron.validate()?;
         self.extensions.validate()?;
         self.idle.validate()?;
         self.input.validate()?;

@@ -88,6 +88,7 @@ mod display_sleep;
 mod dmabuf_descriptor;
 mod dmabuf_import;
 mod eis;
+mod electron_apps;
 mod engine;
 mod engine_buffers;
 mod engine_damage;
@@ -451,6 +452,9 @@ struct DomicileCompositor {
     /// The clients launched from the chrome, kept for the next compositor;
     /// see [`crate::launches`]. `None` when started without `--launches`.
     launched: Option<Arc<launches::Launches>>,
+    /// Where the entries that run `electron.apps` on the engine go; see
+    /// [`crate::electron_apps`]. `None` writes none.
+    electron_entries: Option<PathBuf>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// Where the page last said each window is, in desktop logical units
@@ -843,6 +847,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     // Every process started from here on is told it; see `desk_terminal`.
     domicile_host::desk_terminal::set(config.terminal.clone());
+    // Before any client starts, so the launcher's first listing has them.
+    if let Some(out) = &arguments.electron_entries {
+        electron_apps::write_the_electron_entries(out, &config.electron.apps);
+    }
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<DomicileCompositor> = Display::new()?;
@@ -1392,6 +1400,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         scope_clients: arguments.scope_clients,
         launched: launched.clone(),
+        electron_entries: arguments.electron_entries.clone(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
         app_zoom: HashMap::new(),

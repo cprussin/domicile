@@ -188,6 +188,21 @@
       "required": ["display"],
       "type": "object"
     },
+    "ElectronConfig": {
+      "additionalProperties": false,
+      "description": "Installed Electron apps that run on the desktop's engine instead of the\nElectron they ship. See `docs/architecture/ELECTRON-APPS.md`.",
+      "properties": {
+        "apps": {
+          "default": [],
+          "description": "Desktop file ids, as `slack.desktop`. Whatever starts one of these\nentries (the launcher, a link, a notification) runs it with\n`domicile open --electron`. An app the engine can't run yet runs on\nits own Electron, with a notification saying so.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "ExtensionSettings": {
       "additionalProperties": false,
       "description": "One extension's settings. See [`ExtensionsConfig::settings`].",
@@ -897,6 +912,12 @@
       "default": null,
       "description": "Where editors find this file's JSON Schema. Domicile ignores it.",
       "type": ["string", "null"]
+    },
+    "electron": {
+      "$ref": "#/$defs/ElectronConfig",
+      "default": {
+        "apps": []
+      }
     },
     "extensions": {
       "$ref": "#/$defs/ExtensionsConfig",

@@ -734,6 +734,30 @@ fn an_empty_startup_command_is_refused() {
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
+// ---- electron -------------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_electron_runs_no_app_on_the_engine() {
+    assert!(Config::parse("{}").unwrap().electron.apps.is_empty());
+}
+
+#[test]
+fn electron_apps_are_desktop_file_ids() {
+    let apps = Config::parse(r#"{ "electron": { "apps": ["slack.desktop", "element-desktop"] } }"#)
+        .unwrap()
+        .electron
+        .apps;
+    assert_eq!(apps, ["slack.desktop", "element-desktop"]);
+}
+
+#[test]
+fn an_electron_app_given_as_a_path_is_refused() {
+    let err =
+        Config::parse(r#"{ "electron": { "apps": ["/usr/share/applications/slack.desktop"] } }"#)
+            .unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
 // ---- terminal -------------------------------------------------------------
 
 #[test]
