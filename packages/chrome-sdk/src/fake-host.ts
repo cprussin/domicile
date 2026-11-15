@@ -253,28 +253,37 @@ export class FakeDomicileHost {
    * `isApp` `domicile open --app`. `openBrowserWindow` calls this too, and
    * `openPrivateBrowserWindow` with `isPrivate`, and `openApp` with `isApp`
    * and `appId`. Ids count up from `"1"`; the asked-for size is 0 unless
-   * `width` and `height` give one.
+   * `width` and `height` give one. With a `parent`, it is an Electron app's
+   * view in that window, at `x` and `y`.
    */
   openBrowser(
     url: string,
     {
       appId = "",
       isApp = false,
+      isHidden = false,
       isPrivate = false,
+      parent = null,
       partition = "",
       popupWindow = null,
       width = 0,
       height = 0,
+      x = 0,
+      y = 0,
     }: Partial<
       Pick<
         DomicileBrowserWindow,
         | "appId"
         | "height"
         | "isApp"
+        | "isHidden"
         | "isPrivate"
+        | "parent"
         | "partition"
         | "popupWindow"
         | "width"
+        | "x"
+        | "y"
       >
     > = {},
   ): void {
@@ -288,13 +297,21 @@ export class FakeDomicileHost {
           id: this.#browsersOpened.toString(),
           isApp,
           isCaptured: false,
+          isHidden,
           isPrivate,
+          menu: null,
+          menuBarAutoHide: false,
+          menuBarVisible: true,
+          messageBox: null,
+          parent,
           partition,
           popupWindow,
           title: "",
           toplevelId: null,
           url,
           width,
+          x,
+          y,
         } satisfies DomicileBrowserWindow,
       ],
     });
@@ -330,6 +347,41 @@ export class FakeDomicileHost {
     this.set({
       browserWindows: (this.#state.browserWindows ?? []).map((window) =>
         window.id === id ? { ...window, isCaptured: captured } : window,
+      ),
+    });
+  }
+
+  /**
+   * Browser window `id`'s Electron app set its menu bar: `menu` as the engine
+   * lists it (JSON entries), or null for none.
+   */
+  setMenuBar(
+    id: string,
+    menu: string | null,
+    { autoHide = false, visible = true } = {},
+  ): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id
+          ? {
+              ...window,
+              menu,
+              menuBarAutoHide: autoHide,
+              menuBarVisible: visible,
+            }
+          : window,
+      ),
+    });
+  }
+
+  /**
+   * Browser window `id` shows its Electron app's message box `box`, as the
+   * engine lists it (JSON), or null for none.
+   */
+  setMessageBox(id: string, box: string | null): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, messageBox: box } : window,
       ),
     });
   }

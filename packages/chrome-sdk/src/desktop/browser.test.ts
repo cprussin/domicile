@@ -21,15 +21,55 @@ describe("browser", () => {
         id: "1",
         isApp: false,
         isCaptured: false,
+        isHidden: false,
         isPrivate: false,
+        menu: undefined,
+        menuBarAutoHide: false,
+        menuBarVisible: true,
+        messageBox: undefined,
+        parent: undefined,
         partition: "",
         popupWindow: undefined,
         title: "",
         toplevelId: undefined,
         url: "https://example.com/",
         width: 0,
+        x: 0,
+        y: 0,
       },
     ]);
+  });
+
+  it("lists an Electron app's views apart from the windows", () => {
+    const fake = new FakeDomicileHost();
+    fake.openBrowser("https://a.example/", { isApp: true });
+    fake.openBrowser("https://b.example/", {
+      height: 560,
+      parent: "1",
+      width: 800,
+      x: 0,
+      y: 40,
+    });
+    const { browser } = desktop(fake.host);
+
+    expect(browser.windows?.map(({ id }) => id)).toEqual(["1"]);
+    expect(
+      browser.views?.map(({ id, parent, x, y, width, height }) => ({
+        height,
+        id,
+        parent,
+        width,
+        x,
+        y,
+      })),
+    ).toEqual([{ height: 560, id: "2", parent: "1", width: 800, x: 0, y: 40 }]);
+    // The same lists until the browser lists again, as a React store needs.
+    expect(browser.windows).toBe(browser.windows);
+    expect(browser.views).toBe(browser.views);
+  });
+
+  it("lists no views until the browser has", () => {
+    expect(desktop(new FakeDomicileHost().host).browser.views).toBeUndefined();
   });
 
   it("opens and closes browser windows", () => {
@@ -40,6 +80,8 @@ describe("browser", () => {
     browser.openPrivate("https://c.example/");
     browser.openApp("https://d.example/");
     browser.close("1");
+    browser.clickMenu("2", 7);
+    browser.answerMessageBox("2", 1, true);
 
     expect(fake.calls).toStrictEqual([
       ["openBrowserWindow", "https://a.example/", ""],
@@ -47,6 +89,8 @@ describe("browser", () => {
       ["openPrivateBrowserWindow", "https://c.example/"],
       ["openAppWindow", "https://d.example/", "", "new"],
       ["closeBrowserWindow", "1"],
+      ["clickBrowserWindowMenu", "2", 7],
+      ["answerBrowserWindowMessageBox", "2", 1, true],
     ]);
   });
 

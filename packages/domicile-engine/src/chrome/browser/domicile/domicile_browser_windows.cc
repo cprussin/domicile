@@ -4,6 +4,7 @@
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 
 #include <algorithm>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -218,7 +219,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
       const WebViewPartition& partition,
       const std::string& preload,
       ElectronPageCalls calls,
-      base::WeakPtr<ElectronSession> session) {
+      base::WeakPtr<ElectronSession> session,
+      bool view) {
     WebViewGuest* made = Make(
         [&](WebViewGuest& guest) {
           // Before the first navigation, which runs the preload and loads
@@ -232,11 +234,125 @@ class DeskWindows final : public base::SupportsUserData::Data,
         },
         /*popup_window=*/std::nullopt, 0, 0,
         /*private_browsing=*/false, /*app=*/true, partition,
-        /*app_host=*/std::string(), app_id);
+        /*app_host=*/std::string(), app_id, view);
     if (made == nullptr) {
       return std::nullopt;
     }
     return made->window_id();
+  }
+
+  // Window `id` holds `views`, bottom first, and no others. The app made
+  // sure `id` is a window and each of `views` a view, both its own; a window
+  // or view that closed meanwhile is skipped.
+  void SetViews(const std::string& id, std::vector<ElectronDeskView> views) {
+    if (std::ranges::find(windows_, id, &Window::id) == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to set the views of browser window "
+                   << id << ", which is not open.";
+      return;
+    }
+    for (Window& window : windows_) {
+      if (window.parent == id) {
+        window.parent.clear();
+      }
+    }
+    int stack = 0;
+    for (const ElectronDeskView& placed : views) {
+      auto view = std::ranges::find(windows_, placed.id, &Window::id);
+      if (view == windows_.end()) {
+        continue;
+      }
+      CHECK(view->view) << "browser window " << placed.id
+                        << " was placed as a view and is a window";
+      view->parent = id;
+      view->x = placed.x;
+      view->y = placed.y;
+      view->width = placed.width;
+      view->height = placed.height;
+      view->hidden = placed.hidden;
+      view->stack = stack++;
+    }
+    Changed();
+  }
+
+  // Window `id`'s menu bar. The app made sure `id` is one of its windows; one
+  // that closed meanwhile is skipped.
+  void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to set the menu bar of browser window "
+                   << id << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id
+                         << " was given a menu bar and is a view";
+    if (window->menu_bar == bar) {
+      return;
+    }
+    window->menu_bar = std::move(bar);
+    Changed();
+  }
+
+  // The user clicked entry `command` of window `id`'s menu bar. A window that
+  // closed meanwhile, or that has no menu, is a click that raced it.
+  void ClickMenu(const std::string& id, int command) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end() || window->menu_bar.menu.empty()) {
+      LOG(WARNING) << "domicile: a click on the menu of browser window " << id
+                   << ", which has none.";
+      return;
+    }
+    ElectronPage* page = ElectronPage::FromWebContents(&window->guest->contents());
+    CHECK(page) << "browser window " << id
+                << " has a menu bar and no Electron app";
+    page->MenuClicked(command);
+  }
+
+  // Asks `box` over window `id`, after any it is already asking. The app made
+  // sure `id` is one of its windows; one that closed meanwhile answers with
+  // the box's cancel button at once.
+  void ShowMessageBox(const std::string& id,
+                      ElectronDeskMessageBox box,
+                      base::OnceCallback<void(int, bool)> answered) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to show a message box over browser "
+                      "window "
+                   << id << ", which is not open; it answers Cancel.";
+      std::move(answered).Run(box.cancel_id, false);
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id
+                         << " was asked to show a message box and is a view";
+    window->message_boxes.push_back(
+        {.box = std::move(box), .answered = std::move(answered)});
+    // The shell lists only the first; later ones wait their turn.
+    if (window->message_boxes.size() == 1) {
+      Changed();
+    }
+  }
+
+  // The user answered the message box window `id` shows with button
+  // `response`. A window that closed meanwhile, or shows none, is an answer
+  // that raced it. Returns false for a button the box doesn't have.
+  bool AnswerMessageBox(const std::string& id,
+                        int response,
+                        bool checkbox_checked) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end() || window->message_boxes.empty()) {
+      LOG(WARNING) << "domicile: an answer to a message box over browser "
+                      "window "
+                   << id << ", which shows none.";
+      return true;
+    }
+    AskedMessageBox& shown = window->message_boxes.front();
+    if (response < 0 || response >= shown.box.buttons) {
+      return false;
+    }
+    base::OnceCallback<void(int, bool)> answered = std::move(shown.answered);
+    window->message_boxes.pop_front();
+    Changed();
+    std::move(answered).Run(response, checkbox_checked);
+    return true;
   }
 
   // Opens an app window at an app module's `url`, pinned to `app_host`. See
@@ -320,6 +436,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // <webview> shows the page only while the page exists. Muted meanwhile,
     // since the window is closed as far as anyone hears.
     found->guest->contents().SetAudioMuted(true);
+    // Its message boxes answer with their cancel buttons, as the app waits on
+    // each.
+    std::deque<AskedMessageBox> boxes = std::move(found->message_boxes);
     closing_.push_back({id, std::move(found->guest)});
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
@@ -327,8 +446,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
                        closing_.back().id),
         kLinger);
     windows_.erase(found);
+    // Its views stay open, unlisted, as an Electron app's WebContentsViews
+    // outlive the window that held them until the app closes them.
+    for (Window& window : windows_) {
+      if (window.parent == id) {
+        window.parent.clear();
+      }
+    }
     LOG(INFO) << "domicile: closed browser window " << id << ".";
     Changed();
+    for (AskedMessageBox& box : boxes) {
+      std::move(box.answered).Run(box.box.cancel_id, false);
+    }
   }
 
   // Closes window `id` once its page agrees; see WebViewGuest::AskToClose. An
@@ -356,26 +485,26 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return found == windows_.end() ? std::string() : found->id;
   }
 
-  // The whole list, as sent to the shell.
+  // The whole list, as sent to the shell: the windows oldest first, each
+  // followed by the views it holds, bottom first. A view no window holds is
+  // left out.
   std::vector<mojom::BrowserWindowPtr> List() const {
     std::vector<mojom::BrowserWindowPtr> list;
     for (const Window& window : windows_) {
-      content::WebContents& contents = window.guest->contents();
-      content::NavigationEntry* entry =
-          contents.GetController().GetVisibleEntry();
-      // A page's new window has only its initial entry until its first
-      // navigation commits.
-      const bool navigated = entry != nullptr && !entry->IsInitialEntry();
-      const std::optional<WebViewPartition> partition =
-          window.guest->partition();
-      list.push_back(mojom::BrowserWindow::New(
-          window.id, navigated ? entry->GetVirtualURL() : window.opened_at,
-          base::UTF16ToUTF8(contents.GetTitle()),
-          window.guest->popup_window().value_or(0), window.width,
-          window.height, contents.GetBrowserContext()->IsOffTheRecord(),
-          partition.has_value() ? WebViewPartitionAttribute(*partition)
-                                : std::string(),
-          window.app, window.app_id, window.captures > 0));
+      if (window.view) {
+        continue;
+      }
+      list.push_back(Listed(window));
+      std::vector<const Window*> views;
+      for (const Window& view : windows_) {
+        if (view.view && view.parent == window.id) {
+          views.push_back(&view);
+        }
+      }
+      std::ranges::sort(views, {}, &Window::stack);
+      for (const Window* view : views) {
+        list.push_back(Listed(*view));
+      }
     }
     return list;
   }
@@ -450,6 +579,12 @@ class DeskWindows final : public base::SupportsUserData::Data,
     base::RepeatingClosure changed_;
   };
 
+  // A message box a window asks, and where its answer goes.
+  struct AskedMessageBox {
+    ElectronDeskMessageBox box;
+    base::OnceCallback<void(int, bool)> answered;
+  };
+
   struct Window {
     std::string id;
     std::unique_ptr<WebViewGuest> guest;
@@ -464,19 +599,57 @@ class DeskWindows final : public base::SupportsUserData::Data,
     GURL opened_at;
     // The captures of its page running; see Capture.
     int captures = 0;
+    // An Electron app's WebContentsView page: listed only while a window
+    // holds it, as `parent`, at `x`, `y`, `width` and `height` in its page,
+    // `stack` from the bottom of its views, and `hidden` when the app hid it.
+    bool view = false;
+    std::string parent;
+    int x = 0;
+    int y = 0;
+    bool hidden = false;
+    int stack = 0;
+    // An Electron app window's menu bar, which the shell draws under its tab.
+    ElectronDeskMenuBar menu_bar;
+    // The message boxes its Electron app asks over it, first shown first.
+    std::deque<AskedMessageBox> message_boxes;
   };
+
+  // One window as the shell's list has it.
+  static mojom::BrowserWindowPtr Listed(const Window& window) {
+    content::WebContents& contents = window.guest->contents();
+    content::NavigationEntry* entry =
+        contents.GetController().GetVisibleEntry();
+    // A page's new window has only its initial entry until its first
+    // navigation commits.
+    const bool navigated = entry != nullptr && !entry->IsInitialEntry();
+    const std::optional<WebViewPartition> partition = window.guest->partition();
+    return mojom::BrowserWindow::New(
+        window.id, navigated ? entry->GetVirtualURL() : window.opened_at,
+        base::UTF16ToUTF8(contents.GetTitle()),
+        window.guest->popup_window().value_or(0), window.width, window.height,
+        contents.GetBrowserContext()->IsOffTheRecord(),
+        partition.has_value() ? WebViewPartitionAttribute(*partition)
+                              : std::string(),
+        window.app, window.app_id, window.captures > 0, window.parent, window.x,
+        window.y, window.hidden, window.menu_bar.menu, window.menu_bar.visible,
+        window.menu_bar.auto_hide,
+        window.message_boxes.empty()
+            ? std::string()
+            : window.message_boxes.front().box.message_box);
+  }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
   // null when the profile has no shell to own it.
   WebViewGuest* Make(base::FunctionRef<void(WebViewGuest&)> load,
-            std::optional<int> popup_window,
-            int width,
-            int height,
-            bool private_browsing,
-            bool app,
-            const std::optional<WebViewPartition>& partition,
-            const std::string& app_host = std::string(),
-            const std::string& app_id = std::string()) {
+                     std::optional<int> popup_window,
+                     int width,
+                     int height,
+                     bool private_browsing,
+                     bool app,
+                     const std::optional<WebViewPartition>& partition,
+                     const std::string& app_host = std::string(),
+                     const std::string& app_id = std::string(),
+                     bool view = false) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -498,8 +671,14 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     load(*guest);
     WebViewGuest* made = guest.get();
-    windows_.push_back(Window{id, std::move(guest), std::move(watch), width,
-                              height, app, app_id});
+    windows_.push_back(Window{.id = id,
+                              .guest = std::move(guest),
+                              .watch = std::move(watch),
+                              .width = width,
+                              .height = height,
+                              .app = app,
+                              .app_id = app_id,
+                              .view = view});
     Changed();
     return made;
   }
@@ -563,8 +742,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
           .app_id = window.app_id,
           .url = (committed.is_empty() ? window.opened_at : committed)
                      .possibly_invalid_spec(),
-          .off_the_record =
-              contents.GetBrowserContext()->IsOffTheRecord()});
+          .off_the_record = contents.GetBrowserContext()->IsOffTheRecord(),
+          .view = window.view});
     }
     return listing;
   }
@@ -754,6 +933,25 @@ class BrowserWindowsService final
 
   void Close(const std::string& id) override { windows_->AskToClose(id); }
 
+  void ClickMenu(const std::string& id, int32_t command) override {
+    if (command < 1) {
+      ReportBadMessageAndDeleteThis(
+          "domicile: a menu entry was clicked by a number no entry has.");
+      return;
+    }
+    windows_->ClickMenu(id, command);
+  }
+
+  void AnswerMessageBox(const std::string& id,
+                        int32_t response,
+                        bool checkbox_checked) override {
+    if (!windows_->AnswerMessageBox(id, response, checkbox_checked)) {
+      ReportBadMessageAndDeleteThis(
+          "domicile: a message box was answered with a button it doesn't "
+          "have.");
+    }
+  }
+
   // DeskWindows::Observer:
   void OnWindowsChanged() override {
     if (client_.is_bound()) {
@@ -887,13 +1085,37 @@ std::optional<std::string> OpenElectronWindow(
     const WebViewPartition& partition,
     const std::string& preload,
     ElectronPageCalls calls,
-    base::WeakPtr<ElectronSession> session) {
+    base::WeakPtr<ElectronSession> session,
+    bool view) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {
     return std::nullopt;
   }
   return windows->OpenElectron(url, app_id, partition, preload,
-                               std::move(calls), std::move(session));
+                               std::move(calls), std::move(session), view);
+}
+
+void SetElectronViews(const std::string& id,
+                      std::vector<ElectronDeskView> views) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetViews(id, std::move(views));
+  }
+}
+
+void SetElectronMenuBar(const std::string& id, ElectronDeskMenuBar bar) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetMenuBar(id, std::move(bar));
+  }
+}
+
+void ShowElectronMessageBox(const std::string& id,
+                            ElectronDeskMessageBox box,
+                            base::OnceCallback<void(int, bool)> answered) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->ShowMessageBox(id, std::move(box), std::move(answered));
+  } else {
+    std::move(answered).Run(box.cancel_id, false);
+  }
 }
 
 ElectronPage* ElectronPageOf(const std::string& id) {

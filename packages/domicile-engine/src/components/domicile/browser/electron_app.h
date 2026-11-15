@@ -51,6 +51,44 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(std::string port)> port_closed;
   // A new document replaced the page, its ports and listeners with it.
   base::RepeatingClosure gone;
+  // The shell gave the page a new size, in CSS pixels.
+  base::RepeatingCallback<void(int width, int height)> resized;
+  // The user clicked entry `command` of the window's menu bar.
+  base::RepeatingCallback<void(int command)> menu_clicked;
+};
+
+// A window's menu bar, as the desk lists it: the menu's entries as JSON
+// (empty for none), whether the bar shows, and whether it hides until Alt.
+struct ElectronDeskMenuBar {
+  std::string menu;
+  bool visible = true;
+  bool auto_hide = false;
+
+  friend bool operator==(const ElectronDeskMenuBar&,
+                         const ElectronDeskMenuBar&) = default;
+};
+
+// A message box over a window, as the desk lists it: the box as JSON (see
+// ElectronShowMessageBox), how many buttons it has, and the button that
+// answers when the shell can't, as when the window closes first.
+struct ElectronDeskMessageBox {
+  std::string message_box;
+  int buttons = 0;
+  int cancel_id = 0;
+};
+
+// Where a window holds one of its views, as the desk lists it: the view's
+// desk id and the app's bounds, in CSS pixels from the window page's top left.
+struct ElectronDeskView {
+  std::string id;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  bool hidden = false;
+
+  friend bool operator==(const ElectronDeskView&,
+                         const ElectronDeskView&) = default;
 };
 
 // Where a page's protocol request is answered: the loader that made it. The
@@ -155,15 +193,32 @@ class ElectronDesk {
 
   // Opens an app window at `url` for app `app_id`, in `partition`, whose
   // pages run `preload` (none when empty), make `calls` and load through
-  // `session`. Returns its id, or nothing when there is no shell to open it
-  // in.
+  // `session`. A `view` is a WebContentsView's page, listed only while a
+  // window holds it. Returns its id, or nothing when there is no shell to
+  // open it in.
   virtual std::optional<std::string> Open(
       const GURL& url,
       const std::string& app_id,
       const WebViewPartition& partition,
       const std::string& preload,
       ElectronPageCalls calls,
-      base::WeakPtr<ElectronSession> session) = 0;
+      base::WeakPtr<ElectronSession> session,
+      bool view) = 0;
+  // Window `id` holds `views`, bottom first, and no others. A view another
+  // window held moves here.
+  virtual void SetViews(const std::string& id,
+                        std::vector<ElectronDeskView> views) = 0;
+  // Window `id`'s menu bar, which the shell draws under its tab.
+  virtual void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) = 0;
+  // Asks `box` over window `id`, after any the window is already asking, and
+  // runs `answered` with the button the user pressed and whether the checkbox
+  // was left checked. A window that closes first answers its boxes with their
+  // cancel buttons.
+  virtual void ShowMessageBox(
+      const std::string& id,
+      ElectronDeskMessageBox box,
+      base::OnceCallback<void(int response, bool checkbox_checked)>
+          answered) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
   // Closes window `id` once its page agrees.
@@ -257,6 +312,8 @@ class ElectronApp {
     std::string title;
     // Its session, by its Electron partition.
     std::string session;
+    // A WebContentsView's page rather than a BrowserWindow.
+    bool view = false;
   };
 
   // A page's protocol request, waiting on the app's handler.
@@ -333,6 +390,15 @@ class ElectronApp {
                       base::Value data);
   void PagePortClosed(ElectronWindow number, std::string port);
   void PageGone(ElectronWindow number);
+  void PageResized(ElectronWindow number, int width, int height);
+  void SetViews(const ElectronSetViews& set);
+  void MenuClicked(ElectronWindow number, int command);
+  void SetMenuBar(const ElectronSetMenuBar& bar);
+  void ShowMessageBox(const ElectronShowMessageBox& box);
+  void MessageBoxAnswered(ElectronWindow number,
+                          int box,
+                          int response,
+                          bool checkbox_checked);
   // The desk id of window `number`, or nothing after refusing the request.
   std::optional<std::string> IdOf(ElectronWindow number);
 

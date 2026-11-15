@@ -59,8 +59,21 @@ export type BrowserListeners = {
 };
 
 export type Browser = {
-  /** The desk's browser windows, oldest first; `undefined` until the browser lists them. */
+  /**
+   * The desk's browser windows, oldest first; `undefined` until the browser
+   * lists them. An Electron app's views are not windows, and are in
+   * {@link Browser.views} instead.
+   */
   readonly windows: readonly BrowserWindow[] | undefined;
+  /**
+   * An Electron app's views (`WebContentsView`): pages that are part of a
+   * window, each with the `parent` window that holds it and where its app
+   * asks for it (`x`, `y`, `width`, `height`). Bottom first within a window;
+   * `undefined` until the browser lists them. Draw each with
+   * `<webview window>` over or inside its window, where its app asks or
+   * wherever your layout puts it. See docs/SHELL-BROWSER-WINDOWS.md.
+   */
+  readonly views: readonly BrowserWindow[] | undefined;
   /** Open a browser window, with storage of its own under `partition`. */
   open: (url: string, options?: { partition?: string }) => void;
   /** Open a window in the off-the-record profile. */
@@ -80,6 +93,21 @@ export type Browser = {
   /** Close window `id`. Its page may ask to stay. */
   close: (id: string) => void;
   /**
+   * The user clicked entry `command` (its `id`) of window `id`'s menu bar;
+   * its Electron app runs the entry.
+   */
+  clickMenu: (id: string, command: number) => void;
+  /**
+   * The user answered the message box window `id` shows (its `messageBox`)
+   * with button `response`, an index into its `buttons`, leaving its checkbox
+   * `checkboxChecked`; its Electron app hears the answer.
+   */
+  answerMessageBox: (
+    id: string,
+    response: number,
+    checkboxChecked: boolean,
+  ) => void;
+  /**
    * Fetch `url` from the browser process with its cookies. Resolves whatever
    * the status; rejects with a NetworkError for a refusal or a network
    * failure.
@@ -91,7 +119,9 @@ export type Browser = {
 export type BrowserHost = Pick<
   DomicileHost,
   | "addEventListener"
+  | "answerBrowserWindowMessageBox"
   | "browserWindows"
+  | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
   | "countBrowserWindowMatches"
   | "fetchWithCookies"
@@ -103,9 +133,19 @@ export type BrowserHost = Pick<
 
 export const browser = (host: BrowserHost): Browser => {
   const windowsOf = memoizeLast(
-    (list: readonly DomicileBrowserWindow[] | null) => list?.map(defined),
+    (list: readonly DomicileBrowserWindow[] | null) =>
+      list?.filter(({ parent }) => parent === null).map(defined),
+  );
+  const viewsOf = memoizeLast((list: readonly DomicileBrowserWindow[] | null) =>
+    list?.filter(({ parent }) => parent !== null).map(defined),
   );
   return {
+    answerMessageBox: (id, response, checkboxChecked) => {
+      host.answerBrowserWindowMessageBox(id, response, checkboxChecked);
+    },
+    clickMenu: (id, command) => {
+      host.clickBrowserWindowMenu(id, command);
+    },
     close: (id) => {
       host.closeBrowserWindow(id);
     },
@@ -134,6 +174,9 @@ export const browser = (host: BrowserHost): Browser => {
     },
     openPrivate: (url) => {
       host.openPrivateBrowserWindow(url);
+    },
+    get views() {
+      return viewsOf(host.browserWindows);
     },
     get windows() {
       return windowsOf(host.browserWindows);

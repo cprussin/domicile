@@ -84,8 +84,26 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 
 - **`new BrowserWindow()`** asks for an app window pinned to the app, as
   `open --app` does ([WEB-APPS.md](WEB-APPS.md)).
-- **`WebContentsView`** and **`BrowserView`** are guests inside that window,
-  placed at the bounds the app sets.
+- **`WebContentsView`** and **`BrowserView`** are views: pages that are part
+  of a window, not windows. Claude Desktop's whole chat is one, under its
+  title bar page.
+  - The host opens one with `open_window` and `"view": true`, and places a
+    window's views with `set_views {window, views: [{window, x, y, width,
+    height, hidden?}]}`, bottom first, replacing the ones it held. Only a
+    window holds views, and only views are held. A view placed in another
+    window moves there.
+  - The engine lists a view to the shell only while a window holds it, right
+    after that window, with `parent` and the app's bounds
+    (`DomicileBrowserWindow.parent`, `x`, `y`, `width`, `height`,
+    `isHidden`). It is never a capture source of its own.
+  - **The shell lays views out.** The app's bounds are what it asks for:
+    Manganese draws each view there, over its window, and another shell may
+    put views in tabs or a split instead (user's decision, 2026-11-14).
+  - The engine tells the app each page's size, its windows' and its views',
+    with `resized {window, width, height}`, for `getContentBounds()`,
+    `getBounds()` and the `resize` event.
+  - A view outlives the window that held it until the app closes it, as an
+    Electron app's do.
 - **`loadURL`, `loadFile`, title, show, focus and close** map to existing
   window requests. Window size and position are ignored: the shell lays out
   windows.
@@ -202,7 +220,8 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `Menu.popup` | a shell context menu |
 | `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)) |
 | `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)) |
-| `dialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
+| `dialog.showOpenDialog`, `dialog.showSaveDialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
+| `dialog.showMessageBox` | a message box over the window, drawn by the shell |
 | `nativeTheme` | the desktop theme |
 | `shell.openExternal` | `domicile open` |
 | `safeStorage` | Secret Service on D-Bus |
@@ -210,11 +229,27 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `clipboard` | the desktop clipboard |
 | `autoUpdater` | off; the app's package updates it |
 
-App menus travel as a JSON model over the Electron socket. The engine puts
-it on the app window, and the shell draws it as a menu bar under the window's
-tab, with the menu component the tray uses. A click goes back as the item's
-id. The bar behaves as on Electron for Linux: it follows the app's
-`autoHideMenuBar` and `setMenuBarVisibility`, and Alt toggles it.
+App menus travel as a JSON model over the Electron socket:
+`set_menu_bar {window, menu: [entries] | null, visible, auto_hide}`. The
+engine checks the entries, keeps only the keys the shell reads, and lists the
+menu with the window (`DomicileBrowserWindow.menu`, `menuBarVisible`,
+`menuBarAutoHide`). The shell draws it as a menu bar under the window's tab,
+with the menu component the tray uses. A click goes back through
+`clickBrowserWindowMenu` to the app as `menu_clicked {window, command}`, the
+entry's id. The bar behaves as on Electron for Linux: it follows the app's
+`autoHideMenuBar` and `setMenuBarVisibility`, and Alt toggles it. Only a
+window has a menu bar; a view's is refused.
+
+Message boxes travel the same way: `show_message_box {window, box, box_type,
+title, message, detail, buttons, default_id, cancel_id, checkbox_label,
+checkbox_checked}`, with 1 to 16 buttons. The engine checks the box and lists
+it with the window (`DomicileBrowserWindow.messageBox`), one box at a time: a
+window that asks another while one shows lists it once the first is answered.
+The shell draws it over the window's page and answers through
+`answerBrowserWindowMessageBox`, which reaches the app as
+`message_box_answered {window, box, response, checkbox_checked}`. A window
+that closes under its boxes answers each with its `cancel_id`, as the app
+waits on every one. Only a window shows a message box; a view's is refused.
 
 ### Unsupported apps
 
@@ -284,9 +319,15 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: session cookies, storage clearing, `clearCache`, `setUserAgent`
 - [x] `electron-host`: `setPermissionRequestHandler`
 - [x] `electron-host`: `utilityProcess`
-- [ ] `WebContentsView`, `BrowserView`
+- [x] engine: views (`set_views`), listed to the shell under their window, and each page's size
+- [x] shells: the SDK lists views apart (`browser.views`); Manganese draws them where their apps ask
+- [ ] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
-- [ ] app menus: a menu bar under the window's tab; Alt toggles it
+- [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)
+- [x] Manganese: app menus as a menu bar under the window's tab; accelerators run their entries; Alt toggles an auto-hidden bar, and Alt with a mnemonic opens a menu
+- [x] engine: message boxes (`show_message_box`), listed with the window one at a time, and answers back to the app (`message_box_answered`)
+- [x] Manganese: message boxes over the window's page, the app's buttons in its order; Enter presses its default and Escape its cancel
+- [ ] `electron-host`: `dialog.showMessageBox`
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

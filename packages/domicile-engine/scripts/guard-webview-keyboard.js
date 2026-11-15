@@ -28,6 +28,10 @@
 //                                 This is how a browser window's Ctrl+R
 //                                 reaches the shell. A plain key must never
 //                                 produce one
+//   GUARD guest-keyup key=…       a key let go of in the guest page, sent to
+//                                 the element as `domicile-guest-keyup`. How
+//                                 a lone Alt shows an app's menu bar. Only a
+//                                 modifier may produce one
 //   GUARD zoom factor=…           the zoom the browser reports after the first
 //                                 guest chord set 150%
 //   GUARD key-delivered           a key press reached the guest page, as
@@ -161,6 +165,9 @@ export const HostShell = (_root, desktop) => {
       zoomed = true;
       view.setZoom(1.5);
     }
+  });
+  view.addEventListener("domicile-guest-keyup", (event) => {
+    say(`guest-keyup key=${event.key} code=${event.code}`);
   });
 
   view.addEventListener("domicile-key-delivered", () => {

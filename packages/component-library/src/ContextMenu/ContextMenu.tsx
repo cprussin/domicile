@@ -361,7 +361,7 @@ const mnemonicKey = (
  * instead of base-ui's type-ahead. A key from a submenu bubbles here through
  * React's tree; that submenu's popup is not inside this one, so it is skipped.
  */
-const chooseByMnemonic = (
+export const chooseByMnemonic = (
   event: BaseUIEvent<KeyboardEvent<HTMLDivElement>>,
 ) => {
   const item = mnemonicItem(event);

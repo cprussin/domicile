@@ -69,6 +69,7 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 
 // Opens an app window at `url` for an Electron app, with `app_id`, in its own
 // `partition`, whose pages run `preload` (none when empty) and make `calls`.
+// A `view` is a WebContentsView's page, listed only while a window holds it.
 // Returns the window's id. Nothing when there is no shell to own it. See
 // docs/architecture/ELECTRON-APPS.md.
 std::optional<std::string> OpenElectronWindow(
@@ -77,7 +78,23 @@ std::optional<std::string> OpenElectronWindow(
     const WebViewPartition& partition,
     const std::string& preload,
     ElectronPageCalls calls,
-    base::WeakPtr<ElectronSession> session);
+    base::WeakPtr<ElectronSession> session,
+    bool view);
+
+// Electron window `id` holds `views`, bottom first, and no others; each is
+// listed with it as its parent. A view another window held moves here.
+void SetElectronViews(const std::string& id,
+                      std::vector<ElectronDeskView> views);
+
+// Electron window `id`'s menu bar, listed with it for the shell to draw.
+void SetElectronMenuBar(const std::string& id, ElectronDeskMenuBar bar);
+
+// Asks `box` over Electron window `id`, listed with it for the shell to show,
+// and runs `answered` with the button pressed and the checkbox's state. With
+// no shell, or once the window closes, the box's cancel button answers.
+void ShowElectronMessageBox(const std::string& id,
+                            ElectronDeskMessageBox box,
+                            base::OnceCallback<void(int, bool)> answered);
 
 // Electron window `id`'s page, for the app's IPC to it, or null after
 // logging when no such window is open or its page has no preload.

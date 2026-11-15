@@ -23,6 +23,10 @@
       "types": "./dist/app-element.d.ts",
       "default": "./dist/app-element.js"
     },
+    "./app-menu": {
+      "types": "./dist/app-menu.d.ts",
+      "default": "./dist/app-menu.js"
+    },
     "./bind-keys": {
       "types": "./dist/bind-keys.d.ts",
       "default": "./dist/bind-keys.js"
@@ -189,6 +193,10 @@
     "./keymap-choice": {
       "types": "./dist/keymap-choice.d.ts",
       "default": "./dist/keymap-choice.js"
+    },
+    "./message-box": {
+      "types": "./dist/message-box.d.ts",
+      "default": "./dist/message-box.js"
     },
     "./miracast": {
       "types": "./dist/miracast.d.ts",
