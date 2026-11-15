@@ -114,6 +114,7 @@ TOGETHER=(
   guard-portal-requests
   guard-shortcut-chords
   guard-app-routes-input
+  guard-locked-keys-stay-on-the-page
   guard-shell-handover
   guard-shell-script-src
   guard-shell-crash
