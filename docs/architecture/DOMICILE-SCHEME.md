@@ -34,8 +34,9 @@ and the binding.
   `fetch()`, `XMLHttpRequest` or `<img>`. Navigations are gated by the scheme
   not being web-safe and by `MayShowInWebView`.
 - Loaded through `ContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory`
-  (navigation) and `RegisterNonNetworkSubresourceURLLoaderFactories`
-  (subresources).
+  (navigation), `RegisterNonNetworkSubresourceURLLoaderFactories`
+  (subresources) and `RegisterNonNetworkWorkerMainResourceURLLoaderFactories`
+  (a dedicated or shared worker's main script, which the browser fetches).
 - `--domicile-shell-root` and `--domicile-shell-module` say what to serve.
 - Requests must resolve inside the shell root. Directory listings are off.
 - Shell files and the document are served `Cache-Control: no-store`. Blink
