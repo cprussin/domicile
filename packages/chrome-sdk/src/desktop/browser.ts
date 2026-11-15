@@ -59,8 +59,21 @@ export type BrowserListeners = {
 };
 
 export type Browser = {
-  /** The desk's browser windows, oldest first; `undefined` until the browser lists them. */
+  /**
+   * The desk's browser windows, oldest first; `undefined` until the browser
+   * lists them. An Electron app's views are not windows, and are in
+   * {@link Browser.views} instead.
+   */
   readonly windows: readonly BrowserWindow[] | undefined;
+  /**
+   * An Electron app's views (`WebContentsView`): pages that are part of a
+   * window, each with the `parent` window that holds it and where its app
+   * asks for it (`x`, `y`, `width`, `height`). Bottom first within a window;
+   * `undefined` until the browser lists them. Draw each with
+   * `<webview window>` over or inside its window, where its app asks or
+   * wherever your layout puts it. See docs/SHELL-BROWSER-WINDOWS.md.
+   */
+  readonly views: readonly BrowserWindow[] | undefined;
   /** Open a browser window, with storage of its own under `partition`. */
   open: (url: string, options?: { partition?: string }) => void;
   /** Open a window in the off-the-record profile. */
@@ -120,7 +133,11 @@ export type BrowserHost = Pick<
 
 export const browser = (host: BrowserHost): Browser => {
   const windowsOf = memoizeLast(
-    (list: readonly DomicileBrowserWindow[] | null) => list?.map(defined),
+    (list: readonly DomicileBrowserWindow[] | null) =>
+      list?.filter(({ parent }) => parent === null).map(defined),
+  );
+  const viewsOf = memoizeLast((list: readonly DomicileBrowserWindow[] | null) =>
+    list?.filter(({ parent }) => parent !== null).map(defined),
   );
   return {
     answerMessageBox: (id, response, checkboxChecked) => {
@@ -157,6 +174,9 @@ export const browser = (host: BrowserHost): Browser => {
     },
     openPrivate: (url) => {
       host.openPrivateBrowserWindow(url);
+    },
+    get views() {
+      return viewsOf(host.browserWindows);
     },
     get windows() {
       return windowsOf(host.browserWindows);

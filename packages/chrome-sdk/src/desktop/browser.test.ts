@@ -40,6 +40,38 @@ describe("browser", () => {
     ]);
   });
 
+  it("lists an Electron app's views apart from the windows", () => {
+    const fake = new FakeDomicileHost();
+    fake.openBrowser("https://a.example/", { isApp: true });
+    fake.openBrowser("https://b.example/", {
+      height: 560,
+      parent: "1",
+      width: 800,
+      x: 0,
+      y: 40,
+    });
+    const { browser } = desktop(fake.host);
+
+    expect(browser.windows?.map(({ id }) => id)).toEqual(["1"]);
+    expect(
+      browser.views?.map(({ id, parent, x, y, width, height }) => ({
+        height,
+        id,
+        parent,
+        width,
+        x,
+        y,
+      })),
+    ).toEqual([{ height: 560, id: "2", parent: "1", width: 800, x: 0, y: 40 }]);
+    // The same lists until the browser lists again, as a React store needs.
+    expect(browser.windows).toBe(browser.windows);
+    expect(browser.views).toBe(browser.views);
+  });
+
+  it("lists no views until the browser has", () => {
+    expect(desktop(new FakeDomicileHost().host).browser.views).toBeUndefined();
+  });
+
   it("opens and closes browser windows", () => {
     const fake = new FakeDomicileHost();
     const { browser } = desktop(fake.host);

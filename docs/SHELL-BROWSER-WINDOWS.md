@@ -403,10 +403,10 @@ An Electron app's window can be made of several pages: its own, and views
 (`WebContentsView`) the app places over it. Claude Desktop's window is a
 title bar page with the whole chat in a view under it.
 
-- **A view is listed right after its window**, bottom first, with `parent`
-  set to the window's `id`. Every window has `parent: undefined`. A view is
-  listed only while a window holds it, and never on its own as a window: keep
-  it out of your window list, task switcher and tiling.
+- **Views are listed apart, in `domicile.browser.views`**, bottom first,
+  each with `parent` set to its window's `id`. `domicile.browser.windows`
+  holds no views, so your window list, task switcher and tiling never see
+  one. A view is listed only while a window holds it.
 - **Draw it with `<webview window>`** as any window, inside or over its
   window. Its app asks for it at `x`, `y`, `width` and `height`, in CSS pixels
   from the top left of the window's page. Honor that and the app looks as it
@@ -415,17 +415,17 @@ title bar page with the whole chat in a view under it.
   a page draws only while laid out.
 - The app hears the size you give each page, its window's and its views', and
   lays itself out again, so a view you draw at another size still fits.
+- Manganese draws each view where its app asks
+  (`packages/manganese-window-management/src/browser/PageViews.tsx`).
 
 ```js
-for (const window of domicile.browser.windows ?? []) {
-  if (window.parent !== undefined) {
-    const view = drawn.get(window.id);
-    view.style.left = `${window.x}px`;
-    view.style.top = `${window.y}px`;
-    view.style.width = `${window.width}px`;
-    view.style.height = `${window.height}px`;
-    view.style.visibility = window.isHidden ? "hidden" : "visible";
-  }
+for (const view of domicile.browser.views ?? []) {
+  const element = drawn.get(view.id);
+  element.style.left = `${view.x}px`;
+  element.style.top = `${view.y}px`;
+  element.style.width = `${view.width}px`;
+  element.style.height = `${view.height}px`;
+  element.style.visibility = view.isHidden ? "hidden" : "visible";
 }
 ```
 
