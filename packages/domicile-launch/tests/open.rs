@@ -239,6 +239,35 @@ fn a_handler_that_opens_an_app_window_is_no_loop() {
 }
 
 #[test]
+fn a_handler_that_runs_an_electron_app_on_the_engine_is_no_loop() {
+    // The entry `electron.apps` writes for Slack.
+    let desk = desk();
+    fs::write(
+        desk.path().join("applications/slack.desktop"),
+        app(
+            "domicile open --electron slack.desktop -- /opt/slack/slack -s %U",
+            "x-scheme-handler/slack;",
+        ),
+    )
+    .unwrap();
+    let places = places(desk.path(), "");
+
+    assert_eq!(
+        opening("slack://open", Path::new("/"), &places),
+        Ok(Opening::Run(vec![
+            "domicile".into(),
+            "open".into(),
+            "--electron".into(),
+            "slack.desktop".into(),
+            "--".into(),
+            "/opt/slack/slack".into(),
+            "-s".into(),
+            "slack://open".into(),
+        ]))
+    );
+}
+
+#[test]
 fn a_file_url_decodes_only_hex_escapes_and_no_path_is_the_root() {
     let desk = desk();
     let home = written(&[("a%+1b", "\0")]);

@@ -604,6 +604,7 @@ fn runtime(directory: &std::path::Path) -> Runtime {
         profile: directory.join("profile"),
         shims: directory.join("bin"),
         session: directory.join("session.json"),
+        electron_entries: directory.join("share"),
         launches: directory.join("launches.json"),
     }
 }

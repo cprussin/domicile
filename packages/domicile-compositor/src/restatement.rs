@@ -23,6 +23,7 @@
 //! | `theme.cursor_hide_after_ms`, `cursor_hide_when_typing` | sent to every chrome's browser, which hides the pointer (`Host::set_appearance`) |
 //! | `theme.force_dark` | sent to every chrome, whose browser draws those sites dark from their next load (`Host::set_force_dark`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
+//! | `electron.apps` | the entries that run them on the engine written again (`write_the_electron_entries`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
 //! | `lock.*` | the verifier replaced; the desktop stays as locked as it was (`rekey_the_lock`, `Lock::rekeyed`) |
 //! | `lockdown.*` | sent to the Lockdown portal, which signals the change (`Portals::lock_down`) |
@@ -81,6 +82,8 @@ pub struct Restatement {
     pub force_dark: Option<Vec<String>>,
     /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
+    /// The Electron apps that run on the engine, or `None` if unchanged.
+    pub electron_apps: Option<Vec<String>>,
     /// The extensions the browser process installs, or `None` if unchanged.
     pub extensions: Option<ExtensionsConfig>,
     /// What applications are asked not to do, or `None` if unchanged.
@@ -121,6 +124,7 @@ impl Restatement {
             force_dark: (was.theme.force_dark != now.theme.force_dark)
                 .then(|| now.theme.force_dark.clone()),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
+            electron_apps: (was.electron != now.electron).then(|| now.electron.apps.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             lock: (was.lock != now.lock).then(|| now.lock.clone()),
@@ -243,6 +247,18 @@ mod tests {
             Some(now.theme.clone())
         );
         assert_eq!(Restatement::between(&now, &now).appearance, None);
+    }
+
+    #[test]
+    fn the_electron_apps_are_restated_when_they_change() {
+        let was = parsed("{}");
+        let now = parsed(r#"{ "electron": { "apps": ["slack.desktop"] } }"#);
+
+        assert_eq!(
+            Restatement::between(&was, &now).electron_apps,
+            Some(vec!["slack.desktop".to_string()])
+        );
+        assert_eq!(Restatement::between(&now, &now).electron_apps, None);
     }
 
     #[test]

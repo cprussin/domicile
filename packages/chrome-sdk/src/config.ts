@@ -13,6 +13,7 @@
 export type Config = {
   /** Where editors find this file's JSON Schema. Domicile ignores it. */
   $schema?: string | null;
+  electron?: ElectronConfig;
   extensions?: ExtensionsConfig;
   files?: FilesConfig;
   idle?: IdleConfig;
@@ -191,6 +192,20 @@ export type DisplayPlacement = {
   sdr_white?: number | null;
   /** Which way up the monitor is. */
   transform?: Transform;
+};
+
+/**
+ * Installed Electron apps that run on the desktop's engine instead of the
+ * Electron they ship. See `docs/architecture/ELECTRON-APPS.md`.
+ */
+export type ElectronConfig = {
+  /**
+   * Desktop file ids, as `slack.desktop`. Whatever starts one of these
+   * entries (the launcher, a link, a notification) runs it with
+   * `domicile open --electron`. An app the engine can't run yet runs on
+   * its own Electron, with a notification saying so.
+   */
+  apps?: string[];
 };
 
 /** One extension's settings. See [`ExtensionsConfig::settings`]. */

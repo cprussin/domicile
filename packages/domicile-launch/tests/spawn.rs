@@ -32,6 +32,7 @@ fn runtime() -> Runtime {
         profile: PathBuf::from("/run/d/profile"),
         shims: PathBuf::from("/run/d/bin"),
         session: PathBuf::from("/run/d/session.json"),
+        electron_entries: PathBuf::from("/run/d/share"),
         launches: PathBuf::from("/run/d/launches.json"),
     }
 }
@@ -392,6 +393,8 @@ fn the_compositor_is_a_producer_to_the_engine() {
             "/run/d/broker",
             "--launches",
             "/run/d/launches.json",
+            "--electron-entries",
+            "/run/d/share",
         ]
     );
     // The engine's own directory, so `libdomicile_engine.so` is loadable.
@@ -523,7 +526,7 @@ fn a_link_an_app_opens_through_gio_or_a_portal_opens_in_this_desktop_too() {
     );
     assert_eq!(
         env_of(&spawned, "XDG_DATA_DIRS").unwrap(),
-        "/d/share:/run/sw/share"
+        "/run/d/share:/d/share:/run/sw/share"
     );
 }
 
@@ -543,7 +546,7 @@ fn a_machine_with_no_data_directories_keeps_the_defaults_behind_this_desktops() 
     );
     assert_eq!(
         env_of(&spawned, "XDG_DATA_DIRS").unwrap(),
-        "/d/share:/usr/local/share:/usr/share"
+        "/run/d/share:/d/share:/usr/local/share:/usr/share"
     );
 }
 
@@ -775,6 +778,8 @@ fn the_compositor_is_given_the_config_it_was_started_with() {
             "/run/d/broker",
             "--launches",
             "/run/d/launches.json",
+            "--electron-entries",
+            "/run/d/share",
             "--config",
             "/etc/domicile/desk.json",
         ]

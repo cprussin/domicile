@@ -145,6 +145,7 @@ An edit applies to the running desktop, and windows stay open:
 | `theme.force_dark` | Those sites are drawn dark from their next load |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
 | `files.omit` | Launcher file index rebuilt |
+| `electron.apps` | Starting a newly listed app runs it on the engine; apps already running stay as they are |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
 | `terminal` | Processes started from then on get the new terminal: the launcher's next opening, the next `domicile open` from a new window, and Meta+Return |
@@ -174,6 +175,13 @@ An edit applies to the running desktop, and windows stay open:
   argv: `[["emacs", "--daemon"], ["sh", "-c", "…"]]`.
 - `files`: what the launcher's file index leaves out. See
   [LAUNCHER.md](LAUNCHER.md).
+- `electron.apps`: desktop file ids of installed Electron apps that run on
+  the desktop's engine instead of the Electron they ship:
+  `{ "electron": { "apps": ["slack.desktop"] } }`. Whatever starts the
+  entry (the launcher, a link, a notification) runs it with
+  `domicile open --electron`. An entry in `~/.local/share/applications`
+  can't be overridden, and is logged. See
+  [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
 - `terminal`: see [Terminal](#terminal).
 - `output.max_scale`: the highest scale advertised for the output that
   follows Domicile's window. Applies only when `output.displays` is empty.

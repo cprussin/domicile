@@ -126,6 +126,14 @@ export const displayPlacementSchema = z.strictObject({
   transform: transformSchema.prefault("normal"),
 });
 
+/**
+ * Installed Electron apps that run on the desktop's engine instead of the
+ * Electron they ship. See `docs/architecture/ELECTRON-APPS.md`.
+ */
+export const electronConfigSchema = z.strictObject({
+  apps: z.array(z.string()).prefault([]),
+});
+
 /** [`SiteAccess`] other than a list of hosts. */
 export const siteAccessModeSchema = z.union([
   z.literal("on_click"),
@@ -462,6 +470,7 @@ export const configSchema = z.strictObject({
     .string()
     .nullish()
     .transform((value) => value ?? undefined),
+  electron: electronConfigSchema.prefault({ apps: [] }),
   extensions: extensionsConfigSchema.prefault({
     settings: {},
     unpacked: [],

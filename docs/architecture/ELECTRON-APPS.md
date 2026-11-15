@@ -41,8 +41,18 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   The command's arguments, or the `Exec`'s, are the app's `process.argv`.
   What a wrapper sets (`LD_PRELOAD`, flags) does not reach the app.
 - **`electron.apps`** in the desk config lists desktop entry ids. The
-  launcher starts those entries with `--electron` instead of their `Exec`.
-  The app's own package installs and updates it; nothing is repackaged.
+  compositor copies each entry into a directory first on the desk's
+  `XDG_DATA_DIRS`, with every `Exec` running
+  `domicile open --electron <id> -- <the original Exec>`, and without
+  `DBusActivatable` and `TryExec`
+  ([`electron_entries.rs`](../../packages/domicile-host/src/electron_entries.rs)).
+  So whatever starts the entry by its id runs it on the engine: any shell's
+  launcher, a `slack://` link through `domicile open` or GIO, a press on a
+  notification. No shell needs to know. The copies are written at start and
+  again when a reload changes the list. An entry in the data home
+  (`~/.local/share/applications`) comes before every data directory, so it
+  can't be overridden; that is logged as an error. The app's own package
+  installs and updates it; nothing is repackaged.
 - **`domicile` runs `electron-host`** (`libexec/domicile/electron-host`, or
   `DOMICILE_ELECTRON_HOST`) and waits on it, in the place of whatever started
   it: the compositor, for an app the launcher starts. So the app outlives a
@@ -366,7 +376,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] Manganese: message boxes over the window's page, the app's buttons in its order; Enter presses its default and Escape its cancel
 - [x] `electron-host`: `dialog.showMessageBox`
 - [x] `domicile open --electron`: the app from its entry or path, and the fallback to its own Electron
-- [ ] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
+- [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
 - [ ] the quirks table, and an app's schemes kept for the next start
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page
