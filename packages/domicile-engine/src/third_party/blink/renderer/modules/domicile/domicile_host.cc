@@ -13,6 +13,7 @@
 #include "base/check.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -1488,6 +1489,16 @@ void DomicileHost::ForwardKeyDown(Event* event) {
     return;
   }
   if (app_id.IsNull()) {
+    return;
+  }
+  // A locked desk's keys are the page's: its lock screen is the only thing to
+  // type into, and the compositor drops a key sent for a client. Taken from
+  // the page, the passphrase would reach nothing. The window should not have
+  // the keyboard at all while locked, so say so.
+  if (locked_.value_or(false)) {
+    // `String` quotes itself when streamed.
+    LOG(ERROR) << "domicile: the desk is locked but window " << app_id
+               << " has the keyboard; the key stays on the page";
     return;
   }
   event->preventDefault();

@@ -38,7 +38,8 @@ Why some requests are allowed:
 - `SetOutputScale`, `SetOutputSize`, `SetAppBounds`, `set_window_states`,
   `set_color_temperature`: nothing replays them after unlock.
 - `KeyboardFocus`: refusing it would leave the shell and the compositor disagreeing
-  about focus after unlock. No key reaches the window while locked anyway.
+  about focus after unlock. No key reaches the window while locked anyway: the
+  engine keeps every key on the page.
 - `ClipboardCopied`: it is a client's copy, and the history must match pastes.
 - `SetTheme`: it opens and reads nothing.
 - System reads under `/sys`: the user can change nothing there. Only an
@@ -93,6 +94,14 @@ library sends; the libraries' tests and the allowlist's both check it.
   screens light.
 - **The compositor releases held keys when the desktop locks** (`release_pressed_keys`).
   The refusal would drop the release and leave the key stuck down.
+- **The page takes the keyboard when the desktop locks**, after `locked` is
+  sent (`hand_the_keyboard_to_the_lock_screen`). Every chrome hears
+  `focus_changed` with no window, so the engine stops sending keys to the
+  window that had it. The shell gives it back after unlocking.
+- **The engine keeps every key on the page while locked**, even if a window
+  has the keyboard, and logs an error naming the window. A key sent for a
+  client is dropped, so taking it from the lock screen would lose the
+  passphrase. `guard-locked-keys-stay-on-the-page.sh` checks it.
 
 ## Sleep and logind
 
