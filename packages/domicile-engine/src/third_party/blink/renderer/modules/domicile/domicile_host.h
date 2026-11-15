@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "base/time/time.h"
 #include "components/domicile/common/forwarded_keys.h"
 #include "components/domicile/common/held_chords.h"
 #include "components/domicile/common/warp_landing.h"
@@ -228,6 +229,7 @@ class MODULES_EXPORT DomicileHost final
   void grabShortcut(ScriptState*,
                     const String& chord,
                     bool while_inhibited,
+                    uint32_t longest_tap,
                     ExceptionState&);
   // Answers one grabShortcut of that name. The last one gives the chord back,
   // and its key too unless another name grabbed is on it.
@@ -425,7 +427,8 @@ class MODULES_EXPORT DomicileHost final
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void GesturePerformed(domicile::mojom::blink::GesturePtr gesture) override;
-  void ModifierTapped(domicile::mojom::blink::TapModifier modifier) override;
+  void ModifierTapped(domicile::mojom::blink::TapModifier modifier,
+                      base::TimeDelta held) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void Files(const String& query,
              const Vector<String>& files,
@@ -732,6 +735,8 @@ class MODULES_EXPORT DomicileHost final
     domicile::mojom::blink::TapModifier modifier;
     uint32_t holds = 1;
     bool while_inhibited = false;
+    // The longest any grab of it lets the modifier be held and still tap.
+    base::TimeDelta longest;
   };
   Vector<GrabbedTap> taps_;
   // A gesture grabbed by name, and how many grabGesture calls no

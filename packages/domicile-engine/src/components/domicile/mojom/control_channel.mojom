@@ -3,6 +3,7 @@
 
 module domicile.mojom;
 
+import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
 enum PointerAxisSource { kWheel, kFinger, kContinuous, kWheelTilt };
@@ -508,12 +509,13 @@ interface ControlChannel {
   // This page no longer wants `grab`. See DeskGestures::Ungrab.
   UngrabGesture(GestureGrab grab);
 
-  // A tap of `modifier` alone to hand the page, as `Meta` for a tap of
-  // Super. Under a shortcuts inhibitor it is the window's unless
-  // `while_inhibited`. It stops in the browser process, in DeskModifierTaps,
-  // which hears every key aura does. A second grab sets `while_inhibited`
-  // anew: the page counts its own grabs and sends what they add up to.
-  GrabModifierTap(TapModifier modifier, bool while_inhibited);
+  // A tap of `modifier` alone, held no longer than `longest`, to hand the
+  // page, as `Meta` for a tap of Super. Under a shortcuts inhibitor it is the
+  // window's unless `while_inhibited`. It stops in the browser process, in
+  // DeskModifierTaps, which hears every key aura does. A second grab sets
+  // both anew: the page counts its own grabs and sends what they add up to.
+  GrabModifierTap(TapModifier modifier, bool while_inhibited,
+                  mojo_base.mojom.TimeDelta longest);
 
   // This page no longer wants taps of `modifier`.
   UngrabModifierTap(TapModifier modifier);
@@ -686,9 +688,9 @@ interface ControlChannelClient {
   // socket.
   GesturePerformed(Gesture gesture);
 
-  // `modifier` was tapped alone, and this page grabbed it. Matched in the
-  // browser process (DeskModifierTaps), like a gesture.
-  ModifierTapped(TapModifier modifier);
+  // `modifier` was tapped alone, held `held`, and this page grabbed it.
+  // Matched in the browser process (DeskModifierTaps), like a gesture.
+  ModifierTapped(TapModifier modifier, mojo_base.mojom.TimeDelta held);
 
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.
