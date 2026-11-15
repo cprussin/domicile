@@ -8,6 +8,7 @@
 #   - A menu with no picture-in-picture blames the context menu's flags.
 #   - A refused request blames WebViewGuest::EnterPictureInPicture.
 #   - An entered video the shell never heard blames ShowInactive.
+#   - A video heard without its place in its page blames the source bounds.
 #   - A close that never paused blames kClose, and a listing that stays
 #     blames Hide.
 #
@@ -51,6 +52,8 @@ judge() { # NAME=value overrides
     SAW_MENU=1
     SAW_ENTERED=1
     SAW_LISTED=1
+    SAW_SOURCE=1
+    VIDEO_SOURCE=8,8,320x180
     SAW_LEFT_PAUSED=1
     SAW_UNLISTED=1
     for override in "$@"; do
@@ -98,6 +101,8 @@ expect "a refused request blames EnterPictureInPicture" "yes" \
   "$(blames "EnterPictureInPicture" SAW_ENTERED=0)"
 expect "an unheard video blames ShowInactive" "yes" \
   "$(blames "ShowInactive" SAW_LISTED=0)"
+expect "a video heard without its place in the page blames InMainFrame" "yes" \
+  "$(blames "InMainFrame" SAW_SOURCE=0)"
 expect "a close that never paused blames kClose" "yes" \
   "$(blames "kClose" SAW_LEFT_PAUSED=0)"
 expect "a listing that stays blames Hide" "yes" \

@@ -12,6 +12,7 @@ const VIDEO = {
   playbackRate: 1,
   playing: true,
   position: 102,
+  source: null,
   width: 640,
   window: "window-1",
 };

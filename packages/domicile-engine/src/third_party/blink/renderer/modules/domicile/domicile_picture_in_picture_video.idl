@@ -35,6 +35,11 @@ enum DomicilePictureInPictureAction {
   readonly attribute long width;
   readonly attribute long height;
 
+  // Where the video was in its page when it entered picture-in-picture, in
+  // CSS pixels from the page's top left, so the shell can grow it out of that
+  // place; null when the page was drawn nowhere.
+  readonly attribute DOMRectReadOnly? source;
+
   readonly attribute boolean playing;
 
   // Which controls the page takes: play and pause, and its media session's

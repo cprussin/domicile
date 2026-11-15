@@ -5,8 +5,10 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_PICTURE_IN_PICTURE_VIDEO_H_
 
 #include "components/domicile/mojom/picture_in_picture.mojom-blink.h"
+#include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -27,6 +29,7 @@ class MODULES_EXPORT DomicilePictureInPictureVideo final
   const String& window() const { return window_; }
   int32_t width() const { return width_; }
   int32_t height() const { return height_; }
+  DOMRectReadOnly* source() const { return source_.Get(); }
   bool playing() const { return playing_; }
   bool canPlay() const { return can_play_; }
   bool canPreviousTrack() const { return can_previous_track_; }
@@ -42,6 +45,8 @@ class MODULES_EXPORT DomicilePictureInPictureVideo final
   String window_;
   int32_t width_;
   int32_t height_;
+  // Made once, so each read is the same object.
+  Member<DOMRectReadOnly> source_;
   bool playing_;
   bool can_play_;
   bool can_previous_track_;

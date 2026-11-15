@@ -3,6 +3,8 @@
 
 #include "third_party/blink/renderer/modules/domicile/domicile_picture_in_picture_video.h"
 
+#include "ui/gfx/geometry/rect_f.h"
+
 namespace blink {
 
 DomicilePictureInPictureVideo::DomicilePictureInPictureVideo(
@@ -11,6 +13,9 @@ DomicilePictureInPictureVideo::DomicilePictureInPictureVideo(
       window_(video.window),
       width_(video.size.width()),
       height_(video.size.height()),
+      source_(video.source.IsEmpty()
+                  ? nullptr
+                  : DOMRectReadOnly::FromRectF(gfx::RectF(video.source))),
       playing_(video.playing),
       can_play_(video.can_play),
       can_previous_track_(video.can_previous_track),
@@ -22,6 +27,7 @@ DomicilePictureInPictureVideo::DomicilePictureInPictureVideo(
 DomicilePictureInPictureVideo::~DomicilePictureInPictureVideo() = default;
 
 void DomicilePictureInPictureVideo::Trace(Visitor* visitor) const {
+  visitor->Trace(source_);
   ScriptWrappable::Trace(visitor);
 }
 

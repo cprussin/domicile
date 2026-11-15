@@ -593,7 +593,9 @@ A video's `width` and `height` are 0 until its page says them; keep its box
 in the shape it has now.
 
 Manganese floats each video over every window, in the bottom-right corner of
-its window's screen, with its controls and progress bar under the pointer.
+its window's screen, with its controls and progress bar under the pointer. It
+grows out of its place in the page, and "Back to tab" shrinks it back in
+before acting.
 
 ## Crashed pages
 
