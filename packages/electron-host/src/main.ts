@@ -11,6 +11,7 @@ import { connectDesktop, runCommand } from "./desktop";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
 import { createIpcMain } from "./electron/ipc-main";
+import { createMenu } from "./electron/menu";
 import {
   MessageChannelMain,
   MessagePortMain,
@@ -117,10 +118,23 @@ const main = async ([resources, ...args]: string[]) => {
       }),
     );
     theme.changed = appearanceChanged;
+    const { Menu, MenuItem } = createMenu<InstanceType<typeof BrowserWindow>>({
+      appName: app.getName,
+      focusedWindow: BrowserWindow.getFocusedWindow,
+      roles: {
+        close: (window) => window?.close(),
+        quit: () => app.quit(),
+      },
+      // The menu bar under the window's tab comes next; until then the app's
+      // menu is kept for getApplicationMenu alone.
+      setApplicationMenu: () => undefined,
+    });
     const electron = {
       app,
       BrowserWindow,
       ipcMain,
+      Menu,
+      MenuItem,
       MessageChannelMain,
       MessagePortMain,
       Notification: createNotification(desktop.notifications, {
