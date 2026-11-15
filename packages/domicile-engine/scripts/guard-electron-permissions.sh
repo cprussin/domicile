@@ -11,17 +11,20 @@
 # 127.0.0.1, but under a nested Wayland compositor (under-wayland.sh), as
 # guard-webview-permissions.sh is: PermissionRequestManager::AddRequest denies
 # every request on a headless screen before any prompt. A python client plays
-# `electron-host`, grants window management and denies everything else, and
-# asserts:
+# `electron-host`. Its window asks for its location twice, from two origins:
+# http://127.0.0.1, which the app grants, and then http://localhost, which it
+# denies. It asserts:
 #
 #   ready    the socket took the hello
-#   asked    the app heard the page's window-management request, as its
-#            window's
-#   granted  the page got the screens' details
-#   denied   the app heard the page's geolocation request, and the page was
-#            denied its location
+#   asked    the app heard 127.0.0.1's geolocation request, as its window's
+#   granted  127.0.0.1's request was not denied (a position, or no position
+#            to give, both come after a grant)
+#   denied   the app heard localhost's request, and localhost was denied
 #
-# No control run: the grant and the denial are each other's control.
+# Geolocation, as the one kind a page here asks for without a click: in CI,
+# `Notification.requestPermission()` and `getScreenDetails()` were refused
+# before any prompt. No control run: the grant and the denial are each
+# other's control.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -148,8 +151,8 @@ def send(request):
 
 def hear_until(wanted):
     """Reads events until one matches `wanted` or time runs out, answering
-    each permission request as it comes: window management granted, the
-    rest denied."""
+    each permission request as it comes: 127.0.0.1's granted, the rest
+    denied."""
     for event in heard:
         if wanted(event):
             return event
@@ -167,7 +170,7 @@ def hear_until(wanted):
         heard.append(event)
         if event.get("type") == "permission_request":
             send({"type": "permission_answer", "ask": event["ask"],
-                  "granted": event.get("permission") == "window-management"})
+                  "granted": event.get("requesting_url") == origin + "/"})
         if wanted(event):
             return event
     return None
@@ -186,25 +189,36 @@ send({"type": "hello", "version": 1, "app_id": "guard.electron.permissions",
       "partition": "persist:electron-guard-permissions"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "permission_handler", "session": "", "handle": True})
+other = "http://localhost:%d" % server.server_address[1]
 send({"type": "open_window", "window": 1, "url": origin + "/index.html"})
-done = hear_until(lambda e: e.get("type") == "title_changed" and
-                  e.get("window") == 1 and
-                  e.get("title", "").startswith("done|"))
-# "done|<getScreenDetails()'s>|<getCurrentPosition's>"
-says = ((done or {}).get("title", "").split("|") + ["", ""])[1:]
 
-def asked(permission):
+def page_says():
+    """How the page ended its request: "error 1" when denied."""
+    done = hear_until(lambda e: e.get("type") == "title_changed" and
+                      e.get("window") == 1 and
+                      e.get("title", "").startswith("done|"))
+    if done is None:
+        return ""
+    # So the next page's title is not this one's.
+    heard.remove(done)
+    return done["title"][len("done|"):]
+
+first = page_says()
+send({"type": "load_url", "window": 1, "url": other + "/index.html"})
+second = page_says()
+
+def asked(url):
     return any(e.get("type") == "permission_request" and
-               e.get("permission") == permission and e.get("window") == 1 and
-               e.get("session") == "" and
-               e.get("requesting_url") == origin + "/"
+               e.get("permission") == "geolocation" and
+               e.get("window") == 1 and e.get("session") == "" and
+               e.get("requesting_url") == url + "/"
                for e in heard)
 
 print("measured: %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
-    asked("window-management"),
-    says[0] == "granted",
-    asked("geolocation") and says[1] == "error 1"),
+    asked(origin),
+    first not in ("", "error 1"),
+    asked(other) and second == "error 1"),
     flush=True)
 server.shutdown()
 PY
@@ -228,18 +242,18 @@ requests, granting one and denying the other"
 guard-electron-socket.sh is the guard for that"
   ;;
 "1 0 "*)
-  FAILURE="the app never heard its page's window-management request as its \\
+  FAILURE="the app never heard its page's geolocation request as its \\
 window's: MakePrompt must hand an Electron page's prompt to \\
 ElectronPermissionPrompt while its session HandlesPermissions, and \\
 ElectronPermissionFor must name it"
   ;;
 "1 1 0 "*)
-  FAILURE="the page did not get the screens' details the app's handler granted: \\
+  FAILURE="the page was denied what the app's handler granted: \\
 ElectronPermissionPrompt::Decide must Accept"
   ;;
 "1 1 1 0")
-  FAILURE="THE PAGE GOT ITS LOCATION, OR THE APP NEVER HEARD THE REQUEST, \\
-when the app's handler would have denied it: ElectronPermissionPrompt::Decide \\
+  FAILURE="THE SECOND ORIGIN GOT PAST THE APP'S DENIAL, OR THE APP NEVER \\
+HEARD IT: ElectronPermissionPrompt::Decide \\
 must Deny, and ElectronPermissionFor must name geolocation"
   ;;
 *)
