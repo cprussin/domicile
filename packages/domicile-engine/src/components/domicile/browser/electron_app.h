@@ -68,6 +68,15 @@ struct ElectronDeskMenuBar {
                          const ElectronDeskMenuBar&) = default;
 };
 
+// A message box over a window, as the desk lists it: the box as JSON (see
+// ElectronShowMessageBox), how many buttons it has, and the button that
+// answers when the shell can't, as when the window closes first.
+struct ElectronDeskMessageBox {
+  std::string message_box;
+  int buttons = 0;
+  int cancel_id = 0;
+};
+
 // Where a window holds one of its views, as the desk lists it: the view's
 // desk id and the app's bounds, in CSS pixels from the window page's top left.
 struct ElectronDeskView {
@@ -201,6 +210,15 @@ class ElectronDesk {
                         std::vector<ElectronDeskView> views) = 0;
   // Window `id`'s menu bar, which the shell draws under its tab.
   virtual void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) = 0;
+  // Asks `box` over window `id`, after any the window is already asking, and
+  // runs `answered` with the button the user pressed and whether the checkbox
+  // was left checked. A window that closes first answers its boxes with their
+  // cancel buttons.
+  virtual void ShowMessageBox(
+      const std::string& id,
+      ElectronDeskMessageBox box,
+      base::OnceCallback<void(int response, bool checkbox_checked)>
+          answered) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
   // Closes window `id` once its page agrees.
@@ -376,6 +394,11 @@ class ElectronApp {
   void SetViews(const ElectronSetViews& set);
   void MenuClicked(ElectronWindow number, int command);
   void SetMenuBar(const ElectronSetMenuBar& bar);
+  void ShowMessageBox(const ElectronShowMessageBox& box);
+  void MessageBoxAnswered(ElectronWindow number,
+                          int box,
+                          int response,
+                          bool checkbox_checked);
   // The desk id of window `number`, or nothing after refusing the request.
   std::optional<std::string> IdOf(ElectronWindow number);
 

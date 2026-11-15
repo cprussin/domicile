@@ -78,6 +78,11 @@ class ChromeElectronDesk final : public ElectronDesk {
   void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) override {
     SetElectronMenuBar(id, std::move(bar));
   }
+  void ShowMessageBox(const std::string& id,
+                      ElectronDeskMessageBox box,
+                      base::OnceCallback<void(int, bool)> answered) override {
+    ShowElectronMessageBox(id, std::move(box), std::move(answered));
+  }
   void Load(const std::string& id, const GURL& url) override {
     LoadBrowserWindow(id, url);
   }

@@ -4,6 +4,7 @@
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 
 #include <algorithm>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -306,6 +307,54 @@ class DeskWindows final : public base::SupportsUserData::Data,
     page->MenuClicked(command);
   }
 
+  // Asks `box` over window `id`, after any it is already asking. The app made
+  // sure `id` is one of its windows; one that closed meanwhile answers with
+  // the box's cancel button at once.
+  void ShowMessageBox(const std::string& id,
+                      ElectronDeskMessageBox box,
+                      base::OnceCallback<void(int, bool)> answered) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to show a message box over browser "
+                      "window "
+                   << id << ", which is not open; it answers Cancel.";
+      std::move(answered).Run(box.cancel_id, false);
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id
+                         << " was asked to show a message box and is a view";
+    window->message_boxes.push_back(
+        {.box = std::move(box), .answered = std::move(answered)});
+    // The shell lists only the first; later ones wait their turn.
+    if (window->message_boxes.size() == 1) {
+      Changed();
+    }
+  }
+
+  // The user answered the message box window `id` shows with button
+  // `response`. A window that closed meanwhile, or shows none, is an answer
+  // that raced it. Returns false for a button the box doesn't have.
+  bool AnswerMessageBox(const std::string& id,
+                        int response,
+                        bool checkbox_checked) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end() || window->message_boxes.empty()) {
+      LOG(WARNING) << "domicile: an answer to a message box over browser "
+                      "window "
+                   << id << ", which shows none.";
+      return true;
+    }
+    AskedMessageBox& shown = window->message_boxes.front();
+    if (response < 0 || response >= shown.box.buttons) {
+      return false;
+    }
+    base::OnceCallback<void(int, bool)> answered = std::move(shown.answered);
+    window->message_boxes.pop_front();
+    Changed();
+    std::move(answered).Run(response, checkbox_checked);
+    return true;
+  }
+
   // Opens an app window at an app module's `url`, pinned to `app_host`. See
   // WebViewGuest::PinToApp.
   bool OpenAppModule(const GURL& url, const std::string& app_host) {
@@ -387,6 +436,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // <webview> shows the page only while the page exists. Muted meanwhile,
     // since the window is closed as far as anyone hears.
     found->guest->contents().SetAudioMuted(true);
+    // Its message boxes answer with their cancel buttons, as the app waits on
+    // each.
+    std::deque<AskedMessageBox> boxes = std::move(found->message_boxes);
     closing_.push_back({id, std::move(found->guest)});
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
@@ -403,6 +455,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     LOG(INFO) << "domicile: closed browser window " << id << ".";
     Changed();
+    for (AskedMessageBox& box : boxes) {
+      std::move(box.answered).Run(box.box.cancel_id, false);
+    }
   }
 
   // Closes window `id` once its page agrees; see WebViewGuest::AskToClose. An
@@ -524,6 +579,12 @@ class DeskWindows final : public base::SupportsUserData::Data,
     base::RepeatingClosure changed_;
   };
 
+  // A message box a window asks, and where its answer goes.
+  struct AskedMessageBox {
+    ElectronDeskMessageBox box;
+    base::OnceCallback<void(int, bool)> answered;
+  };
+
   struct Window {
     std::string id;
     std::unique_ptr<WebViewGuest> guest;
@@ -549,6 +610,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     int stack = 0;
     // An Electron app window's menu bar, which the shell draws under its tab.
     ElectronDeskMenuBar menu_bar;
+    // The message boxes its Electron app asks over it, first shown first.
+    std::deque<AskedMessageBox> message_boxes;
   };
 
   // One window as the shell's list has it.
@@ -569,7 +632,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
                               : std::string(),
         window.app, window.app_id, window.captures > 0, window.parent, window.x,
         window.y, window.hidden, window.menu_bar.menu, window.menu_bar.visible,
-        window.menu_bar.auto_hide);
+        window.menu_bar.auto_hide,
+        window.message_boxes.empty()
+            ? std::string()
+            : window.message_boxes.front().box.message_box);
   }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
@@ -876,6 +942,16 @@ class BrowserWindowsService final
     windows_->ClickMenu(id, command);
   }
 
+  void AnswerMessageBox(const std::string& id,
+                        int32_t response,
+                        bool checkbox_checked) override {
+    if (!windows_->AnswerMessageBox(id, response, checkbox_checked)) {
+      ReportBadMessageAndDeleteThis(
+          "domicile: a message box was answered with a button it doesn't "
+          "have.");
+    }
+  }
+
   // DeskWindows::Observer:
   void OnWindowsChanged() override {
     if (client_.is_bound()) {
@@ -1029,6 +1105,16 @@ void SetElectronViews(const std::string& id,
 void SetElectronMenuBar(const std::string& id, ElectronDeskMenuBar bar) {
   if (DeskWindows* windows = ShellDeskWindows()) {
     windows->SetMenuBar(id, std::move(bar));
+  }
+}
+
+void ShowElectronMessageBox(const std::string& id,
+                            ElectronDeskMessageBox box,
+                            base::OnceCallback<void(int, bool)> answered) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->ShowMessageBox(id, std::move(box), std::move(answered));
+  } else {
+    std::move(answered).Run(box.cancel_id, false);
   }
 }
 

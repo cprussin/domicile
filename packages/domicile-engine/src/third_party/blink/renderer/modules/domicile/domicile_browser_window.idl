@@ -89,4 +89,14 @@
   // held or after Alt is tapped. A window with no menu has true and false.
   readonly attribute boolean menuBarVisible;
   readonly attribute boolean menuBarAutoHide;
+
+  // The message box an Electron app asks over this window, as JSON, null for
+  // none: `type` (none, info, error, question or warning), `title`,
+  // `message`, `detail`, `buttons` (1 to 16 labels, in the app's order),
+  // `defaultId` (the button Enter presses, -1 for none), `cancelId` (the
+  // button Escape presses), `checkboxLabel` (empty for no checkbox) and
+  // `checkboxChecked`. Show it over the window's page, and answer it with
+  // DomicileHost.answerBrowserWindowMessageBox; the window then lists its
+  // next box, if its app asked more.
+  readonly attribute DOMString? messageBox;
 };

@@ -407,7 +407,7 @@ bool IsWindowRequest(std::string_view type) {
          type == "focus_window" || type == "close_window" ||
          type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
          type == "port_post" || type == "port_close" || type == "set_views" ||
-         type == "set_menu_bar";
+         type == "set_menu_bar" || type == "show_message_box";
 }
 
 // Entry `entry` of a menu, with only the keys the shell reads, or why it is
@@ -505,6 +505,69 @@ base::expected<ElectronRequest, ElectronRefusal> ParseSetMenuBar(
     set.menu = std::move(*json);
   }
   return set;
+}
+
+// A show_message_box request, or why it is not one.
+base::expected<ElectronRequest, ElectronRefusal> ParseShowMessageBox(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  constexpr size_t kMostButtons = 16;
+  const std::optional<int> box = request.FindInt("box");
+  const std::string* type = request.FindString("box_type");
+  const std::string* title = request.FindString("title");
+  const std::string* message = request.FindString("message");
+  const std::string* detail = request.FindString("detail");
+  const base::ListValue* buttons = request.FindList("buttons");
+  const std::optional<int> default_id = request.FindInt("default_id");
+  const std::optional<int> cancel_id = request.FindInt("cancel_id");
+  const std::string* checkbox_label = request.FindString("checkbox_label");
+  const std::optional<bool> checkbox_checked =
+      request.FindBool("checkbox_checked");
+  if (!box.has_value() || *box < 1) {
+    return Refuse("\"box\" must be a whole number from 1", window);
+  } else if (type == nullptr ||
+             (*type != "none" && *type != "info" && *type != "error" &&
+              *type != "question" && *type != "warning")) {
+    return Refuse("\"box_type\" must be none, info, error, question or warning",
+                  window);
+  } else if (title == nullptr || message == nullptr || detail == nullptr ||
+             checkbox_label == nullptr) {
+    return Refuse(
+        "\"title\", \"message\", \"detail\" and \"checkbox_label\" must be "
+        "strings",
+        window);
+  } else if (buttons == nullptr || buttons->empty() ||
+             buttons->size() > kMostButtons ||
+             !std::ranges::all_of(*buttons, &base::Value::is_string)) {
+    return Refuse("\"buttons\" must be a list of 1 to 16 labels", window);
+  }
+  const int count = static_cast<int>(buttons->size());
+  if (!default_id.has_value() || *default_id < -1 || *default_id >= count) {
+    return Refuse(
+        "\"default_id\" must be a button's index, or -1 for no default",
+        window);
+  } else if (!cancel_id.has_value() || *cancel_id < 0 || *cancel_id >= count) {
+    return Refuse("\"cancel_id\" must be a button's index", window);
+  } else if (!checkbox_checked.has_value()) {
+    return Refuse("\"checkbox_checked\" must be true or false", window);
+  }
+  base::DictValue kept;
+  kept.Set("type", *type);
+  kept.Set("title", *title);
+  kept.Set("message", *message);
+  kept.Set("detail", *detail);
+  kept.Set("buttons", buttons->Clone());
+  kept.Set("defaultId", *default_id);
+  kept.Set("cancelId", *cancel_id);
+  kept.Set("checkboxLabel", *checkbox_label);
+  kept.Set("checkboxChecked", *checkbox_checked);
+  std::string json;
+  CHECK(base::JSONWriter::Write(kept, &json));
+  return ElectronShowMessageBox{.window = window,
+                                .box = *box,
+                                .message_box = std::move(json),
+                                .buttons = count,
+                                .cancel_id = *cancel_id};
 }
 
 // The "views" of a set_views request, or why they are not views.
@@ -961,6 +1024,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseSetViews(*request, *window);
   } else if (*type == "set_menu_bar") {
     return ParseSetMenuBar(*request, *window);
+  } else if (*type == "show_message_box") {
+    return ParseShowMessageBox(*request, *window);
   } else if (*type == "focus_window") {
     return ElectronFocusWindow{.window = *window};
   } else if (*type == "close_window") {
@@ -1187,6 +1252,17 @@ std::string ElectronWindowResized(ElectronWindow window,
 std::string ElectronMenuClicked(ElectronWindow window, int command) {
   base::DictValue event = Event("menu_clicked", window);
   event.Set("command", command);
+  return Line(std::move(event));
+}
+
+std::string ElectronMessageBoxAnswered(ElectronWindow window,
+                                       int box,
+                                       int response,
+                                       bool checkbox_checked) {
+  base::DictValue event = Event("message_box_answered", window);
+  event.Set("box", box);
+  event.Set("response", response);
+  event.Set("checkbox_checked", checkbox_checked);
   return Line(std::move(event));
 }
 
