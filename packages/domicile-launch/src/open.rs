@@ -195,10 +195,13 @@ fn run(
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     let again = matches!(program.as_str(), "xdg-open" | "domicile-xdg-open")
-        // `open --app` opens an app window, not the type's default.
+        // `open --app` opens an app window, and `open --electron` runs an
+        // Electron app, not the type's default.
         || (program == "domicile"
             && argv.get(1).is_some_and(|verb| verb == "open")
-            && argv.get(2).is_none_or(|flag| flag != "--app"));
+            && argv
+                .get(2)
+                .is_none_or(|flag| flag != "--app" && flag != "--electron"));
     match again {
         true => Err(OpenError::Loop {
             id: handler.id.clone(),

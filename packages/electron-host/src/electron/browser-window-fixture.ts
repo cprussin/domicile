@@ -64,7 +64,7 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
     },
   });
   const windows = createBrowserWindow(
-    { events, send: (request) => sent.push(request) },
+    { events, schemes: [], send: (request) => sent.push(request) },
     app,
     ipc,
     sessions,

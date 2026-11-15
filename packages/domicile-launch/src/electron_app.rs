@@ -82,11 +82,12 @@ pub fn electron_app(
         (true, true) => None,
         (true, false) => {
             let name = target.strip_suffix(".desktop").unwrap_or(target);
-            Some(launch_command(name, application_dirs, None).ok_or_else(|| {
+            let argv = launch_command(name, application_dirs, None).ok_or_else(|| {
                 ElectronError::NoEntry {
                     id: format!("{name}.desktop"),
                 }
-            })?)
+            })?;
+            Some(own_command(argv))
         }
     };
     let start = match &argv {
@@ -109,6 +110,22 @@ pub fn electron_app(
             .unwrap_or_default(),
         fallback: argv,
     })
+}
+
+/// The app's own command in `argv`, an entry's: the one after `--` when the
+/// entry is the copy `electron.apps` wrote, which runs
+/// `domicile open --electron <id> -- <its own Exec>`; else `argv`.
+fn own_command(argv: Vec<String>) -> Vec<String> {
+    let copied = argv.first().is_some_and(|program| {
+        Path::new(program)
+            .file_name()
+            .is_some_and(|name| name == "domicile")
+    }) && argv.get(1).is_some_and(|verb| verb == "open")
+        && argv.get(2).is_some_and(|flag| flag == "--electron");
+    match argv.iter().position(|word| word == "--") {
+        Some(dashes) if copied && dashes + 1 < argv.len() => argv[dashes + 1..].to_vec(),
+        _ => argv,
+    }
 }
 
 /// Where `program`, which starts `target`, is: relative to `here` if it

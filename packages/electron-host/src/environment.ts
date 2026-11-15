@@ -9,6 +9,8 @@ const schema = z.object({
   DOMICILE_ELECTRON_SOCK: z.string().optional(),
   XDG_CACHE_HOME: z.string().optional(),
   XDG_CONFIG_HOME: z.string().optional(),
+  /** Where the apps' own schemes are kept for the desktop's next start. */
+  XDG_STATE_HOME: z.string().optional(),
 });
 
 export type Environment = z.infer<typeof schema>;

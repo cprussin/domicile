@@ -1,11 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ProtocolRequest } from "./protocol";
-import {
-  createProtocols,
-  privilegedSchemes,
-  registerSchemesAsPrivileged,
-} from "./protocol";
+import { createProtocols } from "./protocol";
 
 const setUp = () => {
   const sent: ProtocolRequest[] = [];
@@ -198,18 +194,5 @@ describe(createProtocols, () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ request: 1, type: "protocol_response" });
     expect(sent[0]).toHaveProperty("error");
-  });
-});
-
-describe(registerSchemesAsPrivileged, () => {
-  it("keeps the schemes for the engine's next start", () => {
-    registerSchemesAsPrivileged([
-      { privileges: { secure: true, standard: true }, scheme: "app" },
-    ]);
-
-    expect(privilegedSchemes()).toContainEqual({
-      privileges: { secure: true, standard: true },
-      scheme: "app",
-    });
   });
 });

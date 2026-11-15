@@ -113,6 +113,12 @@ impl DomicileCompositor {
         if let Some(idle) = &restated.idle {
             self.reset_the_idle_clock(idle);
         }
+        if let Some(apps) = &restated.electron_apps {
+            match &self.electron_entries {
+                Some(out) => crate::electron_apps::write_the_electron_entries(out, apps),
+                None => debug!("no --electron-entries, so `electron.apps` changes nothing"),
+            }
+        }
         if let Some(omit) = &restated.omit {
             self.omit_from_the_index(omit);
         }

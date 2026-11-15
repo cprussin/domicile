@@ -46,6 +46,7 @@ use domicile_launch::control_socket::{
     VARIABLE,
 };
 use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
+use domicile_launch::electron_schemes::{self, schemes_switch};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
@@ -61,7 +62,7 @@ use domicile_launch::open::{app_opening, opener, opening, AppOpening, Opening, P
 use domicile_launch::platform::platform;
 use domicile_launch::power::{confirmed, Power};
 use domicile_launch::profile_claim::claim;
-use domicile_launch::profile_path::profile_directory;
+use domicile_launch::profile_path::{profile_directory, state_directory};
 use domicile_launch::restart::{
     clear_the_last_compositor, clear_the_last_engine, clear_the_last_one, keep_a_desktop_up,
     keep_the_parts_up, renderer_unavailable, restarts, Attempt, Ending, PartAttempt, Policy,
@@ -862,6 +863,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         profile: profile.path.clone(),
         shims: runtime.join("bin"),
         session: runtime.join("session.json"),
+        electron_entries: runtime.join("share"),
         launches: runtime.join("launches.json"),
     };
     shim(
@@ -1257,6 +1259,9 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
     if desktop.on_the_cpu {
         composite_on_the_cpu(&mut spawn);
     }
+    if let Some(schemes) = electron_schemes(desktop.env) {
+        spawn.args.push(schemes.into());
+    }
     running
         .start("engine", &spawn)
         .map_err(|why| why.to_string())?;
@@ -1266,6 +1271,32 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
         running,
         desktop.policy,
     )
+}
+
+/// The engine switch registering the Electron apps' own schemes, read again
+/// at each engine start, so an app that brought a new scheme runs on the
+/// engine from the next one. See `domicile_launch::electron_schemes`.
+///
+/// A record that can't be read registers none, with an error in the log:
+/// those apps run on their own Electron, as the engine does with a wrong
+/// switch.
+fn electron_schemes(env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
+    let path = state_directory(env)?.join(electron_schemes::RECORD);
+    let record = match std::fs::read_to_string(&path) {
+        Ok(record) => record,
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(why) => {
+            eprintln!("domicile: cannot read {}: {why}", path.display());
+            return None;
+        }
+    };
+    schemes_switch(&record).unwrap_or_else(|why| {
+        eprintln!(
+            "domicile: registering no Electron app schemes, since {} is wrong: {why}",
+            path.display()
+        );
+        None
+    })
 }
 
 /// Sleeps for the backoff, returning early on a stop request.

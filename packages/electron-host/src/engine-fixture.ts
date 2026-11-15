@@ -26,7 +26,7 @@ export type FakeEngine = {
  */
 export const startFakeEngine = async (
   answer: (request: { type: string }) => unknown[] = (request) =>
-    request.type === "hello" ? [{ type: "ready" }] : [],
+    request.type === "hello" ? [{ schemes: [], type: "ready" }] : [],
 ): Promise<FakeEngine> => {
   const dir = await mkdtemp(join(tmpdir(), "electron-host-engine-"));
   const path = join(dir, "electron.sock");

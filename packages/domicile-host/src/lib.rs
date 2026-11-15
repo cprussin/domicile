@@ -26,6 +26,7 @@ pub mod data_dirs;
 pub mod data_url;
 pub mod dbus_json;
 pub mod desk_terminal;
+pub mod electron_entries;
 pub mod fanout;
 pub mod file_changes;
 pub mod file_filters;

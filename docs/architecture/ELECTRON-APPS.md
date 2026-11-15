@@ -41,8 +41,18 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   The command's arguments, or the `Exec`'s, are the app's `process.argv`.
   What a wrapper sets (`LD_PRELOAD`, flags) does not reach the app.
 - **`electron.apps`** in the desk config lists desktop entry ids. The
-  launcher starts those entries with `--electron` instead of their `Exec`.
-  The app's own package installs and updates it; nothing is repackaged.
+  compositor copies each entry into a directory first on the desk's
+  `XDG_DATA_DIRS`, with every `Exec` running
+  `domicile open --electron <id> -- <the original Exec>`, and without
+  `DBusActivatable` and `TryExec`
+  ([`electron_entries.rs`](../../packages/domicile-host/src/electron_entries.rs)).
+  So whatever starts the entry by its id runs it on the engine: any shell's
+  launcher, a `slack://` link through `domicile open` or GIO, a press on a
+  notification. No shell needs to know. The copies are written at start and
+  again when a reload changes the list. An entry in the data home
+  (`~/.local/share/applications`) comes before every data directory, so it
+  can't be overridden; that is logged as an error. The app's own package
+  installs and updates it; nothing is repackaged.
 - **`domicile` runs `electron-host`** (`libexec/domicile/electron-host`, or
   `DOMICILE_ELECTRON_HOST`) and waits on it, in the place of whatever started
   it: the compositor, for an app the launcher starts. So the app outlives a
@@ -180,16 +190,25 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   the app then answers before anything else sees the request, as in Electron.
 - **An app's own schemes** (`app://`, `cowork-artifact://`) are registered
   when the engine starts, because Chromium registers schemes only as each
-  process starts: from the quirks table and from schemes apps registered on
-  earlier runs. The supervisor passes them as
+  process starts. `ready` names the schemes the engine registered and the
+  privileges it granted each. When an app's `registerSchemesAsPrivileged`
+  names one the engine lacks, or a granted privilege it lacks, the host adds
+  it to `$XDG_STATE_HOME/domicile/electron-schemes.json` (each app's package
+  name, then its schemes and privileges) and exits 3, so the app runs on its
+  own Electron this time
+  ([`schemes.ts`](../../packages/electron-host/src/electron/schemes.ts)).
+  At each engine start the supervisor passes every kept scheme as
   `--domicile-electron-schemes=app:standard,secure;…`, with Electron's names
-  for the privileges, and the browser hands the switch to every child
-  process. `standard`, `secure`, `bypassCSP`, `corsEnabled` and
-  `supportFetchAPI` are granted; `stream`, `codeCache` and
-  `allowServiceWorkers` are not yet. `ready` names the schemes registered
-  and their privileges, so the host sees one the engine lacks, and an app
-  that brings a new scheme runs on its own Electron until the next login
-  ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
+  for the privileges, two apps' copies of a scheme getting what either asked
+  for ([`electron_schemes.rs`](../../packages/domicile-launch/src/electron_schemes.rs)).
+  The browser hands the switch to every child process. `standard`,
+  `secure`, `bypassCSP`, `corsEnabled` and `supportFetchAPI` are granted;
+  `stream`, `codeCache` and `allowServiceWorkers` are not yet, and don't
+  hold an app back. A scheme the engine keeps for itself is refused without
+  being kept ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
+  An app's first run with a new scheme falls back; the quirks table can
+  seed known apps' schemes to spare it, once their privileges are checked
+  against the real apps.
 - **Not yet:** a handler's redirect (the load fails loudly), a request body
   that is a file or a stream, and requests from an Electron page's workers,
   which go to the network.
@@ -369,8 +388,9 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] Manganese: message boxes over the window's page, the app's buttons in its order; Enter presses its default and Escape its cancel
 - [x] `electron-host`: `dialog.showMessageBox`
 - [x] `domicile open --electron`: the app from its entry or path, and the fallback to its own Electron
-- [ ] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
+- [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
+- [x] an app's own schemes kept for the next engine start
 - [x] the quirks table: known phase-2 apps go straight to their own Electron
-- [ ] an app's schemes kept for the next start
+- [ ] the quirks table seeds known apps' schemes, once checked against the real apps
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

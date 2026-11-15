@@ -60,6 +60,11 @@ pub struct Runtime {
     /// Set here rather than derived in [`compositor`] because the launcher
     /// waits on it.
     pub session: PathBuf,
+    /// A data directory first on every app's `XDG_DATA_DIRS`, where the
+    /// compositor writes the desktop entries that run the config's
+    /// `electron.apps` on the engine. See
+    /// `domicile_host::electron_entries`.
+    pub electron_entries: PathBuf,
     /// The clients the compositor launched, kept across a compositor restart
     /// so the next one launches again those the crash took. See
     /// `domicile_compositor::launches`.
@@ -213,8 +218,10 @@ pub fn let_the_engine_take_input(compositor: &mut Spawn) {
 /// - `BROWSER`: `domicile-open-url`, a single program because many readers
 ///   don't split the value.
 /// - `PATH`: [`Runtime::shims`] first, so `xdg-open` is `domicile open`.
-/// - `XDG_DATA_DIRS`: `data` first, so GIO finds `domicile-mimeapps.list`.
-///   A user's own `mimeapps.list` still wins. The portal does not see this.
+/// - `XDG_DATA_DIRS`: [`Runtime::electron_entries`] first, so starting an
+///   app the config lists runs it on the engine; then `data`, so GIO finds
+///   `domicile-mimeapps.list`. A user's own `mimeapps.list` still wins. The
+///   portal does not see this.
 /// - `LD_LIBRARY_PATH`: the engine directory first, for the
 ///   `libdomicile_engine.so` the compositor `dlopen`s. The compositor removes
 ///   it again for its clients.
@@ -239,7 +246,9 @@ pub fn compositor(
     }
     // Unset means `/usr/local/share:/usr/share` per the XDG spec, so keep
     // those after ours.
-    let mut data_dirs = OsString::from(data);
+    let mut data_dirs = OsString::from(&runtime.electron_entries);
+    data_dirs.push(":");
+    data_dirs.push(data);
     data_dirs.push(":");
     data_dirs.push(
         inherited("XDG_DATA_DIRS")
@@ -260,6 +269,8 @@ pub fn compositor(
         runtime.broker.clone().into(),
         "--launches".into(),
         runtime.launches.clone().into(),
+        "--electron-entries".into(),
+        runtime.electron_entries.clone().into(),
     ];
     // Omit `--config` when there is none. The compositor uses defaults for a
     // missing flag but fails on a path it cannot load.
