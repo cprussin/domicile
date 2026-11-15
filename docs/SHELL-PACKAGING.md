@@ -206,6 +206,11 @@ Markup from outside (a notification body, window title or file name put in
 Those files may compile WebAssembly, so a shell can be written in Rust or any
 language that targets wasm. See [`examples/dioxus-shell`](/examples/dioxus-shell).
 
+The shell is cross-origin isolated without COOP or COEP headers:
+`crossOriginIsolated` is true and `SharedArrayBuffer` works, so threaded wasm
+runs. Nothing it loads is checked for CORP. See
+[DOMICILE-SCHEME.md](/docs/architecture/DOMICILE-SCHEME.md#cross-origin-isolation).
+
 Refused:
 
 - inline `<script>` elements and `on…` attributes

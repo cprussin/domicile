@@ -61,7 +61,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
 | `guard-app-only-in-shell.sh` | `<app>`, `HTMLAppElement` and `canvas.embedExternalSurface()` exist in the shell and not in a site in its `<webview>`. Headless |
-| `guard-app-module.sh` | `run_app` runs an app module: its `main` gets the layer's `AppDomicile` (no `windows`) and its `files.write` reaches the compositor after `app_hello`; it `fetch()`es its own file and not the shell's (patch 0126). Control: the app's address in an unpinned window runs nothing. Headless |
+| `guard-app-module.sh` | `run_app` runs an app module: its `main` gets the layer's `AppDomicile` (no `windows`) and its `files.write` reaches the compositor after `app_hello`; it `fetch()`es its own file and not the shell's (patch 0126), and is cross-origin isolated (patch 0225). Control: the app's address in an unpinned window runs nothing. Headless |
 | `guard-electron-preload.sh` | an Electron window opened with a preload: the preload runs in its own isolated world before the page's script and exposes an API with `contextBridge`; the page can neither see the preload's globals nor replace the API; `ipcRenderer.send` and `invoke` reach the app over the Electron socket and the reply comes back; the app's `ipc_send` reaches the page's listener. Control: a window opened without a preload has no API. Headless |
 | `guard-electron-protocol.sh` | an Electron app's protocol handlers: a window opens at a `file:` URL the app serves, the page's `file:` subresources come from the app whole and streamed, and its `https` requests, with their bodies, go to the app when its session handles `https`. Control: a session that does not handle `file:` opens no `file:` window. Headless |
 | `guard-electron-schemes.sh` | Electron apps' own schemes, registered as the engine starts from `--domicile-electron-schemes`: `ready` names them with their privileges, and a page the app serves in one has its origin, is a secure context, and `fetch()`es its own files. Control: a scheme nobody registered has no origin. Headless |
@@ -95,7 +95,7 @@ Headless.
 |---|---|
 | `guard-shell-shortcuts.sh` | Chrome's reload, back, fullscreen, zoom, close and quit keys do nothing to the shell (patch 0047) |
 | `guard-shell-local-network.sh` | the shell loads an image from loopback with no Local Network Access prompt (patch 0066) |
-| `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0105) |
+| `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0105), and is cross-origin isolated with memory shared with a worker (patch 0225) |
 | `guard-notification-server-late.sh` | the browser connects to a notification server that takes its name after the browser looked, on a private bus (patch 0134) |
 | `guard-notification-window.sh` | a page's notification names its browser window in `x-domicile-browser-window`, and the shell's names none, on a private bus with a stand-in server (patch 0172) |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
