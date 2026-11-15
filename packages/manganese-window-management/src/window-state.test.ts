@@ -58,7 +58,7 @@ const listed = (
   isCaptured: false,
   isHidden: false,
   isPrivate: false,
-  menu: null,
+  menu: undefined,
   menuBarAutoHide: false,
   menuBarVisible: true,
   parent: undefined,
