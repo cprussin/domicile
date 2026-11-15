@@ -646,6 +646,41 @@ describe("the screens", () => {
     expect(windowsOn(workspaceOn(state, "left"))).toEqual([APP("kitty")]);
   });
 
+  it("numbers the screens a desk starts with in reading order", () => {
+    // The host lists the center monitor before the laptop left of it.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed([
+        { box: { height: 1080, width: 1920, x: 1920, y: 0 }, name: "center" },
+        { box: { height: 1080, width: 1920, x: 0, y: 0 }, name: "laptop" },
+        { box: { height: 1080, width: 1920, x: 3840, y: 0 }, name: "right" },
+      ]),
+    );
+
+    expect(state.screens.map(({ current, name }) => [name, current])).toEqual([
+      ["center", "2"],
+      ["laptop", "1"],
+      ["right", "3"],
+    ]);
+    expect(state.focused).toBe("laptop");
+  });
+
+  it("numbers the monitors plugged in together in reading order", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("laptop")),
+      WindowAction.ScreensDescribed([
+        { box: { height: 1080, width: 1920, x: 3840, y: 0 }, name: "right" },
+        { box: { height: 1080, width: 1920, x: 0, y: 0 }, name: "laptop" },
+        { box: { height: 1080, width: 1920, x: 1920, y: 0 }, name: "center" },
+      ]),
+    );
+
+    expect(currentOn(state, "laptop")).toBe("1");
+    expect(currentOn(state, "center")).toBe("2");
+    expect(currentOn(state, "right")).toBe("3");
+  });
+
   it("finds the screen a client's window is on, for its dialogs", () => {
     const state = reduce(
       desktop("kitty"),

@@ -18,6 +18,7 @@ import type { MediaKey } from "./keyboard/media-key";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
+import { readingOrder } from "./screens/reading-order";
 import type { PlacedScreen } from "./screens/screen-toward";
 import { screenToward } from "./screens/screen-toward";
 import { Beside } from "./tree/drop";
@@ -2210,8 +2211,9 @@ const sameFields = <Fields extends object>(
  *
  * Runs on every hotplug, so workspaces must stay put. An existing screen
  * keeps its workspace. A new display takes over a removed screen's workspace
- * (a different dock renames every monitor), else the lowest unused one. No
- * two screens show one workspace.
+ * (a different dock renames every monitor), else the lowest unused one.
+ * New displays are numbered in reading order (see `readingOrder`), whatever
+ * order the host lists them in. No two screens show one workspace.
  *
  * With no displays, keeps one {@link UNDESCRIBED_SCREEN} so open windows
  * still have a workspace.
@@ -2229,16 +2231,19 @@ const describeScreens = (
   const replaced = state.screens
     .filter((screen) => !names.includes(screen.name))
     .map(({ current }) => current);
-  const screens = kept.reduce<readonly DeskScreen[]>(
+  const numbered = readingOrder(kept).reduce<readonly DeskScreen[]>(
     (placed, { box, name }) => [
       ...placed,
       { box, current: showing(state, placed, replaced, name), name },
     ],
     [],
   );
+  const screens = kept.map(({ name }) =>
+    screenNamed({ ...state, screens: numbered }, name),
+  );
   return {
     ...state,
-    focused: focusedAmong(screens, state.focused),
+    focused: focusedAmong(numbered, state.focused),
     screens,
   };
 };
