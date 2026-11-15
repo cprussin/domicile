@@ -541,6 +541,8 @@ shell draws over the window's page, as it draws a page's
   checkboxChecked)`, `button` an index into `buttons`. The app hears the
   answer, and the window lists its next box, if it asked another.
 - A window that closes under a box answers it with `cancelId`.
+- **`@domicile-desktop/sdk/message-box`**'s `messageBox` reads the JSON into
+  what to draw, with no default or checkbox as `undefined`.
 
 ```js
 for (const window of domicile.browser.windows ?? []) {

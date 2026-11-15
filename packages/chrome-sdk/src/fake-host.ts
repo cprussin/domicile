@@ -374,6 +374,18 @@ export class FakeDomicileHost {
     });
   }
 
+  /**
+   * Browser window `id` shows its Electron app's message box `box`, as the
+   * engine lists it (JSON), or null for none.
+   */
+  setMessageBox(id: string, box: string | null): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, messageBox: box } : window,
+      ),
+    });
+  }
+
   /** The engine closed browser window `id`. `closeBrowserWindow` calls this too. */
   closeBrowser(id: string): void {
     this.set({

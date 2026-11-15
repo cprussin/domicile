@@ -3413,3 +3413,110 @@ describe("an Electron app's menu bar", () => {
     expect(menuBar()).not.toBeInTheDocument();
   });
 });
+
+describe("an Electron app's message box", () => {
+  const BOX = JSON.stringify({
+    buttons: ["Cancel", "Quit"],
+    cancelId: 0,
+    checkboxChecked: false,
+    checkboxLabel: "Don't ask again",
+    defaultId: 1,
+    detail: "Any conversation still generating will stop.",
+    message: "Quit Claude?",
+    title: "Claude",
+    type: "question",
+  });
+
+  /** A browser window "1" whose app asked `BOX`, and the host's answers. */
+  const appWindow = () => {
+    const host = new FakeDomicileHost();
+    host.openBrowser("https://claude.test/");
+    host.setMessageBox("1", BOX);
+    const domicile: Domicile = {
+      ...host.domicile,
+      windows: {
+        ...host.domicile.windows,
+        focus: () => undefined,
+        focusShell: () => undefined,
+      },
+    };
+    render(
+      <BrowserWindow
+        behindPanel={false}
+        clickThrough={false}
+        covered={false}
+        depth={0}
+        domicile={domicile}
+        dragging={false}
+        focused
+        frame={FRAME}
+        fullscreen={false}
+        isApp
+        motion="resting"
+        onDescription={noDescription}
+        onFocusRequest={() => undefined}
+        onIcon={noIcon}
+        onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        resizing={false}
+        url="https://claude.test/"
+        window="1"
+      />,
+    );
+    const answers = () =>
+      host.calls.filter(([name]) => name === "answerBrowserWindowMessageBox");
+    return { answers, host };
+  };
+
+  it("shows the box over the window and answers the app", async () => {
+    const { answers } = appWindow();
+
+    expect(
+      screen.getByRole("alertdialog", { name: "Quit Claude?" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Don't ask again" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Quit" }));
+
+    expect(answers()).toEqual([
+      ["answerBrowserWindowMessageBox", "1", 1, true],
+    ]);
+  });
+
+  it("focuses the default button", () => {
+    appWindow();
+
+    expect(screen.getByRole("button", { name: "Quit" })).toHaveFocus();
+  });
+
+  it("takes the box away once the engine lists none", () => {
+    const { host } = appWindow();
+
+    act(() => {
+      host.setMessageBox("1", null);
+    });
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("starts the app's next box with its own checkbox", async () => {
+    const { host } = appWindow();
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Don't ask again" }),
+    );
+
+    act(() => {
+      host.setMessageBox(
+        "1",
+        JSON.stringify({ ...JSON.parse(BOX), message: "Really quit?" }),
+      );
+    });
+
+    expect(
+      screen.getByRole("switch", { name: "Don't ask again" }),
+    ).not.toBeChecked();
+  });
+});
