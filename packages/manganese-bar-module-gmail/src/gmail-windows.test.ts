@@ -14,13 +14,17 @@ const browser = (
   id,
   isApp: false,
   isCaptured: false,
+  isHidden: false,
   isPrivate: false,
+  parent: null,
   partition: "",
   popupWindow: null,
   title,
   toplevelId: null,
   url,
   width: 0,
+  x: 0,
+  y: 0,
 });
 
 const INBOX = "https://mail.google.com/mail/u/0/#inbox";

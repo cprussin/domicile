@@ -16,6 +16,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace domicile {
 
@@ -56,6 +57,8 @@ class ElectronPage final : public content::WebContentsObserver,
 
   // content::WebContentsObserver:
   void ReadyToCommitNavigation(content::NavigationHandle* navigation) override;
+  // Tells the app the page's new size, for getContentBounds and "resize".
+  void PrimaryMainFrameWasResized(bool width_changed) override;
 
   // mojom::ElectronFrameHost:
   void Send(const std::string& channel, const std::string& args_json) override;
@@ -97,6 +100,9 @@ class ElectronPage final : public content::WebContentsObserver,
   // The document that last committed with the preload, or is about to.
   mojo::AssociatedRemote<mojom::ElectronFrame> frame_;
   mojo::AssociatedReceiver<mojom::ElectronFrameHost> receiver_{this};
+  // The size last told to the app, so a resize that changes nothing says
+  // nothing.
+  gfx::Size size_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

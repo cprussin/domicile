@@ -27,6 +27,10 @@ struct ListedBrowserWindow {
   std::string url;
   // Whether it is a private window, in the off-the-record profile.
   bool off_the_record = false;
+  // Whether it is an Electron app's view, part of a window rather than one:
+  // a capture tool never lists it, and its app hears it closed only when it
+  // leaves this list.
+  bool view = false;
 
   friend bool operator==(const ListedBrowserWindow&,
                          const ListedBrowserWindow&) = default;

@@ -2688,12 +2688,15 @@ void DomicileHost::ListBrowserWindows() {
     const auto toplevel_id = browser_toplevel_ids_.find(window->id);
     listed.push_back(MakeGarbageCollected<DomicileBrowserWindow>(
         window->id, window->url.GetString(), window->title,
-        window->popup_window == 0 ? std::nullopt
-                                  : std::optional<int32_t>(window->popup_window),
+        window->popup_window == 0
+            ? std::nullopt
+            : std::optional<int32_t>(window->popup_window),
         window->width, window->height, window->private_browsing,
         window->partition, window->app, window->app_id, window->captured,
         toplevel_id == browser_toplevel_ids_.end() ? String()
-                                                   : toplevel_id->value));
+                                                   : toplevel_id->value,
+        window->parent.empty() ? String() : String(window->parent), window->x,
+        window->y, window->hidden));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

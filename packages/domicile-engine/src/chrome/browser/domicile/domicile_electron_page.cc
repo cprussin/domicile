@@ -17,6 +17,7 @@
 #include "components/domicile/browser/electron_protocol.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -103,6 +104,19 @@ void ElectronPage::DeliverToPort(const std::string& port,
 void ElectronPage::ClosePort(const std::string& port) {
   if (frame_.is_bound()) {
     frame_->ClosePort(port);
+  }
+}
+
+void ElectronPage::PrimaryMainFrameWasResized(bool width_changed) {
+  content::RenderWidgetHostView* view =
+      web_contents()->GetRenderWidgetHostView();
+  if (view == nullptr) {
+    return;
+  }
+  const gfx::Size size = view->GetViewBounds().size();
+  if (size != size_) {
+    size_ = size;
+    calls_.resized.Run(size.width(), size.height());
   }
 }
 

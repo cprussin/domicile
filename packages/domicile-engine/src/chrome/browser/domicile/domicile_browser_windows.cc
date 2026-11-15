@@ -218,7 +218,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
       const WebViewPartition& partition,
       const std::string& preload,
       ElectronPageCalls calls,
-      base::WeakPtr<ElectronSession> session) {
+      base::WeakPtr<ElectronSession> session,
+      bool view) {
     WebViewGuest* made = Make(
         [&](WebViewGuest& guest) {
           // Before the first navigation, which runs the preload and loads
@@ -232,11 +233,44 @@ class DeskWindows final : public base::SupportsUserData::Data,
         },
         /*popup_window=*/std::nullopt, 0, 0,
         /*private_browsing=*/false, /*app=*/true, partition,
-        /*app_host=*/std::string(), app_id);
+        /*app_host=*/std::string(), app_id, view);
     if (made == nullptr) {
       return std::nullopt;
     }
     return made->window_id();
+  }
+
+  // Window `id` holds `views`, bottom first, and no others. The app made
+  // sure `id` is a window and each of `views` a view, both its own; a window
+  // or view that closed meanwhile is skipped.
+  void SetViews(const std::string& id, std::vector<ElectronDeskView> views) {
+    if (std::ranges::find(windows_, id, &Window::id) == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to set the views of browser window "
+                   << id << ", which is not open.";
+      return;
+    }
+    for (Window& window : windows_) {
+      if (window.parent == id) {
+        window.parent.clear();
+      }
+    }
+    int stack = 0;
+    for (const ElectronDeskView& placed : views) {
+      auto view = std::ranges::find(windows_, placed.id, &Window::id);
+      if (view == windows_.end()) {
+        continue;
+      }
+      CHECK(view->view) << "browser window " << placed.id
+                        << " was placed as a view and is a window";
+      view->parent = id;
+      view->x = placed.x;
+      view->y = placed.y;
+      view->width = placed.width;
+      view->height = placed.height;
+      view->hidden = placed.hidden;
+      view->stack = stack++;
+    }
+    Changed();
   }
 
   // Opens an app window at an app module's `url`, pinned to `app_host`. See
@@ -327,6 +361,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
                        closing_.back().id),
         kLinger);
     windows_.erase(found);
+    // Its views stay open, unlisted, as an Electron app's WebContentsViews
+    // outlive the window that held them until the app closes them.
+    for (Window& window : windows_) {
+      if (window.parent == id) {
+        window.parent.clear();
+      }
+    }
     LOG(INFO) << "domicile: closed browser window " << id << ".";
     Changed();
   }
@@ -356,26 +397,26 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return found == windows_.end() ? std::string() : found->id;
   }
 
-  // The whole list, as sent to the shell.
+  // The whole list, as sent to the shell: the windows oldest first, each
+  // followed by the views it holds, bottom first. A view no window holds is
+  // left out.
   std::vector<mojom::BrowserWindowPtr> List() const {
     std::vector<mojom::BrowserWindowPtr> list;
     for (const Window& window : windows_) {
-      content::WebContents& contents = window.guest->contents();
-      content::NavigationEntry* entry =
-          contents.GetController().GetVisibleEntry();
-      // A page's new window has only its initial entry until its first
-      // navigation commits.
-      const bool navigated = entry != nullptr && !entry->IsInitialEntry();
-      const std::optional<WebViewPartition> partition =
-          window.guest->partition();
-      list.push_back(mojom::BrowserWindow::New(
-          window.id, navigated ? entry->GetVirtualURL() : window.opened_at,
-          base::UTF16ToUTF8(contents.GetTitle()),
-          window.guest->popup_window().value_or(0), window.width,
-          window.height, contents.GetBrowserContext()->IsOffTheRecord(),
-          partition.has_value() ? WebViewPartitionAttribute(*partition)
-                                : std::string(),
-          window.app, window.app_id, window.captures > 0));
+      if (window.view) {
+        continue;
+      }
+      list.push_back(Listed(window));
+      std::vector<const Window*> views;
+      for (const Window& view : windows_) {
+        if (view.view && view.parent == window.id) {
+          views.push_back(&view);
+        }
+      }
+      std::ranges::sort(views, {}, &Window::stack);
+      for (const Window* view : views) {
+        list.push_back(Listed(*view));
+      }
     }
     return list;
   }
@@ -464,19 +505,49 @@ class DeskWindows final : public base::SupportsUserData::Data,
     GURL opened_at;
     // The captures of its page running; see Capture.
     int captures = 0;
+    // An Electron app's WebContentsView page: listed only while a window
+    // holds it, as `parent`, at `x`, `y`, `width` and `height` in its page,
+    // `stack` from the bottom of its views, and `hidden` when the app hid it.
+    bool view = false;
+    std::string parent;
+    int x = 0;
+    int y = 0;
+    bool hidden = false;
+    int stack = 0;
   };
+
+  // One window as the shell's list has it.
+  static mojom::BrowserWindowPtr Listed(const Window& window) {
+    content::WebContents& contents = window.guest->contents();
+    content::NavigationEntry* entry =
+        contents.GetController().GetVisibleEntry();
+    // A page's new window has only its initial entry until its first
+    // navigation commits.
+    const bool navigated = entry != nullptr && !entry->IsInitialEntry();
+    const std::optional<WebViewPartition> partition = window.guest->partition();
+    return mojom::BrowserWindow::New(
+        window.id, navigated ? entry->GetVirtualURL() : window.opened_at,
+        base::UTF16ToUTF8(contents.GetTitle()),
+        window.guest->popup_window().value_or(0), window.width, window.height,
+        contents.GetBrowserContext()->IsOffTheRecord(),
+        partition.has_value() ? WebViewPartitionAttribute(*partition)
+                              : std::string(),
+        window.app, window.app_id, window.captures > 0, window.parent, window.x,
+        window.y, window.hidden);
+  }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
   // null when the profile has no shell to own it.
   WebViewGuest* Make(base::FunctionRef<void(WebViewGuest&)> load,
-            std::optional<int> popup_window,
-            int width,
-            int height,
-            bool private_browsing,
-            bool app,
-            const std::optional<WebViewPartition>& partition,
-            const std::string& app_host = std::string(),
-            const std::string& app_id = std::string()) {
+                     std::optional<int> popup_window,
+                     int width,
+                     int height,
+                     bool private_browsing,
+                     bool app,
+                     const std::optional<WebViewPartition>& partition,
+                     const std::string& app_host = std::string(),
+                     const std::string& app_id = std::string(),
+                     bool view = false) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -498,8 +569,14 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     load(*guest);
     WebViewGuest* made = guest.get();
-    windows_.push_back(Window{id, std::move(guest), std::move(watch), width,
-                              height, app, app_id});
+    windows_.push_back(Window{.id = id,
+                              .guest = std::move(guest),
+                              .watch = std::move(watch),
+                              .width = width,
+                              .height = height,
+                              .app = app,
+                              .app_id = app_id,
+                              .view = view});
     Changed();
     return made;
   }
@@ -563,8 +640,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
           .app_id = window.app_id,
           .url = (committed.is_empty() ? window.opened_at : committed)
                      .possibly_invalid_spec(),
-          .off_the_record =
-              contents.GetBrowserContext()->IsOffTheRecord()});
+          .off_the_record = contents.GetBrowserContext()->IsOffTheRecord(),
+          .view = window.view});
     }
     return listing;
   }
@@ -887,13 +964,21 @@ std::optional<std::string> OpenElectronWindow(
     const WebViewPartition& partition,
     const std::string& preload,
     ElectronPageCalls calls,
-    base::WeakPtr<ElectronSession> session) {
+    base::WeakPtr<ElectronSession> session,
+    bool view) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {
     return std::nullopt;
   }
   return windows->OpenElectron(url, app_id, partition, preload,
-                               std::move(calls), std::move(session));
+                               std::move(calls), std::move(session), view);
+}
+
+void SetElectronViews(const std::string& id,
+                      std::vector<ElectronDeskView> views) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetViews(id, std::move(views));
+  }
 }
 
 ElectronPage* ElectronPageOf(const std::string& id) {

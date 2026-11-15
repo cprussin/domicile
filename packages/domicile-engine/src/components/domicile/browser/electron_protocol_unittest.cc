@@ -279,6 +279,60 @@ TEST(ElectronProtocolTest, ReadySaysWhichSchemesTheEngineRegistered) {
             "\"claude-media\"}],\"type\":\"ready\"}\n");
 }
 
+TEST(ElectronProtocolTest, OpenWindowMayOpenAView) {
+  const auto window = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  const auto view = ParseElectronRequest(
+      R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+      R"("view":true})");
+
+  ASSERT_TRUE(window.has_value() && view.has_value());
+  EXPECT_FALSE(std::get<ElectronOpenWindow>(*window).view);
+  EXPECT_TRUE(std::get<ElectronOpenWindow>(*view).view);
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","view":1})"),
+            "\"view\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, SetViewsPlacesEachViewBottomFirst) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"set_views","window":1,"views":[)"
+      R"({"window":2,"x":0,"y":40,"width":800,"height":560},)"
+      R"({"window":3,"x":-5,"y":0,"width":0,"height":0,"hidden":true}]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& set = std::get<ElectronSetViews>(*request);
+  EXPECT_EQ(set.window, 1);
+  EXPECT_EQ(set.views,
+            (std::vector<ElectronViewPlacement>{
+                {.view = 2, .x = 0, .y = 40, .width = 800, .height = 560},
+                {.view = 3, .x = -5, .hidden = true}}));
+  EXPECT_TRUE(std::get<ElectronSetViews>(
+                  *ParseElectronRequest(
+                      R"({"type":"set_views","window":1,"views":[]})"))
+                  .views.empty());
+}
+
+TEST(ElectronProtocolTest, ABadSetViewsIsRefusedAsTheWindows) {
+  EXPECT_EQ(ParseElectronRequest(R"({"type":"set_views","window":4})").error(),
+            (ElectronRefusal{.why = "\"views\" must be a list", .window = 4}));
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[2]})"),
+            "each of \"views\" must be an object");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"x":0,"y":0,"width":1,"height":1}]})"),
+            "a view's \"window\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"window":2,"y":0,"width":1,"height":1}]})"),
+            "a view's \"x\" and \"y\" must be whole numbers");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"window":2,"x":0,"y":0,"width":-1,"height":1}]})"),
+            "a view's \"width\" and \"height\" must be whole numbers from 0");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"window":2,"x":0,"y":0,"width":1,"height":1,)"
+                       R"("hidden":"yes"}]})"),
+            "a view's \"hidden\" must be true or false");
+}
+
 TEST(ElectronProtocolTest, EventsAreOneLineEach) {
   EXPECT_EQ(ElectronReady({}), "{\"schemes\":[],\"type\":\"ready\"}\n");
   EXPECT_EQ(ElectronRefused("no"), "{\"type\":\"refused\",\"why\":\"no\"}\n");
@@ -292,6 +346,9 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"title\":\"Claude\",\"type\":\"title_changed\",\"window\":4}\n");
   EXPECT_EQ(ElectronWindowClosed(5),
             "{\"type\":\"window_closed\",\"window\":5}\n");
+  EXPECT_EQ(ElectronWindowResized(6, 800, 600),
+            "{\"height\":600,\"type\":\"resized\",\"width\":800,"
+            "\"window\":6}\n");
 }
 
 TEST(ElectronProtocolTest, OpenWindowCarriesItsPreload) {

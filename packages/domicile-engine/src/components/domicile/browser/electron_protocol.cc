@@ -406,7 +406,50 @@ bool IsWindowRequest(std::string_view type) {
   return type == "open_window" || type == "load_url" ||
          type == "focus_window" || type == "close_window" ||
          type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
-         type == "port_post" || type == "port_close";
+         type == "port_post" || type == "port_close" || type == "set_views";
+}
+
+// The "views" of a set_views request, or why they are not views.
+base::expected<ElectronRequest, ElectronRefusal> ParseSetViews(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const base::ListValue* views = request.FindList("views");
+  if (views == nullptr) {
+    return Refuse("\"views\" must be a list", window);
+  }
+  ElectronSetViews set{.window = window};
+  for (const base::Value& entry : *views) {
+    const base::DictValue* view = entry.GetIfDict();
+    if (view == nullptr) {
+      return Refuse("each of \"views\" must be an object", window);
+    }
+    const base::expected<ElectronWindow, std::string> number = WindowIn(*view);
+    const std::optional<int> x = view->FindInt("x");
+    const std::optional<int> y = view->FindInt("y");
+    const std::optional<int> width = view->FindInt("width");
+    const std::optional<int> height = view->FindInt("height");
+    const base::Value* hidden = view->Find("hidden");
+    if (!number.has_value()) {
+      return Refuse(base::StrCat({"a view's ", number.error()}), window);
+    } else if (!x.has_value() || !y.has_value()) {
+      return Refuse("a view's \"x\" and \"y\" must be whole numbers", window);
+    } else if (!width.has_value() || *width < 0 || !height.has_value() ||
+               *height < 0) {
+      return Refuse(
+          "a view's \"width\" and \"height\" must be whole numbers from 0",
+          window);
+    } else if (hidden != nullptr && !hidden->is_bool()) {
+      return Refuse("a view's \"hidden\" must be true or false", window);
+    }
+    set.views.push_back(ElectronViewPlacement{
+        .view = *number,
+        .x = *x,
+        .y = *y,
+        .width = *width,
+        .height = *height,
+        .hidden = hidden != nullptr && hidden->GetBool()});
+  }
+  return set;
 }
 
 // The "port" a port request names, or why it names none.
@@ -797,10 +840,13 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
       return Refuse(std::move(url.error()), *window);
     } else if (*type == "open_window") {
       const base::Value* preload = request->Find("preload");
+      const base::Value* view = request->Find("view");
       base::expected<std::string, std::string> session =
           SessionIn(*request, /*optional=*/true);
       if (preload != nullptr && !preload->is_string()) {
         return Refuse("\"preload\" must be a string", *window);
+      } else if (view != nullptr && !view->is_bool()) {
+        return Refuse("\"view\" must be true or false", *window);
       } else if (!session.has_value()) {
         return Refuse(std::move(session.error()), *window);
       }
@@ -808,10 +854,13 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
           .window = *window,
           .url = std::move(*url),
           .preload = preload ? preload->GetString() : std::string(),
-          .session = std::move(*session)};
+          .session = std::move(*session),
+          .view = view != nullptr && view->GetBool()};
     } else {
       return ElectronLoadUrl{.window = *window, .url = std::move(*url)};
     }
+  } else if (*type == "set_views") {
+    return ParseSetViews(*request, *window);
   } else if (*type == "focus_window") {
     return ElectronFocusWindow{.window = *window};
   } else if (*type == "close_window") {
@@ -1024,6 +1073,15 @@ std::string ElectronTitleChanged(ElectronWindow window,
 
 std::string ElectronWindowClosed(ElectronWindow window) {
   return Line(Event("window_closed", window));
+}
+
+std::string ElectronWindowResized(ElectronWindow window,
+                                  int width,
+                                  int height) {
+  base::DictValue event = Event("resized", window);
+  event.Set("width", width);
+  event.Set("height", height);
+  return Line(std::move(event));
 }
 
 std::string ElectronIpcMessage(ElectronWindow window,
