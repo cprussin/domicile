@@ -79,11 +79,39 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 
 - **`new BrowserWindow()`** asks for an app window pinned to the app, as
   `open --app` does ([WEB-APPS.md](WEB-APPS.md)).
-- **`WebContentsView`** and **`BrowserView`** are guests inside that window,
-  placed at the bounds the app sets.
+- **`WebContentsView`** and **`BrowserView`** are views: pages that are part
+  of a window, not windows. Claude Desktop's whole chat is one, under its
+  title bar page.
+  - The host opens one with `open_window` and `"view": true`, and places a
+    window's views with `set_views {window, views: [{window, x, y, width,
+    height, hidden?}]}`, bottom first, replacing the ones it held. Only a
+    window holds views, and only views are held. A view placed in another
+    window moves there.
+  - The engine lists a view to the shell only while a window holds it, right
+    after that window, with `parent` and the app's bounds
+    (`DomicileBrowserWindow.parent`, `x`, `y`, `width`, `height`,
+    `isHidden`). It is never a capture source of its own.
+  - **The shell lays views out.** The app's bounds are what it asks for:
+    Manganese draws each view there, over its window, and another shell may
+    put views in tabs or a split instead (user's decision, 2026-11-14).
+  - The engine tells the app each page's size, its windows' and its views',
+    with `resized {window, width, height}`, for `getContentBounds()`,
+    `getBounds()` and the `resize` event.
+  - A view outlives the window that held it until the app closes it, as an
+    Electron app's do.
+  - In the host, `win.contentView.addChildView(view, index?)`,
+    `removeChildView`, `view.setBounds` and `view.setVisible` each send the
+    window's `set_views`, only once the window and the view have opened and
+    only when something moved. `BrowserView` is a view placed with
+    `setBrowserView` and kin; its `setAutoResize` follows the window's
+    `resized`. A view nested in a view throws, since only a window holds
+    views. `BrowserWindow.fromWebContents` finds the window holding a view's
+    page.
 - **`loadURL`, `loadFile`, title, show, focus and close** map to existing
-  window requests. Window size and position are ignored: the shell lays out
-  windows.
+  window requests. Window size and position are not the app's to set: the
+  shell lays out windows. A window's size reads as the shell gave it
+  (`getContentBounds`, `getBounds`, `getSize`), and `resize` fires as it
+  changes; before the shell gives one, it is the size the app asked for.
 - **`loadFile`** loads from the mirror, so the engine reads plain files.
 - **Storage:** each app gets its own partition, named by its `package.json`
   name. Apps share no cookies with each other or with the browser.
@@ -283,7 +311,10 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `session.webRequest`
 - [x] `electron-host`: session cookies, storage clearing, `clearCache`, `setUserAgent`
 - [x] `electron-host`: `setPermissionRequestHandler`
-- [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
+- [x] engine: views (`set_views`), listed to the shell under their window, and each page's size
+- [ ] shells: Manganese draws views where their apps ask
+- [x] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds` and `resize`
+- [ ] `electron-host`: `utilityProcess`
 - [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
 - [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`
 - [x] `electron-host`: `Notification`

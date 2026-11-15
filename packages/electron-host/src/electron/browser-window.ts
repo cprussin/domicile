@@ -1,12 +1,19 @@
-// The stand-in for Electron's `BrowserWindow`: each one is an app window on
-// the desk, opened over the engine's Electron socket.
+// The stand-ins for Electron's `BrowserWindow`, `WebContentsView` and
+// `BrowserView`. Each window is an app window on the desk, opened over the
+// engine's Electron socket. Each view is a page the shell draws as part of the
+// window that holds it. See "Windows" in docs/architecture/ELECTRON-APPS.md.
 
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { Engine, EngineRequest, WindowEvent } from "../engine";
+import type {
+  Engine,
+  EngineRequest,
+  ViewPlacement,
+  WindowEvent,
+} from "../engine";
 import type { ElectronApp } from "./app";
 import type { createIpcMain } from "./ipc-main";
 import type { MenuEntry } from "./menu";
@@ -29,7 +36,30 @@ export type BrowserWindowOptions = {
   /** The menu bar hides until the user presses Alt. */
   readonly autoHideMenuBar?: boolean | undefined;
   readonly title?: string | undefined;
+  /** The size it starts at, until the shell gives it one. */
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
   readonly webPreferences?: WebPreferences | undefined;
+};
+
+export type ViewOptions = {
+  readonly webPreferences?: WebPreferences | undefined;
+};
+
+/** Electron's `Rectangle`. */
+export type Rectangle = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
+/** A `BrowserView`'s `setAutoResize`: what follows its window's size. */
+export type AutoResize = {
+  readonly width?: boolean | undefined;
+  readonly height?: boolean | undefined;
+  readonly horizontal?: boolean | undefined;
+  readonly vertical?: boolean | undefined;
 };
 
 /** Where the windows' pages' IPC goes: the host's side of `ipcMain`. */
@@ -48,11 +78,37 @@ export type WindowMenus<Menu> = {
   readonly click: (menu: Menu, command: number, window: number) => void;
 };
 
+/** Electron's size for a window that asks for none. */
+const DEFAULT_SIZE = { height: 600, width: 800 };
+
+const NO_BOUNDS: Rectangle = { height: 0, width: 0, x: 0, y: 0 };
+
 /**
- * Makes the `BrowserWindow` class for an app on `engine`. The engine's window
- * events reach the window they name, and its pages' IPC reaches `ipc`. Its
- * pages load through `sessions`. Its menu bar shows one of `menus`.
- * `readPreload` reads a preload's source.
+ * One side of a BrowserView that follows its window: scaled with it, grown by
+ * as much as it grew, or left.
+ */
+const followed = (
+  size: number,
+  scales: boolean | undefined,
+  grows: boolean | undefined,
+  growth: number,
+  scale: number,
+) => {
+  if (scales) {
+    return Math.round(size * scale);
+  } else if (grows) {
+    return size + growth;
+  } else {
+    return size;
+  }
+};
+
+/**
+ * Makes the `BrowserWindow`, `WebContentsView` and `BrowserView` classes for
+ * an app on `engine`. The engine's window events reach the page they name, and
+ * its pages' IPC reaches `ipc`. Its pages load through `sessions`. A window's
+ * menu bar shows one of `menus`. `readPreload` reads a preload's source. `webContentsOf` finds a page by the
+ * engine's number, a window's or a view's.
  */
 export const createBrowserWindow = <Menu extends EventEmitter>(
   engine: Engine,
@@ -62,6 +118,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   menus: WindowMenus<Menu>,
   readPreload: (path: string) => string = (path) => readFileSync(path, "utf8"),
 ) => {
+  /** Every page by the engine's number: windows' and views'. */
+  const pages = new Map<number, Page>();
   const windows = new Map<number, BrowserWindow>();
   const ports = createPagePorts(engine.send);
   let nextId = 1;
@@ -77,9 +135,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     return event;
   };
 
-  /** A window's page. Electron's `webContents`, as far as the host has it. */
+  /** A page's `webContents`, as far as the host has it. */
   class WebContents extends EventEmitter {
-    constructor(private readonly owner: BrowserWindow) {
+    constructor(readonly owner: Page) {
       super();
     }
 
@@ -96,6 +154,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isDestroyed = () => this.owner.isDestroyed();
     readonly loadFile = (path: string) => this.owner.loadFile(path);
     readonly loadURL = (url: string) => this.owner.loadURL(url);
+    /** Closes the page at once: a window's ends the window. */
+    readonly close = () => {
+      this.owner.destroy();
+    };
 
     /**
      * Sends `args` on `channel` to the page's `ipcRenderer`. They travel as
@@ -131,30 +193,25 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     };
   }
 
-  class BrowserWindow extends EventEmitter {
-    static readonly fromId = (id: number) => windows.get(id) ?? null;
-    static readonly getAllWindows = () => [...windows.values()];
-    /** Null: which window has focus is the shell's, and not told yet. */
-    static readonly getFocusedWindow = () => null;
-
+  /**
+   * One page on the engine, a window's or a view's: what both kinds share.
+   * The engine has no empty pages, so it opens with the first load.
+   */
+  abstract class Page extends EventEmitter {
     readonly id = nextId++;
     readonly webContents = new WebContents(this);
     url = "";
-    #title: string;
-    #opened = false;
-    #shown = false;
-    #destroyed = false;
-    #loads: { resolve: () => void; reject: (why: Error) => void }[] = [];
-    readonly #preload: string | undefined;
-    #menu: Menu | null = menus.applicationMenu();
-    #menuBarVisible = true;
-    #menuBarAutoHide: boolean;
     /** Its page's session. */
     readonly session: Session;
+    protected title: string;
+    protected opened = false;
+    protected destroyed = false;
+    #loads: { resolve: () => void; reject: (why: Error) => void }[] = [];
+    readonly #preload: string | undefined;
+    readonly #view: boolean;
 
-    constructor(options: BrowserWindowOptions = {}) {
+    constructor(preferences: WebPreferences, title: string, view: boolean) {
       super();
-      const preferences = options.webPreferences ?? {};
       if (
         preferences.nodeIntegration === true ||
         preferences.contextIsolation === false
@@ -170,26 +227,22 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       this.session =
         preferences.session ??
         sessions.fromPartition(preferences.partition ?? "");
-      this.#title = options.title ?? app.getName();
-      this.#menuBarAutoHide = options.autoHideMenuBar ?? false;
-      this.#menu?.on("changed", this.#showMenuBar);
-      windows.set(this.id, this);
+      this.title = title;
+      this.#view = view;
+      pages.set(this.id, this);
     }
 
-    /**
-     * Shows `url`. The first load opens the window, as the engine has no empty
-     * windows. Resolves once the page loads, as Electron's does.
-     */
+    /** Shows `url`. Resolves once the page loads, as Electron's does. */
     readonly loadURL = (url: string) => {
       this.assertAlive();
       this.url = url;
       const loaded = new Promise<void>((resolve, reject) => {
         this.#loads.push({ reject, resolve });
       });
-      if (this.#opened) {
+      if (this.opened) {
         engine.send({ type: "load_url", url, window: this.id });
       } else {
-        this.#opened = true;
+        this.opened = true;
         const session = sessionPartition(this.session);
         engine.send({
           type: "open_window",
@@ -197,11 +250,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           window: this.id,
           ...(this.#preload === undefined ? {} : { preload: this.#preload }),
           ...(session === "" ? {} : { session }),
+          ...(this.#view ? { view: true } : {}),
         });
-        // A window opens with no menu bar, so there's only one to tell of.
-        if (this.#menu !== null) {
-          this.#showMenuBar();
-        }
+        this.wasOpened();
       }
       return loaded;
     };
@@ -213,87 +264,19 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           .href,
       );
 
-    readonly show = () => {
-      this.focus();
-    };
-
-    readonly focus = () => {
-      this.assertAlive();
-      if (this.#opened) {
-        engine.send({ type: "focus_window", window: this.id });
-      }
-    };
-
-    /** Closes the window once its page agrees, unless a `close` listener prevents it. */
-    readonly close = () => {
-      if (!this.#destroyed) {
-        const event = eventObject();
-        this.emit("close", event);
-        if (!event.defaultPrevented) {
-          this.#end(() => {
-            engine.send({ type: "close_window", window: this.id });
-          });
-        }
-      }
-    };
-
-    /** Closes the window without asking its page or listeners. */
+    /** Closes the page without asking it or any listener. */
     readonly destroy = () => {
-      if (!this.#destroyed) {
-        this.#end(() => {
+      if (!this.destroyed) {
+        this.end(() => {
           engine.send({ type: "destroy_window", window: this.id });
         });
       }
     };
 
-    /** Shows `menu` in the window's menu bar, or no menu bar for null. */
-    readonly setMenu = (menu: Menu | null) => {
-      this.assertAlive();
-      this.#menu?.off("changed", this.#showMenuBar);
-      this.#menu = menu;
-      this.#menu?.on("changed", this.#showMenuBar);
-      this.#showMenuBar();
-    };
+    readonly isDestroyed = () => this.destroyed;
+    readonly getTitle = () => this.title;
 
-    readonly removeMenu = () => {
-      this.setMenu(null);
-    };
-
-    readonly setMenuBarVisibility = (visible: boolean) => {
-      this.#menuBarVisible = visible;
-      this.#showMenuBar();
-    };
-
-    readonly isMenuBarVisible = () => this.#menuBarVisible;
-
-    readonly setAutoHideMenuBar = (autoHide: boolean) => {
-      this.#menuBarAutoHide = autoHide;
-      this.#showMenuBar();
-    };
-
-    readonly isMenuBarAutoHide = () => this.#menuBarAutoHide;
-
-    /** Tells the engine the menu bar as it is now, once the window is open. */
-    readonly #showMenuBar = () => {
-      if (this.#opened && !this.#destroyed) {
-        engine.send({
-          auto_hide: this.#menuBarAutoHide,
-          menu: this.#menu === null ? null : menus.model(this.#menu),
-          type: "set_menu_bar",
-          visible: this.#menuBarVisible,
-          window: this.id,
-        });
-      }
-    };
-
-    readonly isDestroyed = () => this.#destroyed;
-    readonly isVisible = () => this.#shown && !this.#destroyed;
-    readonly getTitle = () => this.#title;
-    readonly setTitle = (title: string) => {
-      this.#title = title;
-    };
-
-    /** Takes what the engine said of this window. */
+    /** Takes what the engine said of this page. */
     readonly take = (event: WindowEvent) => {
       switch (event.type) {
         case "window_opened": {
@@ -302,21 +285,14 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         }
         case "window_loaded": {
           this.webContents.emit("did-finish-load");
-          if (!this.#shown) {
-            this.#shown = true;
-            this.emit("ready-to-show");
-          }
+          this.wasLoaded();
           for (const load of this.#loads.splice(0)) {
             load.resolve();
           }
           break;
         }
         case "title_changed": {
-          const titleEvent = eventObject();
-          this.emit("page-title-updated", titleEvent, event.title, false);
-          if (!titleEvent.defaultPrevented) {
-            this.#title = event.title;
-          }
+          this.titled(event.title);
           break;
         }
         case "window_refused": {
@@ -325,6 +301,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         }
         case "window_closed": {
           this.#closed();
+          break;
+        }
+        case "resized": {
+          this.resized(event.width, event.height);
           break;
         }
         case "ipc_message": {
@@ -367,11 +347,56 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           break;
         }
         case "menu_clicked": {
-          if (this.#menu !== null) {
-            menus.click(this.#menu, event.command, this.id);
-          }
+          this.menuClicked(event.command);
           break;
         }
+      }
+    };
+
+    /** Throws as Electron does for a page that's gone. */
+    readonly assertAlive = () => {
+      if (this.destroyed) {
+        throw new Error("Object has been destroyed");
+      }
+    };
+
+    /** The engine opened the page. */
+    protected wasOpened() {
+      // Only a window or a view has more to do.
+    }
+
+    /** The page loaded. */
+    protected wasLoaded() {
+      // Only a window has more to do.
+    }
+
+    /** The page's title changed to `title`. */
+    protected titled(title: string) {
+      this.title = title;
+      this.webContents.emit("page-title-updated", eventObject(), title, false);
+    }
+
+    /** The shell gave the page a size. */
+    protected resized(_width: number, _height: number) {
+      // Only a window has more to do.
+    }
+
+    /** The user chose entry `command` of the page's menu bar. */
+    protected menuClicked(_command: number) {
+      // Only a window has a menu bar.
+    }
+
+    /** The page is gone. */
+    protected wasClosed() {
+      // Only a window or a view has more to do.
+    }
+
+    /** Ends a page that was never opened at once; asks the engine otherwise. */
+    protected readonly end = (ask: () => void) => {
+      if (this.opened) {
+        ask();
+      } else {
+        this.#closed();
       }
     };
 
@@ -397,49 +422,417 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         });
     };
 
-    /** Ends a window that was never opened at once; asks the engine otherwise. */
-    readonly #end = (ask: () => void) => {
-      if (this.#opened) {
-        ask();
-      } else {
-        this.#closed();
-      }
-    };
-
     readonly #refused = (why: string) => {
       const loads = this.#loads.splice(0);
       if (loads.length > 0) {
         for (const load of loads) {
           load.reject(new Error(why));
         }
-      } else if (!this.#destroyed) {
+      } else if (!this.destroyed) {
         throw new Error(`the engine refused window ${this.id}: ${why}`);
       }
     };
 
     readonly #closed = () => {
-      if (!this.#destroyed) {
-        this.#destroyed = true;
-        this.#menu?.off("changed", this.#showMenuBar);
-        windows.delete(this.id);
+      if (!this.destroyed) {
+        this.destroyed = true;
+        pages.delete(this.id);
         ports.gone(this.id);
         for (const load of this.#loads.splice(0)) {
           load.reject(new Error("the window closed before its page loaded"));
         }
-        this.emit("closed");
+        this.wasClosed();
         this.webContents.emit("destroyed");
-        if (windows.size === 0) {
-          allClosed();
+      }
+    };
+  }
+
+  /**
+   * Electron's `WebContentsView`: a page the shell draws as part of the window
+   * whose `contentView` holds it, where the app puts it. It outlives that
+   * window until the app closes its page.
+   */
+  class WebContentsView extends Page {
+    #bounds: Rectangle = NO_BOUNDS;
+    #visible = true;
+    /** The window whose contentView holds it. */
+    holder: BrowserWindow | undefined;
+
+    constructor(options: ViewOptions = {}) {
+      super(options.webPreferences ?? {}, "", true);
+    }
+
+    /** Where the app asks for it in its window, in CSS pixels. */
+    readonly setBounds = (bounds: Rectangle) => {
+      this.#bounds = {
+        height: bounds.height,
+        width: bounds.width,
+        x: bounds.x,
+        y: bounds.y,
+      };
+      this.holder?.placeViews();
+    };
+
+    readonly getBounds = (): Rectangle => this.#bounds;
+
+    /** Hides or shows it. A hidden view keeps its page and its place. */
+    readonly setVisible = (visible: boolean) => {
+      this.#visible = visible;
+      this.holder?.placeViews();
+    };
+
+    readonly getVisible = () => this.#visible;
+
+    /** The shell draws views; the app's color and corners are its own look. */
+    readonly setBackgroundColor = (_color: string) => undefined;
+    readonly setBorderRadius = (_radius: number) => undefined;
+
+    readonly children: readonly WebContentsView[] = [];
+
+    /** Electron nests views; Domicile's engine has only a window hold them. */
+    readonly addChildView = (_view: WebContentsView, _index?: number) => {
+      throw new Error(
+        "only a window's contentView holds views on Domicile: this app nests a view in a view",
+      );
+    };
+
+    readonly removeChildView = (_view: WebContentsView) => undefined;
+
+    /** Where the engine is told to put it, or nothing before it opens. */
+    readonly placement = (): ViewPlacement | undefined =>
+      this.opened && !this.destroyed
+        ? {
+            ...this.#bounds,
+            ...(this.#visible ? {} : { hidden: true }),
+            window: this.id,
+          }
+        : undefined;
+
+    protected override wasOpened() {
+      this.holder?.placeViews();
+    }
+
+    protected override wasClosed() {
+      this.holder?.contentView.removeChildView(this);
+    }
+  }
+
+  /**
+   * Electron's `BrowserView`, the older view: a `WebContentsView` placed with
+   * the window's `setBrowserView` and kin, which can follow its window's size.
+   */
+  class BrowserView extends WebContentsView {
+    #autoResize: AutoResize = {};
+
+    readonly setAutoResize = (options: AutoResize) => {
+      this.#autoResize = options;
+    };
+
+    /** Follows its window from `from` to `to`, as its autoResize asks. */
+    readonly follow = (
+      from: { width: number; height: number },
+      to: { width: number; height: number },
+    ) => {
+      const { height, horizontal, vertical, width } = this.#autoResize;
+      const bounds = this.getBounds();
+      const scaleX = from.width === 0 ? 1 : to.width / from.width;
+      const scaleY = from.height === 0 ? 1 : to.height / from.height;
+      const next = {
+        height: followed(
+          bounds.height,
+          vertical,
+          height,
+          to.height - from.height,
+          scaleY,
+        ),
+        width: followed(
+          bounds.width,
+          horizontal,
+          width,
+          to.width - from.width,
+          scaleX,
+        ),
+        x: horizontal ? Math.round(bounds.x * scaleX) : bounds.x,
+        y: vertical ? Math.round(bounds.y * scaleY) : bounds.y,
+      };
+      if (
+        next.x !== bounds.x ||
+        next.y !== bounds.y ||
+        next.width !== bounds.width ||
+        next.height !== bounds.height
+      ) {
+        this.setBounds(next);
+      }
+    };
+  }
+
+  /** A window's `contentView`: its page, and the views over it, bottom first. */
+  class ContentView {
+    #children: WebContentsView[] = [];
+
+    constructor(private readonly window: BrowserWindow) {}
+
+    get children(): readonly WebContentsView[] {
+      return [...this.#children];
+    }
+
+    /**
+     * Puts `view` at `index`, or on top, taking it from any window that held
+     * it. A view it already holds moves.
+     */
+    readonly addChildView = (view: WebContentsView, index?: number) => {
+      const from = view.holder;
+      if (from !== undefined && from !== this.window) {
+        from.contentView.removeChildView(view);
+      }
+      this.#children = this.#children.filter((child) => child !== view);
+      this.#children.splice(index ?? this.#children.length, 0, view);
+      view.holder = this.window;
+      this.window.placeViews();
+    };
+
+    readonly removeChildView = (view: WebContentsView) => {
+      if (this.#children.includes(view)) {
+        this.#children = this.#children.filter((child) => child !== view);
+        view.holder = undefined;
+        this.window.placeViews();
+      }
+    };
+
+    /** The window's page fills it, at the size the shell gave it. */
+    readonly getBounds = () => this.window.getContentBounds();
+
+    /** The shell lays out windows: a window's size is not the app's to set. */
+    readonly setBounds = (_bounds: Rectangle) => undefined;
+    readonly setBackgroundColor = (_color: string) => undefined;
+  }
+
+  class BrowserWindow extends Page {
+    static readonly fromId = (id: number) => windows.get(id) ?? null;
+    static readonly getAllWindows = () => [...windows.values()];
+    /** Null: which window has focus is the shell's, and not told yet. */
+    static readonly getFocusedWindow = () => null;
+    /** The window of `webContents`' page, or of the view it is. */
+    static readonly fromWebContents = (webContents: WebContents) => {
+      const { owner } = webContents;
+      if (owner instanceof BrowserWindow) {
+        return owner;
+      } else if (owner instanceof WebContentsView) {
+        return owner.holder ?? null;
+      } else {
+        return null;
+      }
+    };
+    static readonly fromBrowserView = (view: BrowserView) =>
+      view.holder ?? null;
+
+    readonly contentView = new ContentView(this);
+    #shown = false;
+    #size: { width: number; height: number };
+    /** The views the engine last placed, as it was told them. */
+    #placed = "[]";
+    #menu: Menu | null = menus.applicationMenu();
+    #menuBarVisible = true;
+    #menuBarAutoHide: boolean;
+
+    constructor(options: BrowserWindowOptions = {}) {
+      super(
+        options.webPreferences ?? {},
+        options.title ?? app.getName(),
+        false,
+      );
+      this.#size = {
+        height: options.height ?? DEFAULT_SIZE.height,
+        width: options.width ?? DEFAULT_SIZE.width,
+      };
+      this.#menuBarAutoHide = options.autoHideMenuBar ?? false;
+      this.#menu?.on("changed", this.#showMenuBar);
+      windows.set(this.id, this);
+    }
+
+    readonly show = () => {
+      this.focus();
+    };
+
+    readonly focus = () => {
+      this.assertAlive();
+      if (this.opened) {
+        engine.send({ type: "focus_window", window: this.id });
+      }
+    };
+
+    /** Closes the window once its page agrees, unless a `close` listener prevents it. */
+    readonly close = () => {
+      if (!this.destroyed) {
+        const event = eventObject();
+        this.emit("close", event);
+        if (!event.defaultPrevented) {
+          this.end(() => {
+            engine.send({ type: "close_window", window: this.id });
+          });
         }
       }
     };
 
-    /** Throws as Electron does for a window that's gone. */
-    readonly assertAlive = () => {
-      if (this.#destroyed) {
-        throw new Error("Object has been destroyed");
+    readonly isVisible = () => this.#shown && !this.destroyed;
+    readonly setTitle = (title: string) => {
+      this.title = title;
+    };
+
+    /** Its page's box, at the size the shell gave it. */
+    readonly getContentBounds = (): Rectangle => ({
+      ...this.#size,
+      x: 0,
+      y: 0,
+    });
+    /** The shell draws the frame, so the window is its page. */
+    readonly getBounds = () => this.getContentBounds();
+    readonly getSize = () => [this.#size.width, this.#size.height];
+    readonly getContentSize = () => this.getSize();
+
+    readonly setBrowserView = (view: BrowserView | null) => {
+      for (const held of this.getBrowserViews()) {
+        if (held !== view) {
+          this.contentView.removeChildView(held);
+        }
+      }
+      if (view !== null) {
+        this.contentView.addChildView(view);
       }
     };
+
+    readonly addBrowserView = (view: BrowserView) => {
+      this.contentView.addChildView(view);
+    };
+
+    readonly removeBrowserView = (view: BrowserView) => {
+      this.contentView.removeChildView(view);
+    };
+
+    readonly setTopBrowserView = (view: BrowserView) => {
+      this.contentView.addChildView(view);
+    };
+
+    readonly getBrowserViews = () =>
+      this.contentView.children.filter(
+        (child): child is BrowserView => child instanceof BrowserView,
+      );
+
+    /** Its one BrowserView, as Electron throws for a window with more. */
+    readonly getBrowserView = () => {
+      const views = this.getBrowserViews();
+      if (views.length > 1) {
+        throw new Error(
+          "BrowserWindow have multiple BrowserViews, use getBrowserViews() instead: this window holds more than one BrowserView",
+        );
+      }
+      return views[0] ?? null;
+    };
+
+    /** Shows `menu` in the window's menu bar, or no menu bar for null. */
+    readonly setMenu = (menu: Menu | null) => {
+      this.assertAlive();
+      this.#menu?.off("changed", this.#showMenuBar);
+      this.#menu = menu;
+      this.#menu?.on("changed", this.#showMenuBar);
+      this.#showMenuBar();
+    };
+
+    readonly removeMenu = () => {
+      this.setMenu(null);
+    };
+
+    readonly setMenuBarVisibility = (visible: boolean) => {
+      this.#menuBarVisible = visible;
+      this.#showMenuBar();
+    };
+
+    readonly isMenuBarVisible = () => this.#menuBarVisible;
+
+    readonly setAutoHideMenuBar = (autoHide: boolean) => {
+      this.#menuBarAutoHide = autoHide;
+      this.#showMenuBar();
+    };
+
+    readonly isMenuBarAutoHide = () => this.#menuBarAutoHide;
+
+    /** Tells the engine the menu bar as it is now, once the window is open. */
+    readonly #showMenuBar = () => {
+      if (this.opened && !this.destroyed) {
+        engine.send({
+          auto_hide: this.#menuBarAutoHide,
+          menu: this.#menu === null ? null : menus.model(this.#menu),
+          type: "set_menu_bar",
+          visible: this.#menuBarVisible,
+          window: this.id,
+        });
+      }
+    };
+
+    /** Tells the engine where the window's open views go, if that changed. */
+    readonly placeViews = () => {
+      if (this.opened && !this.destroyed) {
+        const views = this.contentView.children.flatMap(
+          (view) => view.placement() ?? [],
+        );
+        const placed = JSON.stringify(views);
+        if (placed !== this.#placed) {
+          this.#placed = placed;
+          engine.send({ type: "set_views", views, window: this.id });
+        }
+      }
+    };
+
+    protected override wasOpened() {
+      this.placeViews();
+      // A window opens with no menu bar, so there's only one to tell of.
+      if (this.#menu !== null) {
+        this.#showMenuBar();
+      }
+    }
+
+    protected override menuClicked(command: number) {
+      if (this.#menu !== null) {
+        menus.click(this.#menu, command, this.id);
+      }
+    }
+
+    protected override wasLoaded() {
+      if (!this.#shown) {
+        this.#shown = true;
+        this.emit("ready-to-show");
+      }
+    }
+
+    protected override titled(title: string) {
+      const titleEvent = eventObject();
+      this.emit("page-title-updated", titleEvent, title, false);
+      if (!titleEvent.defaultPrevented) {
+        this.title = title;
+      }
+    }
+
+    protected override resized(width: number, height: number) {
+      const from = this.#size;
+      this.#size = { height, width };
+      for (const view of this.getBrowserViews()) {
+        view.follow(from, this.#size);
+      }
+      this.emit("resize");
+    }
+
+    protected override wasClosed() {
+      windows.delete(this.id);
+      this.#menu?.off("changed", this.#showMenuBar);
+      // The engine lets go of the window's views; they live on unheld.
+      for (const view of this.contentView.children) {
+        view.holder = undefined;
+      }
+      this.emit("closed");
+      if (windows.size === 0) {
+        allClosed();
+      }
+    }
   }
 
   /** Electron quits when the last window closes, unless the app listens. */
@@ -452,12 +845,19 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   };
 
   engine.events.on("window", (event) => {
-    windows.get(event.window)?.take(event);
+    pages.get(event.window)?.take(event);
   });
 
-  return BrowserWindow;
+  return {
+    BrowserView,
+    BrowserWindow,
+    WebContentsView,
+    /** The page the engine numbers `window`, a window's or a view's. */
+    webContentsOf: (window: number) => pages.get(window)?.webContents,
+  };
 };
 
-export type BrowserWindow = InstanceType<
-  ReturnType<typeof createBrowserWindow>
->;
+type Windows = ReturnType<typeof createBrowserWindow>;
+export type BrowserWindow = InstanceType<Windows["BrowserWindow"]>;
+export type WebContentsView = InstanceType<Windows["WebContentsView"]>;
+export type BrowserView = InstanceType<Windows["BrowserView"]>;

@@ -25,6 +25,16 @@ import type {
 
 export const PROTOCOL_VERSION = 1;
 
+/** Where the app asks for one of a window's views, in its page's CSS pixels. */
+export type ViewPlacement = {
+  readonly window: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly hidden?: true;
+};
+
 export type EngineRequest =
   | {
       readonly type: "hello";
@@ -40,6 +50,14 @@ export type EngineRequest =
       readonly preload?: string;
       /** Its session's Electron partition; the app's own when left out. */
       readonly session?: string;
+      /** A view (`WebContentsView`), shown only as part of a window. */
+      readonly view?: true;
+    }
+  | {
+      readonly type: "set_views";
+      readonly window: number;
+      /** The window's views, bottom first, replacing those it held. */
+      readonly views: readonly ViewPlacement[];
     }
   | { readonly type: "load_url"; readonly window: number; readonly url: string }
   | { readonly type: "focus_window"; readonly window: number }
@@ -139,6 +157,13 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("page_gone"), window: z.number() }),
+  /** The size the shell gives a page, a window's or a view's. */
+  z.object({
+    height: z.number(),
+    type: z.literal("resized"),
+    width: z.number(),
+    window: z.number(),
+  }),
   z.object({
     command: z.number(),
     type: z.literal("menu_clicked"),

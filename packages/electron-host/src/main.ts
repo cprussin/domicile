@@ -93,16 +93,15 @@ const main = async ([resources, ...args]: string[]) => {
     engine.events.on("protocol", (request) => {
       void protocols.answer(request);
     });
-    const webRequests = createWebRequests(
-      engine.send,
-      (window) => BrowserWindow.fromId(window)?.webContents,
+    const webRequests = createWebRequests(engine.send, (window) =>
+      webContentsOf(window),
     );
     engine.events.on("webRequest", webRequests.hear);
     const sessionCalls = createSessionCalls(engine.send);
     engine.events.on("sessionResult", sessionCalls.hear);
     const permissions = createPermissions(
       engine.send,
-      (window) => BrowserWindow.fromId(window)?.webContents,
+      (window) => webContentsOf(window),
       (warning) => {
         // biome-ignore lint/suspicious/noConsole: what the engine does not do for this app, for the app's developer
         console.warn(`electron-host: ${warning}`);
@@ -138,15 +137,17 @@ const main = async ([resources, ...args]: string[]) => {
         }
       },
     });
-    const BrowserWindow = createBrowserWindow(engine, app, ipc, session, {
-      applicationMenu: Menu.getApplicationMenu,
-      click: (menu, command, window) => {
-        click(menu, command, undefined, BrowserWindow.fromId(window));
-      },
-      model,
-    });
+    const { BrowserView, BrowserWindow, WebContentsView, webContentsOf } =
+      createBrowserWindow(engine, app, ipc, session, {
+        applicationMenu: Menu.getApplicationMenu,
+        click: (menu, command, window) => {
+          click(menu, command, undefined, BrowserWindow.fromId(window));
+        },
+        model,
+      });
     const electron = {
       app,
+      BrowserView,
       BrowserWindow,
       clipboard: createClipboard({ run: runCommandSync }),
       dialog: createDialog({
@@ -184,6 +185,7 @@ const main = async ([resources, ...args]: string[]) => {
         menus: { click, model },
         name: app.getName,
       }),
+      WebContentsView,
     };
     Bun.plugin({
       name: "electron",

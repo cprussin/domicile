@@ -1,87 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { EventEmitter } from "node:events";
-
-import type { Engine, EngineRequest, WindowEvent } from "../engine";
-import { electronPaths } from "../paths";
-import { createApp } from "./app";
+import type { EngineRequest } from "../engine";
 import { createBrowserWindow } from "./browser-window";
-import { createIpcMain } from "./ipc-main";
+import { setUp } from "./browser-window-fixture";
 import type { MenuEntry } from "./menu";
-import { createMenu } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
-import { createPermissions } from "./permissions";
-import { createProtocols } from "./protocol";
-import { createSessions } from "./session";
-import { createSessionCalls } from "./session-calls";
-import { createWebRequests } from "./web-request";
-
-const setUp = () => {
-  const sent: EngineRequest[] = [];
-  const events: Engine["events"] = new EventEmitter();
-  const exits: number[] = [];
-  const { app } = createApp({
-    appPath: "/cache/x/resources/app.asar",
-    exit: (code) => exits.push(code),
-    paths: electronPaths({
-      env: {},
-      execPath: "/bin/bun",
-      home: "/home/me",
-      productName: "Notes",
-      temp: "/tmp",
-      userDirs: undefined,
-    }),
-    pkg: {
-      appId: "com.example.Notes",
-      main: "/cache/x/resources/app.asar/main.js",
-      name: "notes",
-      productName: "Notes",
-      version: "1.0.0",
-    },
-  });
-  const { ipcMain, ...ipc } = createIpcMain();
-  const sessions = createSessions(
-    createProtocols((request) => sent.push(request)),
-    createWebRequests(
-      (message) => sent.push(message),
-      () => undefined,
-    ),
-    createSessionCalls((message) => sent.push(message)),
-    createPermissions(
-      (message) => sent.push(message),
-      () => undefined,
-      () => undefined,
-    ),
-  );
-  // The default session's file: handler, which every test would start with.
-  sent.length = 0;
-  const menus = createMenu<{ readonly id: number }>({
-    appName: () => "Notes",
-    focusedWindow: () => null,
-    roles: {},
-    setApplicationMenu: (menu) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        window.setMenu(menu);
-      }
-    },
-  });
-  const BrowserWindow = createBrowserWindow(
-    { events, send: (request) => sent.push(request) },
-    app,
-    ipc,
-    sessions,
-    {
-      applicationMenu: menus.Menu.getApplicationMenu,
-      click: (menu, command, window) => {
-        menus.click(menu, command, undefined, BrowserWindow.fromId(window));
-      },
-      model: menus.model,
-    },
-    (path) => `source of ${path}`,
-  );
-  const say = (event: WindowEvent) => events.emit("window", event);
-  return { app, BrowserWindow, exits, ipcMain, menus, say, sent, sessions };
-};
 
 describe(createBrowserWindow, () => {
   it("opens a window in the app's own session unless it names another", () => {
