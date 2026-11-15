@@ -24,6 +24,7 @@ replaces them.
 | Meta+Space, Meta+D | Toggle the launcher, closing the overview. |
 | Meta+O, Super tapped alone | Toggle the overview. Super held for a chord, a drag or a scroll is no tap. |
 | `pinch:4:inward` / `pinch:4:outward` | `overview show` / `overview hide`: open and close the overview. |
+| `swipe:4:up` / `swipe:4:down` | `layer up` / `layer down`: put the scratchpad away or else open the overview / close the overview or else pull the scratchpad down. |
 | `pinch:3:outward` | Toggle the launcher, closing the overview. |
 | Meta+Shift+V | Toggle the clipboard history. |
 | Meta+Shift+Space | Open the copied URL, or search Google for the copied text. Private from a private window. |
@@ -68,7 +69,8 @@ Manganese-only commands:
 | `lock` | Lock the desktop. |
 | `group` | Turn the focused tab into a group of its own, nested in its slot, so new windows open in it. Does nothing for a window alone in its group. |
 | `launcher` | Toggle the launcher. Closes the overview. |
-| `overview` | Toggle the overview: each screen's workspaces with windows, and the shown one, at once. Closes the launcher and clipboard. While it is open, `focus <way>` moves between its workspaces and `move <way>` swaps them; no other key's command runs but `lock`, `screenshot`, the volume and brightness commands, `launcher`, `clipboard` and `overview` itself. |
+| `overview` | Toggle the overview: each screen's workspaces with windows, and the shown one, at once. Closes the launcher and clipboard. While it is open, `focus <way>` moves between its workspaces and `move <way>` swaps them; no other key's command runs but `lock`, `screenshot`, the volume and brightness commands, `launcher`, `clipboard`, `layer` and `overview` itself. |
+| `layer up` / `layer down` | Step from the scratchpad to the desk to the overview: up runs `scratchpad hide` while a scratchpad window is out, else `overview show`; down runs `overview hide` while the overview is open, else `scratchpad bring`. Both run while the overview is open. |
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |
 | `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. The window is private when the active one is. Reads the first 480 characters. |

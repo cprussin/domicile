@@ -137,6 +137,8 @@ const HEARD_OVER_OVERVIEW: ReadonlySet<WindowActionKind> = new Set([
   WindowActionKind.DeskLocked,
   WindowActionKind.FocusStepped,
   WindowActionKind.LauncherToggled,
+  WindowActionKind.LayerLowered,
+  WindowActionKind.LayerRaised,
   WindowActionKind.MediaKeyPressed,
   WindowActionKind.OverviewDismissed,
   WindowActionKind.OverviewShown,

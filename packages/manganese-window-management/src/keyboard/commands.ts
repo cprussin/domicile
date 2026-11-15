@@ -31,6 +31,8 @@ export const launcher = () => command("launcher");
  */
 export const overview = (only?: "hide" | "show") =>
   only === undefined ? command("overview") : command("overview", only);
+/** Step between the scratchpad, the desk and the overview. */
+export const layer = (way: "down" | "up") => command("layer", way);
 /** Toggle the clipboard history. */
 export const clipboard = () => command("clipboard");
 /** Open the newest copy as a site if it is a URL, else search for it. */
@@ -189,13 +191,13 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "swipe:3:left": focus("left"),
   "swipe:3:right": focus("right"),
   "swipe:3:up": focus("up"),
-  // The scratchpad hangs from the top of the screen: pull it down, push it
-  // back up.
-  "swipe:4:down": scratchpad("bring"),
+  // The scratchpad hangs above the desk and the overview sits under it: down
+  // pulls the scratchpad down or closes the overview, up the reverse.
+  "swipe:4:down": layer("down"),
   // The workspace follows the fingers, as a page does.
   "swipe:4:left": stepWorkspace("next"),
   "swipe:4:right": stepWorkspace("prev"),
-  "swipe:4:up": scratchpad("hide"),
+  "swipe:4:up": layer("up"),
   XF86AudioLowerVolume: volume("down"),
   XF86AudioMicMute: micMute(),
   XF86AudioMute: volume("mute"),

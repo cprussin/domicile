@@ -2,7 +2,7 @@
 //
 // - Commands use sway's syntax where sway has one (`focus left`, `layout
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
-//   `overview`, `clipboard`, `search-clipboard`, `screenshot`, `terminal`,
+//   `overview`, `layer`, `clipboard`, `search-clipboard`, `screenshot`, `terminal`,
 //   `volume`, `mic`,
 //   `brightness`, `keymap`, `notifications`, `idle-inhibitor`,
 //   `night-light`, `virtual-monitor` and `resize grow <direction>` are
@@ -48,6 +48,10 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   // Manganese's: one way each, for gestures that go one way.
   ["overview show", WindowAction.OverviewShown()],
   ["overview hide", WindowAction.OverviewDismissed()],
+  // Manganese's: up hides the scratchpad or else shows the overview; down
+  // closes the overview or else brings the scratchpad.
+  ["layer up", WindowAction.LayerRaised()],
+  ["layer down", WindowAction.LayerLowered()],
   // Clipboard history; a toggle, like the launcher.
   ["clipboard", WindowAction.ClipboardToggled()],
   // The area is picked in the screenshot dialog.
@@ -210,6 +214,11 @@ export const COMMAND_HELP: readonly ShellCommandHelp[] = [
     description:
       "Toggle the overview of every screen's workspaces, or one way only.",
     usage: "overview [show|hide]",
+  },
+  {
+    description:
+      "Step from the scratchpad to the desk to the overview, or back down.",
+    usage: "layer up|down",
   },
   { description: "Toggle the clipboard history.", usage: "clipboard" },
   { description: "Take a screenshot, as Print does.", usage: "screenshot" },

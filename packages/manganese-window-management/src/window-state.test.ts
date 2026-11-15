@@ -2555,6 +2555,44 @@ describe("the overview", () => {
     );
   });
 
+  describe("`layer up` and `layer down`", () => {
+    const out = () =>
+      reduce(
+        desktop("kitty", "editor"),
+        WindowAction.WindowSentToScratchpad(),
+        WindowAction.ScratchpadBrought(),
+      );
+
+    it("puts the scratchpad away going up, and opens the overview once it is", () => {
+      const away = reduce(out(), WindowAction.LayerRaised());
+      const opened = reduce(away, WindowAction.LayerRaised());
+
+      expect([away.scratchpad, away.overviewOpen]).toEqual([
+        [APP("editor")],
+        false,
+      ]);
+      expect(opened.overviewOpen).toBe(true);
+      expect(reduceWindows(opened, WindowAction.LayerRaised())).toBe(opened);
+    });
+
+    it("closes the overview going down, and pulls the scratchpad down once it is", () => {
+      const opened = reduce(
+        desktop("kitty", "editor"),
+        WindowAction.WindowSentToScratchpad(),
+        WindowAction.OverviewShown(),
+      );
+      const closed = reduce(opened, WindowAction.LayerLowered());
+      const pulled = reduce(closed, WindowAction.LayerLowered());
+
+      expect([closed.overviewOpen, closed.scratchpad]).toEqual([
+        false,
+        [APP("editor")],
+      ]);
+      expect(activeIdOf(pulled)).toBe(APP("editor"));
+      expect(reduceWindows(pulled, WindowAction.LayerLowered())).toBe(pulled);
+    });
+  });
+
   it("opens and stays open on `overview show`, and closes on `overview hide`", () => {
     const shown = reduce(
       NO_WINDOWS,

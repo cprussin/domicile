@@ -71,6 +71,8 @@ describe("parseCommand", () => {
     ["scratchpad hide", WindowAction.ScratchpadHidden()],
     ["overview show", WindowAction.OverviewShown()],
     ["overview hide", WindowAction.OverviewDismissed()],
+    ["layer up", WindowAction.LayerRaised()],
+    ["layer down", WindowAction.LayerLowered()],
     ["workspace 1", WindowAction.WorkspaceSelected("1")],
     ["workspace next_on_output", WindowAction.WorkspaceStepped("next")],
     ["workspace prev_on_output", WindowAction.WorkspaceStepped("prev")],

@@ -23,6 +23,8 @@ const KEYS: ShellKeybindings = {
     "Meta+t": KeyAction.SendShell(["get-tree"]),
     "Meta+v": KeyAction.SendShell(["clipboard"]),
     "Meta+x": KeyAction.SendShell(["teleport"]),
+    "swipe:4:down": KeyAction.SendShell(["layer", "down"]),
+    "swipe:4:up": KeyAction.SendShell(["layer", "up"]),
     XF86AudioRaiseVolume: KeyAction.SendShell(["volume", "up"]),
   },
   modes: {
@@ -108,6 +110,8 @@ describe("useKeybindings", () => {
     presses("XF86AudioRaiseVolume");
     presses("Meta+v");
     presses("Meta+o");
+    presses("swipe:4:up");
+    presses("swipe:4:down");
 
     expect(acted).toStrictEqual([
       WindowAction.FocusStepped(Direction.Right),
@@ -115,6 +119,8 @@ describe("useKeybindings", () => {
       WindowAction.MediaKeyPressed(MediaKey.VolumeUp),
       WindowAction.ClipboardToggled(),
       WindowAction.OverviewToggled(),
+      WindowAction.LayerRaised(),
+      WindowAction.LayerLowered(),
     ]);
   });
 

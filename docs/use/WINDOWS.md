@@ -72,7 +72,7 @@ Each rule matches the window's app id and title, as regular expressions.
 
 ## Overview
 
-Meta+O, a four-finger pinch in, or the button left of the workspaces in the
+Meta+O, a four-finger pinch in or swipe up, or the button left of the workspaces in the
 bar shows each monitor's workspaces side by side, with their windows: the
 ones that have windows, and the one shown.
 
@@ -90,7 +90,7 @@ ones that have windows, and the one shown.
 - The workspace your keys are on has a bold white ring, and the one on
   screen has a colored ring. The white ring moves with a workspace you
   swap. The workspace under the pointer gets a faint ring.
-- Escape, Meta+O, a four-finger spread, or a click outside the
+- Escape, Meta+O, a four-finger spread or swipe down, or a click outside the
   workspaces closes it. The launcher and clipboard close it too.
 
 ## Fullscreen

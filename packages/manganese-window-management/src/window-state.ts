@@ -443,6 +443,8 @@ export enum WindowActionKind {
   KeyPressed,
   LauncherDismissed,
   LauncherToggled,
+  LayerLowered,
+  LayerRaised,
   LayoutSet,
   MediaKeyPressed,
   ModeSet,
@@ -840,6 +842,12 @@ export const WindowAction = {
    * `mod+space`, which opens and closes the launcher.
    */
   LauncherToggled: () => ({ kind: WindowActionKind.LauncherToggled as const }),
+
+  /** `layer down`: close the overview, or else bring the scratchpad. */
+  LayerLowered: () => ({ kind: WindowActionKind.LayerLowered as const }),
+
+  /** `layer up`: hide the scratchpad, or else show the overview. */
+  LayerRaised: () => ({ kind: WindowActionKind.LayerRaised as const }),
 
   /** `layout tabbed` / `layout stacking`. */
   LayoutSet: (layout: Layout) => ({
@@ -1543,6 +1551,24 @@ const reduceAction = (
         ...reachWindow(state, openTabBeside(state, action.id)),
         launcherOpen: true,
       };
+    }
+    // The scratchpad hangs above the desk and the overview sits under it, so
+    // up and down step one layer at a time.
+    case WindowActionKind.LayerLowered: {
+      return reduceAction(
+        state,
+        state.overviewOpen
+          ? WindowAction.OverviewDismissed()
+          : WindowAction.ScratchpadBrought(),
+      );
+    }
+    case WindowActionKind.LayerRaised: {
+      return reduceAction(
+        state,
+        state.overviewOpen || scratchpadShownHere(state) === undefined
+          ? WindowAction.OverviewShown()
+          : WindowAction.ScratchpadHidden(),
+      );
     }
     case WindowActionKind.OverviewAimed: {
       return { ...state, overviewAim: action.name };
