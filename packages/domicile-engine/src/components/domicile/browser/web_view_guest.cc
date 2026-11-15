@@ -2433,8 +2433,7 @@ void WebViewGuest::RequestMediaAccessPermission(
     content::MediaResponseCallback callback) {
   if (IsScreenCapture(request.video_type)) {
     const int choice = next_screen_choice_++;
-    const bool audio = request.audio_type ==
-                       blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE;
+    const bool audio = WantsScreenSound(request.audio_type);
     // Unretained: the guest owns the choice, which answers only while alive.
     screen_choices_[choice] = std::make_unique<ScreenChoice>(
         MakePortalPicker(), audio, base::BindOnce(&AskWhatThePortalPicked),
@@ -2444,15 +2443,17 @@ void WebViewGuest::RequestMediaAccessPermission(
         base::BindOnce(
             [](WebViewGuest* guest, int choice,
                blink::mojom::MediaStreamType video,
+               blink::mojom::MediaStreamType audio,
                content::MediaResponseCallback callback,
                blink::mojom::StreamDevicesSetPtr devices,
                blink::mojom::MediaStreamRequestResult result) {
               guest->screen_choices_.erase(choice);
-              std::move(callback).Run(*AsRequested(video, std::move(devices)),
-                                      result, /*ui=*/nullptr);
+              std::move(callback).Run(
+                  *AsRequested(video, audio, std::move(devices)), result,
+                  /*ui=*/nullptr);
             },
             base::Unretained(this), choice, request.video_type,
-            std::move(callback)));
+            request.audio_type, std::move(callback)));
     return;
   }
   if (!IsDeviceCapture(request.audio_type, request.video_type)) {

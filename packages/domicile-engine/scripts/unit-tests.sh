@@ -36,7 +36,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # PrivatePages 3, ShellOrigin 4, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 8,
 # DeskCursorThemeSource 3, XCursorTheme 5, XCursorThemeDirectory 4,
-# SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
+# SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 7,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
 # DeskPointer 5, PointerWarp 10, PointerConfinementBoxes 4, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
@@ -46,6 +46,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ElectronPermissionFor 2, ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 832, and it was 830 — a desktop getUserMedia(), as Electron apps capture a
+# desktopCapturer source with, is two more ScreenCapture cases. Before that
 # 830, and it was 828 — viz stopping a capture before or after a frame, which
 # the screenshot and cast now say, is two more DisplayCapture cases. Before
 # that
@@ -289,7 +291,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=830
+FLOOR=832
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

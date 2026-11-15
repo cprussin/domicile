@@ -856,6 +856,9 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
   A browser window is captured as a tab: its page alone, its sound,
   `cropTo()` and its capture handle. `preferCurrentTab` opens the same
   picker, where the page's own browser window is listed with the rest.
+  A `getUserMedia()` with `chromeMediaSource: "desktop"`, as Electron apps
+  capture a `desktopCapturer` source, opens it too, whatever source it
+  names.
   - The promise waits for the pick. Canceling the picker rejects it with
     `NotAllowedError`.
   - The pick opens two portal sessions: the picker's, then the capture's,

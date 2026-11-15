@@ -12,6 +12,7 @@ import { connectDesktop, runCommand, runCommandSync } from "./desktop";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
 import { createClipboard } from "./electron/clipboard";
+import { desktopCapturer } from "./electron/desktop-capturer";
 import { createDialog } from "./electron/dialog";
 import { createIpcMain } from "./electron/ipc-main";
 import { createMenu } from "./electron/menu";
@@ -166,6 +167,7 @@ const main = async ([resources, ...args]: string[]) => {
       BrowserView,
       BrowserWindow,
       clipboard: createClipboard({ run: runCommandSync }),
+      desktopCapturer,
       dialog: createDialog({
         askMessageBox: async (window, options) =>
           messageBoxes.ask(boxWindow(window, BrowserWindow), options),
