@@ -1496,8 +1496,9 @@ void DomicileHost::ForwardKeyDown(Event* event) {
   // the page, the passphrase would reach nothing. The window should not have
   // the keyboard at all while locked, so say so.
   if (locked_.value_or(false)) {
-    LOG(ERROR) << "domicile: the desk is locked but window \"" << app_id
-               << "\" has the keyboard; the key stays on the page";
+    // `String` quotes itself when streamed.
+    LOG(ERROR) << "domicile: the desk is locked but window " << app_id
+               << " has the keyboard; the key stays on the page";
     return;
   }
   event->preventDefault();
