@@ -1,7 +1,8 @@
 // A desktop session bus for tests: a private dbus-daemon serving a stand-in
 // settings portal with the appearance a test gives, and a notification server
 // that writes down each notification, and a tray watcher that writes down
-// each item registered with it.
+// each item registered with it, and a file chooser portal that answers what a
+// test tells it to.
 
 import {
   DBusError,
@@ -99,6 +100,13 @@ Notifications.configureMembers({
 /** An item registered with the tray: what it said, and its connection. */
 export type RegisteredItem = { service: string; sender: string };
 
+/** A file chooser portal call: its method, title and options' values. */
+export type AskedChooser = {
+  method: string;
+  title: string;
+  options: Record<string, unknown>;
+};
+
 /** Starts the bus and its services; `address` goes in DBUS_SESSION_BUS_ADDRESS. */
 export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
   const daemon = Bun.spawn(
@@ -137,11 +145,50 @@ export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
     bus.send(Message.newMethodReturn(message));
     return true;
   });
+  const chooser = {
+    /** What the portal answers next: a response, and the URIs chosen. */
+    answer: { response: 0, uris: [] as string[] },
+    asked: [] as AskedChooser[],
+  };
+  bus.addMethodHandler((message: Message) => {
+    if (message.interface !== "org.freedesktop.portal.FileChooser") {
+      return false;
+    }
+    const [, title, options] = message.body as [
+      string,
+      string,
+      Record<string, Variant>,
+    ];
+    chooser.asked.push({
+      method: message.member ?? "",
+      options: Object.fromEntries(
+        Object.entries(options).map(([key, { value }]) => [key, value]),
+      ),
+      title,
+    });
+    const token = String(options.handle_token?.value);
+    const sender = (message.sender ?? "").slice(1).replaceAll(".", "_");
+    const handle = `/org/freedesktop/portal/desktop/request/${sender}/${token}`;
+    bus.send(Message.newMethodReturn(message, "o", [handle]));
+    const { response, uris } = chooser.answer;
+    bus.send(
+      Message.newSignal(
+        handle,
+        "org.freedesktop.portal.Request",
+        "Response",
+        "ua{sv}",
+        [response, { uris: new Variant("as", uris) }],
+      ),
+    );
+    return true;
+  });
   const notifications = new Notifications();
   bus.export("/org/freedesktop/portal/desktop", new Settings(appearance));
   bus.export("/org/freedesktop/Notifications", notifications);
   return {
     address,
+    /** The file chooser portal: what it was asked, and what it answers. */
+    chooser,
     close: async () => {
       bus.disconnect();
       daemon.kill();

@@ -2,6 +2,7 @@
 // Runs an installed Electron app's main process on Domicile:
 // `electron-host <install>/resources [app arguments…]`.
 
+import { statSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,7 @@ import { watchAppearance } from "./appearance";
 import { connectDesktop, runCommand } from "./desktop";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
+import { createDialog } from "./electron/dialog";
 import { createIpcMain } from "./electron/ipc-main";
 import { createMenu } from "./electron/menu";
 import {
@@ -135,6 +137,16 @@ const main = async ([resources, ...args]: string[]) => {
     const electron = {
       app,
       BrowserWindow,
+      dialog: createDialog({
+        choose: desktop.choose,
+        chooseSync: desktop.chooseSync,
+        isDirectory: (path) =>
+          statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false,
+        printError: (text) => {
+          // biome-ignore lint/suspicious/noConsole: Electron's error box on a desktop with no dialog for it, for the supervisor's log
+          console.error(text);
+        },
+      }),
       ipcMain,
       Menu,
       MenuItem,
