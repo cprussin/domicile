@@ -203,6 +203,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `safeStorage` | Secret Service on D-Bus |
 | `desktopCapturer` | the share picker |
 | `clipboard` | the desktop clipboard |
+| `nativeImage` | the image's PNG or JPEG bytes, in the host. PNGs are read and written without a library (`src/png.ts`) for `resize`, `crop` and bitmaps; a JPEG is kept as it came and can't be decoded, so those throw for one. One scale factor, 1 |
 | `autoUpdater` | off; the app's package updates it |
 
 App menus travel as a JSON model over the Electron socket. The engine puts
@@ -285,6 +286,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
 - [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`
 - [x] `electron-host`: `Notification`
+- [x] `electron-host`: `nativeImage`
 - [ ] tray, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
