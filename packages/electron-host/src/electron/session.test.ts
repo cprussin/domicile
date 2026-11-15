@@ -47,6 +47,23 @@ describe(createSessions, () => {
     );
   });
 
+  it("takes a display media handler, leaving the desktop's picker to answer", () => {
+    const { sent, sessions } = setUp();
+    let asked = false;
+
+    sessions.defaultSession.setDisplayMediaRequestHandler(
+      () => {
+        asked = true;
+      },
+      { useSystemPicker: true },
+    );
+
+    expect(asked).toBe(false);
+    expect(sent).toEqual([
+      { scheme: "file", session: "", type: "handle_protocol" },
+    ]);
+  });
+
   it("names its partition for the engine", () => {
     const { sessions } = setUp();
 
