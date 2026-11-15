@@ -234,7 +234,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: `protocol.handle`, `loadFile` and sessions
 - [x] engine: an app's own schemes, registered at start
 - [ ] engine: `webRequest`, cookies, permission handlers, storage clearing
-- [ ] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
+- [x] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
