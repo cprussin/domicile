@@ -302,6 +302,7 @@ export class FakeDomicileHost {
           menu: null,
           menuBarAutoHide: false,
           menuBarVisible: true,
+          messageBox: null,
           parent,
           partition,
           popupWindow,

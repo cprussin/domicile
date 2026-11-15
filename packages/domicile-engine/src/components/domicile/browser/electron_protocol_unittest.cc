@@ -398,6 +398,59 @@ TEST(ElectronProtocolTest, ABadSetMenuBarIsRefusedAsTheWindows) {
             "checkbox or radio");
 }
 
+TEST(ElectronProtocolTest, AShowMessageBoxKeepsWhatTheShellShows) {
+  base::expected<ElectronRequest, ElectronRefusal> request =
+      ParseElectronRequest(
+          R"({"type":"show_message_box","window":2,"box":7,)"
+          R"("box_type":"question","title":"Notes","message":"Quit Notes?",)"
+          R"("detail":"Unsaved notes are kept.","buttons":["Cancel","Quit"],)"
+          R"("default_id":1,"cancel_id":0,"checkbox_label":"Don't ask again",)"
+          R"("checkbox_checked":false,"no_link":true})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& box = std::get<ElectronShowMessageBox>(*request);
+  EXPECT_EQ(box.window, 2);
+  EXPECT_EQ(box.box, 7);
+  EXPECT_EQ(box.buttons, 2);
+  EXPECT_EQ(box.cancel_id, 0);
+  EXPECT_EQ(box.message_box,
+            R"({"buttons":["Cancel","Quit"],"cancelId":0,)"
+            R"("checkboxChecked":false,"checkboxLabel":"Don't ask again",)"
+            R"("defaultId":1,"detail":"Unsaved notes are kept.",)"
+            R"("message":"Quit Notes?","title":"Notes","type":"question"})");
+}
+
+TEST(ElectronProtocolTest, ABadShowMessageBoxIsRefusedAsTheWindows) {
+  const std::string rest =
+      R"("box_type":"info","title":"","message":"Hi","detail":"",)"
+      R"("checkbox_label":"","checkbox_checked":false)";
+  const auto box = [&](const std::string& fields) {
+    return WhyRefused(R"({"type":"show_message_box","window":1,)" + fields +
+                      "," + rest + "}");
+  };
+  EXPECT_EQ(
+      ParseElectronRequest(R"({"type":"show_message_box","window":4,"box":0,)"
+                           R"("buttons":["OK"],"default_id":0,"cancel_id":0,)" +
+                           rest + "}")
+          .error(),
+      (ElectronRefusal{.why = "\"box\" must be a whole number from 1",
+                       .window = 4}));
+  EXPECT_EQ(box(R"("box":1,"buttons":[],"default_id":0,"cancel_id":0)"),
+            "\"buttons\" must be a list of 1 to 16 labels");
+  EXPECT_EQ(box(R"("box":1,"buttons":[1],"default_id":0,"cancel_id":0)"),
+            "\"buttons\" must be a list of 1 to 16 labels");
+  EXPECT_EQ(box(R"("box":1,"buttons":["OK"],"default_id":1,"cancel_id":0)"),
+            "\"default_id\" must be a button's index, or -1 for no default");
+  EXPECT_EQ(box(R"("box":1,"buttons":["OK"],"default_id":-1,"cancel_id":1)"),
+            "\"cancel_id\" must be a button's index");
+  EXPECT_EQ(WhyRefused(R"({"type":"show_message_box","window":1,"box":1,)"
+                       R"("box_type":"alert","title":"","message":"",)"
+                       R"("detail":"","checkbox_label":"",)"
+                       R"("checkbox_checked":false,"buttons":["OK"],)"
+                       R"("default_id":0,"cancel_id":0})"),
+            "\"box_type\" must be none, info, error, question or warning");
+}
+
 TEST(ElectronProtocolTest, EventsAreOneLineEach) {
   EXPECT_EQ(ElectronReady({}), "{\"schemes\":[],\"type\":\"ready\"}\n");
   EXPECT_EQ(ElectronRefused("no"), "{\"type\":\"refused\",\"why\":\"no\"}\n");
@@ -413,6 +466,9 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"type\":\"window_closed\",\"window\":5}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
+  EXPECT_EQ(ElectronMessageBoxAnswered(3, 9, 1, true),
+            "{\"box\":9,\"checkbox_checked\":true,\"response\":1,"
+            "\"type\":\"message_box_answered\",\"window\":3}\n");
   EXPECT_EQ(ElectronWindowResized(6, 800, 600),
             "{\"height\":600,\"type\":\"resized\",\"width\":800,"
             "\"window\":6}\n");

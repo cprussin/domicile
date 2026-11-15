@@ -245,6 +245,8 @@ void ElectronApp::Take(std::string_view line) {
     SetViews(*set);
   } else if (auto* bar = std::get_if<ElectronSetMenuBar>(&*request)) {
     SetMenuBar(*bar);
+  } else if (auto* box = std::get_if<ElectronShowMessageBox>(&*request)) {
+    ShowMessageBox(*box);
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -510,6 +512,36 @@ void ElectronApp::SetMenuBar(const ElectronSetMenuBar& bar) {
   desk_->SetMenuBar(*id, ElectronDeskMenuBar{.menu = bar.menu,
                                              .visible = bar.visible,
                                              .auto_hide = bar.auto_hide});
+}
+
+void ElectronApp::ShowMessageBox(const ElectronShowMessageBox& box) {
+  const std::optional<std::string> id = IdOf(box.window);
+  if (!id.has_value()) {
+    return;
+  }
+  if (windows_.at(box.window).view) {
+    send_.Run(ElectronWindowRefused(
+        box.window,
+        base::StrCat({"window ", base::NumberToString(box.window),
+                      " is a view: a message box goes over a window"})));
+    return;
+  }
+  desk_->ShowMessageBox(
+      *id,
+      ElectronDeskMessageBox{.message_box = box.message_box,
+                             .buttons = box.buttons,
+                             .cancel_id = box.cancel_id},
+      base::BindOnce(&ElectronApp::MessageBoxAnswered,
+                     weak_factory_.GetWeakPtr(), box.window, box.box));
+}
+
+// Sent even when the window has closed since: the app waits on every box.
+void ElectronApp::MessageBoxAnswered(ElectronWindow number,
+                                     int box,
+                                     int response,
+                                     bool checkbox_checked) {
+  send_.Run(
+      ElectronMessageBoxAnswered(number, box, response, checkbox_checked));
 }
 
 void ElectronApp::SetViews(const ElectronSetViews& set) {
