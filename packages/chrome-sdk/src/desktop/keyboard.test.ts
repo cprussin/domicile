@@ -51,6 +51,18 @@ describe("keyboard", () => {
     expect(fake.calls).toStrictEqual([["grabShortcut", "Meta+Escape", true]]);
   });
 
+  it("grabs a tap held no longer than it says", () => {
+    const fake = new FakeDomicileHost();
+    const { keyboard } = desktop(fake.host);
+    keyboard.grab("Meta", { longestTap: 500 });
+    keyboard.grab("Alt", { longestTap: 200, whileInhibited: true });
+
+    expect(fake.calls).toStrictEqual([
+      ["grabShortcut", "Meta", false, 500],
+      ["grabShortcut", "Alt", true, 200],
+    ]);
+  });
+
   it("hears a grabbed chord pressed and let go", async () => {
     const fake = new FakeDomicileHost();
     const { keyboard } = desktop(fake.host);

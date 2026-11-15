@@ -865,12 +865,19 @@ export type DomicileHost = {
    * `Shift`, in any spelling a chord takes), is a tap of it: either side's key
    * pressed and let go with nothing else in between. Another key, a click, a
    * scroll, a pinch, a touch or a touchpad gesture the shell takes makes it no
-   * tap, so `Meta+Return` and Super-dragging a window still work. A tap comes
-   * back as a `shortcut` and then a `shortcutrelease` with `keyCode` 0, once
-   * the key is up. The engine hears it before any page or window does, and
-   * the key still reaches the focused client as it always did.
+   * tap, so `Meta+Return` and Super-dragging a window still work. Nor does a
+   * hold longer than `longestTap` milliseconds, 300 unless given, as on
+   * GNOME: Super held and let go does nothing. A tap comes back as a
+   * `shortcut` and then a `shortcutrelease` with `keyCode` 0, once the key is
+   * up. The engine hears it before any page or window does, and the key still
+   * reaches the focused client as it always did. `longestTap` means nothing
+   * to a chord.
    */
-  grabShortcut(chord: string, whileInhibited?: boolean): void;
+  grabShortcut(
+    chord: string,
+    whileInhibited?: boolean,
+    longestTap?: number,
+  ): void;
   /**
    * Answer one grabShortcut() of that name. Once every grab of it is
    * answered, its key reaches the focused client or site again, so two parts

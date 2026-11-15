@@ -41,11 +41,13 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # DeskPointer 5, PointerWarp 10, PointerConfinementBoxes 4, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
-# InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
+# InputMethodLines 7, DeskModifierTaps 13, TapModifierOf 1, IdentityDialog 11,
 # PictureInPictureVideos 14, ElectronProtocol 36, ElectronApp 42,
 # ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 787, and it was 785 — a Super tap held too long, and how long it was held,
+# are two more DeskModifierTaps cases. Before that
 # 785, and it was 784 — dropping the desk's pointer theme being an error is
 # one more DeskCursorThemeSource case. Before that
 # 784, and it was 783 — the tray menu's extension entries are one more
@@ -263,7 +265,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=785
+FLOOR=787
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

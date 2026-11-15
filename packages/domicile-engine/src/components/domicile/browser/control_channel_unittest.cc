@@ -191,7 +191,7 @@ class FakeClient : public mojom::ControlChannelClient {
   void ShortcutPressed(mojom::ShortcutPtr) override {}
   void ShortcutReleased(mojom::ShortcutPtr) override {}
   void GesturePerformed(mojom::GesturePtr) override {}
-  void ModifierTapped(mojom::TapModifier) override {}
+  void ModifierTapped(mojom::TapModifier, base::TimeDelta) override {}
   void Modifiers(bool, bool, bool, bool) override {}
   void Displays(std::vector<mojom::DisplayInfoPtr> displays) override {
     for (const auto& display : displays) {

@@ -51,8 +51,10 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
 - A modifier alone, `Meta`, is a tap of it: either side's key pressed and let
   go with nothing in between. Another key, a click, a scroll, a pinch, a touch
   or a touchpad gesture the shell takes while it is held makes it no tap, so
-  `Meta+Return` and Super-dragging a window still work. Manganese binds `Meta`
-  to the overview, as GNOME and KDE do.
+  `Meta+Return` and Super-dragging a window still work. So does holding it
+  longer than 300 ms, as on GNOME: Super held and let go does nothing.
+  `keyboard.grab("Meta", { longestTap })` sets another limit. Manganese binds
+  `Meta` to the overview, as GNOME and KDE do.
 
 **Gestures** bind in the same tables, in sway's `bindgesture` grammar:
 `swipe:3:left`, `pinch:4:inward`, `hold`, and touchscreen swipes in from an
@@ -139,7 +141,9 @@ domicile list-bindings       ─▶ ... ─▶ compositor (which_shell_bindings)
   sends `GrabModifierTap`; `DeskModifierTaps` (fed by an aura event observer,
   `StartModifierTaps`, which sees every key whoever has the keyboard) hands
   the tap to the first page that grabbed it, as `shortcut` then
-  `shortcutrelease` with `keyCode` 0. The key itself still reaches the focused
+  `shortcutrelease` with `keyCode` 0. It is held to the longest `longestTap`
+  of the page's names for it and reports how long it was held, and the page
+  fires only the names whose own `longestTap` that fits. The key itself still reaches the focused
   client. Under a shortcuts inhibitor the tap is the window's unless grabbed
   `--inhibited`, as a chord is. Nested in another compositor, the host may
   keep Super for itself, and then no tap arrives.
