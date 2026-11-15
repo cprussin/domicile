@@ -332,7 +332,7 @@ export type DomicileBrowserWindow = {
    * `label` with Electron's `&` mnemonics, `enabled`, `visible` and
    * `checked`, and maybe an `accelerator` as the app wrote it, an `icon` (a
    * PNG data: URL) and a `submenu` of entries. Click an entry with
-   * `clickBrowserWindowMenu`.
+   * DomicileHost.clickBrowserWindowMenu.
    */
   readonly menu: string | null;
   /**
@@ -1025,7 +1025,7 @@ export type DomicileHost = {
   closeBrowserWindow(id: string): void;
   /**
    * The user clicked entry `command` of window `id`'s menu bar
-   * (`DomicileBrowserWindow.menu`); its Electron app runs the entry. Throws a
+   * (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a
    * TypeError for a `command` below 1. A window that closed meanwhile, or has
    * no menu, does nothing.
    */
