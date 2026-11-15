@@ -201,7 +201,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `dialog` | file dialogs through the file chooser portal ([PORTALS.md](/docs/PORTALS.md)), built in the host (`src/electron/dialog.ts`): Electron's properties, filters, button label and default path become the portal's options, and its URIs come back as paths. The `Sync` calls block on a child process that asks the portal (`src/choose-file.ts`), as Electron's block the main process. Dialogs aren't tied to the app's window yet: Electron windows are the shell's pages, not toplevels a portal can name. Message boxes need a dialog the shell draws, so `showMessageBox` throws, naming that, until the menu bar work brings one; `showErrorBox` writes to the host's log |
 | `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
 | `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
-| `safeStorage` | Secret Service on D-Bus |
+| `safeStorage` | Chromium's OSCrypt for Linux, byte for byte, built in the host (`src/electron/safe-storage.ts`), so what an app encrypted on its own Electron decrypts here and back: AES-128-CBC with the PBKDF2 key of a password the Secret Service keeps as "Chromium Safe Storage" with `application` set to the app's name (`src/secret-service.ts`), prefixed `v11`. The password is read, or created, when the app first needs it, blocking on a child process (`src/safe-storage-password.ts`) as Electron blocks on libsecret, so a locked keyring asks to be unlocked then. With no Secret Service, or an unlock refused, the backend is `basic_text`: encryption needs `setUsePlainTextEncryption(true)` and uses the hardcoded `v10` key, as in Electron |
 | `desktopCapturer` | the share picker |
 | `clipboard` | the desktop clipboard |
 | `nativeImage` | the image's PNG or JPEG bytes, in the host. PNGs are read and written without a library (`src/png.ts`) for `resize`, `crop` and bitmaps; a JPEG is kept as it came and can't be decoded, so those throw for one. One scale factor, 1 |
@@ -292,7 +292,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `Tray`
 - [x] `electron-host`: `dialog` file dialogs
 - [ ] `dialog` message boxes (a shell-drawn dialog)
-- [ ] `safeStorage`, `desktopCapturer`, clipboard
+- [x] `electron-host`: `safeStorage`
+- [ ] `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
