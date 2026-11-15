@@ -173,7 +173,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   which the compositor already has. A monitor source is the composited
   output, which only viz has: the engine runs a `FrameSinkVideoCapturer` on
   the display's root frame sink and sends each frame's dmabuf over the broker
-  socket. One producer keeps cursor modes and restore tokens in one place.
+  socket. Frames come in shared memory instead when the GPU cannot make
+  dmabufs, as nested in a Wayland session with no render node. A capture viz
+  stops fails every stream and shot on it with viz's cause, such as a first
+  frame it could not allocate. One producer keeps cursor modes and restore tokens in one place.
   The producer is `src/casting/`: `Casting::start` takes a `Source` and
   reports the node. `Source::Monitor` names a `wl_output`; `Source::Region`
   is a desktop rectangle in logical pixels. The pointer is drawn where the

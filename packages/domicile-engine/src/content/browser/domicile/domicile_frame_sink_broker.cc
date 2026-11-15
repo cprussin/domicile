@@ -32,6 +32,7 @@
 #include "content/browser/domicile/domicile_spike_probe.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/browser/gpu_utils.h"
@@ -46,6 +47,7 @@
 #include "ui/display/display_observer.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/buffer_types.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/devices/input_device_event_observer.h"
@@ -84,6 +86,15 @@ gpu::SharedImageInterface* GetSharedImageInterface() {
     return nullptr;
   }
   return context_provider->SharedImageInterface();
+}
+
+// Whether the GPU can make the dmabufs viz captures a display into: BGRA, for
+// scanout, as media::RenderableMappableSharedImageVideoFramePool asks for
+// without CPU access. Nested on Wayland it cannot without a render node or
+// the session's dmabuf formats, and viz then fails the capture's first frame.
+bool CanCaptureIntoDmabufs() {
+  return ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(
+      viz::SinglePlaneFormat::kBGRA_8888, gfx::BufferUsage::SCANOUT);
 }
 
 // The interface that makes a window in shared memory a software image, while
@@ -489,7 +500,8 @@ class DomicileBrowserService : public content::GpuDataManagerObserver,
                 base::BindRepeating(&InjectInput),
                 base::BindRepeating(&SetInputConfig),
                 base::BindRepeating(&RedrawDisplay),
-                base::BindRepeating(&SetColorMatrix)),
+                base::BindRepeating(&SetColorMatrix),
+                base::BindRepeating(&CanCaptureIntoDmabufs)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

@@ -710,13 +710,13 @@ class Capture : public mojom::DisplayCaptureObserver {
   // started, so a refusal's closed pipes are not an ending.
   void Watch() {
     if (!control_.is_connected()) {
-      End();
+      End(0, std::string());
       return;
     }
     // Unretained: both pipes are members.
-    control_.set_disconnect_handler(
+    control_.set_disconnect_with_reason_handler(
         base::BindOnce(&Capture::End, base::Unretained(this)));
-    observer_.set_disconnect_handler(
+    observer_.set_disconnect_with_reason_handler(
         base::BindOnce(&Capture::End, base::Unretained(this)));
   }
 
@@ -780,10 +780,13 @@ class Capture : public mojom::DisplayCaptureObserver {
     queue_->Push(event);
   }
 
-  // The browser closed the capture.
-  void End() {
-    queue_->Push(
-        {.type = EngineEvent::Type::kCaptureEnded, .capture = id_});
+  // The browser closed the capture, saying `why` when it failed. The
+  // browser closes both pipes with the same reason, so the first to close
+  // tells the whole story.
+  void End(uint32_t, const std::string& why) {
+    queue_->Push({.type = EngineEvent::Type::kCaptureEnded,
+                  .capture = id_,
+                  .why = why});
     // Runs last: the owner destroys this.
     std::move(ended_).Run();
   }
@@ -1366,7 +1369,10 @@ struct DomicileEngine {
           }
           break;
         case domicile::EngineEvent::Type::kCaptureEnded:
-          if (callbacks_.capture_ended) {
+          if (!event.why.empty() && callbacks_.capture_failed) {
+            callbacks_.capture_failed(callbacks_.user_data, event.capture,
+                                      event.why.c_str());
+          } else if (callbacks_.capture_ended) {
             callbacks_.capture_ended(callbacks_.user_data, event.capture);
           }
           break;

@@ -711,6 +711,14 @@ typedef struct DomicileEngineCallbacks {
   void (*input_devices)(void* user_data,
                         const DomicileInputDevice* devices,
                         uint32_t count);
+  // Like `capture_ended`, for a capture the browser ended because it failed,
+  // such as one viz could not allocate a frame for. `why` names the cause,
+  // borrowed for the call.
+  //
+  // Called instead of `capture_ended` when set. An older engine ignores it.
+  void (*capture_failed)(void* user_data,
+                         DomicileCaptureId capture,
+                         const char* why);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls

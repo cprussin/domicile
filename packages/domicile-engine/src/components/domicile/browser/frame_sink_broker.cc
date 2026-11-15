@@ -61,7 +61,8 @@ FrameSinkBroker::FrameSinkBroker(
     InputInjector inject_input,
     InputConfigSetter set_input_config,
     DisplayRedrawer redraw_display,
-    ColorMatrixSetter set_color_matrix)
+    ColorMatrixSetter set_color_matrix,
+    DmabufCaptureChecker can_capture_into_dmabufs)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -78,7 +79,8 @@ FrameSinkBroker::FrameSinkBroker(
       inject_input_(std::move(inject_input)),
       set_input_config_(std::move(set_input_config)),
       redraw_display_(std::move(redraw_display)),
-      set_color_matrix_(std::move(set_color_matrix)) {
+      set_color_matrix_(std::move(set_color_matrix)),
+      can_capture_into_dmabufs_(std::move(can_capture_into_dmabufs)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -499,7 +501,8 @@ void FrameSinkBroker::StartCapture(
     mojo::PendingRemote<mojom::DisplayCaptureObserver> observer,
     base::ScopedClosureRunner held) {
   const bool gpu = get_shared_image_interface_ &&
-                   get_shared_image_interface_.Run() != nullptr;
+                   get_shared_image_interface_.Run() != nullptr &&
+                   can_capture_into_dmabufs_ && can_capture_into_dmabufs_.Run();
   const uint64_t id = next_capture_++;
   // Unretained: the broker owns every capture and the manager outlives it.
   captures_[id] = std::make_unique<DisplayCapture>(
