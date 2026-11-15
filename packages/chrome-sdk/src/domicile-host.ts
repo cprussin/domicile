@@ -1379,6 +1379,12 @@ export type DomicilePictureInPictureVideo = {
   /** The video's own size, in pixels: its shape. */
   readonly width: number;
   readonly height: number;
+  /**
+   * Where the video was in its page when it entered picture-in-picture, in
+   * CSS pixels from the page's top left, so the shell can grow it out of that
+   * place; null when the page was drawn nowhere.
+   */
+  readonly source: DOMRectReadOnly | null;
   readonly playing: boolean;
   /**
    * Which controls the page takes: play and pause, and its media session's

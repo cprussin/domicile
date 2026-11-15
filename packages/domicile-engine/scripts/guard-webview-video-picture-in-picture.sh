@@ -69,6 +69,8 @@ CLICK_LOG="${CLICK_LOG:-/tmp/domicile-webview-video-picture-in-picture-click.log
 # What the server writes for the page's reports and for nothing else. The
 # `GUARD` prefix keeps the server's banner from matching.
 REPORT_LINE="GUARD report "
+# Where the page's video sits: at its body's 8px margin, the stream's 320x180.
+VIDEO_SOURCE="8,8,320x180"
 
 STARTED=()
 cleanup() {
@@ -174,6 +176,7 @@ SAW_PLAYING=$(saw "event=playing" "$HTTP_LOG")
 SAW_MENU=$(saw "GUARD menu-picture-in-picture" "$ENGINE_LOG")
 SAW_ENTERED=$(saw "event=entered" "$HTTP_LOG")
 SAW_LISTED=$(saw "ours=true" "$ENGINE_LOG")
+SAW_SOURCE=$(saw "source=$VIDEO_SOURCE" "$ENGINE_LOG")
 if [ "$(saw "event=left" "$HTTP_LOG")" = 1 ] &&
   [ "$(saw "event=paused" "$HTTP_LOG")" = 1 ]; then
   SAW_LEFT_PAUSED=1
@@ -188,7 +191,7 @@ grep -F "$REPORT_LINE" "$HTTP_LOG" || true
 grep -F "GUARD pip" "$ENGINE_LOG" || true
 grep -F "GUARD menu" "$ENGINE_LOG" || true
 echo "shell=$SAW_SHELL window=$SAW_WINDOW playing=$SAW_PLAYING menu=$SAW_MENU"
-echo "entered=$SAW_ENTERED listed=$SAW_LISTED left paused=$SAW_LEFT_PAUSED unlisted=$SAW_UNLISTED"
+echo "entered=$SAW_ENTERED listed=$SAW_LISTED source=$SAW_SOURCE left paused=$SAW_LEFT_PAUSED unlisted=$SAW_UNLISTED"
 echo
 
 # The verdict: names the component to blame. Checks run in dependency order.
@@ -220,6 +223,11 @@ elif [ "$SAW_LISTED" != "1" ]; then
 for the window it drew. ShellVideoOverlayWindow::ShowInactive did not list \
 it, PictureInPictureVideos did not tell DomicileHost, or WindowOf named \
 another window"
+elif [ "$SAW_SOURCE" != "1" ]; then
+  FAILURE="the shell heard the video but not where it was in its page \
+($VIDEO_SOURCE, see the pip lines above). ShellVideoOverlayWindow did not \
+list GetSourceBounds() in DIPs, or PictureInPictureServiceImpl's InMainFrame \
+moved it"
 elif [ "$SAW_LEFT_PAUSED" != "1" ]; then
   FAILURE="the shell's close never left the page paused. \
 actOnPictureInPictureVideo did not reach PictureInPictureVideos::Act, or \
@@ -228,7 +236,8 @@ elif [ "$SAW_UNLISTED" != "1" ]; then
   FAILURE="the page left picture-in-picture but the shell still lists it. \
 ShellVideoOverlayWindow::Hide did not drop its listing"
 else
-  PASSED="a video in picture-in-picture is listed for its window, and the \
+  PASSED="a video in picture-in-picture is listed for its window with its \
+place in its page, and the \
 shell's close pauses it and takes it off the list"
 fi
 

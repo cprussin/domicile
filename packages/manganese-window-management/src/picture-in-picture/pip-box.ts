@@ -128,3 +128,29 @@ export const resizedBox = (
   };
   return movedBox(resized, workspace, 0, 0);
 };
+
+/**
+ * Where a video is drawn on the desktop: its `source` box in the page drawn
+ * at `page`, fitted to its `shape` as a `<video>` fits its frames.
+ */
+export const inPage = (page: Rect, source: Rect, shape: Shape): Rect => {
+  const ratio = ratioOf(shape);
+  const width = Math.min(source.width, source.height * ratio);
+  const height = width / ratio;
+  return {
+    height,
+    width,
+    x: page.x + source.x + (source.width - width) / 2,
+    y: page.y + source.y + (source.height - height) / 2,
+  };
+};
+
+/** How far `box` moves and scales, about its top left, to lie on `to`. */
+export type Offset = { scale: number; x: number; y: number };
+
+/** The {@link Offset} from `box` to `to`, a box of its shape. */
+export const offsetTo = (box: Rect, to: Rect): Offset => ({
+  scale: to.width / box.width,
+  x: to.x - box.x,
+  y: to.y - box.y,
+});

@@ -24,6 +24,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace domicile {
@@ -59,6 +60,8 @@ class PictureInPictureVideos : public mojom::PictureInPictureVideos {
     const std::string& id() const { return id_; }
 
     void SetSize(const gfx::Size& size);
+    // Where the video was in its page, in DIPs; empty when unknown.
+    void SetSource(const gfx::Rect& source);
     void SetPlaying(bool playing);
     void SetControls(bool can_play,
                      bool can_previous_track,
