@@ -6,9 +6,9 @@ import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { writeAsar } from "../asar-fixture";
+import { startFakeDesktopBus } from "../desktop-bus-fixture";
 import type { FakeEngine } from "../engine-fixture";
 import { startFakeEngine } from "../engine-fixture";
-import { startFakePortal } from "../portal-fixture";
 
 const MAIN = join(import.meta.dir, "../main.ts");
 
@@ -26,6 +26,16 @@ app.whenReady().then(() => {
     userData: app.getPath("userData"),
   }));
   app.quit();
+});
+`;
+
+const NOTIFY_JS = `
+const { app, Notification } = require("electron");
+app.whenReady().then(() => {
+  const notification = new Notification({ title: "Done", body: "All set", silent: true });
+  notification.on("show", () => app.quit());
+  notification.on("failed", (_event, why) => { console.error(why); app.exit(2); });
+  notification.show();
 });
 `;
 
@@ -54,9 +64,9 @@ const run = async (
     env: {
       ...inherited,
       ...(engine === undefined ? {} : { DOMICILE_ELECTRON_SOCK: engine.path }),
-      ...(portal === undefined
+      ...(desktopBus === undefined
         ? {}
-        : { DBUS_SESSION_BUS_ADDRESS: portal.address }),
+        : { DBUS_SESSION_BUS_ADDRESS: desktopBus.address }),
       HOME: home,
       XDG_CACHE_HOME: join(home, ".cache"),
       XDG_CONFIG_HOME: join(home, ".config"),
@@ -72,13 +82,13 @@ const run = async (
 };
 
 let engine: FakeEngine | undefined;
-let portal: Awaited<ReturnType<typeof startFakePortal>> | undefined;
+let desktopBus: Awaited<ReturnType<typeof startFakeDesktopBus>> | undefined;
 
 afterEach(async () => {
   await engine?.close();
-  await portal?.close();
+  await desktopBus?.close();
   engine = undefined;
-  portal = undefined;
+  desktopBus = undefined;
 });
 
 describe("electron-host", () => {
@@ -93,7 +103,7 @@ describe("electron-host", () => {
     });
 
     engine = await startFakeEngine();
-    portal = await startFakePortal({ colorScheme: 1, contrast: 0 });
+    desktopBus = await startFakeDesktopBus({ colorScheme: 1, contrast: 0 });
     const { code, stdout } = await run(
       resources,
       home,
@@ -164,7 +174,7 @@ describe("electron-host", () => {
       }
     });
 
-    portal = await startFakePortal({ colorScheme: 2, contrast: 0 });
+    desktopBus = await startFakeDesktopBus({ colorScheme: 2, contrast: 0 });
     const { code, stderr, stdout } = await run(resources, home, [], engine);
 
     expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
@@ -224,5 +234,35 @@ describe("electron-host", () => {
 
     expect(code).toBe(1);
     expect(stderr).toContain("DBUS_SESSION_BUS_ADDRESS is not set");
+  });
+
+  it("shows the app's notifications on the desktop as the app's", async () => {
+    const home = await mkdtemp(join(tmpdir(), "electron-host-main-"));
+    const resources = join(home, "install/resources");
+    await writeAsar(join(resources, "app.asar"), {
+      "main.js": { content: NOTIFY_JS },
+      "package.json": {
+        content: `{"main":"main.js","name":"notes","productName":"Notes","desktopName":"com.example.Notes.desktop","version":"1.2.3"}`,
+      },
+    });
+    engine = await startFakeEngine();
+    desktopBus = await startFakeDesktopBus({ colorScheme: 0, contrast: 0 });
+
+    const { code, stderr } = await run(resources, home, [], engine);
+
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+    expect(desktopBus.notifications).toEqual([
+      {
+        actions: ["default", ""],
+        appName: "Notes",
+        body: "All set",
+        hints: {
+          "desktop-entry": "com.example.Notes",
+          "suppress-sound": true,
+          urgency: 1,
+        },
+        summary: "Done",
+      },
+    ]);
   });
 });

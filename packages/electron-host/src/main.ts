@@ -7,7 +7,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAppPackage } from "./app-package";
 import { watchAppearance } from "./appearance";
-import { portalSettings, runCommand } from "./desktop";
+import { connectDesktop, runCommand } from "./desktop";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
 import { createIpcMain } from "./electron/ipc-main";
@@ -17,6 +17,7 @@ import {
 } from "./electron/message-port-main";
 import type { Appearance } from "./electron/native-theme";
 import { createNativeTheme } from "./electron/native-theme";
+import { createNotification } from "./electron/notification";
 import { createPermissions } from "./electron/permissions";
 import {
   createProtocols,
@@ -107,9 +108,10 @@ const main = async ([resources, ...args]: string[]) => {
     );
     const BrowserWindow = createBrowserWindow(engine, app, ipc, session);
     // Read before the app's main runs, as an app reads its theme as it starts.
+    const desktop = await reachDesktop(env);
     const theme: { changed?: (next: Appearance) => void } = {};
     const { appearanceChanged, nativeTheme } = createNativeTheme(
-      await watchAppearance(await desktopSettings(env), (next) => {
+      await watchAppearance(desktop.settings, (next) => {
         theme.changed?.(next);
       }),
     );
@@ -120,6 +122,10 @@ const main = async ([resources, ...args]: string[]) => {
       ipcMain,
       MessageChannelMain,
       MessagePortMain,
+      Notification: createNotification(desktop.notifications, {
+        appId: pkg.appId,
+        name: app.getName(),
+      }),
       nativeTheme,
       protocol: {
         ...session.defaultSession.protocol,
@@ -145,18 +151,18 @@ const main = async ([resources, ...args]: string[]) => {
   }
 };
 
-/** The desktop's settings portal, or the host fails, naming why. */
-const desktopSettings = async (env: Environment) => {
+/** The desktop's services on its session bus, or the host fails, naming why. */
+const reachDesktop = async (env: Environment) => {
   const address =
     env.DBUS_SESSION_BUS_ADDRESS ??
     fail(
       "DBUS_SESSION_BUS_ADDRESS is not set, so there is no desktop session bus to read the theme from. Start the app from inside a Domicile desktop.",
     );
   try {
-    return await portalSettings(address);
+    return await connectDesktop(address);
   } catch (error) {
     return fail(
-      `couldn't reach the desktop's settings portal: ${error instanceof Error ? error.message : String(error)}`,
+      `couldn't reach the desktop's settings portal and notification server: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 };
