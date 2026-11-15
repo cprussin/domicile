@@ -35,7 +35,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 8,
-# DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
+# DeskCursorThemeSource 3, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
 # DeskPointer 5, PointerWarp 10, PointerConfinementBoxes 4, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
@@ -46,6 +46,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 785, and it was 784 — dropping the desk's pointer theme being an error is
+# one more DeskCursorThemeSource case. Before that
 # 784, and it was 783 — the tray menu's extension entries are one more
 # case. Before that
 # 783, and it was 771 — an Electron app's webRequest listeners are six more
@@ -261,7 +263,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=784
+FLOOR=785
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

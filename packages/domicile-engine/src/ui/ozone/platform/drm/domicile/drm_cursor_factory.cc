@@ -3,6 +3,8 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_cursor_factory.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -79,17 +81,23 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetTurnedDefaultCursor(
   }
 
   const int size = base::ClampRound(theme->size * scale);
-  const auto cursors = loaded_.find(size);
-  if (cursors == loaded_.end()) {
-    if (loading_.insert(size).second) {
-      base::ThreadPool::PostTaskAndReplyWithResult(
-          FROM_HERE,
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-          base::BindOnce(load_, *theme, size),
-          base::BindOnce(&DrmCursorFactory::Loaded,
-                         weak_factory_.GetWeakPtr(), *theme, size));
+  if (!loaded_.contains(size) && loading_.insert(size).second) {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(load_, *theme, size),
+        base::BindOnce(&DrmCursorFactory::Loaded, weak_factory_.GetWeakPtr(),
+                       *theme, size));
+    if (loaded_.empty()) {
+      LOG(ERROR) << "domicile: the pointer is Chromium's until \""
+                 << theme->name << "\" at " << size << " px loads";
     }
+  }
+  // Until `size` loads, the nearest loaded size stands in: a monitor at a new
+  // density draws the theme a little off size rather than Chromium's art.
+  const auto cursors = NearestLoaded(size);
+  if (cursors == loaded_.end()) {
     return nullptr;
   }
 
@@ -99,6 +107,12 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetTurnedDefaultCursor(
   const auto cursor = cursors->second.find(
       type == mojom::CursorType::kNull ? mojom::CursorType::kPointer : type);
   if (cursor == cursors->second.end()) {
+    // A theme with no cursors at all was said once, when it loaded.
+    if (!cursors->second.empty() && said_lacking_.insert(type).second) {
+      LOG(ERROR) << "domicile: the pointer theme \"" << theme->name
+                 << "\" has no cursor for type " << type
+                 << "; it is Chromium's";
+    }
     return nullptr;
   }
 
@@ -110,7 +124,7 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetTurnedDefaultCursor(
     hotspot = cursor->second.hotspot;
     turn(frame, hotspot);
   }
-  const float image_scale = static_cast<float>(size) / theme->size;
+  const float image_scale = static_cast<float>(cursors->first) / theme->size;
   return frames.size() == 1
              ? CreateImageCursor(type, frames[0], hotspot, image_scale)
              : CreateAnimatedCursor(type, frames, hotspot, image_scale,
@@ -126,8 +140,20 @@ void DrmCursorFactory::ObserveThemeChanges() {}
 void DrmCursorFactory::OnDeskCursorThemeChanged() {
   loaded_.clear();
   loading_.clear();
+  said_lacking_.clear();
   weak_factory_.InvalidateWeakPtrs();
   NotifyObserversOnThemeLoaded();
+}
+
+DrmCursorFactory::Sizes::const_iterator DrmCursorFactory::NearestLoaded(
+    int size) const {
+  // A tie goes to the larger size: shrunk art looks better than grown.
+  return std::ranges::min_element(
+      loaded_, [size](const auto& a, const auto& b) {
+        const int to_a = std::abs(a.first - size);
+        const int to_b = std::abs(b.first - size);
+        return to_a != to_b ? to_a < to_b : a.first > b.first;
+      });
 }
 
 void DrmCursorFactory::Loaded(
@@ -140,10 +166,10 @@ void DrmCursorFactory::Loaded(
 
   // The lines to look for on hardware when the pointer did not change.
   if (cursors.empty()) {
-    LOG(WARNING) << "domicile: no cursor theme \"" << theme.name
-                 << "\" on the XCursor path (XCURSOR_PATH, or icons under "
-                    "XDG_DATA_HOME and XDG_DATA_DIRS); the pointer is "
-                    "Chromium's own";
+    LOG(ERROR) << "domicile: no cursor theme \"" << theme.name
+               << "\" on the XCursor path (XCURSOR_PATH, or icons under "
+                  "XDG_DATA_HOME and XDG_DATA_DIRS); the pointer is "
+                  "Chromium's own";
   } else {
     LOG(INFO) << "domicile: loaded " << cursors.size() << " cursors from \""
               << theme.name << "\" at " << size << " px";

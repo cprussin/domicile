@@ -37,8 +37,10 @@ void DeskCursorThemeSource::Set(std::optional<DeskCursorTheme> theme) {
     LOG(INFO) << "domicile: the desk's pointer theme is \"" << theme_->name
               << "\" at " << theme_->size << " px";
   } else {
-    LOG(INFO) << "domicile: the desk names no pointer theme; the pointer is "
-                 "Chromium's own";
+    // At ERROR: the engine logs nothing quieter, and every pointer turning
+    // into Chromium's art is what a person reports.
+    LOG(ERROR) << "domicile: the desk names no pointer theme; the pointer is "
+                  "Chromium's own";
   }
   for (Observer& observer : observers_) {
     observer.OnDeskCursorThemeChanged();
