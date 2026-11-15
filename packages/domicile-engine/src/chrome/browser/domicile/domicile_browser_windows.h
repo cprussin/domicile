@@ -86,6 +86,9 @@ std::optional<std::string> OpenElectronWindow(
 void SetElectronViews(const std::string& id,
                       std::vector<ElectronDeskView> views);
 
+// Electron window `id`'s menu bar, listed with it for the shell to draw.
+void SetElectronMenuBar(const std::string& id, ElectronDeskMenuBar bar);
+
 // Electron window `id`'s page, for the app's IPC to it, or null after
 // logging when no such window is open or its page has no preload.
 ElectronPage* ElectronPageOf(const std::string& id);

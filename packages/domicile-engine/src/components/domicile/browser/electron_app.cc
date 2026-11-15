@@ -243,6 +243,8 @@ void ElectronApp::Take(std::string_view line) {
     AnswerPermission(*permission);
   } else if (auto* set = std::get_if<ElectronSetViews>(&*request)) {
     SetViews(*set);
+  } else if (auto* bar = std::get_if<ElectronSetMenuBar>(&*request)) {
+    SetMenuBar(*bar);
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -315,6 +317,9 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
                                   weak_factory_.GetWeakPtr(), open.window),
       .resized = base::BindRepeating(&ElectronApp::PageResized,
                                      weak_factory_.GetWeakPtr(), open.window),
+      .menu_clicked =
+          base::BindRepeating(&ElectronApp::MenuClicked,
+                              weak_factory_.GetWeakPtr(), open.window),
   };
   const std::optional<std::string> id = desk_->Open(
       open.url, hello_->app_id, *partition, open.preload, std::move(calls),
@@ -482,6 +487,29 @@ void ElectronApp::PageResized(ElectronWindow number, int width, int height) {
   if (windows_.contains(number)) {
     send_.Run(ElectronWindowResized(number, width, height));
   }
+}
+
+void ElectronApp::MenuClicked(ElectronWindow number, int command) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronMenuClicked(number, command));
+  }
+}
+
+void ElectronApp::SetMenuBar(const ElectronSetMenuBar& bar) {
+  const std::optional<std::string> id = IdOf(bar.window);
+  if (!id.has_value()) {
+    return;
+  }
+  if (windows_.at(bar.window).view) {
+    send_.Run(ElectronWindowRefused(
+        bar.window, base::StrCat({"window ", base::NumberToString(bar.window),
+                                  " is a view, and only a window has a menu "
+                                  "bar"})));
+    return;
+  }
+  desk_->SetMenuBar(*id, ElectronDeskMenuBar{.menu = bar.menu,
+                                             .visible = bar.visible,
+                                             .auto_hide = bar.auto_hide});
 }
 
 void ElectronApp::SetViews(const ElectronSetViews& set) {

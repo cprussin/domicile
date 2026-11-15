@@ -2449,6 +2449,23 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   }
 }
 
+void DomicileHost::clickBrowserWindowMenu(ScriptState*,
+                                          const String& id,
+                                          int32_t command,
+                                          ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  } else if (command < 1) {
+    exception_state.ThrowTypeError(
+        "command must be a menu entry's id, a whole number from 1");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->ClickMenu(id, command);
+  }
+}
+
 namespace {
 
 // The browser's answer to startCasting(): the cast's route, or why there is
@@ -2696,7 +2713,9 @@ void DomicileHost::ListBrowserWindows() {
         toplevel_id == browser_toplevel_ids_.end() ? String()
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,
-        window->y, window->hidden));
+        window->y, window->hidden,
+        window->menu.empty() ? String() : window->menu,
+        window->menu_bar_visible, window->menu_bar_auto_hide));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

@@ -335,6 +335,10 @@ Bind browser keys yourself:
 
 - `domicile-guest-keydown`: a `KeyboardEvent` for each chord (Ctrl, Alt or
   Meta held) the page did not `preventDefault`. Plain keys never arrive.
+- `domicile-guest-keyup`: a `KeyboardEvent` for each modifier (Alt, Control,
+  Meta or Shift) let go of that the page did not `preventDefault`. With
+  `domicile-guest-keydown`, it tells a lone Alt tap from Alt held for a chord.
+  Other keys' releases never arrive.
 - `domicile-key-delivered`: a plain `Event` for each key press the page gets
   (not a modifier, a repeat or a grabbed chord). Names no key. `<app>` fires
   the same for its client.
@@ -426,6 +430,41 @@ for (const window of domicile.browser.windows ?? []) {
 ```
 
 See "Windows" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+
+## Menu bars
+
+An Electron app window can have a menu bar (File, Edit, View, ...), which
+the shell draws under the window's tab.
+
+- **`menu`** is the menu's entries as JSON, or `undefined` for none. Each
+  entry has an `id` (a whole number from 1), a `type` (`normal`,
+  `separator`, `submenu`, `checkbox` or `radio`), a `label` with Electron's
+  `&` mnemonics (`&File`; `&&` is an ampersand), `enabled`, `visible` and
+  `checked`, and maybe an `accelerator` as the app wrote it
+  (`CmdOrCtrl+Shift+N`), an `icon` (a PNG `data:` URL) and a `submenu` of
+  entries.
+- **`menuBarVisible`** says whether the bar shows. With **`menuBarAutoHide`**,
+  as Electron's `autoHideMenuBar`, it shows after Alt is tapped, and hides
+  again after a click or Escape. An Alt tap over the window is an Alt
+  `domicile-guest-keydown` then an Alt `domicile-guest-keyup` with no other
+  chord between.
+- **Click an entry** with `domicile.browser.clickMenu(id, entry.id)`.
+  The app runs it: a checkbox or radio changes, and the next list shows it.
+- **Accelerators** run the entry, as Electron's menus do: match each
+  `domicile-guest-keydown` against them. The page gets the key first, so a
+  page that takes the chord keeps it.
+
+```js
+for (const window of domicile.browser.windows ?? []) {
+  if (window.menu !== undefined && window.menuBarVisible) {
+    drawMenuBar(window.id, JSON.parse(window.menu), (entry) => {
+      domicile.browser.clickMenu(window.id, entry.id);
+    });
+  }
+}
+```
+
+See "Desktop pieces" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
 
 ## Fullscreen
 

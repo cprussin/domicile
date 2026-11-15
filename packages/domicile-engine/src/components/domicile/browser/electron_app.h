@@ -53,6 +53,19 @@ struct ElectronPageCalls {
   base::RepeatingClosure gone;
   // The shell gave the page a new size, in CSS pixels.
   base::RepeatingCallback<void(int width, int height)> resized;
+  // The user clicked entry `command` of the window's menu bar.
+  base::RepeatingCallback<void(int command)> menu_clicked;
+};
+
+// A window's menu bar, as the desk lists it: the menu's entries as JSON
+// (empty for none), whether the bar shows, and whether it hides until Alt.
+struct ElectronDeskMenuBar {
+  std::string menu;
+  bool visible = true;
+  bool auto_hide = false;
+
+  friend bool operator==(const ElectronDeskMenuBar&,
+                         const ElectronDeskMenuBar&) = default;
 };
 
 // Where a window holds one of its views, as the desk lists it: the view's
@@ -186,6 +199,8 @@ class ElectronDesk {
   // window held moves here.
   virtual void SetViews(const std::string& id,
                         std::vector<ElectronDeskView> views) = 0;
+  // Window `id`'s menu bar, which the shell draws under its tab.
+  virtual void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
   // Closes window `id` once its page agrees.
@@ -359,6 +374,8 @@ class ElectronApp {
   void PageGone(ElectronWindow number);
   void PageResized(ElectronWindow number, int width, int height);
   void SetViews(const ElectronSetViews& set);
+  void MenuClicked(ElectronWindow number, int command);
+  void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number`, or nothing after refusing the request.
   std::optional<std::string> IdOf(ElectronWindow number);
 

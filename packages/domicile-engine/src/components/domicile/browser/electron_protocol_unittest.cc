@@ -333,6 +333,71 @@ TEST(ElectronProtocolTest, ABadSetViewsIsRefusedAsTheWindows) {
             "a view's \"hidden\" must be true or false");
 }
 
+TEST(ElectronProtocolTest, ASetMenuBarKeepsTheMenusEntries) {
+  base::expected<ElectronRequest, ElectronRefusal> request =
+      ParseElectronRequest(
+          R"({"type":"set_menu_bar","window":1,"visible":true,)"
+          R"("auto_hide":false,"menu":[{"id":1,"type":"submenu",)"
+          R"("label":"&File","enabled":true,"visible":true,"checked":false,)"
+          R"("sublabel":"dropped","submenu":[{"id":2,"type":"normal",)"
+          R"("label":"Quit","enabled":true,"visible":true,"checked":false,)"
+          R"("accelerator":"CmdOrCtrl+Q",)"
+          R"("icon":"data:image/png;base64,AA=="}]}]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& bar = std::get<ElectronSetMenuBar>(*request);
+  EXPECT_EQ(bar.window, 1);
+  EXPECT_TRUE(bar.visible);
+  EXPECT_FALSE(bar.auto_hide);
+  EXPECT_EQ(bar.menu,
+            R"([{"checked":false,"enabled":true,"id":1,"label":"&File",)"
+            R"("submenu":[{"accelerator":"CmdOrCtrl+Q","checked":false,)"
+            R"("enabled":true,"icon":"data:image/png;base64,AA==","id":2,)"
+            R"("label":"Quit","type":"normal","visible":true}],)"
+            R"("type":"submenu","visible":true}])");
+  EXPECT_EQ(std::get<ElectronSetMenuBar>(
+                *ParseElectronRequest(
+                    R"({"type":"set_menu_bar","window":1,"menu":null,)"
+                    R"("visible":false,"auto_hide":true})"))
+                .menu,
+            "");
+}
+
+TEST(ElectronProtocolTest, ABadSetMenuBarIsRefusedAsTheWindows) {
+  const std::string flags = R"("visible":true,"auto_hide":false)";
+  const std::string entry =
+      R"("enabled":true,"visible":true,"checked":false)";
+  EXPECT_EQ(ParseElectronRequest(
+                R"({"type":"set_menu_bar","window":4,)" + flags + "}")
+                .error(),
+            (ElectronRefusal{
+                .why = "\"menu\" must be a list of entries, or null for none",
+                .window = 4}));
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[]})"),
+            "\"visible\" and \"auto_hide\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[1],)" +
+                       flags + "}"),
+            "each menu entry must be an object");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":0,)"
+                       R"("type":"normal","label":"",)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"id\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":1,)"
+                       R"("type":"button","label":"",)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"type\" must be normal, separator, submenu, "
+            "checkbox or radio");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":1,)"
+                       R"("type":"normal","label":"","icon":"x.png",)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"icon\" must be a PNG data: URL");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":1,)"
+                       R"("type":"submenu","label":"","submenu":[{"id":2}],)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"type\" must be normal, separator, submenu, "
+            "checkbox or radio");
+}
+
 TEST(ElectronProtocolTest, EventsAreOneLineEach) {
   EXPECT_EQ(ElectronReady({}), "{\"schemes\":[],\"type\":\"ready\"}\n");
   EXPECT_EQ(ElectronRefused("no"), "{\"type\":\"refused\",\"why\":\"no\"}\n");
@@ -346,6 +411,8 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"title\":\"Claude\",\"type\":\"title_changed\",\"window\":4}\n");
   EXPECT_EQ(ElectronWindowClosed(5),
             "{\"type\":\"window_closed\",\"window\":5}\n");
+  EXPECT_EQ(ElectronMenuClicked(7, 12),
+            "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
   EXPECT_EQ(ElectronWindowResized(6, 800, 600),
             "{\"height\":600,\"type\":\"resized\",\"width\":800,"
             "\"window\":6}\n");

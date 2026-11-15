@@ -152,6 +152,17 @@ export const WEBVIEW_FOCUS_REQUEST_EVENT = "domicile-focus-request";
 export const WEBVIEW_GUEST_KEYDOWN_EVENT = "domicile-guest-keydown";
 
 /**
+ * A `KeyboardEvent` fired for a modifier (Alt, Control, Meta or Shift) let go
+ * of in the page, which the page did not `preventDefault`. Bubbles.
+ *
+ * For what a lone modifier does, such as Alt showing an app's menu bar: a
+ * shell sees a modifier's press as a {@link WEBVIEW_GUEST_KEYDOWN_EVENT} and
+ * its release as this, and anything pressed between as a chord. Only
+ * modifiers, so typed text stays in the guest.
+ */
+export const WEBVIEW_GUEST_KEYUP_EVENT = "domicile-guest-keyup";
+
+/**
  * Fired when a key press reaches the page: not a modifier, a repeat or a chord
  * the shell grabbed. Typing in the window, as opposed to a key the desktop
  * handled. Bubbles.
@@ -1368,6 +1379,7 @@ declare global {
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
   interface HTMLElementEventMap {
     "domicile-guest-keydown": KeyboardEvent;
+    "domicile-guest-keyup": KeyboardEvent;
     "domicile-file-chooser": DomicileFileChooserEvent;
     "domicile-context-menu": DomicileContextMenuEvent;
     "domicile-permission-request": DomicilePermissionRequestEvent;

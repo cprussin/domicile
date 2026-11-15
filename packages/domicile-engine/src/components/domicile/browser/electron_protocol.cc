@@ -406,7 +406,105 @@ bool IsWindowRequest(std::string_view type) {
   return type == "open_window" || type == "load_url" ||
          type == "focus_window" || type == "close_window" ||
          type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
-         type == "port_post" || type == "port_close" || type == "set_views";
+         type == "port_post" || type == "port_close" || type == "set_views" ||
+         type == "set_menu_bar";
+}
+
+// Entry `entry` of a menu, with only the keys the shell reads, or why it is
+// not one. `depth` counts the submenus it is in.
+base::expected<base::DictValue, std::string> MenuEntry(const base::Value& entry,
+                                                       int depth) {
+  // Electron's menus nest a few deep; this keeps a cycle-shaped mistake from
+  // recursing without end.
+  constexpr int kDeepest = 16;
+  const base::DictValue* dict = entry.GetIfDict();
+  if (dict == nullptr) {
+    return base::unexpected("each menu entry must be an object");
+  }
+  const std::optional<int> id = dict->FindInt("id");
+  const std::string* type = dict->FindString("type");
+  const std::string* label = dict->FindString("label");
+  const std::optional<bool> enabled = dict->FindBool("enabled");
+  const std::optional<bool> visible = dict->FindBool("visible");
+  const std::optional<bool> checked = dict->FindBool("checked");
+  const base::Value* accelerator = dict->Find("accelerator");
+  const base::Value* icon = dict->Find("icon");
+  const base::Value* submenu = dict->Find("submenu");
+  if (!id.has_value() || *id < 1) {
+    return base::unexpected("a menu entry's \"id\" must be a whole number from 1");
+  } else if (type == nullptr ||
+             (*type != "normal" && *type != "separator" &&
+              *type != "submenu" && *type != "checkbox" && *type != "radio")) {
+    return base::unexpected(
+        "a menu entry's \"type\" must be normal, separator, submenu, "
+        "checkbox or radio");
+  } else if (label == nullptr) {
+    return base::unexpected("a menu entry's \"label\" must be a string");
+  } else if (!enabled.has_value() || !visible.has_value() ||
+             !checked.has_value()) {
+    return base::unexpected(
+        "a menu entry's \"enabled\", \"visible\" and \"checked\" must be true "
+        "or false");
+  } else if (accelerator != nullptr && !accelerator->is_string()) {
+    return base::unexpected("a menu entry's \"accelerator\" must be a string");
+  } else if (icon != nullptr &&
+             (!icon->is_string() ||
+              !icon->GetString().starts_with("data:image/png;base64,"))) {
+    return base::unexpected("a menu entry's \"icon\" must be a PNG data: URL");
+  } else if (submenu != nullptr && !submenu->is_list()) {
+    return base::unexpected("a menu entry's \"submenu\" must be a list");
+  } else if (submenu != nullptr && depth == kDeepest) {
+    return base::unexpected("a menu nests more than 16 submenus deep");
+  }
+  base::DictValue kept;
+  kept.Set("id", *id);
+  kept.Set("type", *type);
+  kept.Set("label", *label);
+  kept.Set("enabled", *enabled);
+  kept.Set("visible", *visible);
+  kept.Set("checked", *checked);
+  if (accelerator != nullptr) {
+    kept.Set("accelerator", accelerator->GetString());
+  }
+  if (icon != nullptr) {
+    kept.Set("icon", icon->GetString());
+  }
+  if (submenu != nullptr) {
+    base::ListValue entries;
+    for (const base::Value& child : submenu->GetList()) {
+      ASSIGN_OR_RETURN(base::DictValue kept_child, MenuEntry(child, depth + 1));
+      entries.Append(std::move(kept_child));
+    }
+    kept.Set("submenu", std::move(entries));
+  }
+  return kept;
+}
+
+// A set_menu_bar request, or why it is not one.
+base::expected<ElectronRequest, ElectronRefusal> ParseSetMenuBar(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const base::Value* menu = request.Find("menu");
+  const std::optional<bool> visible = request.FindBool("visible");
+  const std::optional<bool> auto_hide = request.FindBool("auto_hide");
+  if (menu == nullptr || !(menu->is_none() || menu->is_list())) {
+    return Refuse("\"menu\" must be a list of entries, or null for none",
+                  window);
+  } else if (!visible.has_value() || !auto_hide.has_value()) {
+    return Refuse("\"visible\" and \"auto_hide\" must be true or false",
+                  window);
+  }
+  ElectronSetMenuBar set{
+      .window = window, .visible = *visible, .auto_hide = *auto_hide};
+  if (menu->is_list()) {
+    base::expected<std::string, std::string> json =
+        ElectronMenuJson(menu->GetList());
+    if (!json.has_value()) {
+      return Refuse(std::move(json.error()), window);
+    }
+    set.menu = std::move(*json);
+  }
+  return set;
 }
 
 // The "views" of a set_views request, or why they are not views.
@@ -861,6 +959,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     }
   } else if (*type == "set_views") {
     return ParseSetViews(*request, *window);
+  } else if (*type == "set_menu_bar") {
+    return ParseSetMenuBar(*request, *window);
   } else if (*type == "focus_window") {
     return ElectronFocusWindow{.window = *window};
   } else if (*type == "close_window") {
@@ -1082,6 +1182,24 @@ std::string ElectronWindowResized(ElectronWindow window,
   event.Set("width", width);
   event.Set("height", height);
   return Line(std::move(event));
+}
+
+std::string ElectronMenuClicked(ElectronWindow window, int command) {
+  base::DictValue event = Event("menu_clicked", window);
+  event.Set("command", command);
+  return Line(std::move(event));
+}
+
+base::expected<std::string, std::string> ElectronMenuJson(
+    const base::ListValue& menu) {
+  base::ListValue entries;
+  for (const base::Value& entry : menu) {
+    ASSIGN_OR_RETURN(base::DictValue kept, MenuEntry(entry, 0));
+    entries.Append(std::move(kept));
+  }
+  std::string json;
+  CHECK(base::JSONWriter::Write(entries, &json));
+  return base::ok(std::move(json));
 }
 
 std::string ElectronIpcMessage(ElectronWindow window,

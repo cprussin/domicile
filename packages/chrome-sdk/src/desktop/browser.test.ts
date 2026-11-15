@@ -23,6 +23,9 @@ describe("browser", () => {
         isCaptured: false,
         isHidden: false,
         isPrivate: false,
+        menu: undefined,
+        menuBarAutoHide: false,
+        menuBarVisible: true,
         parent: undefined,
         partition: "",
         popupWindow: undefined,
@@ -44,6 +47,7 @@ describe("browser", () => {
     browser.openPrivate("https://c.example/");
     browser.openApp("https://d.example/");
     browser.close("1");
+    browser.clickMenu("2", 7);
 
     expect(fake.calls).toStrictEqual([
       ["openBrowserWindow", "https://a.example/", ""],
@@ -51,6 +55,7 @@ describe("browser", () => {
       ["openPrivateBrowserWindow", "https://c.example/"],
       ["openAppWindow", "https://d.example/", "", "new"],
       ["closeBrowserWindow", "1"],
+      ["clickBrowserWindowMenu", "2", 7],
     ]);
   });
 

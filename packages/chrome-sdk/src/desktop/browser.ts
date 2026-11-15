@@ -80,6 +80,11 @@ export type Browser = {
   /** Close window `id`. Its page may ask to stay. */
   close: (id: string) => void;
   /**
+   * The user clicked entry `command` (its `id`) of window `id`'s menu bar;
+   * its Electron app runs the entry.
+   */
+  clickMenu: (id: string, command: number) => void;
+  /**
    * Fetch `url` from the browser process with its cookies. Resolves whatever
    * the status; rejects with a NetworkError for a refusal or a network
    * failure.
@@ -92,6 +97,7 @@ export type BrowserHost = Pick<
   DomicileHost,
   | "addEventListener"
   | "browserWindows"
+  | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
   | "countBrowserWindowMatches"
   | "fetchWithCookies"
@@ -106,6 +112,9 @@ export const browser = (host: BrowserHost): Browser => {
     (list: readonly DomicileBrowserWindow[] | null) => list?.map(defined),
   );
   return {
+    clickMenu: (id, command) => {
+      host.clickBrowserWindowMenu(id, command);
+    },
     close: (id) => {
       host.closeBrowserWindow(id);
     },

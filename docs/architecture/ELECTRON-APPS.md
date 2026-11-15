@@ -228,11 +228,16 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `clipboard` | the desktop clipboard |
 | `autoUpdater` | off; the app's package updates it |
 
-App menus travel as a JSON model over the Electron socket. The engine puts
-it on the app window, and the shell draws it as a menu bar under the window's
-tab, with the menu component the tray uses. A click goes back as the item's
-id. The bar behaves as on Electron for Linux: it follows the app's
-`autoHideMenuBar` and `setMenuBarVisibility`, and Alt toggles it.
+App menus travel as a JSON model over the Electron socket:
+`set_menu_bar {window, menu: [entries] | null, visible, auto_hide}`. The
+engine checks the entries, keeps only the keys the shell reads, and lists the
+menu with the window (`DomicileBrowserWindow.menu`, `menuBarVisible`,
+`menuBarAutoHide`). The shell draws it as a menu bar under the window's tab,
+with the menu component the tray uses. A click goes back through
+`clickBrowserWindowMenu` to the app as `menu_clicked {window, command}`, the
+entry's id. The bar behaves as on Electron for Linux: it follows the app's
+`autoHideMenuBar` and `setMenuBarVisibility`, and Alt toggles it. Only a
+window has a menu bar; a view's is refused.
 
 ### Unsupported apps
 
@@ -310,8 +315,10 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [ ] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds`
 - [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
 - [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`
-- [ ] tray, notifications, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
+- [ ] tray, notifications, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
+- [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)
+- [ ] app menus: the shell's menu bar under the window's tab; Alt toggles it
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

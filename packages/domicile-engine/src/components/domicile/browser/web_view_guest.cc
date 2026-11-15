@@ -1603,6 +1603,13 @@ bool WebViewGuest::HandleKeyboardEvent(
         (modifiers & blink::WebInputEvent::kShiftKey) != 0,
         (modifiers & blink::WebInputEvent::kMetaKey) != 0,
         (modifiers & blink::WebInputEvent::kIsAutoRepeat) != 0);
+  } else if (event.GetType() == blink::WebInputEvent::Type::kKeyUp &&
+             ui::KeycodeConverter::IsDomKeyForModifier(
+                 ui::DomKey(event.dom_key))) {
+    client_->UnhandledModifierUp(
+        ui::KeycodeConverter::DomKeyToKeyString(ui::DomKey(event.dom_key)),
+        ui::KeycodeConverter::DomCodeToCodeString(
+            static_cast<ui::DomCode>(event.dom_code)));
   }
   return false;
 }
