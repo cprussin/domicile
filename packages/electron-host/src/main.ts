@@ -8,9 +8,10 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAppPackage } from "./app-package";
 import { watchAppearance } from "./appearance";
-import { connectDesktop, runCommand } from "./desktop";
+import { connectDesktop, runCommand, runCommandSync } from "./desktop";
 import { createApp } from "./electron/app";
 import { createBrowserWindow } from "./electron/browser-window";
+import { createClipboard } from "./electron/clipboard";
 import { createDialog } from "./electron/dialog";
 import { createIpcMain } from "./electron/ipc-main";
 import { createMenu } from "./electron/menu";
@@ -138,6 +139,7 @@ const main = async ([resources, ...args]: string[]) => {
     const electron = {
       app,
       BrowserWindow,
+      clipboard: createClipboard({ run: runCommandSync }),
       dialog: createDialog({
         choose: desktop.choose,
         chooseSync: desktop.chooseSync,

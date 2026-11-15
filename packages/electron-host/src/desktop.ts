@@ -1,12 +1,16 @@
 // What the host reaches on the desktop itself: commands and the session bus.
 // Thin on purpose; what reads their answers is tested on its own.
 
+import { randomUUID } from "node:crypto";
+import { readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { MessageBus } from "dbus-next";
 import { Message, MessageType, sessionBus, Variant } from "dbus-next";
 
 import type { PortalSettings } from "./appearance";
+import type { Ran, RunOptions } from "./electron/clipboard";
 import type {
   ChooserAnswer,
   ChooserMethod,
@@ -270,4 +274,33 @@ export const safeStoragePasswordSync = (
     password: string | null;
   };
   return { password: password ?? undefined };
+};
+
+/**
+ * Runs `command` and waits for it. Its stderr goes through a file, not a
+ * pipe: a command that leaves a child running, as `wl-copy` does, would hold
+ * a pipe open and this waiting.
+ */
+export const runCommandSync = (
+  command: readonly string[],
+  { input, output }: RunOptions,
+): Ran => {
+  const errors = join(
+    tmpdir(),
+    `electron-host-${process.pid}-${randomUUID()}.stderr`,
+  );
+  try {
+    const child = Bun.spawnSync([...command], {
+      stderr: Bun.file(errors),
+      stdin: input ?? "ignore",
+      stdout: output ? "pipe" : "ignore",
+    });
+    return {
+      code: child.exitCode ?? 1,
+      stderr: readFileSync(errors, "utf8"),
+      stdout: child.stdout ?? Buffer.alloc(0),
+    };
+  } finally {
+    rmSync(errors, { force: true });
+  }
 };
