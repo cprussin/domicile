@@ -48,6 +48,10 @@ ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-electron-views-engine.log}"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-electron-views-socket.log}"
 APP_LOG="${APP_LOG:-/tmp/domicile-electron-views-app.log}"
 FOR_SECONDS="${FOR_SECONDS:-120}"
+# The shell's window. Headless, it has no size unless given one, and the
+# window's page, drawn across it, would have none to report.
+WIDTH="${WIDTH:-1024}"
+HEIGHT="${HEIGHT:-768}"
 
 STARTED=()
 cleanup() {
@@ -95,6 +99,7 @@ rm -f "$ENGINE_LOG"
   --ozone-platform=headless \
   --disable-gpu \
   --app="domicile://shell/" \
+  --window-size="$WIDTH,$HEIGHT" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-electron-views-module.js" \
   --domicile-control-socket="$CONTROL" \
