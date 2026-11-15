@@ -130,6 +130,7 @@ TOGETHER=(
   guard-electron-protocol
   guard-electron-schemes
   guard-electron-session
+  guard-electron-permissions
   guard-electron-web-request
   guard-video-codecs
   guard-browser-brand
@@ -154,6 +155,7 @@ ONCE=(
   guard-domicile-fetch
   guard-electron-preload
   guard-electron-protocol
+  guard-electron-permissions
   guard-electron-schemes
   guard-electron-session
   guard-electron-socket

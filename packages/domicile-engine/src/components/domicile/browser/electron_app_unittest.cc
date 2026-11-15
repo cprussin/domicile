@@ -853,6 +853,118 @@ TEST_F(ElectronAppTest, AnAppThatGoesCancelsItsWaitingRequests) {
   EXPECT_EQ(got, (ElectronWebRequestAnswer{.ask = 1, .cancel = true}));
 }
 
+// Writes down whether a permission request was granted.
+base::OnceCallback<void(bool)> Into(std::optional<bool>& got) {
+  return base::BindOnce(
+      [](std::optional<bool>* got, bool granted) { *got = granted; }, &got);
+}
+
+TEST(ElectronPermissionForTest, NamesEachKindAsElectronDoes) {
+  const GURL origin("https://a.test/");
+  const auto name = [&](mojom::WebViewPermission permission) {
+    const std::optional<ElectronPermissionDetails> details =
+        ElectronPermissionFor({permission}, origin);
+    return details.has_value() ? details->permission : "(shell)";
+  };
+
+  EXPECT_EQ(name(mojom::WebViewPermission::kLocation), "geolocation");
+  EXPECT_EQ(name(mojom::WebViewPermission::kNotifications), "notifications");
+  EXPECT_EQ(name(mojom::WebViewPermission::kClipboard), "clipboard-read");
+  EXPECT_EQ(name(mojom::WebViewPermission::kMidi), "midiSysex");
+  EXPECT_EQ(name(mojom::WebViewPermission::kWindowManagement),
+            "window-management");
+  EXPECT_EQ(name(mojom::WebViewPermission::kIdleDetection), "idle-detection");
+  EXPECT_EQ(name(mojom::WebViewPermission::kLocalFonts), "unknown");
+  // Electron never asks about downloads.
+  EXPECT_EQ(name(mojom::WebViewPermission::kAutomaticDownloads), "(shell)");
+}
+
+TEST(ElectronPermissionForTest, CameraAndMicrophoneAreOneMediaRequest) {
+  EXPECT_EQ(
+      ElectronPermissionFor({mojom::WebViewPermission::kCamera,
+                             mojom::WebViewPermission::kMicrophone},
+                            GURL("https://a.test/")),
+      (ElectronPermissionDetails{.permission = "media",
+                                 .requesting_url = GURL("https://a.test/"),
+                                 .media_types = {"video", "audio"}}));
+  // Electron asks about each other kind on its own.
+  EXPECT_EQ(ElectronPermissionFor({mojom::WebViewPermission::kCamera,
+                                   mojom::WebViewPermission::kLocation},
+                                  GURL("https://a.test/")),
+            std::nullopt);
+  EXPECT_EQ(ElectronPermissionFor({}, GURL("https://a.test/")), std::nullopt);
+}
+
+TEST_F(ElectronAppTest, ASessionHandlesPermissionsWhileTheAppSaysSo) {
+  Hello();
+  app_->Take(kOpenOwn);
+  const ElectronSession& own = *desk_.sessions.at("10");
+
+  EXPECT_FALSE(own.HandlesPermissions());
+  app_->Take(R"({"type":"permission_handler","session":"","handle":true})");
+  EXPECT_TRUE(own.HandlesPermissions());
+  app_->Take(R"({"type":"permission_handler","session":"","handle":false})");
+  EXPECT_FALSE(own.HandlesPermissions());
+}
+
+TEST_F(ElectronAppTest, APermissionRequestIsAnsweredByTheAppsHandler) {
+  Hello();
+  app_->Take(kOpenOwn);
+  app_->Take(R"({"type":"permission_handler","session":"","handle":true})");
+  sent_.clear();
+  std::optional<bool> granted;
+  std::optional<bool> denied;
+
+  desk_.sessions.at("10")->AskPermission(
+      "10",
+      {.permission = "notifications",
+       .requesting_url = GURL("https://a.test/")},
+      Into(granted));
+  desk_.sessions.at("10")->AskPermission(
+      "10",
+      {.permission = "geolocation", .requesting_url = GURL("https://a.test/")},
+      Into(denied));
+  EXPECT_EQ(granted, std::nullopt);
+  app_->Take(R"({"type":"permission_answer","ask":2,"granted":false})");
+  app_->Take(R"({"type":"permission_answer","ask":1,"granted":true})");
+
+  EXPECT_EQ(sent_, (Lines{R"({"ask":1,"permission":"notifications",)"
+                          R"("requesting_url":"https://a.test/","session":"",)"
+                          R"("type":"permission_request","window":1})"
+                          "\n",
+                          R"({"ask":2,"permission":"geolocation",)"
+                          R"("requesting_url":"https://a.test/","session":"",)"
+                          R"("type":"permission_request","window":1})"
+                          "\n"}));
+  EXPECT_EQ(granted, true);
+  EXPECT_EQ(denied, false);
+}
+
+TEST_F(ElectronAppTest, APermissionAnswerNobodyWaitsForIsRefused) {
+  Hello();
+  sent_.clear();
+
+  app_->Take(R"({"type":"permission_answer","ask":5,"granted":true})");
+
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"no permission request )"
+                         R"(is waiting for answer 5"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AnAppThatGoesDeniesItsWaitingPermissions) {
+  Hello();
+  app_->Take(kOpenOwn);
+  app_->Take(R"({"type":"permission_handler","session":"","handle":true})");
+  std::optional<bool> got;
+  desk_.sessions.at("10")->AskPermission(
+      "10", {.permission = "media", .requesting_url = GURL("https://a.test/")},
+      Into(got));
+
+  app_.reset();
+
+  EXPECT_EQ(got, false);
+}
+
 TEST_F(ElectronAppTest, ASessionCallGetsTheCookiesItsFilterMatches) {
   Hello();
   desk_.cookies = {{.name = "a", .value = "1", .domain = "a.test"},

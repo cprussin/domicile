@@ -172,7 +172,22 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   included, as Electron does. A session's user agent reaches its open
   windows from their next navigation and its new windows before their first
   ([`domicile_electron_storage.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_storage.h)).
-  Not yet: `cookies.on('changed')`, and `setPermissionRequestHandler`.
+  Not yet: `cookies.on('changed')`.
+- **Permission handlers** (`permission_handler`): while one of the app's
+  sessions has a `setPermissionRequestHandler`, its pages' permission
+  requests ask the app (`permission_request`, answered by
+  `permission_answer` under the same `ask`) instead of the shell, with
+  Electron's names: `media` (its `mediaTypes`), `geolocation`,
+  `notifications`, `clipboard-read`, `midiSysex`, `window-management`,
+  `idle-detection`, and `unknown` for local fonts. Chrome keeps the answer
+  for the origin as it keeps a user's, so the handler is asked when Chrome
+  would prompt, not on every request as in Electron. A request Electron has
+  no name for (several downloads at once) still asks the shell, as every
+  request does in a session with no handler, where Electron would grant it.
+  An app that goes while a request waits denies it
+  ([`domicile_permissions.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_permissions.h)).
+  Not yet: `setPermissionCheckHandler`, which Electron calls synchronously;
+  checks answer from what Chrome kept.
 
 ### Desktop pieces
 
@@ -258,7 +273,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: an app's own schemes, registered at start
 - [x] engine: `webRequest`
 - [x] engine: cookies, storage clearing, `clearCache`, `setUserAgent`
-- [ ] engine: permission handlers
+- [x] engine: permission handlers
 - [x] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
 - [ ] `electron-host`: `session.webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
