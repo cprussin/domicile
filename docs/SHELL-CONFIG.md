@@ -448,9 +448,13 @@ The engine draws every pointer on a tty, including a window's, from
   `~/.icons`, `icons` under each of `XDG_DATA_DIRS`, and
   `/usr/share/pixmaps`, in that order. Inherited themes are followed.
 - A cursor the theme lacks is Chromium's own.
-- The engine logs `the desk's pointer theme is "<theme>" at <size> px`, then
-  `loaded <n> cursors from "<theme>"`, or `no cursor theme "<theme>" on
-  the XCursor path`.
+- The theme loads once per size in pixels. Until a monitor's size loads, the
+  nearest loaded size stands in; before any has loaded, the pointer is
+  Chromium's.
+- The engine logs these at `ERROR`, which reaches the journal:
+  `the pointer is Chromium's until "<theme>" at <size> px loads`,
+  `has no cursor for type <n>`, `no cursor theme "<theme>" on the XCursor
+  path`, and `the desk names no pointer theme`.
 - A cursor larger than the GPU's cursor plane, often 64 or 256 pixels, is
   cut off.
 
