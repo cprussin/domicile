@@ -196,7 +196,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `Menu.setApplicationMenu`, `win.setMenu` | a menu bar under the window's tab, drawn by the shell |
 | `Menu.popup` | a shell context menu |
 | `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)) |
-| `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)) |
+| `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)): a click is the `default` action, buttons are actions numbered from 0, `hasReply` is `inline-reply`, and `desktop-entry` names the app. An icon is a file path; a `nativeImage` icon throws until the host has `nativeImage` |
 | `dialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
 | `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
 | `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
@@ -284,7 +284,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
 - [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`
-- [ ] tray, notifications, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
+- [x] `electron-host`: `Notification`
+- [ ] tray, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
