@@ -61,15 +61,27 @@ bool ConnectedByUs(const net::UnixDomainServerSocket::Credentials& peer) {
 // The desk as an Electron app sees it: the shell profile's browser windows.
 class ChromeElectronDesk final : public ElectronDesk {
  public:
-  std::optional<std::string> Open(
-      const GURL& url,
-      const std::string& app_id,
-      const WebViewPartition& partition,
-      const std::string& preload,
-      ElectronPageCalls calls,
-      base::WeakPtr<ElectronSession> session) override {
+  std::optional<std::string> Open(const GURL& url,
+                                  const std::string& app_id,
+                                  const WebViewPartition& partition,
+                                  const std::string& preload,
+                                  ElectronPageCalls calls,
+                                  base::WeakPtr<ElectronSession> session,
+                                  bool view) override {
     return OpenElectronWindow(url, app_id, partition, preload, std::move(calls),
-                              std::move(session));
+                              std::move(session), view);
+  }
+  void SetViews(const std::string& id,
+                std::vector<ElectronDeskView> views) override {
+    SetElectronViews(id, std::move(views));
+  }
+  void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) override {
+    SetElectronMenuBar(id, std::move(bar));
+  }
+  void ShowMessageBox(const std::string& id,
+                      ElectronDeskMessageBox box,
+                      base::OnceCallback<void(int, bool)> answered) override {
+    ShowElectronMessageBox(id, std::move(box), std::move(answered));
   }
   void Load(const std::string& id, const GURL& url) override {
     LoadBrowserWindow(id, url);

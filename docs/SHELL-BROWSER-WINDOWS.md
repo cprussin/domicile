@@ -335,6 +335,10 @@ Bind browser keys yourself:
 
 - `domicile-guest-keydown`: a `KeyboardEvent` for each chord (Ctrl, Alt or
   Meta held) the page did not `preventDefault`. Plain keys never arrive.
+- `domicile-guest-keyup`: a `KeyboardEvent` for each modifier (Alt, Control,
+  Meta or Shift) let go of that the page did not `preventDefault`. With
+  `domicile-guest-keydown`, it tells a lone Alt tap from Alt held for a chord.
+  Other keys' releases never arrive.
 - `domicile-key-delivered`: a plain `Event` for each key press the page gets
   (not a modifier, a repeat or a grabbed chord). Names no key. `<app>` fires
   the same for its client.
@@ -392,6 +396,163 @@ A page's new window is the window it asked for: `window.open` returns it, and
 the opener, the window name and a form's POST body are kept. It is listed once
 the page shows it, at the address it opens. A middle click opens the link with
 no opener, as in Chrome.
+
+## Views
+
+An Electron app's window can be made of several pages: its own, and views
+(`WebContentsView`) the app places over it. Claude Desktop's window is a
+title bar page with the whole chat in a view under it.
+
+- **Views are listed apart, in `domicile.browser.views`**, bottom first,
+  each with `parent` set to its window's `id`. `domicile.browser.windows`
+  holds no views, so your window list, task switcher and tiling never see
+  one. A view is listed only while a window holds it.
+- **Draw it with `<webview window>`** as any window, inside or over its
+  window. Its app asks for it at `x`, `y`, `width` and `height`, in CSS pixels
+  from the top left of the window's page. Honor that and the app looks as it
+  does elsewhere, or lay views out your own way, such as in tabs.
+- **`isHidden`:** the app hid the view. Keep it laid out, out of sight, as
+  a page draws only while laid out.
+- The app hears the size you give each page, its window's and its views', and
+  lays itself out again, so a view you draw at another size still fits.
+- Manganese draws each view where its app asks
+  (`packages/manganese-window-management/src/browser/PageViews.tsx`).
+
+```js
+for (const view of domicile.browser.views ?? []) {
+  const element = drawn.get(view.id);
+  element.style.left = `${view.x}px`;
+  element.style.top = `${view.y}px`;
+  element.style.width = `${view.width}px`;
+  element.style.height = `${view.height}px`;
+  element.style.visibility = view.isHidden ? "hidden" : "visible";
+}
+```
+
+See "Windows" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+
+## Menu bars
+
+An Electron app window can have a menu bar (File, Edit, View, ...), which
+the shell draws under the window's tab.
+
+- **`menu`** is the menu's entries as JSON, or `undefined` for none. Each
+  entry has an `id` (a whole number from 1), a `type` (`normal`,
+  `separator`, `submenu`, `checkbox` or `radio`), a `label` with Electron's
+  `&` mnemonics (`&File`; `&&` is an ampersand), `enabled`, `visible` and
+  `checked`, and maybe an `accelerator` as the app wrote it
+  (`CmdOrCtrl+Shift+N`), an `icon` (a PNG `data:` URL) and a `submenu` of
+  entries.
+- **`menuBarVisible`** says whether the bar shows. With **`menuBarAutoHide`**,
+  as Electron's `autoHideMenuBar`, it shows after Alt is tapped, and hides
+  again after a click or Escape. An Alt tap over the window is an Alt
+  `domicile-guest-keydown` then an Alt `domicile-guest-keyup` with no other
+  chord between.
+- **Click an entry** with `domicile.browser.clickMenu(id, entry.id)`.
+  The app runs it: a checkbox or radio changes, and the next list shows it.
+- **Accelerators** run the entry, as Electron's menus do: match each
+  `domicile-guest-keydown` against them. The page gets the key first, so a
+  page that takes the chord keeps it.
+
+`@domicile-desktop/sdk/app-menu` reads the menu: `appMenu(window.menu)` gives
+its entries with mnemonics found, hidden ones left out and accelerators
+parsed (with a `label` such as `Ctrl+Shift+N` to show). `acceleratedBy` finds
+the entry a `domicile-guest-keydown` runs, and `openedByMnemonic` the menu Alt
+and a letter open.
+
+<!-- tab: React -->
+
+```tsx
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { acceleratedBy, appMenu } from "@domicile-desktop/sdk/app-menu";
+import { type RefObject, useEffect, useMemo } from "react";
+
+const AppMenu = ({
+  id,
+  menu,
+  view,
+}: {
+  id: string;
+  menu: string;
+  view: RefObject<HTMLElement | null>;
+}) => {
+  const { browser } = useDomicile();
+  const entries = useMemo(() => appMenu(menu), [menu]);
+  useEffect(() => {
+    const element = view.current;
+    const run = (event: KeyboardEvent) => {
+      const entry = acceleratedBy(entries, event);
+      if (entry !== undefined) {
+        browser.clickMenu(id, entry.id);
+      }
+    };
+    element?.addEventListener("domicile-guest-keydown", run);
+    return () => element?.removeEventListener("domicile-guest-keydown", run);
+  }, [browser, entries, id, view]);
+  return (
+    <MenuBar
+      entries={entries}
+      onChoose={(entry) => browser.clickMenu(id, entry.id)}
+    />
+  );
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { acceleratedBy, appMenu } from "@domicile-desktop/sdk/app-menu";
+
+for (const window of domicile.browser.windows ?? []) {
+  if (window.menu !== undefined && window.menuBarVisible) {
+    const entries = appMenu(window.menu);
+    drawMenuBar(window.id, entries, (entry) => {
+      domicile.browser.clickMenu(window.id, entry.id);
+    });
+    viewOf(window.id).addEventListener("domicile-guest-keydown", (event) => {
+      const entry = acceleratedBy(entries, event);
+      if (entry !== undefined) {
+        domicile.browser.clickMenu(window.id, entry.id);
+      }
+    });
+  }
+}
+```
+
+<!-- /tabs -->
+
+Manganese draws it with the component library's `MenuBar`.
+
+See "Desktop pieces" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+
+## Message boxes
+
+An Electron app window can ask a message box ("Quit Claude?"), which the
+shell draws over the window's page, as it draws a page's
+[dialogs](#dialogs).
+
+- **`messageBox`** is the box the window shows as JSON, or `undefined` for
+  none: its `type` (`none`, `info`, `error`, `question` or `warning`),
+  `title`, `message`, `detail`, `buttons` (labels, in the app's order),
+  `defaultId` (the button Enter presses, or -1 for none), `cancelId` (the
+  button Escape presses), `checkboxLabel` (empty for no checkbox) and
+  `checkboxChecked`.
+- **Answer it** with `domicile.browser.answerMessageBox(id, button,
+  checkboxChecked)`, `button` an index into `buttons`. The app hears the
+  answer, and the window lists its next box, if it asked another.
+- A window that closes under a box answers it with `cancelId`.
+- **`@domicile-desktop/sdk/message-box`**'s `messageBox` reads the JSON into
+  what to draw, with no default or checkbox as `undefined`.
+
+```js
+for (const window of domicile.browser.windows ?? []) {
+  if (window.messageBox !== undefined) {
+    drawMessageBox(window.id, JSON.parse(window.messageBox), (button, checked) => {
+      domicile.browser.answerMessageBox(window.id, button, checked);
+    });
+  }
+}
+```
 
 ## Fullscreen
 

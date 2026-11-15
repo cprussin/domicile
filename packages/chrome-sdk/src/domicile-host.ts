@@ -269,7 +269,7 @@ export type DomicileBrowserWindow = {
   readonly popupWindow: number | null;
   /**
    * The size the popup window, or a page's window.open(), asked for, in CSS
-   * pixels. 0 on an axis it left unset.
+   * pixels. 0 on an axis it left unset. For a view, the size its app gave it.
    */
   readonly width: number;
   readonly height: number;
@@ -308,6 +308,51 @@ export type DomicileBrowserWindow = {
    * until the compositor has listed the window.
    */
   readonly toplevelId: string | null;
+  /**
+   * For an Electron app's view (a WebContentsView): the id of the window
+   * that holds it. Null for every window. A view is part of its window, not a
+   * window: it is listed right after the window, bottom first, only while
+   * the window holds it, and is never a capture source of its own. Draw it
+   * with `<webview window>` as any window, where its app asks (`x`, `y`,
+   * `width`, `height`, in CSS pixels from the top left of the window's page)
+   * or wherever the shell lays it out. See docs/architecture/ELECTRON-APPS.md.
+   */
+  readonly parent: string | null;
+  readonly x: number;
+  readonly y: number;
+  /**
+   * Whether the view's app hid it. Keep a hidden view laid out, out of
+   * sight, as a page draws only while laid out. False for every window.
+   */
+  readonly isHidden: boolean;
+  /**
+   * An Electron app window's menu bar, for the shell to draw under its tab:
+   * the menu's entries as JSON, null for none. Each entry has a whole `id`
+   * from 1, a `type` (normal, separator, submenu, checkbox or radio), a
+   * `label` with Electron's `&` mnemonics, `enabled`, `visible` and
+   * `checked`, and maybe an `accelerator` as the app wrote it, an `icon` (a
+   * PNG data: URL) and a `submenu` of entries. Click an entry with
+   * DomicileHost.clickBrowserWindowMenu.
+   */
+  readonly menu: string | null;
+  /**
+   * Whether the bar shows, as setMenuBarVisibility says. With
+   * `menuBarAutoHide`, as Electron's autoHideMenuBar, it shows while Alt is
+   * held or after Alt is tapped. A window with no menu has true and false.
+   */
+  readonly menuBarVisible: boolean;
+  readonly menuBarAutoHide: boolean;
+  /**
+   * The message box an Electron app asks over this window, as JSON, null for
+   * none: `type` (none, info, error, question or warning), `title`,
+   * `message`, `detail`, `buttons` (1 to 16 labels, in the app's order),
+   * `defaultId` (the button Enter presses, -1 for none), `cancelId` (the
+   * button Escape presses), `checkboxLabel` (empty for no checkbox) and
+   * `checkboxChecked`. Show it over the window's page, and answer it with
+   * DomicileHost.answerBrowserWindowMessageBox; the window then lists its
+   * next box, if its app asked more.
+   */
+  readonly messageBox: string | null;
 };
 
 /**
@@ -989,6 +1034,25 @@ export type DomicileHost = {
    * on its <webview>; Cancel keeps the window. An unknown id does nothing.
    */
   closeBrowserWindow(id: string): void;
+  /**
+   * The user clicked entry `command` of window `id`'s menu bar
+   * (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a
+   * TypeError for a `command` below 1. A window that closed meanwhile, or has
+   * no menu, does nothing.
+   */
+  clickBrowserWindowMenu(id: string, command: number): void;
+  /**
+   * The user answered the message box window `id` shows
+   * (DomicileBrowserWindow.messageBox) with button `response`, an index into
+   * its `buttons`, leaving its checkbox `checkboxChecked`. Throws a TypeError
+   * for a negative `response`. A window that closed meanwhile, or shows no
+   * box, does nothing.
+   */
+  answerBrowserWindowMessageBox(
+    id: string,
+    response: number,
+    checkboxChecked: boolean,
+  ): void;
   /**
    * Casts the desktop to TV `id`: its picture is what the desktop's ScreenCast
    * portal picks, which asks this page, and its sound is the desktop's.

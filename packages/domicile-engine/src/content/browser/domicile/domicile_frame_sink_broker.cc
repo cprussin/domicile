@@ -573,6 +573,9 @@ class DomicileBrowserService : public content::GpuDataManagerObserver,
     std::vector<domicile::mojom::ListedBrowserWindowPtr> windows;
     for (domicile::ListedBrowserWindow& window :
          domicile::ListedBrowserWindows()) {
+      if (window.view) {
+        continue;
+      }
       windows.push_back(domicile::mojom::ListedBrowserWindow::New(
           std::move(window.id), std::move(window.title),
           std::move(window.app_id), std::move(window.url),

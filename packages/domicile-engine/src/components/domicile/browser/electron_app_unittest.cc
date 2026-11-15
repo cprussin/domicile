@@ -32,17 +32,18 @@ constexpr char kHello[] =
 // A desk that numbers its windows from 10 and writes down each call.
 class FakeDesk final : public ElectronDesk {
  public:
-  std::optional<std::string> Open(
-      const GURL& url,
-      const std::string& app_id,
-      const WebViewPartition& partition,
-      const std::string& preload,
-      ElectronPageCalls page_calls,
-      base::WeakPtr<ElectronSession> session) override {
+  std::optional<std::string> Open(const GURL& url,
+                                  const std::string& app_id,
+                                  const WebViewPartition& partition,
+                                  const std::string& preload,
+                                  ElectronPageCalls page_calls,
+                                  base::WeakPtr<ElectronSession> session,
+                                  bool view) override {
     if (!has_shell) {
       return std::nullopt;
     }
-    calls.push_back("open " + url.spec() + " as " + app_id +
+    calls.push_back(std::string(view ? "open view " : "open ") + url.spec() +
+                    " as " + app_id +
                     (preload.empty() ? "" : " with " + preload));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
@@ -58,6 +59,24 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("ask to close " + id);
   }
   void Close(const std::string& id) override { calls.push_back("close " + id); }
+  void SetViews(const std::string& id,
+                std::vector<ElectronDeskView> views) override {
+    calls.push_back("set views of " + id);
+    held[id] = std::move(views);
+  }
+  void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) override {
+    calls.push_back("set menu bar of " + id);
+    menu_bars[id] = std::move(bar);
+  }
+  void ShowMessageBox(
+      const std::string& id,
+      ElectronDeskMessageBox box,
+      base::OnceCallback<void(int response, bool checkbox_checked)> answered)
+      override {
+    calls.push_back("show message box over " + id);
+    message_boxes.push_back(
+        {.id = id, .box = std::move(box), .answered = std::move(answered)});
+  }
   void SendToPage(const std::string& id,
                   const std::string& channel,
                   const std::string& args_json) override {
@@ -132,6 +151,16 @@ class FakeDesk final : public ElectronDesk {
   std::map<std::string, base::WeakPtr<ElectronSession>> sessions;
   int next_id = 10;
   std::vector<std::string> calls;
+  // The views each window holds, by id, as SetViews last set them.
+  std::map<std::string, std::vector<ElectronDeskView>> held;
+  std::map<std::string, ElectronDeskMenuBar> menu_bars;
+  // The message boxes asked, oldest first, each with its answer.
+  struct AskedBox {
+    std::string id;
+    ElectronDeskMessageBox box;
+    base::OnceCallback<void(int, bool)> answered;
+  };
+  std::vector<AskedBox> message_boxes;
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
@@ -351,6 +380,164 @@ base::ListValue OneAndA() {
   args.Append(1);
   args.Append("a");
   return args;
+}
+
+TEST_F(ElectronAppTest, AViewOpensAsAViewOfTheApp) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("view":true})");
+
+  EXPECT_EQ(desk_.calls,
+            Lines{"open view https://a.test/ as com.anthropic.Claude"});
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"window_opened\",\"window\":1}\n"});
+}
+
+TEST_F(ElectronAppTest, AWindowHoldsTheViewsTheAppPlaces) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+
+  app_->Take(
+      R"({"type":"set_views","window":1,"views":[)"
+      R"({"window":3,"x":0,"y":40,"width":800,"height":560},)"
+      R"({"window":2,"x":1,"y":2,"width":3,"height":4,"hidden":true}]})");
+
+  EXPECT_TRUE(sent_.empty());
+  EXPECT_EQ(desk_.held.at("10"),
+            (std::vector<ElectronDeskView>{
+                {.id = "12", .x = 0, .y = 40, .width = 800, .height = 560},
+                {.id = "11",
+                 .x = 1,
+                 .y = 2,
+                 .width = 3,
+                 .height = 4,
+                 .hidden = true}}));
+}
+
+TEST_F(ElectronAppTest, AWindowHasTheMenuBarTheAppSets) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+
+  app_->Take(R"({"type":"set_menu_bar","window":1,"visible":false,)"
+             R"("auto_hide":true,"menu":[{"id":1,"type":"normal",)"
+             R"("label":"Quit","enabled":true,"visible":true,)"
+             R"("checked":false}]})");
+  app_->Take(R"({"type":"set_menu_bar","window":2,"visible":true,)"
+             R"("auto_hide":false,"menu":null})");
+  app_->Take(R"({"type":"set_menu_bar","window":9,"visible":true,)"
+             R"("auto_hide":false,"menu":null})");
+
+  EXPECT_EQ(desk_.menu_bars.at("10"),
+            (ElectronDeskMenuBar{
+                .menu = R"([{"checked":false,"enabled":true,"id":1,)"
+                        R"("label":"Quit","type":"normal","visible":true}])",
+                .visible = false,
+                .auto_hide = true}));
+  EXPECT_FALSE(desk_.menu_bars.contains("11"));
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window has a menu bar\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 9 is not "
+                   "open\",\"window\":9}\n"}));
+}
+
+TEST_F(ElectronAppTest, AClickOnTheMenuBarReachesTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+
+  page.menu_clicked.Run(7);
+  EXPECT_EQ(sent_, Lines{"{\"command\":7,\"type\":\"menu_clicked\","
+                         "\"window\":3}\n"});
+
+  // A click that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.menu_clicked.Run(8);
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, AMessageBoxGoesOverItsWindowAndItsAnswerBack) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+  const std::string box =
+      R"("box_type":"none","title":"","message":"Quit?","detail":"",)"
+      R"("buttons":["Cancel","Quit"],"default_id":1,"cancel_id":0,)"
+      R"("checkbox_label":"","checkbox_checked":false)";
+
+  app_->Take(R"({"type":"show_message_box","window":1,"box":5,)" + box + "}");
+  app_->Take(R"({"type":"show_message_box","window":2,"box":6,)" + box + "}");
+
+  ASSERT_EQ(desk_.message_boxes.size(), 1u);
+  EXPECT_EQ(desk_.message_boxes[0].id, "10");
+  EXPECT_EQ(desk_.message_boxes[0].box.buttons, 2);
+  EXPECT_EQ(desk_.message_boxes[0].box.cancel_id, 0);
+  EXPECT_EQ(sent_, (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is "
+                          "a view: a message box goes over a window\","
+                          "\"window\":2}\n"}));
+
+  // Answered even after the window closed, as the app waits on every box.
+  app_->Listed({});
+  sent_.clear();
+  std::move(desk_.message_boxes[0].answered).Run(1, true);
+  EXPECT_EQ(sent_, Lines{"{\"box\":5,\"checkbox_checked\":true,"
+                         "\"response\":1,\"type\":\"message_box_answered\","
+                         "\"window\":1}\n"});
+}
+
+TEST_F(ElectronAppTest, OnlyAWindowHoldsViewsAndOnlyViews) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  sent_.clear();
+  const std::string place = R"("x":0,"y":0,"width":1,"height":1})";
+
+  app_->Take(R"({"type":"set_views","window":2,"views":[]})");
+  app_->Take(R"({"type":"set_views","window":1,"views":[{"window":3,)" + place +
+             "]}");
+  app_->Take(R"({"type":"set_views","window":1,"views":[{"window":9,)" + place +
+             "]}");
+  app_->Take(R"({"type":"set_views","window":1,"views":[{"window":2,)" + place +
+             R"(,{"window":2,)" + place + "]}");
+
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window holds views\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 3 is a "
+                   "window, not a view\",\"window\":1}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"view 9 is not "
+                   "open\",\"window\":1}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"view 2 is listed "
+                   "twice\",\"window\":1}\n"}));
+  EXPECT_TRUE(desk_.held.empty());
+}
+
+TEST_F(ElectronAppTest, APagesNewSizeReachesTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+
+  desk_.pages.at("10").resized.Run(800, 600);
+  app_->Listed({});
+  desk_.pages.at("10").resized.Run(1, 1);
+
+  EXPECT_EQ(sent_, (Lines{"{\"height\":600,\"type\":\"resized\","
+                          "\"width\":800,\"window\":2}\n",
+                          "{\"type\":\"window_closed\",\"window\":2}\n"}));
 }
 
 TEST_F(ElectronAppTest, APagesSendReachesTheApp) {

@@ -2,6 +2,7 @@
 
 import { FilePicker } from "@domicile-desktop/component-library/FilePicker";
 import { desktopFolders } from "@domicile-desktop/component-library/folders";
+import { AppMessageBox } from "@domicile-desktop/manganese-page-requests/AppMessageBox";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { ExternalAppAsk } from "@domicile-desktop/manganese-page-requests/ExternalAppAsk";
 import { IdentityAsk } from "@domicile-desktop/manganese-page-requests/IdentityAsk";
@@ -18,12 +19,17 @@ import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/
 import { usePickerRequest } from "@domicile-desktop/manganese-page-requests/usePickerRequest";
 import { usePromptRequest } from "@domicile-desktop/manganese-page-requests/usePromptRequest";
 import { useSignInRequest } from "@domicile-desktop/manganese-page-requests/useSignInRequest";
+import {
+  acceleratedBy,
+  openedByMnemonic,
+} from "@domicile-desktop/sdk/app-menu";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import {
   WEBVIEW_DIALOG_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
+  WEBVIEW_GUEST_KEYUP_EVENT,
   WEBVIEW_ZOOM_IN_REQUEST_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
@@ -33,6 +39,7 @@ import { css, cx } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { AppAddress } from "./browser/AppAddress";
+import { AppMenuBar } from "./browser/AppMenuBar";
 import { leftOrigin } from "./browser/app-origin";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FindBar } from "./browser/FindBar";
@@ -42,7 +49,10 @@ import { PageMenu } from "./browser/PageMenu";
 import { PagePopup } from "./browser/PagePopup";
 import { PageProblem } from "./browser/PageProblem";
 import { PageTooltip } from "./browser/PageTooltip";
+import { PageViews } from "./browser/PageViews";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
+import { useAppMenuBar } from "./browser/useAppMenuBar";
+import { useAppMessageBox } from "./browser/useAppMessageBox";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
@@ -263,6 +273,8 @@ export const BrowserWindow = ({
   const unclickable = covered || behindPanel;
   // `null` because React passes `null` to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
+  /** The page and the app's views over it, whose keys bubble up to it. */
+  const [page, setPage] = useState<HTMLDivElement | null>(null);
   // The whole window, used to check whether focus is inside it and to ease it
   // into a new box. A ref because only effects read it.
   const element = useRef<HTMLElement>(null);
@@ -341,6 +353,10 @@ export const BrowserWindow = ({
   // paused on, and the element in it to focus. The engine draws no dialog.
   const dialogRequest = useDialogRequest(view);
   const [dialogBox, setDialogBox] = useState<HTMLElement | null>(null);
+  // The message box an Electron app asks over this window, and the button
+  // in it to focus. The engine draws no dialog.
+  const appBox = useAppMessageBox(domicile, window);
+  const [appBoxButton, setAppBoxButton] = useState<HTMLElement | null>(null);
   // The link for an application the page opened, the application that opens
   // it, and the button to focus. The engine draws no dialog.
   const externalApp = useExternalAppRequest(view);
@@ -369,6 +385,7 @@ export const BrowserWindow = ({
   // What the page waits on, which takes the keyboard while it is open.
   const waiting =
     pickerBox ??
+    appBoxButton ??
     dialogBox ??
     signInBox ??
     promptBox ??
@@ -504,6 +521,34 @@ export const BrowserWindow = ({
     [findBox, focusOwn, showPopup, view],
   );
 
+  // An Electron app's menu bar, the menu open on it, and whether Alt showed a
+  // bar that hides until Alt (`autoHideMenuBar`).
+  const menuBar = useAppMenuBar(domicile, window);
+  const [openMenu, setOpenMenu] = useState<number | undefined>(undefined);
+  const [menuBarShown, setMenuBarShown] = useState(false);
+  // Whether Alt is down with nothing pressed with it, so letting it go is a
+  // tap that shows or hides an auto-hidden bar.
+  const altAlone = useRef(false);
+  const shownMenuBar =
+    menuBar?.visible === true &&
+    !pageFullscreen &&
+    (!menuBar.autoHide || menuBarShown || openMenu !== undefined)
+      ? menuBar
+      : undefined;
+  const openedMenu = useCallback((opened: number | undefined) => {
+    setOpenMenu(opened);
+    // A choice or Escape puts an auto-hidden bar away, as on Electron.
+    if (opened === undefined) {
+      setMenuBarShown(false);
+    }
+  }, []);
+  const chooseMenuEntry = useCallback(
+    (id: number) => {
+      domicile.browser.clickMenu(window, id);
+    },
+    [domicile, window],
+  );
+
   // Focuses the find bar when it opens.
   useEffect(() => {
     if (findBox !== null) {
@@ -514,14 +559,42 @@ export const BrowserWindow = ({
   // Keys pressed in the guest never reach this document. The engine forwards
   // chords the page did not handle, and Ctrl+wheel as zoom requests, so sites
   // keep their own bindings as in Chrome. See `WEBVIEW_GUEST_KEYDOWN_EVENT`.
+  // An Electron app's views are part of its window, so the app's keys are
+  // heard from them too; the browser's keys act on the window's own page, so
+  // only that page's run them.
   useEffect(() => {
-    if (view === null) {
+    if (view === null || page === null) {
       return undefined;
     } else {
       const pressed = (event: KeyboardEvent) => {
-        const command = browserCommandFor(event);
-        if (command !== undefined) {
+        altAlone.current =
+          event.key === "Alt" && (altAlone.current || !event.repeat);
+        // An app's accelerators come before the browser's keys, as its menu
+        // runs them in Electron, and Alt with a mnemonic opens a menu.
+        const accelerated =
+          menuBar === undefined
+            ? undefined
+            : acceleratedBy(menuBar.entries, event);
+        const mnemonic =
+          menuBar === undefined || !menuBar.visible
+            ? undefined
+            : openedByMnemonic(menuBar.entries, event);
+        const command =
+          event.target === view ? browserCommandFor(event) : undefined;
+        if (accelerated !== undefined) {
+          chooseMenuEntry(accelerated.id);
+        } else if (mnemonic !== undefined) {
+          setOpenMenu(mnemonic.id);
+        } else if (command !== undefined) {
           run(command);
+        }
+      };
+      const released = (event: KeyboardEvent) => {
+        if (event.key === "Alt" && altAlone.current) {
+          altAlone.current = false;
+          if (menuBar?.visible === true && menuBar.autoHide) {
+            setMenuBarShown((shown) => !shown);
+          }
         }
       };
       const zoomIn = () => {
@@ -530,16 +603,18 @@ export const BrowserWindow = ({
       const zoomOut = () => {
         run(BrowserCommand.ZoomOut);
       };
-      view.addEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+      page.addEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+      page.addEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
       view.addEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
       view.addEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       return () => {
-        view.removeEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+        page.removeEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+        page.removeEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
         view.removeEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
         view.removeEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       };
     }
-  }, [run, view]);
+  }, [chooseMenuEntry, menuBar, page, run, view]);
 
   // Gives the keyboard to the focused window's page.
   //
@@ -766,6 +841,14 @@ export const BrowserWindow = ({
             zoom={zoom}
           />
         )}
+        {shownMenuBar !== undefined && (
+          <AppMenuBar
+            entries={shownMenuBar.entries}
+            onChoose={chooseMenuEntry}
+            onOpen={openedMenu}
+            open={openMenu}
+          />
+        )}
         {isApp && !pageFullscreen && leftOrigin(start, address) && (
           <AppAddress address={address} security={shown.security} />
         )}
@@ -773,7 +856,7 @@ export const BrowserWindow = ({
         Wraps the page so the find bar and file picker cover the page but not
         the address bar.
       */}
-        <div className={pageStyles}>
+        <div className={pageStyles} ref={setPage}>
           <webview
             className={viewStyles}
             ref={setView}
@@ -788,6 +871,12 @@ export const BrowserWindow = ({
             }
             // React sets attributes before insertion, when the engine reads it.
             // See `window`.
+            window={window}
+          />
+          <PageViews
+            domicile={domicile}
+            onReach={onReach}
+            unclickable={unclickable}
             window={window}
           />
           {problem !== undefined && (
@@ -918,6 +1007,16 @@ export const BrowserWindow = ({
                 request={externalApp}
               />
             )}
+          {appBox !== undefined && (
+            <AppMessageBox
+              box={appBox.box}
+              // A new box per box the app asks, so each starts with its
+              // own checkbox.
+              key={appBox.key}
+              onAnswer={appBox.answer}
+              ref={setAppBoxButton}
+            />
+          )}
           {asking !== undefined && (
             <FilePicker
               // A new picker per request, so each starts empty.

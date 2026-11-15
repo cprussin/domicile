@@ -611,8 +611,9 @@ class WebViewGuest : public mojom::WebViewGuest,
       const input::NativeWebKeyboardEvent& event) override;
 
   // Forwards chords the page did not preventDefault to the shell, matching
-  // Chrome's order (site first, browser second). Plain keys are not sent; see
-  // UnhandledKeyDown in components/domicile/mojom/web_view_guest.mojom.
+  // Chrome's order (site first, browser second), and modifiers let go of.
+  // Plain keys are not sent; see UnhandledKeyDown and UnhandledModifierUp in
+  // components/domicile/mojom/web_view_guest.mojom.
   // Returns false because the shell handles the key asynchronously.
   bool HandleKeyboardEvent(content::WebContents* source,
                            const input::NativeWebKeyboardEvent& event) override;

@@ -279,6 +279,178 @@ TEST(ElectronProtocolTest, ReadySaysWhichSchemesTheEngineRegistered) {
             "\"claude-media\"}],\"type\":\"ready\"}\n");
 }
 
+TEST(ElectronProtocolTest, OpenWindowMayOpenAView) {
+  const auto window = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  const auto view = ParseElectronRequest(
+      R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+      R"("view":true})");
+
+  ASSERT_TRUE(window.has_value() && view.has_value());
+  EXPECT_FALSE(std::get<ElectronOpenWindow>(*window).view);
+  EXPECT_TRUE(std::get<ElectronOpenWindow>(*view).view);
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","view":1})"),
+            "\"view\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, SetViewsPlacesEachViewBottomFirst) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"set_views","window":1,"views":[)"
+      R"({"window":2,"x":0,"y":40,"width":800,"height":560},)"
+      R"({"window":3,"x":-5,"y":0,"width":0,"height":0,"hidden":true}]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& set = std::get<ElectronSetViews>(*request);
+  EXPECT_EQ(set.window, 1);
+  EXPECT_EQ(set.views,
+            (std::vector<ElectronViewPlacement>{
+                {.view = 2, .x = 0, .y = 40, .width = 800, .height = 560},
+                {.view = 3, .x = -5, .hidden = true}}));
+  EXPECT_TRUE(std::get<ElectronSetViews>(
+                  *ParseElectronRequest(
+                      R"({"type":"set_views","window":1,"views":[]})"))
+                  .views.empty());
+}
+
+TEST(ElectronProtocolTest, ABadSetViewsIsRefusedAsTheWindows) {
+  EXPECT_EQ(ParseElectronRequest(R"({"type":"set_views","window":4})").error(),
+            (ElectronRefusal{.why = "\"views\" must be a list", .window = 4}));
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[2]})"),
+            "each of \"views\" must be an object");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"x":0,"y":0,"width":1,"height":1}]})"),
+            "a view's \"window\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"window":2,"y":0,"width":1,"height":1}]})"),
+            "a view's \"x\" and \"y\" must be whole numbers");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"window":2,"x":0,"y":0,"width":-1,"height":1}]})"),
+            "a view's \"width\" and \"height\" must be whole numbers from 0");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_views","window":1,"views":[)"
+                       R"({"window":2,"x":0,"y":0,"width":1,"height":1,)"
+                       R"("hidden":"yes"}]})"),
+            "a view's \"hidden\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, ASetMenuBarKeepsTheMenusEntries) {
+  base::expected<ElectronRequest, ElectronRefusal> request =
+      ParseElectronRequest(
+          R"({"type":"set_menu_bar","window":1,"visible":true,)"
+          R"("auto_hide":false,"menu":[{"id":1,"type":"submenu",)"
+          R"("label":"&File","enabled":true,"visible":true,"checked":false,)"
+          R"("sublabel":"dropped","submenu":[{"id":2,"type":"normal",)"
+          R"("label":"Quit","enabled":true,"visible":true,"checked":false,)"
+          R"("accelerator":"CmdOrCtrl+Q",)"
+          R"("icon":"data:image/png;base64,AA=="}]}]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& bar = std::get<ElectronSetMenuBar>(*request);
+  EXPECT_EQ(bar.window, 1);
+  EXPECT_TRUE(bar.visible);
+  EXPECT_FALSE(bar.auto_hide);
+  EXPECT_EQ(bar.menu,
+            R"([{"checked":false,"enabled":true,"id":1,"label":"&File",)"
+            R"("submenu":[{"accelerator":"CmdOrCtrl+Q","checked":false,)"
+            R"("enabled":true,"icon":"data:image/png;base64,AA==","id":2,)"
+            R"("label":"Quit","type":"normal","visible":true}],)"
+            R"("type":"submenu","visible":true}])");
+  EXPECT_EQ(std::get<ElectronSetMenuBar>(
+                *ParseElectronRequest(
+                    R"({"type":"set_menu_bar","window":1,"menu":null,)"
+                    R"("visible":false,"auto_hide":true})"))
+                .menu,
+            "");
+}
+
+TEST(ElectronProtocolTest, ABadSetMenuBarIsRefusedAsTheWindows) {
+  const std::string flags = R"("visible":true,"auto_hide":false)";
+  const std::string entry =
+      R"("enabled":true,"visible":true,"checked":false)";
+  EXPECT_EQ(ParseElectronRequest(
+                R"({"type":"set_menu_bar","window":4,)" + flags + "}")
+                .error(),
+            (ElectronRefusal{
+                .why = "\"menu\" must be a list of entries, or null for none",
+                .window = 4}));
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[]})"),
+            "\"visible\" and \"auto_hide\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[1],)" +
+                       flags + "}"),
+            "each menu entry must be an object");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":0,)"
+                       R"("type":"normal","label":"",)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"id\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":1,)"
+                       R"("type":"button","label":"",)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"type\" must be normal, separator, submenu, "
+            "checkbox or radio");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":1,)"
+                       R"("type":"normal","label":"","icon":"x.png",)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"icon\" must be a PNG data: URL");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_menu_bar","window":1,"menu":[{"id":1,)"
+                       R"("type":"submenu","label":"","submenu":[{"id":2}],)" +
+                       entry + "}]," + flags + "}"),
+            "a menu entry's \"type\" must be normal, separator, submenu, "
+            "checkbox or radio");
+}
+
+TEST(ElectronProtocolTest, AShowMessageBoxKeepsWhatTheShellShows) {
+  base::expected<ElectronRequest, ElectronRefusal> request =
+      ParseElectronRequest(
+          R"({"type":"show_message_box","window":2,"box":7,)"
+          R"("box_type":"question","title":"Notes","message":"Quit Notes?",)"
+          R"("detail":"Unsaved notes are kept.","buttons":["Cancel","Quit"],)"
+          R"("default_id":1,"cancel_id":0,"checkbox_label":"Don't ask again",)"
+          R"("checkbox_checked":false,"no_link":true})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& box = std::get<ElectronShowMessageBox>(*request);
+  EXPECT_EQ(box.window, 2);
+  EXPECT_EQ(box.box, 7);
+  EXPECT_EQ(box.buttons, 2);
+  EXPECT_EQ(box.cancel_id, 0);
+  EXPECT_EQ(box.message_box,
+            R"({"buttons":["Cancel","Quit"],"cancelId":0,)"
+            R"("checkboxChecked":false,"checkboxLabel":"Don't ask again",)"
+            R"("defaultId":1,"detail":"Unsaved notes are kept.",)"
+            R"("message":"Quit Notes?","title":"Notes","type":"question"})");
+}
+
+TEST(ElectronProtocolTest, ABadShowMessageBoxIsRefusedAsTheWindows) {
+  const std::string rest =
+      R"("box_type":"info","title":"","message":"Hi","detail":"",)"
+      R"("checkbox_label":"","checkbox_checked":false)";
+  const auto box = [&](const std::string& fields) {
+    return WhyRefused(R"({"type":"show_message_box","window":1,)" + fields +
+                      "," + rest + "}");
+  };
+  EXPECT_EQ(
+      ParseElectronRequest(R"({"type":"show_message_box","window":4,"box":0,)"
+                           R"("buttons":["OK"],"default_id":0,"cancel_id":0,)" +
+                           rest + "}")
+          .error(),
+      (ElectronRefusal{.why = "\"box\" must be a whole number from 1",
+                       .window = 4}));
+  EXPECT_EQ(box(R"("box":1,"buttons":[],"default_id":0,"cancel_id":0)"),
+            "\"buttons\" must be a list of 1 to 16 labels");
+  EXPECT_EQ(box(R"("box":1,"buttons":[1],"default_id":0,"cancel_id":0)"),
+            "\"buttons\" must be a list of 1 to 16 labels");
+  EXPECT_EQ(box(R"("box":1,"buttons":["OK"],"default_id":1,"cancel_id":0)"),
+            "\"default_id\" must be a button's index, or -1 for no default");
+  EXPECT_EQ(box(R"("box":1,"buttons":["OK"],"default_id":-1,"cancel_id":1)"),
+            "\"cancel_id\" must be a button's index");
+  EXPECT_EQ(WhyRefused(R"({"type":"show_message_box","window":1,"box":1,)"
+                       R"("box_type":"alert","title":"","message":"",)"
+                       R"("detail":"","checkbox_label":"",)"
+                       R"("checkbox_checked":false,"buttons":["OK"],)"
+                       R"("default_id":0,"cancel_id":0})"),
+            "\"box_type\" must be none, info, error, question or warning");
+}
+
 TEST(ElectronProtocolTest, EventsAreOneLineEach) {
   EXPECT_EQ(ElectronReady({}), "{\"schemes\":[],\"type\":\"ready\"}\n");
   EXPECT_EQ(ElectronRefused("no"), "{\"type\":\"refused\",\"why\":\"no\"}\n");
@@ -292,6 +464,14 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"title\":\"Claude\",\"type\":\"title_changed\",\"window\":4}\n");
   EXPECT_EQ(ElectronWindowClosed(5),
             "{\"type\":\"window_closed\",\"window\":5}\n");
+  EXPECT_EQ(ElectronMenuClicked(7, 12),
+            "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
+  EXPECT_EQ(ElectronMessageBoxAnswered(3, 9, 1, true),
+            "{\"box\":9,\"checkbox_checked\":true,\"response\":1,"
+            "\"type\":\"message_box_answered\",\"window\":3}\n");
+  EXPECT_EQ(ElectronWindowResized(6, 800, 600),
+            "{\"height\":600,\"type\":\"resized\",\"width\":800,"
+            "\"window\":6}\n");
 }
 
 TEST(ElectronProtocolTest, OpenWindowCarriesItsPreload) {
