@@ -28,6 +28,7 @@ import {
 import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
 import { createShell } from "./electron/shell";
+import { utilityProcess } from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
 import { connectEngine } from "./engine";
@@ -148,6 +149,7 @@ const main = async ([resources, ...args]: string[]) => {
       },
       session,
       shell: createShell(runCommand),
+      utilityProcess,
     };
     Bun.plugin({
       name: "electron",
