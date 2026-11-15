@@ -1199,7 +1199,7 @@ base::expected<std::string, std::string> ElectronMenuJson(
   }
   std::string json;
   CHECK(base::JSONWriter::Write(entries, &json));
-  return json;
+  return base::ok(std::move(json));
 }
 
 std::string ElectronIpcMessage(ElectronWindow window,
