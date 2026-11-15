@@ -302,7 +302,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: session cookies, storage clearing, `clearCache`, `setUserAgent`
 - [x] `electron-host`: `setPermissionRequestHandler`
 - [x] engine: views (`set_views`), listed to the shell under their window, and each page's size
-- [ ] shells: Manganese draws views where their apps ask
+- [x] shells: the SDK lists views apart (`browser.views`); Manganese draws them where their apps ask
 - [ ] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
 - [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)

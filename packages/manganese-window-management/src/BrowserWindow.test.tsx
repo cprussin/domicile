@@ -3338,6 +3338,46 @@ describe("an Electron app's menu bar", () => {
     expect(reloads).toEqual([]);
   });
 
+  it("runs an accelerator pressed in one of the app's views", () => {
+    const { clicks, host, rendered } = appWindow();
+    act(() => {
+      host.openBrowser("https://claude.test/chat", { parent: "1" });
+    });
+    const chat = rendered.container.querySelector<HTMLWebViewElement>(
+      'webview[window="2"]',
+    );
+    expect(chat).not.toBeNull();
+
+    guestPresses(chat ?? view(rendered.container), {
+      code: "KeyN",
+      ctrlKey: true,
+      key: "n",
+    });
+
+    expect(clicks()).toEqual([["clickBrowserWindowMenu", "1", 2]]);
+  });
+
+  it("leaves the browser's keys pressed in a view alone, as they act on the window's page", () => {
+    const { host, rendered } = appWindow();
+    act(() => {
+      host.setMenuBar("1", null);
+      host.openBrowser("https://claude.test/chat", { parent: "1" });
+    });
+    const element = view(rendered.container);
+    const reloads: string[] = [];
+    element.reload = () => {
+      reloads.push("reload");
+    };
+    const chat = rendered.container.querySelector<HTMLWebViewElement>(
+      'webview[window="2"]',
+    );
+
+    guestPresses(chat ?? element, { code: "KeyR", ctrlKey: true, key: "r" });
+    expect(reloads).toEqual([]);
+    guestPresses(element, { code: "KeyR", ctrlKey: true, key: "r" });
+    expect(reloads).toEqual(["reload"]);
+  });
+
   it("opens a menu with Alt and its mnemonic", async () => {
     const { rendered } = appWindow();
 
