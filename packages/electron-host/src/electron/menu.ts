@@ -489,8 +489,16 @@ export const createMenu = <Window>(dependencies: MenuDependencies<Window>) => {
     return menu.items.slice(start, end + 1);
   };
 
-  /** Carries out a click on entry `command` of `menu`, as Electron does. */
-  const click = (menu: Menu<Window>, command: number, event = NO_KEYS) => {
+  /**
+   * Carries out a click on entry `command` of `menu`, as Electron does, for
+   * `window`: the one whose menu bar was clicked, or the focused one.
+   */
+  const click = (
+    menu: Menu<Window>,
+    command: number,
+    event = NO_KEYS,
+    window: Window | null = dependencies.focusedWindow(),
+  ) => {
     const found = find(menu, command);
     if (found === undefined) {
       // The menu changed under the click: the entry is gone.
@@ -507,7 +515,6 @@ export const createMenu = <Window>(dependencies: MenuDependencies<Window>) => {
         radio.checked = radio === item;
       }
     }
-    const window = dependencies.focusedWindow();
     if (item.click !== undefined) {
       item.click(item, window, event);
     } else if (item.role !== undefined) {

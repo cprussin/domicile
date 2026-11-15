@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import type { Engine, EngineRequest, WindowEvent } from "../engine";
 import type { ElectronApp } from "./app";
 import type { createIpcMain } from "./ipc-main";
+import type { MenuEntry } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
 import type { createSessions, Session } from "./session";
@@ -25,6 +26,8 @@ export type WebPreferences = {
 
 export type BrowserWindowOptions = {
   readonly show?: boolean | undefined;
+  /** The menu bar hides until the user presses Alt. */
+  readonly autoHideMenuBar?: boolean | undefined;
   readonly title?: string | undefined;
   readonly webPreferences?: WebPreferences | undefined;
 };
@@ -35,16 +38,28 @@ export type IpcRoutes = Pick<
   "invoke" | "post" | "receive" | "sendSync"
 >;
 
+/** What a window's menu bar needs of the app's menus. */
+export type WindowMenus<Menu> = {
+  /** The app's menu, which a new window starts with. */
+  readonly applicationMenu: () => Menu | null;
+  /** The menu as the menu bar draws it. */
+  readonly model: (menu: Menu) => readonly MenuEntry[];
+  /** Carries out a click on entry `command` of window `window`'s `menu`. */
+  readonly click: (menu: Menu, command: number, window: number) => void;
+};
+
 /**
  * Makes the `BrowserWindow` class for an app on `engine`. The engine's window
  * events reach the window they name, and its pages' IPC reaches `ipc`. Its
- * pages load through `sessions`. `readPreload` reads a preload's source.
+ * pages load through `sessions`. Its menu bar shows one of `menus`.
+ * `readPreload` reads a preload's source.
  */
-export const createBrowserWindow = (
+export const createBrowserWindow = <Menu extends EventEmitter>(
   engine: Engine,
   app: ElectronApp,
   ipc: IpcRoutes,
   sessions: ReturnType<typeof createSessions>,
+  menus: WindowMenus<Menu>,
   readPreload: (path: string) => string = (path) => readFileSync(path, "utf8"),
 ) => {
   const windows = new Map<number, BrowserWindow>();
@@ -131,6 +146,9 @@ export const createBrowserWindow = (
     #destroyed = false;
     #loads: { resolve: () => void; reject: (why: Error) => void }[] = [];
     readonly #preload: string | undefined;
+    #menu: Menu | null = menus.applicationMenu();
+    #menuBarVisible = true;
+    #menuBarAutoHide: boolean;
     /** Its page's session. */
     readonly session: Session;
 
@@ -153,6 +171,8 @@ export const createBrowserWindow = (
         preferences.session ??
         sessions.fromPartition(preferences.partition ?? "");
       this.#title = options.title ?? app.getName();
+      this.#menuBarAutoHide = options.autoHideMenuBar ?? false;
+      this.#menu?.on("changed", this.#showMenuBar);
       windows.set(this.id, this);
     }
 
@@ -178,6 +198,10 @@ export const createBrowserWindow = (
           ...(this.#preload === undefined ? {} : { preload: this.#preload }),
           ...(session === "" ? {} : { session }),
         });
+        // A window opens with no menu bar, so there's only one to tell of.
+        if (this.#menu !== null) {
+          this.#showMenuBar();
+        }
       }
       return loaded;
     };
@@ -218,6 +242,46 @@ export const createBrowserWindow = (
       if (!this.#destroyed) {
         this.#end(() => {
           engine.send({ type: "destroy_window", window: this.id });
+        });
+      }
+    };
+
+    /** Shows `menu` in the window's menu bar, or no menu bar for null. */
+    readonly setMenu = (menu: Menu | null) => {
+      this.assertAlive();
+      this.#menu?.off("changed", this.#showMenuBar);
+      this.#menu = menu;
+      this.#menu?.on("changed", this.#showMenuBar);
+      this.#showMenuBar();
+    };
+
+    readonly removeMenu = () => {
+      this.setMenu(null);
+    };
+
+    readonly setMenuBarVisibility = (visible: boolean) => {
+      this.#menuBarVisible = visible;
+      this.#showMenuBar();
+    };
+
+    readonly isMenuBarVisible = () => this.#menuBarVisible;
+
+    readonly setAutoHideMenuBar = (autoHide: boolean) => {
+      this.#menuBarAutoHide = autoHide;
+      this.#showMenuBar();
+    };
+
+    readonly isMenuBarAutoHide = () => this.#menuBarAutoHide;
+
+    /** Tells the engine the menu bar as it is now, once the window is open. */
+    readonly #showMenuBar = () => {
+      if (this.#opened && !this.#destroyed) {
+        engine.send({
+          auto_hide: this.#menuBarAutoHide,
+          menu: this.#menu === null ? null : menus.model(this.#menu),
+          type: "set_menu_bar",
+          visible: this.#menuBarVisible,
+          window: this.id,
         });
       }
     };
@@ -302,6 +366,12 @@ export const createBrowserWindow = (
           ports.gone(this.id);
           break;
         }
+        case "menu_clicked": {
+          if (this.#menu !== null) {
+            menus.click(this.#menu, event.command, this.id);
+          }
+          break;
+        }
       }
     };
 
@@ -350,6 +420,7 @@ export const createBrowserWindow = (
     readonly #closed = () => {
       if (!this.#destroyed) {
         this.#destroyed = true;
+        this.#menu?.off("changed", this.#showMenuBar);
         windows.delete(this.id);
         ports.gone(this.id);
         for (const load of this.#loads.splice(0)) {

@@ -6,6 +6,8 @@ import { electronPaths } from "../paths";
 import { createApp } from "./app";
 import { createBrowserWindow } from "./browser-window";
 import { createIpcMain } from "./ipc-main";
+import type { MenuEntry } from "./menu";
+import { createMenu } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
 import { createPermissions } from "./permissions";
@@ -53,15 +55,32 @@ const setUp = () => {
   );
   // The default session's file: handler, which every test would start with.
   sent.length = 0;
+  const menus = createMenu<{ readonly id: number }>({
+    appName: () => "Notes",
+    focusedWindow: () => null,
+    roles: {},
+    setApplicationMenu: (menu) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.setMenu(menu);
+      }
+    },
+  });
   const BrowserWindow = createBrowserWindow(
     { events, send: (request) => sent.push(request) },
     app,
     ipc,
     sessions,
+    {
+      applicationMenu: menus.Menu.getApplicationMenu,
+      click: (menu, command, window) => {
+        menus.click(menu, command, undefined, BrowserWindow.fromId(window));
+      },
+      model: menus.model,
+    },
     (path) => `source of ${path}`,
   );
   const say = (event: WindowEvent) => events.emit("window", event);
-  return { app, BrowserWindow, exits, ipcMain, say, sent, sessions };
+  return { app, BrowserWindow, exits, ipcMain, menus, say, sent, sessions };
 };
 
 describe(createBrowserWindow, () => {
@@ -433,5 +452,133 @@ describe(createBrowserWindow, () => {
 
     expect(message).toBe("a port");
     expect(heard).toEqual([50, "closed"]);
+  });
+});
+
+describe("a window's menu bar", () => {
+  /** The set_menu_bar requests sent, without the rest. */
+  const menuBars = (sent: readonly EngineRequest[]) =>
+    sent.filter((request) => request.type === "set_menu_bar");
+
+  const entry = (id: number, label: string): MenuEntry => ({
+    checked: false,
+    enabled: true,
+    id,
+    label,
+    sublabel: "",
+    toolTip: "",
+    type: "normal",
+    visible: true,
+  });
+
+  it("opens with the app's menu, right after the window", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    menus.Menu.setApplicationMenu(
+      menus.Menu.buildFromTemplate([{ label: "New Note" }]),
+    );
+    const window = new BrowserWindow();
+
+    void window.loadURL("https://notes.test/");
+
+    expect(sent).toEqual([
+      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        auto_hide: false,
+        menu: [entry(1, "New Note")],
+        type: "set_menu_bar",
+        visible: true,
+        window: 1,
+      },
+    ]);
+  });
+
+  it("opens with no menu bar when the app has no menu", () => {
+    const { BrowserWindow, sent } = setUp();
+
+    void new BrowserWindow().loadURL("https://notes.test/");
+
+    expect(menuBars(sent)).toEqual([]);
+  });
+
+  it("follows its menu as it changes, and the menu set in its place", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://notes.test/");
+    const first = menus.Menu.buildFromTemplate([{ label: "New Note" }]);
+    const second = menus.Menu.buildFromTemplate([{ label: "Open" }]);
+    sent.length = 0;
+
+    window.setMenu(first);
+    first.append(new menus.MenuItem({ label: "Close" }));
+    window.setMenu(second);
+    first.append(new menus.MenuItem({ label: "Unseen" }));
+    window.removeMenu();
+
+    expect(menuBars(sent).map(({ menu }) => menu)).toEqual([
+      [entry(1, "New Note")],
+      [entry(1, "New Note"), entry(3, "Close")],
+      [entry(2, "Open")],
+      null,
+    ]);
+  });
+
+  it("gives every window the menu the app sets", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    void new BrowserWindow().loadURL("https://notes.test/");
+    void new BrowserWindow().loadURL("https://notes.test/");
+    sent.length = 0;
+
+    menus.Menu.setApplicationMenu(
+      menus.Menu.buildFromTemplate([{ label: "New Note" }]),
+    );
+
+    expect(menuBars(sent).map(({ window }) => window)).toEqual([1, 2]);
+  });
+
+  it("hides the bar or keeps it until Alt, as the app asks", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow({ autoHideMenuBar: true });
+    void window.loadURL("https://notes.test/");
+
+    window.setMenuBarVisibility(false);
+    window.setAutoHideMenuBar(false);
+
+    expect(
+      menuBars(sent).map(({ auto_hide, visible }) => ({ auto_hide, visible })),
+    ).toEqual([
+      { auto_hide: true, visible: false },
+      { auto_hide: false, visible: false },
+    ]);
+    expect(window.isMenuBarVisible()).toBe(false);
+    expect(window.isMenuBarAutoHide()).toBe(false);
+  });
+
+  it("tells the engine nothing before the window opens", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    const window = new BrowserWindow();
+
+    window.setMenu(menus.Menu.buildFromTemplate([{ label: "New Note" }]));
+    window.setMenuBarVisibility(false);
+
+    expect(sent).toEqual([]);
+  });
+
+  it("runs a clicked entry for the window whose bar was clicked", () => {
+    const { BrowserWindow, menus, say } = setUp();
+    const clicks: [string, unknown][] = [];
+    const window = new BrowserWindow();
+    void window.loadURL("https://notes.test/");
+    window.setMenu(
+      menus.Menu.buildFromTemplate([
+        {
+          click: (item, clicked) => clicks.push([item.label, clicked]),
+          label: "New Note",
+        },
+      ]),
+    );
+
+    say({ command: 1, type: "menu_clicked", window: 1 });
+
+    expect(clicks).toEqual([["New Note", window]]);
   });
 });
