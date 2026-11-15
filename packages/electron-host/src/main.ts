@@ -21,6 +21,7 @@ import {
 } from "./electron/protocol";
 import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
+import { utilityProcess } from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
 import { connectEngine } from "./engine";
@@ -111,6 +112,7 @@ const main = async ([resources, ...args]: string[]) => {
         registerSchemesAsPrivileged,
       },
       session,
+      utilityProcess,
     };
     Bun.plugin({
       name: "electron",
