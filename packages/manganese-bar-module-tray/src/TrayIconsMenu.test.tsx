@@ -188,17 +188,6 @@ describe(TrayIconsMenu, () => {
     ).toBeVisible();
   });
 
-  it("marks the button when an unpinned extension has a badge", () => {
-    renderMenu({
-      extensions: [{ ...darkAction, badgeText: "3" }],
-      unpinned: new Set([`extension:${DARK}`]),
-    });
-
-    expect(
-      screen.getByRole("img", { name: "An unpinned icon has news" }),
-    ).toBeInTheDocument();
-  });
-
   it("opens Settings from its footer", async () => {
     const calls: unknown[][] = [];
     renderMenu({ calls });

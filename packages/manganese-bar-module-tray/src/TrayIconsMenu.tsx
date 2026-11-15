@@ -64,9 +64,6 @@ type Props = {
  *
  * Clicking a row does what clicking its icon does. An unpinned extension's
  * popup opens from the tray, where its icon shows while it is open.
- *
- * A dot on the button says an unpinned extension has a badge, which the
- * tray would otherwise show.
  */
 export const TrayIconsMenu = ({
   domicile,
@@ -83,10 +80,6 @@ export const TrayIconsMenu = ({
   const [open, setOpen] = useState(false);
   const [failure, setFailure] = useState<Failure | undefined>(undefined);
   const actions = new Map(extensions.map((action) => [action.id, action]));
-  const attention = extensions.some(
-    (action) =>
-      action.badgeText !== "" && unpinned.has(extensionKey(action.id)),
-  );
   /** Runs `request`, saying `what` failed if it is refused. */
   const ask = (what: string, request: Promise<void>) => {
     request.then(
@@ -136,13 +129,6 @@ export const TrayIconsMenu = ({
         <Button label="All tray icons" size="sm" variant="ghost">
           <span className={caretStyles}>
             <CaretDownIcon aria-hidden size={12} weight="bold" />
-            {attention && (
-              <span
-                aria-label="An unpinned icon has news"
-                className={dotStyles}
-                role="img"
-              />
-            )}
           </span>
         </Button>
       }
@@ -521,23 +507,8 @@ const letterStyles = center({
   inlineSize: 4,
 });
 
-// Holds the dot over the caret's corner, in the box of a tray icon.
-const caretStyles = center({
-  blockSize: 4,
-  inlineSize: 4,
-  position: "relative",
-});
-
-// The accent, as a notification's unread dot.
-const dotStyles = css({
-  backgroundColor: "accent",
-  blockSize: 1.5,
-  borderRadius: "full",
-  inlineSize: 1.5,
-  insetBlockStart: -0.5,
-  insetInlineEnd: -0.5,
-  position: "absolute",
-});
+// The caret, in the box of a tray icon.
+const caretStyles = center({ blockSize: 4, inlineSize: 4 });
 
 const confirmStyles = css({
   alignItems: "center",
