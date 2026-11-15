@@ -19,6 +19,7 @@ import {
   registerSchemesAsPrivileged,
 } from "./electron/protocol";
 import { createSessions } from "./electron/session";
+import { createSessionCalls } from "./electron/session-calls";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
 import { connectEngine } from "./engine";
@@ -80,7 +81,9 @@ const main = async ([resources, ...args]: string[]) => {
       (window) => BrowserWindow.fromId(window)?.webContents,
     );
     engine.events.on("webRequest", webRequests.hear);
-    const session = createSessions(protocols, webRequests);
+    const sessionCalls = createSessionCalls(engine.send);
+    engine.events.on("sessionResult", sessionCalls.hear);
+    const session = createSessions(protocols, webRequests, sessionCalls);
     const BrowserWindow = createBrowserWindow(engine, app, ipc, session);
     const electron = {
       app,

@@ -10,6 +10,7 @@ import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
 import { createProtocols } from "./protocol";
 import { createSessions } from "./session";
+import { createSessionCalls } from "./session-calls";
 import { createWebRequests } from "./web-request";
 
 const setUp = () => {
@@ -42,6 +43,7 @@ const setUp = () => {
       (message) => sent.push(message),
       () => undefined,
     ),
+    createSessionCalls((message) => sent.push(message)),
   );
   // The default session's file: handler, which every test would start with.
   sent.length = 0;

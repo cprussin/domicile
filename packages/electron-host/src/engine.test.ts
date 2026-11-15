@@ -118,6 +118,28 @@ describe(connectEngine, () => {
     expect(await heard).toEqual(event);
   });
 
+  it("passes on each session result, with its result or its error", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const heard: unknown[] = [];
+    const both = new Promise((resolve) =>
+      engine.events.on("sessionResult", (result) => {
+        heard.push(result);
+        if (heard.length === 2) {
+          resolve(heard);
+        }
+      }),
+    );
+
+    fake.say({ call: 1, result: null, type: "session_result" });
+    fake.say({ call: 2, error: "no", type: "session_result" });
+
+    expect(await both).toEqual([
+      { call: 1, result: null, type: "session_result" },
+      { call: 2, error: "no", type: "session_result" },
+    ]);
+  });
+
   it("says when the engine goes", async () => {
     fake = await startFakeEngine();
     const engine = await connected(fake);

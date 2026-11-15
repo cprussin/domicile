@@ -3,19 +3,23 @@ import { describe, expect, it } from "bun:test";
 import type { ProtocolRequest } from "./protocol";
 import { createProtocols } from "./protocol";
 import { createSessions, sessionPartition } from "./session";
+import type { SessionCallMessage } from "./session-calls";
+import { createSessionCalls } from "./session-calls";
 import type { WebRequestMessage } from "./web-request";
 import { createWebRequests } from "./web-request";
 
 const setUp = () => {
-  const sent: (ProtocolRequest | WebRequestMessage)[] = [];
+  const sent: (ProtocolRequest | WebRequestMessage | SessionCallMessage)[] = [];
+  const calls = createSessionCalls((m) => sent.push(m));
   const sessions = createSessions(
     createProtocols((r) => sent.push(r)),
     createWebRequests(
       (m) => sent.push(m),
       () => undefined,
     ),
+    calls,
   );
-  return { sent, sessions };
+  return { calls, sent, sessions };
 };
 
 describe(createSessions, () => {
@@ -71,5 +75,43 @@ describe(createSessions, () => {
         type: "web_request_listen",
       },
     ]);
+  });
+
+  it("gives each session cookies and storage calls of its own partition", async () => {
+    const { calls, sent, sessions } = setUp();
+    sent.length = 0;
+
+    const cleared = sessions.fromPartition("persist:a").clearCache();
+    sessions.defaultSession.setUserAgent("Claude/1");
+    const cookies = sessions.defaultSession.cookies.get({});
+    calls.hear({ call: 1, result: null, type: "session_result" });
+    calls.hear({ call: 3, result: [], type: "session_result" });
+
+    // Less the file: handler each new session starts with.
+    expect(sent.filter((m) => m.type === "session_call")).toEqual([
+      {
+        call: 1,
+        method: "clear_cache",
+        session: "persist:a",
+        type: "session_call",
+      },
+      {
+        call: 2,
+        method: "set_user_agent",
+        session: "",
+        type: "session_call",
+        user_agent: "Claude/1",
+      },
+      {
+        call: 3,
+        filter: {},
+        method: "cookies_get",
+        session: "",
+        type: "session_call",
+      },
+    ]);
+    expect(sessions.defaultSession.getUserAgent()).toBe("Claude/1");
+    expect(await cleared).toBeUndefined();
+    expect(await cookies).toEqual([]);
   });
 });

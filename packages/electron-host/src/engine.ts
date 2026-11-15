@@ -10,6 +10,10 @@ import { z } from "zod";
 import type { PortRequest } from "./electron/message-port-main";
 import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
 import type {
+  SessionCallMessage,
+  SessionResult,
+} from "./electron/session-calls";
+import type {
   IncomingWebRequest,
   WebRequestMessage,
 } from "./electron/web-request";
@@ -62,7 +66,8 @@ export type EngineRequest =
     }
   | PortRequest
   | ProtocolRequest
-  | WebRequestMessage;
+  | WebRequestMessage
+  | SessionCallMessage;
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ready") }),
@@ -157,6 +162,12 @@ const engineEvent = z.discriminatedUnion("type", [
     url: z.string(),
     window: z.number().optional(),
   }),
+  z.object({
+    call: z.number(),
+    error: z.string().optional(),
+    result: z.unknown().optional(),
+    type: z.literal("session_result"),
+  }),
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;
@@ -178,6 +189,8 @@ export type Engine = {
     protocol: [request: IncomingRequest];
     /** An event of a page's request, for its session's webRequest. */
     webRequest: [request: IncomingWebRequest];
+    /** The engine's answer to a session call. */
+    sessionResult: [result: SessionResult];
   }>;
 };
 
@@ -222,6 +235,14 @@ export const connectEngine = (
         events.emit("protocol", parsed.data);
       } else if (parsed.data.type === "web_request") {
         events.emit("webRequest", parsed.data);
+      } else if (parsed.data.type === "session_result") {
+        const { call, error, result } = parsed.data;
+        events.emit(
+          "sessionResult",
+          error === undefined
+            ? { call, result, type: "session_result" }
+            : { call, error, type: "session_result" },
+        );
       } else if ("window" in parsed.data) {
         events.emit("window", parsed.data);
       } else {
