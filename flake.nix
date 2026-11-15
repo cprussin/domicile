@@ -2716,8 +2716,9 @@
                   machine.screenshot(name)
                   image = Image.open(os.path.join(machine.out_dir, f"{name}.png")).convert("RGB")
                   pixels = image.width * image.height
-                  colors = dict((color, count) for count, color in image.getcolors(maxcolors=pixels))
-                  return colors.get(BLUE, 0) / pixels
+                  colors = image.getcolors(maxcolors=pixels)
+                  assert colors is not None
+                  return sum(count for count, color in colors if color == BLUE) / pixels
 
 
               def in_the_desk(command):
