@@ -306,7 +306,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [ ] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
 - [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)
-- [ ] app menus: the shell's menu bar under the window's tab; Alt toggles it
+- [x] Manganese: app menus as a menu bar under the window's tab; accelerators run their entries; Alt toggles an auto-hidden bar, and Alt with a mnemonic opens a menu
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page
