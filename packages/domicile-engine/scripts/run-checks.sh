@@ -128,6 +128,7 @@ TOGETHER=(
   guard-electron-preload
   guard-electron-protocol
   guard-electron-schemes
+  guard-electron-web-request
   guard-video-codecs
   guard-browser-brand
 )
@@ -153,6 +154,7 @@ ONCE=(
   guard-electron-protocol
   guard-electron-schemes
   guard-electron-socket
+  guard-electron-web-request
   guard-held-moments
   guard-pdf-scaled-text
   guard-pdf-after-hiding

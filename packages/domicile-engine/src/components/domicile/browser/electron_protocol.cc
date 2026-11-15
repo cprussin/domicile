@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -239,6 +240,105 @@ base::expected<ElectronRequest, ElectronRefusal> ParseProtocolAnswer(
   }
 }
 
+// Each webRequest event's name on the wire.
+constexpr std::pair<ElectronWebRequestEvent, std::string_view>
+    kWebRequestEvents[] = {
+        {ElectronWebRequestEvent::kBeforeRequest, "before_request"},
+        {ElectronWebRequestEvent::kBeforeSendHeaders, "before_send_headers"},
+        {ElectronWebRequestEvent::kSendHeaders, "send_headers"},
+        {ElectronWebRequestEvent::kHeadersReceived, "headers_received"},
+        {ElectronWebRequestEvent::kResponseStarted, "response_started"},
+        {ElectronWebRequestEvent::kBeforeRedirect, "before_redirect"},
+        {ElectronWebRequestEvent::kCompleted, "completed"},
+        {ElectronWebRequestEvent::kErrorOccurred, "error_occurred"},
+};
+
+base::expected<ElectronRequest, ElectronRefusal> ParseWebRequestListen(
+    const base::DictValue& request) {
+  base::expected<std::string, std::string> session =
+      SessionIn(request, /*optional=*/false);
+  if (!session.has_value()) {
+    return Refuse(std::move(session.error()));
+  }
+  const base::ListValue* names = request.FindList("events");
+  if (names == nullptr) {
+    return Refuse("\"events\" must name webRequest events");
+  }
+  std::set<ElectronWebRequestEvent> events;
+  for (const base::Value& name : *names) {
+    const auto* found =
+        name.is_string()
+            ? std::ranges::find(
+                  kWebRequestEvents, name.GetString(),
+                  &std::pair<ElectronWebRequestEvent, std::string_view>::second)
+            : std::end(kWebRequestEvents);
+    if (found == std::end(kWebRequestEvents)) {
+      return Refuse("\"events\" must name webRequest events");
+    }
+    events.insert(found->first);
+  }
+  return ElectronWebRequestListen{.session = std::move(*session),
+                                  .events = std::move(events)};
+}
+
+// The headers under `key`, when the line has them.
+base::expected<std::optional<ElectronHeaders>, std::string> OptionalHeadersIn(
+    const base::DictValue& request,
+    std::string_view key) {
+  if (!request.contains(key)) {
+    return std::nullopt;
+  } else if (!request.Find(key)->is_list()) {
+    return base::unexpected(base::StrCat({"\"", key, "\" must be an array"}));
+  }
+  base::DictValue only;
+  only.Set("headers", request.Find(key)->Clone());
+  base::expected<ElectronHeaders, std::string> headers = HeadersIn(only);
+  if (!headers.has_value()) {
+    return base::unexpected(std::move(headers.error()));
+  }
+  return std::optional(std::move(*headers));
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseWebRequestAnswer(
+    const base::DictValue& request) {
+  const std::optional<int> ask = request.FindInt("ask");
+  if (!ask.has_value() || *ask < 1) {
+    return Refuse("\"ask\" must be a whole number from 1");
+  }
+  ElectronWebRequestAnswer answer{.ask = *ask};
+  if (const base::Value* cancel = request.Find("cancel")) {
+    if (!cancel->is_bool()) {
+      return Refuse("\"cancel\" must be true or false");
+    }
+    answer.cancel = cancel->GetBool();
+  }
+  if (const base::Value* redirect = request.Find("redirect_url")) {
+    GURL url(redirect->is_string() ? redirect->GetString() : "");
+    if (!url.is_valid()) {
+      return Refuse("\"redirect_url\" must be a URL");
+    }
+    answer.redirect_url = std::move(url);
+  }
+  for (auto [key, field] :
+       {std::pair("request_headers", &answer.request_headers),
+        std::pair("response_headers", &answer.response_headers)}) {
+    base::expected<std::optional<ElectronHeaders>, std::string> headers =
+        OptionalHeadersIn(request, key);
+    if (!headers.has_value()) {
+      return Refuse(std::move(headers.error()));
+    }
+    *field = std::move(*headers);
+  }
+  if (const base::Value* line = request.Find("status_line")) {
+    if (!line->is_string() || !base::StartsWith(line->GetString(), "HTTP/") ||
+        !net::HttpUtil::IsValidHeaderValue(line->GetString())) {
+      return Refuse("\"status_line\" must be an HTTP status line");
+    }
+    answer.status_line = line->GetString();
+  }
+  return answer;
+}
+
 base::ListValue HeadersList(const ElectronHeaders& headers) {
   base::ListValue list;
   for (const auto& [name, value] : headers) {
@@ -445,6 +545,10 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
   } else if (*type == "protocol_response" || *type == "protocol_data" ||
              *type == "protocol_end") {
     return ParseProtocolAnswer(*type, *request);
+  } else if (*type == "web_request_listen") {
+    return ParseWebRequestListen(*request);
+  } else if (*type == "web_request_answer") {
+    return ParseWebRequestAnswer(*request);
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }
@@ -492,6 +596,68 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     CHECK_EQ(*type, "destroy_window");
     return ElectronDestroyWindow{.window = *window};
   }
+}
+
+std::string_view ElectronWebRequestEventName(ElectronWebRequestEvent event) {
+  const auto* found = std::ranges::find(
+      kWebRequestEvents, event,
+      &std::pair<ElectronWebRequestEvent, std::string_view>::first);
+  CHECK(found != std::end(kWebRequestEvents));
+  return found->second;
+}
+
+bool IsBlockingElectronWebRequestEvent(ElectronWebRequestEvent event) {
+  return event == ElectronWebRequestEvent::kBeforeRequest ||
+         event == ElectronWebRequestEvent::kBeforeSendHeaders ||
+         event == ElectronWebRequestEvent::kHeadersReceived;
+}
+
+std::string ElectronWebRequest(ElectronWebRequestEvent event,
+                               std::optional<int> ask,
+                               std::optional<ElectronWindow> window,
+                               std::string_view session,
+                               const ElectronWebRequestDetails& details) {
+  base::DictValue line;
+  line.Set("type", "web_request");
+  line.Set("event", ElectronWebRequestEventName(event));
+  if (ask.has_value()) {
+    line.Set("ask", *ask);
+  }
+  if (window.has_value()) {
+    line.Set("window", *window);
+  }
+  line.Set("session", session);
+  line.Set("id", details.id);
+  line.Set("url", details.url.spec());
+  line.Set("method", details.method);
+  line.Set("resource_type", details.resource_type);
+  line.Set("referrer", details.referrer);
+  if (details.request_headers.has_value()) {
+    line.Set("request_headers", HeadersList(*details.request_headers));
+  }
+  if (details.response_headers.has_value()) {
+    line.Set("response_headers", HeadersList(*details.response_headers));
+  }
+  if (details.status_code.has_value()) {
+    line.Set("status_code", *details.status_code);
+  }
+  if (details.status_line.has_value()) {
+    line.Set("status_line", *details.status_line);
+  }
+  if (details.redirect_url.has_value()) {
+    line.Set("redirect_url", details.redirect_url->spec());
+  }
+  if (details.error.has_value()) {
+    line.Set("error", *details.error);
+  }
+  if (details.from_cache) {
+    line.Set("from_cache", true);
+  }
+  if (details.ip.has_value()) {
+    line.Set("ip", *details.ip);
+  }
+  // The loader made every string UTF-8.
+  return Line(std::move(line));
 }
 
 std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
