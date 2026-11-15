@@ -15,6 +15,7 @@ import {
   MessageChannelMain,
   MessagePortMain,
 } from "./electron/message-port-main";
+import { nativeImage } from "./electron/native-image";
 import type { Appearance } from "./electron/native-theme";
 import { createNativeTheme } from "./electron/native-theme";
 import { createNotification } from "./electron/notification";
@@ -126,6 +127,7 @@ const main = async ([resources, ...args]: string[]) => {
         appId: pkg.appId,
         name: app.getName(),
       }),
+      nativeImage,
       nativeTheme,
       protocol: {
         ...session.defaultSession.protocol,
