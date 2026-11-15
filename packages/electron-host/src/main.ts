@@ -28,6 +28,7 @@ import {
 import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
 import { createShell } from "./electron/shell";
+import { createTray } from "./electron/tray";
 import { utilityProcess } from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
@@ -118,7 +119,9 @@ const main = async ([resources, ...args]: string[]) => {
       }),
     );
     theme.changed = appearanceChanged;
-    const { Menu, MenuItem } = createMenu<InstanceType<typeof BrowserWindow>>({
+    const { click, Menu, MenuItem, model } = createMenu<
+      InstanceType<typeof BrowserWindow>
+    >({
       appName: app.getName,
       focusedWindow: BrowserWindow.getFocusedWindow,
       roles: {
@@ -149,6 +152,11 @@ const main = async ([resources, ...args]: string[]) => {
       },
       session,
       shell: createShell(runCommand),
+      Tray: createTray({
+        connect: desktop.connect,
+        menus: { click, model },
+        name: app.getName,
+      }),
       utilityProcess,
     };
     Bun.plugin({
