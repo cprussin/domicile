@@ -11,6 +11,7 @@ import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
+  WEBVIEW_GUEST_KEYUP_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
   WEBVIEW_IDENTITY_EVENT,
   WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT,
@@ -3201,5 +3202,174 @@ describe("BrowserWindow", () => {
         fireEvent.animationEnd(browser());
       });
     });
+  });
+});
+
+describe("an Electron app's menu bar", () => {
+  /** An entry as the engine lists it, with Electron's defaults. */
+  const entry = (fields: object) => ({
+    checked: false,
+    enabled: true,
+    type: "normal",
+    visible: true,
+    ...fields,
+  });
+
+  const MENU = JSON.stringify([
+    entry({
+      id: 1,
+      label: "&File",
+      submenu: [
+        entry({
+          accelerator: "CmdOrCtrl+N",
+          id: 2,
+          label: "&New Conversation",
+        }),
+        entry({ accelerator: "CmdOrCtrl+R", id: 3, label: "&Reload" }),
+      ],
+      type: "submenu",
+    }),
+    entry({
+      id: 4,
+      label: "&Edit",
+      submenu: [entry({ id: 5, label: "Undo" })],
+      type: "submenu",
+    }),
+  ]);
+
+  /** A browser window "1" whose app set `MENU`, and the host's calls. */
+  const appWindow = (
+    options: { autoHide?: boolean; visible?: boolean } = {},
+  ) => {
+    const host = new FakeDomicileHost();
+    host.openBrowser("https://claude.test/");
+    host.setMenuBar("1", MENU, options);
+    const domicile: Domicile = {
+      ...host.domicile,
+      windows: {
+        ...host.domicile.windows,
+        focus: () => undefined,
+        focusShell: () => undefined,
+      },
+    };
+    const rendered = render(
+      <BrowserWindow
+        behindPanel={false}
+        clickThrough={false}
+        covered={false}
+        depth={0}
+        domicile={domicile}
+        dragging={false}
+        focused
+        frame={FRAME}
+        fullscreen={false}
+        isApp
+        motion="resting"
+        onDescription={noDescription}
+        onFocusRequest={() => undefined}
+        onIcon={noIcon}
+        onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        resizing={false}
+        url="https://claude.test/"
+        window="1"
+      />,
+    );
+    const clicks = () =>
+      host.calls.filter(([name]) => name === "clickBrowserWindowMenu");
+    return { clicks, host, rendered };
+  };
+
+  const menuBar = () => screen.queryByRole("menubar");
+
+  const guestLetsGo = (
+    element: HTMLWebViewElement,
+    init: KeyboardEventInit,
+  ) => {
+    fireEvent(
+      element,
+      new KeyboardEvent(WEBVIEW_GUEST_KEYUP_EVENT, { bubbles: true, ...init }),
+    );
+  };
+
+  it("draws the app's menus under the tab, and clicks the entry chosen", async () => {
+    const { clicks } = appWindow();
+
+    expect(
+      within(menuBar() ?? document.body)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["File", "Edit"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "File" }));
+    const file = await screen.findByRole("menu", { name: "File" });
+    const entries = within(file).getAllByRole("menuitem");
+    expect(entries.map((entry) => entry.textContent)).toEqual([
+      "New ConversationCtrl+N",
+      "ReloadCtrl+R",
+    ]);
+    await userEvent.click(entries[0] ?? file);
+
+    expect(clicks()).toEqual([["clickBrowserWindowMenu", "1", 2]]);
+  });
+
+  it("draws no bar for a window whose app hides it, or sets no menu", () => {
+    const { host } = appWindow({ visible: false });
+
+    expect(menuBar()).not.toBeInTheDocument();
+    act(() => {
+      host.setMenuBar("1", null);
+    });
+    expect(menuBar()).not.toBeInTheDocument();
+  });
+
+  it("runs an accelerator the page left alone instead of the browser's key", () => {
+    const { clicks, rendered } = appWindow();
+    const element = view(rendered.container);
+    const reloads: string[] = [];
+    element.reload = () => {
+      reloads.push("reload");
+    };
+
+    guestPresses(element, { code: "KeyR", ctrlKey: true, key: "r" });
+
+    expect(clicks()).toEqual([["clickBrowserWindowMenu", "1", 3]]);
+    expect(reloads).toEqual([]);
+  });
+
+  it("opens a menu with Alt and its mnemonic", async () => {
+    const { rendered } = appWindow();
+
+    guestPresses(view(rendered.container), {
+      altKey: true,
+      code: "KeyE",
+      key: "e",
+    });
+
+    expect(await screen.findByRole("menu", { name: "Edit" })).toBeVisible();
+  });
+
+  it("shows an auto-hidden bar on an Alt tap, and not for Alt held for a chord", () => {
+    const { rendered } = appWindow({ autoHide: true });
+    const element = view(rendered.container);
+    expect(menuBar()).not.toBeInTheDocument();
+
+    guestPresses(element, { altKey: true, code: "AltLeft", key: "Alt" });
+    guestPresses(element, {
+      altKey: true,
+      code: "ArrowLeft",
+      key: "ArrowLeft",
+    });
+    guestLetsGo(element, { code: "AltLeft", key: "Alt" });
+    expect(menuBar()).not.toBeInTheDocument();
+
+    guestPresses(element, { altKey: true, code: "AltLeft", key: "Alt" });
+    guestLetsGo(element, { code: "AltLeft", key: "Alt" });
+    expect(menuBar()).toBeInTheDocument();
+
+    guestPresses(element, { altKey: true, code: "AltLeft", key: "Alt" });
+    guestLetsGo(element, { code: "AltLeft", key: "Alt" });
+    expect(menuBar()).not.toBeInTheDocument();
   });
 });
