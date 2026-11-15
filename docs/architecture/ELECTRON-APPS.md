@@ -260,7 +260,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: cookies, storage clearing, `clearCache`, `setUserAgent`
 - [ ] engine: permission handlers
 - [x] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
-- [ ] `electron-host`: `session.webRequest`
+- [x] `electron-host`: `session.webRequest`
+- [x] `electron-host`: session cookies, storage clearing, `clearCache`, `setUserAgent`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
