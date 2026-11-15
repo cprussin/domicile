@@ -288,6 +288,15 @@ bool BrokeredFrameSink::SubmitBuffer(uint64_t buffer_id,
   // `size_` is in device pixels at the page's scale.
   frame.metadata.device_scale_factor = scale_;
   frame.metadata.frame_token = ++next_frame_token_;
+  // A window the page does not draw (on another workspace, behind a tab)
+  // still submits a frame now and then, and each goes undrawn. Past a few
+  // undrawn frames viz throttles the BeginFrames that would carry their
+  // failed presentation timing, so the timing never leaves and the sink
+  // observes the BeginFrameSource for good: the display ticks at its refresh
+  // rate, keeping vblank interrupts on and panel self-refresh off, for a
+  // window nobody sees. This sink never asks for BeginFrames to draw, so
+  // there is nothing to throttle; let the timing go.
+  frame.metadata.may_throttle_if_undrawn_frames = false;
   frame.resource_list.push_back(buffer.resource);
   frame.render_pass_list.push_back(std::move(pass));
 

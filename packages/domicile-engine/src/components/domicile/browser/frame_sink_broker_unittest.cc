@@ -36,6 +36,8 @@
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_manager.h"
 #include "components/viz/test/compositor_frame_helpers.h"
 #include "components/viz/test/fake_external_begin_frame_source.h"
 #include "components/viz/test/fake_host_frame_sink_client.h"
@@ -1241,6 +1243,38 @@ TEST_F(FrameSinkBrokerTest, ABeginFrameWithNothingToDrawIsAnswered) {
   RunUntilIdle();
 
   EXPECT_TRUE(begin_frames.AllFramesDidFinish());
+}
+
+// A window the page does not draw still submits now and then, and each frame
+// goes undrawn. Throttled for that, viz would hold back the BeginFrames that
+// carry the frames' failed presentation timing, and the sink would observe the
+// BeginFrameSource for good: the display would tick at its refresh rate for a
+// window nobody sees.
+TEST_F(FrameSinkBrokerTest, AnUndrawnWindowsFramesMayNotBeThrottled) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerABrowserHeldSink(remote, observer.BindRemote());
+  const viz::LocalSurfaceId local_surface_id = AllocateLocalSurfaceId();
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, local_surface_id,
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  const auto [buffer_id, mailbox] = ImportABuffer(remote, frame_sink_id);
+
+  remote->SubmitBuffer(frame_sink_id, buffer_id, gfx::Rect());
+  RunUntilIdle();
+
+  viz::Surface* surface =
+      frame_sink_manager_->surface_manager()->GetSurfaceForId(
+          viz::SurfaceId(frame_sink_id, local_surface_id));
+  ASSERT_TRUE(surface);
+  ASSERT_TRUE(surface->HasActiveFrame());
+  EXPECT_FALSE(
+      surface->GetActiveFrameMetadata().may_throttle_if_undrawn_frames);
 }
 
 // Destroying a sink also unregisters it from the hierarchy.
