@@ -67,6 +67,8 @@ Event names and full types are in `src/app-element.ts` and
   move it in code, both in the compositor's seat and for the page's keys.
   Each press sent (not a modifier, a repeat or a grabbed chord) fires
   `domicile-key-delivered` on the `<app>`: a plain `Event` that names no key.
+  While the desk is locked, the page keeps every key, so the lock screen
+  gets the passphrase.
 - **Focus events** (both cancelable; call `preventDefault()` to decide focus
   yourself):
   - `domicile-focus-requested`: a click on a window, before it is focused. A

@@ -49,6 +49,9 @@ impl DomicileCompositor {
             self.cancel_swipe();
             self.cancel_touches();
             self.tell_the_chromes_whether_the_desk_is_locked();
+            // After the chromes hear `locked`, so a shell does not hand the
+            // keyboard straight back to the window.
+            self.hand_the_keyboard_to_the_lock_screen();
         } else if !self.lock.locked() {
             warn!(
                 why,
