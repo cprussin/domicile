@@ -42,6 +42,9 @@ import { readEnvironment } from "./environment";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
 
+/** A window as the app's menus hand it to a click: one of its BrowserWindows. */
+type MenuWindow = { readonly close: () => void };
+
 const main = async ([resources, ...args]: string[]) => {
   if (resources === undefined) {
     throw new Error("usage: electron-host <resources directory> [arguments…]");
@@ -113,7 +116,6 @@ const main = async ([resources, ...args]: string[]) => {
       sessionCalls,
       permissions,
     );
-    const BrowserWindow = createBrowserWindow(engine, app, ipc, session);
     // Read before the app's main runs, as an app reads its theme as it starts.
     const desktop = await reachDesktop(env);
     const theme: { changed?: (next: Appearance) => void } = {};
@@ -123,18 +125,26 @@ const main = async ([resources, ...args]: string[]) => {
       }),
     );
     theme.changed = appearanceChanged;
-    const { click, Menu, MenuItem, model } = createMenu<
-      InstanceType<typeof BrowserWindow>
-    >({
+    const { click, Menu, MenuItem, model } = createMenu<MenuWindow>({
       appName: app.getName,
-      focusedWindow: BrowserWindow.getFocusedWindow,
+      focusedWindow: (): MenuWindow | null => BrowserWindow.getFocusedWindow(),
       roles: {
         close: (window) => window?.close(),
         quit: () => app.quit(),
       },
-      // The menu bar under the window's tab comes next; until then the app's
-      // menu is kept for getApplicationMenu alone.
-      setApplicationMenu: () => undefined,
+      // Electron gives every window the app's menu, as each new one starts with.
+      setApplicationMenu: (menu) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.setMenu(menu);
+        }
+      },
+    });
+    const BrowserWindow = createBrowserWindow(engine, app, ipc, session, {
+      applicationMenu: Menu.getApplicationMenu,
+      click: (menu, command, window) => {
+        click(menu, command, undefined, BrowserWindow.fromId(window));
+      },
+      model,
     });
     const electron = {
       app,

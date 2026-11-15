@@ -7,6 +7,7 @@ import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
+import type { MenuEntry } from "./electron/menu";
 import type { PortRequest } from "./electron/message-port-main";
 import type {
   IncomingPermissionRequest,
@@ -44,6 +45,15 @@ export type EngineRequest =
   | { readonly type: "focus_window"; readonly window: number }
   | { readonly type: "close_window"; readonly window: number }
   | { readonly type: "destroy_window"; readonly window: number }
+  | {
+      readonly type: "set_menu_bar";
+      readonly window: number;
+      /** The menu as the menu bar draws it, or none for no menu bar. */
+      readonly menu: readonly MenuEntry[] | null;
+      readonly visible: boolean;
+      /** Hidden until the user presses Alt. */
+      readonly auto_hide: boolean;
+    }
   | {
       readonly type: "ipc_send";
       readonly window: number;
@@ -129,6 +139,11 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("page_gone"), window: z.number() }),
+  z.object({
+    command: z.number(),
+    type: z.literal("menu_clicked"),
+    window: z.number(),
+  }),
   z.object({
     body: z.string().optional(),
     headers: z.array(z.tuple([z.string(), z.string()])),
