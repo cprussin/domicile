@@ -172,7 +172,8 @@ class ControlChannel : public mojom::ControlChannel {
   void GrabGesture(mojom::GestureGrabPtr grab) override;
   void UngrabGesture(mojom::GestureGrabPtr grab) override;
   void GrabModifierTap(mojom::TapModifier modifier,
-                       bool while_inhibited) override;
+                       bool while_inhibited,
+                       base::TimeDelta longest) override;
   void UngrabModifierTap(mojom::TapModifier modifier) override;
   void KeyboardWindowInhibitsShortcuts(bool inhibits) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
@@ -252,7 +253,7 @@ class ControlChannel : public mojom::ControlChannel {
   void ForwardGesture(const ui::NativeGesture& gesture);
   // A tap of a modifier alone this page grabbed; see DeskModifierTaps.
   // Posted here for DeliverShortcut's reason.
-  void DeliverModifierTap(TapModifier modifier);
+  void DeliverModifierTap(TapModifier modifier, base::TimeDelta held);
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
   void SomebodyIsHere(const std::string& input);

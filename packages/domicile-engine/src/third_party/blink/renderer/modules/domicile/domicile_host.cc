@@ -901,6 +901,7 @@ void DomicileHost::themeCaptured(ScriptState*, V8DomicileTheme theme,
 void DomicileHost::grabShortcut(ScriptState*,
                                 const String& written,
                                 bool while_inhibited,
+                                uint32_t longest_tap,
                                 ExceptionState& exception_state) {
   if (const auto modifier = ParseDomicileTap(written)) {
     if (!Ready(exception_state)) {
@@ -912,12 +913,14 @@ void DomicileHost::grabShortcut(ScriptState*,
         found = &grabbed;
       }
     }
+    const base::TimeDelta longest = base::Milliseconds(longest_tap);
     if (found) {
       ++found->holds;
       found->while_inhibited |= while_inhibited;
+      found->longest = std::max(found->longest, longest);
     } else {
-      taps_.push_back(
-          GrabbedTap{written, *modifier, /*holds=*/1, while_inhibited});
+      taps_.push_back(GrabbedTap{written, *modifier, /*holds=*/1,
+                                 while_inhibited, longest});
     }
     RegrabTap(*modifier);
     return;
@@ -1115,16 +1118,19 @@ void DomicileHost::TellWhetherTheKeyboardWindowInhibits() {
 void DomicileHost::RegrabTap(domicile::mojom::blink::TapModifier modifier) {
   bool grabbed = false;
   bool while_inhibited = false;
+  base::TimeDelta longest;
   for (const GrabbedTap& tap : taps_) {
     if (tap.modifier == modifier) {
       grabbed = true;
       while_inhibited |= tap.while_inhibited;
+      longest = std::max(longest, tap.longest);
     }
   }
   if (grabbed) {
     // Sent again on each grab: the browser process keeps the latest
-    // `while_inhibited`, which an ungrab of another name can take away.
-    channel_->GrabModifierTap(modifier, while_inhibited);
+    // `while_inhibited` and `longest`, which an ungrab of another name can
+    // take away. `ModifierTapped` holds each name to its own `longest`.
+    channel_->GrabModifierTap(modifier, while_inhibited, longest);
   } else {
     channel_->UngrabModifierTap(modifier);
   }
@@ -2014,7 +2020,8 @@ void DomicileHost::GesturePerformed(
 }
 
 void DomicileHost::ModifierTapped(
-    domicile::mojom::blink::TapModifier modifier) {
+    domicile::mojom::blink::TapModifier modifier,
+    base::TimeDelta held) {
   using domicile::mojom::blink::TapModifier;
   // A tap is over when it is heard: the key is already up. So `shortcut` and
   // `shortcutrelease` together, for each name it is grabbed by, with no key
@@ -2025,7 +2032,7 @@ void DomicileHost::ModifierTapped(
   const bool meta = modifier == TapModifier::kMeta;
   Vector<String> names;
   for (const GrabbedTap& tap : taps_) {
-    if (tap.modifier == modifier) {
+    if (tap.modifier == modifier && held <= tap.longest) {
       names.push_back(tap.written);
     }
   }

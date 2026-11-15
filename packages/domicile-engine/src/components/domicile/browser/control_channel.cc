@@ -822,11 +822,12 @@ void ControlChannel::UngrabGesture(mojom::GestureGrabPtr grab) {
 }
 
 void ControlChannel::GrabModifierTap(mojom::TapModifier modifier,
-                                     bool while_inhibited) {
+                                     bool while_inhibited,
+                                     base::TimeDelta longest) {
   // Recorded here, for GrabGesture's reason: aura sees every key in this
   // process, and a modifier alone means nothing to the compositor.
   DeskModifierTaps::Get().Grab(taps_, TapModifierFromMojo(modifier),
-                               while_inhibited);
+                               while_inhibited, longest);
 }
 
 void ControlChannel::UngrabModifierTap(mojom::TapModifier modifier) {
@@ -1059,9 +1060,10 @@ void ControlChannel::DeliverGesture(const ui::NativeGesture& gesture) {
   }
 }
 
-void ControlChannel::DeliverModifierTap(TapModifier modifier) {
+void ControlChannel::DeliverModifierTap(TapModifier modifier,
+                                        base::TimeDelta held) {
   if (client_) {
-    client_->ModifierTapped(TapModifierToMojo(modifier));
+    client_->ModifierTapped(TapModifierToMojo(modifier), held);
   }
 }
 
