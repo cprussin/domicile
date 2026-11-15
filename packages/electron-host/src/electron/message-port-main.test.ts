@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import type { MessagePortMain, PortRequest } from "./message-port-main";
-import { createPagePorts, MessageChannelMain } from "./message-port-main";
+import type {
+  LinkedPortRequest,
+  MessagePortMain,
+  PortRequest,
+} from "./message-port-main";
+import {
+  createLinkedPorts,
+  createPagePorts,
+  MessageChannelMain,
+} from "./message-port-main";
 
 /** Resolves with the data of the next message on `port`. */
 const nextMessage = (port: MessagePortMain) =>
@@ -60,7 +68,7 @@ describe(createPagePorts, () => {
     ports.give(2, [port2]);
 
     expect(() => ports.give(2, [port2])).toThrow(
-      "a MessagePortMain goes to a page once, from its MessageChannelMain",
+      "a MessagePortMain goes elsewhere once, from its MessageChannelMain",
     );
   });
 
@@ -110,5 +118,66 @@ describe(createPagePorts, () => {
     ports.gone(2);
 
     expect(heard).toEqual(["window 2"]);
+  });
+});
+
+describe(createLinkedPorts, () => {
+  const linkedPorts = () => {
+    const sent: LinkedPortRequest[] = [];
+    let next = 1;
+    return {
+      ports: createLinkedPorts(
+        (request) => sent.push(request),
+        () => `u${next++}`,
+      ),
+      sent,
+    };
+  };
+
+  it("carries a given port's partner's messages as they are, unlike a page's", () => {
+    const { ports, sent } = linkedPorts();
+    const { port1, port2 } = new MessageChannelMain();
+    const bytes = new Uint8Array([1, 2]);
+
+    expect(ports.give([port2])).toEqual(["u1"]);
+    port1.postMessage({ bytes, gap: undefined });
+    port1.close();
+
+    expect(sent).toEqual([
+      { data: { bytes, gap: undefined }, port: "u1", type: "post" },
+      { port: "u1", type: "close" },
+    ]);
+  });
+
+  it("carries the other side's messages and close to the partner", async () => {
+    const { ports } = linkedPorts();
+    const { port1, port2 } = new MessageChannelMain();
+    ports.give([port2]);
+    const closed = new Promise<void>((resolve) => {
+      port1.once("close", () => resolve());
+    });
+    const message = nextMessage(port1);
+    port1.start();
+
+    ports.message("u1", "hi");
+    ports.closed("u1");
+
+    expect(await message).toBe("hi");
+    await closed;
+  });
+
+  it("closes every port when the other side goes", () => {
+    const { ports } = linkedPorts();
+    const heard: string[] = [];
+    const [taken] = ports.take(["c1"]);
+    const { port1, port2 } = new MessageChannelMain();
+    ports.give([port2]);
+    taken?.on("close", () => heard.push("taken"));
+    port1.on("close", () => heard.push("given"));
+
+    ports.gone();
+    ports.message("c1", "late");
+
+    expect(heard).toEqual(["taken", "given"]);
   });
 });
