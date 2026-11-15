@@ -10,15 +10,18 @@
 # Set up as guard-electron-session.sh is, with an HTTP server of its own on
 # 127.0.0.1, but under a nested Wayland compositor (under-wayland.sh), as
 # guard-webview-permissions.sh is: PermissionRequestManager::AddRequest denies
-# every request on a headless screen before any prompt. No control run:
-# notifications granted and the location denied are each other's control. A python client plays `electron-host`, grants notifications and
-# denies everything else, and asserts:
+# every request on a headless screen before any prompt. A python client plays
+# `electron-host`, grants window management and denies everything else, and
+# asserts:
 #
 #   ready    the socket took the hello
-#   asked    the app heard the page's notifications request, as its window's
-#   granted  the page was granted notifications
+#   asked    the app heard the page's window-management request, as its
+#            window's
+#   granted  the page got the screens' details
 #   denied   the app heard the page's geolocation request, and the page was
 #            denied its location
+#
+# No control run: the grant and the denial are each other's control.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -145,8 +148,8 @@ def send(request):
 
 def hear_until(wanted):
     """Reads events until one matches `wanted` or time runs out, answering
-    each permission request as it comes: notifications granted, the rest
-    denied."""
+    each permission request as it comes: window management granted, the
+    rest denied."""
     for event in heard:
         if wanted(event):
             return event
@@ -164,7 +167,7 @@ def hear_until(wanted):
         heard.append(event)
         if event.get("type") == "permission_request":
             send({"type": "permission_answer", "ask": event["ask"],
-                  "granted": event.get("permission") == "notifications"})
+                  "granted": event.get("permission") == "window-management"})
         if wanted(event):
             return event
     return None
@@ -187,7 +190,7 @@ send({"type": "open_window", "window": 1, "url": origin + "/index.html"})
 done = hear_until(lambda e: e.get("type") == "title_changed" and
                   e.get("window") == 1 and
                   e.get("title", "").startswith("done|"))
-# "done|<Notification.requestPermission()>|<getCurrentPosition's>"
+# "done|<getScreenDetails()'s>|<getCurrentPosition's>"
 says = ((done or {}).get("title", "").split("|") + ["", ""])[1:]
 
 def asked(permission):
@@ -199,7 +202,7 @@ def asked(permission):
 
 print("measured: %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
-    asked("notifications"),
+    asked("window-management"),
     says[0] == "granted",
     asked("geolocation") and says[1] == "error 1"),
     flush=True)
@@ -225,13 +228,13 @@ requests, granting one and denying the other"
 guard-electron-socket.sh is the guard for that"
   ;;
 "1 0 "*)
-  FAILURE="the app never heard its page's notifications request as its \\
+  FAILURE="the app never heard its page's window-management request as its \\
 window's: MakePrompt must hand an Electron page's prompt to \\
 ElectronPermissionPrompt while its session HandlesPermissions, and \\
 ElectronPermissionFor must name it"
   ;;
 "1 1 0 "*)
-  FAILURE="the page was not granted what the app's handler granted: \\
+  FAILURE="the page did not get the screens' details the app's handler granted: \\
 ElectronPermissionPrompt::Decide must Accept"
   ;;
 "1 1 1 0")
