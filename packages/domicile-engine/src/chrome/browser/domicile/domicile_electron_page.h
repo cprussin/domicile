@@ -59,11 +59,16 @@ class ElectronPage final : public content::WebContentsObserver,
   // content::WebContentsObserver:
   void ReadyToCommitNavigation(content::NavigationHandle* navigation) override;
   // Each tells the app the page's new size, for getContentBounds and
-  // "resize". Both: which one fires for a guest's page is Chromium's, and a
-  // size heard twice is sent once.
+  // "resize". All of them: which one fires for a guest's page is Chromium's,
+  // and a size heard twice is sent once. A page the shell sized before its
+  // document's widget was made hears no resize, so a new page and a finished
+  // load report the size too.
   void PrimaryMainFrameWasResized(bool width_changed) override;
   void FrameSizeChanged(content::RenderFrameHost* frame,
                         const gfx::Size& frame_size) override;
+  void PrimaryPageChanged(content::Page& page) override;
+  void DidFinishLoad(content::RenderFrameHost* frame,
+                     const GURL& url) override;
 
   // mojom::ElectronFrameHost:
   void Send(const std::string& channel, const std::string& args_json) override;

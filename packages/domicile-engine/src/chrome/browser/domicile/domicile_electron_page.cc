@@ -119,6 +119,17 @@ void ElectronPage::FrameSizeChanged(content::RenderFrameHost* frame,
   }
 }
 
+void ElectronPage::PrimaryPageChanged(content::Page& page) {
+  ReportSize("PrimaryPageChanged");
+}
+
+void ElectronPage::DidFinishLoad(content::RenderFrameHost* frame,
+                                 const GURL& url) {
+  if (frame->IsInPrimaryMainFrame()) {
+    ReportSize("DidFinishLoad");
+  }
+}
+
 void ElectronPage::ReportSize(std::string_view heard) {
   content::RenderWidgetHostView* view =
       web_contents()->GetRenderWidgetHostView();
@@ -127,7 +138,8 @@ void ElectronPage::ReportSize(std::string_view heard) {
   // prefix.
   LOG(INFO) << "domicile: an Electron page heard " << heard << ", at "
             << (view ? size.ToString() : std::string("no view"));
-  if (view != nullptr && size != size_) {
+  // A view the app hasn't placed has no size yet: nothing to tell.
+  if (view != nullptr && !size.IsEmpty() && size != size_) {
     size_ = size;
     calls_.resized.Run(size.width(), size.height());
   }
