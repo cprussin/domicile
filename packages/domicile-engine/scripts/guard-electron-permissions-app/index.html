@@ -1,12 +1,16 @@
 <!doctype html>
 <title>served</title>
-<!-- Served by the guard's own server at http://127.0.0.1/. Asks for
-     notifications, then for the location, and says what each answer was.
+<!-- Served by the guard's own server at http://127.0.0.1/. Asks for the
+     screens' details (window management), then for the location, and says
+     what each answer was.
      The title says everything at once, as the desk may report only its
      last. -->
 <script>
   (async () => {
-    const notifications = await Notification.requestPermission();
+    const screens = await window.getScreenDetails().then(
+      () => "granted",
+      (error) => `refused ${error.name}`,
+    );
     const location = await new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         () => resolve("position"),
@@ -14,6 +18,6 @@
         { timeout: 60_000 },
       );
     });
-    document.title = ["done", notifications, location].join("|");
+    document.title = ["done", screens, location].join("|");
   })();
 </script>
