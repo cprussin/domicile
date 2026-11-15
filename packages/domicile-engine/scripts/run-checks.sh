@@ -125,6 +125,8 @@ TOGETHER=(
   guard-app-module
   guard-electron-socket
   guard-electron-preload
+  guard-electron-protocol
+  guard-electron-schemes
   guard-video-codecs
   guard-browser-brand
 )
@@ -147,6 +149,8 @@ ONCE=(
   guard-desktop-geometry
   guard-domicile-fetch
   guard-electron-preload
+  guard-electron-protocol
+  guard-electron-schemes
   guard-electron-socket
   guard-held-moments
   guard-pdf-scaled-text

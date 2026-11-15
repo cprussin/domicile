@@ -33,6 +33,7 @@
 #include "components/domicile/browser/electron_protocol.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/common/domicile_scheme.h"
+#include "components/domicile/common/electron_schemes.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
@@ -59,12 +60,15 @@ bool ConnectedByUs(const net::UnixDomainServerSocket::Credentials& peer) {
 // The desk as an Electron app sees it: the shell profile's browser windows.
 class ChromeElectronDesk final : public ElectronDesk {
  public:
-  std::optional<std::string> Open(const GURL& url,
-                                  const ElectronHello& hello,
-                                  const std::string& preload,
-                                  ElectronPageCalls calls) override {
-    return OpenElectronWindow(url, hello.app_id, hello.partition, preload,
-                              std::move(calls));
+  std::optional<std::string> Open(
+      const GURL& url,
+      const std::string& app_id,
+      const WebViewPartition& partition,
+      const std::string& preload,
+      ElectronPageCalls calls,
+      base::WeakPtr<ElectronSession> session) override {
+    return OpenElectronWindow(url, app_id, partition, preload, std::move(calls),
+                              std::move(session));
   }
   void Load(const std::string& id, const GURL& url) override {
     LoadBrowserWindow(id, url);
@@ -107,7 +111,9 @@ class ChromeElectronDesk final : public ElectronDesk {
 class AppOnUIThread {
  public:
   explicit AppOnUIThread(ElectronApp::Send send)
-      : app_(desk_, std::move(send)),
+      : app_(desk_,
+             std::move(send),
+             ElectronSchemesIn(*base::CommandLine::ForCurrentProcess())),
         listing_(WatchBrowserWindowListing(
             base::BindRepeating(&AppOnUIThread::Listed,
                                 base::Unretained(this)))),
