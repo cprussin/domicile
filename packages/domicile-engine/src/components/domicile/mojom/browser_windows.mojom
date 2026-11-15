@@ -79,6 +79,13 @@ struct BrowserWindow {
   // Whether the app hid the view. A shell keeps a hidden view laid out, as a
   // page draws only while laid out, and out of sight.
   bool hidden;
+  // An Electron app window's menu bar, for the shell to draw under its tab:
+  // its entries as JSON (see ElectronMenuJson in electron_protocol.h), empty
+  // for none; whether it shows; and whether it hides until Alt, as Electron's
+  // autoHideMenuBar. Click an entry with BrowserWindows.ClickMenu.
+  string menu;
+  bool menu_bar_visible;
+  bool menu_bar_auto_hide;
 };
 
 // What OpenApp does when an app window with its `app_id` is already open.
@@ -124,6 +131,11 @@ interface BrowserWindows {
   // first, and stays open if the shell answers Cancel. An unknown id is a
   // close that raced another, and does nothing.
   Close(string id);
+
+  // The user clicked entry `command` of window `id`'s menu bar; its app runs
+  // the entry. A window that closed meanwhile, or has no menu, is a click
+  // that raced it and does nothing. A `command` below 1 is a bad message.
+  ClickMenu(string id, int32 command);
 };
 
 // Browser -> renderer.

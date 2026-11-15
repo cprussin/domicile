@@ -321,6 +321,11 @@ class CORE_EXPORT HTMLWebViewElement final
                         bool meta_key,
                         bool repeat) override;
 
+  // Dispatches a modifier the page let go of as a `domicile-guest-keyup`
+  // KeyboardEvent on this element. See UnhandledModifierUp in
+  // components/domicile/mojom/web_view_guest.mojom.
+  void UnhandledModifierUp(const String& key, const String& code) override;
+
   // Dispatches `domicile-key-delivered`, which names no key. See KeyDelivered
   // in components/domicile/mojom/web_view_guest.mojom.
   void KeyDelivered() override;

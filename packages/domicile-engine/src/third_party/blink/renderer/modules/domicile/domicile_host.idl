@@ -448,6 +448,13 @@
   [CallWith=ScriptState, RaisesException] undefined closeBrowserWindow(
       DOMString id);
 
+  // The user clicked entry `command` of window `id`'s menu bar
+  // (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a
+  // TypeError for a `command` below 1. A window that closed meanwhile, or has
+  // no menu, does nothing.
+  [CallWith=ScriptState, RaisesException] undefined clickBrowserWindowMenu(
+      DOMString id, long command);
+
   // The TVs the desktop can cast to: the Google Cast receivers the browser
   // finds, by name. Null until the browser lists them, which it does as soon
   // as this page listens; empty when the profile turns casting off. No

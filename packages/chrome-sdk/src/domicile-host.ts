@@ -325,6 +325,23 @@ export type DomicileBrowserWindow = {
    * sight, as a page draws only while laid out. False for every window.
    */
   readonly isHidden: boolean;
+  /**
+   * An Electron app window's menu bar, for the shell to draw under its tab:
+   * the menu's entries as JSON, null for none. Each entry has a whole `id`
+   * from 1, a `type` (normal, separator, submenu, checkbox or radio), a
+   * `label` with Electron's `&` mnemonics, `enabled`, `visible` and
+   * `checked`, and maybe an `accelerator` as the app wrote it, an `icon` (a
+   * PNG data: URL) and a `submenu` of entries. Click an entry with
+   * DomicileHost.clickBrowserWindowMenu.
+   */
+  readonly menu: string | null;
+  /**
+   * Whether the bar shows, as setMenuBarVisibility says. With
+   * `menuBarAutoHide`, as Electron's autoHideMenuBar, it shows while Alt is
+   * held or after Alt is tapped. A window with no menu has true and false.
+   */
+  readonly menuBarVisible: boolean;
+  readonly menuBarAutoHide: boolean;
 };
 
 /**
@@ -1006,6 +1023,13 @@ export type DomicileHost = {
    * on its <webview>; Cancel keeps the window. An unknown id does nothing.
    */
   closeBrowserWindow(id: string): void;
+  /**
+   * The user clicked entry `command` of window `id`'s menu bar
+   * (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a
+   * TypeError for a `command` below 1. A window that closed meanwhile, or has
+   * no menu, does nothing.
+   */
+  clickBrowserWindowMenu(id: string, command: number): void;
   /**
    * Casts the desktop to TV `id`: its picture is what the desktop's ScreenCast
    * portal picks, which asks this page, and its sound is the desktop's.

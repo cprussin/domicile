@@ -129,6 +129,7 @@ TOGETHER=(
   guard-electron-socket
   guard-electron-preload
   guard-electron-protocol
+  guard-electron-menu-bar
   guard-electron-schemes
   guard-electron-session
   guard-electron-views
@@ -154,6 +155,7 @@ ONCE=(
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch
+  guard-electron-menu-bar
   guard-electron-preload
   guard-electron-protocol
   guard-electron-permissions

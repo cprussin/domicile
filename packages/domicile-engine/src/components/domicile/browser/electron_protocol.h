@@ -196,6 +196,19 @@ struct ElectronSetViews {
   std::vector<ElectronViewPlacement> views;
 };
 
+// Menu.setApplicationMenu, win.setMenu, setMenuBarVisibility and
+// setAutoHideMenuBar: the menu bar the shell draws under `window`'s tab.
+struct ElectronSetMenuBar {
+  ElectronWindow window;
+  // The menu's entries as JSON, checked and with only the keys the shell
+  // reads; empty for no menu. See ElectronMenuJson.
+  std::string menu;
+  // Whether the bar shows. With `auto_hide`, it shows while Alt is held or
+  // after Alt is tapped, as Electron's autoHideMenuBar.
+  bool visible = true;
+  bool auto_hide = false;
+};
+
 struct ElectronLoadUrl {
   ElectronWindow window;
   GURL url;
@@ -544,7 +557,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSessionCall,
                                      ElectronPermissionHandler,
                                      ElectronPermissionAnswer,
-                                     ElectronSetViews>;
+                                     ElectronSetViews,
+                                     ElectronSetMenuBar>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -590,6 +604,16 @@ std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
 // The size, in CSS pixels, the shell gave window or view `window`'s page.
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
+// The user clicked entry `command` of `window`'s menu bar.
+std::string ElectronMenuClicked(ElectronWindow window, int command);
+
+// `menu`, a list of menu entries, as the JSON the shell reads, or why it is
+// not one. Each entry is an object with a whole "id" from 1, a "type"
+// (normal, separator, submenu, checkbox or radio), a string "label", true or
+// false "enabled", "visible" and "checked", and optionally a string
+// "accelerator", a PNG data: URL "icon" and a "submenu" list of entries.
+base::expected<std::string, std::string> ElectronMenuJson(
+    const base::ListValue& menu);
 std::string ElectronIpcMessage(ElectronWindow window,
                                std::string_view channel,
                                const base::ListValue& args);

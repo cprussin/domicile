@@ -108,6 +108,10 @@ void ElectronPage::ClosePort(const std::string& port) {
   }
 }
 
+void ElectronPage::MenuClicked(int command) {
+  calls_.menu_clicked.Run(command);
+}
+
 void ElectronPage::PrimaryMainFrameWasResized(bool width_changed) {
   ReportSize("PrimaryMainFrameWasResized");
 }

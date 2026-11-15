@@ -64,6 +64,10 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("set views of " + id);
     held[id] = std::move(views);
   }
+  void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) override {
+    calls.push_back("set menu bar of " + id);
+    menu_bars[id] = std::move(bar);
+  }
   void SendToPage(const std::string& id,
                   const std::string& channel,
                   const std::string& args_json) override {
@@ -140,6 +144,7 @@ class FakeDesk final : public ElectronDesk {
   std::vector<std::string> calls;
   // The views each window holds, by id, as SetViews last set them.
   std::map<std::string, std::vector<ElectronDeskView>> held;
+  std::map<std::string, ElectronDeskMenuBar> menu_bars;
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
@@ -396,6 +401,53 @@ TEST_F(ElectronAppTest, AWindowHoldsTheViewsTheAppPlaces) {
                  .width = 3,
                  .height = 4,
                  .hidden = true}}));
+}
+
+TEST_F(ElectronAppTest, AWindowHasTheMenuBarTheAppSets) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+
+  app_->Take(R"({"type":"set_menu_bar","window":1,"visible":false,)"
+             R"("auto_hide":true,"menu":[{"id":1,"type":"normal",)"
+             R"("label":"Quit","enabled":true,"visible":true,)"
+             R"("checked":false}]})");
+  app_->Take(R"({"type":"set_menu_bar","window":2,"visible":true,)"
+             R"("auto_hide":false,"menu":null})");
+  app_->Take(R"({"type":"set_menu_bar","window":9,"visible":true,)"
+             R"("auto_hide":false,"menu":null})");
+
+  EXPECT_EQ(desk_.menu_bars.at("10"),
+            (ElectronDeskMenuBar{
+                .menu = R"([{"checked":false,"enabled":true,"id":1,)"
+                        R"("label":"Quit","type":"normal","visible":true}])",
+                .visible = false,
+                .auto_hide = true}));
+  EXPECT_FALSE(desk_.menu_bars.contains("11"));
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window has a menu bar\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 9 is not "
+                   "open\",\"window\":9}\n"}));
+}
+
+TEST_F(ElectronAppTest, AClickOnTheMenuBarReachesTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+
+  page.menu_clicked.Run(7);
+  EXPECT_EQ(sent_, Lines{"{\"command\":7,\"type\":\"menu_clicked\","
+                         "\"window\":3}\n"});
+
+  // A click that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.menu_clicked.Run(8);
+  EXPECT_TRUE(sent_.empty());
 }
 
 TEST_F(ElectronAppTest, OnlyAWindowHoldsViewsAndOnlyViews) {

@@ -75,6 +75,9 @@ class ChromeElectronDesk final : public ElectronDesk {
                 std::vector<ElectronDeskView> views) override {
     SetElectronViews(id, std::move(views));
   }
+  void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) override {
+    SetElectronMenuBar(id, std::move(bar));
+  }
   void Load(const std::string& id, const GURL& url) override {
     LoadBrowserWindow(id, url);
   }
