@@ -273,6 +273,39 @@ class DeskWindows final : public base::SupportsUserData::Data,
     Changed();
   }
 
+  // Window `id`'s menu bar. The app made sure `id` is one of its windows; one
+  // that closed meanwhile is skipped.
+  void SetMenuBar(const std::string& id, ElectronDeskMenuBar bar) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to set the menu bar of browser window "
+                   << id << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id
+                         << " was given a menu bar and is a view";
+    if (window->menu_bar == bar) {
+      return;
+    }
+    window->menu_bar = std::move(bar);
+    Changed();
+  }
+
+  // The user clicked entry `command` of window `id`'s menu bar. A window that
+  // closed meanwhile, or that has no menu, is a click that raced it.
+  void ClickMenu(const std::string& id, int command) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end() || window->menu_bar.menu.empty()) {
+      LOG(WARNING) << "domicile: a click on the menu of browser window " << id
+                   << ", which has none.";
+      return;
+    }
+    ElectronPage* page = ElectronPage::FromWebContents(&window->guest->contents());
+    CHECK(page) << "browser window " << id
+                << " has a menu bar and no Electron app";
+    page->MenuClicked(command);
+  }
+
   // Opens an app window at an app module's `url`, pinned to `app_host`. See
   // WebViewGuest::PinToApp.
   bool OpenAppModule(const GURL& url, const std::string& app_host) {
@@ -514,6 +547,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     int y = 0;
     bool hidden = false;
     int stack = 0;
+    // An Electron app window's menu bar, which the shell draws under its tab.
+    ElectronDeskMenuBar menu_bar;
   };
 
   // One window as the shell's list has it.
@@ -533,7 +568,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
         partition.has_value() ? WebViewPartitionAttribute(*partition)
                               : std::string(),
         window.app, window.app_id, window.captures > 0, window.parent, window.x,
-        window.y, window.hidden);
+        window.y, window.hidden, window.menu_bar.menu, window.menu_bar.visible,
+        window.menu_bar.auto_hide);
   }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
@@ -831,6 +867,15 @@ class BrowserWindowsService final
 
   void Close(const std::string& id) override { windows_->AskToClose(id); }
 
+  void ClickMenu(const std::string& id, int32_t command) override {
+    if (command < 1) {
+      ReportBadMessageAndDeleteThis(
+          "domicile: a menu entry was clicked by a number no entry has.");
+      return;
+    }
+    windows_->ClickMenu(id, command);
+  }
+
   // DeskWindows::Observer:
   void OnWindowsChanged() override {
     if (client_.is_bound()) {
@@ -978,6 +1023,12 @@ void SetElectronViews(const std::string& id,
                       std::vector<ElectronDeskView> views) {
   if (DeskWindows* windows = ShellDeskWindows()) {
     windows->SetViews(id, std::move(views));
+  }
+}
+
+void SetElectronMenuBar(const std::string& id, ElectronDeskMenuBar bar) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetMenuBar(id, std::move(bar));
   }
 }
 

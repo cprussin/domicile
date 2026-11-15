@@ -52,6 +52,9 @@ class ElectronPage final : public content::WebContentsObserver,
   void DeliverPost(const std::string& channel,
                    const std::string& message_json,
                    const std::vector<std::string>& ports);
+  // The user clicked entry `command` of the window's menu bar.
+  void MenuClicked(int command);
+
   // A message on a port, and the main process closing one:
   void DeliverToPort(const std::string& port, const std::string& data_json);
   void ClosePort(const std::string& port);

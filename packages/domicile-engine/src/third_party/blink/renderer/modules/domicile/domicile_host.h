@@ -296,6 +296,10 @@ class MODULES_EXPORT DomicileHost final
                                                    const String& selector,
                                                    ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  void clickBrowserWindowMenu(ScriptState*,
+                              const String& id,
+                              int32_t command,
+                              ExceptionState&);
 
   // The TVs, or null until the browser has listed them.
   const FrozenArray<DomicileCastSink>* castSinks() const {
