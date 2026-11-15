@@ -454,5 +454,121 @@ TEST(ElectronProtocolTest, SyncPortAndPageEventsAreOneLineEach) {
                                  "\n");
 }
 
+TEST(ElectronProtocolTest, WebRequestListenNamesTheSessionsEvents) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"web_request_listen","session":"persist:x",)"
+      R"("events":["before_request","completed","headers_received"]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronWebRequestListen>(*request),
+            (ElectronWebRequestListen{
+                .session = "persist:x",
+                .events = {ElectronWebRequestEvent::kBeforeRequest,
+                           ElectronWebRequestEvent::kHeadersReceived,
+                           ElectronWebRequestEvent::kCompleted}}));
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_listen","session":"",)"
+                       R"("events":["before_flying"]})"),
+            "\"events\" must name webRequest events");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_listen","session":""})"),
+            "\"events\" must name webRequest events");
+}
+
+TEST(ElectronProtocolTest, AWebRequestAnswerSaysWhatToChange) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"web_request_answer","ask":3,"cancel":false,)"
+      R"("redirect_url":"https://b.test/","request_headers":[["a","1"]],)"
+      R"("response_headers":[["b","2"],["b","3"]],)"
+      R"("status_line":"HTTP/1.1 200 OK"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronWebRequestAnswer>(*request),
+            (ElectronWebRequestAnswer{
+                .ask = 3,
+                .redirect_url = GURL("https://b.test/"),
+                .request_headers = ElectronHeaders{{"a", "1"}},
+                .response_headers = ElectronHeaders{{"b", "2"}, {"b", "3"}},
+                .status_line = "HTTP/1.1 200 OK"}));
+}
+
+TEST(ElectronProtocolTest, AnEmptyWebRequestAnswerChangesNothing) {
+  const auto request =
+      ParseElectronRequest(R"({"type":"web_request_answer","ask":4})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronWebRequestAnswer>(*request),
+            ElectronWebRequestAnswer{.ask = 4});
+}
+
+TEST(ElectronProtocolTest, ABadWebRequestAnswerIsRefused) {
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer"})"),
+            "\"ask\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("redirect_url":"nowhere"})"),
+            "\"redirect_url\" must be a URL");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("cancel":"yes"})"),
+            "\"cancel\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("request_headers":[["a b","1"]]})"),
+            "\"a b\" is not a header name");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("status_line":"200 OK"})"),
+            "\"status_line\" must be an HTTP status line");
+}
+
+TEST(ElectronProtocolTest, AWebRequestEventIsOneLine) {
+  EXPECT_EQ(ElectronWebRequest(
+                ElectronWebRequestEvent::kBeforeSendHeaders, 3, 1, "persist:x",
+                ElectronWebRequestDetails{
+                    .id = 7,
+                    .url = GURL("https://a.test/"),
+                    .method = "GET",
+                    .resource_type = "mainFrame",
+                    .referrer = "",
+                    .request_headers = ElectronHeaders{{"a", "1"}}}),
+            R"({"ask":3,"event":"before_send_headers","id":7,"method":"GET",)"
+            R"("referrer":"","request_headers":[["a","1"]],)"
+            R"("resource_type":"mainFrame","session":"persist:x",)"
+            R"("type":"web_request","url":"https://a.test/","window":1})"
+            "\n");
+  EXPECT_EQ(ElectronWebRequest(ElectronWebRequestEvent::kErrorOccurred,
+                               std::nullopt, std::nullopt, "",
+                               ElectronWebRequestDetails{
+                                   .id = 8,
+                                   .url = GURL("https://a.test/x.js"),
+                                   .method = "GET",
+                                   .resource_type = "script",
+                                   .referrer = "https://a.test/",
+                                   .status_code = 404,
+                                   .status_line = "HTTP/1.1 404 Not Found",
+                                   .error = "net::ERR_ABORTED",
+                                   .from_cache = true,
+                                   .ip = "192.0.2.1"}),
+            R"({"error":"net::ERR_ABORTED","event":"error_occurred",)"
+            R"("from_cache":true,"id":8,"ip":"192.0.2.1","method":"GET",)"
+            R"("referrer":"https://a.test/","resource_type":"script",)"
+            R"("session":"","status_code":404,)"
+            R"("status_line":"HTTP/1.1 404 Not Found","type":"web_request",)"
+            R"("url":"https://a.test/x.js"})"
+            "\n");
+}
+
+TEST(ElectronProtocolTest, OnlyBeforeRequestSendHeadersAndHeadersReceivedWait) {
+  EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
+      ElectronWebRequestEvent::kBeforeRequest));
+  EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
+      ElectronWebRequestEvent::kBeforeSendHeaders));
+  EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
+      ElectronWebRequestEvent::kHeadersReceived));
+  for (ElectronWebRequestEvent event :
+       {ElectronWebRequestEvent::kSendHeaders,
+        ElectronWebRequestEvent::kResponseStarted,
+        ElectronWebRequestEvent::kBeforeRedirect,
+        ElectronWebRequestEvent::kCompleted,
+        ElectronWebRequestEvent::kErrorOccurred}) {
+    EXPECT_FALSE(IsBlockingElectronWebRequestEvent(event));
+  }
+}
+
 }  // namespace
 }  // namespace domicile

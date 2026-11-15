@@ -23,8 +23,10 @@
 #include "base/strings/string_view_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
+#include "chrome/browser/domicile/domicile_electron_web_request.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/browser/electron_protocol.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "content/public/browser/file_url_loader.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -437,9 +439,11 @@ class ElectronURLLoaderFactory final
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
       base::WeakPtr<ElectronSession> session,
       mojo::PendingRemote<network::mojom::URLLoaderFactory> network,
+      std::optional<std::string> window,
       base::SelfDeletingPassKey key)
       : network::SelfDeletingURLLoaderFactory(std::move(receiver), key),
-        session_(std::move(session)) {
+        session_(std::move(session)),
+        window_(std::move(window)) {
     if (network) {
       network_.Bind(std::move(network));
     }
@@ -458,6 +462,12 @@ class ElectronURLLoaderFactory final
     if (session_ && session_->Handles(request.url.scheme())) {
       ElectronURLLoader::Start(session_, request, std::move(loader),
                                std::move(client));
+    } else if (network_ && session_ && session_->ListensForWebRequests()) {
+      mojo::PendingRemote<network::mojom::URLLoaderFactory> network;
+      network_->Clone(network.InitWithNewPipeAndPassReceiver());
+      StartElectronWebRequest(session_, window_, std::move(network), request_id,
+                              options, request, std::move(loader),
+                              std::move(client), traffic_annotation);
     } else if (network_) {
       network_->CreateLoaderAndStart(std::move(loader), request_id, options,
                                      request, std::move(client),
@@ -476,6 +486,9 @@ class ElectronURLLoaderFactory final
 
   const base::WeakPtr<ElectronSession> session_;
   mojo::Remote<network::mojom::URLLoaderFactory> network_;
+  // The desk window whose page loads through this, for webRequest's
+  // listeners.
+  const std::optional<std::string> window_;
 };
 
 mojo::PendingRemote<network::mojom::URLLoaderFactory> MakeFactory(
@@ -483,7 +496,7 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory> MakeFactory(
   mojo::PendingRemote<network::mojom::URLLoaderFactory> remote;
   base::MakeSelfDeleting<ElectronURLLoaderFactory>(
       remote.InitWithNewPipeAndPassReceiver(), std::move(session),
-      mojo::PendingRemote<network::mojom::URLLoaderFactory>());
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>(), std::nullopt);
   return remote;
 }
 
@@ -537,10 +550,13 @@ void ProxyElectronNetworkLoads(content::RenderFrameHost* frame,
     return;
   }
   // Every load of the page, whether or not the app handles http or https
-  // yet: it may start to.
+  // or listens for its requests yet: it may start to.
+  const WebViewGuest* guest = WebViewGuest::FromWebContents(
+      content::WebContents::FromRenderFrameHost(frame));
   auto [receiver, network] = builder.Append();
   base::MakeSelfDeleting<ElectronURLLoaderFactory>(
-      std::move(receiver), std::move(session), std::move(network));
+      std::move(receiver), std::move(session), std::move(network),
+      guest ? std::optional(guest->window_id()) : std::nullopt);
 }
 
 bool MayElectronPageLoad(content::WebContents* guest, const GURL& url) {

@@ -687,5 +687,124 @@ TEST_F(ElectronAppTest, AnAppThatGoesDropsItsPagesRequests) {
   EXPECT_FALSE(session);
 }
 
+ElectronWebRequestDetails Details(std::string_view url) {
+  return ElectronWebRequestDetails{.id = 4,
+                                   .url = GURL(url),
+                                   .method = "GET",
+                                   .resource_type = "mainFrame",
+                                   .referrer = ""};
+}
+
+// Writes down the answer a waiting request got.
+ElectronWebRequestAnswered Into(std::optional<ElectronWebRequestAnswer>& got) {
+  return base::BindOnce(
+      [](std::optional<ElectronWebRequestAnswer>* got,
+         ElectronWebRequestAnswer answer) { *got = std::move(answer); },
+      &got);
+}
+
+TEST_F(ElectronAppTest, ASessionListensForTheEventsTheAppNames) {
+  Hello();
+  app_->Take(kOpenOwn);
+  const ElectronSession& own = *desk_.sessions.at("10");
+
+  EXPECT_FALSE(own.ListensForWebRequests());
+  app_->Take(R"({"type":"web_request_listen","session":"",)"
+             R"("events":["before_request","completed"]})");
+  EXPECT_TRUE(own.ListensForWebRequests());
+  EXPECT_TRUE(own.ListensFor(ElectronWebRequestEvent::kBeforeRequest));
+  EXPECT_TRUE(own.ListensFor(ElectronWebRequestEvent::kCompleted));
+  EXPECT_FALSE(own.ListensFor(ElectronWebRequestEvent::kHeadersReceived));
+
+  // Each line names them all.
+  app_->Take(R"({"type":"web_request_listen","session":"",)"
+             R"("events":["headers_received"]})");
+  EXPECT_FALSE(own.ListensFor(ElectronWebRequestEvent::kBeforeRequest));
+  EXPECT_TRUE(own.ListensFor(ElectronWebRequestEvent::kHeadersReceived));
+}
+
+TEST_F(ElectronAppTest, AWaitingRequestIsAnsweredByTheApp) {
+  Hello();
+  app_->Take(kOpenOwn);
+  sent_.clear();
+  std::optional<ElectronWebRequestAnswer> got;
+
+  desk_.sessions.at("10")->AskWebRequest(
+      ElectronWebRequestEvent::kBeforeRequest, "10", Details("https://a.test/"),
+      Into(got));
+  EXPECT_EQ(got, std::nullopt);
+  app_->Take(R"({"type":"web_request_answer","ask":1,)"
+             R"("redirect_url":"https://b.test/"})");
+
+  EXPECT_EQ(sent_, Lines{R"({"ask":1,"event":"before_request","id":4,)"
+                         R"("method":"GET","referrer":"",)"
+                         R"("resource_type":"mainFrame","session":"",)"
+                         R"("type":"web_request","url":"https://a.test/",)"
+                         R"("window":1})"
+                         "\n"});
+  EXPECT_EQ(got, (ElectronWebRequestAnswer{
+                     .ask = 1, .redirect_url = GURL("https://b.test/")}));
+}
+
+TEST_F(ElectronAppTest, ARequestNoWindowMadeNamesNone) {
+  Hello();
+  app_->Take(kOpenOwn);
+  sent_.clear();
+
+  desk_.sessions.at("10")->TellWebRequest(ElectronWebRequestEvent::kCompleted,
+                                          std::nullopt,
+                                          Details("https://a.test/"));
+
+  EXPECT_EQ(sent_, Lines{R"({"event":"completed","id":4,"method":"GET",)"
+                         R"("referrer":"","resource_type":"mainFrame",)"
+                         R"("session":"","type":"web_request",)"
+                         R"("url":"https://a.test/"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AnAnswerChangesOnlyWhatItsEventCan) {
+  Hello();
+  app_->Take(kOpenOwn);
+  std::optional<ElectronWebRequestAnswer> got;
+  desk_.sessions.at("10")->AskWebRequest(
+      ElectronWebRequestEvent::kBeforeRequest, "10", Details("https://a.test/"),
+      Into(got));
+  sent_.clear();
+
+  app_->Take(R"({"type":"web_request_answer","ask":1,)"
+             R"("request_headers":[["a","1"]]})");
+
+  // The app's bug fails the request rather than letting it through as if
+  // the app had not asked for a change.
+  EXPECT_EQ(got, (ElectronWebRequestAnswer{.ask = 1, .cancel = true}));
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"an answer to )"
+                         R"(before_request cannot set request_headers"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AnAnswerNobodyWaitsForIsRefused) {
+  Hello();
+  sent_.clear();
+
+  app_->Take(R"({"type":"web_request_answer","ask":7})");
+
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"no web request is )"
+                         R"(waiting for answer 7"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AnAppThatGoesCancelsItsWaitingRequests) {
+  Hello();
+  app_->Take(kOpenOwn);
+  std::optional<ElectronWebRequestAnswer> got;
+  desk_.sessions.at("10")->AskWebRequest(
+      ElectronWebRequestEvent::kHeadersReceived, "10",
+      Details("https://a.test/"), Into(got));
+
+  app_.reset();
+
+  EXPECT_EQ(got, (ElectronWebRequestAnswer{.ask = 1, .cancel = true}));
+}
+
 }  // namespace
 }  // namespace domicile
