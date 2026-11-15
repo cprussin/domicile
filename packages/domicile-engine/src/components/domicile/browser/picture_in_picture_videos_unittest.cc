@@ -22,6 +22,7 @@
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace domicile {
@@ -178,6 +179,23 @@ TEST_F(PictureInPictureVideosTest, AShellHearsWhereTheVideoIs) {
   EXPECT_EQ(video.duration, 270);
   EXPECT_EQ(video.position, 102);
   EXPECT_EQ(video.playback_rate, 1);
+}
+
+TEST_F(PictureInPictureVideosTest, AShellHearsWhereTheVideoCameFrom) {
+  std::unique_ptr<PictureInPictureVideos::Listing> listing =
+      videos_.List("4", &controls_);
+  mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
+  RecordingClient client;
+  shell->SetClient(client.receiver.BindNewPipeAndPassRemote());
+  RunUntilIdle();
+
+  listing->SetSource(gfx::Rect(8, 120, 640, 360));
+  listing->SetSource(gfx::Rect(8, 120, 640, 360));
+  RunUntilIdle();
+
+  ASSERT_EQ(client.heard.size(), 2u);
+  EXPECT_TRUE(client.heard[0][0]->source.IsEmpty());
+  EXPECT_EQ(client.heard[1][0]->source, gfx::Rect(8, 120, 640, 360));
 }
 
 TEST_F(PictureInPictureVideosTest, AVideoLeavesTheListWithItsListing) {

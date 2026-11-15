@@ -1248,6 +1248,7 @@ describe("Shell", () => {
       playbackRate: 1,
       playing: true,
       position: 0,
+      source: null,
       width: 640,
       window: "",
     };

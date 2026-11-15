@@ -122,6 +122,7 @@ TOGETHER=(
   guard-shell-crash
   guard-app-only-in-shell
   guard-domicile-fetch
+  guard-shell-workers
   guard-shell-pdf
   guard-pdf-scaled-text
   guard-pdf-after-hiding
@@ -173,6 +174,7 @@ ONCE=(
   guard-shell-handover
   guard-shell-pdf
   guard-shell-script-src
+  guard-shell-workers
   guard-shortcut-chords
   guard-video-codecs
   guard-windows-state

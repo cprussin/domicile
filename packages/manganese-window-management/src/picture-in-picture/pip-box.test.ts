@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
-import { movedBox, openingBox, reshapedBox, resizedBox } from "./pip-box";
+import {
+  inPage,
+  movedBox,
+  offsetTo,
+  openingBox,
+  reshapedBox,
+  resizedBox,
+} from "./pip-box";
 
 // A 1920x1080 screen whose workspace starts under a 40px bar.
 const WORKSPACE = { height: 1040, width: 1920, x: 0, y: 40 };
@@ -143,5 +150,40 @@ describe("resizedBox", () => {
 
     expect(grown.x + grown.width).toBeLessThanOrEqual(1920);
     expect(grown.y + grown.height).toBeLessThanOrEqual(1080);
+  });
+});
+
+describe("inPage", () => {
+  // A page drawn at (200, 100), its 640x360 video 50px down a 1000x600 box.
+  const PAGE = { height: 800, width: 1200, x: 200, y: 100 };
+  const SOURCE = { height: 600, width: 1000, x: 100, y: 50 };
+
+  it("is where the video is drawn on the desktop, in its shape", () => {
+    expect(inPage(PAGE, SOURCE, VIDEO)).toEqual({
+      height: 562.5,
+      width: 1000,
+      x: 300,
+      y: 168.75,
+    });
+  });
+
+  it("fits a tall video in its box by height", () => {
+    expect(inPage(PAGE, SOURCE, { height: 1200, width: 600 })).toEqual({
+      height: 600,
+      width: 300,
+      x: 650,
+      y: 150,
+    });
+  });
+});
+
+describe("offsetTo", () => {
+  it("moves and scales a box onto another of its shape, about its top left", () => {
+    expect(
+      offsetTo(
+        { height: 270, width: 480, x: 1416, y: 786 },
+        { height: 135, width: 240, x: 100, y: 50 },
+      ),
+    ).toEqual({ scale: 0.5, x: -1316, y: -736 });
   });
 });

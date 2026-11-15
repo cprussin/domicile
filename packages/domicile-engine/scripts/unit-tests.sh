@@ -23,29 +23,40 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 56,
 # WindowDiff 7, EngineEventQueue 9, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 57,
-# DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 8,
-# ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
+# DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 10,
+# ShellWindowPlaces 8, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, BufferColor 4, ExtensionInstaller 3,
 # ExtensionSettings 7, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 32,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
-# SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
+# SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 9,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
 # ControlChannel 27, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
-# PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 3, AppDocument 3,
+# PrivatePages 3, ShellOrigin 4, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 8,
 # DeskCursorThemeSource 3, XCursorTheme 5, XCursorThemeDirectory 4,
-# SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
+# SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 7,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
 # DeskPointer 5, PointerWarp 10, PointerConfinementBoxes 4, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 13, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 14, ElectronProtocol 52, ElectronApp 58,
+# PictureInPictureVideos 15, ElectronProtocol 52, ElectronApp 58,
 # ElectronPermissionFor 2, ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 832, and it was 830 — a desktop getUserMedia(), as Electron apps capture a
+# desktopCapturer source with, is two more ScreenCapture cases. Before that
+# 830, and it was 828 — viz stopping a capture before or after a frame, which
+# the screenshot and cast now say, is two more DisplayCapture cases. Before
+# that
+# 828, and it was 825 — the host's window moving when the host does is two
+# more ShellWindows cases and one more ShellWindowPlaces one. Before that
+# 825, and it was 824 — where a video in picture-in-picture came from in its
+# page is one more PictureInPictureVideos case. Before that
+# 824, and it was 822 — the shell and app modules being cross-origin isolated,
+# and no other page, is two more ShellOrigin cases. Before that
 # 822, and it was 819 — an Electron app's message boxes are two more
 # ElectronProtocol cases and one more ElectronApp one. Before that
 # 819, and it was 815 — an Electron app's menu bar is two more
@@ -280,7 +291,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=822
+FLOOR=832
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

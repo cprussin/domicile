@@ -26,11 +26,23 @@ import { Direction } from "../direction";
 import type { Grip } from "../floating/float";
 import { followPress } from "../follow-press";
 import type { Rect } from "../rect";
-import type { Shape } from "./pip-box";
-import { movedBox, openingBox, reshapedBox, resizedBox } from "./pip-box";
+import type { Offset, Shape } from "./pip-box";
+import {
+  inPage,
+  movedBox,
+  offsetTo,
+  openingBox,
+  reshapedBox,
+  resizedBox,
+} from "./pip-box";
 import { clockOf, playheadAt } from "./playhead";
 
 type Props = {
+  /**
+   * Where browser window `window`'s page is drawn on the desktop, or
+   * undefined while it is drawn nowhere.
+   */
+  pageFor: (window: string) => Rect | undefined;
   pictureInPicture: PictureInPicture;
   /** False while the desk is locked, so no video shows on the lock screen. */
   shown: boolean;
@@ -42,18 +54,26 @@ type Props = {
 };
 
 /**
- * Where a video floats, the workspace it stays on, and the size of the video
- * it was placed for.
+ * Where a video floats, the workspace it stays on, the size of the video it
+ * was placed for, and how far from its box it grows out of its page, if it
+ * does.
  */
-type Placed = { box: Rect; shape: Shape; workspace: Rect };
+type Placed = {
+  box: Rect;
+  grownFrom: Offset | undefined;
+  shape: Shape;
+  workspace: Rect;
+};
 
 /**
  * The videos pages put in picture-in-picture, each a small float over every
  * window, on every workspace of its screen. A video opens in its screen's
  * bottom-right corner; it is dragged to move it, and by an edge to resize it
- * in its shape. Its controls show under the pointer.
+ * in its shape. Its controls show under the pointer. It grows out of its
+ * place in its page, and shrinks back into it on "Back to tab".
  */
 export const PictureInPictureFloats = ({
+  pageFor,
   pictureInPicture,
   shown,
   workspaceFor,
@@ -66,10 +86,11 @@ export const PictureInPictureFloats = ({
   const [placed, setPlaced] = useState<ReadonlyMap<string, Placed>>(
     () => new Map(),
   );
-  // A new video takes its opening box once, and a gone one's is dropped, so
-  // a video listed again later opens in the corner again. A video whose size
-  // changed, as when its page first says it, takes its new shape.
-  const listed = placedFor(videos, placed, workspaceFor);
+  // A new video takes its opening box once its page says its size, so it
+  // grows out of the page in its shape, and a gone one's is dropped, so a
+  // video listed again later opens in the corner again. A video whose size
+  // changed takes its new shape.
+  const listed = placedFor(videos, placed, workspaceFor, pageFor);
   if (listed !== placed) {
     setPlaced(listed);
   }
@@ -90,6 +111,7 @@ export const PictureInPictureFloats = ({
             at={at}
             key={video.id}
             onBox={place}
+            pageFor={pageFor}
             pictureInPicture={pictureInPicture}
             video={video}
           />
@@ -99,14 +121,16 @@ export const PictureInPictureFloats = ({
 };
 
 /**
- * `placed` for `videos`, or `placed` itself when no video came, went or
- * changed size.
+ * `placed` for the `videos` with a size, or `placed` itself when no video
+ * came, went or changed size.
  */
 const placedFor = (
-  videos: readonly DomicilePictureInPictureVideo[],
+  listed: readonly DomicilePictureInPictureVideo[],
   placed: ReadonlyMap<string, Placed>,
   workspaceFor: (window: string) => Rect,
+  pageFor: (window: string) => Rect | undefined,
 ): ReadonlyMap<string, Placed> => {
+  const videos = listed.filter(({ height, width }) => height > 0 && width > 0);
   const same =
     videos.length === placed.size &&
     videos.every((video) => {
@@ -121,9 +145,16 @@ const placedFor = (
           const shape = { height: video.height, width: video.width };
           if (was === undefined) {
             const workspace = workspaceFor(video.window);
+            const box = openingBox(workspace, shape);
+            const from = sourceOnDesktop(video, pageFor);
             return [
               video.id,
-              { box: openingBox(workspace, shape), shape, workspace },
+              {
+                box,
+                grownFrom: from === undefined ? undefined : offsetTo(box, from),
+                shape,
+                workspace,
+              },
             ] as const;
           } else if (sameShape(was.shape, shape)) {
             return [video.id, was] as const;
@@ -144,9 +175,39 @@ const placedFor = (
 const sameShape = (a: Shape, b: Shape): boolean =>
   a.height === b.height && a.width === b.width;
 
+/**
+ * Where `video` is drawn in its page on the desktop now, or undefined when it
+ * has no place there or its page is drawn nowhere.
+ */
+const sourceOnDesktop = (
+  video: DomicilePictureInPictureVideo,
+  pageFor: (window: string) => Rect | undefined,
+): Rect | undefined => {
+  const page = pageFor(video.window);
+  return page === undefined || video.source === null
+    ? undefined
+    : inPage(page, video.source, video);
+};
+
+/** How a float moves on its own: out of its page, or back into it. */
+type Motion =
+  | { name: "growing"; offset: Offset }
+  | { name: "returning"; offset: Offset };
+
+/** Custom properties for the `pictureInPicture*` keyframes. */
+const motionStyle = (motion: Motion | undefined): Record<string, string> =>
+  motion === undefined
+    ? {}
+    : {
+        "--pip-scale": motion.offset.scale.toString(),
+        "--pip-x": `${motion.offset.x.toString()}px`,
+        "--pip-y": `${motion.offset.y.toString()}px`,
+      };
+
 type FloatProps = {
   at: Placed;
   onBox: (id: string, box: Rect) => void;
+  pageFor: (window: string) => Rect | undefined;
   pictureInPicture: PictureInPicture;
   video: DomicilePictureInPictureVideo;
 };
@@ -199,13 +260,19 @@ const GRIPS: readonly { grip: Grip; name: Edge }[] = [
 
 /** One video: the page's own surface, with the shell's controls over it. */
 const Float = ({
-  at: { box, workspace },
+  at: { box, grownFrom, workspace },
   onBox,
+  pageFor,
   pictureInPicture,
   video,
 }: FloatProps) => {
   const { id } = video;
   const [hovered, setHovered] = useState(false);
+  const [motion, setMotion] = useState<Motion | undefined>(() =>
+    grownFrom === undefined
+      ? undefined
+      : { name: "growing", offset: grownFrom },
+  );
   const act = useCallback(
     (action: DomicilePictureInPictureAction) => {
       pictureInPicture.act(id, action);
@@ -243,7 +310,18 @@ const Float = ({
   return (
     <div
       className={floatStyles}
+      data-motion={motion?.name}
       data-picture-in-picture={id}
+      onAnimationEnd={(event) => {
+        // The shadow's and the controls' fades end here too.
+        if (event.target === event.currentTarget) {
+          if (motion?.name === "returning") {
+            act("back-to-page");
+          } else {
+            setMotion(undefined);
+          }
+        }
+      }}
       onPointerEnter={() => {
         setHovered(true);
       }}
@@ -252,105 +330,117 @@ const Float = ({
       }}
       // Inline because the box is a runtime value Panda cannot extract.
       style={{
+        ...motionStyle(motion),
         blockSize: `${box.height.toString()}px`,
         inlineSize: `${box.width.toString()}px`,
         insetBlockStart: `${box.y.toString()}px`,
         insetInlineStart: `${box.x.toString()}px`,
       }}
     >
-      <app className={videoStyles} picture-in-picture={id} />
-      <div
-        className={controlsStyles({ shown: hovered })}
-        onPointerDown={(event) => {
-          follow(event, (dx, dy) => movedBox(box, workspace, dx, dy));
-        }}
-      >
-        <div className={scrimStyles({ edge: "top" })} />
-        <div className={scrimStyles({ edge: "bottom" })} />
-        <div className={cornerStyles({ side: "start" })}>
-          <IconButton
-            label="Back to tab"
-            onClick={() => {
-              act("back-to-page");
-            }}
-          >
-            <ArrowSquareInIcon size={16} />
-          </IconButton>
-        </div>
-        <div className={cornerStyles({ side: "end" })}>
-          <IconButton
-            label="Close"
-            onClick={() => {
-              act("close");
-            }}
-          >
-            <XIcon size={16} />
-          </IconButton>
-        </div>
-        <div className={middleStyles}>
-          {video.canPreviousTrack && (
-            <IconButton
-              label="Previous track"
-              onClick={() => {
-                act("previous-track");
-              }}
-            >
-              <SkipBackIcon size={16} weight="fill" />
-            </IconButton>
-          )}
-          {video.canPlay &&
-            (video.playing ? (
-              <IconButton
-                label="Pause"
-                onClick={() => {
-                  act("pause");
-                }}
-              >
-                <PauseIcon size={20} weight="fill" />
-              </IconButton>
-            ) : (
-              <IconButton
-                label="Play"
-                onClick={() => {
-                  act("play");
-                }}
-              >
-                <PlayIcon size={20} weight="fill" />
-              </IconButton>
-            ))}
-          {video.canNextTrack && (
-            <IconButton
-              label="Next track"
-              onClick={() => {
-                act("next-track");
-              }}
-            >
-              <SkipForwardIcon size={16} weight="fill" />
-            </IconButton>
-          )}
-        </div>
-        {video.duration > 0 && (
-          <Progress
-            onSeek={(seconds) => {
-              pictureInPicture.seek(id, seconds);
-            }}
-            ticking={hovered}
-            video={video}
-          />
-        )}
-      </div>
-      {GRIPS.map(({ grip, name }) => (
+      <div aria-hidden className={shadowStyles} />
+      <div className={clipStyles}>
+        <app className={videoStyles} picture-in-picture={id} />
         <div
-          aria-hidden
-          className={gripStyles({ edge: name })}
-          key={name}
+          className={controlsStyles({
+            shown: hovered && motion?.name !== "returning",
+          })}
           onPointerDown={(event) => {
-            follow(event, (dx, dy) =>
-              resizedBox(box, workspace, video, grip, dx, dy),
-            );
+            follow(event, (dx, dy) => movedBox(box, workspace, dx, dy));
           }}
-        />
-      ))}
+        >
+          <div className={scrimStyles({ edge: "top" })} />
+          <div className={scrimStyles({ edge: "bottom" })} />
+          <div className={cornerStyles({ side: "start" })}>
+            <IconButton
+              label="Back to tab"
+              onClick={() => {
+                // Into where its page shows it now, which may have moved.
+                const into = sourceOnDesktop(video, pageFor);
+                if (into === undefined) {
+                  act("back-to-page");
+                } else {
+                  setMotion({ name: "returning", offset: offsetTo(box, into) });
+                }
+              }}
+            >
+              <ArrowSquareInIcon size={16} />
+            </IconButton>
+          </div>
+          <div className={cornerStyles({ side: "end" })}>
+            <IconButton
+              label="Close"
+              onClick={() => {
+                act("close");
+              }}
+            >
+              <XIcon size={16} />
+            </IconButton>
+          </div>
+          <div className={middleStyles}>
+            {video.canPreviousTrack && (
+              <IconButton
+                label="Previous track"
+                onClick={() => {
+                  act("previous-track");
+                }}
+              >
+                <SkipBackIcon size={16} weight="fill" />
+              </IconButton>
+            )}
+            {video.canPlay &&
+              (video.playing ? (
+                <IconButton
+                  label="Pause"
+                  onClick={() => {
+                    act("pause");
+                  }}
+                >
+                  <PauseIcon size={20} weight="fill" />
+                </IconButton>
+              ) : (
+                <IconButton
+                  label="Play"
+                  onClick={() => {
+                    act("play");
+                  }}
+                >
+                  <PlayIcon size={20} weight="fill" />
+                </IconButton>
+              ))}
+            {video.canNextTrack && (
+              <IconButton
+                label="Next track"
+                onClick={() => {
+                  act("next-track");
+                }}
+              >
+                <SkipForwardIcon size={16} weight="fill" />
+              </IconButton>
+            )}
+          </div>
+          {video.duration > 0 && (
+            <Progress
+              onSeek={(seconds) => {
+                pictureInPicture.seek(id, seconds);
+              }}
+              ticking={hovered}
+              video={video}
+            />
+          )}
+        </div>
+        {GRIPS.map(({ grip, name }) => (
+          <div
+            aria-hidden
+            className={gripStyles({ edge: name })}
+            key={name}
+            onPointerDown={(event) => {
+              follow(event, (dx, dy) =>
+                resizedBox(box, workspace, video, grip, dx, dy),
+              );
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 };
@@ -432,13 +522,53 @@ const Progress = ({
 // Over every window, as Chrome's picture-in-picture window is, and under the
 // panels with the toasts, which come later in the document. The shell's float
 // border and shadow, with no title bar: the video is the window.
+//
+// It grows out of its place in its page and shrinks back into it, about its
+// top left, by the offset `motionStyle` sets. Long moves, so `emphasized`.
+// Returning holds its last frame until the page takes the video back.
 const floatStyles = css({
-  border: "1px solid {colors.border}",
+  "&[data-motion=growing]": {
+    animationDuration: "token(durations.slow)",
+    animationName: "pictureInPictureGrowing",
+    animationTimingFunction: "token(easings.emphasized)",
+  },
+  "&[data-motion=returning]": {
+    animationDuration: "token(durations.slow)",
+    animationFillMode: "forwards",
+    animationName: "pictureInPictureReturning",
+    animationTimingFunction: "token(easings.emphasized)",
+  },
+  position: "fixed",
+  transformOrigin: "top left",
+  zIndex: "toast",
+});
+
+// A layer of its own, outside the clip, so it fades in as the video grows out
+// of its page and out as it shrinks back.
+const shadowStyles = css({
+  "[data-motion=growing] > &": {
+    animationDuration: "token(durations.slow)",
+    animationName: "pictureInPictureShadowIn",
+    animationTimingFunction: "token(easings.emphasized)",
+  },
+  "[data-motion=returning] > &": {
+    animationDuration: "token(durations.slow)",
+    animationFillMode: "forwards",
+    animationName: "pictureInPictureShadowOut",
+    animationTimingFunction: "token(easings.emphasized)",
+  },
   borderRadius: "lg",
   boxShadow: "lifted",
+  inset: 0,
+  position: "absolute",
+});
+
+const clipStyles = css({
+  border: "1px solid {colors.border}",
+  borderRadius: "lg",
+  inset: 0,
   overflow: "hidden",
-  position: "fixed",
-  zIndex: "toast",
+  position: "absolute",
 });
 
 const videoStyles = css({

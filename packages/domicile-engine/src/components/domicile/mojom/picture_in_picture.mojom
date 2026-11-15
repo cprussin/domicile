@@ -31,6 +31,10 @@ struct PictureInPictureVideo {
   string window;
   // The video's own size, in pixels. Its shape, for the shell to keep.
   gfx.mojom.Size size;
+  // Where the video was in its page when it entered picture-in-picture, in
+  // DIPs from the page's top left, so the shell can grow it out of that
+  // place. Empty when the page was drawn nowhere.
+  gfx.mojom.Rect source;
   // Whether it plays.
   bool playing;
   // Which of Act's controls the page takes: play and pause, and the media

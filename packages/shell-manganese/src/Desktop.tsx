@@ -69,6 +69,7 @@ import { sightOf } from "@domicile-desktop/manganese-window-management/overview/
 import { steeredInOverview } from "@domicile-desktop/manganese-window-management/overview/steering";
 import { useOverviewPhase } from "@domicile-desktop/manganese-window-management/overview/useOverviewPhase";
 import { PictureInPictureFloats } from "@domicile-desktop/manganese-window-management/picture-in-picture/PictureInPictureFloats";
+import { pageOf } from "@domicile-desktop/manganese-window-management/picture-in-picture/page-of";
 import type { Geometry } from "@domicile-desktop/manganese-window-management/placement";
 import type {
   Focus,
@@ -171,6 +172,12 @@ type Props = {
  * one {@link Stage} that draws every window. Workspaces are shared across
  * monitors, as in sway. See `docs/architecture/ONE-PAGE-FOR-THE-DESK.md`.
  */
+/**
+ * Where browser window `window`'s page is drawn, for a video in
+ * picture-in-picture to grow out of and shrink back into.
+ */
+const pageOfThisDocument = (window: string) => pageOf(document, window);
+
 export const Desktop = ({
   applications,
   bar,
@@ -826,6 +833,7 @@ export const Desktop = ({
         workspace. Not on the lock screen.
       */}
       <PictureInPictureFloats
+        pageFor={pageOfThisDocument}
         pictureInPicture={domicile.pictureInPicture}
         shown={screens.length > 0 && !lock.locked}
         workspaceFor={pictureInPictureWorkspace}

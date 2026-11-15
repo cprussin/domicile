@@ -21,6 +21,7 @@
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "services/media_session/public/cpp/media_position.h"
@@ -41,6 +42,18 @@ PictureInPictureVideos& Videos() {
 std::string WindowOf(content::WebContents* contents) {
   WebViewGuest* guest = WebViewGuest::FromWebContents(contents);
   return guest ? guest->window_id() : std::string();
+}
+
+// Where `controller`'s video was in its page when it entered
+// picture-in-picture, in DIPs from the page's top left; empty while the page
+// is drawn nowhere. The controller keeps it in the page's physical pixels.
+gfx::Rect SourceInPage(
+    content::VideoPictureInPictureWindowController& controller) {
+  const content::RenderWidgetHostView* page =
+      controller.GetWebContents()->GetRenderWidgetHostView();
+  return page ? gfx::ScaleToEnclosingRect(controller.GetSourceBounds(),
+                                          1.f / page->GetDeviceScaleFactor())
+              : gfx::Rect();
 }
 
 // Chrome's VideoOverlayWindowViews is a widget of its own, with its own
@@ -73,6 +86,7 @@ class ShellVideoOverlayWindow : public content::VideoOverlayWindow,
     }
     listing_ = Videos().List(WindowOf(controller_->GetWebContents()), this);
     listing_->SetSize(natural_size_);
+    listing_->SetSource(SourceInPage(*controller_));
     listing_->SetPlaying(playing_);
     listing_->SetControls(can_play_, can_previous_track_, can_next_track_);
     listing_->SetPosition(duration_, position_, rate_);

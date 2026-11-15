@@ -70,6 +70,31 @@ export const windowManagementPreset = definePreset({
         // opens; the backdrop fades out by `overviewHiding`. See `overview/`.
         overviewHiding: BACKDROP_FADE,
         overviewShowing: BACKDROP_FADE,
+        // A video in picture-in-picture grows out of its place in its page,
+        // and shrinks back into it (see `PictureInPictureFloats`).
+        pictureInPictureGrowing: {
+          "0%": {
+            transform:
+              "translate(var(--pip-x), var(--pip-y)) scale(var(--pip-scale))",
+          },
+          "100%": { transform: "none" },
+        },
+        pictureInPictureReturning: {
+          "0%": { transform: "none" },
+          "100%": {
+            transform:
+              "translate(var(--pip-x), var(--pip-y)) scale(var(--pip-scale))",
+          },
+        },
+        // Its shadow fades in and out with it, on a layer of its own.
+        pictureInPictureShadowIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        pictureInPictureShadowOut: {
+          "0%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
         // A workspace switch slides every window on the workspace by one
         // screen width (`--workspace-width`; see `slidAcross`). The arriving
         // workspace starts where the leaving one ends, so they never overlap

@@ -16,7 +16,9 @@
 //   GUARD menu media=… can=…           a right click's menu
 //   GUARD menu-picture-in-picture      it ran the menu's picture-in-picture
 //   GUARD pip id=… ours=… size=…       a listed video; `ours` is whether its
-//                                      window is the one drawn here
+//         source=…                     window is the one drawn here, and
+//                                      `source` where it was in its page
+//                                      (x,y,widthxheight, or none)
 //   GUARD pip-closed id=…              it closed that video
 //   GUARD pip-none                     the list emptied after a video
 //
@@ -59,8 +61,12 @@ export const HostShell = (_root, desktop) => {
   desktop.addEventListener("pictureinpicturevideoschanged", () => {
     const videos = desktop.pictureInPictureVideos ?? [];
     for (const video of videos) {
+      const source =
+        video.source === null
+          ? "none"
+          : `${video.source.x},${video.source.y},${video.source.width}x${video.source.height}`;
       say(
-        `pip id=${video.id} ours=${drawn.has(video.window)} size=${video.width}x${video.height} playing=${video.playing}`,
+        `pip id=${video.id} ours=${drawn.has(video.window)} size=${video.width}x${video.height} playing=${video.playing} source=${source}`,
       );
       if (!shown.has(video.id)) {
         const app = document.createElement("app");

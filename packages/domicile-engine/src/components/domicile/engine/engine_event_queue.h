@@ -181,6 +181,8 @@ struct EngineEvent {
   base::flat_map<std::string, std::vector<uint8_t>> copied;
   // kCaptured and kCaptureEnded: the DomicileCaptureId.
   uint32_t capture = 0;
+  // kCaptureEnded: why the capture failed, or empty when it just ended.
+  std::string why;
   // kCaptured: the frame's id, which releases it, and the frame.
   // kFrameDone and kPresented: the window's frame number; see SurfaceFrames.
   uint64_t frame = 0;

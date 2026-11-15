@@ -106,6 +106,11 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // because the windows are //chrome's. Empty when the embedder has no
   // browser windows; every such capture is then refused.
   using BrowserWindowCaptureTargetGetter = BrowserWindowCaptureTargetFinder;
+  // Whether the GPU can make the dmabufs viz captures into. Injected because
+  // asking needs //ui/ozone. Empty, or false, when it cannot, as nested in a
+  // Wayland session that offers no render node: captures then come in shared
+  // memory.
+  using DmabufCaptureChecker = base::RepeatingCallback<bool()>;
 
   // `get_shared_image_interface` gives imported dmabufs a GPU. Injected because
   // this target does not depend on //ui/aura. It returns null when headless.
@@ -132,7 +137,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       InputInjector inject_input = InputInjector(),
       InputConfigSetter set_input_config = InputConfigSetter(),
       DisplayRedrawer redraw_display = DisplayRedrawer(),
-      ColorMatrixSetter set_color_matrix = ColorMatrixSetter());
+      ColorMatrixSetter set_color_matrix = ColorMatrixSetter(),
+      DmabufCaptureChecker can_capture_into_dmabufs = DmabufCaptureChecker());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -348,6 +354,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const DisplayRedrawer redraw_display_;
   // See ColorMatrixSetter.
   const ColorMatrixSetter set_color_matrix_;
+  // See DmabufCaptureChecker.
+  const DmabufCaptureChecker can_capture_into_dmabufs_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
   base::RepeatingClosure producer_gone_;

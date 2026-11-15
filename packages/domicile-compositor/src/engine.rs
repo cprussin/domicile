@@ -486,8 +486,12 @@ pub enum Event {
         captured: Result<CapturedFrame, String>,
     },
 
-    /// The browser ended a display capture. No frame of it follows.
-    CaptureEnded { capture: CaptureId },
+    /// The browser ended a display capture, saying why when it failed. No
+    /// frame of it follows.
+    CaptureEnded {
+        capture: CaptureId,
+        why: Option<String>,
+    },
 
     /// `wl_surface.frame`'s `done`: viz took `frame` and takes the next.
     /// Frames are numbered from 1 per submit, as
@@ -618,6 +622,7 @@ struct Callbacks {
     hdr_displays: Option<extern "C" fn(*mut c_void, *const RawHdrDisplay, u32)>,
     listed_browser_windows: Option<extern "C" fn(*mut c_void, *const RawListedBrowserWindow, u32)>,
     input_devices: Option<extern "C" fn(*mut c_void, *const RawInputDevice, u32)>,
+    capture_failed: Option<extern "C" fn(*mut c_void, CaptureId, *const c_char)>,
 }
 
 /// `DomicileInputDevice`, laid out as in the C header. Its strings are
@@ -2071,6 +2076,7 @@ fn join(
         hdr_displays: Some(on_hdr_displays),
         listed_browser_windows: Some(on_listed_browser_windows),
         input_devices: Some(on_input_devices),
+        capture_failed: Some(on_capture_failed),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2369,7 +2375,22 @@ extern "C" fn on_captured(
 }
 
 extern "C" fn on_capture_ended(user_data: *mut c_void, capture: CaptureId) {
-    push(user_data, Event::CaptureEnded { capture });
+    push(user_data, Event::CaptureEnded { capture, why: None });
+}
+
+extern "C" fn on_capture_failed(user_data: *mut c_void, capture: CaptureId, why: *const c_char) {
+    // SAFETY: the engine passes a NUL-terminated string, borrowed for the
+    // call.
+    let why = unsafe { std::ffi::CStr::from_ptr(why) }
+        .to_string_lossy()
+        .into_owned();
+    push(
+        user_data,
+        Event::CaptureEnded {
+            capture,
+            why: Some(why),
+        },
+    );
 }
 
 extern "C" fn on_disconnected(user_data: *mut c_void) {
@@ -2952,10 +2973,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_twenty_three_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `input_devices` is last, as in
+    fn the_callbacks_are_the_user_data_and_twenty_four_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `capture_failed` is last, as in
         // the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 24 * 8);
+        assert_eq!(std::mem::size_of::<Callbacks>(), 25 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2975,6 +2996,7 @@ mod tests {
             22 * 8
         );
         assert_eq!(std::mem::offset_of!(Callbacks, input_devices), 23 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, capture_failed), 24 * 8);
     }
 
     #[test]
@@ -2988,6 +3010,22 @@ mod tests {
         assert_eq!(std::mem::offset_of!(RawInputDevice, product_id), 22);
         assert_eq!(std::mem::offset_of!(RawInputDevice, kind), 24);
         assert_eq!(std::mem::offset_of!(RawInputDevice, connection), 25);
+    }
+
+    #[test]
+    fn a_failed_capture_carries_the_engines_cause() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+
+        on_capture_failed(queue, 3, c"viz ran out".as_ptr());
+
+        assert_eq!(
+            events.into_inner(),
+            vec![Event::CaptureEnded {
+                capture: 3,
+                why: Some("viz ran out".into())
+            }]
+        );
     }
 
     #[test]

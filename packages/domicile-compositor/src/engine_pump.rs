@@ -269,9 +269,9 @@ impl DomicileCompositor {
                     let listed = self.foreign_toplevels.browser_windows(&[]);
                     self.browser_toplevels_listed(listed);
                 }
-                engine::Event::CaptureEnded { capture } => {
+                engine::Event::CaptureEnded { capture, why } => {
                     let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
-                    self.casting.capture_ended(capture, capturer);
+                    self.casting.capture_ended(capture, why, capturer);
                 }
                 // A copy in a page or browser window. The browser is not our
                 // Wayland client, so this is how its copies reach the seat and

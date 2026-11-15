@@ -46,6 +46,15 @@ void PictureInPictureVideos::Listing::SetSize(const gfx::Size& size) {
   }
 }
 
+void PictureInPictureVideos::Listing::SetSource(const gfx::Rect& source) {
+  Video* video = videos_->Find(id_);
+  CHECK(video);
+  if (video->listed.source != source) {
+    video->listed.source = source;
+    videos_->Changed();
+  }
+}
+
 void PictureInPictureVideos::Listing::SetPlaying(bool playing) {
   Video* video = videos_->Find(id_);
   CHECK(video);

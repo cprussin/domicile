@@ -392,6 +392,9 @@ interface DisplayCaptureObserver {
 
 // Controls one capture: of a display, or of a browser window. Closing it stops
 // the capture.
+//
+// When the browser ends a capture that failed, it closes this pipe and the
+// observer's with the cause as the disconnect reason's description.
 interface DisplayCapture {
   // Captures at `size` from the next frame on, letterboxed to keep the
   // source's aspect.

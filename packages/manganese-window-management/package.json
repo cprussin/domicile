@@ -47,6 +47,7 @@
     "./overview/useOverviewPhase": "./src/overview/useOverviewPhase.ts",
     "./panda-preset": "./src/panda-preset.ts",
     "./picture-in-picture/PictureInPictureFloats": "./src/picture-in-picture/PictureInPictureFloats.tsx",
+    "./picture-in-picture/page-of": "./src/picture-in-picture/page-of.ts",
     "./placement": "./src/placement.ts",
     "./pointer-warp": "./src/pointer-warp.ts",
     "./rect": "./src/rect.ts",

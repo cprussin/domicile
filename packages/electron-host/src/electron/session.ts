@@ -4,6 +4,8 @@
 // so no session reaches another app's storage. See "Requests" in
 // docs/architecture/ELECTRON-APPS.md.
 
+import type { DisplayMediaRequestHandler } from "./desktop-capturer";
+import { setDisplayMediaRequestHandler } from "./desktop-capturer";
 import type {
   createPermissions,
   PermissionCheckHandler,
@@ -46,6 +48,14 @@ export class Session {
 
   setPermissionCheckHandler(handler: PermissionCheckHandler | null) {
     this.#permissions.setPermissionCheckHandler(handler);
+  }
+
+  /** The desktop's picker answers instead: see desktop-capturer.ts. */
+  setDisplayMediaRequestHandler(
+    handler: DisplayMediaRequestHandler | null,
+    options?: { useSystemPicker?: boolean },
+  ) {
+    setDisplayMediaRequestHandler(handler, options);
   }
 
   clearStorageData(options?: ClearStorageDataOptions) {
