@@ -2,6 +2,7 @@
 
 import { FilePicker } from "@domicile-desktop/component-library/FilePicker";
 import { desktopFolders } from "@domicile-desktop/component-library/folders";
+import { AppMessageBox } from "@domicile-desktop/manganese-page-requests/AppMessageBox";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { ExternalAppAsk } from "@domicile-desktop/manganese-page-requests/ExternalAppAsk";
 import { IdentityAsk } from "@domicile-desktop/manganese-page-requests/IdentityAsk";
@@ -51,6 +52,7 @@ import { PageTooltip } from "./browser/PageTooltip";
 import { PageViews } from "./browser/PageViews";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
+import { useAppMessageBox } from "./browser/useAppMessageBox";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
@@ -351,6 +353,10 @@ export const BrowserWindow = ({
   // paused on, and the element in it to focus. The engine draws no dialog.
   const dialogRequest = useDialogRequest(view);
   const [dialogBox, setDialogBox] = useState<HTMLElement | null>(null);
+  // The message box an Electron app asks over this window, and the button
+  // in it to focus. The engine draws no dialog.
+  const appBox = useAppMessageBox(domicile, window);
+  const [appBoxButton, setAppBoxButton] = useState<HTMLElement | null>(null);
   // The link for an application the page opened, the application that opens
   // it, and the button to focus. The engine draws no dialog.
   const externalApp = useExternalAppRequest(view);
@@ -379,6 +385,7 @@ export const BrowserWindow = ({
   // What the page waits on, which takes the keyboard while it is open.
   const waiting =
     pickerBox ??
+    appBoxButton ??
     dialogBox ??
     signInBox ??
     promptBox ??
@@ -1000,6 +1007,16 @@ export const BrowserWindow = ({
                 request={externalApp}
               />
             )}
+          {appBox !== undefined && (
+            <AppMessageBox
+              box={appBox.box}
+              // A new box per box the app asks, so each starts with its
+              // own checkbox.
+              key={appBox.key}
+              onAnswer={appBox.answer}
+              ref={setAppBoxButton}
+            />
+          )}
           {asking !== undefined && (
             <FilePicker
               // A new picker per request, so each starts empty.
