@@ -13,6 +13,10 @@
 
 use std::path::{Path, PathBuf};
 
+use oxc_allocator::Allocator;
+use oxc_parser::Parser;
+use oxc_span::SourceType;
+
 use crate::shell_path::{shell_module, Shell, ShellPathError};
 
 /// Where a shell comes from.
@@ -80,7 +84,8 @@ fn is_package(argument: &str, here: &Path, exists: &dyn Fn(&Path) -> Option<bool
 /// Whether the file at `file` has to be built before it is served.
 ///
 /// TypeScript and JSX always do. JavaScript does when it imports a package
-/// by name, which a browser cannot resolve.
+/// by name, which a browser cannot resolve, or when it does not parse as a
+/// module: it may hold JSX, and otherwise the builder reports the error.
 fn needs_building(file: &Path, read: &dyn Fn(&Path) -> Option<String>) -> bool {
     match file.extension().and_then(|extension| extension.to_str()) {
         Some("ts" | "tsx" | "mts" | "jsx") => true,
@@ -89,37 +94,36 @@ fn needs_building(file: &Path, read: &dyn Fn(&Path) -> Option<String>) -> bool {
     }
 }
 
-/// Whether `text` imports a package by name.
+/// Whether the module `text` imports a package by name, or does not parse.
 ///
-/// A loose scan that also matches comments. A false positive rebuilds a
-/// bundle, or refuses it where there is no builder; a false negative would
-/// serve a module the browser cannot load.
+/// Reads only real `import` and `export ... from` declarations and `import()`
+/// calls on a string, never strings or comments that look like them.
 pub fn imports_a_package(text: &str) -> bool {
-    ["from", "import", "import("].iter().any(|keyword| {
-        text.match_indices(keyword).any(|(at, _)| {
-            if !starts_a_word(text, at) {
-                return false;
-            }
-            let after = text[at + keyword.len()..].trim_start();
-            let Some(quote) = after.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
-                return false;
-            };
-            let specifier = &after[1..];
-            let Some(end) = specifier.find(quote) else {
-                return false;
-            };
-            is_bare(&specifier[..end])
-        })
-    })
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, text, SourceType::mjs()).parse();
+    if parsed.panicked || !parsed.errors.is_empty() {
+        return true;
+    }
+    let record = &parsed.module_record;
+    record
+        .requested_modules
+        .keys()
+        .any(|specifier| is_bare(specifier))
+        || record
+            .dynamic_imports
+            .iter()
+            .any(|import| literal(import.module_request.source_text(text)).is_some_and(is_bare))
 }
 
-/// Whether the text at `at` starts a word, so the keyword there is not the end
-/// of a longer one, such as the property name `"--restack-from"`.
-fn starts_a_word(text: &str, at: usize) -> bool {
-    text[..at]
+/// The text of `expression` when it is a string literal or a template without
+/// substitutions.
+fn literal(expression: &str) -> Option<&str> {
+    let quote = expression
         .chars()
-        .next_back()
-        .is_none_or(|before| !(before.is_alphanumeric() || matches!(before, '_' | '$' | '-' | '.')))
+        .next()
+        .filter(|c| matches!(c, '"' | '\'' | '`'))?;
+    let inner = expression.strip_prefix(quote)?.strip_suffix(quote)?;
+    (quote != '`' || !inner.contains("${")).then_some(inner)
 }
 
 /// Whether a browser cannot resolve `specifier`: it is not relative,

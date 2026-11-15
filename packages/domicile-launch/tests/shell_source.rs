@@ -141,7 +141,49 @@ fn only_a_bare_specifier_is_a_package_import() {
 #[test]
 fn a_keyword_inside_a_longer_word_is_no_import() {
     assert!(!imports_a_package(
-        r#"{"--restack-from":e.from,"--restack-to":e.to}"#
+        r#"const s = {"--restack-from":e.from,"--restack-to":e.to};"#
     ));
     assert!(imports_a_package(r#"import{a}from"zod";"#));
+}
+
+/// mecattaf's prebuilt shell, refused where there was no builder (#2169).
+#[test]
+fn text_that_reads_like_an_import_is_no_import() {
+    assert!(!imports_a_package(
+        r#"export const Shell = root => { root.textContent = "Turn on notifications from 'fixture'"; };"#
+    ));
+    assert!(!imports_a_package("const s = `import 'react'`;"));
+    assert!(!imports_a_package(
+        "// import x from 'zod';\n/* import('zod') */"
+    ));
+}
+
+#[test]
+fn a_re_export_of_a_package_is_a_package_import() {
+    assert!(imports_a_package(r#"export * from "zod";"#));
+    assert!(imports_a_package(r#"export { a } from "zod";"#));
+    assert!(!imports_a_package(r#"export { a } from "./a.js";"#));
+}
+
+#[test]
+fn only_a_literal_dynamic_import_names_a_package() {
+    assert!(imports_a_package("import(`zod`);"));
+    assert!(!imports_a_package(r#"import("./chunk.js");"#));
+    assert!(!imports_a_package(
+        "import(new URL('x', import.meta.url).href);"
+    ));
+}
+
+#[test]
+fn javascript_the_browser_cannot_parse_is_built() {
+    assert_eq!(
+        source(
+            "./entry.js",
+            &[(
+                "/home/me/desk/entry.js",
+                "export const Shell = () => <div />;"
+            )]
+        ),
+        Ok(ShellSource::Entry("/home/me/desk/entry.js".into()))
+    );
 }

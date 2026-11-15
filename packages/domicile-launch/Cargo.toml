@@ -14,6 +14,10 @@ domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
 libc.workspace = true
 notify.workspace = true
+# Finds a JavaScript shell's imports, to tell a bundle from an entry.
+oxc_allocator.workspace = true
+oxc_parser.workspace = true
+oxc_span.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

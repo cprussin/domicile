@@ -57,6 +57,12 @@ libc = "0.2"
 png = "0.18"
 # The config's JSON Schema, from which the SDK's config types are generated.
 schemars = "1"
+# Parses JavaScript shells to find their imports (see
+# `domicile_launch::shell_source`). 0.102 is the last release whose MSRV is
+# within the workspace's `rust-version`.
+oxc_allocator = "0.102"
+oxc_parser = "0.102"
+oxc_span = "0.102"
 
 # The installed binaries (`domicileBinaries` in `flake.nix`). Panics unwind:
 # `domicile`'s `Drop`s end the desktop's process groups and its graphical
