@@ -48,6 +48,8 @@ enters a gap, because pointer crossing follows `desk`.
 - `ShellWindows` (`domicile_shell_windows.cc`) keeps one window per CRTC.
 - The **host** is the only window that loads the shell. It sits on the fastest
   display (see [Key decisions](#key-decisions)).
+- When the host moves (its display sleeps, wakes or is unplugged), its window
+  moves with it. A new window would reload the shell.
 - The host's `WebContents` view is sized to the desk box and offset by the
   host's `desk` origin. The window clips it to the host's own slice.
 - Every other window is a `DeskPresenter`: a widget with no `WebContents`.

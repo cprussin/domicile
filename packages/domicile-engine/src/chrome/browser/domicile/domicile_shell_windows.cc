@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/callback_list.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -349,13 +350,23 @@ class ShellWindows : public display::DisplayObserver {
     }
     const ShellWindowPlan plan = ShellWindowsFor(displays, windowed);
 
-    // Open before closing: if every monitor is swapped at once, briefly having
-    // zero windows would exit the browser. See `shell_windows.h`.
+    for (const ShellWindowMove& move : plan.move) {
+      Move(move, displays, held, placed);
+    }
+    // Open before closing: briefly having zero windows would exit the browser.
+    // See `shell_windows.h`.
     for (int64_t id : plan.open) {
       Open(id, displays, held);
     }
+    // Read places again: a window just moved must not be closed as the
+    // window on the display it left.
+    std::vector<int64_t> placed_now;
+    placed_now.reserve(held.size());
+    for (const ShellWindow& one : held) {
+      placed_now.push_back(places_.Of(Identity(one.window)));
+    }
     for (int64_t id : plan.close) {
-      Close(id, held, placed);
+      Close(id, held, placed_now);
     }
     FitMisplaced(held, all);
     Watch();
@@ -566,6 +577,34 @@ class ShellWindows : public display::DisplayObserver {
     // watches its page. The next one watches it, or presents it if it
     // already committed.
     ReconcileSoon();
+  }
+
+  // Moves the shell window on display `move.from` to `move.to`, keeping its
+  // page. The host moves when its display sleeps, wakes or is unplugged, and a
+  // new window there would restart the shell.
+  //
+  // A window still loading or opening on `move.from` is not in `held`. It is
+  // placed there once it commits or opens, and the next reconciliation moves
+  // it.
+  void Move(const ShellWindowMove& move,
+            const std::vector<display::Display>& displays,
+            const std::vector<ShellWindow>& held,
+            const std::vector<int64_t>& placed) {
+    const auto to = std::ranges::find(displays, move.to, &display::Display::id);
+    CHECK(to != displays.end()) << "planned a move to display " << move.to
+                                << ", which is not on the desk";
+    for (size_t index = 0; index < held.size(); ++index) {
+      if (placed[index] == move.from) {
+        VLOG(1) << "domicile: moving the shell window from display "
+                << move.from << " to display " << move.to;
+        places_.Move(Identity(held[index].window), move.to);
+        FitTo(held[index].window, to->bounds());
+        return;
+      }
+    }
+    VLOG(1) << "domicile: the shell window for display " << move.from
+            << " is still loading; it moves to display " << move.to
+            << " once it is placed";
   }
 
   void Close(int64_t id,

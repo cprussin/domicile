@@ -143,6 +143,8 @@ source_set("shell_windows") {
     "browser/shell_windows.h",
   ]
 
+  deps = [ "//base" ]
+
   public_deps = [
     "//ui/display",
     "//ui/gfx/geometry",

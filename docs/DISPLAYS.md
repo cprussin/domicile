@@ -216,10 +216,11 @@ window so each can rotate and scale on its own.
 
 Each display gets its own browser window, and one shell page spans them all:
 [ONE-PAGE-FOR-THE-DESK.md](architecture/ONE-PAGE-FOR-THE-DESK.md). On a
-hotplug, `ShellWindows` opens new windows before closing old ones and never
-closes the last window, since that would exit the browser. A new host's window
-is created asynchronously, so `ShellWindows` reconciles again once it exists
-to watch its page.
+hotplug, sleep or wake that moves the host, `ShellWindows` moves the host's
+window to the new host rather than reopening it, which would reload the shell.
+It opens new windows before closing old ones and never closes the last window,
+since that would exit the browser. A new window is created asynchronously, so
+`ShellWindows` reconciles again once it exists to watch its page.
 
 ## Monitor names
 
