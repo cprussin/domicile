@@ -48,16 +48,16 @@ const pickerSource = (types: readonly SourceType[]): DesktopCapturerSource => {
 
 /** Electron's `desktopCapturer`. */
 export const desktopCapturer = {
-  getSources: async (
-    options: SourcesOptions,
-  ): Promise<DesktopCapturerSource[]> => {
+  // Rejects rather than throws, as Electron's does.
+  getSources: (options: SourcesOptions): Promise<DesktopCapturerSource[]> => {
     const types = options.types;
-    if (!Array.isArray(types) || types.length === 0) {
-      throw new TypeError(
-        'desktopCapturer.getSources takes `types`, some of "screen" and "window"',
-      );
-    }
-    return [pickerSource(types)];
+    return !Array.isArray(types) || types.length === 0
+      ? Promise.reject(
+          new TypeError(
+            'desktopCapturer.getSources takes `types`, some of "screen" and "window"',
+          ),
+        )
+      : Promise.resolve([pickerSource(types)]);
   },
 };
 
