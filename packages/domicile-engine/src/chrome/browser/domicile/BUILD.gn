@@ -41,6 +41,8 @@ source_set("domicile") {
     "domicile_electron_loader.h",
     "domicile_electron_page.cc",
     "domicile_electron_page.h",
+    "domicile_electron_web_request.cc",
+    "domicile_electron_web_request.h",
     "domicile_electron_socket.cc",
     "domicile_electron_socket.h",
     "domicile_extension_installer.cc",

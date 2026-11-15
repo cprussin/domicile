@@ -61,6 +61,25 @@ void ElectronSession::Fetch(ElectronFetch fetch,
   app_->StartFetch(name_, std::move(fetch), std::move(responder));
 }
 
+bool ElectronSession::ListensFor(ElectronWebRequestEvent event) const {
+  return web_request_events_.contains(event);
+}
+
+void ElectronSession::AskWebRequest(ElectronWebRequestEvent event,
+                                    const std::optional<std::string>& window,
+                                    ElectronWebRequestDetails details,
+                                    ElectronWebRequestAnswered answered) {
+  CHECK(IsBlockingElectronWebRequestEvent(event));
+  app_->StartAsk(name_, event, window, details, std::move(answered));
+}
+
+void ElectronSession::TellWebRequest(ElectronWebRequestEvent event,
+                                     const std::optional<std::string>& window,
+                                     ElectronWebRequestDetails details) {
+  CHECK(!IsBlockingElectronWebRequestEvent(event));
+  app_->SendWebRequest(name_, event, std::nullopt, window, details);
+}
+
 ElectronApp::ElectronApp(ElectronDesk& desk,
                          Send send,
                          std::vector<ElectronScheme> schemes)
@@ -69,6 +88,12 @@ ElectronApp::ElectronApp(ElectronDesk& desk,
 ElectronApp::~ElectronApp() {
   for (const auto& [number, window] : windows_) {
     desk_->Close(window.id);
+  }
+  // A request the app's listener never answered does not go ahead as if it
+  // had said nothing.
+  for (auto& [number, ask] : std::exchange(asks_, {})) {
+    std::move(ask.answered)
+        .Run(ElectronWebRequestAnswer{.ask = number, .cancel = true});
   }
 }
 
@@ -135,6 +160,10 @@ void ElectronApp::Take(std::string_view line) {
     ReceiveData(std::move(*data));
   } else if (auto* end = std::get_if<ElectronProtocolEnd>(&*request)) {
     EndBody(*end);
+  } else if (auto* listen = std::get_if<ElectronWebRequestListen>(&*request)) {
+    ListenForWebRequests(std::move(*listen));
+  } else if (auto* answer = std::get_if<ElectronWebRequestAnswer>(&*request)) {
+    Answer(std::move(*answer));
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -291,6 +320,83 @@ ElectronSession& ElectronApp::SessionNamed(const std::string& name) {
     session = std::make_unique<ElectronSession>(*this, name);
   }
   return *session;
+}
+
+void ElectronApp::ListenForWebRequests(ElectronWebRequestListen listen) {
+  // Checked as handle_protocol's session is.
+  base::expected<WebViewPartition, std::string> partition =
+      ElectronSessionPartition(hello_->partition, listen.session);
+  if (!partition.has_value()) {
+    send_.Run(ElectronRefused(partition.error()));
+    return;
+  }
+  SessionNamed(listen.session).web_request_events_ = std::move(listen.events);
+}
+
+void ElectronApp::SendWebRequest(const std::string& session,
+                                 ElectronWebRequestEvent event,
+                                 std::optional<int> ask,
+                                 const std::optional<std::string>& window,
+                                 const ElectronWebRequestDetails& details) {
+  std::optional<ElectronWindow> number;
+  if (window.has_value()) {
+    const auto found = std::ranges::find(
+        windows_, *window, [](const auto& entry) -> const std::string& {
+          return entry.second.id;
+        });
+    if (found != windows_.end()) {
+      number = found->first;
+    }
+  }
+  send_.Run(ElectronWebRequest(event, ask, number, session, details));
+}
+
+void ElectronApp::StartAsk(const std::string& session,
+                           ElectronWebRequestEvent event,
+                           const std::optional<std::string>& window,
+                           const ElectronWebRequestDetails& details,
+                           ElectronWebRequestAnswered answered) {
+  const int number = next_ask_++;
+  asks_.emplace(number, Ask{.event = event, .answered = std::move(answered)});
+  SendWebRequest(session, event, number, window, details);
+}
+
+void ElectronApp::Answer(ElectronWebRequestAnswer answer) {
+  auto found = asks_.find(answer.ask);
+  if (found == asks_.end()) {
+    send_.Run(
+        ElectronRefused(base::StrCat({"no web request is waiting for answer ",
+                                      base::NumberToString(answer.ask)})));
+    return;
+  }
+  Ask ask = std::move(found->second);
+  asks_.erase(found);
+  // What each listener's answer may change, as in Electron.
+  const char* stray = nullptr;
+  if (answer.redirect_url.has_value() &&
+      ask.event != ElectronWebRequestEvent::kBeforeRequest) {
+    stray = "redirect_url";
+  } else if (answer.request_headers.has_value() &&
+             ask.event != ElectronWebRequestEvent::kBeforeSendHeaders) {
+    stray = "request_headers";
+  } else if (answer.response_headers.has_value() &&
+             ask.event != ElectronWebRequestEvent::kHeadersReceived) {
+    stray = "response_headers";
+  } else if (answer.status_line.has_value() &&
+             ask.event != ElectronWebRequestEvent::kHeadersReceived) {
+    stray = "status_line";
+  }
+  if (stray != nullptr) {
+    // The app's bug fails the request, rather than letting it through as if
+    // the app had not asked for a change.
+    send_.Run(ElectronRefused(
+        base::StrCat({"an answer to ", ElectronWebRequestEventName(ask.event),
+                      " cannot set ", stray})));
+    std::move(ask.answered)
+        .Run(ElectronWebRequestAnswer{.ask = answer.ask, .cancel = true});
+    return;
+  }
+  std::move(ask.answered).Run(std::move(answer));
 }
 
 void ElectronApp::HandleProtocol(const ElectronHandleProtocol& handle) {
