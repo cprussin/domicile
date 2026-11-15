@@ -196,7 +196,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `Menu.setApplicationMenu`, `win.setMenu` | a menu bar under the window's tab, drawn by the shell |
 | `Menu.popup` | a shell context menu |
 | `Menu`, `MenuItem` | built in the host (`src/electron/menu.ts`): roles get Electron's Linux labels and accelerators, and role menus (`editMenu`, `viewMenu`, …) expand as Electron's do; macOS-only roles are hidden. The tray and the menu bar draw a menu's model and click its entries by number; a click toggles a checkbox or picks a radio first. A role the host doesn't carry out yet throws when clicked, naming it. `before`/`after` place items; group positions keep template order |
-| `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)) |
+| `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)), built in the host (`src/electron/tray.ts`). Each tray has its own bus connection, so `destroy` takes the icon down. The icon goes as `IconPixmap`, the tooltip as `ToolTip`'s title, and the context menu as a `com.canonical.dbusmenu` at `/MenuBar` that the shell draws and clicks; a change anywhere in the menu sends `LayoutUpdated`. `Activate` is `click`, `SecondaryActivate` `middle-click` and `ContextMenu` `right-click`. The click's activation token isn't needed: the engine raises the app's windows itself. Balloons, pressed images, `setTitle` and `getBounds` are other platforms' and do nothing |
 | `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)): a click is the `default` action, buttons are actions numbered from 0, `hasReply` is `inline-reply`, and `desktop-entry` names the app. An icon is a file path; a `nativeImage` icon throws until the host has `nativeImage` |
 | `dialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
 | `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
@@ -289,7 +289,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `Notification`
 - [x] `electron-host`: `nativeImage`
 - [x] `electron-host`: `Menu` and `MenuItem` (the model the tray and menu bar draw)
-- [ ] tray, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
+- [x] `electron-host`: `Tray`
+- [ ] `dialog`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron

@@ -1,10 +1,12 @@
 // A desktop session bus for tests: a private dbus-daemon serving a stand-in
 // settings portal with the appearance a test gives, and a notification server
-// that writes down each notification.
+// that writes down each notification, and a tray watcher that writes down
+// each item registered with it.
 
 import {
   DBusError,
   interface as dbusInterface,
+  Message,
   sessionBus,
   Variant,
 } from "dbus-next";
@@ -94,6 +96,9 @@ Notifications.configureMembers({
   },
 });
 
+/** An item registered with the tray: what it said, and its connection. */
+export type RegisteredItem = { service: string; sender: string };
+
 /** Starts the bus and its services; `address` goes in DBUS_SESSION_BUS_ADDRESS. */
 export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
   const daemon = Bun.spawn(
@@ -114,6 +119,24 @@ export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
   const bus = sessionBus({ busAddress: address });
   await bus.requestName("org.freedesktop.portal.Desktop", 0);
   await bus.requestName("org.freedesktop.Notifications", 0);
+  await bus.requestName("org.kde.StatusNotifierWatcher", 0);
+  const registered: RegisteredItem[] = [];
+  // By hand rather than as an interface: the item's connection is the
+  // message's sender, which an interface's method isn't told.
+  bus.addMethodHandler((message: Message) => {
+    if (
+      message.interface !== "org.kde.StatusNotifierWatcher" ||
+      message.member !== "RegisterStatusNotifierItem"
+    ) {
+      return false;
+    }
+    registered.push({
+      sender: message.sender ?? "",
+      service: String(message.body[0]),
+    });
+    bus.send(Message.newMethodReturn(message));
+    return true;
+  });
   const notifications = new Notifications();
   bus.export("/org/freedesktop/portal/desktop", new Settings(appearance));
   bus.export("/org/freedesktop/Notifications", notifications);
@@ -126,5 +149,7 @@ export const startFakeDesktopBus = async (appearance: PortalAppearance) => {
     },
     /** Each notification the server was sent, in order. */
     notifications: notifications.sent,
+    /** Each item registered with the tray, in order. */
+    registered,
   };
 };

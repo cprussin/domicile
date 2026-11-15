@@ -40,7 +40,7 @@ type NotificationsProxy = {
 
 /**
  * The desktop's services on the session bus at `address`: the settings
- * portal and the notification server.
+ * portal and the notification server, and new connections for tray icons.
  */
 export const connectDesktop = async (address: string) => {
   const bus = sessionBus({ busAddress: address });
@@ -63,6 +63,8 @@ export const connectDesktop = async (address: string) => {
     "org.freedesktop.Notifications",
   ) as unknown as NotificationsProxy;
   return {
+    /** A connection of its own, as each tray icon needs. */
+    connect: () => sessionBus({ busAddress: address }),
     notifications: {
       close: (id) => notifications.CloseNotification(id),
       notify: (call) =>
