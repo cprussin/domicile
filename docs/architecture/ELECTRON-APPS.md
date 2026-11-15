@@ -104,9 +104,19 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     `getBounds()` and the `resize` event.
   - A view outlives the window that held it until the app closes it, as an
     Electron app's do.
+  - In the host, `win.contentView.addChildView(view, index?)`,
+    `removeChildView`, `view.setBounds` and `view.setVisible` each send the
+    window's `set_views`, only once the window and the view have opened and
+    only when something moved. `BrowserView` is a view placed with
+    `setBrowserView` and kin; its `setAutoResize` follows the window's
+    `resized`. A view nested in a view throws, since only a window holds
+    views. `BrowserWindow.fromWebContents` finds the window holding a view's
+    page.
 - **`loadURL`, `loadFile`, title, show, focus and close** map to existing
-  window requests. Window size and position are ignored: the shell lays out
-  windows.
+  window requests. Window size and position are not the app's to set: the
+  shell lays out windows. A window's size reads as the shell gave it
+  (`getContentBounds`, `getBounds`, `getSize`), and `resize` fires as it
+  changes; before the shell gives one, it is the size the app asked for.
 - **`loadFile`** loads from the mirror, so the engine reads plain files.
 - **Storage:** each app gets its own partition, named by its `package.json`
   name. Apps share no cookies with each other or with the browser.
@@ -216,20 +226,18 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 
 | Electron | Domicile |
 |---|---|
-| `Menu.setApplicationMenu`, `win.setMenu` | a menu bar under the window's tab, drawn by the shell |
+| `Menu.setApplicationMenu`, `win.setMenu` | a menu bar under the window's tab, drawn by the shell. The host (`src/electron/browser-window.ts`) sends each window's menu model with `set_menu_bar` once the window opens and again whenever the menu changes, and runs the entry a `menu_clicked` names for that window. As on Electron for Linux, `setApplicationMenu` sets every window's menu and each new window starts with it; `autoHideMenuBar`, `setAutoHideMenuBar`, `setMenuBarVisibility` and `removeMenu` go along with it. Electron's default menu isn't made: an app with no menu has no bar |
 | `Menu.popup` | a shell context menu |
-| `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)) |
-| `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)) |
-| `dialog.showOpenDialog`, `dialog.showSaveDialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
-| `dialog.showMessageBox` | a message box over the window, drawn by the shell |
-| `nativeTheme` | the desktop theme |
-| `shell.openExternal` | `domicile open` |
-| `dialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
+| `Menu`, `MenuItem` | built in the host (`src/electron/menu.ts`): roles get Electron's Linux labels and accelerators, and role menus (`editMenu`, `viewMenu`, …) expand as Electron's do; macOS-only roles are hidden. The tray and the menu bar draw a menu's model and click its entries by number; a click toggles a checkbox or picks a radio first. A role the host doesn't carry out yet throws when clicked, naming it. `before`/`after` place items; group positions keep template order |
+| `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)), built in the host (`src/electron/tray.ts`). Each tray has its own bus connection, so `destroy` takes the icon down. The icon goes as `IconPixmap`, the tooltip as `ToolTip`'s title, and the context menu as a `com.canonical.dbusmenu` at `/MenuBar` that the shell draws and clicks; a change anywhere in the menu sends `LayoutUpdated`. `Activate` is `click`, `SecondaryActivate` `middle-click` and `ContextMenu` `right-click`. The click's activation token isn't needed: the engine raises the app's windows itself. Balloons, pressed images, `setTitle` and `getBounds` are other platforms' and do nothing |
+| `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)): a click is the `default` action, buttons are actions numbered from 0, `hasReply` is `inline-reply`, and `desktop-entry` names the app. An icon is a file path; a `nativeImage` icon throws until the host has `nativeImage` |
+| `dialog` | file dialogs through the file chooser portal ([PORTALS.md](/docs/PORTALS.md)), built in the host (`src/electron/dialog.ts`): Electron's properties, filters, button label and default path become the portal's options, and its URIs come back as paths. The `Sync` calls block on a child process that asks the portal (`src/choose-file.ts`), as Electron's block the main process. Dialogs aren't tied to the app's window yet: Electron windows are the shell's pages, not toplevels a portal can name. `showMessageBox` sends `show_message_box` over the window the app names, or its most recent open one, and resolves with the `message_box_answered` the shell's answer brings (`src/electron/message-boxes.ts`); with no window open it rejects. As Electron, no buttons is one OK, and the cancel button the app names none for is the first labeled Cancel or No. `showMessageBoxSync` throws, as nothing can block for the shell's answer; `showErrorBox` writes to the host's log |
 | `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
 | `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
-| `safeStorage` | Secret Service on D-Bus |
+| `safeStorage` | Chromium's OSCrypt for Linux, byte for byte, built in the host (`src/electron/safe-storage.ts`), so what an app encrypted on its own Electron decrypts here and back: AES-128-CBC with the PBKDF2 key of a password the Secret Service keeps as "Chromium Safe Storage" with `application` set to the app's name (`src/secret-service.ts`), prefixed `v11`. The password is read, or created, when the app first needs it, blocking on a child process (`src/safe-storage-password.ts`) as Electron blocks on libsecret, so a locked keyring asks to be unlocked then. With no Secret Service, or an unlock refused, the backend is `basic_text`: encryption needs `setUsePlainTextEncryption(true)` and uses the hardcoded `v10` key, as in Electron |
 | `desktopCapturer` | the share picker |
-| `clipboard` | the desktop clipboard |
+| `clipboard` | the desktop clipboard through `wl-paste` and `wl-copy`, which the compositor serves with data-control (docs/use/CLIPBOARD.md), built in the host (`src/electron/clipboard.ts`). Each call waits on its command, as Electron's clipboard is synchronous; `selection` is the primary selection. `wl-copy` offers one type per copy, so a `write` of several formats throws, naming them, until the host can offer several. Rich copies in pages go through the engine's own clipboard, which has no such limit. The host's package needs `wl-clipboard` on its `PATH` |
+| `nativeImage` | the image's PNG or JPEG bytes, in the host. PNGs are read and written without a library (`src/png.ts`) for `resize`, `crop` and bitmaps; a JPEG is kept as it came and can't be decoded, so those throw for one. One scale factor, 1 |
 | `autoUpdater` | off; the app's package updates it |
 
 App menus travel as a JSON model over the Electron socket:
@@ -327,15 +335,24 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `utilityProcess`
 - [x] engine: views (`set_views`), listed to the shell under their window, and each page's size
 - [x] shells: the SDK lists views apart (`browser.views`); Manganese draws them where their apps ask
-- [ ] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds`
+- [x] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds` and `resize`
 - [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
 - [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`
-- [ ] tray, notifications, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
+- [x] `electron-host`: `Notification`
+- [x] `electron-host`: `nativeImage`
+- [x] `electron-host`: `Menu` and `MenuItem` (the model the tray and menu bar draw)
+- [x] `electron-host`: `Tray`
+- [x] `electron-host`: `dialog` file dialogs
+- [x] `electron-host`: `safeStorage`
+- [x] `electron-host`: `clipboard`
+- [ ] `clipboard.write` of several formats at once
+- [ ] `desktopCapturer`
 - [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)
 - [x] Manganese: app menus as a menu bar under the window's tab; accelerators run their entries; Alt toggles an auto-hidden bar, and Alt with a mnemonic opens a menu
+- [x] `electron-host`: `setApplicationMenu`, `setMenu` and the menu bar's settings reach the engine; clicks come back
 - [x] engine: message boxes (`show_message_box`), listed with the window one at a time, and answers back to the app (`message_box_answered`)
 - [x] Manganese: message boxes over the window's page, the app's buttons in its order; Enter presses its default and Escape its cancel
-- [ ] `electron-host`: `dialog.showMessageBox`
+- [x] `electron-host`: `dialog.showMessageBox`
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

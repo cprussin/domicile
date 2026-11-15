@@ -15,6 +15,7 @@ import { createClipboard } from "./electron/clipboard";
 import { createDialog } from "./electron/dialog";
 import { createIpcMain } from "./electron/ipc-main";
 import { createMenu } from "./electron/menu";
+import { createMessageBoxes } from "./electron/message-boxes";
 import {
   MessageChannelMain,
   MessagePortMain,
@@ -146,12 +147,20 @@ const main = async ([resources, ...args]: string[]) => {
         },
         model,
       });
+    const messageBoxes = createMessageBoxes(engine.send);
+    engine.events.on("window", (event) => {
+      if (event.type === "message_box_answered") {
+        messageBoxes.hear(event);
+      }
+    });
     const electron = {
       app,
       BrowserView,
       BrowserWindow,
       clipboard: createClipboard({ run: runCommandSync }),
       dialog: createDialog({
+        askMessageBox: async (window, options) =>
+          messageBoxes.ask(boxWindow(window, BrowserWindow), options),
         choose: desktop.choose,
         chooseSync: desktop.chooseSync,
         isDirectory: (path) =>
@@ -203,6 +212,37 @@ const main = async ([resources, ...args]: string[]) => {
     await import(pkg.main);
     markReady();
   }
+};
+
+/**
+ * The window a message box goes over: the one the app named, else its most
+ * recent open one. Throws with none, as there is nowhere to show it.
+ */
+const boxWindow = (
+  named: unknown,
+  windows: {
+    getAllWindows: () => { id: number; isDestroyed: () => boolean }[];
+  },
+): number => {
+  if (named !== undefined && named !== null) {
+    const { id } = named as { id: unknown };
+    if (typeof id !== "number") {
+      throw new TypeError(
+        "dialog.showMessageBox takes a BrowserWindow, then its options",
+      );
+    }
+    return id;
+  }
+  const open = windows
+    .getAllWindows()
+    .filter((window) => !window.isDestroyed());
+  const recent = open.at(-1);
+  if (recent === undefined) {
+    throw new Error(
+      "dialog.showMessageBox needs a window to show over on Domicile, and the app has none open",
+    );
+  }
+  return recent.id;
 };
 
 /** The desktop's services on its session bus, or the host fails, naming why. */

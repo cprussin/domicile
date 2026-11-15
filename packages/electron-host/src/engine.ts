@@ -8,6 +8,7 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 import type { MenuEntry } from "./electron/menu";
+import type { ShowMessageBoxMessage } from "./electron/message-boxes";
 import type { PortRequest } from "./electron/message-port-main";
 import type {
   IncomingPermissionRequest,
@@ -96,6 +97,7 @@ export type EngineRequest =
       /** The names of the app's ports that go with it, each "m" and a number. */
       readonly ports: string[];
     }
+  | ShowMessageBoxMessage
   | PortRequest
   | ProtocolRequest
   | WebRequestMessage
@@ -167,6 +169,13 @@ const engineEvent = z.discriminatedUnion("type", [
   z.object({
     command: z.number(),
     type: z.literal("menu_clicked"),
+    window: z.number(),
+  }),
+  z.object({
+    box: z.number(),
+    checkbox_checked: z.boolean(),
+    response: z.number(),
+    type: z.literal("message_box_answered"),
     window: z.number(),
   }),
   z.object({
