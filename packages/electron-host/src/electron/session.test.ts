@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import type { PermissionMessage } from "./permissions";
+import { createPermissions } from "./permissions";
 import type { ProtocolRequest } from "./protocol";
 import { createProtocols } from "./protocol";
 import { createSessions, sessionPartition } from "./session";
@@ -9,7 +11,12 @@ import type { WebRequestMessage } from "./web-request";
 import { createWebRequests } from "./web-request";
 
 const setUp = () => {
-  const sent: (ProtocolRequest | WebRequestMessage | SessionCallMessage)[] = [];
+  const sent: (
+    | ProtocolRequest
+    | WebRequestMessage
+    | SessionCallMessage
+    | PermissionMessage
+  )[] = [];
   const calls = createSessionCalls((m) => sent.push(m));
   const sessions = createSessions(
     createProtocols((r) => sent.push(r)),
@@ -18,6 +25,11 @@ const setUp = () => {
       () => undefined,
     ),
     calls,
+    createPermissions(
+      (m) => sent.push(m),
+      () => undefined,
+      () => undefined,
+    ),
   );
   return { calls, sent, sessions };
 };
@@ -74,6 +86,18 @@ describe(createSessions, () => {
         session: "persist:a",
         type: "web_request_listen",
       },
+    ]);
+  });
+
+  it("gives each session a permission request handler of its own", () => {
+    const { sent, sessions } = setUp();
+    const session = sessions.fromPartition("persist:a");
+    sent.length = 0;
+
+    session.setPermissionRequestHandler(() => undefined);
+
+    expect(sent).toEqual([
+      { handle: true, session: "persist:a", type: "permission_handler" },
     ]);
   });
 

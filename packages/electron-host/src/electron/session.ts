@@ -1,8 +1,15 @@
 // The stand-in for Electron's `session`: one per partition, each with its own
-// protocol handlers, webRequest listeners, cookies and storage. Each is a partition inside the app's own in the engine,
+// protocol handlers, webRequest listeners, cookies, storage and permission
+// handlers. Each is a partition inside the app's own in the engine,
 // so no session reaches another app's storage. See "Requests" in
 // docs/architecture/ELECTRON-APPS.md.
 
+import type {
+  createPermissions,
+  PermissionCheckHandler,
+  PermissionRequestHandler,
+  Permissions,
+} from "./permissions";
 import type { createProtocols, Protocol } from "./protocol";
 import type {
   ClearStorageDataOptions,
@@ -18,16 +25,27 @@ const partitions = new WeakMap<Session, string>();
 export class Session {
   readonly cookies: Cookies;
   readonly #calls: SessionCalls;
+  readonly #permissions: Permissions;
 
   constructor(
     partition: string,
     readonly protocol: Protocol,
     readonly webRequest: WebRequest,
     calls: SessionCalls,
+    permissions: Permissions,
   ) {
     partitions.set(this, partition);
     this.cookies = calls.cookies;
     this.#calls = calls;
+    this.#permissions = permissions;
+  }
+
+  setPermissionRequestHandler(handler: PermissionRequestHandler | null) {
+    this.#permissions.setPermissionRequestHandler(handler);
+  }
+
+  setPermissionCheckHandler(handler: PermissionCheckHandler | null) {
+    this.#permissions.setPermissionCheckHandler(handler);
   }
 
   clearStorageData(options?: ClearStorageDataOptions) {
@@ -59,13 +77,14 @@ export const sessionPartition = (session: Session) => {
 
 /**
  * Electron's `session` module for an app whose protocols are `protocols`,
- * whose webRequest listeners are `webRequests` and whose session calls go
- * through `calls`.
+ * whose webRequest listeners are `webRequests`, whose session calls go
+ * through `calls` and whose permission handlers are `permissions`.
  */
 export const createSessions = (
   protocols: ReturnType<typeof createProtocols>,
   webRequests: ReturnType<typeof createWebRequests>,
   calls: ReturnType<typeof createSessionCalls>,
+  permissions: ReturnType<typeof createPermissions>,
 ) => {
   const made = new Map<string, Session>();
   const fromPartition = (partition: string) => {
@@ -76,6 +95,7 @@ export const createSessions = (
         protocols.forSession(partition),
         webRequests.forSession(partition),
         calls.forSession(partition),
+        permissions.forSession(partition),
       );
       made.set(partition, session);
       return session;

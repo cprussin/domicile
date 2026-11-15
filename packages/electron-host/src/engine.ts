@@ -8,6 +8,10 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 import type { PortRequest } from "./electron/message-port-main";
+import type {
+  IncomingPermissionRequest,
+  PermissionMessage,
+} from "./electron/permissions";
 import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
 import type {
   SessionCallMessage,
@@ -67,7 +71,8 @@ export type EngineRequest =
   | PortRequest
   | ProtocolRequest
   | WebRequestMessage
-  | SessionCallMessage;
+  | SessionCallMessage
+  | PermissionMessage;
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ready") }),
@@ -168,6 +173,15 @@ const engineEvent = z.discriminatedUnion("type", [
     result: z.unknown().optional(),
     type: z.literal("session_result"),
   }),
+  z.object({
+    ask: z.number(),
+    media_types: z.array(z.string()).optional(),
+    permission: z.string(),
+    requesting_url: z.string(),
+    session: z.string(),
+    type: z.literal("permission_request"),
+    window: z.number().optional(),
+  }),
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;
@@ -191,6 +205,8 @@ export type Engine = {
     webRequest: [request: IncomingWebRequest];
     /** The engine's answer to a session call. */
     sessionResult: [result: SessionResult];
+    /** A page's permission request, for its session's handler. */
+    permissionRequest: [request: IncomingPermissionRequest];
   }>;
 };
 
@@ -243,6 +259,8 @@ export const connectEngine = (
             ? { call, result, type: "session_result" }
             : { call, error, type: "session_result" },
         );
+      } else if (parsed.data.type === "permission_request") {
+        events.emit("permissionRequest", parsed.data);
       } else if ("window" in parsed.data) {
         events.emit("window", parsed.data);
       } else {

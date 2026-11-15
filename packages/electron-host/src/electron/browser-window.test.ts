@@ -8,6 +8,7 @@ import { createBrowserWindow } from "./browser-window";
 import { createIpcMain } from "./ipc-main";
 import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
+import { createPermissions } from "./permissions";
 import { createProtocols } from "./protocol";
 import { createSessions } from "./session";
 import { createSessionCalls } from "./session-calls";
@@ -44,6 +45,11 @@ const setUp = () => {
       () => undefined,
     ),
     createSessionCalls((message) => sent.push(message)),
+    createPermissions(
+      (message) => sent.push(message),
+      () => undefined,
+      () => undefined,
+    ),
   );
   // The default session's file: handler, which every test would start with.
   sent.length = 0;

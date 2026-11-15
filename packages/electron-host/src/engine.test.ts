@@ -118,6 +118,27 @@ describe(connectEngine, () => {
     expect(await heard).toEqual(event);
   });
 
+  it("passes on each permission request", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const heard = new Promise((resolve) =>
+      engine.events.on("permissionRequest", resolve),
+    );
+    const event = {
+      ask: 3,
+      media_types: ["video"],
+      permission: "media",
+      requesting_url: "https://a.test/",
+      session: "",
+      type: "permission_request",
+      window: 1,
+    };
+
+    fake.say(event);
+
+    expect(await heard).toEqual(event);
+  });
+
   it("passes on each session result, with its result or its error", async () => {
     fake = await startFakeEngine();
     const engine = await connected(fake);

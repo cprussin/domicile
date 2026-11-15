@@ -14,6 +14,7 @@ import {
   MessageChannelMain,
   MessagePortMain,
 } from "./electron/message-port-main";
+import { createPermissions } from "./electron/permissions";
 import {
   createProtocols,
   registerSchemesAsPrivileged,
@@ -83,7 +84,21 @@ const main = async ([resources, ...args]: string[]) => {
     engine.events.on("webRequest", webRequests.hear);
     const sessionCalls = createSessionCalls(engine.send);
     engine.events.on("sessionResult", sessionCalls.hear);
-    const session = createSessions(protocols, webRequests, sessionCalls);
+    const permissions = createPermissions(
+      engine.send,
+      (window) => BrowserWindow.fromId(window)?.webContents,
+      (warning) => {
+        // biome-ignore lint/suspicious/noConsole: what the engine does not do for this app, for the app's developer
+        console.warn(`electron-host: ${warning}`);
+      },
+    );
+    engine.events.on("permissionRequest", permissions.hear);
+    const session = createSessions(
+      protocols,
+      webRequests,
+      sessionCalls,
+      permissions,
+    );
     const BrowserWindow = createBrowserWindow(engine, app, ipc, session);
     const electron = {
       app,
