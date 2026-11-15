@@ -32,6 +32,7 @@ FIRST=(
   guard-buffer-formats
   guard-scrolling-bubble
   guard-webview-permissions
+  guard-electron-permissions
   guard-app-survives-load-shell
   guard-app-survives-compositor-restart
   guard-shell
@@ -130,7 +131,6 @@ TOGETHER=(
   guard-electron-protocol
   guard-electron-schemes
   guard-electron-session
-  guard-electron-permissions
   guard-electron-web-request
   guard-video-codecs
   guard-browser-brand
@@ -173,9 +173,12 @@ ONCE=(
 )
 
 # Guards that read a client's pixels, so they run under a headless wlroots
-# compositor: `--ozone-platform=headless` cannot import a dmabuf.
+# compositor: `--ozone-platform=headless` cannot import a dmabuf. And guards
+# whose page asks for a permission: PermissionRequestManager denies every
+# request on a headless screen before any prompt.
 UNDER_WAYLAND=(
   guard-app-survives-compositor-restart
+  guard-electron-permissions
   guard-app-survives-load-shell
   guard-buffer-formats
   guard-buffer-transform
@@ -228,7 +231,9 @@ one() { # name, args...
     guard-shell-manganese)
       engine_guard_and_control_under_wayland guard-shell.sh manganese ;;
     *)
-      if listed "$name" "${ONCE[@]}"; then
+      if listed "$name" "${ONCE[@]}" && listed "$name" "${UNDER_WAYLAND[@]}"; then
+        engine_guard_under_wayland "$name.sh"
+      elif listed "$name" "${ONCE[@]}"; then
         engine_guard "$name.sh"
       elif listed "$name" "${UNDER_WAYLAND[@]}"; then
         engine_guard_and_control_under_wayland "$name.sh"
