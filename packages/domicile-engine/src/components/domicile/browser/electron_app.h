@@ -20,6 +20,7 @@
 #include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/electron_protocol.h"
 #include "components/domicile/browser/web_view_partition.h"
+#include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -71,6 +72,14 @@ class ElectronResponder {
 
 class ElectronApp;
 
+// What setPermissionRequestHandler is asked for a page's request for
+// `permissions` from `origin`, which Chrome groups into one prompt: Electron's
+// name for them. Nothing when Electron has no name for one, or groups them
+// apart, and the shell is asked instead.
+std::optional<ElectronPermissionDetails> ElectronPermissionFor(
+    const std::vector<mojom::WebViewPermission>& permissions,
+    const GURL& origin);
+
 // Where a waiting request hears the app's answer to one of its webRequest
 // events.
 using ElectronWebRequestAnswered =
@@ -110,6 +119,15 @@ class ElectronSession {
                       const std::optional<std::string>& window,
                       ElectronWebRequestDetails details);
 
+  // Whether the app has a permission request handler in this session.
+  bool HandlesPermissions() const { return handles_permissions_; }
+  // Asks the app's handler about `details`, a request desk window `window`'s
+  // page made. `answered` runs once, with the handler's answer or, when the
+  // app goes first, with a denial.
+  void AskPermission(const std::string& window,
+                     ElectronPermissionDetails details,
+                     base::OnceCallback<void(bool granted)> answered);
+
   // session.setUserAgent's, for the session's pages; empty for the engine's.
   const std::string& user_agent() const { return user_agent_; }
   const std::string& name() const { return name_; }
@@ -124,6 +142,7 @@ class ElectronSession {
   const std::string name_;
   std::set<std::string> schemes_;
   std::set<ElectronWebRequestEvent> web_request_events_;
+  bool handles_permissions_ = false;
   std::string user_agent_;
   base::WeakPtrFactory<ElectronSession> weak_factory_{this};
 };
@@ -268,6 +287,14 @@ class ElectronApp {
                 const ElectronWebRequestDetails& details,
                 ElectronWebRequestAnswered answered);
   void Answer(ElectronWebRequestAnswer answer);
+  void HandlePermissions(const ElectronPermissionHandler& handler);
+  void StartPermissionAsk(const std::string& session,
+                          const std::string& window,
+                          const ElectronPermissionDetails& details,
+                          base::OnceCallback<void(bool granted)> answered);
+  void AnswerPermission(const ElectronPermissionAnswer& answer);
+  // The app's number for desk window `id`, if it is one of the app's.
+  std::optional<ElectronWindow> NumberOf(const std::string& id) const;
   // A call on one of the app's sessions, answered with a session_result.
   void RunSessionCall(ElectronSessionCall call);
   void SessionCallDone(int call,
@@ -327,6 +354,9 @@ class ElectronApp {
   // The requests waiting on the app's webRequest listeners, by ask.
   std::map<int, Ask> asks_;
   int next_ask_ = 1;
+  // The pages' permission requests waiting on the app's handlers, by ask.
+  std::map<int, base::OnceCallback<void(bool granted)>> permission_asks_;
+  int next_permission_ask_ = 1;
   base::WeakPtrFactory<ElectronApp> weak_factory_{this};
 };
 

@@ -340,6 +340,32 @@ base::expected<ElectronRequest, ElectronRefusal> ParseWebRequestAnswer(
   return answer;
 }
 
+base::expected<ElectronRequest, ElectronRefusal> ParsePermissionHandler(
+    const base::DictValue& request) {
+  base::expected<std::string, std::string> session =
+      SessionIn(request, /*optional=*/false);
+  const std::optional<bool> handle = request.FindBool("handle");
+  if (!session.has_value()) {
+    return Refuse(std::move(session.error()));
+  } else if (!handle.has_value()) {
+    return Refuse("\"handle\" must be true or false");
+  }
+  return ElectronPermissionHandler{.session = std::move(*session),
+                                   .handle = *handle};
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParsePermissionAnswer(
+    const base::DictValue& request) {
+  const std::optional<int> ask = request.FindInt("ask");
+  const std::optional<bool> granted = request.FindBool("granted");
+  if (!ask.has_value() || *ask < 1) {
+    return Refuse("\"ask\" must be a whole number from 1");
+  } else if (!granted.has_value()) {
+    return Refuse("\"granted\" must be true or false");
+  }
+  return ElectronPermissionAnswer{.ask = *ask, .granted = *granted};
+}
+
 base::ListValue HeadersList(const ElectronHeaders& headers) {
   base::ListValue list;
   for (const auto& [name, value] : headers) {
@@ -755,6 +781,10 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseWebRequestAnswer(*request);
   } else if (*type == "session_call") {
     return ParseSessionCall(*request);
+  } else if (*type == "permission_handler") {
+    return ParsePermissionHandler(*request);
+  } else if (*type == "permission_answer") {
+    return ParsePermissionAnswer(*request);
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }
@@ -863,6 +893,30 @@ std::string ElectronWebRequest(ElectronWebRequestEvent event,
     line.Set("ip", *details.ip);
   }
   // The loader made every string UTF-8.
+  return Line(std::move(line));
+}
+
+std::string ElectronPermissionRequest(
+    int ask,
+    std::optional<ElectronWindow> window,
+    std::string_view session,
+    const ElectronPermissionDetails& details) {
+  base::DictValue line;
+  line.Set("type", "permission_request");
+  line.Set("ask", ask);
+  if (window.has_value()) {
+    line.Set("window", *window);
+  }
+  line.Set("session", session);
+  line.Set("permission", details.permission);
+  line.Set("requesting_url", details.requesting_url.spec());
+  if (!details.media_types.empty()) {
+    base::ListValue types;
+    for (const std::string& type : details.media_types) {
+      types.Append(type);
+    }
+    line.Set("media_types", std::move(types));
+  }
   return Line(std::move(line));
 }
 

@@ -858,6 +858,7 @@ source_set("electron_app") {
     ":browser_window_listing",
     ":electron_protocol",
     "//base",
+    "//components/domicile/mojom",
     "//url",
   ]
 }

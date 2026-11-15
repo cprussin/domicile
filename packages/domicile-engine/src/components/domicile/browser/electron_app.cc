@@ -73,11 +73,73 @@ void ElectronSession::AskWebRequest(ElectronWebRequestEvent event,
   app_->StartAsk(name_, event, window, details, std::move(answered));
 }
 
+void ElectronSession::AskPermission(
+    const std::string& window,
+    ElectronPermissionDetails details,
+    base::OnceCallback<void(bool granted)> answered) {
+  CHECK(handles_permissions_);
+  app_->StartPermissionAsk(name_, window, details, std::move(answered));
+}
+
 void ElectronSession::TellWebRequest(ElectronWebRequestEvent event,
                                      const std::optional<std::string>& window,
                                      ElectronWebRequestDetails details) {
   CHECK(!IsBlockingElectronWebRequestEvent(event));
   app_->SendWebRequest(name_, event, std::nullopt, window, details);
+}
+
+std::optional<ElectronPermissionDetails> ElectronPermissionFor(
+    const std::vector<mojom::WebViewPermission>& permissions,
+    const GURL& origin) {
+  ElectronPermissionDetails details{.requesting_url = origin};
+  for (mojom::WebViewPermission permission : permissions) {
+    std::string_view name;
+    // No default arm, so a new kind fails the build until it has a name or
+    // says why it has none.
+    switch (permission) {
+      case mojom::WebViewPermission::kCamera:
+        name = "media";
+        details.media_types.push_back("video");
+        break;
+      case mojom::WebViewPermission::kMicrophone:
+        name = "media";
+        details.media_types.push_back("audio");
+        break;
+      case mojom::WebViewPermission::kLocation:
+        name = "geolocation";
+        break;
+      case mojom::WebViewPermission::kNotifications:
+        name = "notifications";
+        break;
+      case mojom::WebViewPermission::kClipboard:
+        name = "clipboard-read";
+        break;
+      case mojom::WebViewPermission::kMidi:
+        name = "midiSysex";
+        break;
+      case mojom::WebViewPermission::kWindowManagement:
+        name = "window-management";
+        break;
+      case mojom::WebViewPermission::kIdleDetection:
+        name = "idle-detection";
+        break;
+      case mojom::WebViewPermission::kLocalFonts:
+        // Electron asks its handler about local fonts as "unknown".
+        name = "unknown";
+        break;
+      case mojom::WebViewPermission::kAutomaticDownloads:
+        // Electron never asks about downloads; the shell does.
+        return std::nullopt;
+    }
+    if (!details.permission.empty() && details.permission != name) {
+      return std::nullopt;
+    }
+    details.permission = std::string(name);
+  }
+  if (details.permission.empty()) {
+    return std::nullopt;
+  }
+  return details;
 }
 
 ElectronApp::ElectronApp(ElectronDesk& desk,
@@ -94,6 +156,10 @@ ElectronApp::~ElectronApp() {
   for (auto& [number, ask] : std::exchange(asks_, {})) {
     std::move(ask.answered)
         .Run(ElectronWebRequestAnswer{.ask = number, .cancel = true});
+  }
+  // Nor is a permission the handler never answered granted.
+  for (auto& [number, answered] : std::exchange(permission_asks_, {})) {
+    std::move(answered).Run(false);
   }
 }
 
@@ -169,6 +235,12 @@ void ElectronApp::Take(std::string_view line) {
     Answer(std::move(*answer));
   } else if (auto* call = std::get_if<ElectronSessionCall>(&*request)) {
     RunSessionCall(std::move(*call));
+  } else if (auto* handler =
+                 std::get_if<ElectronPermissionHandler>(&*request)) {
+    HandlePermissions(*handler);
+  } else if (auto* permission =
+                 std::get_if<ElectronPermissionAnswer>(&*request)) {
+    AnswerPermission(*permission);
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -425,17 +497,9 @@ void ElectronApp::SendWebRequest(const std::string& session,
                                  std::optional<int> ask,
                                  const std::optional<std::string>& window,
                                  const ElectronWebRequestDetails& details) {
-  std::optional<ElectronWindow> number;
-  if (window.has_value()) {
-    const auto found = std::ranges::find(
-        windows_, *window, [](const auto& entry) -> const std::string& {
-          return entry.second.id;
-        });
-    if (found != windows_.end()) {
-      number = found->first;
-    }
-  }
-  send_.Run(ElectronWebRequest(event, ask, number, session, details));
+  send_.Run(ElectronWebRequest(
+      event, ask, window.has_value() ? NumberOf(*window) : std::nullopt,
+      session, details));
 }
 
 void ElectronApp::StartAsk(const std::string& session,
@@ -484,6 +548,53 @@ void ElectronApp::Answer(ElectronWebRequestAnswer answer) {
     return;
   }
   std::move(ask.answered).Run(std::move(answer));
+}
+
+void ElectronApp::HandlePermissions(const ElectronPermissionHandler& handler) {
+  // Checked as handle_protocol's session is.
+  base::expected<WebViewPartition, std::string> partition =
+      ElectronSessionPartition(hello_->partition, handler.session);
+  if (!partition.has_value()) {
+    send_.Run(ElectronRefused(partition.error()));
+    return;
+  }
+  // A request already asked still waits for its answer.
+  SessionNamed(handler.session).handles_permissions_ = handler.handle;
+}
+
+std::optional<ElectronWindow> ElectronApp::NumberOf(
+    const std::string& id) const {
+  const auto found = std::ranges::find(
+      windows_, id,
+      [](const auto& entry) -> const std::string& { return entry.second.id; });
+  if (found == windows_.end()) {
+    return std::nullopt;
+  }
+  return found->first;
+}
+
+void ElectronApp::StartPermissionAsk(
+    const std::string& session,
+    const std::string& window,
+    const ElectronPermissionDetails& details,
+    base::OnceCallback<void(bool granted)> answered) {
+  const int number = next_permission_ask_++;
+  permission_asks_.emplace(number, std::move(answered));
+  send_.Run(
+      ElectronPermissionRequest(number, NumberOf(window), session, details));
+}
+
+void ElectronApp::AnswerPermission(const ElectronPermissionAnswer& answer) {
+  auto found = permission_asks_.find(answer.ask);
+  if (found == permission_asks_.end()) {
+    send_.Run(ElectronRefused(
+        base::StrCat({"no permission request is waiting for answer ",
+                      base::NumberToString(answer.ask)})));
+    return;
+  }
+  base::OnceCallback<void(bool granted)> answered = std::move(found->second);
+  permission_asks_.erase(found);
+  std::move(answered).Run(answer.granted);
 }
 
 void ElectronApp::HandleProtocol(const ElectronHandleProtocol& handle) {

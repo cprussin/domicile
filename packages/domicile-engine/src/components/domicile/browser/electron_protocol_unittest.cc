@@ -554,6 +554,61 @@ TEST(ElectronProtocolTest, AWebRequestEventIsOneLine) {
             "\n");
 }
 
+TEST(ElectronProtocolTest, APermissionHandlerIsSetOrCleared) {
+  const auto set = ParseElectronRequest(
+      R"({"type":"permission_handler","session":"persist:x","handle":true})");
+  const auto cleared = ParseElectronRequest(
+      R"({"type":"permission_handler","session":"","handle":false})");
+
+  ASSERT_TRUE(set.has_value()) << set.error().why;
+  ASSERT_TRUE(cleared.has_value()) << cleared.error().why;
+  EXPECT_EQ(
+      std::get<ElectronPermissionHandler>(*set),
+      (ElectronPermissionHandler{.session = "persist:x", .handle = true}));
+  EXPECT_EQ(std::get<ElectronPermissionHandler>(*cleared),
+            (ElectronPermissionHandler{.session = "", .handle = false}));
+  EXPECT_EQ(WhyRefused(R"({"type":"permission_handler","handle":true})"),
+            "\"session\" must be a string");
+  EXPECT_EQ(WhyRefused(R"({"type":"permission_handler","session":""})"),
+            "\"handle\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, APermissionAnswerGrantsOrDenies) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"permission_answer","ask":2,"granted":true})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronPermissionAnswer>(*request),
+            (ElectronPermissionAnswer{.ask = 2, .granted = true}));
+  EXPECT_EQ(WhyRefused(R"({"type":"permission_answer","granted":true})"),
+            "\"ask\" must be a whole number from 1");
+  // No answer is not a denial: the app's bug is refused.
+  EXPECT_EQ(WhyRefused(R"({"type":"permission_answer","ask":2})"),
+            "\"granted\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, APermissionRequestIsOneLine) {
+  EXPECT_EQ(
+      ElectronPermissionRequest(
+          3, 1, "persist:x",
+          ElectronPermissionDetails{.permission = "media",
+                                    .requesting_url = GURL("https://a.test/"),
+                                    .media_types = {"video", "audio"}}),
+      R"({"ask":3,"media_types":["video","audio"],)"
+      R"("permission":"media","requesting_url":"https://a.test/",)"
+      R"("session":"persist:x","type":"permission_request","window":1})"
+      "\n");
+  EXPECT_EQ(
+      ElectronPermissionRequest(
+          4, std::nullopt, "",
+          ElectronPermissionDetails{.permission = "notifications",
+                                    .requesting_url = GURL("https://a.test/")}),
+      R"({"ask":4,"permission":"notifications",)"
+      R"("requesting_url":"https://a.test/","session":"",)"
+      R"("type":"permission_request"})"
+      "\n");
+}
+
 TEST(ElectronProtocolTest, OnlyBeforeRequestSendHeadersAndHeadersReceivedWait) {
   EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
       ElectronWebRequestEvent::kBeforeRequest));

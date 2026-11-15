@@ -347,6 +347,39 @@ struct ElectronWebRequestDetails {
   std::optional<std::string> ip;
 };
 
+// Session `session` has a permission request handler, or no longer has one.
+// While it has one, its pages' permission requests ask the app instead of the
+// shell.
+struct ElectronPermissionHandler {
+  std::string session;
+  bool handle = false;
+
+  friend bool operator==(const ElectronPermissionHandler&,
+                         const ElectronPermissionHandler&) = default;
+};
+
+// The handler's answer to permission request `ask`.
+struct ElectronPermissionAnswer {
+  int ask = 0;
+  bool granted = false;
+
+  friend bool operator==(const ElectronPermissionAnswer&,
+                         const ElectronPermissionAnswer&) = default;
+};
+
+// A page's permission request as setPermissionRequestHandler sees it.
+struct ElectronPermissionDetails {
+  // Electron's name for it: "media", "geolocation", "notifications"...
+  std::string permission;
+  // The origin that asked.
+  GURL requesting_url;
+  // "media"'s kinds: "video", "audio".
+  std::vector<std::string> media_types;
+
+  friend bool operator==(const ElectronPermissionDetails&,
+                         const ElectronPermissionDetails&) = default;
+};
+
 // A cookie as Electron's session.cookies shows it.
 struct ElectronCookie {
   std::string name;
@@ -483,7 +516,9 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronProtocolEnd,
                                      ElectronWebRequestListen,
                                      ElectronWebRequestAnswer,
-                                     ElectronSessionCall>;
+                                     ElectronSessionCall,
+                                     ElectronPermissionHandler,
+                                     ElectronPermissionAnswer>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -555,6 +590,12 @@ std::string ElectronWebRequest(ElectronWebRequestEvent event,
                                std::optional<ElectronWindow> window,
                                std::string_view session,
                                const ElectronWebRequestDetails& details);
+// Permission request `ask` in session `session`, made by window `window`'s
+// page when it was one; it waits for permission_answer.
+std::string ElectronPermissionRequest(int ask,
+                                      std::optional<ElectronWindow> window,
+                                      std::string_view session,
+                                      const ElectronPermissionDetails& details);
 std::string ElectronProtocolRequest(int request,
                                     std::string_view session,
                                     const ElectronFetch& fetch);
