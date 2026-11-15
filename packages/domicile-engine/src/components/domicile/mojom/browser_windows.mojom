@@ -46,7 +46,7 @@ struct BrowserWindow {
   // one tab this is. 0 for a tab of the desk's own window.
   int32 popup_window;
   // The size the popup window, or the page's window.open(), asked for, in CSS
-  // pixels. 0 on an axis it left unset.
+  // pixels. 0 on an axis it left unset. For a view, the size its app gave it.
   int32 width;
   int32 height;
   // Whether the page is in the profile's off-the-record profile. A private
@@ -67,6 +67,18 @@ struct BrowserWindow {
   // laid out, so a shell keeps a window it hides, such as behind a tab, laid
   // out while it is captured.
   bool captured;
+  // For an Electron app's view (a WebContentsView), the window that holds
+  // it; empty for every window. A view is listed right after its window,
+  // bottom first, and only while a window holds it. Its app asks for it at
+  // `x`, `y`, `width` and `height` in CSS pixels from the top left of the
+  // window's page; the shell lays it out there or wherever it likes. See
+  // "Windows" in docs/architecture/ELECTRON-APPS.md.
+  string parent;
+  int32 x;
+  int32 y;
+  // Whether the app hid the view. A shell keeps a hidden view laid out, as a
+  // page draws only while laid out, and out of sight.
+  bool hidden;
 };
 
 // What OpenApp does when an app window with its `app_id` is already open.

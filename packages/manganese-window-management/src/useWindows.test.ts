@@ -318,13 +318,17 @@ describe("the desk's browser windows", () => {
     id: "1",
     isApp: false,
     isCaptured: false,
+    isHidden: false,
     isPrivate: false,
+    parent: null,
     partition: "",
     popupWindow: null,
     title: "",
     toplevelId: null,
     url: "https://example.com/",
     width: 0,
+    x: 0,
+    y: 0,
   };
 
   it("are drawn as the engine lists them", () => {
@@ -543,13 +547,17 @@ describe("a command", () => {
           id: "1",
           isApp: false,
           isCaptured: false,
+          isHidden: false,
           isPrivate: true,
+          parent: null,
           partition: "",
           popupWindow: null,
           title: "",
           toplevelId: null,
           url: "https://example.com/",
           width: 0,
+          x: 0,
+          y: 0,
         },
       ]);
       act(() => {
@@ -586,13 +594,17 @@ describe("a command", () => {
       id: "1",
       isApp: true,
       isCaptured: false,
+      isHidden: false,
       isPrivate: false,
+      parent: null,
       partition: "",
       popupWindow: null,
       title: "",
       toplevelId: null,
       url: "https://messages.example/",
       width: 0,
+      x: 0,
+      y: 0,
     };
     host.lists([window, { ...window, appId: "", id: "2", isApp: false }]);
 

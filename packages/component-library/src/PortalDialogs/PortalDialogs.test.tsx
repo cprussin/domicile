@@ -429,13 +429,17 @@ const browserWindow = (id: string, title: string) => ({
   id,
   isApp: false,
   isCaptured: false,
+  isHidden: false,
   isPrivate: false,
+  parent: null,
   partition: "",
   popupWindow: null,
   title,
   toplevelId: null,
   url: "https://example.com",
   width: 0,
+  x: 0,
+  y: 0,
 });
 
 /** Draws `element` 150x50 at (10, 20), as layout would. */

@@ -17,7 +17,11 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     bool is_app,
     const String& app_id,
     bool is_captured,
-    const String& toplevel_id)
+    const String& toplevel_id,
+    const String& parent,
+    int32_t x,
+    int32_t y,
+    bool is_hidden)
     : id_(id),
       url_(url),
       title_(title),
@@ -29,7 +33,11 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       is_app_(is_app),
       app_id_(app_id),
       is_captured_(is_captured),
-      toplevel_id_(toplevel_id) {}
+      toplevel_id_(toplevel_id),
+      parent_(parent),
+      x_(x),
+      y_(y),
+      is_hidden_(is_hidden) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

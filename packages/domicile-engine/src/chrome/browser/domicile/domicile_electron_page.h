@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
@@ -16,6 +17,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace domicile {
 
@@ -56,6 +58,17 @@ class ElectronPage final : public content::WebContentsObserver,
 
   // content::WebContentsObserver:
   void ReadyToCommitNavigation(content::NavigationHandle* navigation) override;
+  // Each tells the app the page's new size, for getContentBounds and
+  // "resize". All of them: which one fires for a guest's page is Chromium's,
+  // and a size heard twice is sent once. A page the shell sized before its
+  // document's widget was made hears no resize, so a new page and a finished
+  // load report the size too.
+  void PrimaryMainFrameWasResized(bool width_changed) override;
+  void FrameSizeChanged(content::RenderFrameHost* frame,
+                        const gfx::Size& frame_size) override;
+  void PrimaryPageChanged(content::Page& page) override;
+  void DidFinishLoad(content::RenderFrameHost* frame,
+                     const GURL& url) override;
 
   // mojom::ElectronFrameHost:
   void Send(const std::string& channel, const std::string& args_json) override;
@@ -97,6 +110,13 @@ class ElectronPage final : public content::WebContentsObserver,
   // The document that last committed with the preload, or is about to.
   mojo::AssociatedRemote<mojom::ElectronFrame> frame_;
   mojo::AssociatedReceiver<mojom::ElectronFrameHost> receiver_{this};
+  // The size last told to the app, so a resize that changes nothing says
+  // nothing.
+  // Sends the page's view size to the app if it changed. `heard` names what
+  // said so, for the log.
+  void ReportSize(std::string_view heard);
+
+  gfx::Size size_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

@@ -269,7 +269,7 @@ export type DomicileBrowserWindow = {
   readonly popupWindow: number | null;
   /**
    * The size the popup window, or a page's window.open(), asked for, in CSS
-   * pixels. 0 on an axis it left unset.
+   * pixels. 0 on an axis it left unset. For a view, the size its app gave it.
    */
   readonly width: number;
   readonly height: number;
@@ -308,6 +308,23 @@ export type DomicileBrowserWindow = {
    * until the compositor has listed the window.
    */
   readonly toplevelId: string | null;
+  /**
+   * For an Electron app's view (a WebContentsView): the id of the window
+   * that holds it. Null for every window. A view is part of its window, not a
+   * window: it is listed right after the window, bottom first, only while
+   * the window holds it, and is never a capture source of its own. Draw it
+   * with `<webview window>` as any window, where its app asks (`x`, `y`,
+   * `width`, `height`, in CSS pixels from the top left of the window's page)
+   * or wherever the shell lays it out. See docs/architecture/ELECTRON-APPS.md.
+   */
+  readonly parent: string | null;
+  readonly x: number;
+  readonly y: number;
+  /**
+   * Whether the view's app hid it. Keep a hidden view laid out, out of
+   * sight, as a page draws only while laid out. False for every window.
+   */
+  readonly isHidden: boolean;
 };
 
 /**

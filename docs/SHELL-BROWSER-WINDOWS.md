@@ -393,6 +393,40 @@ the opener, the window name and a form's POST body are kept. It is listed once
 the page shows it, at the address it opens. A middle click opens the link with
 no opener, as in Chrome.
 
+## Views
+
+An Electron app's window can be made of several pages: its own, and views
+(`WebContentsView`) the app places over it. Claude Desktop's window is a
+title bar page with the whole chat in a view under it.
+
+- **A view is listed right after its window**, bottom first, with `parent`
+  set to the window's `id`. Every window has `parent: undefined`. A view is
+  listed only while a window holds it, and never on its own as a window: keep
+  it out of your window list, task switcher and tiling.
+- **Draw it with `<webview window>`** as any window, inside or over its
+  window. Its app asks for it at `x`, `y`, `width` and `height`, in CSS pixels
+  from the top left of the window's page. Honor that and the app looks as it
+  does elsewhere, or lay views out your own way, such as in tabs.
+- **`isHidden`:** the app hid the view. Keep it laid out, out of sight, as
+  a page draws only while laid out.
+- The app hears the size you give each page, its window's and its views', and
+  lays itself out again, so a view you draw at another size still fits.
+
+```js
+for (const window of domicile.browser.windows ?? []) {
+  if (window.parent !== undefined) {
+    const view = drawn.get(window.id);
+    view.style.left = `${window.x}px`;
+    view.style.top = `${window.y}px`;
+    view.style.width = `${window.width}px`;
+    view.style.height = `${window.height}px`;
+    view.style.visibility = window.isHidden ? "hidden" : "visible";
+  }
+}
+```
+
+See "Windows" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+
 ## Fullscreen
 
 A page's `requestFullscreen()`, such as a video's fullscreen button, makes it
