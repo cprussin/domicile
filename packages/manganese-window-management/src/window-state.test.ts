@@ -61,6 +61,7 @@ const listed = (
   menu: undefined,
   menuBarAutoHide: false,
   menuBarVisible: true,
+  messageBox: undefined,
   parent: undefined,
   partition: "",
   popupWindow: popup.popupWindow === 0 ? undefined : popup.popupWindow,

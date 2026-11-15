@@ -85,6 +85,16 @@ export type Browser = {
    */
   clickMenu: (id: string, command: number) => void;
   /**
+   * The user answered the message box window `id` shows (its `messageBox`)
+   * with button `response`, an index into its `buttons`, leaving its checkbox
+   * `checkboxChecked`; its Electron app hears the answer.
+   */
+  answerMessageBox: (
+    id: string,
+    response: number,
+    checkboxChecked: boolean,
+  ) => void;
+  /**
    * Fetch `url` from the browser process with its cookies. Resolves whatever
    * the status; rejects with a NetworkError for a refusal or a network
    * failure.
@@ -96,6 +106,7 @@ export type Browser = {
 export type BrowserHost = Pick<
   DomicileHost,
   | "addEventListener"
+  | "answerBrowserWindowMessageBox"
   | "browserWindows"
   | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
@@ -112,6 +123,9 @@ export const browser = (host: BrowserHost): Browser => {
     (list: readonly DomicileBrowserWindow[] | null) => list?.map(defined),
   );
   return {
+    answerMessageBox: (id, response, checkboxChecked) => {
+      host.answerBrowserWindowMessageBox(id, response, checkboxChecked);
+    },
     clickMenu: (id, command) => {
       host.clickBrowserWindowMenu(id, command);
     },

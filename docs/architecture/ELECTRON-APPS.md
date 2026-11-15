@@ -220,6 +220,10 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `Menu.popup` | a shell context menu |
 | `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)) |
 | `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)) |
+| `dialog.showOpenDialog`, `dialog.showSaveDialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
+| `dialog.showMessageBox` | a message box over the window, drawn by the shell |
+| `nativeTheme` | the desktop theme |
+| `shell.openExternal` | `domicile open` |
 | `dialog` | the file chooser portal ([PORTALS.md](/docs/PORTALS.md)) |
 | `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
 | `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
@@ -238,6 +242,17 @@ with the menu component the tray uses. A click goes back through
 entry's id. The bar behaves as on Electron for Linux: it follows the app's
 `autoHideMenuBar` and `setMenuBarVisibility`, and Alt toggles it. Only a
 window has a menu bar; a view's is refused.
+
+Message boxes travel the same way: `show_message_box {window, box, box_type,
+title, message, detail, buttons, default_id, cancel_id, checkbox_label,
+checkbox_checked}`, with 1 to 16 buttons. The engine checks the box and lists
+it with the window (`DomicileBrowserWindow.messageBox`), one box at a time: a
+window that asks another while one shows lists it once the first is answered.
+The shell draws it over the window's page and answers through
+`answerBrowserWindowMessageBox`, which reaches the app as
+`message_box_answered {window, box, response, checkbox_checked}`. A window
+that closes under its boxes answers each with its `cancel_id`, as the app
+waits on every one. Only a window shows a message box; a view's is refused.
 
 ### Unsupported apps
 
@@ -319,6 +334,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [ ] tray, notifications, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
 - [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)
 - [ ] app menus: the shell's menu bar under the window's tab; Alt toggles it
+- [x] engine: message boxes (`show_message_box`), listed with the window one at a time, and answers back to the app (`message_box_answered`)
+- [ ] message boxes: the shell's box over the window's page; `dialog.showMessageBox` in `electron-host`
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

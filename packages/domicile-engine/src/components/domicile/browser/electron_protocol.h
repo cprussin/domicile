@@ -209,6 +209,20 @@ struct ElectronSetMenuBar {
   bool auto_hide = false;
 };
 
+// dialog.showMessageBox: a question the shell asks over `window`, which the
+// app knows as `box` until it is answered.
+struct ElectronShowMessageBox {
+  ElectronWindow window;
+  int box = 0;
+  // The box as JSON, checked and with only the keys the shell reads: "type",
+  // "title", "message", "detail", "buttons", "defaultId" (-1 for none),
+  // "cancelId", "checkboxLabel" and "checkboxChecked".
+  std::string message_box;
+  // How many buttons it has, and the one that answers when the shell can't.
+  int buttons = 0;
+  int cancel_id = 0;
+};
+
 struct ElectronLoadUrl {
   ElectronWindow window;
   GURL url;
@@ -558,7 +572,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronPermissionHandler,
                                      ElectronPermissionAnswer,
                                      ElectronSetViews,
-                                     ElectronSetMenuBar>;
+                                     ElectronSetMenuBar,
+                                     ElectronShowMessageBox>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -606,6 +621,12 @@ std::string ElectronWindowClosed(ElectronWindow window);
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.
 std::string ElectronMenuClicked(ElectronWindow window, int command);
+// Message box `box` over `window` was answered with button `response`, and
+// its checkbox left checked or not.
+std::string ElectronMessageBoxAnswered(ElectronWindow window,
+                                       int box,
+                                       int response,
+                                       bool checkbox_checked);
 
 // `menu`, a list of menu entries, as the JSON the shell reads, or why it is
 // not one. Each entry is an object with a whole "id" from 1, a "type"

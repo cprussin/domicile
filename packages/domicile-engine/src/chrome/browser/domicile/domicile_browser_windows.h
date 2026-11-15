@@ -89,6 +89,13 @@ void SetElectronViews(const std::string& id,
 // Electron window `id`'s menu bar, listed with it for the shell to draw.
 void SetElectronMenuBar(const std::string& id, ElectronDeskMenuBar bar);
 
+// Asks `box` over Electron window `id`, listed with it for the shell to show,
+// and runs `answered` with the button pressed and the checkbox's state. With
+// no shell, or once the window closes, the box's cancel button answers.
+void ShowElectronMessageBox(const std::string& id,
+                            ElectronDeskMessageBox box,
+                            base::OnceCallback<void(int, bool)> answered);
+
 // Electron window `id`'s page, for the app's IPC to it, or null after
 // logging when no such window is open or its page has no preload.
 ElectronPage* ElectronPageOf(const std::string& id);

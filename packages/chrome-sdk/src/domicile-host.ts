@@ -342,6 +342,17 @@ export type DomicileBrowserWindow = {
    */
   readonly menuBarVisible: boolean;
   readonly menuBarAutoHide: boolean;
+  /**
+   * The message box an Electron app asks over this window, as JSON, null for
+   * none: `type` (none, info, error, question or warning), `title`,
+   * `message`, `detail`, `buttons` (1 to 16 labels, in the app's order),
+   * `defaultId` (the button Enter presses, -1 for none), `cancelId` (the
+   * button Escape presses), `checkboxLabel` (empty for no checkbox) and
+   * `checkboxChecked`. Show it over the window's page, and answer it with
+   * DomicileHost.answerBrowserWindowMessageBox; the window then lists its
+   * next box, if its app asked more.
+   */
+  readonly messageBox: string | null;
 };
 
 /**
@@ -1030,6 +1041,18 @@ export type DomicileHost = {
    * no menu, does nothing.
    */
   clickBrowserWindowMenu(id: string, command: number): void;
+  /**
+   * The user answered the message box window `id` shows
+   * (DomicileBrowserWindow.messageBox) with button `response`, an index into
+   * its `buttons`, leaving its checkbox `checkboxChecked`. Throws a TypeError
+   * for a negative `response`. A window that closed meanwhile, or shows no
+   * box, does nothing.
+   */
+  answerBrowserWindowMessageBox(
+    id: string,
+    response: number,
+    checkboxChecked: boolean,
+  ): void;
   /**
    * Casts the desktop to TV `id`: its picture is what the desktop's ScreenCast
    * portal picks, which asks this page, and its sound is the desktop's.
