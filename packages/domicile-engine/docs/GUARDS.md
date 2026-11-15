@@ -120,7 +120,7 @@ Headless.
 | `guard-webview-history-new-window.sh` | `goBackInNewWindow()` opens a window one step back through a copy of the view's history, and the view stays put |
 | `guard-webview-untrusted-cert.sh` | an https page with a self-signed certificate reads `security` `dangerous`; the same certificate trusted reads `secure` |
 | `guard-webview-find.sh` | find in page, including a cross-site frame; find next starts from the active match (patch 0073) |
-| `guard-webview-keyboard.sh` | a desktop shortcut pressed in a guest is caught; an unclaimed Ctrl+R goes to the shell as `domicile-guest-keydown` |
+| `guard-webview-keyboard.sh` | a desktop shortcut pressed in a guest is caught; an unclaimed Ctrl+R goes to the shell as `domicile-guest-keydown`; a lone Alt let go goes as `domicile-guest-keyup`, and a plain key's release does not |
 | `guard-webview-escape.sh` | Escape with an unfocused browser window does not crash the browser (patch 0037) |
 | `guard-webview-browser-page.sh` | `chrome://history` in a browser window is refused by `BrowserPageThrottle` (patch 0083) |
 | `guard-webview-click.sh` | a click in a browser window fires an event in the shell's document |
