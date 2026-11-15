@@ -28,6 +28,7 @@
 #include "base/threading/sequence_bound.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
+#include "chrome/browser/domicile/domicile_electron_storage.h"
 #include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/browser/electron_protocol.h"
@@ -104,6 +105,41 @@ class ChromeElectronDesk final : public ElectronDesk {
     if (ElectronPage* page = ElectronPageOf(id)) {
       page->ClosePort(port);
     }
+  }
+  void SetUserAgent(const std::string& id,
+                    const std::string& user_agent) override {
+    SetBrowserWindowUserAgent(id, user_agent);
+  }
+  void GetCookies(
+      const WebViewPartition& partition,
+      const std::optional<GURL>& url,
+      base::OnceCallback<void(std::vector<ElectronCookie>)> done) override {
+    GetElectronCookies(partition, url, std::move(done));
+  }
+  void SetCookie(
+      const WebViewPartition& partition,
+      const ElectronCookieDetails& details,
+      base::OnceCallback<void(std::optional<std::string>)> done) override {
+    SetElectronCookie(partition, details, std::move(done));
+  }
+  void RemoveCookie(const WebViewPartition& partition,
+                    const GURL& url,
+                    const std::string& name,
+                    base::OnceClosure done) override {
+    RemoveElectronCookie(partition, url, name, std::move(done));
+  }
+  void FlushCookies(const WebViewPartition& partition,
+                    base::OnceClosure done) override {
+    FlushElectronCookies(partition, std::move(done));
+  }
+  void ClearStorage(const WebViewPartition& partition,
+                    const ElectronClearStorage& clear,
+                    base::OnceClosure done) override {
+    ClearElectronStorage(partition, clear, std::move(done));
+  }
+  void ClearCache(const WebViewPartition& partition,
+                  base::OnceClosure done) override {
+    ClearElectronCache(partition, std::move(done));
   }
 };
 

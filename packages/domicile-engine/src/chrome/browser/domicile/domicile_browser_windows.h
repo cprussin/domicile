@@ -84,6 +84,10 @@ std::optional<std::string> OpenElectronWindow(
 ElectronPage* ElectronPageOf(const std::string& id);
 
 // Loads `url` in browser window `id` of the shell's profile.
+// Browser window `id`'s page loads as `user_agent` from its next navigation
+// on, its page's own included: session.setUserAgent for an Electron app's.
+void SetBrowserWindowUserAgent(const std::string& id,
+                               const std::string& user_agent);
 void LoadBrowserWindow(const std::string& id, const GURL& url);
 
 // Asks the shell to focus browser window `id` of the shell's profile.

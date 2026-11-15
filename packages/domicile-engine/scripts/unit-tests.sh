@@ -42,10 +42,13 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 14, ElectronProtocol 36, ElectronApp 42,
+# PictureInPictureVideos 14, ElectronProtocol 42, ElectronApp 47,
 # ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 794, and it was 783 — an Electron app's session calls (cookies, storage,
+# cache, user agent) are six more ElectronProtocol cases and five more
+# ElectronApp ones. Before that
 # 783, and it was 771 — an Electron app's webRequest listeners are six more
 # ElectronProtocol cases and six more ElectronApp ones. Before that
 # 771, and it was 762 — Electron apps' own schemes, registered at start, are
@@ -259,7 +262,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=783
+FLOOR=794
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

@@ -1312,6 +1312,11 @@ void WebViewGuest::Navigate(const GURL& url) {
   content::NavigationController::LoadURLParams params(
       may_show ? url : GURL(content::kBlockedURL));
   params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+  // A window given a user agent (an Electron session's) loads as it.
+  if (!guest_contents_->GetUserAgentOverride().ua_string_override.empty()) {
+    params.override_user_agent =
+        content::NavigationController::UA_OVERRIDE_TRUE;
+  }
   guest_contents_->GetController().LoadURLWithParams(params);
 }
 

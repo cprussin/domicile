@@ -105,6 +105,9 @@ void ElectronApp::Take(std::string_view line) {
         ElectronWindowRefused(*request.error().window, request.error().why));
   } else if (!request.has_value() && request.error().request.has_value()) {
     FailRequest(*request.error().request, request.error().why);
+  } else if (!request.has_value() && request.error().call.has_value()) {
+    send_.Run(ElectronSessionResult(*request.error().call,
+                                    base::unexpected(request.error().why)));
   } else if (!request.has_value()) {
     send_.Run(ElectronRefused(request.error().why));
   } else if (const auto* hello = std::get_if<ElectronHello>(&*request)) {
@@ -164,6 +167,8 @@ void ElectronApp::Take(std::string_view line) {
     ListenForWebRequests(std::move(*listen));
   } else if (auto* answer = std::get_if<ElectronWebRequestAnswer>(&*request)) {
     Answer(std::move(*answer));
+  } else if (auto* call = std::get_if<ElectronSessionCall>(&*request)) {
+    RunSessionCall(std::move(*call));
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -242,11 +247,93 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
   } else {
+    // The session's user agent reaches the desk through the session, before
+    // the window's first navigation.
     windows_.emplace(
         open.window,
         Window{.id = *id, .title = std::string(), .session = open.session});
     send_.Run(ElectronWindowOpened(open.window));
   }
+}
+
+void ElectronApp::RunSessionCall(ElectronSessionCall call) {
+  base::expected<WebViewPartition, std::string> partition =
+      ElectronSessionPartition(hello_->partition, call.session);
+  if (!partition.has_value()) {
+    send_.Run(
+        ElectronSessionResult(call.call, base::unexpected(partition.error())));
+    return;
+  }
+  const int number = call.call;
+  auto done = base::BindOnce(&ElectronApp::SessionCallDone,
+                             weak_factory_.GetWeakPtr(), number);
+  auto done_with_nothing =
+      [](base::OnceCallback<void(base::expected<base::Value, std::string>)>
+             done) {
+        return base::BindOnce(
+            [](base::OnceCallback<void(
+                   base::expected<base::Value, std::string>)> done) {
+              std::move(done).Run(base::Value());
+            },
+            std::move(done));
+      };
+  if (auto* get = std::get_if<ElectronGetCookies>(&call.method)) {
+    desk_->GetCookies(
+        *partition, get->filter.url,
+        base::BindOnce(
+            [](ElectronCookieFilter filter,
+               base::OnceCallback<void(
+                   base::expected<base::Value, std::string>)> done,
+               std::vector<ElectronCookie> cookies) {
+              base::ListValue matching;
+              for (const ElectronCookie& cookie : cookies) {
+                if (ElectronCookieMatches(cookie, filter)) {
+                  matching.Append(ElectronCookieValue(cookie));
+                }
+              }
+              std::move(done).Run(base::Value(std::move(matching)));
+            },
+            get->filter, std::move(done)));
+  } else if (auto* set = std::get_if<ElectronSetCookie>(&call.method)) {
+    desk_->SetCookie(
+        *partition, set->details,
+        base::BindOnce(
+            [](base::OnceCallback<void(
+                   base::expected<base::Value, std::string>)> done,
+               std::optional<std::string> why) {
+              if (why.has_value()) {
+                std::move(done).Run(base::unexpected(std::move(*why)));
+              } else {
+                std::move(done).Run(base::Value());
+              }
+            },
+            std::move(done)));
+  } else if (auto* remove = std::get_if<ElectronRemoveCookie>(&call.method)) {
+    desk_->RemoveCookie(*partition, remove->url, remove->name,
+                        done_with_nothing(std::move(done)));
+  } else if (std::holds_alternative<ElectronFlushCookies>(call.method)) {
+    desk_->FlushCookies(*partition, done_with_nothing(std::move(done)));
+  } else if (auto* clear = std::get_if<ElectronClearStorage>(&call.method)) {
+    desk_->ClearStorage(*partition, *clear, done_with_nothing(std::move(done)));
+  } else if (std::holds_alternative<ElectronClearCache>(call.method)) {
+    desk_->ClearCache(*partition, done_with_nothing(std::move(done)));
+  } else {
+    const std::string& user_agent =
+        std::get<ElectronSetUserAgent>(call.method).user_agent;
+    SessionNamed(call.session).user_agent_ = user_agent;
+    for (const auto& [number_of_window, window] : windows_) {
+      if (window.session == call.session) {
+        desk_->SetUserAgent(window.id, user_agent);
+      }
+    }
+    std::move(done).Run(base::Value());
+  }
+}
+
+void ElectronApp::SessionCallDone(
+    int call,
+    base::expected<base::Value, std::string> result) {
+  send_.Run(ElectronSessionResult(call, result));
 }
 
 void ElectronApp::Reply(ElectronReply reply) {
