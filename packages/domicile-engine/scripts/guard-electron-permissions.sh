@@ -8,7 +8,10 @@
 #     ./packages/domicile-engine/scripts/guard-electron-permissions.sh /build/chromium/src
 #
 # Set up as guard-electron-session.sh is, with an HTTP server of its own on
-# 127.0.0.1. A python client plays `electron-host`, grants notifications and
+# 127.0.0.1, but under a nested Wayland compositor (under-wayland.sh), as
+# guard-webview-permissions.sh is: PermissionRequestManager::AddRequest denies
+# every request on a headless screen before any prompt. No control run:
+# notifications granted and the location denied are each other's control. A python client plays `electron-host`, grants notifications and
 # denies everything else, and asserts:
 #
 #   ready    the socket took the hello
@@ -88,7 +91,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 # 2. The engine, with the Electron socket.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
-  --ozone-platform=headless \
+  --ozone-platform=wayland \
   --disable-gpu \
   --app="domicile://shell/" \
   --domicile-shell-root="$SCRIPTS" \
