@@ -2714,7 +2714,7 @@ void DomicileHost::ListBrowserWindows() {
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,
         window->y, window->hidden,
-        window->menu.empty() ? String() : String::FromUtf8(window->menu),
+        window->menu.empty() ? String() : window->menu,
         window->menu_bar_visible, window->menu_bar_auto_hide));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
