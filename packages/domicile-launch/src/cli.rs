@@ -34,6 +34,10 @@ Ask the running desktop:
                                         Open a site as app <id>; with focus or
                                         navigate, reuse its open window
   domicile open --which <file|url>      Print the app open would use
+  domicile open --electron <entry|path> [-- <command>...]
+                                        Run an installed Electron app on the
+                                        desktop's engine; <command> is its own,
+                                        which runs it if the engine can't
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does,
@@ -290,6 +294,13 @@ pub enum Invocation {
     /// would run for this, or nothing for a web address. The launcher lists
     /// it first under "Open with".
     Opener { target: String },
+    /// Run the installed Electron app `target`, a desktop entry id or a
+    /// path, on the engine ([`crate::electron_app`]). `command`, when given,
+    /// is the app's own command line, as its entry's `Exec` gave it.
+    OpenElectron {
+        target: String,
+        command: Vec<String>,
+    },
     /// Write a desktop entry that opens the site at `url` as an app. Needs no
     /// running desktop.
     InstallApp { url: String },
@@ -397,6 +408,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(shell), None) => Ok(Invocation::Load { shell }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToLoad { extra }),
             },
+            Verb::Opening if args.peek().is_some_and(|word| word == ELECTRON) => {
+                args.next();
+                let target = args.next().ok_or(CliError::NothingToOpen)?;
+                match args.next() {
+                    None => Ok(Invocation::OpenElectron {
+                        target,
+                        command: Vec::new(),
+                    }),
+                    Some(dashes) if dashes == "--" => Ok(Invocation::OpenElectron {
+                        target,
+                        command: args.collect(),
+                    }),
+                    Some(extra) => Err(CliError::ExtraToOpen { extra }),
+                }
+            }
             Verb::Opening => {
                 let first = args.next();
                 let flag = first.clone().filter(|word| word == APP || word == WHICH);
@@ -607,6 +633,9 @@ const HELP: [&str; 3] = ["help", "--help", "-h"];
 
 /// `open`'s flag for opening as an app.
 const APP: &str = "--app";
+
+/// `open`'s flag for running an installed Electron app on the engine.
+const ELECTRON: &str = "--electron";
 
 /// `open --app`'s flag naming the app a site's window belongs to.
 const ID: &str = "--id";

@@ -101,6 +101,9 @@ manifest test-support
 put "$WORKSPACE/packages/test-support/src/preload.ts" test-support
 manifest shell-manganese ',"files":["src/**"],"dependencies":{"@domicile-desktop/sdk":"workspace:*"}'
 put "$WORKSPACE/packages/shell-manganese/src/index.tsx" manganese
+manifest electron-host ',"files":["src/**","!src/**/*.test.ts"]'
+put "$WORKSPACE/packages/electron-host/src/main.ts" 'console.log(process.argv.slice(1).join(" "));'
+put "$WORKSPACE/packages/electron-host/src/main.test.ts" test
 for shell in manganese simple splash; do
   [ -f "$WORKSPACE/packages/shell-$shell/package.json" ] || manifest "shell-$shell"
   put "$WORKSPACE/packages/shell-$shell/.vite/renderer/main_window/shell.js" "$shell"
@@ -167,6 +170,10 @@ echo "the builder runs the bundled bun against the bundled workspace"
 expect "the builder's command line" \
   "$LIBEXEC/workspace/packages/domicile-builder/src/main.ts --domicile $LIBEXEC/workspace --entry desk.tsx" \
   "$("$LIBEXEC/builder" --entry desk.tsx 2>&1)"
+echo "electron-host runs the bundled bun against the bundled workspace"
+expect "electron-host's command line" \
+  "$LIBEXEC/workspace/packages/electron-host/src/main.ts /opt/Slack/resources -u" \
+  "$("$LIBEXEC/electron-host" /opt/Slack/resources -u 2>&1)"
 SHIPPED="$LIBEXEC/workspace/packages"
 present() { # what, file under the shipped packages
   [ -f "$SHIPPED/$2" ] && ok "$1" || fail "$1" "no $SHIPPED/$2"
@@ -182,6 +189,7 @@ absent "or the musl builds of native modules" domicile-builder/node_modules/ligh
 absent "or the workspace packages only they use" test-support/src
 absent "only the files a package publishes" sdk/src
 absent "without tests" domicile-builder/src/main.test.ts
+absent "without electron-host's tests" electron-host/src/main.test.ts
 absent "without the shells' builds" shell-manganese/.vite
 absent "without the crates" domicile-launch
 expect "without source maps or readmes" "" \

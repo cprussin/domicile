@@ -54,6 +54,13 @@ window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
     opening another; `--reuse navigate` also loads the address in it. Both
     need `--id`. `new`, the default, always opens a window.
 - `domicile open --which <file|url>` prints the app `open` would use.
+- `domicile open --electron <entry|path> [-- <command>...]` runs an installed
+  Electron app on the desktop's engine instead of the Electron it ships:
+  `domicile open --electron slack.desktop`. `<entry>` is a desktop entry id;
+  `<path>` is the app's install or its program. `<command>` is the app's own
+  command line, which runs it on its own Electron, with a notification, if a
+  page needs what the engine doesn't do yet
+  ([ELECTRON-APPS.md](architecture/ELECTRON-APPS.md)).
 - Apps on the desktop run it for `xdg-open` and `$BROWSER`.
 
 ## `domicile install-app <url>`

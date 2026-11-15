@@ -48,6 +48,7 @@ pub mod config_watch;
 pub mod control;
 pub mod control_socket;
 pub mod desktop_entry;
+pub mod electron_app;
 pub mod extensions;
 pub mod folder_chooser;
 pub mod graphical_session;

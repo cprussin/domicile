@@ -140,13 +140,21 @@ const main = async ([resources, ...args]: string[]) => {
       },
     });
     const { BrowserView, BrowserWindow, WebContentsView, webContentsOf } =
-      createBrowserWindow(engine, app, ipc, session, {
-        applicationMenu: Menu.getApplicationMenu,
-        click: (menu, command, window) => {
-          click(menu, command, undefined, BrowserWindow.fromId(window));
+      createBrowserWindow(
+        engine,
+        app,
+        ipc,
+        session,
+        {
+          applicationMenu: Menu.getApplicationMenu,
+          click: (menu, command, window) => {
+            click(menu, command, undefined, BrowserWindow.fromId(window));
+          },
+          model,
         },
-        model,
-      });
+        undefined,
+        unsupported,
+      );
     const messageBoxes = createMessageBoxes(engine.send);
     engine.events.on("window", (event) => {
       if (event.type === "message_box_answered") {
@@ -280,6 +288,20 @@ const readOptional = async (path: string) => {
     }
   }
   return readFile(path, "utf8");
+};
+
+/**
+ * The status the host exits with when the app needs what the engine doesn't
+ * do yet: `domicile open --electron` then runs the app on its own Electron.
+ * Matches `UNSUPPORTED_EXIT` in `packages/domicile-launch`.
+ */
+const UNSUPPORTED_EXIT = 3;
+
+/** Gives up on an app the engine can't run yet, whatever the app catches. */
+const unsupported = (why: string): never => {
+  // biome-ignore lint/suspicious/noConsole: why the app runs on its own Electron, for the desktop's log
+  console.error(`electron-host: ${why}`);
+  process.exit(UNSUPPORTED_EXIT);
 };
 
 const fail = (why: string): never => {

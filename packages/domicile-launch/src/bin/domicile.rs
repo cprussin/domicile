@@ -30,7 +30,7 @@ use domicile_launch::command_socket::{
     open_url, run_app, set_extension_enabled, set_media_device, set_site_permission, site_data,
     site_permissions, uninstall_extension, visits,
 };
-use domicile_launch::components::{builder, components, our_shell, Components};
+use domicile_launch::components::{builder, components, electron_host, our_shell, Components};
 use domicile_launch::compositor_socket::{
     act_on_window, configure_display, displays, inputs, lock, monitors, power_displays,
     screen_record, screenshot, send_shell, shell_bindings, shell_commands, status, theme, windows,
@@ -45,6 +45,7 @@ use domicile_launch::control_socket::{
     address, advertised, ask, hold, listen, serve_one, take, Control, PATIENCE as ANSWER_WITHIN,
     VARIABLE,
 };
+use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
@@ -142,6 +143,7 @@ fn run() -> Result<ExitCode, String> {
             }
             Ok(ExitCode::SUCCESS)
         }
+        Invocation::OpenElectron { target, command } => electron_opened(&target, &command),
         Invocation::OpenAsApp { target, id, reuse } => {
             let here = typed_in()?;
             match app_opening(&target, &here).map_err(|why| why.to_string())? {
@@ -195,6 +197,59 @@ fn opened(target: &str) -> Result<ExitCode, String> {
                 Command::new(program).args(args).exec()
             ))
         }
+    }
+}
+
+/// Runs the installed Electron app `target` on the engine, through
+/// `electron-host`; see `domicile_launch::electron_app`. An app that needs
+/// what the engine doesn't do yet runs on its own Electron instead, with a
+/// notification saying so, when there is a `command` or entry to run.
+fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String> {
+    let applications: Vec<PathBuf> = places()
+        .data_dirs
+        .iter()
+        .map(|dir| dir.join("applications"))
+        .collect();
+    let path = std::env::var_os("PATH");
+    let app = electron_app(
+        target,
+        command,
+        &typed_in()?,
+        &applications,
+        path.as_deref(),
+    )
+    .map_err(|why| why.to_string())?;
+    let env = |name: &str| std::env::var(name).ok();
+    let host = electron_host(&myself()?, &env, &|path| path.exists())
+        .map_err(|missing| missing.to_string())?;
+    let status = Command::new(&host)
+        .arg(&app.resources)
+        .args(&app.args)
+        .status()
+        .map_err(|why| format!("cannot run {}: {why}", host.display()))?;
+    match (status.code(), app.fallback) {
+        (Some(UNSUPPORTED_EXIT), Some(fallback)) => {
+            // The host said why on stderr, which the desktop's log keeps.
+            let said = notification::session_bus().and_then(|bus| {
+                notification::notify(
+                    &bus,
+                    &format!("{target} runs on its own Electron"),
+                    "It needs something Domicile's engine doesn't do yet, so its \
+                     windows aren't the desktop's own this time.",
+                )
+            });
+            if let Err(why) = said {
+                eprintln!("domicile: cannot say {target} runs on its own Electron: {why}");
+            }
+            let (program, args) = fallback
+                .split_first()
+                .expect("an app's command has a program");
+            Err(format!(
+                "cannot run {program}: {}",
+                Command::new(program).args(args).exec()
+            ))
+        }
+        _ => Ok(ExitCode::from(exit_code(status))),
     }
 }
 

@@ -117,6 +117,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   sessions: ReturnType<typeof createSessions>,
   menus: WindowMenus<Menu>,
   readPreload: (path: string) => string = (path) => readFileSync(path, "utf8"),
+  /**
+   * Gives up on an app whose page needs what the engine doesn't do yet. The
+   * host exits with `UNSUPPORTED_EXIT`, so the app runs on its own Electron.
+   */
+  refuse: (why: string) => never = (why) => {
+    throw new Error(why);
+  },
 ) => {
   /** Every page by the engine's number: windows' and views'. */
   const pages = new Map<number, Page>();
@@ -216,7 +223,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         preferences.nodeIntegration === true ||
         preferences.contextIsolation === false
       ) {
-        throw new Error(
+        refuse(
           "this window's page needs Node.js or the preload's world, which Domicile's engine doesn't give a page",
         );
       }

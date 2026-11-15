@@ -33,6 +33,12 @@ out="$(nix build --no-link --print-out-paths .#domicile)"
   echo "libexec/domicile/engine holds no chrome" >&2
   exit 1
 }
+[ -x "$out/libexec/domicile/electron-host" ] &&
+  [ -f "$(sed -n 's/^exec [^ ]* \([^ ]*\) .*/\1/p' "$out/libexec/domicile/electron-host")" ] || {
+  echo "libexec/domicile/electron-host is missing or runs no main.ts, so" >&2
+  echo "  domicile open --electron has nothing to run apps with" >&2
+  exit 1
+}
 for program in domicile-history domicile-settings domicile-app-host; do
   [ -x "$out/bin/$program" ] && [ ! -L "$out/bin/$program" ] || {
     echo "bin/$program is missing or a symlink, so it cannot find the" >&2

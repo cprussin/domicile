@@ -7,10 +7,11 @@ shares the desktop's browser, GPU and network processes, and its windows are
 page elements like any other app window.
 
 ```
-domicile open --electron claude-desktop
-  ─▶ supervisor     {"type":"open_electron","app":"claude-desktop"}   control socket
-       resolves the desktop entry ─▶ install ─▶ resources/app.asar
-       spawns electron-host <app.asar>                                  bun, or node from the quirks table
+domicile open --electron claude-desktop.desktop [-- <its Exec>]
+  ─▶ domicile       follows the entry's program, through wrapper scripts,
+                    to the directory holding app.asar
+       runs electron-host <resources> <the Exec's arguments>            bun
+       exit 3: a page needs Node ─▶ a notification, then the Exec itself
   ─▶ electron-host  require("electron") = the stand-in
        runs package.json's main
        new BrowserWindow() ─▶ {"type":"create_window",…}                Electron socket
@@ -29,14 +30,23 @@ domicile open --electron claude-desktop
 
 ### Running an app
 
-- **`domicile open --electron <name|path>`** takes a desktop entry id or an
-  install directory. An id is followed through the entry's `Exec` to the
-  install, and the app is that install's `resources/app.asar`.
+- **`domicile open --electron <entry|path> [-- <command>…]`** takes a desktop
+  entry id or a path into the install
+  ([`electron_app.rs`](../../packages/domicile-launch/src/electron_app.rs)).
+  The entry's program, or the command's when one is given, is followed
+  through symlinks and through the paths each wrapper script names until one
+  is a directory holding `app.asar` or `app/`, or a program beside a
+  `resources/` that does. Packages wrap Electron in scripts (`makeWrapper`
+  on NixOS, shell scripts in `/usr/bin`), so the `Exec` rarely names it.
+  The command's arguments, or the `Exec`'s, are the app's `process.argv`.
+  What a wrapper sets (`LD_PRELOAD`, flags) does not reach the app.
 - **`electron.apps`** in the desk config lists desktop entry ids. The
   launcher starts those entries with `--electron` instead of their `Exec`.
   The app's own package installs and updates it; nothing is repackaged.
-- **The supervisor spawns `electron-host`,** as it spawns any client, so the
-  app outlives a shell reload.
+- **`domicile` runs `electron-host`** (`libexec/domicile/electron-host`, or
+  `DOMICILE_ELECTRON_HOST`) and waits on it, in the place of whatever started
+  it: the compositor, for an app the launcher starts. So the app outlives a
+  shell reload, as any client does.
 
 ### The main process: `electron-host`
 
@@ -265,10 +275,12 @@ waits on every one. Only a window shows a message box; a view's is refused.
 ### Unsupported apps
 
 An app whose pages need Node fails phase 1. When a window asks for
-`nodeIntegration: true` or `sandbox: false` with a preload, `electron-host`
-exits, the desktop shows a notification naming the app, and the supervisor
-runs the entry's own `Exec`. Known ones go straight to `Exec` from the quirks
-table.
+`nodeIntegration: true` or `contextIsolation: false`, `electron-host` exits
+with status 3, whatever the app catches. `domicile open --electron` then
+shows a notification naming the app and runs its own command: the one given
+after `--`, else the entry's `Exec`. An app named by its path alone has no
+command to fall back to, and the status is passed on. Known ones will go
+straight to `Exec` from the quirks table.
 
 ### Phase 2: Node in the page
 
@@ -353,6 +365,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: message boxes (`show_message_box`), listed with the window one at a time, and answers back to the app (`message_box_answered`)
 - [x] Manganese: message boxes over the window's page, the app's buttons in its order; Enter presses its default and Escape its cancel
 - [x] `electron-host`: `dialog.showMessageBox`
-- [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
+- [x] `domicile open --electron`: the app from its entry or path, and the fallback to its own Electron
+- [ ] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
+- [ ] the quirks table, and an app's schemes kept for the next start
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

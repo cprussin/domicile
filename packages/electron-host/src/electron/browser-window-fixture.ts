@@ -14,7 +14,7 @@ import { createSessions } from "./session";
 import { createSessionCalls } from "./session-calls";
 import { createWebRequests } from "./web-request";
 
-export const setUp = () => {
+export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
   const sent: EngineRequest[] = [];
   const events: Engine["events"] = new EventEmitter();
   const exits: number[] = [];
@@ -81,6 +81,7 @@ export const setUp = () => {
       model: menus.model,
     },
     (path) => `source of ${path}`,
+    refuse,
   );
   const say = (event: WindowEvent) => events.emit("window", event);
   return { ...windows, app, exits, ipcMain, menus, say, sent, sessions };

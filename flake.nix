@@ -390,7 +390,8 @@
       # The built workspace a shell is built against: the builder's
       # `--domicile`, from which it resolves manganese and React. Laid out like
       # this repository, because that is the layout the builder reads. Holds
-      # only what the builder and manganese ship, as `packages/distro/stage.sh` does.
+      # only what the builder, manganese and `electron-host` ship, as
+      # `packages/distro/stage.sh` does. `electron-host` runs from it too.
       shellWorkspace = pkgs.stdenv.mkDerivation {
         pname = "domicile-shell-workspace";
         version = "0.0.0";
@@ -421,6 +422,13 @@
           --domicile ${shellWorkspace} "$@"
       '';
 
+      # What runs an installed Electron app's main process on the desktop's
+      # engine, for `domicile open --electron`. A script, because
+      # `electron-host` is TypeScript run by bun.
+      domicileElectronHost = pkgs.writeShellScript "electron-host" ''
+        exec ${pkgs.bun}/bin/bun ${shellWorkspace}/packages/electron-host/src/main.ts "$@"
+      '';
+
       # Domicile, laid out so that `domicile` can find the rest of itself.
       #
       #   bin/domicile
@@ -435,6 +443,8 @@
       #                               screen with
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    builds a shell from an entry or a package
+      #   libexec/domicile/electron-host
+      #                               runs an Electron app's main process
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
       #                               `@domicile-desktop/manganese` names,
       #                               and the splash
@@ -494,6 +504,7 @@
           "$out/share/applications/domicile-mimeapps.list"
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
+        cp ${domicileElectronHost} "$out/libexec/domicile/electron-host"
         mkdir -p "$out/libexec/domicile/shells"
         ln -s ${shellPage "manganese"} "$out/libexec/domicile/shells/manganese"
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"

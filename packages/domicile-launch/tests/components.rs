@@ -2,7 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::components::{app_module, builder, components, our_shell, Components};
+use domicile_launch::components::{
+    app_module, builder, components, electron_host, our_shell, Components,
+};
 
 fn nothing(_: &str) -> Option<String> {
     None
@@ -120,6 +122,24 @@ fn a_missing_builder_names_where_it_looked() {
         PathBuf::from("/usr/libexec/domicile/builder")
     );
     assert_eq!(missing.variable, "DOMICILE_BUILDER");
+}
+
+#[test]
+fn electron_host_is_beside_the_engine_or_where_the_environment_says() {
+    let beside = |path: &Path| path == Path::new("/usr/libexec/domicile/electron-host");
+    assert_eq!(
+        electron_host(Path::new("/usr/bin/domicile"), &nothing, &beside),
+        Ok(PathBuf::from("/usr/libexec/domicile/electron-host"))
+    );
+    let named = |name: &str| {
+        (name == "DOMICILE_ELECTRON_HOST").then(|| "/src/electron-host.sh".to_string())
+    };
+    assert_eq!(
+        electron_host(Path::new("/usr/bin/domicile"), &named, &|_| false),
+        Ok(PathBuf::from("/src/electron-host.sh"))
+    );
+    let missing = electron_host(Path::new("/usr/bin/domicile"), &nothing, &|_| false).unwrap_err();
+    assert_eq!(missing.variable, "DOMICILE_ELECTRON_HOST");
 }
 
 #[test]

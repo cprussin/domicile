@@ -82,6 +82,22 @@ pub fn builder(
     )
 }
 
+/// What runs an Electron app's main process: `DOMICILE_ELECTRON_HOST`, or
+/// `libexec/domicile/electron-host`. See `docs/architecture/ELECTRON-APPS.md`.
+pub fn electron_host(
+    binary: &Path,
+    env: &dyn Fn(&str) -> Option<String>,
+    exists: &dyn Fn(&Path) -> bool,
+) -> Result<PathBuf, Missing> {
+    one(
+        "Electron app host",
+        "DOMICILE_ELECTRON_HOST",
+        libexec(binary).join("electron-host"),
+        env,
+        exists,
+    )
+}
+
 /// The directory of Domicile's prebuilt shell `name`, under
 /// `DOMICILE_SHELLS` or `libexec/domicile/shells`.
 pub fn our_shell(

@@ -234,6 +234,23 @@ describe(createBrowserWindow, () => {
     ).toThrow("needs Node.js");
   });
 
+  it("hands a page that needs Node.js to its refuse", () => {
+    const refused: string[] = [];
+    const { BrowserWindow } = setUp({
+      refuse: (why) => {
+        refused.push(why);
+        throw new Error("refused");
+      },
+    });
+
+    expect(
+      () => new BrowserWindow({ webPreferences: { nodeIntegration: true } }),
+    ).toThrow("refused");
+    expect(refused).toEqual([
+      "this window's page needs Node.js or the preload's world, which Domicile's engine doesn't give a page",
+    ]);
+  });
+
   it("gives its page's send to ipcMain, from its webContents", () => {
     const { BrowserWindow, ipcMain, say } = setUp();
     const window = new BrowserWindow();

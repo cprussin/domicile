@@ -80,8 +80,10 @@ cp -a "$ENGINE" "$LIBEXEC/engine"
 
 install -m 755 "$BUN" "$LIBEXEC/bun"
 install -m 755 "$ROOT/packages/distro/builder" "$LIBEXEC/builder"
+install -m 755 "$ROOT/packages/distro/electron-host" "$LIBEXEC/electron-host"
 
-# What the builder needs, as in `shellWorkspace` in `flake.nix`.
+# What the builder and `electron-host` need, as in `shellWorkspace` in
+# `flake.nix`.
 "$ROOT/packages/distro/shell-workspace.sh" modules "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
 "$ROOT/packages/distro/shell-workspace.sh" files "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
 # A release ships the versions changesets gave the packages.

@@ -210,6 +210,40 @@ fn open_with_which_asks_what_would_open_it() {
 }
 
 #[test]
+fn open_with_electron_takes_an_app_and_its_command() {
+    assert_eq!(
+        run(&["open", "--electron", "slack.desktop"]).unwrap(),
+        Invocation::OpenElectron {
+            target: "slack.desktop".to_string(),
+            command: vec![],
+        }
+    );
+    assert_eq!(
+        run(&[
+            "open",
+            "--electron",
+            "slack.desktop",
+            "--",
+            "slack",
+            "-u",
+            "slack://a"
+        ])
+        .unwrap(),
+        Invocation::OpenElectron {
+            target: "slack.desktop".to_string(),
+            command: vec!["slack".into(), "-u".into(), "slack://a".into()],
+        }
+    );
+    assert_eq!(run(&["open", "--electron"]), Err(CliError::NothingToOpen));
+    assert_eq!(
+        run(&["open", "--electron", "slack", "-u"]),
+        Err(CliError::ExtraToOpen {
+            extra: "-u".to_string()
+        })
+    );
+}
+
+#[test]
 fn open_with_app_opens_an_address_or_module_as_an_app() {
     assert_eq!(
         run(&["open", "--app", "https://example.com/"]).unwrap(),
