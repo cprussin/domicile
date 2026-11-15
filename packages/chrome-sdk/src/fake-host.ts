@@ -253,28 +253,37 @@ export class FakeDomicileHost {
    * `isApp` `domicile open --app`. `openBrowserWindow` calls this too, and
    * `openPrivateBrowserWindow` with `isPrivate`, and `openApp` with `isApp`
    * and `appId`. Ids count up from `"1"`; the asked-for size is 0 unless
-   * `width` and `height` give one.
+   * `width` and `height` give one. With a `parent`, it is an Electron app's
+   * view in that window, at `x` and `y`.
    */
   openBrowser(
     url: string,
     {
       appId = "",
       isApp = false,
+      isHidden = false,
       isPrivate = false,
+      parent = null,
       partition = "",
       popupWindow = null,
       width = 0,
       height = 0,
+      x = 0,
+      y = 0,
     }: Partial<
       Pick<
         DomicileBrowserWindow,
         | "appId"
         | "height"
         | "isApp"
+        | "isHidden"
         | "isPrivate"
+        | "parent"
         | "partition"
         | "popupWindow"
         | "width"
+        | "x"
+        | "y"
       >
     > = {},
   ): void {
@@ -288,21 +297,21 @@ export class FakeDomicileHost {
           id: this.#browsersOpened.toString(),
           isApp,
           isCaptured: false,
-          isHidden: false,
+          isHidden,
           isPrivate,
           menu: null,
           menuBarAutoHide: false,
           menuBarVisible: true,
           messageBox: null,
-          parent: null,
+          parent,
           partition,
           popupWindow,
           title: "",
           toplevelId: null,
           url,
           width,
-          x: 0,
-          y: 0,
+          x,
+          y,
         } satisfies DomicileBrowserWindow,
       ],
     });

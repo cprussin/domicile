@@ -326,7 +326,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `setPermissionRequestHandler`
 - [x] `electron-host`: `utilityProcess`
 - [x] engine: views (`set_views`), listed to the shell under their window, and each page's size
-- [ ] shells: Manganese draws views where their apps ask
+- [x] shells: the SDK lists views apart (`browser.views`); Manganese draws them where their apps ask
 - [ ] `electron-host`: `WebContentsView`, `BrowserView`, `contentView`, `getContentBounds`
 - [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
 - [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`

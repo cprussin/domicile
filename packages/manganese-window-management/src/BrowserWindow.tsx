@@ -48,6 +48,7 @@ import { PageMenu } from "./browser/PageMenu";
 import { PagePopup } from "./browser/PagePopup";
 import { PageProblem } from "./browser/PageProblem";
 import { PageTooltip } from "./browser/PageTooltip";
+import { PageViews } from "./browser/PageViews";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useFileRequest } from "./browser/useFileRequest";
@@ -270,6 +271,8 @@ export const BrowserWindow = ({
   const unclickable = covered || behindPanel;
   // `null` because React passes `null` to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
+  /** The page and the app's views over it, whose keys bubble up to it. */
+  const [page, setPage] = useState<HTMLDivElement | null>(null);
   // The whole window, used to check whether focus is inside it and to ease it
   // into a new box. A ref because only effects read it.
   const element = useRef<HTMLElement>(null);
@@ -549,8 +552,11 @@ export const BrowserWindow = ({
   // Keys pressed in the guest never reach this document. The engine forwards
   // chords the page did not handle, and Ctrl+wheel as zoom requests, so sites
   // keep their own bindings as in Chrome. See `WEBVIEW_GUEST_KEYDOWN_EVENT`.
+  // An Electron app's views are part of its window, so the app's keys are
+  // heard from them too; the browser's keys act on the window's own page, so
+  // only that page's run them.
   useEffect(() => {
-    if (view === null) {
+    if (view === null || page === null) {
       return undefined;
     } else {
       const pressed = (event: KeyboardEvent) => {
@@ -566,7 +572,8 @@ export const BrowserWindow = ({
           menuBar === undefined || !menuBar.visible
             ? undefined
             : openedByMnemonic(menuBar.entries, event);
-        const command = browserCommandFor(event);
+        const command =
+          event.target === view ? browserCommandFor(event) : undefined;
         if (accelerated !== undefined) {
           chooseMenuEntry(accelerated.id);
         } else if (mnemonic !== undefined) {
@@ -589,18 +596,18 @@ export const BrowserWindow = ({
       const zoomOut = () => {
         run(BrowserCommand.ZoomOut);
       };
-      view.addEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
-      view.addEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
+      page.addEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+      page.addEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
       view.addEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
       view.addEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       return () => {
-        view.removeEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
-        view.removeEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
+        page.removeEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+        page.removeEventListener(WEBVIEW_GUEST_KEYUP_EVENT, released);
         view.removeEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
         view.removeEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       };
     }
-  }, [chooseMenuEntry, menuBar, run, view]);
+  }, [chooseMenuEntry, menuBar, page, run, view]);
 
   // Gives the keyboard to the focused window's page.
   //
@@ -842,7 +849,7 @@ export const BrowserWindow = ({
         Wraps the page so the find bar and file picker cover the page but not
         the address bar.
       */}
-        <div className={pageStyles}>
+        <div className={pageStyles} ref={setPage}>
           <webview
             className={viewStyles}
             ref={setView}
@@ -857,6 +864,12 @@ export const BrowserWindow = ({
             }
             // React sets attributes before insertion, when the engine reads it.
             // See `window`.
+            window={window}
+          />
+          <PageViews
+            domicile={domicile}
+            onReach={onReach}
+            unclickable={unclickable}
             window={window}
           />
           {problem !== undefined && (
