@@ -125,6 +125,25 @@ describe("electron-host", () => {
     expect(seen.appPath).toBe(join(seen.resourcesPath, "app.asar"));
   });
 
+  it("hands an app known to need Node in its pages back to its own Electron, before its main runs", async () => {
+    const home = await mkdtemp(join(tmpdir(), "electron-host-main-"));
+    const resources = join(home, "install/resources");
+    await writeAsar(join(resources, "app.asar"), {
+      "main.js": { content: MAIN_JS },
+      "package.json": {
+        content: `{"main":"main.js","name":"signal-desktop","productName":"Signal","version":"8.32.0"}`,
+      },
+    });
+
+    const { code, stderr, stdout } = await run(resources, home, [], undefined);
+
+    expect(code).toBe(3);
+    expect(stdout).toBe("");
+    expect(stderr).toContain(
+      "Signal needs Node in its pages, which Domicile's engine doesn't run yet: its pages load libsignal and ringrtc",
+    );
+  });
+
   it("says why when the app can't be read", async () => {
     const home = await mkdtemp(join(tmpdir(), "electron-host-main-"));
     const resources = join(home, "install/resources");

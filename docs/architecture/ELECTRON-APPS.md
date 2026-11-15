@@ -81,8 +81,10 @@ A bun workspace package, `packages/electron-host`, run by Bun.
   lost. The child lives until it exits or the app kills it, and goes with the
   host. Its `require("electron")` is not answered yet.
 - **Quirks table:** per-app overrides inside the package, keyed by the
-  app's `package.json` name: Node instead of Bun, an updater to skip, a known
-  phase-2 app.
+  app's `package.json` name
+  ([`quirks.ts`](../../packages/electron-host/src/quirks.ts)). Today it names
+  the phase-2 apps inspected (below); Node instead of Bun and an updater to
+  skip go there when an app needs them.
 
 Bun over Node because the desktop already ships Bun for the builder. Node is
 the fallback for an app Bun can't run, and becomes required in phase 2.
@@ -204,8 +206,9 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   `stream`, `codeCache` and `allowServiceWorkers` are not yet, and don't
   hold an app back. A scheme the engine keeps for itself is refused without
   being kept ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
-  The quirks table will seed schemes for known apps, so their first run
-  needs no fallback.
+  An app's first run with a new scheme falls back; the quirks table can
+  seed known apps' schemes to spare it, once their privileges are checked
+  against the real apps.
 - **Not yet:** a handler's redirect (the load fails loudly), a request body
   that is a file or a stream, and requests from an Electron page's workers,
   which go to the network.
@@ -297,8 +300,9 @@ An app whose pages need Node fails phase 1. When a window asks for
 with status 3, whatever the app catches. `domicile open --electron` then
 shows a notification naming the app and runs its own command: the one given
 after `--`, else the entry's `Exec`. An app named by its path alone has no
-command to fall back to, and the status is passed on. Known ones will go
-straight to `Exec` from the quirks table.
+command to fall back to, and the status is passed on. An app the quirks
+table names as needing Node exits with status 3 before its main runs, so its
+own Electron starts without a window opening on the engine first.
 
 ### Phase 2: Node in the page
 
@@ -386,6 +390,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `domicile open --electron`: the app from its entry or path, and the fallback to its own Electron
 - [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
 - [x] an app's own schemes kept for the next engine start
-- [ ] the quirks table
+- [x] the quirks table: known phase-2 apps go straight to their own Electron
+- [ ] the quirks table seeds known apps' schemes, once checked against the real apps
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
 - [ ] phase 2: Node in the page

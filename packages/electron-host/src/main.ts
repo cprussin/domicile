@@ -41,6 +41,7 @@ import type { Environment } from "./environment";
 import { readEnvironment } from "./environment";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
+import { quirksOf } from "./quirks";
 
 /** A window as the app's menus hand it to a click: one of its BrowserWindows. */
 type MenuWindow = { readonly close: () => void };
@@ -64,6 +65,12 @@ const main = async ([resources, ...args]: string[]) => {
       Err: fail,
       Ok: (value) => value,
     });
+    const { needsNodeInPages } = quirksOf(pkg.name);
+    if (needsNodeInPages !== undefined) {
+      unsupported(
+        `${pkg.productName} needs Node in its pages, which Domicile's engine doesn't run yet: ${needsNodeInPages}`,
+      );
+    }
     const configHome = env.XDG_CONFIG_HOME ?? join(home, ".config");
     const { app, markReady } = createApp({
       appPath,
