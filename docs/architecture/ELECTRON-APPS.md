@@ -178,16 +178,24 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   the app then answers before anything else sees the request, as in Electron.
 - **An app's own schemes** (`app://`, `cowork-artifact://`) are registered
   when the engine starts, because Chromium registers schemes only as each
-  process starts: from the quirks table and from schemes apps registered on
-  earlier runs. The supervisor passes them as
+  process starts. `ready` names the schemes the engine registered and the
+  privileges it granted each. When an app's `registerSchemesAsPrivileged`
+  names one the engine lacks, or a granted privilege it lacks, the host adds
+  it to `$XDG_STATE_HOME/domicile/electron-schemes.json` (each app's package
+  name, then its schemes and privileges) and exits 3, so the app runs on its
+  own Electron this time
+  ([`schemes.ts`](../../packages/electron-host/src/electron/schemes.ts)).
+  At each engine start the supervisor passes every kept scheme as
   `--domicile-electron-schemes=app:standard,secure;…`, with Electron's names
-  for the privileges, and the browser hands the switch to every child
-  process. `standard`, `secure`, `bypassCSP`, `corsEnabled` and
-  `supportFetchAPI` are granted; `stream`, `codeCache` and
-  `allowServiceWorkers` are not yet. `ready` names the schemes registered
-  and their privileges, so the host sees one the engine lacks, and an app
-  that brings a new scheme runs on its own Electron until the next login
-  ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
+  for the privileges, two apps' copies of a scheme getting what either asked
+  for ([`electron_schemes.rs`](../../packages/domicile-launch/src/electron_schemes.rs)).
+  The browser hands the switch to every child process. `standard`,
+  `secure`, `bypassCSP`, `corsEnabled` and `supportFetchAPI` are granted;
+  `stream`, `codeCache` and `allowServiceWorkers` are not yet, and don't
+  hold an app back. A scheme the engine keeps for itself is refused without
+  being kept ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
+  The quirks table will seed schemes for known apps, so their first run
+  needs no fallback.
 - **Not yet:** a handler's redirect (the load fails loudly), a request body
   that is a file or a stream, and requests from an Electron page's workers,
   which go to the network.
@@ -367,6 +375,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `dialog.showMessageBox`
 - [x] `domicile open --electron`: the app from its entry or path, and the fallback to its own Electron
 - [ ] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
-- [ ] the quirks table, and an app's schemes kept for the next start
+- [x] an app's own schemes kept for the next engine start
+- [ ] the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

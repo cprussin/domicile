@@ -6,7 +6,6 @@ import { createConnection } from "node:net";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
-
 import type { MenuEntry } from "./electron/menu";
 import type { ShowMessageBoxMessage } from "./electron/message-boxes";
 import type { PortRequest } from "./electron/message-port-main";
@@ -15,6 +14,7 @@ import type {
   PermissionMessage,
 } from "./electron/permissions";
 import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
+import type { RegisteredScheme } from "./electron/schemes";
 import type {
   SessionCallMessage,
   SessionResult,
@@ -105,7 +105,12 @@ export type EngineRequest =
   | PermissionMessage;
 
 const engineEvent = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("ready") }),
+  z.object({
+    schemes: z.array(
+      z.object({ privileges: z.array(z.string()), scheme: z.string() }),
+    ),
+    type: z.literal("ready"),
+  }),
   z.object({ type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("window_opened"), window: z.number() }),
   z.object({
@@ -241,6 +246,11 @@ export type WindowEvent = Extract<EngineEvent, { window: number }>;
 export type Engine = {
   readonly send: (request: EngineRequest) => void;
   /**
+   * The apps' own schemes the engine registered as it started, with the
+   * privileges it granted each, by Electron's names.
+   */
+  readonly schemes: readonly RegisteredScheme[];
+  /**
    * `window` for each window event, `refused` for a request the engine could
    * not take, and `lost` once the connection ends.
    */
@@ -274,7 +284,7 @@ export const connectEngine = (
     let ready = false;
     let pending = "";
 
-    const engine: Engine = {
+    const engine: Omit<Engine, "schemes"> = {
       events,
       send: (request) => {
         socket.write(`${JSON.stringify(request)}\n`);
@@ -289,7 +299,7 @@ export const connectEngine = (
         ready = true;
         resolve(
           parsed.data.type === "ready"
-            ? Ok(engine)
+            ? Ok({ ...engine, schemes: parsed.data.schemes })
             : Err(
                 `the engine refused this app: ${"why" in parsed.data ? parsed.data.why : parsed.data.type}`,
               ),

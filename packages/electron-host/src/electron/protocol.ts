@@ -152,20 +152,6 @@ export type CustomScheme = {
   readonly privileges?: Readonly<Record<string, boolean | undefined>>;
 };
 
-const privileged: CustomScheme[] = [];
-
-/**
- * Electron's `protocol.registerSchemesAsPrivileged`. The engine registers
- * schemes only as it starts, so these are kept for the next start; see
- * "Requests" in docs/architecture/ELECTRON-APPS.md.
- */
-export const registerSchemesAsPrivileged = (schemes: CustomScheme[]) => {
-  privileged.push(...schemes);
-};
-
-/** The schemes the app has registered as privileged so far. */
-export const privilegedSchemes = (): readonly CustomScheme[] => privileged;
-
 const asRequest = (incoming: IncomingRequest) =>
   new Request(incoming.url, {
     headers: incoming.headers,

@@ -153,7 +153,7 @@ describe("electron-host", () => {
     });
     engine = await startFakeEngine((request) => {
       if (request.type === "hello") {
-        return [{ type: "ready" }];
+        return [{ schemes: [], type: "ready" }];
       } else if (request.type === "open_window") {
         return [
           { type: "window_opened", window: 1 },

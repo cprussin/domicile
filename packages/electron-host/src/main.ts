@@ -25,11 +25,9 @@ import type { Appearance } from "./electron/native-theme";
 import { createNativeTheme } from "./electron/native-theme";
 import { createNotification } from "./electron/notification";
 import { createPermissions } from "./electron/permissions";
-import {
-  createProtocols,
-  registerSchemesAsPrivileged,
-} from "./electron/protocol";
+import { createProtocols } from "./electron/protocol";
 import { createSafeStorage } from "./electron/safe-storage";
+import { createSchemeRegistration } from "./electron/schemes";
 import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
 import { createShell } from "./electron/shell";
@@ -191,7 +189,15 @@ const main = async ([resources, ...args]: string[]) => {
       nativeTheme,
       protocol: {
         ...session.defaultSession.protocol,
-        registerSchemesAsPrivileged,
+        registerSchemesAsPrivileged: createSchemeRegistration({
+          app: pkg.name,
+          recordPath: join(
+            env.XDG_STATE_HOME ?? join(home, ".local/state"),
+            "domicile/electron-schemes.json",
+          ),
+          refuse: unsupported,
+          registered: engine.schemes,
+        }),
       },
       safeStorage: createSafeStorage({
         password: () => desktop.safeStoragePassword(app.getName()),
