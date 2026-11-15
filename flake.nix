@@ -2768,7 +2768,14 @@
                   retry(lambda _: blue_share("closed") < 0.01, timeout=WAIT)
                   machine.sleep(10)
                   before = pss_kib()
-                  machine.succeed(in_the_desk("fixture") + " >/tmp/electron.log 2>&1 &")
+                  # The desk names its socket to the apps it starts, not in
+                  # its own environment, so name it as they get it.
+                  machine.succeed(
+                      in_the_desk(
+                          "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) fixture"
+                      )
+                      + " >/tmp/electron.log 2>&1 &"
+                  )
                   retry(lambda _: blue_share("on-electron") > 0.1, timeout=WAIT)
                   machine.sleep(15)
                   return pss_kib() - before
@@ -2786,7 +2793,8 @@
                   machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                   for command in [
                       "tail -8 /tmp/open.log | cut -c1-200",
-                      "tail -8 /tmp/electron.log | cut -c1-200",
+                      "tail -30 /tmp/electron.log | cut -c1-200",
+                      "ls /run/user/1000; pgrep -a -u alice -f electron | cut -c1-200",
                       "grep -iE 'electron' /tmp/domicile.log | tail -8 | cut -c1-200 || true",
                       "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
                   ]:
