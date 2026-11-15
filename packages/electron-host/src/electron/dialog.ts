@@ -1,10 +1,12 @@
 // The stand-in for Electron's `dialog`: file dialogs through the desktop's
 // file chooser portal, as Electron uses on Linux when the portal is there
-// (docs/PORTALS.md). Message boxes need a dialog the shell draws, which comes
-// with the menu bar; until then they throw, naming what they need.
+// (docs/PORTALS.md). Message boxes are drawn by the shell over the window that
+// asks (message-boxes.ts).
 
 import { basename, dirname, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import type { MessageBoxOptions, MessageBoxReturnValue } from "./message-boxes";
 
 /** A portal option's D-Bus signature and value. */
 export type ChooserOption = readonly [signature: string, value: unknown];
@@ -34,6 +36,14 @@ export type DialogDependencies = {
     options: ChooserOptions,
   ) => ChooserAnswer;
   readonly isDirectory: (path: string) => boolean;
+  /**
+   * Shows a message box over `window`, the window the app named, or its most
+   * recent one when it named none.
+   */
+  readonly askMessageBox: (
+    window: unknown,
+    options: MessageBoxOptions,
+  ) => Promise<MessageBoxReturnValue>;
   /** Where `showErrorBox` writes. */
   readonly printError: (text: string) => void;
 };
@@ -158,10 +168,9 @@ const saveResult = (answer: ChooserAnswer) => {
   return { canceled: filePath === "", filePath };
 };
 
-const noMessageBoxes = (call: string) =>
-  new Error(
-    `dialog.${call} needs a dialog drawn by the shell, which Domicile doesn't have for Electron apps yet`,
-  );
+/** Electron's `(window, options)` or `(options)`: the window, if named. */
+const windowOf = (first: unknown, second: unknown) =>
+  second === undefined ? undefined : first;
 
 /** Builds Electron's `dialog` module. */
 export const createDialog = (dependencies: DialogDependencies) => {
@@ -182,10 +191,19 @@ export const createDialog = (dependencies: DialogDependencies) => {
     showErrorBox: (title: string, content: string) => {
       dependencies.printError(`${title}\n${content}`);
     },
-    showMessageBox: (_first: unknown, _second?: unknown) =>
-      Promise.reject(noMessageBoxes("showMessageBox")),
+    showMessageBox: (first: unknown, second?: MessageBoxOptions) =>
+      dependencies.askMessageBox(
+        windowOf(first, second),
+        optionsOf<MessageBoxOptions>(first, second),
+      ),
+    /**
+     * Throws: the shell answers a box while the app's main process runs on,
+     * so nothing can block for it.
+     */
     showMessageBoxSync: (_first: unknown, _second?: unknown): number => {
-      throw noMessageBoxes("showMessageBoxSync");
+      throw new Error(
+        "dialog.showMessageBoxSync can't wait for the shell's answer on Domicile; use dialog.showMessageBox",
+      );
     },
     showOpenDialog: async (first: unknown, second?: OpenDialogOptions) =>
       openResult(await dependencies.choose(...open(optionsOf(first, second)))),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ChooserAnswer, ChooserMethod, ChooserOptions } from "./dialog";
 import { createDialog, openOptions, saveOptions } from "./dialog";
+import type { MessageBoxOptions } from "./message-boxes";
 
 const bytes = (path: string) => [...Buffer.from(`${path}\0`)];
 
@@ -12,7 +13,12 @@ const isDirectory = (path: string) => path === "/home/me/Documents";
 const setUp = (answer: ChooserAnswer) => {
   const asked: [ChooserMethod, string, ChooserOptions][] = [];
   const printed: string[] = [];
+  const boxes: [unknown, MessageBoxOptions][] = [];
   const dialog = createDialog({
+    askMessageBox: (window, options) => {
+      boxes.push([window, options]);
+      return Promise.resolve({ checkboxChecked: true, response: 1 });
+    },
     choose: (...call) => {
       asked.push(call);
       return Promise.resolve(answer);
@@ -24,7 +30,7 @@ const setUp = (answer: ChooserAnswer) => {
     isDirectory,
     printError: (text) => printed.push(text),
   });
-  return { asked, dialog, printed };
+  return { asked, boxes, dialog, printed };
 };
 
 describe("openOptions", () => {
@@ -155,16 +161,34 @@ describe("dialog", () => {
     expect(dialog.showOpenDialogSync({})).toEqual(["/home/me/notes.txt"]);
   });
 
-  it("writes an error box out, and refuses message boxes, naming why", async () => {
+  it("writes an error box out", () => {
     const { dialog, printed } = setUp({ response: 1, uris: [] });
 
     dialog.showErrorBox("Oops", "It broke");
     expect(printed).toEqual(["Oops\nIt broke"]);
-    await expect(dialog.showMessageBox({ message: "Hi" })).rejects.toThrow(
-      "drawn by the shell",
-    );
+  });
+
+  it("asks a message box over the window named, or none", async () => {
+    const { boxes, dialog } = setUp({ response: 1, uris: [] });
+    const window = { id: 3 };
+
+    expect(await dialog.showMessageBox(window, { message: "Quit?" })).toEqual({
+      checkboxChecked: true,
+      response: 1,
+    });
+    await dialog.showMessageBox({ message: "Hi" });
+
+    expect(boxes).toEqual([
+      [window, { message: "Quit?" }],
+      [undefined, { message: "Hi" }],
+    ]);
+  });
+
+  it("refuses a message box it would have to block for, naming why", () => {
+    const { dialog } = setUp({ response: 1, uris: [] });
+
     expect(() => dialog.showMessageBoxSync({ message: "Hi" })).toThrow(
-      "drawn by the shell",
+      "use dialog.showMessageBox",
     );
   });
 });
