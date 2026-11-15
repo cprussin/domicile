@@ -103,78 +103,139 @@ export class MessageChannelMain {
   }
 }
 
+/** What linked ports ask the other side for, by port name. */
+export type LinkedPortRequest =
+  | { readonly type: "post"; readonly port: string; readonly data: unknown }
+  | { readonly type: "close"; readonly port: string };
+
+/**
+ * Ports whose other ends are on another side (a page, a utility process),
+ * each named. `send` carries a port's messages and close there, its data as
+ * it is; `name` names a port given there.
+ */
+export const createLinkedPorts = (
+  send: (request: LinkedPortRequest) => void,
+  name: () => string,
+) => {
+  const linked = new Map<string, MessagePortMain>();
+
+  const attach = (port: string, local: MessagePortMain) => {
+    linked.set(port, local);
+    control(local).link({
+      close: () => {
+        linked.delete(port);
+        send({ port, type: "close" });
+      },
+      post: (data) => {
+        send({ data, port, type: "post" });
+      },
+    });
+  };
+
+  return {
+    /** The other side closed its end of port `port`. */
+    closed: (port: string) => {
+      const local = linked.get(port);
+      if (local !== undefined) {
+        linked.delete(port);
+        control(local).end();
+      }
+    },
+    /**
+     * Sends `given`, ends of MessageChannelMains, to the other side, and links
+     * each one's partner there instead. Returns their names.
+     */
+    give: (given: readonly MessagePortMain[]) =>
+      given
+        .map((port) => transfer(port))
+        .map((partner) => {
+          const port = name();
+          attach(port, partner);
+          return port;
+        }),
+    /** The other side went, and every port it had. */
+    gone: () => {
+      const ended = [...linked.values()];
+      linked.clear();
+      for (const local of ended) {
+        control(local).end();
+      }
+    },
+    /** A message from the other side on port `port`. */
+    message: (port: string, data: unknown) => {
+      // The other side may send on a port closed here before it heard: the
+      // message has nowhere to go, as on the web.
+      const local = linked.get(port);
+      if (local !== undefined) {
+        control(local).deliver(data);
+      }
+    },
+    /** The ports the other side sent with a message, each linked to its end. */
+    take: (names: readonly string[]) =>
+      names.map((port) => {
+        const local = new MessagePortMain();
+        attach(port, local);
+        return local;
+      }),
+  };
+};
+
 /**
  * The ports an app shares with its windows' pages: each is one end of a pipe
  * whose other end is a MessagePort in the page, named by who made it ("m1"
  * by the app, "r1" by the page). `send` asks the engine.
  */
 export const createPagePorts = (send: (request: PortRequest) => void) => {
-  const shared = new Map<string, MessagePortMain>();
+  const windows = new Map<number, ReturnType<typeof createLinkedPorts>>();
   let next = 1;
 
-  const attach = (window: number, port: string, local: MessagePortMain) => {
-    const key = keyOf(window, port);
-    shared.set(key, local);
-    control(local).link({
-      close: () => {
-        shared.delete(key);
-        send({ port, type: "port_close", window });
-      },
-      post: (data) => {
-        send({ data: asJson(data), port, type: "port_post", window });
-      },
-    });
-  };
-
-  const end = (key: string) => {
-    const local = shared.get(key);
-    if (local !== undefined) {
-      shared.delete(key);
-      control(local).end();
+  const of = (window: number) => {
+    const found = windows.get(window);
+    if (found === undefined) {
+      const made = createLinkedPorts(
+        (request) => {
+          send(
+            request.type === "post"
+              ? {
+                  data: asJson(request.data),
+                  port: request.port,
+                  type: "port_post",
+                  window,
+                }
+              : { port: request.port, type: "port_close", window },
+          );
+        },
+        () => `m${next++}`,
+      );
+      windows.set(window, made);
+      return made;
+    } else {
+      return found;
     }
   };
 
   return {
     /** A page closed its end of port `port`. */
     closed: (window: number, port: string) => {
-      end(keyOf(window, port));
+      windows.get(window)?.closed(port);
     },
     /**
      * Sends `given`, ends of MessageChannelMains, to window `window`'s page,
      * and links each one's partner to the page instead. Returns their names.
      */
-    give: (window: number, given: readonly MessagePortMain[]) => {
-      const partners = given.map((port) => transfer(port));
-      return partners.map((partner) => {
-        const port = `m${next++}`;
-        attach(window, port, partner);
-        return port;
-      });
-    },
+    give: (window: number, given: readonly MessagePortMain[]) =>
+      of(window).give(given),
     /** Window `window`'s page went, and every port it had with it. */
     gone: (window: number) => {
-      for (const key of [...shared.keys()]) {
-        if (key.startsWith(`${window} `)) {
-          end(key);
-        }
-      }
+      windows.get(window)?.gone();
+      windows.delete(window);
     },
     /** A message from the page on port `port`. */
     message: (window: number, port: string, data: unknown) => {
-      // A page may send on a port the app closed before it heard: the
-      // message has nowhere to go, as on the web.
-      const local = shared.get(keyOf(window, port));
-      if (local !== undefined) {
-        control(local).deliver(data);
-      }
+      windows.get(window)?.message(port, data);
     },
     /** The ports a page sent with a message, each linked to its end there. */
-    take: (window: number, names: readonly string[]) =>
-      names.map((port) => {
-        const local = new MessagePortMain();
-        attach(window, port, local);
-        return local;
-      }),
+    take: (window: number, names: readonly string[]) => of(window).take(names),
   };
 };
 
@@ -193,12 +254,15 @@ const entangle = (from: MessagePortMain, to: MessagePortMain) => {
   });
 };
 
-/** Takes `port` out of its channel, for a page, and returns its partner. */
+/**
+ * Takes `port` out of its channel, for a page or a utility process, and
+ * returns its partner.
+ */
 const transfer = (port: MessagePortMain) => {
   const partner = control(port).partner;
   if (partner === undefined) {
     throw new Error(
-      "a MessagePortMain goes to a page once, from its MessageChannelMain",
+      "a MessagePortMain goes elsewhere once, from its MessageChannelMain",
     );
   } else {
     control(port).partner = undefined;
@@ -216,8 +280,6 @@ const control = (port: MessagePortMain) => {
     return found;
   }
 };
-
-const keyOf = (window: number, port: string) => `${window} ${port}`;
 
 /** `data` as it arrives after a trip through JSON. */
 const asJson = (data: unknown): unknown =>
