@@ -427,6 +427,38 @@ for (const window of domicile.browser.windows ?? []) {
 
 See "Windows" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
 
+## Menu bars
+
+An Electron app window can have a menu bar (File, Edit, View, ...), which
+the shell draws under the window's tab.
+
+- **`menu`** is the menu's entries as JSON, or `undefined` for none. Each
+  entry has an `id` (a whole number from 1), a `type` (`normal`,
+  `separator`, `submenu`, `checkbox` or `radio`), a `label` with Electron's
+  `&` mnemonics (`&File`; `&&` is an ampersand), `enabled`, `visible` and
+  `checked`, and maybe an `accelerator` as the app wrote it
+  (`CmdOrCtrl+Shift+N`), an `icon` (a PNG `data:` URL) and a `submenu` of
+  entries.
+- **`menuBarVisible`** says whether the bar shows. With **`menuBarAutoHide`**,
+  as Electron's `autoHideMenuBar`, it shows while Alt is held or after Alt is
+  tapped, and hides again after a click or Escape.
+- **Click an entry** with `domicile.browser.clickMenu(id, entry.id)`.
+  The app runs it: a checkbox or radio changes, and the next list shows it.
+- Accelerators are the app's own: the page handles its keys. Draw them as
+  hints only.
+
+```js
+for (const window of domicile.browser.windows ?? []) {
+  if (window.menu !== undefined && window.menuBarVisible) {
+    drawMenuBar(window.id, JSON.parse(window.menu), (entry) => {
+      domicile.browser.clickMenu(window.id, entry.id);
+    });
+  }
+}
+```
+
+See "Desktop pieces" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+
 ## Fullscreen
 
 A page's `requestFullscreen()`, such as a video's fullscreen button, makes it

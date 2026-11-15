@@ -74,4 +74,19 @@
   // Whether the view's app hid it. Keep a hidden view laid out, out of
   // sight, as a page draws only while laid out. False for every window.
   readonly attribute boolean isHidden;
+
+  // An Electron app window's menu bar, for the shell to draw under its tab:
+  // the menu's entries as JSON, null for none. Each entry has a whole `id`
+  // from 1, a `type` (normal, separator, submenu, checkbox or radio), a
+  // `label` with Electron's `&` mnemonics, `enabled`, `visible` and
+  // `checked`, and maybe an `accelerator` as the app wrote it, an `icon` (a
+  // PNG data: URL) and a `submenu` of entries. Click an entry with
+  // DomicileHost.clickBrowserWindowMenu.
+  readonly attribute DOMString? menu;
+
+  // Whether the bar shows, as setMenuBarVisibility says. With
+  // `menuBarAutoHide`, as Electron's autoHideMenuBar, it shows while Alt is
+  // held or after Alt is tapped. A window with no menu has true and false.
+  readonly attribute boolean menuBarVisible;
+  readonly attribute boolean menuBarAutoHide;
 };
