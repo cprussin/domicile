@@ -32,17 +32,18 @@ constexpr char kHello[] =
 // A desk that numbers its windows from 10 and writes down each call.
 class FakeDesk final : public ElectronDesk {
  public:
-  std::optional<std::string> Open(
-      const GURL& url,
-      const std::string& app_id,
-      const WebViewPartition& partition,
-      const std::string& preload,
-      ElectronPageCalls page_calls,
-      base::WeakPtr<ElectronSession> session) override {
+  std::optional<std::string> Open(const GURL& url,
+                                  const std::string& app_id,
+                                  const WebViewPartition& partition,
+                                  const std::string& preload,
+                                  ElectronPageCalls page_calls,
+                                  base::WeakPtr<ElectronSession> session,
+                                  bool view) override {
     if (!has_shell) {
       return std::nullopt;
     }
-    calls.push_back("open " + url.spec() + " as " + app_id +
+    calls.push_back(std::string(view ? "open view " : "open ") + url.spec() +
+                    " as " + app_id +
                     (preload.empty() ? "" : " with " + preload));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
@@ -58,6 +59,11 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("ask to close " + id);
   }
   void Close(const std::string& id) override { calls.push_back("close " + id); }
+  void SetViews(const std::string& id,
+                std::vector<ElectronDeskView> views) override {
+    calls.push_back("set views of " + id);
+    held[id] = std::move(views);
+  }
   void SendToPage(const std::string& id,
                   const std::string& channel,
                   const std::string& args_json) override {
@@ -132,6 +138,8 @@ class FakeDesk final : public ElectronDesk {
   std::map<std::string, base::WeakPtr<ElectronSession>> sessions;
   int next_id = 10;
   std::vector<std::string> calls;
+  // The views each window holds, by id, as SetViews last set them.
+  std::map<std::string, std::vector<ElectronDeskView>> held;
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
@@ -351,6 +359,86 @@ base::ListValue OneAndA() {
   args.Append(1);
   args.Append("a");
   return args;
+}
+
+TEST_F(ElectronAppTest, AViewOpensAsAViewOfTheApp) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("view":true})");
+
+  EXPECT_EQ(desk_.calls,
+            Lines{"open view https://a.test/ as com.anthropic.Claude"});
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"window_opened\",\"window\":1}\n"});
+}
+
+TEST_F(ElectronAppTest, AWindowHoldsTheViewsTheAppPlaces) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+
+  app_->Take(
+      R"({"type":"set_views","window":1,"views":[)"
+      R"({"window":3,"x":0,"y":40,"width":800,"height":560},)"
+      R"({"window":2,"x":1,"y":2,"width":3,"height":4,"hidden":true}]})");
+
+  EXPECT_TRUE(sent_.empty());
+  EXPECT_EQ(desk_.held.at("10"),
+            (std::vector<ElectronDeskView>{
+                {.id = "12", .x = 0, .y = 40, .width = 800, .height = 560},
+                {.id = "11",
+                 .x = 1,
+                 .y = 2,
+                 .width = 3,
+                 .height = 4,
+                 .hidden = true}}));
+}
+
+TEST_F(ElectronAppTest, OnlyAWindowHoldsViewsAndOnlyViews) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  sent_.clear();
+  const std::string place = R"("x":0,"y":0,"width":1,"height":1})";
+
+  app_->Take(R"({"type":"set_views","window":2,"views":[]})");
+  app_->Take(R"({"type":"set_views","window":1,"views":[{"window":3,)" + place +
+             "]}");
+  app_->Take(R"({"type":"set_views","window":1,"views":[{"window":9,)" + place +
+             "]}");
+  app_->Take(R"({"type":"set_views","window":1,"views":[{"window":2,)" + place +
+             R"(,{"window":2,)" + place + "]}");
+
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window holds views\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 3 is a "
+                   "window, not a view\",\"window\":1}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"view 9 is not "
+                   "open\",\"window\":1}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"view 2 is listed "
+                   "twice\",\"window\":1}\n"}));
+  EXPECT_TRUE(desk_.held.empty());
+}
+
+TEST_F(ElectronAppTest, APagesNewSizeReachesTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+
+  desk_.pages.at("10").resized.Run(800, 600);
+  app_->Listed({});
+  desk_.pages.at("10").resized.Run(1, 1);
+
+  EXPECT_EQ(sent_, (Lines{"{\"height\":600,\"type\":\"resized\","
+                          "\"width\":800,\"window\":2}\n",
+                          "{\"type\":\"window_closed\",\"window\":2}\n"}));
 }
 
 TEST_F(ElectronAppTest, APagesSendReachesTheApp) {

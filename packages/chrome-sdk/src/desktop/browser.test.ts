@@ -21,13 +21,17 @@ describe("browser", () => {
         id: "1",
         isApp: false,
         isCaptured: false,
+        isHidden: false,
         isPrivate: false,
+        parent: undefined,
         partition: "",
         popupWindow: undefined,
         title: "",
         toplevelId: undefined,
         url: "https://example.com/",
         width: 0,
+        x: 0,
+        y: 0,
       },
     ]);
   });

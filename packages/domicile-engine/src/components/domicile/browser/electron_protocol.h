@@ -169,6 +169,31 @@ struct ElectronOpenWindow {
   std::string preload;
   // Its Electron partition; empty for the app's own session.
   std::string session;
+  // A WebContentsView's page rather than a BrowserWindow: listed to the shell
+  // only while a window holds it (ElectronSetViews).
+  bool view = false;
+};
+
+// Where a window holds one of its views, in CSS pixels from the top left of
+// the window's page, as the app asked: the shell lays the view out there or
+// elsewhere.
+struct ElectronViewPlacement {
+  ElectronWindow view;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  bool hidden = false;
+
+  friend bool operator==(const ElectronViewPlacement&,
+                         const ElectronViewPlacement&) = default;
+};
+
+// contentView.addChildView and friends: the views `window` holds, bottom
+// first, replacing the ones it held before.
+struct ElectronSetViews {
+  ElectronWindow window;
+  std::vector<ElectronViewPlacement> views;
 };
 
 struct ElectronLoadUrl {
@@ -518,7 +543,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronWebRequestAnswer,
                                      ElectronSessionCall,
                                      ElectronPermissionHandler,
-                                     ElectronPermissionAnswer>;
+                                     ElectronPermissionAnswer,
+                                     ElectronSetViews>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -562,6 +588,8 @@ std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);
 std::string ElectronWindowLoaded(ElectronWindow window);
 std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
+// The size, in CSS pixels, the shell gave window or view `window`'s page.
+std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 std::string ElectronIpcMessage(ElectronWindow window,
                                std::string_view channel,
                                const base::ListValue& args);

@@ -32,7 +32,11 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         bool is_app,
                         const String& app_id,
                         bool is_captured,
-                        const String& toplevel_id);
+                        const String& toplevel_id,
+                        const String& parent,
+                        int32_t x,
+                        int32_t y,
+                        bool is_hidden);
   ~DomicileBrowserWindow() override;
 
   const String& id() const { return id_; }
@@ -47,6 +51,11 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   const String& appId() const { return app_id_; }
   bool isCaptured() const { return is_captured_; }
   const String& toplevelId() const { return toplevel_id_; }
+  // Null for a window, as the empty string the browser sends for none.
+  const String& parent() const { return parent_; }
+  int32_t x() const { return x_; }
+  int32_t y() const { return y_; }
+  bool isHidden() const { return is_hidden_; }
 
   void Trace(Visitor*) const override;
 
@@ -63,6 +72,10 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   String app_id_;
   bool is_captured_ = false;
   String toplevel_id_;
+  String parent_;
+  int32_t x_ = 0;
+  int32_t y_ = 0;
+  bool is_hidden_ = false;
 };
 
 }  // namespace blink

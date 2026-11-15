@@ -241,6 +241,8 @@ void ElectronApp::Take(std::string_view line) {
   } else if (auto* permission =
                  std::get_if<ElectronPermissionAnswer>(&*request)) {
     AnswerPermission(*permission);
+  } else if (auto* set = std::get_if<ElectronSetViews>(&*request)) {
+    SetViews(*set);
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -311,19 +313,22 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
                               weak_factory_.GetWeakPtr(), open.window),
       .gone = base::BindRepeating(&ElectronApp::PageGone,
                                   weak_factory_.GetWeakPtr(), open.window),
+      .resized = base::BindRepeating(&ElectronApp::PageResized,
+                                     weak_factory_.GetWeakPtr(), open.window),
   };
-  const std::optional<std::string> id =
-      desk_->Open(open.url, hello_->app_id, *partition, open.preload,
-                  std::move(calls), SessionNamed(open.session).GetWeakPtr());
+  const std::optional<std::string> id = desk_->Open(
+      open.url, hello_->app_id, *partition, open.preload, std::move(calls),
+      SessionNamed(open.session).GetWeakPtr(), open.view);
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
   } else {
     // The session's user agent reaches the desk through the session, before
     // the window's first navigation.
-    windows_.emplace(
-        open.window,
-        Window{.id = *id, .title = std::string(), .session = open.session});
+    windows_.emplace(open.window, Window{.id = *id,
+                                         .title = std::string(),
+                                         .session = open.session,
+                                         .view = open.view});
     send_.Run(ElectronWindowOpened(open.window));
   }
 }
@@ -471,6 +476,50 @@ void ElectronApp::PageGone(ElectronWindow number) {
   if (windows_.contains(number)) {
     send_.Run(ElectronPageGone(number));
   }
+}
+
+void ElectronApp::PageResized(ElectronWindow number, int width, int height) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronWindowResized(number, width, height));
+  }
+}
+
+void ElectronApp::SetViews(const ElectronSetViews& set) {
+  const std::optional<std::string> id = IdOf(set.window);
+  if (!id.has_value()) {
+    return;
+  }
+  auto refuse = [&](std::string_view why) {
+    send_.Run(ElectronWindowRefused(set.window, why));
+  };
+  if (windows_.at(set.window).view) {
+    refuse(base::StrCat({"window ", base::NumberToString(set.window),
+                         " is a view, and only a window holds views"}));
+    return;
+  }
+  std::vector<ElectronDeskView> views;
+  std::set<ElectronWindow> placed;
+  for (const ElectronViewPlacement& placement : set.views) {
+    auto found = windows_.find(placement.view);
+    const std::string number = base::NumberToString(placement.view);
+    if (found == windows_.end()) {
+      refuse(base::StrCat({"view ", number, " is not open"}));
+      return;
+    } else if (!found->second.view) {
+      refuse(base::StrCat({"window ", number, " is a window, not a view"}));
+      return;
+    } else if (!placed.insert(placement.view).second) {
+      refuse(base::StrCat({"view ", number, " is listed twice"}));
+      return;
+    }
+    views.push_back(ElectronDeskView{.id = found->second.id,
+                                     .x = placement.x,
+                                     .y = placement.y,
+                                     .width = placement.width,
+                                     .height = placement.height,
+                                     .hidden = placement.hidden});
+  }
+  desk_->SetViews(*id, std::move(views));
 }
 
 ElectronSession& ElectronApp::SessionNamed(const std::string& name) {

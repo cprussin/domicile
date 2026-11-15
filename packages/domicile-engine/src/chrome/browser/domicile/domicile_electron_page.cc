@@ -12,11 +12,13 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_protocol.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -103,6 +105,43 @@ void ElectronPage::DeliverToPort(const std::string& port,
 void ElectronPage::ClosePort(const std::string& port) {
   if (frame_.is_bound()) {
     frame_->ClosePort(port);
+  }
+}
+
+void ElectronPage::PrimaryMainFrameWasResized(bool width_changed) {
+  ReportSize("PrimaryMainFrameWasResized");
+}
+
+void ElectronPage::FrameSizeChanged(content::RenderFrameHost* frame,
+                                    const gfx::Size& frame_size) {
+  if (frame->IsInPrimaryMainFrame()) {
+    ReportSize("FrameSizeChanged");
+  }
+}
+
+void ElectronPage::PrimaryPageChanged(content::Page& page) {
+  ReportSize("PrimaryPageChanged");
+}
+
+void ElectronPage::DidFinishLoad(content::RenderFrameHost* frame,
+                                 const GURL& url) {
+  if (frame->IsInPrimaryMainFrame()) {
+    ReportSize("DidFinishLoad");
+  }
+}
+
+void ElectronPage::ReportSize(std::string_view heard) {
+  content::RenderWidgetHostView* view =
+      web_contents()->GetRenderWidgetHostView();
+  const gfx::Size size = view ? view->GetViewBounds().size() : gfx::Size();
+  // Guards read this line. engine-diagnostics.sh greps for the `domicile:`
+  // prefix.
+  LOG(INFO) << "domicile: an Electron page heard " << heard << ", at "
+            << (view ? size.ToString() : std::string("no view"));
+  // A view the app hasn't placed has no size yet: nothing to tell.
+  if (view != nullptr && !size.IsEmpty() && size != size_) {
+    size_ = size;
+    calls_.resized.Run(size.width(), size.height());
   }
 }
 
