@@ -1030,23 +1030,24 @@ impl Streams {
     pub fn capture_ended(
         &mut self,
         capture: CaptureId,
+        why: Option<String>,
         mut capturer: Option<&mut (dyn Capturer + 'static)>,
     ) {
+        let stopped = |what: &str| match &why {
+            Some(why) => format!("the engine stopped capturing the {what}: {why}"),
+            None => format!("the engine stopped capturing the {what}"),
+        };
         if let Some(developed) = self.browser_shots.remove(&capture) {
-            developed(Err("the engine stopped capturing the browser window".into()));
+            developed(Err(stopped("browser window")));
         }
         for stream in self.captures.ended(capture) {
-            self.end_or_fail(
-                stream,
-                "the engine stopped capturing the monitor".into(),
-                capturer.as_deref_mut(),
-            );
+            self.end_or_fail(stream, stopped("monitor"), capturer.as_deref_mut());
         }
         if let Some(stream) = self.page_cast(capture) {
             self.pages.remove(&capture);
             self.send(ToPipewire::End {
                 stream,
-                why: Ended::Failed("the engine stopped capturing the browser window".into()),
+                why: Ended::Failed(stopped("browser window")),
             });
         }
     }
@@ -2194,9 +2195,12 @@ mod tests {
             Some(&mut engine),
         );
 
-        streams.capture_ended(2, Some(&mut engine));
+        streams.capture_ended(2, Some("viz ran out".into()), Some(&mut engine));
 
-        assert!(heard.try_recv().expect("developed").is_err());
+        assert_eq!(
+            heard.try_recv().expect("developed"),
+            Err("the engine stopped capturing the monitor: viz ran out".into())
+        );
         assert_eq!(engine.stopped, [1]);
     }
 
@@ -2249,9 +2253,12 @@ mod tests {
             Some(&mut engine),
         );
 
-        streams.capture_ended(BROWSER_WINDOW, Some(&mut engine));
+        streams.capture_ended(BROWSER_WINDOW, None, Some(&mut engine));
 
-        assert!(heard.try_recv().expect("developed").is_err());
+        assert_eq!(
+            heard.try_recv().expect("developed"),
+            Err("the engine stopped capturing the browser window".into())
+        );
     }
 
     /// The engine's pointer replaces the arrow, as a page changes it; a

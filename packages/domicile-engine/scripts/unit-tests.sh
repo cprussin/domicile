@@ -28,7 +28,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SurfaceTransform 3, SurfaceAlpha 2, BufferColor 4, ExtensionInstaller 3,
 # ExtensionSettings 7, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 32,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
-# SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
+# SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 9,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
 # ControlChannel 27, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
@@ -46,6 +46,9 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ElectronPermissionFor 2, ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 830, and it was 828 — viz stopping a capture before or after a frame, which
+# the screenshot and cast now say, is two more DisplayCapture cases. Before
+# that
 # 828, and it was 825 — the host's window moving when the host does is two
 # more ShellWindows cases and one more ShellWindowPlaces one. Before that
 # 825, and it was 824 — where a video in picture-in-picture came from in its
@@ -286,7 +289,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=828
+FLOOR=830
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
