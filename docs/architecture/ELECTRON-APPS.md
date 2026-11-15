@@ -71,8 +71,10 @@ A bun workspace package, `packages/electron-host`, run by Bun.
   lost. The child lives until it exits or the app kills it, and goes with the
   host. Its `require("electron")` is not answered yet.
 - **Quirks table:** per-app overrides inside the package, keyed by the
-  app's `package.json` name: Node instead of Bun, an updater to skip, a known
-  phase-2 app.
+  app's `package.json` name
+  ([`quirks.ts`](../../packages/electron-host/src/quirks.ts)). Today it names
+  the phase-2 apps inspected (below); Node instead of Bun and an updater to
+  skip go there when an app needs them.
 
 Bun over Node because the desktop already ships Bun for the builder. Node is
 the fallback for an app Bun can't run, and becomes required in phase 2.
@@ -279,8 +281,9 @@ An app whose pages need Node fails phase 1. When a window asks for
 with status 3, whatever the app catches. `domicile open --electron` then
 shows a notification naming the app and runs its own command: the one given
 after `--`, else the entry's `Exec`. An app named by its path alone has no
-command to fall back to, and the status is passed on. Known ones will go
-straight to `Exec` from the quirks table.
+command to fall back to, and the status is passed on. An app the quirks
+table names as needing Node exits with status 3 before its main runs, so its
+own Electron starts without a window opening on the engine first.
 
 ### Phase 2: Node in the page
 
@@ -367,6 +370,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `dialog.showMessageBox`
 - [x] `domicile open --electron`: the app from its entry or path, and the fallback to its own Electron
 - [ ] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
-- [ ] the quirks table, and an app's schemes kept for the next start
+- [x] the quirks table: known phase-2 apps go straight to their own Electron
+- [ ] an app's schemes kept for the next start
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page
