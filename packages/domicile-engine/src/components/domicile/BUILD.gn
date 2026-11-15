@@ -276,8 +276,9 @@ source_set("warp_landing") {
   public_deps = [ "//ui/gfx/geometry" ]
 }
 
-# Whether an origin is the shell's. Its own target for :web_view_url's reason:
-# the check needs no browser, so its tests need none either.
+# Whether an origin is the shell's or an app's. Its own target for
+# :web_view_url's reason: the check needs no browser, so its tests need none
+# either.
 source_set("shell_origin") {
   sources = [
     "browser/shell_origin.cc",
@@ -286,7 +287,10 @@ source_set("shell_origin") {
 
   public_deps = [ "//url" ]
 
-  deps = [ ":common" ]
+  deps = [
+    ":app_roots",
+    ":common",
+  ]
 }
 
 # Serving the shell over domicile://.
