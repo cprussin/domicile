@@ -853,6 +853,16 @@ interface WebViewGuestClient {
   // The navigation waits for the answer. `proceed` false cancels it and the
   // page stays. An unhandled event or a closed pipe proceeds.
   WillNavigate(url.mojom.Url url) => (bool proceed);
+
+  // A modifier key (Alt, Control, Meta or Shift) let go of in the page, which
+  // the page did not handle, for what a lone modifier does: Alt showing an
+  // app's menu bar. Unhandled key releases stop at the guest's
+  // WebContentsDelegate as presses do (see UnhandledKeyDown), and come from
+  // HandleKeyboardEvent, so not when the page called preventDefault.
+  //
+  // Modifiers only, so typed text stays in the guest. `key` and `code` are
+  // KeyboardEvent values.
+  UnhandledModifierUp(string key, string code);
 };
 
 // One guest, for the life of the element that requested it.

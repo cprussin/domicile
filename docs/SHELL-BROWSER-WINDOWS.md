@@ -335,6 +335,10 @@ Bind browser keys yourself:
 
 - `domicile-guest-keydown`: a `KeyboardEvent` for each chord (Ctrl, Alt or
   Meta held) the page did not `preventDefault`. Plain keys never arrive.
+- `domicile-guest-keyup`: a `KeyboardEvent` for each modifier (Alt, Control,
+  Meta or Shift) let go of that the page did not `preventDefault`. With
+  `domicile-guest-keydown`, it tells a lone Alt tap from Alt held for a chord.
+  Other keys' releases never arrive.
 - `domicile-key-delivered`: a plain `Event` for each key press the page gets
   (not a modifier, a repeat or a grabbed chord). Names no key. `<app>` fires
   the same for its client.
@@ -440,12 +444,15 @@ the shell draws under the window's tab.
   (`CmdOrCtrl+Shift+N`), an `icon` (a PNG `data:` URL) and a `submenu` of
   entries.
 - **`menuBarVisible`** says whether the bar shows. With **`menuBarAutoHide`**,
-  as Electron's `autoHideMenuBar`, it shows while Alt is held or after Alt is
-  tapped, and hides again after a click or Escape.
+  as Electron's `autoHideMenuBar`, it shows after Alt is tapped, and hides
+  again after a click or Escape. An Alt tap over the window is an Alt
+  `domicile-guest-keydown` then an Alt `domicile-guest-keyup` with no other
+  chord between.
 - **Click an entry** with `domicile.browser.clickMenu(id, entry.id)`.
   The app runs it: a checkbox or radio changes, and the next list shows it.
-- Accelerators are the app's own: the page handles its keys. Draw them as
-  hints only.
+- **Accelerators** run the entry, as Electron's menus do: match each
+  `domicile-guest-keydown` against them. The page gets the key first, so a
+  page that takes the chord keeps it.
 
 ```js
 for (const window of domicile.browser.windows ?? []) {
