@@ -66,7 +66,7 @@ expect "and points at the socket's guard" "yes" \
 expect "a window whose size never came is a failure" "fail" \
   "$(verdict "1 0 0 0")"
 expect "and names where the size is told" "yes" \
-  "$(says "1 0 0 0" "PrimaryMainFrameWasResized")"
+  "$(says "1 0 0 0" "the app never heard its window's size")"
 expect "a view never sized where it was placed is a failure" "fail" \
   "$(verdict "1 1 0 0")"
 expect "and names the listing" "yes" "$(says "1 1 0 0" "DeskWindows::List")"

@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_protocol.h"
@@ -108,13 +109,25 @@ void ElectronPage::ClosePort(const std::string& port) {
 }
 
 void ElectronPage::PrimaryMainFrameWasResized(bool width_changed) {
+  ReportSize("PrimaryMainFrameWasResized");
+}
+
+void ElectronPage::FrameSizeChanged(content::RenderFrameHost* frame,
+                                    const gfx::Size& frame_size) {
+  if (frame->IsInPrimaryMainFrame()) {
+    ReportSize("FrameSizeChanged");
+  }
+}
+
+void ElectronPage::ReportSize(std::string_view heard) {
   content::RenderWidgetHostView* view =
       web_contents()->GetRenderWidgetHostView();
-  if (view == nullptr) {
-    return;
-  }
-  const gfx::Size size = view->GetViewBounds().size();
-  if (size != size_) {
+  const gfx::Size size = view ? view->GetViewBounds().size() : gfx::Size();
+  // Guards read this line. engine-diagnostics.sh greps for the `domicile:`
+  // prefix.
+  LOG(INFO) << "domicile: an Electron page heard " << heard << ", at "
+            << (view ? size.ToString() : std::string("no view"));
+  if (view != nullptr && size != size_) {
     size_ = size;
     calls_.resized.Run(size.width(), size.height());
   }

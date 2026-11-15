@@ -225,7 +225,7 @@ guard-electron-socket.sh is the guard for that"
   ;;
 "1 0 "*)
   FAILURE="the app never heard its window's size: ElectronPage must tell \\
-the app its page's size on PrimaryMainFrameWasResized"
+the app its page's size when it is resized (see what it heard, below)"
   ;;
 "1 1 0 "*)
   FAILURE="the app never heard its view sized where it placed it: \\
@@ -247,6 +247,8 @@ if [ -n "$PASSED" ]; then
 fi
 
 annotate_from "guard-electron-views: $FAILURE" "$ENGINE_LOG"
+echo "what the Electron pages heard of their size:" >&2
+grep -F "an Electron page heard" "$ENGINE_LOG" >&2 || echo "  nothing" >&2
 echo "what the engine died of, if it did:" >&2
 grep -n -A45 -E "FATAL|Check failed|Received signal" "$ENGINE_LOG" | head -150 >&2
 echo "the app heard:" >&2
