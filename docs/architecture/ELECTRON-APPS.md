@@ -320,7 +320,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)
 - [x] Manganese: app menus as a menu bar under the window's tab; accelerators run their entries; Alt toggles an auto-hidden bar, and Alt with a mnemonic opens a menu
 - [x] engine: message boxes (`show_message_box`), listed with the window one at a time, and answers back to the app (`message_box_answered`)
-- [ ] message boxes: the shell's box over the window's page; `dialog.showMessageBox` in `electron-host`
+- [x] Manganese: message boxes over the window's page, the app's buttons in its order; Enter presses its default and Escape its cancel
+- [ ] `electron-host`: `dialog.showMessageBox`
 - [ ] `domicile open --electron`, `electron.apps`, the launcher hand-off, the fallback, the quirks table
 - [ ] VM test with a fixture app, and memory against the same app on its own Electron
 - [ ] phase 2: Node in the page

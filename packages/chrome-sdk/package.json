@@ -194,6 +194,10 @@
       "types": "./dist/keymap-choice.d.ts",
       "default": "./dist/keymap-choice.js"
     },
+    "./message-box": {
+      "types": "./dist/message-box.d.ts",
+      "default": "./dist/message-box.js"
+    },
     "./miracast": {
       "types": "./dist/miracast.d.ts",
       "default": "./dist/miracast.js"
