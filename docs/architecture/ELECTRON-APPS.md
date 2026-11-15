@@ -54,7 +54,12 @@ A bun workspace package, `packages/electron-host`, run by Bun.
   directory (`~/.config/Claude`), so logins and settings carry over.
 - Native modules load as they are. N-API is runtime-independent, and every
   native module in the apps inspected (below) is N-API.
-- `utilityProcess.fork()` is a child process of the same runtime.
+- `utilityProcess.fork()` is a child process of the same runtime. Its module
+  gets `process.parentPort`, and `MessageChannelMain` ports sent with a
+  message carry structured clones over the child's IPC channel. Messages
+  wait until the module has loaded, so one sent right after `fork` is not
+  lost. The child lives until it exits or the app kills it, and goes with the
+  host. Its `require("electron")` is not answered yet.
 - **Quirks table:** per-app overrides inside the package, keyed by the
   app's `package.json` name: Node instead of Bun, an updater to skip, a known
   phase-2 app.
@@ -281,7 +286,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `session.webRequest`
 - [x] `electron-host`: session cookies, storage clearing, `clearCache`, `setUserAgent`
 - [x] `electron-host`: `setPermissionRequestHandler`
-- [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
+- [x] `electron-host`: `utilityProcess`
+- [ ] `WebContentsView`, `BrowserView`
 - [x] `electron-host`: `shell` (`openExternal`, `openPath`, `showItemInFolder`) and `nativeTheme`
 - [ ] engine: an app's `nativeTheme.themeSource` reaches its pages' `prefers-color-scheme`
 - [ ] tray, notifications, `dialog`, `safeStorage`, `desktopCapturer`, clipboard
