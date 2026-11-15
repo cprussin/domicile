@@ -387,5 +387,5 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
 - [x] an app's own schemes kept for the next engine start
 - [ ] the quirks table
-- [ ] VM test with a fixture app, and memory against the same app on its own Electron
+- [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
 - [ ] phase 2: Node in the page

@@ -2622,6 +2622,175 @@
                 raise
           '';
         };
+
+        # An installed Electron app runs on the desk's engine: `electron.apps`
+        # lists its entry, so a link it handles starts it through
+        # `domicile open --electron`, its window is a page of the engine's
+        # with no Electron running, and it costs less memory than the same
+        # app on the Electron it ships. See docs/architecture/ELECTRON-APPS.md.
+        #
+        # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
+        electron-app-on-a-tty =
+          let
+            # An app laid out as an Electron install: its program beside
+            # `resources/app`. The program is a script running nixpkgs'
+            # Electron, as packages wrap it.
+            fixture = pkgs.runCommand "electron-fixture" { } ''
+              app="$out/lib/fixture/resources/app"
+              mkdir -p "$app" "$out/bin" "$out/share/applications"
+              cat >"$app/package.json" <<'EOF'
+              {"name":"fixture","productName":"Fixture","version":"1.0.0","main":"main.js"}
+              EOF
+              cat >"$app/main.js" <<'EOF'
+              const { app, BrowserWindow } = require("electron");
+              app.whenReady().then(() => {
+                const window = new BrowserWindow({ width: 640, height: 480 });
+                window.loadFile("index.html");
+              });
+              EOF
+              cat >"$app/index.html" <<'EOF'
+              <!doctype html><title>Fixture</title>
+              <style>html, body { margin: 0; height: 100%; background: #3366cc; }</style>
+              EOF
+              cat >"$out/lib/fixture/fixture" <<EOF
+              #!${pkgs.runtimeShell}
+              exec ${pkgs.electron}/bin/electron --ozone-platform=wayland --disable-gpu "$app" "\$@"
+              EOF
+              chmod +x "$out/lib/fixture/fixture"
+              ln -s "$out/lib/fixture/fixture" "$out/bin/fixture"
+              cat >"$out/share/applications/fixture.desktop" <<EOF
+              [Desktop Entry]
+              Type=Application
+              Name=Fixture
+              Exec=$out/bin/fixture %U
+              MimeType=x-scheme-handler/fixture;
+              EOF
+            '';
+          in
+          pkgs.testers.runNixOSTest {
+            name = "electron-app-on-a-tty";
+            extraPythonPackages = python: [ python.pillow ];
+            nodes.machine = {
+              imports = [ self.nixosModules.domicile ];
+              programs.domicile.enable = true;
+              virtualisation = {
+                memorySize = 4096;
+                # See `tty-on-a-card-with-no-3d`.
+                useNixStoreImage = true;
+                cores = 2;
+                qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
+              };
+              users.users.alice = {
+                isNormalUser = true;
+                uid = 1000;
+                extraGroups = [ "domicile" "video" "input" ];
+              };
+              services.getty.autologinUser = "alice";
+              environment.loginShellInit =
+                let
+                  config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                    electron.apps = [ "fixture.desktop" ];
+                  });
+                in
+                ''
+                  if [ "$(tty)" = /dev/tty1 ]; then
+                    mkdir -p ~/.config/domicile
+                    cp ${config} ~/.config/domicile/domicile.json
+                    export RUST_LOG=domicile_compositor=debug
+                    exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                  fi
+                '';
+              environment.systemPackages = [ fixture ];
+              fonts.enableDefaultPackages = true;
+            };
+            testScript = ''
+              import datetime as dt
+              import os
+              from PIL import Image
+
+              WAIT = dt.timedelta(seconds=300)
+              BLUE = (0x33, 0x66, 0xCC)
+
+
+              def blue_share(name):
+                  machine.screenshot(name)
+                  image = Image.open(os.path.join(machine.out_dir, f"{name}.png")).convert("RGB")
+                  pixels = image.width * image.height
+                  colors = dict((color, count) for count, color in image.getcolors(maxcolors=pixels))
+                  return colors.get(BLUE, 0) / pixels
+
+
+              def in_the_desk(command):
+                  """`command`, as alice, in the environment the desk's apps get."""
+                  return (
+                      "su alice -c 'env $(tr \"\\0\" \"\\n\" "
+                      "</proc/$(pgrep -u alice -o -f bin/domicile-compositor)/environ "
+                      "| grep -E \"^(DOMICILE_|XDG_|DBUS_|PATH=|WAYLAND_)\") "
+                      f"{command}'"
+                  )
+
+
+              def pss_kib():
+                  """Every one of alice's processes' proportional memory, in KiB."""
+                  return int(machine.succeed(
+                      "for pid in $(pgrep -u alice); do "
+                      "grep -s '^Pss:' /proc/$pid/smaps_rollup; done "
+                      "| awk '{ total += $2 } END { print total }'").strip())
+
+
+              def the_desk_is_up():
+                  machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                  machine.wait_until_succeeds("pgrep -u alice -f bin/domicile-compositor", timeout=WAIT)
+                  # The compositor wrote the copy of the listed entry.
+                  machine.wait_until_succeeds(
+                      "grep -l 'domicile open --electron fixture.desktop' "
+                      "/run/user/1000/domicile*/share/applications/fixture.desktop",
+                      timeout=WAIT)
+                  machine.sleep(20)
+
+
+              def a_link_starts_the_app_on_the_engine():
+                  before = pss_kib()
+                  machine.succeed(in_the_desk("domicile open fixture://hello") + " >/tmp/open.log 2>&1 &")
+                  retry(lambda _: blue_share("on-the-engine") > 0.1, timeout=WAIT)
+                  machine.succeed("pgrep -u alice -f 'electron-host/src/main.ts'")
+                  machine.fail("pgrep -u alice -f '${pkgs.electron}'")
+                  machine.sleep(15)
+                  return pss_kib() - before
+
+
+              def the_same_app_on_its_own_electron():
+                  machine.succeed("pkill -u alice -f 'electron-host/src/main.ts'")
+                  retry(lambda _: blue_share("closed") < 0.01, timeout=WAIT)
+                  machine.sleep(10)
+                  before = pss_kib()
+                  machine.succeed(in_the_desk("fixture") + " >/tmp/electron.log 2>&1 &")
+                  retry(lambda _: blue_share("on-electron") > 0.1, timeout=WAIT)
+                  machine.sleep(15)
+                  return pss_kib() - before
+
+
+              machine.wait_for_unit("multi-user.target")
+              try:
+                  the_desk_is_up()
+                  on_the_engine = a_link_starts_the_app_on_the_engine()
+                  on_electron = the_same_app_on_its_own_electron()
+                  print(f"memory: {on_the_engine // 1024} MiB on the engine, "
+                        f"{on_electron // 1024} MiB on its own Electron")
+                  assert on_the_engine < on_electron, "the app cost more on the engine"
+              except Exception:
+                  machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                  for command in [
+                      "tail -8 /tmp/open.log | cut -c1-200",
+                      "tail -8 /tmp/electron.log | cut -c1-200",
+                      "grep -iE 'electron' /tmp/domicile.log | tail -8 | cut -c1-200 || true",
+                      "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                  ]:
+                      print(f"$ {command}")
+                      print(machine.execute(f"{command} 2>&1")[1])
+                  raise
+            '';
+          };
       };
 
       apps.${system} = {
