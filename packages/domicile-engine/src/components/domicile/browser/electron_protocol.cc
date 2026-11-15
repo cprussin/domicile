@@ -20,6 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/types/expected.h"
+#include "base/types/expected_macros.h"
 #include "base/values.h"
 #include "net/http/http_util.h"
 #include "url/gurl.h"
@@ -498,6 +499,209 @@ std::string Written(base::DictValue event) {
   return line;
 }
 
+constexpr std::string_view kElectronStorages[] = {
+    "cookies",     "filesystem", "indexdb",        "localstorage",
+    "shadercache", "websql",     "serviceworkers", "cachestorage",
+};
+
+constexpr std::string_view kSameSites[] = {"unspecified", "no_restriction",
+                                           "lax", "strict"};
+
+base::expected<ElectronRequest, ElectronRefusal> RefuseCall(std::string why,
+                                                            int call) {
+  return base::unexpected(ElectronRefusal{.why = std::move(why), .call = call});
+}
+
+base::expected<std::optional<std::string>, std::string> OptionalStringIn(
+    const base::DictValue& dict,
+    std::string_view key) {
+  const base::Value* value = dict.Find(key);
+  if (value == nullptr) {
+    return std::nullopt;
+  } else if (!value->is_string()) {
+    return base::unexpected(base::StrCat({"\"", key, "\" must be a string"}));
+  }
+  return std::optional(value->GetString());
+}
+
+base::expected<std::optional<bool>, std::string> OptionalBoolIn(
+    const base::DictValue& dict,
+    std::string_view key) {
+  const base::Value* value = dict.Find(key);
+  if (value == nullptr) {
+    return std::nullopt;
+  } else if (!value->is_bool()) {
+    return base::unexpected(
+        base::StrCat({"\"", key, "\" must be true or false"}));
+  }
+  return std::optional(value->GetBool());
+}
+
+base::expected<std::optional<GURL>, std::string> OptionalUrlIn(
+    const base::DictValue& dict,
+    std::string_view key) {
+  ASSIGN_OR_RETURN(std::optional<std::string> text,
+                   OptionalStringIn(dict, key));
+  if (!text.has_value()) {
+    return std::nullopt;
+  }
+  GURL url(*text);
+  if (!url.is_valid()) {
+    return base::unexpected(base::StrCat({"\"", key, "\" must be a URL"}));
+  }
+  return std::optional(std::move(url));
+}
+
+base::expected<GURL, std::string> RequiredUrlIn(const base::DictValue& dict) {
+  ASSIGN_OR_RETURN(std::optional<GURL> url, OptionalUrlIn(dict, "url"));
+  if (!url.has_value()) {
+    return base::unexpected("\"url\" must be a string");
+  }
+  return std::move(*url);
+}
+
+base::expected<ElectronSessionMethod, std::string> GetCookiesIn(
+    const base::DictValue& request) {
+  const base::Value* found = request.Find("filter");
+  if (found == nullptr) {
+    return ElectronGetCookies{};
+  } else if (!found->is_dict()) {
+    return base::unexpected("\"filter\" must be an object");
+  }
+  const base::DictValue& filter = found->GetDict();
+  ElectronCookieFilter parsed;
+  ASSIGN_OR_RETURN(parsed.url, OptionalUrlIn(filter, "url"));
+  ASSIGN_OR_RETURN(parsed.name, OptionalStringIn(filter, "name"));
+  ASSIGN_OR_RETURN(parsed.domain, OptionalStringIn(filter, "domain"));
+  ASSIGN_OR_RETURN(parsed.path, OptionalStringIn(filter, "path"));
+  ASSIGN_OR_RETURN(parsed.secure, OptionalBoolIn(filter, "secure"));
+  ASSIGN_OR_RETURN(parsed.session, OptionalBoolIn(filter, "session"));
+  ASSIGN_OR_RETURN(parsed.http_only, OptionalBoolIn(filter, "http_only"));
+  return ElectronGetCookies{.filter = std::move(parsed)};
+}
+
+base::expected<ElectronSessionMethod, std::string> SetCookieIn(
+    const base::DictValue& request) {
+  const base::DictValue* details = request.FindDict("details");
+  if (details == nullptr) {
+    return base::unexpected("\"details\" must be an object");
+  }
+  ElectronCookieDetails parsed;
+  ASSIGN_OR_RETURN(parsed.url, RequiredUrlIn(*details));
+  ASSIGN_OR_RETURN(std::optional<std::string> name,
+                   OptionalStringIn(*details, "name"));
+  parsed.name = name.value_or("");
+  ASSIGN_OR_RETURN(std::optional<std::string> value,
+                   OptionalStringIn(*details, "value"));
+  parsed.value = value.value_or("");
+  ASSIGN_OR_RETURN(parsed.domain, OptionalStringIn(*details, "domain"));
+  ASSIGN_OR_RETURN(parsed.path, OptionalStringIn(*details, "path"));
+  ASSIGN_OR_RETURN(std::optional<bool> secure,
+                   OptionalBoolIn(*details, "secure"));
+  parsed.secure = secure.value_or(false);
+  ASSIGN_OR_RETURN(std::optional<bool> http_only,
+                   OptionalBoolIn(*details, "http_only"));
+  parsed.http_only = http_only.value_or(false);
+  if (const base::Value* expires = details->Find("expiration_date")) {
+    if (!expires->is_int() && !expires->is_double()) {
+      return base::unexpected("\"expiration_date\" must be a number");
+    }
+    parsed.expiration_date = expires->GetDouble();
+  }
+  ASSIGN_OR_RETURN(std::optional<std::string> same_site,
+                   OptionalStringIn(*details, "same_site"));
+  if (same_site.has_value()) {
+    if (std::ranges::find(kSameSites, *same_site) == std::end(kSameSites)) {
+      return base::unexpected(
+          "\"same_site\" must be unspecified, no_restriction, lax or strict");
+    }
+    parsed.same_site = std::move(*same_site);
+  }
+  return ElectronSetCookie{.details = std::move(parsed)};
+}
+
+base::expected<ElectronSessionMethod, std::string> RemoveCookieIn(
+    const base::DictValue& request) {
+  ASSIGN_OR_RETURN(GURL url, RequiredUrlIn(request));
+  const std::string* name = request.FindString("name");
+  if (name == nullptr) {
+    return base::unexpected("\"name\" must be a string");
+  }
+  return ElectronRemoveCookie{.url = std::move(url), .name = *name};
+}
+
+base::expected<ElectronSessionMethod, std::string> ClearStorageIn(
+    const base::DictValue& request) {
+  ElectronClearStorage clear;
+  ASSIGN_OR_RETURN(clear.origin, OptionalUrlIn(request, "origin"));
+  if (const base::Value* storages = request.Find("storages")) {
+    if (!storages->is_list()) {
+      return base::unexpected("\"storages\" must be an array");
+    }
+    for (const base::Value& storage : storages->GetList()) {
+      if (!storage.is_string()) {
+        return base::unexpected("\"storages\" must hold strings");
+      } else if (!IsElectronStorage(storage.GetString())) {
+        return base::unexpected(
+            base::StrCat({"\"", storage.GetString(),
+                          "\" is not a storage clearStorageData knows"}));
+      }
+      clear.storages.insert(storage.GetString());
+    }
+  }
+  return clear;
+}
+
+base::expected<ElectronSessionMethod, std::string> SessionMethodIn(
+    std::string_view method,
+    const base::DictValue& request) {
+  if (method == "cookies_get") {
+    return GetCookiesIn(request);
+  } else if (method == "cookies_set") {
+    return SetCookieIn(request);
+  } else if (method == "cookies_remove") {
+    return RemoveCookieIn(request);
+  } else if (method == "cookies_flush") {
+    return ElectronFlushCookies{};
+  } else if (method == "clear_storage_data") {
+    return ClearStorageIn(request);
+  } else if (method == "clear_cache") {
+    return ElectronClearCache{};
+  } else if (method == "set_user_agent") {
+    const std::string* agent = request.FindString("user_agent");
+    if (agent == nullptr) {
+      return base::unexpected("\"user_agent\" must be a string");
+    }
+    return ElectronSetUserAgent{.user_agent = *agent};
+  }
+  return base::unexpected(base::StrCat({"no session call is named ", method}));
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseSessionCall(
+    const base::DictValue& request) {
+  const std::optional<int> call = request.FindInt("call");
+  if (!call.has_value() || *call < 1) {
+    return Refuse("\"call\" must be a whole number from 1");
+  }
+  base::expected<std::string, std::string> session =
+      SessionIn(request, /*optional=*/false);
+  if (!session.has_value()) {
+    return RefuseCall(std::move(session.error()), *call);
+  }
+  const std::string* method = request.FindString("method");
+  if (method == nullptr) {
+    return RefuseCall("\"method\" must be a string", *call);
+  }
+  base::expected<ElectronSessionMethod, std::string> parsed =
+      SessionMethodIn(*method, request);
+  if (!parsed.has_value()) {
+    return RefuseCall(std::move(parsed.error()), *call);
+  }
+  return ElectronSessionCall{.call = *call,
+                             .session = std::move(*session),
+                             .method = std::move(*parsed)};
+}
+
 }  // namespace
 
 base::expected<WebViewPartition, std::string> ElectronSessionPartition(
@@ -549,6 +753,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseWebRequestListen(*request);
   } else if (*type == "web_request_answer") {
     return ParseWebRequestAnswer(*request);
+  } else if (*type == "session_call") {
+    return ParseSessionCall(*request);
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }
@@ -658,6 +864,63 @@ std::string ElectronWebRequest(ElectronWebRequestEvent event,
   }
   // The loader made every string UTF-8.
   return Line(std::move(line));
+}
+
+bool IsElectronStorage(std::string_view storage) {
+  return std::ranges::find(kElectronStorages, storage) !=
+         std::end(kElectronStorages);
+}
+
+bool ElectronCookieMatches(const ElectronCookie& cookie,
+                           const ElectronCookieFilter& filter) {
+  // Electron compares domains without a leading dot, and takes a cookie
+  // of a domain inside the filter's.
+  const std::string_view domain =
+      base::TrimString(cookie.domain, ".", base::TRIM_LEADING);
+  const std::string_view wanted =
+      filter.domain.has_value()
+          ? base::TrimString(*filter.domain, ".", base::TRIM_LEADING)
+          : std::string_view();
+  return (!filter.name.has_value() || cookie.name == *filter.name) &&
+         (!filter.domain.has_value() || domain == wanted ||
+          domain.ends_with(base::StrCat({".", wanted}))) &&
+         (!filter.path.has_value() || cookie.path == *filter.path) &&
+         (!filter.secure.has_value() || cookie.secure == *filter.secure) &&
+         (!filter.session.has_value() ||
+          !cookie.expiration_date.has_value() == *filter.session) &&
+         (!filter.http_only.has_value() ||
+          cookie.http_only == *filter.http_only);
+}
+
+std::string ElectronSessionResult(
+    int call,
+    const base::expected<base::Value, std::string>& result) {
+  base::DictValue event;
+  event.Set("type", "session_result");
+  event.Set("call", call);
+  if (result.has_value()) {
+    event.Set("result", result->Clone());
+  } else {
+    event.Set("error", result.error());
+  }
+  return Line(std::move(event));
+}
+
+base::DictValue ElectronCookieValue(const ElectronCookie& cookie) {
+  base::DictValue value;
+  value.Set("name", cookie.name);
+  value.Set("value", cookie.value);
+  value.Set("domain", cookie.domain);
+  value.Set("hostOnly", cookie.host_only);
+  value.Set("path", cookie.path);
+  value.Set("secure", cookie.secure);
+  value.Set("httpOnly", cookie.http_only);
+  value.Set("session", !cookie.expiration_date.has_value());
+  if (cookie.expiration_date.has_value()) {
+    value.Set("expirationDate", *cookie.expiration_date);
+  }
+  value.Set("sameSite", cookie.same_site);
+  return value;
 }
 
 std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {

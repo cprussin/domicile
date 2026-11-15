@@ -81,6 +81,48 @@ class FakeDesk final : public ElectronDesk {
   void ClosePort(const std::string& id, const std::string& port) override {
     calls.push_back("close port " + id + " " + port);
   }
+  void SetUserAgent(const std::string& id,
+                    const std::string& user_agent) override {
+    calls.push_back("user agent " + id + " " + user_agent);
+  }
+  void GetCookies(
+      const WebViewPartition& partition,
+      const std::optional<GURL>& url,
+      base::OnceCallback<void(std::vector<ElectronCookie>)> done) override {
+    calls.push_back("get cookies in " + partition.name +
+                    (url.has_value() ? " for " + url->spec() : ""));
+    std::move(done).Run(cookies);
+  }
+  void SetCookie(
+      const WebViewPartition& partition,
+      const ElectronCookieDetails& details,
+      base::OnceCallback<void(std::optional<std::string>)> done) override {
+    calls.push_back("set cookie " + details.name + " in " + partition.name);
+    std::move(done).Run(cookie_refusal);
+  }
+  void RemoveCookie(const WebViewPartition& partition,
+                    const GURL& url,
+                    const std::string& name,
+                    base::OnceClosure done) override {
+    calls.push_back("remove cookie " + name + " for " + url.spec());
+    std::move(done).Run();
+  }
+  void FlushCookies(const WebViewPartition& partition,
+                    base::OnceClosure done) override {
+    calls.push_back("flush cookies in " + partition.name);
+    std::move(done).Run();
+  }
+  void ClearStorage(const WebViewPartition& partition,
+                    const ElectronClearStorage& clear,
+                    base::OnceClosure done) override {
+    calls.push_back("clear storage in " + partition.name);
+    waiting = std::move(done);
+  }
+  void ClearCache(const WebViewPartition& partition,
+                  base::OnceClosure done) override {
+    calls.push_back("clear cache in " + partition.name);
+    std::move(done).Run();
+  }
 
   bool has_shell = true;
   // What each window's page may call, by id.
@@ -90,6 +132,11 @@ class FakeDesk final : public ElectronDesk {
   std::map<std::string, base::WeakPtr<ElectronSession>> sessions;
   int next_id = 10;
   std::vector<std::string> calls;
+  // What GetCookies finds and why SetCookie fails, when it does.
+  std::vector<ElectronCookie> cookies;
+  std::optional<std::string> cookie_refusal;
+  // A ClearStorage that has not finished.
+  base::OnceClosure waiting;
 };
 
 class ElectronAppTest : public testing::Test {
@@ -804,6 +851,95 @@ TEST_F(ElectronAppTest, AnAppThatGoesCancelsItsWaitingRequests) {
   app_.reset();
 
   EXPECT_EQ(got, (ElectronWebRequestAnswer{.ask = 1, .cancel = true}));
+}
+
+TEST_F(ElectronAppTest, ASessionCallGetsTheCookiesItsFilterMatches) {
+  Hello();
+  desk_.cookies = {{.name = "a", .value = "1", .domain = "a.test"},
+                   {.name = "b", .value = "2", .domain = "b.test"}};
+
+  app_->Take(R"({"type":"session_call","call":1,"session":"persist:work",)"
+             R"("method":"cookies_get","filter":{"url":"https://a.test/",)"
+             R"("domain":"a.test"}})");
+
+  EXPECT_EQ(desk_.calls,
+            Lines{"get cookies in electron-claude:work for https://a.test/"});
+  EXPECT_EQ(sent_, Lines{"{\"call\":1,\"result\":[{\"domain\":\"a.test\","
+                         "\"hostOnly\":false,\"httpOnly\":false,\"name\":\"a\","
+                         "\"path\":\"\",\"sameSite\":\"unspecified\","
+                         "\"secure\":false,\"session\":true,\"value\":\"1\"}],"
+                         "\"type\":\"session_result\"}\n"});
+}
+
+TEST_F(ElectronAppTest, ASessionCallSaysWhyACookieWasNotSet) {
+  Hello();
+  desk_.cookie_refusal = "the cookie's domain is not the URL's";
+
+  app_->Take(
+      R"({"type":"session_call","call":2,"session":"","method":"cookies_set",)"
+      R"("details":{"url":"https://a.test/","name":"n"}})");
+  desk_.cookie_refusal.reset();
+  app_->Take(
+      R"({"type":"session_call","call":3,"session":"","method":"cookies_set",)"
+      R"("details":{"url":"https://a.test/","name":"m"}})");
+
+  EXPECT_EQ(desk_.calls, (Lines{"set cookie n in electron-claude",
+                                "set cookie m in electron-claude"}));
+  EXPECT_EQ(sent_, (Lines{"{\"call\":2,\"error\":\"the cookie's domain is not "
+                          "the URL's\",\"type\":\"session_result\"}\n",
+                          "{\"call\":3,\"result\":null,"
+                          "\"type\":\"session_result\"}\n"}));
+}
+
+TEST_F(ElectronAppTest, ASessionCallIsAnsweredOnceTheDeskIsDone) {
+  Hello();
+
+  app_->Take(R"({"type":"session_call","call":4,"session":"",)"
+             R"("method":"clear_storage_data"})");
+  EXPECT_EQ(sent_, Lines{});
+  std::move(desk_.waiting).Run();
+
+  EXPECT_EQ(desk_.calls, Lines{"clear storage in electron-claude"});
+  EXPECT_EQ(
+      sent_,
+      Lines{"{\"call\":4,\"result\":null,\"type\":\"session_result\"}\n"});
+}
+
+TEST_F(ElectronAppTest, AUserAgentReachesTheSessionsWindowsAndItsNewOnes) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("session":"persist:work"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(R"({"type":"session_call","call":5,"session":"persist:work",)"
+             R"("method":"set_user_agent","user_agent":"Claude/1"})");
+
+  EXPECT_EQ(desk_.calls, Lines{"user agent 10 Claude/1"});
+  EXPECT_EQ(
+      sent_,
+      Lines{"{\"call\":5,\"result\":null,\"type\":\"session_result\"}\n"});
+  // A window opened later finds it on its session, before it loads.
+  EXPECT_EQ(desk_.sessions.at("10")->user_agent(), "Claude/1");
+  EXPECT_EQ(desk_.sessions.at("11")->user_agent(), "");
+}
+
+TEST_F(ElectronAppTest, ABadSessionCallIsAnsweredWithWhy) {
+  Hello();
+
+  app_->Take(R"({"type":"session_call","call":6,"session":"",)"
+             R"("method":"cookies_remove"})");
+  app_->Take(R"({"type":"session_call","call":7,"session":"persist:",)"
+             R"("method":"clear_cache"})");
+
+  EXPECT_EQ(desk_.calls, Lines{});
+  EXPECT_EQ(
+      sent_,
+      (Lines{"{\"call\":6,\"error\":\"\\\"url\\\" must be a string\","
+             "\"type\":\"session_result\"}\n",
+             "{\"call\":7,\"error\":\"a partition of \\\"persist:\\\" "
+             "names no partition to keep\",\"type\":\"session_result\"}\n"}));
 }
 
 }  // namespace

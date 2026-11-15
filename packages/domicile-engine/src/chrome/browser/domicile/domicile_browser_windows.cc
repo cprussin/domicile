@@ -60,6 +60,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -69,6 +70,20 @@
 
 namespace domicile {
 namespace {
+
+// Has `contents` load as `user_agent`: its next browser navigation, as
+// WebViewGuest::Navigate asks for the override, and the navigations its
+// page makes after its current document, which take its entry's.
+void UseUserAgent(content::WebContents& contents,
+                  const std::string& user_agent) {
+  contents.SetUserAgentOverride(
+      blink::UserAgentOverride::UserAgentOnly(user_agent),
+      /*override_in_new_tabs=*/true);
+  if (content::NavigationEntry* entry =
+          contents.GetController().GetLastCommittedEntry()) {
+    entry->SetIsOverridingUserAgent(true);
+  }
+}
 
 constexpr char kWindowsUserDataKey[] = "domicile_browser_windows";
 
@@ -208,6 +223,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
         [&](WebViewGuest& guest) {
           // Before the first navigation, which runs the preload and loads
           // through the session too.
+          if (session && !session->user_agent().empty()) {
+            UseUserAgent(guest.contents(), session->user_agent());
+          }
           ElectronPage::Attach(guest.contents(), preload, std::move(calls),
                                std::move(session));
           guest.Navigate(url);
@@ -887,6 +905,18 @@ ElectronPage* ElectronPageOf(const std::string& id) {
     return nullptr;
   }
   return ElectronPage::FromWebContents(&guest->contents());
+}
+
+void SetBrowserWindowUserAgent(const std::string& id,
+                               const std::string& user_agent) {
+  DeskWindows* windows = ShellDeskWindows();
+  WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);
+  if (guest == nullptr) {
+    LOG(WARNING) << "domicile: asked to set the user agent of browser window "
+                 << id << ", which is not open.";
+  } else {
+    UseUserAgent(guest->contents(), user_agent);
+  }
 }
 
 void LoadBrowserWindow(const std::string& id, const GURL& url) {

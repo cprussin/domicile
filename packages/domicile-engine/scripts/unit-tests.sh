@@ -42,10 +42,13 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 13, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 14, ElectronProtocol 36, ElectronApp 42,
+# PictureInPictureVideos 14, ElectronProtocol 42, ElectronApp 47,
 # ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 798, and it was 787 — an Electron app's session calls (cookies, storage,
+# cache, user agent) are six more ElectronProtocol cases and five more
+# ElectronApp ones. Before that
 # 787, and it was 785 — a Super tap held too long, and how long it was held,
 # are two more DeskModifierTaps cases. Before that
 # 785, and it was 784 — dropping the desk's pointer theme being an error is
@@ -265,7 +268,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=787
+FLOOR=798
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

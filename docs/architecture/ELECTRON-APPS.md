@@ -164,8 +164,15 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   redirect `onHeadersReceived` writes is not followed, a redirect to a
   scheme the web cannot reach is refused, and WebSockets and workers' requests
   pass by the listeners.
-- **Cookies** and `setPermissionRequestHandler` apply to the app's
-  partition only.
+- **Session calls** (`session_call`, answered by `session_result` under
+  the same `call`): `cookies.get`, `set`, `remove` and `flushStore`,
+  `clearStorageData`, `clearCache` and `setUserAgent`, each on one of the
+  app's sessions and so on its partition only. `cookies.get` gives every
+  cookie a request to its `url` could carry, HTTP-only and cross-site ones
+  included, as Electron does. A session's user agent reaches its open
+  windows from their next navigation and its new windows before their first
+  ([`domicile_electron_storage.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_storage.h)).
+  Not yet: `cookies.on('changed')`, and `setPermissionRequestHandler`.
 
 ### Desktop pieces
 
@@ -250,7 +257,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: `protocol.handle`, `loadFile` and sessions
 - [x] engine: an app's own schemes, registered at start
 - [x] engine: `webRequest`
-- [ ] engine: cookies, permission handlers, storage clearing
+- [x] engine: cookies, storage clearing, `clearCache`, `setUserAgent`
+- [ ] engine: permission handlers
 - [x] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
 - [ ] `electron-host`: `session.webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
