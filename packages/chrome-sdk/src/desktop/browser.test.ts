@@ -26,6 +26,7 @@ describe("browser", () => {
         menu: undefined,
         menuBarAutoHide: false,
         menuBarVisible: true,
+        messageBox: undefined,
         parent: undefined,
         partition: "",
         popupWindow: undefined,
@@ -48,6 +49,7 @@ describe("browser", () => {
     browser.openApp("https://d.example/");
     browser.close("1");
     browser.clickMenu("2", 7);
+    browser.answerMessageBox("2", 1, true);
 
     expect(fake.calls).toStrictEqual([
       ["openBrowserWindow", "https://a.example/", ""],
@@ -56,6 +58,7 @@ describe("browser", () => {
       ["openAppWindow", "https://d.example/", "", "new"],
       ["closeBrowserWindow", "1"],
       ["clickBrowserWindowMenu", "2", 7],
+      ["answerBrowserWindowMessageBox", "2", 1, true],
     ]);
   });
 

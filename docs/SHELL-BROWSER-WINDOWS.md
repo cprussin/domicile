@@ -466,6 +466,33 @@ for (const window of domicile.browser.windows ?? []) {
 
 See "Desktop pieces" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
 
+## Message boxes
+
+An Electron app window can ask a message box ("Quit Claude?"), which the
+shell draws over the window's page, as it draws a page's
+[dialogs](#dialogs).
+
+- **`messageBox`** is the box the window shows as JSON, or `undefined` for
+  none: its `type` (`none`, `info`, `error`, `question` or `warning`),
+  `title`, `message`, `detail`, `buttons` (labels, in the app's order),
+  `defaultId` (the button Enter presses, or -1 for none), `cancelId` (the
+  button Escape presses), `checkboxLabel` (empty for no checkbox) and
+  `checkboxChecked`.
+- **Answer it** with `domicile.browser.answerMessageBox(id, button,
+  checkboxChecked)`, `button` an index into `buttons`. The app hears the
+  answer, and the window lists its next box, if it asked another.
+- A window that closes under a box answers it with `cancelId`.
+
+```js
+for (const window of domicile.browser.windows ?? []) {
+  if (window.messageBox !== undefined) {
+    drawMessageBox(window.id, JSON.parse(window.messageBox), (button, checked) => {
+      domicile.browser.answerMessageBox(window.id, button, checked);
+    });
+  }
+}
+```
+
 ## Fullscreen
 
 A page's `requestFullscreen()`, such as a video's fullscreen button, makes it

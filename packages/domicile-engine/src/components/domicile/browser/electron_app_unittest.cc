@@ -68,6 +68,15 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("set menu bar of " + id);
     menu_bars[id] = std::move(bar);
   }
+  void ShowMessageBox(
+      const std::string& id,
+      ElectronDeskMessageBox box,
+      base::OnceCallback<void(int response, bool checkbox_checked)> answered)
+      override {
+    calls.push_back("show message box over " + id);
+    message_boxes.push_back(
+        {.id = id, .box = std::move(box), .answered = std::move(answered)});
+  }
   void SendToPage(const std::string& id,
                   const std::string& channel,
                   const std::string& args_json) override {
@@ -145,6 +154,13 @@ class FakeDesk final : public ElectronDesk {
   // The views each window holds, by id, as SetViews last set them.
   std::map<std::string, std::vector<ElectronDeskView>> held;
   std::map<std::string, ElectronDeskMenuBar> menu_bars;
+  // The message boxes asked, oldest first, each with its answer.
+  struct AskedBox {
+    std::string id;
+    ElectronDeskMessageBox box;
+    base::OnceCallback<void(int, bool)> answered;
+  };
+  std::vector<AskedBox> message_boxes;
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
@@ -448,6 +464,37 @@ TEST_F(ElectronAppTest, AClickOnTheMenuBarReachesTheApp) {
   sent_.clear();
   page.menu_clicked.Run(8);
   EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, AMessageBoxGoesOverItsWindowAndItsAnswerBack) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+  const std::string box =
+      R"("box_type":"none","title":"","message":"Quit?","detail":"",)"
+      R"("buttons":["Cancel","Quit"],"default_id":1,"cancel_id":0,)"
+      R"("checkbox_label":"","checkbox_checked":false)";
+
+  app_->Take(R"({"type":"show_message_box","window":1,"box":5,)" + box + "}");
+  app_->Take(R"({"type":"show_message_box","window":2,"box":6,)" + box + "}");
+
+  ASSERT_EQ(desk_.message_boxes.size(), 1u);
+  EXPECT_EQ(desk_.message_boxes[0].id, "10");
+  EXPECT_EQ(desk_.message_boxes[0].box.buttons, 2);
+  EXPECT_EQ(desk_.message_boxes[0].box.cancel_id, 0);
+  EXPECT_EQ(sent_, (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is "
+                          "a view: a message box goes over a window\","
+                          "\"window\":2}\n"}));
+
+  // Answered even after the window closed, as the app waits on every box.
+  app_->Listed({});
+  sent_.clear();
+  std::move(desk_.message_boxes[0].answered).Run(1, true);
+  EXPECT_EQ(sent_, Lines{"{\"box\":5,\"checkbox_checked\":true,"
+                         "\"response\":1,\"type\":\"message_box_answered\","
+                         "\"window\":1}\n"});
 }
 
 TEST_F(ElectronAppTest, OnlyAWindowHoldsViewsAndOnlyViews) {

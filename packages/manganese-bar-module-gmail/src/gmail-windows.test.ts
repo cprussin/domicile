@@ -19,6 +19,7 @@ const browser = (
   menu: null,
   menuBarAutoHide: false,
   menuBarVisible: true,
+  messageBox: null,
   parent: null,
   partition: "",
   popupWindow: null,

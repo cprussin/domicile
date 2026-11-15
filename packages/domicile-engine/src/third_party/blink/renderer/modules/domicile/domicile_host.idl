@@ -455,6 +455,14 @@
   [CallWith=ScriptState, RaisesException] undefined clickBrowserWindowMenu(
       DOMString id, long command);
 
+  // The user answered the message box window `id` shows
+  // (DomicileBrowserWindow.messageBox) with button `response`, an index into
+  // its `buttons`, leaving its checkbox `checkboxChecked`. Throws a TypeError
+  // for a negative `response`. A window that closed meanwhile, or shows no
+  // box, does nothing.
+  [CallWith=ScriptState, RaisesException] undefined answerBrowserWindowMessageBox(
+      DOMString id, long response, boolean checkboxChecked);
+
   // The TVs the desktop can cast to: the Google Cast receivers the browser
   // finds, by name. Null until the browser lists them, which it does as soon
   // as this page listens; empty when the profile turns casting off. No

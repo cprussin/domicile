@@ -24,7 +24,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     bool is_hidden,
     const String& menu,
     bool menu_bar_visible,
-    bool menu_bar_auto_hide)
+    bool menu_bar_auto_hide,
+    const String& message_box)
     : id_(id),
       url_(url),
       title_(title),
@@ -43,7 +44,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       is_hidden_(is_hidden),
       menu_(menu),
       menu_bar_visible_(menu_bar_visible),
-      menu_bar_auto_hide_(menu_bar_auto_hide) {}
+      menu_bar_auto_hide_(menu_bar_auto_hide),
+      message_box_(message_box) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 
