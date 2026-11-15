@@ -124,7 +124,7 @@ void DeskModifierTaps::Heard(const ui::Event& event) {
   TapModifier tapped = TapModifier::kMeta;
   base::TimeDelta held;
   {
-    base::AutoLock held(lock_);
+    base::AutoLock locked(lock_);
     if (!event.IsKeyEvent()) {
       pressed_.reset();
       return;
