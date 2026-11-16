@@ -126,6 +126,13 @@ TEST(BrowserProfilesTest, APrivateProfilesExtensionsRunInItsPages) {
   EXPECT_EQ(chosen.settings.at("mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm").in_private,
             true);
   EXPECT_FALSE(chosen.settings.contains("aeblfdkhhhdcdjpifhhbdiojplfjncoa"));
+
+  // One that names none keeps them all out, as a private page has always
+  // been kept from extensions unless they were allowed.
+  const BrowserProfile unnamed{.id = "private", .is_private = true};
+  const ExtensionList none = ExtensionsFor(unnamed, all, unpacked_id);
+  EXPECT_TRUE(none.web_store.empty());
+  EXPECT_TRUE(none.unpacked.empty());
 }
 
 }  // namespace

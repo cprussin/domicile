@@ -80,7 +80,8 @@ pub struct BrowserProfile {
     pub color: String,
     /// Keeps nothing past its last page.
     pub private: bool,
-    /// The extension ids it turns on; `None` turns on all of them.
+    /// The extension ids it turns on; `None` turns on all of them, or none
+    /// for a private profile.
     pub extensions: Option<Vec<String>>,
 }
 

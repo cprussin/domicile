@@ -29,7 +29,8 @@ struct BrowserProfile {
   std::string color;
   // Keeps nothing past its last page.
   bool is_private = false;
-  // The extension ids it turns on; nothing turns on all of them.
+  // The extension ids it turns on; nothing turns on all of them, or none for
+  // a private profile.
   std::optional<std::vector<std::string>> extensions;
 };
 
@@ -73,7 +74,8 @@ BrowserProfiles DefaultBrowserProfiles();
 std::optional<BrowserProfiles> ParseBrowserProfiles(
     const base::DictValue& message);
 
-// The extensions of `all` that `profile` turns on, with every setting.
+// The extensions of `all` that `profile` turns on, with every setting. A
+// private profile's are allowed into its private pages.
 // `unpacked_id` gives the id of each of `all.unpacked`.
 ExtensionList ExtensionsFor(
     const BrowserProfile& profile,

@@ -140,9 +140,12 @@ ExtensionList ExtensionsFor(
     const BrowserProfile& profile,
     const ExtensionList& all,
     base::FunctionRef<std::string(const std::string&)> unpacked_id) {
+  // A profile that names none turns on all of them, or none when private:
+  // extensions stay out of private pages unless named.
   const auto on = [&profile](const std::string& id) {
-    return !profile.extensions.has_value() ||
-           base::Contains(*profile.extensions, id);
+    return profile.extensions.has_value()
+               ? base::Contains(*profile.extensions, id)
+               : !profile.is_private;
   };
   ExtensionList chosen{.settings = all.settings};
   std::vector<std::string> ids;

@@ -66,8 +66,9 @@ permissions are granted as declared.
 
 Each browser profile is a Chrome profile of its own, so the lists are
 reconciled once per profile: each gets the extensions its
-`browser.profiles.<id>.extensions` turns on, or all of them when it names
-none, and loses the rest it was given (`BrowserProfileRegistry` in
+`browser.profiles.<id>.extensions` turns on, or when it names none, all of
+them for a regular profile and none for a private one, and loses the rest it
+was given (`BrowserProfileRegistry` in
 `chrome/browser/domicile/domicile_browser_profiles.h`). See
 [BROWSER-PROFILES.md](BROWSER-PROFILES.md).
 
