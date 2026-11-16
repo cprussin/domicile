@@ -580,6 +580,32 @@ fn help_after_a_verb_s_first_argument_is_that_argument() {
 }
 
 #[test]
+fn version_is_asked_for_by_flag_and_takes_nothing() {
+    assert_eq!(run(&["--version"]), Ok(Invocation::Version));
+    assert_eq!(
+        run(&["--version", "simple"]),
+        Err(CliError::Extra {
+            verb: "--version".to_string(),
+            extra: "simple".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_flag_domicile_does_not_take_is_refused_and_named() {
+    // Taken as a shell, it reached the shell builder, which failed on it.
+    for line in [&["--bsaothus"][..], &["./dist/shell.js", "--bsaothus"]] {
+        assert_eq!(
+            run(line),
+            Err(CliError::UnknownFlag {
+                flag: "--bsaothus".to_string()
+            }),
+            "{line:?}"
+        );
+    }
+}
+
+#[test]
 fn help_takes_no_arguments() {
     assert_eq!(
         run(&["help", "theme"]),

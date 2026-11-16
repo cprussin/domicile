@@ -115,6 +115,8 @@ for app in history settings; do
 done
 put "$WORKSPACE/packages/app-history/.vite/app/history.js" 'export const main = () => {};'
 put "$WORKSPACE/packages/app-settings/.vite/app/settings.js" 'export const main = () => {};'
+# The distribution package's manifest, whose version `--version` prints.
+put "$WORKSPACE/packages/domicile/package.json" '{"name":"domicile","private":true,"version":"0.0.0"}'
 # A crate: no `package.json`, so not part of the workspace.
 put "$WORKSPACE/packages/domicile-launch/Cargo.toml" ''
 # As `packages/distro/build.sh` installs before it builds.
@@ -152,6 +154,8 @@ expect "bin holds only what the flake installs" "$FLAKE_BINARIES" \
   ok "the engine is libexec/domicile/engine, as unpacked" ||
   fail "the engine is libexec/domicile/engine, as unpacked" \
     "$(ls -R "$LIBEXEC/engine" 2>&1)"
+expect "libexec/domicile/version names the version and commit" \
+  "$(printf 'domicile 0.0.0\ncommit   %s' "$REV")" "$(cat "$LIBEXEC/version" 2>&1)"
 for shell in manganese simple splash; do
   [ -f "$LIBEXEC/shells/$shell/shell.js" ] &&
     ok "the $shell shell is prebuilt" ||

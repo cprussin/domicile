@@ -442,6 +442,7 @@
       #   bin/domicile-recorder       what the compositor records the
       #                               screen with
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
+      #   libexec/domicile/version    the version and commit `--version` prints
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/electron-host
       #                               runs an Electron app's main process
@@ -472,6 +473,11 @@
           };
         } ''
         mkdir -p "$out/bin" "$out/libexec/domicile"
+        # What `domicile --version` prints first. `packages/distro/stage.sh`
+        # writes the same.
+        printf 'domicile %s\ncommit   %s\n' \
+          ${(builtins.fromJSON (builtins.readFile ./packages/domicile/package.json)).version} \
+          ${self.rev or self.dirtyRev} > "$out/libexec/domicile/version"
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         # `BROWSER` inside a desktop. Copied for the same reason as above.

@@ -83,5 +83,6 @@ pub mod splash;
 pub mod subscription;
 pub mod supervise;
 pub mod uninstall_app;
+pub mod version;
 pub mod web_address;
 pub mod web_app;

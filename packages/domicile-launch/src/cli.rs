@@ -91,6 +91,7 @@ Without a desktop:
   domicile install-app <url>            Add a site to your applications
   domicile uninstall-app <url>          Remove a site install-app added
   domicile help                         Print this, as do --help and -h
+  domicile --version                    Print the version, commit and engine
 ";
 
 /// An invalid `domicile` command line.
@@ -255,6 +256,8 @@ pub enum CliError {
          settings nobody chose."
     )]
     TwoConfigs { second: String },
+    #[error("{flag} is not a flag domicile takes. domicile --help lists what it takes.")]
+    UnknownFlag { flag: String },
 }
 
 /// A parsed `domicile` command line.
@@ -330,6 +333,8 @@ pub enum Invocation {
     List { listing: Listing, json: bool },
     /// Print [`USAGE`].
     Help,
+    /// Print the version, the commit it was built from, and the engine's.
+    Version,
 }
 
 /// What a `list-*` verb or `status` prints.
@@ -367,7 +372,8 @@ impl Listing {
 /// - Each verb has a closed argument list and takes no flags but `open`'s
 ///   `--app`, `--id` and `--reuse`, and `--which`. The running desktop already read its config, so a `--config`
 ///   would be silently ignored.
-/// - `--config` may come before or after the shell.
+/// - `--config` may come before or after the shell. Any other flag in a run is
+///   refused, rather than taken as the shell.
 pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, CliError> {
     let mut args = args.into_iter();
     let Some(first) = args.next() else {
@@ -377,6 +383,12 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
         });
     };
     let mut args = args.peekable();
+    if first == VERSION {
+        return match args.next() {
+            None => Ok(Invocation::Version),
+            Some(extra) => Err(CliError::Extra { verb: first, extra }),
+        };
+    }
     if HELP.contains(&first.as_str())
         || (verb(&first).is_some()
             && args
@@ -618,6 +630,8 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             } else {
                 return Err(CliError::ConfigWithoutPath);
             }
+        } else if said.starts_with('-') {
+            return Err(CliError::UnknownFlag { flag: said });
         } else if shell.is_none() {
             shell = Some(said);
         } else {
@@ -630,6 +644,9 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
 
 /// The words that ask for [`USAGE`], first or right after a verb.
 const HELP: [&str; 3] = ["help", "--help", "-h"];
+
+/// The flag that asks for [`Invocation::Version`].
+const VERSION: &str = "--version";
 
 /// `open`'s flag for opening as an app.
 const APP: &str = "--app";

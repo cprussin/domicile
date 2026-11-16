@@ -30,7 +30,9 @@ use domicile_launch::command_socket::{
     open_url, run_app, set_extension_enabled, set_media_device, set_site_permission, site_data,
     site_permissions, uninstall_extension, visits,
 };
-use domicile_launch::components::{builder, components, electron_host, our_shell, Components};
+use domicile_launch::components::{
+    builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
+};
 use domicile_launch::compositor_socket::{
     act_on_window, configure_display, displays, inputs, lock, monitors, power_displays,
     screen_record, screenshot, send_shell, shell_bindings, shell_commands, status, theme, windows,
@@ -82,6 +84,7 @@ use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::subscription::follow;
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
+use domicile_launch::version::engine as engine_version;
 use domicile_protocol::{Theme, WatchTopic};
 
 /// How long each startup milestone may take. A debug build on a loaded
@@ -191,9 +194,29 @@ fn run() -> Result<ExitCode, String> {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
         }
+        Invocation::Version => versioned(),
         Invocation::InstallApp { url } => installed(&url),
         Invocation::UninstallApp { url } => uninstalled(&url),
     }
+}
+
+/// Prints the version file beside the binary, then the engine's provenance.
+fn versioned() -> Result<ExitCode, String> {
+    let binary = myself()?;
+    let read = |path: &Path| {
+        std::fs::read_to_string(path)
+            .map_err(|why| format!("cannot read {}: {why}", path.display()))
+    };
+    let env = |name: &str| std::env::var(name).ok();
+    let engine =
+        engine_path(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
+    let built = read(&version_file(&binary))?;
+    let provenance = engine.join("PROVENANCE");
+    let engine = engine_version(&read(&provenance)?)
+        .map_err(|why| format!("{why}, at {}", provenance.display()))?;
+    print!("{built}");
+    println!("{engine}");
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Opens `target` with what opens its type, in this process's place, or in a
