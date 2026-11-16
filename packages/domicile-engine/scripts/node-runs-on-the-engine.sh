@@ -25,9 +25,10 @@ NODE="$ENGINE_OUT/node"
 }
 
 VERSION_H="$ENGINE_DIR/v8/include/v8-version.h"
+# As V8 writes its version: a patch level of 0 is left off.
 v8="$(for part in MAJOR_VERSION MINOR_VERSION BUILD_NUMBER PATCH_LEVEL; do
   sed -n "s/^#define V8_$part \([0-9]*\)$/\1/p" "$VERSION_H"
-done | paste -sd.)"
+done | paste -sd. | sed 's/^\([0-9]*\.[0-9]*\.[0-9]*\)\.0$/\1/')"
 [ -n "$v8" ] || {
   annotate "cannot read V8's version from $VERSION_H"
   exit 1
