@@ -223,6 +223,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
       bool view) {
     WebViewGuest* made = Make(
         [&](WebViewGuest& guest) {
+          // An app, not a page: Energy Saver leaves it at full rate.
+          guest.KeepFullFrameRate();
           // Before the first navigation, which runs the preload and loads
           // through the session too.
           if (session && !session->user_agent().empty()) {
