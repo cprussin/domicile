@@ -264,11 +264,25 @@ void DrmModeset::OnDisplaySnapshotsInvalidated() {
   display_ids_.clear();
 }
 
-bool ModesetWouldChangeAnything(
+std::vector<display::DisplayConfigurationParams> ModesetParamsThatChange(
     const std::vector<display::DisplayConfigurationParams>& asked,
-    const std::vector<display::DisplayConfigurationParams>& wanted) {
-  // `operator==` compares every field a modeset request carries.
-  return asked != wanted;
+    const std::vector<display::DisplayConfigurationParams>& wanted,
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots) {
+  std::vector<display::DisplayConfigurationParams> changed;
+  for (const display::DisplayConfigurationParams& one : wanted) {
+    const auto snapshot = std::ranges::find(
+        snapshots, one.id, &display::DisplaySnapshot::display_id);
+    CHECK(snapshot != snapshots.end())
+        << "a modeset request for display " << one.id
+        << ", which the reading does not have";
+    // `operator==` compares every field a modeset request carries.
+    if (!std::ranges::contains(asked, one) ||
+        (one.mode != nullptr && (*snapshot)->current_mode() == nullptr)) {
+      changed.push_back(one);
+    }
+  }
+  return changed;
 }
 
 void DrmModeset::OnDisplaysReceived(
@@ -319,31 +333,44 @@ void DrmModeset::TakeReading(
     return;
   }
 
-  if (!ModesetWouldChangeAnything(confirmed_, params)) {
+  std::vector<display::DisplayConfigurationParams> changed =
+      ModesetParamsThatChange(confirmed_, params, snapshots);
+  if (changed.empty()) {
     // The CRTCs already match. This is usually the udev CHANGE from our own
-    // last modeset.
+    // last modeset, or a display unplugged.
     VLOG(1) << "domicile: the displays read the same as last time; not "
                "modesetting again";
+    confirmed_ = std::move(params);
     // A ramp sent while the displays were unread is applied here, with no
     // modeset to apply it after.
     ApplyGamma();
     return;
   }
 
-  VLOG(1) << "domicile: configuring " << params.size() << " display(s)";
+  VLOG(1) << "domicile: configuring " << changed.size() << " display(s)";
   inside_configure_ = true;
+  // Only a request that differs can have brought adaptive sync into this
+  // modeset. A display asked for again only because it reads dark, as one
+  // another session left dark does, keeps its adaptive sync when refused.
+  std::vector<display::DisplayConfigurationParams> requested;
+  for (const display::DisplayConfigurationParams& one : changed) {
+    if (!std::ranges::contains(confirmed_, one)) {
+      requested.push_back(one);
+    }
+  }
   delegate_->Configure(
-      params,
+      changed,
       base::BindOnce(
           [](base::WeakPtr<DrmModeset> self,
              std::vector<display::DisplayConfigurationParams> asked,
+             std::vector<display::DisplayConfigurationParams> requested,
              const std::vector<display::DisplayConfigurationParams>&,
              bool status) {
             if (!self) {
               return;
             }
             const base::flat_set<int64_t> adaptive_sync =
-                AdaptiveSyncAskedIn(asked);
+                AdaptiveSyncAskedIn(requested);
             if (!status && !adaptive_sync.empty() &&
                 !self->inside_configure_) {
               // Adaptive sync may be what the driver refused, so ask again
@@ -361,7 +388,7 @@ void DrmModeset::TakeReading(
             }
             if (!status) {
               // Not recorded: only a confirmed modeset is compared against.
-              // See `ModesetWouldChangeAnything`.
+              // See `ModesetParamsThatChange`.
               LOG(ERROR) << "domicile: the DRM thread refused the modeset; the "
                             "displays it reported are connected but nothing is "
                             "lit";
@@ -381,7 +408,8 @@ void DrmModeset::TakeReading(
             }
             VLOG(1) << "domicile: the DRM thread confirmed the modeset";
             const bool adaptive_sync_changed =
-                adaptive_sync != AdaptiveSyncAskedIn(self->confirmed_);
+                AdaptiveSyncAskedIn(asked) !=
+                AdaptiveSyncAskedIn(self->confirmed_);
             self->confirmed_ = std::move(asked);
             self->ApplyGamma();
             if (adaptive_sync_changed) {
@@ -392,7 +420,7 @@ void DrmModeset::TakeReading(
               self->Read();
             }
           },
-          weak_factory_.GetWeakPtr(), params),
+          weak_factory_.GetWeakPtr(), std::move(params), std::move(requested)),
       {display::ModesetFlag::kCommitModeset});
   inside_configure_ = false;
 }
