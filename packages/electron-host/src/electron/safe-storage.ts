@@ -70,6 +70,7 @@ const readPassword = (
   try {
     return dependencies.password();
   } catch (why) {
+    // biome-ignore lint/suspicious/noConsole: the desktop's keyring failed, which only the log can say
     console.error(
       `electron-host: safeStorage has no key, as reading it failed: ${why instanceof Error ? why.message : String(why)}`,
     );
