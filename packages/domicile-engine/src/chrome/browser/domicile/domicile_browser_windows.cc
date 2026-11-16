@@ -932,16 +932,16 @@ class Host final : public BrowserWindowHost {
         registry.ContextOf(shell, profile.empty() ? fallback : profile);
     if (context == nullptr && !profile.empty()) {
       // The shell's list may be a change behind the config.
-      LOG(WARNING) << "domicile: a page asked for browser profile ""
-                   << profile << "", which the desk does not have; it opens "
+      LOG(WARNING) << "domicile: a page asked for browser profile \""
+                   << profile << "\", which the desk does not have; it opens "
                    << "in " << fallback << ".";
       context = registry.ContextOf(shell, fallback);
     }
     if (private_browsing && context != nullptr &&
         !context->IsOffTheRecord()) {
       // A private page is never made where it would keep anything.
-      LOG(WARNING) << "domicile: a private page asked for browser profile ""
-                   << profile << "", which is not private; it opens in "
+      LOG(WARNING) << "domicile: a private page asked for browser profile \""
+                   << profile << "\", which is not private; it opens in "
                    << fallback << ".";
       context = registry.ContextOf(shell, fallback);
     }
