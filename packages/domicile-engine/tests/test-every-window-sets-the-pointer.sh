@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Checks the pointer on a tty shows the current cursor after monitors come and
+# go.
+#
+# Every window shares one cursor client. Two patches keep the screen current:
+#
+# - `DrmCursor::SetCursor` takes a cursor from any window. Taken only from the
+#   window under the pointer, a cursor set while an unplugged monitor's window
+#   was going away never reached the screen.
+# - `DesktopNativeCursorManager` sets the cursor again after a window is added
+#   or removed, so the window the pointer moves to shows it.
+#
+# Missing either still compiles. After an undock the pointer then stays
+# Chromium's art until the cursor changes, such as over a native window.
+#
+# Needs no engine build.
+set -u
+
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+PATCHES="$ROOT/packages/domicile-engine/patches"
+
+fail() {
+  echo "  FAIL  $1" >&2
+  shift
+  for line in "$@"; do echo "        $line" >&2; done
+  exit 1
+}
+
+# The last patch to touch a file has the newest context for it.
+last_touching() {
+  grep -l "^diff --git a/$1 " "$PATCHES"/*.patch | tail -1
+}
+
+CURSOR="$(last_touching ui/ozone/platform/drm/host/drm_cursor.cc)"
+[ -n "$CURSOR" ] || fail "no patch edits ui/ozone/platform/drm/host/drm_cursor.cc"
+grep -q '^-.*window_ != window && window != desk_host_' "$CURSOR" || fail \
+  "DrmCursor::SetCursor still takes a cursor only from the window under it" \
+  "A cursor set while that window goes away never reaches the screen."
+
+MANAGER="$(last_touching ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc)"
+[ -n "$MANAGER" ] || fail "no patch edits desktop_native_cursor_manager.cc"
+for host in AddHost RemoveHost; do
+  awk -v host="$host" '
+    $0 ~ "DesktopNativeCursorManager::" host "\\(" { inside = 1 }
+    inside && /^[+ ]}/ { exit found ? 0 : 1 }
+    inside && /^\+.*RedrawSoon\(\)/ { found = 1 }
+    END { if (!inside) exit 1 }
+  ' "$MANAGER" || fail \
+    "DesktopNativeCursorManager::$host does not set the cursor again" \
+    "The window the pointer moves to keeps the cursor it last had."
+done
+
+echo "every window sets the pointer, and a window change redraws it"

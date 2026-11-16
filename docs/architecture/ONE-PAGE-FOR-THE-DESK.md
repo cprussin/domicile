@@ -89,8 +89,10 @@ enters a gap, because pointer crossing follows `desk`.
 - `DrmScreen::GetCursorScreenPoint` answers where the host hears the pointer
   (`PointerHeardAt`), so a mouse move aura synthesizes after a window change
   or a warp lands where the cursor is.
-- Each CRTC keeps its own cursor (`DrmCursor`). The host sets the cursor shape
-  on every monitor.
+- One cursor client serves every window, and `DrmCursor` takes the cursor
+  from any of them and draws it on the CRTC the pointer is on. A window added
+  or removed sets the cursor again (`DesktopNativeCursorManager::RedrawSoon`),
+  so the pointer stays current across a hotplug.
 - The page's cursor applies off the host monitor too: `RenderWidgetHostViewAura`
   takes a pointer outside its root but on the page as over itself
   (`DeskPagePoint`, patch `0159`).
