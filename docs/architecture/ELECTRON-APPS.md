@@ -459,7 +459,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
 - [x] an app's own schemes kept for the next engine start
 - [x] the quirks table: known phase-2 apps go straight to their own Electron
-- [x] known apps' schemes (Element, Claude, Slack, from their own runs) register from the first engine start (`KNOWN` in `packages/domicile-launch/src/electron_schemes.rs`)
+- [x] known apps' schemes (Element, Claude, Slack, ChatGPT, from their own runs) register from the first engine start (`KNOWN` in `packages/domicile-launch/src/electron_schemes.rs`)
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
 - [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
