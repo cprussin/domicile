@@ -2846,16 +2846,14 @@
             };
             # Each app's `domicile open --electron` arguments, and whether it
             # must run on the engine: an app still allowed to hand itself
-            # back names what it needs. Element finds no keyring here and
-            # says so in a message box before its window has a page, which
-            # the engine can't show yet.
+            # back names what it needs. All of these must stay on it.
             apps = {
-              element = { open = "element-desktop.desktop"; package = pkgs.element-desktop; onTheEngine = false; };
-              slack = { open = "slack.desktop"; package = unfree.slack; onTheEngine = false; };
+              element = { open = "element-desktop.desktop"; package = pkgs.element-desktop; onTheEngine = true; };
+              slack = { open = "slack.desktop"; package = unfree.slack; onTheEngine = true; };
               element-compiled = {
                 open = "${elementCompiled}/bin/element-desktop -- ${elementCompiled}/bin/element-desktop";
                 package = elementCompiled;
-                onTheEngine = false;
+                onTheEngine = true;
               };
             };
           in
@@ -2930,6 +2928,10 @@
                   # with what they set.
                   assert "doesn't look like an Electron app" not in said, f"{entry} wasn't found:\n{said[-3000:]}"
                   assert "without what its wrappers set" not in said, f"{entry} lost its wrappers:\n{said[-3000:]}"
+                  # An app that relaunches itself on every start (Element
+                  # migrating its safeStorage did) never settles on lyra.
+                  for loop in ["Relaunching", "safeStorage migration"]:
+                      assert loop not in said, f"{entry} restarts itself: {loop}\n{said[-3000:]}"
                   # The schemes it registered, which the next start brings.
                   print(machine.execute("cat /home/alice/.local/state/domicile/electron-schemes.json 2>&1")[1])
                   hosted = machine.execute(f"pgrep -u alice -f {HOST}")[0] == 0
