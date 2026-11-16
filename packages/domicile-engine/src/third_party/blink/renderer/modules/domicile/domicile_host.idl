@@ -485,6 +485,24 @@
   [CallWith=ScriptState, RaisesException] Promise<DOMString>
       browserProfileFor(USVString url);
 
+  // The site that routes `url` to its profile: the entry of the config's
+  // `browser.sites`, or of the sites the user pinned, that browserProfileFor
+  // matched. Empty when none did, so it opens in the default profile.
+  // Throws TypeError for a `url` that is no address.
+  [CallWith=ScriptState, RaisesException] Promise<DOMString>
+      browserSiteFor(USVString url);
+
+  // Opens `site` in browser profile `profile` from now on, kept across
+  // restarts; the default profile unpins it. `site` is a host, `*.host`, or
+  // a host and path, as the config's `browser.sites` keys are; it shows in
+  // the profile's `pinnedSites` from the next `browserprofileschanged`.
+  // Pages already open stay where they are. Throws TypeError for an empty
+  // site or profile. Rejects with an OperationError saying why for a site
+  // the config's sites name, which only the config changes, for one that is
+  // no such key, and for a profile the desk does not have.
+  [CallWith=ScriptState, RaisesException] Promise<undefined> pinBrowserSite(
+      DOMString site, DOMString profile);
+
   // The user clicked entry `command` of window `id`'s menu bar
   // (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a
   // TypeError for a `command` below 1. A window that closed meanwhile, or has

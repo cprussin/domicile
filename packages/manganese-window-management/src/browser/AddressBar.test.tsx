@@ -87,29 +87,40 @@ describe("AddressBar", () => {
     const PROFILES = [
       {
         color: "#0d9488",
+        configSites: [],
         id: "personal",
         isDefault: true,
         isDefaultPrivate: false,
         isPrivate: false,
         name: "Personal",
+        pinnedSites: [],
       },
       {
         color: "#d97706",
+        configSites: [],
         id: "work",
         isDefault: false,
         isDefaultPrivate: false,
         isPrivate: false,
         name: "Work",
+        pinnedSites: [],
       },
     ] as const;
 
-    const withProfiles = (calls: string[]) => ({
+    const withProfiles = (
+      calls: string[],
+      pinned?: { locked: boolean; profile: string; site: string },
+    ) => ({
       onMove: (id: string) => {
         calls.push(`move ${id}`);
       },
       onOpenInNew: (id: string) => {
         calls.push(`open ${id}`);
       },
+      onPin: (id: string) => {
+        calls.push(`pin ${id}`);
+      },
+      pinned,
       profile: PROFILES[1],
       profiles: PROFILES,
     });
@@ -149,6 +160,81 @@ describe("AddressBar", () => {
       await userEvent.click(control("Open in a new Personal window"));
 
       expect(calls).toStrictEqual(["open personal"]);
+    });
+    it("pins the page's site to a profile", async () => {
+      const calls: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          profile={withProfiles(calls, {
+            locked: false,
+            profile: "work",
+            site: "github.com/acme",
+          })}
+        />,
+      );
+
+      await userEvent.click(control("Browser profile: Work"));
+      expect(
+        control("github.com/acme opens in Work by default"),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.getByText("github.com/acme is pinned to Work."),
+      ).toBeVisible();
+      await userEvent.click(
+        control("Open github.com/acme in Personal by default"),
+      );
+
+      expect(calls).toStrictEqual(["pin personal"]);
+    });
+
+    it("says a site with no pin opens in the default profile", async () => {
+      render(
+        <AddressBar
+          {...BAR}
+          profile={withProfiles([], {
+            locked: false,
+            profile: "personal",
+            site: "news.example",
+          })}
+        />,
+      );
+
+      await userEvent.click(control("Browser profile: Work"));
+
+      expect(
+        screen.getByText(
+          "news.example opens in Personal, your default profile.",
+        ),
+      ).toBeVisible();
+    });
+
+    it("offers no pins for a site the config pins", async () => {
+      render(
+        <AddressBar
+          {...BAR}
+          profile={withProfiles([], {
+            locked: true,
+            profile: "work",
+            site: "*.acme.com",
+          })}
+        />,
+      );
+
+      await userEvent.click(control("Browser profile: Work"));
+
+      expect(
+        screen.getByText("Your config opens *.acme.com in Work."),
+      ).toBeVisible();
+      expect(screen.queryByRole("button", { name: /by default$/ })).toBeNull();
+    });
+
+    it("offers no pins for a page that is no web site", async () => {
+      render(<AddressBar {...BAR} profile={withProfiles([])} />);
+
+      await userEvent.click(control("Browser profile: Work"));
+
+      expect(screen.queryByRole("button", { name: /by default$/ })).toBeNull();
     });
   });
 

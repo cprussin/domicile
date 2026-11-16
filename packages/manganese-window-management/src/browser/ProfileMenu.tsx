@@ -7,16 +7,26 @@ import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
+import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
+import { PushPinIcon } from "@phosphor-icons/react/dist/ssr/PushPin";
 import type { CSSProperties } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import type { PinnedSite } from "./useBrowserProfile";
 
 type Props = {
   /** Moves the page to profile `id`, in place. */
   onMove: (id: string) => void;
   /** Opens the page's address in a new window of profile `id`. */
   onOpenInNew: (id: string) => void;
+  /** Opens the page's site, `pinned.site`, in profile `id` from now on. */
+  onPin: (id: string) => void;
+  /**
+   * Where the page's site opens; `undefined` for a page that is no web site,
+   * which has nothing to pin.
+   */
+  pinned?: PinnedSite | undefined;
   /** The page's profile. */
   profile: BrowserProfile;
   /** Every profile, in the config's order. */
@@ -30,17 +40,21 @@ type Props = {
 
 /**
  * The profile button at the start of the address bar: the page's profile in
- * its color, with a menu to move the page to another profile or open it in a
- * new window of one. See docs/architecture/BROWSER-PROFILES.md.
+ * its color, with a menu to move the page to another profile, open it in a
+ * new window of one, or pin its site to one. See
+ * docs/architecture/BROWSER-PROFILES.md.
  */
 export const ProfileMenu = ({
   onMove,
   onOpenInNew,
+  onPin,
+  pinned,
   profile,
   profiles,
   url,
 }: Props) => {
   const [open, setOpen] = useState(false);
+  const pinnedTo = profiles.find((each) => each.id === pinned?.profile);
   return (
     <Popover
       align="start"
@@ -73,21 +87,33 @@ export const ProfileMenu = ({
             const current = each.id === profile.id;
             const row = {
               actions: (
-                <Tooltip
-                  content={`Open in a new ${each.name} window`}
-                  trigger={
-                    <IconButton
-                      label={`Open in a new ${each.name} window`}
-                      onClick={() => {
-                        setOpen(false);
-                        onOpenInNew(each.id);
+                <>
+                  {pinned === undefined || pinned.locked ? undefined : (
+                    <PinButton
+                      onPin={() => {
+                        onPin(each.id);
                       }}
-                      size="sm"
-                    >
-                      <ArrowSquareOutIcon />
-                    </IconButton>
-                  }
-                />
+                      pinned={each.id === pinned.profile}
+                      profile={each}
+                      site={pinned.site}
+                    />
+                  )}
+                  <Tooltip
+                    content={`Open in a new ${each.name} window`}
+                    trigger={
+                      <IconButton
+                        label={`Open in a new ${each.name} window`}
+                        onClick={() => {
+                          setOpen(false);
+                          onOpenInNew(each.id);
+                        }}
+                        size="sm"
+                      >
+                        <ArrowSquareOutIcon />
+                      </IconButton>
+                    }
+                  />
+                </>
               ),
               end: current ? (
                 <CheckIcon aria-label="Current" className={checkStyles} />
@@ -117,9 +143,65 @@ export const ProfileMenu = ({
           })}
         </List>
       </PanelSection>
-      <span className={siteStyles}>{hostOf(url)}</span>
+      <span className={siteStyles}>
+        {pinned === undefined || pinnedTo === undefined ? (
+          hostOf(url)
+        ) : (
+          <>
+            {pinned.locked ? (
+              <LockIcon aria-hidden className={lockStyles} />
+            ) : undefined}
+            {siteNote(pinned, pinnedTo)}
+          </>
+        )}
+      </span>
     </Popover>
   );
+};
+
+/**
+ * A profile row's pin: filled on the profile the page's site opens in, and on
+ * any other, pins the site there.
+ */
+const PinButton = ({
+  onPin,
+  pinned,
+  profile,
+  site,
+}: {
+  onPin: () => void;
+  pinned: boolean;
+  profile: BrowserProfile;
+  site: string;
+}) => {
+  const label = pinned
+    ? `${site} opens in ${profile.name} by default`
+    : `Open ${site} in ${profile.name} by default`;
+  return (
+    <Tooltip
+      content={label}
+      trigger={
+        <IconButton
+          aria-pressed={pinned}
+          label={label}
+          onClick={pinned ? undefined : onPin}
+          size="sm"
+        >
+          <PushPinIcon weight={pinned ? "fill" : "regular"} />
+        </IconButton>
+      }
+    />
+  );
+};
+
+/** The line under the profiles that says where the page's site opens. */
+const siteNote = (pinned: PinnedSite, to: BrowserProfile): string => {
+  if (pinned.locked) {
+    return `Your config opens ${pinned.site} in ${to.name}.`;
+  }
+  return to.isDefault
+    ? `${pinned.site} opens in ${to.name}, your default profile.`
+    : `${pinned.site} is pinned to ${to.name}.`;
 };
 
 /** `url`'s host, or `url` itself when it has none. */
@@ -172,6 +254,12 @@ const dotStyles = css({
 const headingStyles = hstack({ gap: 2 });
 
 const checkStyles = css({ color: "accent" });
+
+const lockStyles = css({
+  flex: "none",
+  marginInlineEnd: 1,
+  verticalAlign: "-0.125em",
+});
 
 const siteStyles = css({
   color: "muted",

@@ -1115,6 +1115,26 @@ class BrowserWindowsService final
         ProfileForUrl(BrowserProfileRegistry::Get().profiles(), url));
   }
 
+  void SiteFor(const GURL& url, SiteForCallback callback) override {
+    const std::string* site =
+        SiteForUrl(BrowserProfileRegistry::Get().profiles(), url);
+    std::move(callback).Run(site == nullptr ? std::nullopt
+                                            : std::optional(*site));
+  }
+
+  void PinSite(const std::string& site,
+               const std::string& profile,
+               PinSiteCallback callback) override {
+    const base::expected<void, std::string> pinned =
+        BrowserProfileRegistry::Get().PinSite(
+            *Profile::FromBrowserContext(
+                 render_frame_host().GetBrowserContext())
+                 ->GetOriginalProfile(),
+            site, profile);
+    std::move(callback).Run(pinned.has_value() ? std::string()
+                                               : pinned.error());
+  }
+
   // DeskWindows::Observer:
   void OnWindowsChanged() override {
     if (client_.is_bound()) {
@@ -1127,11 +1147,24 @@ class BrowserWindowsService final
     if (!client_.is_bound()) {
       return;
     }
-    const BrowserProfiles& profiles = BrowserProfileRegistry::Get().profiles();
+    const BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    const BrowserProfiles& profiles = registry.profiles();
     std::vector<mojom::BrowserProfilePtr> listed;
     for (const BrowserProfile& profile : profiles.profiles) {
       listed.push_back(mojom::BrowserProfile::New(
-          profile.id, profile.name, profile.color, profile.is_private));
+          profile.id, profile.name, profile.color, profile.is_private,
+          std::vector<std::string>(), std::vector<std::string>()));
+    }
+    for (const auto& [site, id] : profiles.sites) {
+      auto profile = std::ranges::find(profiles.profiles, id,
+                                       &BrowserProfile::id);
+      CHECK(profile != profiles.profiles.end())
+          << "site " << site << " routes to profile " << id
+          << ", which the desk does not have";
+      mojom::BrowserProfilePtr& entry =
+          listed[profile - profiles.profiles.begin()];
+      (registry.IsConfigSite(site) ? entry->config_sites : entry->pinned_sites)
+          .push_back(site);
     }
     client_->ProfilesChanged(std::move(listed), profiles.default_profile,
                              profiles.default_private_profile);

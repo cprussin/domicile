@@ -24,8 +24,9 @@ class FilePath;
 namespace domicile {
 
 // Registers the pref of extension ids `InstallExtensionsInto` added, so it
-// only uninstalls extensions it installed, and the settings it set
-// (domicile_extension_settings.h).
+// only uninstalls extensions it installed, the settings it set
+// (domicile_extension_settings.h), and the sites the user pinned to a browser
+// profile (domicile_browser_profiles.h): the desk's profile prefs.
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry);
 
 // Takes every extension the desk's config names, for the shell in `shell`:

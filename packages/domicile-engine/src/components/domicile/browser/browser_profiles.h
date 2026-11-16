@@ -77,6 +77,25 @@ BrowserProfiles DefaultBrowserProfiles();
 std::optional<BrowserProfiles> ParseBrowserProfiles(
     const base::DictValue& message);
 
+// The sites the user pinned to a profile from a shell, by site, as the engine
+// keeps them beside the config's own (WithPinnedSites).
+using PinnedSites = std::map<std::string, std::string>;
+
+// `config` with the user's `pinned` sites added to its own. The config wins:
+// a pin of a site the config's sites name is left out. So is one to a profile
+// the config does not have, or to its default profile, which a site never
+// maps to. Pins stay kept while left out, so one comes back with its profile.
+BrowserProfiles WithPinnedSites(const BrowserProfiles& config,
+                                const PinnedSites& pinned);
+
+// Whether `site` can be a key of `BrowserProfiles::sites`: a lowercase host,
+// `*.` and a host, or a host and a path that starts with `/`.
+bool IsSiteKey(std::string_view site);
+
+// The key of `profiles.sites` that routes `url` (ProfileForUrl), or null when
+// none matches and it opens in the default profile.
+const std::string* SiteForUrl(const BrowserProfiles& profiles, const GURL& url);
+
 // The profile `url` opens in: the most specific of `profiles.sites` that
 // matches it, else the default profile. A host and path is more specific than
 // a host, a host than `*.host`, and a longer one than a shorter. Only web

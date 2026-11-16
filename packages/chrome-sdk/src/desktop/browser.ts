@@ -87,8 +87,8 @@ export type BrowserListeners = {
   /** A window opened, closed or changed. */
   change: () => void;
   /**
-   * A profile was added, removed, renamed or recolored, or the defaults
-   * moved.
+   * A profile was added, removed, renamed or recolored, the defaults moved,
+   * or a site was pinned.
    */
   profilesChange: () => void;
 };
@@ -120,6 +120,23 @@ export type Browser = {
    * Rejects with a TypeError for an invalid `url`.
    */
   profileFor: (url: string) => Promise<string>;
+  /**
+   * The site that routes `url` to its profile: the entry of the config's
+   * `browser.sites`, or of a profile's {@link BrowserProfile.pinnedSites},
+   * that {@link Browser.profileFor} matched. `undefined` when none did, so it
+   * opens in the default profile. Rejects with a TypeError for an invalid
+   * `url`.
+   */
+  siteFor: (url: string) => Promise<string | undefined>;
+  /**
+   * Open `site` in browser profile `profile` from now on, kept across
+   * restarts; the default profile unpins it. `site` is a host, `*.host`, or a
+   * host and path, as the config's `browser.sites` keys are. Pages already
+   * open stay where they are. Rejects with an `OperationError` for a site one
+   * of the config's sites names ({@link BrowserProfile.configSites}), which
+   * only the config changes.
+   */
+  pin: (site: string, profile: string) => Promise<void>;
   /** Open a browser window, in the profile its site opens in by default. */
   open: (url: string, options?: BrowserWindowOptions) => void;
   /** Open a window in the default private profile. */
@@ -175,6 +192,7 @@ export type BrowserHost = Pick<
   | "answerBrowserWindowMessageBox"
   | "browserProfileFor"
   | "browserProfiles"
+  | "browserSiteFor"
   | "browserWindows"
   | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
@@ -183,6 +201,7 @@ export type BrowserHost = Pick<
   | "openAppWindow"
   | "openBrowserWindow"
   | "openPrivateBrowserWindow"
+  | "pinBrowserSite"
   | "removeEventListener"
   | "reopenBrowserWindow"
 >;
@@ -240,12 +259,17 @@ export const browser = (host: BrowserHost): Browser => {
     openPrivate: (url) => {
       host.openPrivateBrowserWindow(url);
     },
+    pin: (site, profile) => host.pinBrowserSite(site, profile),
     profileFor: (url) => host.browserProfileFor(url),
     get profiles() {
       return host.browserProfiles ?? undefined;
     },
     reopen: (id, profile) => {
       host.reopenBrowserWindow(id, profile);
+    },
+    siteFor: async (url) => {
+      const site = await host.browserSiteFor(url);
+      return site === "" ? undefined : site;
     },
     get views() {
       return viewsOf(host.browserWindows);
