@@ -9,6 +9,7 @@
 #   - A refused request blames WebViewGuest::EnterPictureInPicture.
 #   - An entered video the shell never heard blames ShowInactive.
 #   - A video heard without its place in its page blames the source bounds.
+#   - An element that never says it drew blames SurfaceChanged.
 #   - A close that never paused blames kClose, and a listing that stays
 #     blames Hide.
 #
@@ -53,6 +54,7 @@ judge() { # NAME=value overrides
     SAW_ENTERED=1
     SAW_LISTED=1
     SAW_SOURCE=1
+    SAW_SHOWN=1
     VIDEO_SOURCE=8,8,320x180
     SAW_LEFT_PAUSED=1
     SAW_UNLISTED=1
@@ -103,6 +105,8 @@ expect "an unheard video blames ShowInactive" "yes" \
   "$(blames "ShowInactive" SAW_LISTED=0)"
 expect "a video heard without its place in the page blames InMainFrame" "yes" \
   "$(blames "InMainFrame" SAW_SOURCE=0)"
+expect "an element that never said it drew blames SurfaceChanged" "yes" \
+  "$(blames "SurfaceChanged" SAW_SHOWN=0)"
 expect "a close that never paused blames kClose" "yes" \
   "$(blames "kClose" SAW_LEFT_PAUSED=0)"
 expect "a listing that stays blames Hide" "yes" \

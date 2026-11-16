@@ -46,15 +46,6 @@ void PictureInPictureVideos::Listing::SetSize(const gfx::Size& size) {
   }
 }
 
-void PictureInPictureVideos::Listing::SetSource(const gfx::Rect& source) {
-  Video* video = videos_->Find(id_);
-  CHECK(video);
-  if (video->listed.source != source) {
-    video->listed.source = source;
-    videos_->Changed();
-  }
-}
-
 void PictureInPictureVideos::Listing::SetPlaying(bool playing) {
   Video* video = videos_->Find(id_);
   CHECK(video);
@@ -112,12 +103,14 @@ PictureInPictureVideos::~PictureInPictureVideos() = default;
 
 std::unique_ptr<PictureInPictureVideos::Listing> PictureInPictureVideos::List(
     const std::string& window,
+    const gfx::Rect& source,
     Controls* controls) {
   CHECK(controls);
   const std::string id = base::NumberToString(next_id_++);
   Video video;
   video.listed.id = id;
   video.listed.window = window;
+  video.listed.source = source;
   video.controls = controls;
   videos_.emplace_back(id, std::move(video));
   Changed();
