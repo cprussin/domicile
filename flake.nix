@@ -2868,6 +2868,7 @@
             testScript = ''
               import datetime as dt
               import json
+              import re
 
               WAIT = dt.timedelta(seconds=300)
               APPS = json.loads(${pkgs.lib.escapeShellArg (builtins.toJSON (builtins.mapAttrs (_: app: app.onTheEngine) apps))})
@@ -2905,7 +2906,10 @@
                       assert hosted, f"{entry} left the engine:\n{tail}\nrunning:\n{running}"
                       assert "Domicile's Electron doesn't have yet" not in said
                   else:
-                      assert hosted or "Domicile's Electron doesn't have yet" in said, (
+                      # Every hand-back names what the engine lacks.
+                      assert hosted or re.search(
+                          r"Domicile's (Electron doesn't have|engine can't|engine doesn't)", said
+                      ), (
                           f"{entry} left the engine without saying why:\n{tail}\nrunning:\n{running}"
                       )
                   machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer' ; sleep 5")
