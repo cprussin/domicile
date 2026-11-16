@@ -2738,7 +2738,9 @@
                   """Every one of alice's processes' proportional memory, in KiB."""
                   return int(machine.succeed(
                       "for pid in $(pgrep -u alice); do "
-                      "grep -s '^Pss:' /proc/$pid/smaps_rollup; done "
+                      # A process can exit between pgrep and grep, and then
+                      # grep exits 2, which pipefail would make the test's.
+                      "grep -s '^Pss:' /proc/$pid/smaps_rollup || true; done "
                       "| awk '{ total += $2 } END { print total }'").strip())
 
 
