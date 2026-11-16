@@ -31,9 +31,9 @@ last_touching() {
   grep -l "^diff --git a/$1 " "$PATCHES"/*.patch | tail -1
 }
 
-CURSOR="$(last_touching ui/ozone/platform/drm/host/drm_cursor.cc)"
-[ -n "$CURSOR" ] || fail "no patch edits ui/ozone/platform/drm/host/drm_cursor.cc"
-grep -q '^-.*window_ != window && window != desk_host_' "$CURSOR" || fail \
+# Any patch: later ones edit other parts of drm_cursor.cc.
+grep -l "^diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc " \
+  "$PATCHES"/*.patch | xargs grep -q '^-.*window_ != window && window != desk_host_' || fail \
   "DrmCursor::SetCursor still takes a cursor only from the window under it" \
   "A cursor set while that window goes away never reaches the screen."
 
