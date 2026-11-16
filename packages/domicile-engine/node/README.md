@@ -12,8 +12,12 @@ their pages need it. See "Phase 2" in
 - `patches/boringssl`: Electron's patches to BoringSSL, for the digests and
   ciphers Node's crypto offers.
 
-Each directory's `.patches` gives the order. They are Electron's, unchanged,
-under its license, `LICENSE.electron`. `.github/scripts/engine-node.sh` puts
+Each directory's `.patches` gives the order. They are Electron's, under its
+license, `LICENSE.electron`, with three changes: their messages and
+comments use American spelling, `build_add_gn_build_files.patch` also links
+Chromium's zstd compressor, which Node's zlib binding uses, and patches
+named `domicile_*` are the engine's own, last in the order. Carry these over
+when moving to Electron's next patches. `.github/scripts/engine-node.sh` puts
 them into the Chromium checkout after `apply.sh`, and
 `src/build/args/domicile_node.gn` builds Node. `src/electron/` holds the few
 targets and scripts Node's build reads from Electron's own tree.
