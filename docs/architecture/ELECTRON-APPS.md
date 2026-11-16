@@ -312,6 +312,37 @@ command to fall back to, and the status is passed on. An app the quirks
 table names as needing Node exits with status 3 before its main runs, so its
 own Electron starts without a window opening on the engine first.
 
+### Every API
+
+An app must never find a plain `undefined` where Electron has an API: that
+is a `TypeError` in the app's main, which takes the app down with no reason
+given and no fallback. `scripts/electron-surface.ts` reads `electron.d.ts`
+from Electron 45.2.1 and the newest release of each of the twelve majors
+before it, and writes `src/electron/surface.ts`: every module, its methods
+and properties, which exist only on macOS or Windows, and each instance
+class's members with its parents'. Regenerate it with
+`bun scripts/electron-surface.ts` when Electron ships a major.
+
+At start the host fills what it lacks from the surface
+(`src/electron/complete.ts`):
+
+- A Linux method the host doesn't have exits with status 3, naming it, so the
+  app runs on its own Electron, as for [unsupported apps](#unsupported-apps).
+- A macOS or Windows method does nothing and gives `undefined`, as
+  Electron's does on Linux.
+- A property the host doesn't have logs once and reads as `undefined`; an
+  object may still set it.
+- A name Electron itself doesn't have logs once ("doesn't have on Linux"):
+  the surface is stale or the app is probing.
+
+What the host has is real where the engine can do it and a stated answer
+where the shell owns it: window state reads as shown and normal, because
+the shell lays windows out, and `globalShortcut` refuses with a warning,
+because shortcuts are the shell's. `screen` and `powerMonitor` follow the
+desk through `domicile subscribe` from their first use. The
+`electron-apps-start-on-a-tty` VM test starts Element and Slack as packaged
+and fails on a crash or on Element leaving the engine.
+
 ### Phase 2: Node in the page
 
 The engine embeds Node in the page processes of apps that ask for it, as
@@ -424,6 +455,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] the quirks table: known phase-2 apps go straight to their own Electron
 - [ ] the quirks table seeds known apps' schemes, once checked against the real apps
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
+- [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
+- [ ] engine: `webContents.executeJavaScript` and `mainFrame`, which Claude calls at start and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [ ] phase 2, engine: Node in the pages of windows that ask for it
 - [ ] phase 2, `electron-host`: the main process on the engine's Node

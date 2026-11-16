@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 import type { ProtocolRequest } from "./protocol";
 import { createProtocols } from "./protocol";
@@ -194,5 +196,43 @@ describe(createProtocols, () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ request: 1, type: "protocol_response" });
     expect(sent[0]).toHaveProperty("error");
+  });
+});
+
+describe("the protocol registrations before protocol.handle", () => {
+  it("answers a registerFileProtocol scheme with the file its handler names", async () => {
+    const dir = await mkdtemp(`${tmpdir()}/legacy-protocol-`);
+    await Bun.write(`${dir}/index.html`, "<title>Element</title>");
+    const { protocols } = setUp();
+    const protocol = protocols.forSession("");
+
+    expect(
+      protocol.registerFileProtocol("vector", (request, callback) => {
+        const { pathname } = new URL((request as { url: string }).url);
+        callback({ path: `${dir}${pathname}` });
+      }),
+    ).toBe(true);
+    expect(protocol.isProtocolRegistered("vector")).toBe(true);
+    expect(protocol.isProtocolHandled("vector")).toBe(true);
+
+    expect(protocol.unregisterProtocol("vector")).toBe(true);
+    expect(protocol.isProtocolHandled("vector")).toBe(false);
+  });
+
+  it("gives each kind of answer as a response", async () => {
+    const { legacyResponse } = await import("./protocol");
+
+    const text = await legacyResponse("string", {
+      charset: "utf-8",
+      data: "hi",
+      mimeType: "text/plain",
+    });
+    expect(await text.text()).toBe("hi");
+    expect(text.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect((await legacyResponse("buffer", Buffer.from("raw"))).status).toBe(
+      200,
+    );
+    expect((await legacyResponse("file", { error: -6 })).status).toBe(404);
+    expect((await legacyResponse("file", "/no/such/file")).status).toBe(404);
   });
 });

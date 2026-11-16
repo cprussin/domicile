@@ -16,6 +16,7 @@ import type {
 } from "../engine";
 import type { ElectronApp } from "./app";
 import type { createIpcMain } from "./ipc-main";
+import { IpcMain } from "./ipc-main";
 import type { MenuEntry } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
@@ -81,6 +82,16 @@ export type WindowMenus<Menu> = {
 /** Electron's size for a window that asks for none. */
 const DEFAULT_SIZE = { height: 600, width: 800 };
 
+/** What this host has warned of, so each warning shows once. */
+const warned = new Set<string>();
+const warnOnce = (key: string, why: string) => {
+  if (!warned.has(key)) {
+    warned.add(key);
+    // biome-ignore lint/suspicious/noConsole: the app's log is where a stated answer is told
+    console.warn(`electron-host: ${why}`);
+  }
+};
+
 const NO_BOUNDS: Rectangle = { height: 0, width: 0, x: 0, y: 0 };
 
 /**
@@ -144,6 +155,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
   /** A page's `webContents`, as far as the host has it. */
   class WebContents extends EventEmitter {
+    /** What this page alone sends, heard before `ipcMain`. */
+    readonly ipc = new IpcMain();
+
     constructor(readonly owner: Page) {
       super();
     }
@@ -156,7 +170,72 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       return this.owner.session;
     }
 
+    /**
+     * Not asked yet: the engine opens a page's new windows and
+     * `target=_blank` links as the desktop's browser does.
+     */
+    readonly setWindowOpenHandler = (_handler: unknown) => undefined;
+
     readonly getTitle = () => this.owner.getTitle();
+    readonly focus = () => {
+      if (this.owner instanceof BrowserWindow) {
+        this.owner.focus();
+      }
+    };
+    /** The engine keeps each page's history, which the app can't walk yet. */
+    readonly navigationHistory = {
+      canGoBack: () => false,
+      canGoForward: () => false,
+      canGoToOffset: (_offset: number) => false,
+      clear: () => undefined,
+      getActiveIndex: () => 0,
+      getAllEntries: () => [{ title: this.getTitle(), url: this.owner.url }],
+      getEntryAtIndex: (index: number) =>
+        index === 0 ? { title: this.getTitle(), url: this.owner.url } : null,
+      goBack: () => undefined,
+      goForward: () => undefined,
+      goToIndex: (_index: number) => undefined,
+      goToOffset: (_offset: number) => undefined,
+      length: () => 1,
+    };
+    zoomFactor = 1;
+    zoomLevel = 0;
+    readonly isFocused = () => false;
+    readonly isLoading = () => false;
+    readonly isLoadingMainFrame = () => false;
+    readonly isWaitingForResponse = () => false;
+    readonly isCrashed = () => false;
+    readonly reload = () => this.owner.loadURL(this.owner.url);
+    readonly getOSProcessId = () => 0;
+    readonly getProcessId = () => 0;
+    // The engine's DevTools aren't the app's to open yet.
+    readonly openDevTools = (_options?: unknown) => undefined;
+    readonly closeDevTools = () => undefined;
+    readonly isDevToolsOpened = () => false;
+    readonly isDevToolsFocused = () => false;
+    readonly toggleDevTools = () => undefined;
+    // The engine's settings for every page, not each app's.
+    readonly setBackgroundThrottling = (_allowed: boolean) => undefined;
+    readonly getBackgroundThrottling = () => true;
+    readonly setWebRTCIPHandlingPolicy = (_policy: string) => undefined;
+    readonly getWebRTCIPHandlingPolicy = () => "default";
+    readonly setUserAgent = (_userAgent: string) => undefined;
+    readonly getUserAgent = () => "";
+    readonly setAudioMuted = (_muted: boolean) => undefined;
+    readonly isAudioMuted = () => false;
+    readonly isCurrentlyAudible = () => false;
+    // The shell zooms pages: the app's zoom is kept, not applied.
+    readonly getZoomFactor = () => this.zoomFactor;
+    readonly getZoomLevel = () => this.zoomLevel;
+    readonly setZoomFactor = (factor: number) => {
+      this.zoomFactor = factor;
+    };
+    readonly setZoomLevel = (level: number) => {
+      this.zoomLevel = level;
+    };
+    readonly setVisualZoomLevelLimits = async (_min: number, _max: number) =>
+      undefined;
+    readonly setIgnoreMenuShortcuts = (_ignore: boolean) => undefined;
     readonly getURL = () => this.owner.url;
     readonly isDestroyed = () => this.owner.isDestroyed();
     readonly loadFile = (path: string) => this.owner.loadFile(path);
@@ -697,6 +776,93 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly getSize = () => [this.#size.width, this.#size.height];
     readonly getContentSize = () => this.getSize();
 
+    // The shell lays windows out and decides their state: a window asks
+    // nothing of it, and reads as the shell keeps every window, shown and
+    // normal, where the shell put it.
+    readonly isMinimized = () => false;
+    readonly isMaximized = () => false;
+    readonly isFullScreen = () => false;
+    readonly isSimpleFullScreen = () => false;
+    readonly isNormal = () => true;
+    readonly isKiosk = () => false;
+    readonly isModal = () => false;
+    readonly isAlwaysOnTop = () => false;
+    readonly isEnabled = () => true;
+    readonly isFocusable = () => true;
+    readonly isResizable = () => true;
+    readonly isMovable = () => true;
+    readonly isMinimizable = () => true;
+    readonly isMaximizable = () => true;
+    readonly isFullScreenable = () => true;
+    readonly isClosable = () => true;
+    readonly isVisibleOnAllWorkspaces = () => false;
+    readonly minimize = () => undefined;
+    readonly maximize = () => undefined;
+    readonly unmaximize = () => undefined;
+    readonly restore = () => undefined;
+    readonly blur = () => undefined;
+    readonly center = () => undefined;
+    readonly setFullScreen = (_flag: boolean) => undefined;
+    readonly setSimpleFullScreen = (_flag: boolean) => undefined;
+    readonly setKiosk = (_flag: boolean) => undefined;
+    readonly setAlwaysOnTop = (_flag: boolean, _level?: string) => undefined;
+    readonly setEnabled = (_enabled: boolean) => undefined;
+    readonly setFocusable = (_focusable: boolean) => undefined;
+    readonly setResizable = (_resizable: boolean) => undefined;
+    readonly setMovable = (_movable: boolean) => undefined;
+    readonly setMinimizable = (_minimizable: boolean) => undefined;
+    readonly setMaximizable = (_maximizable: boolean) => undefined;
+    readonly setFullScreenable = (_fullscreenable: boolean) => undefined;
+    readonly setClosable = (_closable: boolean) => undefined;
+    readonly setSkipTaskbar = (_skip: boolean) => undefined;
+    readonly setVisibleOnAllWorkspaces = (_visible: boolean) => undefined;
+    readonly setMinimumSize = (_width: number, _height: number) => undefined;
+    readonly setMaximumSize = (_width: number, _height: number) => undefined;
+    readonly getMinimumSize = () => [0, 0];
+    readonly getMaximumSize = () => [0, 0];
+    readonly setAspectRatio = (_ratio: number) => undefined;
+    readonly setBounds = (_bounds: Partial<Rectangle>) => undefined;
+    readonly setSize = (_width: number, _height: number) => undefined;
+    readonly setContentSize = (_width: number, _height: number) => undefined;
+    readonly setContentBounds = (_bounds: Partial<Rectangle>) => undefined;
+    readonly setPosition = (_x: number, _y: number) => undefined;
+    readonly getPosition = () => [0, 0];
+    readonly getNormalBounds = () => this.getBounds();
+    // The desktop file names the app's icon, and the shell draws windows.
+    readonly setIcon = (_icon: unknown) => undefined;
+    readonly setBackgroundColor = (_color: string) => undefined;
+    readonly getBackgroundColor = () => "#FFFFFF";
+    readonly setHasShadow = (_shadow: boolean) => undefined;
+    readonly hasShadow = () => false;
+    readonly setOpacity = (_opacity: number) => undefined;
+    readonly getOpacity = () => 1;
+    readonly setIgnoreMouseEvents = (_ignore: boolean) => undefined;
+    readonly setProgressBar = (_progress: number) => undefined;
+    // The shell draws every window's frame, so there is no title bar to
+    // overlay.
+    readonly setTitleBarOverlay = (_options: unknown) => undefined;
+    readonly setContentProtection = (_enable: boolean) => undefined;
+    readonly isContentProtected = () => false;
+    /** No shell shows an attention request yet. */
+    readonly flashFrame = (_flag: boolean) => undefined;
+    readonly getParentWindow = () => null;
+    readonly getChildWindows = () => [];
+    readonly setParentWindow = (_parent: unknown) => undefined;
+    readonly getNativeWindowHandle = () => Buffer.alloc(8);
+    readonly getMediaSourceId = () => "";
+    readonly isFocused = () => this.isVisible();
+    readonly reload = () => this.webContents.reload();
+    /**
+     * Not yet: the engine has no hidden windows, so the window stays. Apps
+     * that close to their tray keep their window open on Domicile.
+     */
+    readonly hide = () => {
+      warnOnce(
+        "hide",
+        `${app.getName()} hid a window, which Domicile's engine can't yet, so it stays open`,
+      );
+    };
+
     readonly setBrowserView = (view: BrowserView | null) => {
       for (const held of this.getBrowserViews()) {
         if (held !== view) {
@@ -855,10 +1021,22 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     pages.get(event.window)?.take(event);
   });
 
+  /** Electron's `webContents` module: the app's pages. */
+  const webContents = {
+    fromId: (id: number) => pages.get(id)?.webContents,
+    getAllWebContents: () =>
+      [...pages.values()]
+        .filter((page) => !page.isDestroyed())
+        .map((page) => page.webContents),
+    getFocusedWebContents: () => null,
+  };
+
   return {
     BrowserView,
     BrowserWindow,
+    WebContents,
     WebContentsView,
+    webContents,
     /** The page the engine numbers `window`, a window's or a view's. */
     webContentsOf: (window: number) => pages.get(window)?.webContents,
   };
