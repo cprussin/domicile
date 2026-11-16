@@ -49,3 +49,27 @@ fn a_record_electron_host_cannot_have_written_is_refused() {
     assert!(schemes_switch(r#"{ "a": [{ "scheme": "app", "privileges": ["stream"] }] }"#).is_err());
     assert!(schemes_switch("not json").is_err());
 }
+
+#[test]
+fn known_apps_schemes_register_before_their_first_run() {
+    use domicile_launch::electron_schemes::with_known;
+
+    let switch = schemes_switch(&with_known("{}").unwrap()).unwrap().unwrap();
+    assert!(
+        switch.contains("vector:standard,secure,supportFetchAPI"),
+        "{switch}"
+    );
+    assert!(
+        switch.contains("sentry-ipc:secure,bypassCSP,corsEnabled,supportFetchAPI"),
+        "{switch}"
+    );
+
+    // What an app kept adds to what is known of it.
+    let kept = r#"{ "element-desktop": [{ "scheme": "vector", "privileges": ["corsEnabled"] }] }"#;
+    let switch = schemes_switch(&with_known(kept).unwrap()).unwrap().unwrap();
+    assert!(
+        switch.contains("vector:standard,secure,corsEnabled,supportFetchAPI"),
+        "{switch}"
+    );
+    assert!(with_known("not json").is_err());
+}

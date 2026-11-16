@@ -46,7 +46,7 @@ use domicile_launch::control_socket::{
     VARIABLE,
 };
 use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
-use domicile_launch::electron_schemes::{self, schemes_switch};
+use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
@@ -1312,26 +1312,31 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
 /// at each engine start, so an app that brought a new scheme runs on the
 /// engine from the next one. See `domicile_launch::electron_schemes`.
 ///
-/// A record that can't be read registers none, with an error in the log:
-/// those apps run on their own Electron, as the engine does with a wrong
-/// switch.
+/// Known apps' schemes always register. A record that can't be read
+/// registers only those, with an error in the log: the other apps run on
+/// their own Electron, as the engine does with a wrong switch.
 fn electron_schemes(env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
-    let path = state_directory(env)?.join(electron_schemes::RECORD);
+    let Some(state) = state_directory(env) else {
+        return schemes_switch(electron_schemes::KNOWN).expect("the known schemes register");
+    };
+    let path = state.join(electron_schemes::RECORD);
     let record = match std::fs::read_to_string(&path) {
         Ok(record) => record,
-        Err(why) if why.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => "{}".to_string(),
         Err(why) => {
             eprintln!("domicile: cannot read {}: {why}", path.display());
-            return None;
+            "{}".to_string()
         }
     };
-    schemes_switch(&record).unwrap_or_else(|why| {
-        eprintln!(
-            "domicile: registering no Electron app schemes, since {} is wrong: {why}",
-            path.display()
-        );
-        None
-    })
+    with_known(&record)
+        .and_then(|record| schemes_switch(&record))
+        .unwrap_or_else(|why| {
+            eprintln!(
+                "domicile: registering only known Electron apps' schemes, since {} is wrong: {why}",
+                path.display()
+            );
+            schemes_switch(electron_schemes::KNOWN).expect("the known schemes register")
+        })
 }
 
 /// Sleeps for the backoff, returning early on a stop request.

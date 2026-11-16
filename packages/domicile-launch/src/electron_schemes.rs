@@ -108,6 +108,36 @@ pub fn schemes_switch(record: &str) -> Result<Option<String>, String> {
     Ok(Some(format!("{SWITCH}{}", entries.join(";"))))
 }
 
+/// The schemes known apps register, by package name, as `electron-host`
+/// records them: the engine registers these from its first start, so a known
+/// app's first run is on the engine too. Taken from each app's own run.
+pub const KNOWN: &str = r#"{
+  "element-desktop": [
+    { "scheme": "vector", "privileges": ["standard", "secure", "supportFetchAPI"] }
+  ],
+  "@ant/desktop": [
+    { "scheme": "app", "privileges": ["standard", "secure", "supportFetchAPI"] },
+    { "scheme": "claude-mcp-app", "privileges": ["standard", "secure"] },
+    { "scheme": "claude-media", "privileges": ["standard", "secure", "bypassCSP"] },
+    { "scheme": "claude-simulator", "privileges": ["standard", "secure", "bypassCSP", "corsEnabled", "supportFetchAPI"] },
+    { "scheme": "cowork-artifact", "privileges": ["standard", "secure", "supportFetchAPI"] },
+    { "scheme": "cowork-artifact-read", "privileges": ["standard", "secure", "corsEnabled", "supportFetchAPI"] },
+    { "scheme": "cowork-file", "privileges": ["standard", "secure", "supportFetchAPI"] },
+    { "scheme": "sentry-ipc", "privileges": ["secure", "bypassCSP", "corsEnabled", "supportFetchAPI"] }
+  ]
+}"#;
+
+/// `record` with [`KNOWN`]'s schemes added, for [`schemes_switch`].
+pub fn with_known(record: &str) -> Result<String, String> {
+    type Record = BTreeMap<String, Vec<serde_json::Value>>;
+    let mut apps: Record = serde_json::from_str(record).map_err(|why| why.to_string())?;
+    let known: Record = serde_json::from_str(KNOWN).expect("the known schemes are a record");
+    for (app, schemes) in known {
+        apps.entry(app).or_default().extend(schemes);
+    }
+    serde_json::to_string(&apps).map_err(|why| why.to_string())
+}
+
 /// Whether the engine can register `scheme` for an app.
 fn registrable(scheme: &str) -> bool {
     scheme.starts_with(|c: char| c.is_ascii_lowercase())
