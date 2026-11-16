@@ -33,7 +33,7 @@ version = "0.0.0"
 edition = "2021"
 license = "MIT"
 # The oldest rustc the locked dependencies build with.
-rust-version = "1.89"
+rust-version = "1.97"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -58,11 +58,10 @@ png = "0.18"
 # The config's JSON Schema, from which the SDK's config types are generated.
 schemars = "1"
 # Parses JavaScript shells to find their imports (see
-# `domicile_launch::shell_source`). 0.102 is the last release whose MSRV is
-# within the workspace's `rust-version`.
-oxc_allocator = "0.102"
-oxc_parser = "0.102"
-oxc_span = "0.102"
+# `domicile_launch::shell_source`).
+oxc_allocator = "0.157"
+oxc_parser = "0.157"
+oxc_span = "0.157"
 
 # The installed binaries (`domicileBinaries` in `flake.nix`). Panics unwind:
 # `domicile`'s `Drop`s end the desktop's process groups and its graphical

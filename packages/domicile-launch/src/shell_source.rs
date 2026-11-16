@@ -101,7 +101,7 @@ fn needs_building(file: &Path, read: &dyn Fn(&Path) -> Option<String>) -> bool {
 pub fn imports_a_package(text: &str) -> bool {
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, text, SourceType::mjs()).parse();
-    if parsed.panicked || !parsed.errors.is_empty() {
+    if parsed.fatal_error || parsed.diagnostics.has_errors() {
         return true;
     }
     let record = &parsed.module_record;
