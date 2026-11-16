@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 16 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a mismatched Widget reply ends its renderer
+
+HandleValidatedMessage refuses a message three ways and logs each only
+as "Message N rejected by interface ...". A response whose name does
+not match its request also drops the request's responder unrun, and
+RaiseError() on the renderer's IPC channel closes nothing, so a
+blink.mojom.Widget reply refused this way leaves its page hung with an
+idle renderer.
+
+- The three refusals are logged at ERROR: a message after the
+  interface disconnected, a response nothing waits for, and a response
+  to a different message.
+- A blink.mojom.Widget response to a different message is reported as
+  a bad message, which ends the renderer: its pages show as crashed
+  and can be reloaded. The other two refusals drop no pending reply,
+  so they only log.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ .../bindings/lib/interface_endpoint_client.cc | 41 ++++++++++++++++---
+ 1 file changed, 35 insertions(+), 6 deletions(-)
+
+diff --git a/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc b/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
+index 4354967..9d383aa 100644
+--- a/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
++++ b/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
+@@ -245,6 +245,19 @@ class ThreadSafeInterfaceEndpointClientProxy : public ThreadSafeProxy {
+   const base::Location location_;
+ };
+ 
++// DOMICILE: a Widget reply whose name does not match its request drops the
++// request's responder without running it. RaiseError() on the renderer's IPC
++// channel closes nothing, so the browser never gets that reply and the page
++// hangs with an idle renderer. A bad-message report ends the renderer, so its
++// pages show as crashed and can be reloaded.
++void DomicileReportRefusedWidgetResponse(Message* message,
++                                         std::string_view interface_name,
++                                         std::string_view why) {
++  if (interface_name == "blink.mojom.Widget") {
++    message->NotifyBadMessage(why);
++  }
++}
++
+ }  // namespace
+ 
+ // ----------------------------------------------------------------------------
+@@ -917,8 +930,10 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
+     // interfaces, this means the remote side sends a
+     // PeerAssociatedEndpointClosed event but continues to send more messages
+     // for the same interface. Close the pipe because this shouldn't happen.
+-    DVLOG(1) << "A message is received for an interface after it has been "
+-             << "disconnected. Closing the pipe.";
++    // DOMICILE: an ERROR, so a release engine's log names the refusal;
++    // "Message N rejected" alone does not.
++    LOG(ERROR) << "domicile: message " << message->name() << " to "
++               << interface_name_ << " came after the interface disconnected";
+     return false;
+   }
+ 
+@@ -967,14 +982,28 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
+     {
+       base::AutoLock lock(async_responders_lock_);
+       auto it = async_responders_.find(request_id);
+-      if (it == async_responders_.end()) {
+-        return false;
++      if (it != async_responders_.end()) {
++        pending_response = std::move(it->second);
++        async_responders_.erase(it);
+       }
+-      pending_response = std::move(it->second);
+-      async_responders_.erase(it);
++    }
++
++    // DOMICILE: logged and reported outside the lock, since a bad-message
++    // report runs the process error callback.
++    if (!pending_response) {
++      LOG(ERROR) << "domicile: response " << message->name() << " to "
++                 << interface_name_ << " answers request " << request_id
++                 << ", which nothing is waiting for";
++      return false;
+     }
+ 
+     if (message->name() != pending_response->request_message_name) {
++      LOG(ERROR) << "domicile: response " << message->name() << " to "
++                 << interface_name_ << " answers request " << request_id
++                 << ", which was message "
++                 << pending_response->request_message_name;
++      DomicileReportRefusedWidgetResponse(message, interface_name_,
++                                          "response to a different message");
+       return false;
+     }
+ 
