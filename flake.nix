@@ -2881,11 +2881,19 @@
                   config = pkgs.writeText "domicile.json" (builtins.toJSON {
                     electron.apps = [ "element-desktop.desktop" "slack.desktop" ];
                   });
+                  # Element as a user has it once it has run: on a desktop
+                  # Chromium doesn't know, a first run asks in a message box
+                  # whether to keep its keys in plain text (which hands it
+                  # back, as no window has a page yet) and stores the answer.
+                  elementConfig = pkgs.writeText "electron-config.json" (builtins.toJSON {
+                    safeStorageBackend = "basic_text";
+                  });
                 in
                 ''
                   if [ "$(tty)" = /dev/tty1 ]; then
-                    mkdir -p ~/.config/domicile
+                    mkdir -p ~/.config/domicile ~/.config/Element
                     cp ${config} ~/.config/domicile/domicile.json
+                    cp ${elementConfig} ~/.config/Element/electron-config.json
                     exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
                   fi
                 '';
