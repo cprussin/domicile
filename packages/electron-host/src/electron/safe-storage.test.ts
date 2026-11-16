@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 
-import { createSafeStorage } from "./safe-storage";
+import { createSafeStorage, selectBackend } from "./safe-storage";
 
 // "hello", encrypted by `openssl enc -aes-128-cbc` with the IV of sixteen
 // spaces and the PBKDF2-HMAC-SHA1 keys (one round, salt "saltysalt") of
@@ -15,9 +15,13 @@ const HELLO_V11 = Buffer.concat([
 ]);
 
 /** safeStorage with `password` in the keyring, counting how often it's read. */
-const setUp = (password: string | undefined) => {
+const setUp = (
+  password: string | undefined,
+  backend: "basic_text" | "gnome_libsecret" = "gnome_libsecret",
+) => {
   let reads = 0;
   const safeStorage = createSafeStorage({
+    backend: () => backend,
     password: () => {
       reads += 1;
       return { password };
@@ -110,6 +114,7 @@ describe("safeStorage when the keyring fails", () => {
     const said = spyOn(console, "error").mockImplementation(() => undefined);
     try {
       const safeStorage = createSafeStorage({
+        backend: () => "gnome_libsecret",
         password: () => {
           throw new Error("the Secret Service is gone");
         },
@@ -123,5 +128,54 @@ describe("safeStorage when the keyring fails", () => {
     } finally {
       said.mockRestore();
     }
+  });
+});
+
+describe("safeStorage on the plain-text backend", () => {
+  it("never asks the keyring, as Chromium doesn't", () => {
+    const { reads, safeStorage } = setUp("peanuts", "basic_text");
+
+    expect(safeStorage.getSelectedStorageBackend()).toBe("basic_text");
+    expect(safeStorage.isEncryptionAvailable()).toBe(false);
+    expect(reads()).toBe(0);
+  });
+});
+
+describe(selectBackend, () => {
+  const refuse = (why: string): never => {
+    throw new Error(why);
+  };
+
+  it("takes --password-store first, as Chromium does", () => {
+    expect(selectBackend("basic", "GNOME", refuse)).toBe("basic_text");
+    expect(selectBackend("gnome-libsecret", "domicile", refuse)).toBe(
+      "gnome_libsecret",
+    );
+  });
+
+  it("keeps plain text on a desktop Chromium doesn't know, as Element's own Electron did on lyra", () => {
+    expect(selectBackend("", "domicile", refuse)).toBe("basic_text");
+    expect(selectBackend("", undefined, refuse)).toBe("basic_text");
+    expect(selectBackend("detect", "sway", refuse)).toBe("basic_text");
+  });
+
+  it("uses the keyring on the desktops Chromium does", () => {
+    for (const desktop of [
+      "GNOME",
+      "ubuntu:GNOME",
+      "XFCE",
+      "X-Cinnamon",
+      "Pantheon",
+      "Unity",
+    ]) {
+      expect(selectBackend("", desktop, refuse)).toBe("gnome_libsecret");
+    }
+  });
+
+  it("hands back an app that wants KWallet, which the host can't reach", () => {
+    expect(() => selectBackend("kwallet5", "domicile", refuse)).toThrow(
+      "KWallet",
+    );
+    expect(() => selectBackend("", "KDE", refuse)).toThrow("KWallet");
   });
 });

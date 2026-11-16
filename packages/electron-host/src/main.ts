@@ -35,7 +35,7 @@ import type { DesktopStatus } from "./electron/power";
 import { createPowerMonitor, createPowerSaveBlocker } from "./electron/power";
 import { electronProcess } from "./electron/process";
 import { createProtocols } from "./electron/protocol";
-import { createSafeStorage } from "./electron/safe-storage";
+import { createSafeStorage, selectBackend } from "./electron/safe-storage";
 import { createSchemeRegistration } from "./electron/schemes";
 import type { ListedDisplay } from "./electron/screen";
 import { createScreen } from "./electron/screen";
@@ -48,7 +48,7 @@ import { createTray } from "./electron/tray";
 import { UtilityProcess, utilityProcess } from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
-import { connectEngine } from "./engine";
+import { connectEngine, connectEngineWhenUp } from "./engine";
 import type { Environment } from "./environment";
 import { readEnvironment } from "./environment";
 import { mirrorResources } from "./mirror";
@@ -57,6 +57,11 @@ import { quirksOf } from "./quirks";
 
 /** A window as the app's menus hand it to a click: one of its BrowserWindows. */
 type MenuWindow = { readonly close: () => void };
+
+/**
+ * How long an app started with the desktop waits for the engine to listen.
+ */
+const ENGINE_WAIT = 60_000;
 
 const main = async ([resources, ...args]: string[]) => {
   if (resources === undefined) {
@@ -127,7 +132,10 @@ const main = async ([resources, ...args]: string[]) => {
         "DOMICILE_ELECTRON_SOCK is not set, so there is no desktop to open this app's windows on. Start it from inside a Domicile desktop.",
       );
     const engine = (
-      await connectEngine(socket, pkg.appId, `persist:electron-${pkg.name}`)
+      await connectEngineWhenUp(
+        () => connectEngine(socket, pkg.appId, `persist:electron-${pkg.name}`),
+        ENGINE_WAIT,
+      )
     ).match({ Err: fail, Ok: (value) => value });
     engine.events.on("lost", (why) => fail(`lost the engine: ${why}`));
     engine.events.on("refused", (why) =>
@@ -289,6 +297,12 @@ const main = async ([resources, ...args]: string[]) => {
         }),
       },
       safeStorage: createSafeStorage({
+        backend: () =>
+          selectBackend(
+            app.commandLine.getSwitchValue("password-store"),
+            env.XDG_CURRENT_DESKTOP,
+            (why) => unsupported(`${pkg.productName} ${why}`),
+          ),
         password: () => desktop.safeStoragePassword(app.getName()),
       }),
       screen: createScreen(listDisplays, desktopState.displays),
