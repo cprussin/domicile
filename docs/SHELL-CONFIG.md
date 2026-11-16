@@ -182,6 +182,8 @@ An edit applies to the running desktop, and windows stay open:
   `domicile open --electron`. An entry in `~/.local/share/applications`
   can't be overridden, and is logged. See
   [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+- `browser`: browser profiles and the profile each site opens in. Nothing
+  acts on it yet; see [BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md).
 - `terminal`: see [Terminal](#terminal).
 - `output.max_scale`: the highest scale advertised for the output that
   follows Domicile's window. Applies only when `output.displays` is empty.

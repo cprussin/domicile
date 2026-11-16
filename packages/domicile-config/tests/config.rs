@@ -734,6 +734,110 @@ fn an_empty_startup_command_is_refused() {
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
+// ---- browser profiles -----------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_profiles_has_a_default_and_a_private_one() {
+    let browser = Config::parse("{}").unwrap().browser;
+    assert_eq!(browser.default_profile, "default");
+    assert_eq!(browser.default_private_profile, "private");
+    assert!(!browser.profiles["default"].private);
+    assert!(browser.profiles["private"].private);
+    assert!(browser.sites.is_empty());
+}
+
+const PROFILES: &str = r##""profiles": {
+    "personal": { "name": "Personal", "color": "#0d9488" },
+    "work": { "name": "Work", "color": "#d97706", "extensions": ["aeblfdkhhhdcdjpifhhbdiojplfjncoa"] },
+    "incognito": { "name": "Private", "color": "#a78bfa", "private": true }
+  },
+  "default_profile": "personal",
+  "default_private_profile": "incognito""##;
+
+fn browser_config(rest: &str) -> String {
+    format!(r#"{{ "browser": {{ {PROFILES}{rest} }} }}"#)
+}
+
+#[test]
+fn profiles_map_sites_to_profiles() {
+    let browser = Config::parse(&browser_config(
+        r#", "sites": { "*.acme.com": "work", "github.com/acme": "work", "chase.com": "incognito" }"#,
+    ))
+    .unwrap()
+    .browser;
+    assert_eq!(browser.sites["github.com/acme"], "work");
+    assert_eq!(browser.sites["chase.com"], "incognito");
+    assert_eq!(
+        browser.profiles["work"].extensions,
+        Some(vec!["aeblfdkhhhdcdjpifhhbdiojplfjncoa".to_string()])
+    );
+    assert_eq!(browser.profiles["personal"].extensions, None);
+}
+
+#[test]
+fn a_profile_config_that_contradicts_itself_is_refused() {
+    let refused = [
+        // A site in a profile that doesn't exist.
+        browser_config(r#", "sites": { "acme.com": "office" }"#),
+        // A site in the default profile, which every unlisted site opens in.
+        browser_config(r#", "sites": { "acme.com": "personal" }"#),
+        // A site that is no host.
+        browser_config(r#", "sites": { "https://acme.com": "work" }"#),
+        browser_config(r#", "sites": { "acme.com/": "work" }"#),
+    ];
+    for text in refused {
+        let err = Config::parse(&text).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{text}: got {err:?}"
+        );
+    }
+}
+
+#[test]
+fn default_profiles_must_exist_and_be_the_right_kind() {
+    let refused = [
+        // The default profile is missing.
+        r##"{ "browser": { "profiles": { "work": { "name": "Work", "color": "#d97706" } } } }"##,
+        // The default profile is private.
+        r##"{ "browser": { "default_profile": "private" } }"##,
+        // The default private profile is not private.
+        r##"{ "browser": { "default_private_profile": "default" } }"##,
+    ];
+    for text in refused {
+        let err = Config::parse(text).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{text}: got {err:?}"
+        );
+    }
+}
+
+#[test]
+fn a_profile_id_is_a_directory_name() {
+    let err = Config::parse(
+        r##"{ "browser": { "profiles": {
+            "default": { "name": "Default", "color": "#0d9488" },
+            "private": { "name": "Private", "color": "#a78bfa", "private": true },
+            "../work": { "name": "Work", "color": "#d97706" }
+        } } }"##,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+#[test]
+fn a_profile_names_extensions_by_id() {
+    let err = Config::parse(
+        r##"{ "browser": { "profiles": {
+            "default": { "name": "Default", "color": "#0d9488", "extensions": ["bitwarden"] },
+            "private": { "name": "Private", "color": "#a78bfa", "private": true }
+        } } }"##,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
 // ---- electron -------------------------------------------------------------
 
 #[test]
