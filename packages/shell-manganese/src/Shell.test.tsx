@@ -4241,6 +4241,38 @@ describe("the overview", () => {
 
     expect(overview()).toBeNull();
   });
+
+  describe("on the lock screen", () => {
+    // Stacking is a style, so this reads the shell's stylesheet.
+    loadEmittedStylesheet(
+      document,
+      new URL("../styled-system/styles.css", import.meta.url),
+    );
+
+    it("stays under it, so it blurs with the rest of the desk", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+      press("o");
+      act(() => {
+        domicile.fake.set({ locked: true });
+      });
+      const sheet =
+        container.querySelector("[data-veil]")?.parentElement ?? undefined;
+      if (sheet === undefined) {
+        throw new Error("test: no lock screen");
+      }
+
+      const lock = Number(globalThis.getComputedStyle(sheet).zIndex);
+      const over = [
+        ...container.querySelectorAll<HTMLElement>("[style*='z-index']"),
+      ]
+        .map((part) => Number(part.style.zIndex))
+        .filter((depth) => depth >= lock);
+      expect(overview()).not.toBeNull();
+      expect(Number.isFinite(lock)).toBe(true);
+      expect(over).toEqual([]);
+    });
+  });
 });
 
 describe("the launcher", () => {
