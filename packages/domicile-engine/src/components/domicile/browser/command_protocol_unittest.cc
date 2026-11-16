@@ -638,15 +638,17 @@ TEST(CommandProtocolTest, RefusesAProfileThatIsNoId) {
   }
 }
 
-TEST(CommandProtocolTest, RefusesAProfileForAnAppWindow) {
+TEST(CommandProtocolTest, OpensAnAppWindowInTheProfileARequestNames) {
+  // Two accounts of one site, such as two Gmail inboxes, open in their own
+  // profiles though their site routes to one.
   Told told;
   const std::string reply = Answer(
       R"({"type":"open_url","version":1,"url":"https://example.com/",)"
-      R"("app":true,"profile":"work"})",
+      R"("app":true,"app_id":"mail","profile":"work"})",
       &told);
-  EXPECT_EQ(TypeOf(reply), "refused");
-  EXPECT_THAT(WhyOf(reply), HasSubstr("app window"));
-  EXPECT_FALSE(told.opened);
+  EXPECT_EQ(TypeOf(reply), "opened");
+  EXPECT_EQ(told.app, (AppLaunch{.id = "mail"}));
+  EXPECT_EQ(told.profile, "work");
 }
 
 TEST(CommandProtocolTest, OpensAnAppWindowWhenARequestAsksForOne) {

@@ -1714,6 +1714,7 @@ describe("Shell", () => {
         "https://inbox.example.com/",
         "fake-chat",
         "focus",
+        "",
       ]);
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

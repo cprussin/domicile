@@ -1102,7 +1102,13 @@ const launch = (
       break;
     }
     case LaunchKind.Browsed: {
-      act(WindowAction.BrowserOpened(picked.url, picked.isPrivate));
+      act(
+        WindowAction.BrowserOpened(
+          picked.url,
+          picked.isPrivate,
+          picked.profile,
+        ),
+      );
       break;
     }
   }

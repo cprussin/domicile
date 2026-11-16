@@ -622,13 +622,15 @@ export const WindowAction = {
   }),
 
   /**
-   * The user opened a browser window at `src`, private or not. `useWindows`
-   * asks the engine, and the window arrives in the next
+   * The user opened a browser window at `src`, private or not, in browser
+   * profile `profile` or with none its site's. `useWindows` asks the engine,
+   * and the window arrives in the next
    * {@link WindowAction.BrowserWindowsListed}.
    */
-  BrowserOpened: (src: string, isPrivate: boolean) => ({
+  BrowserOpened: (src: string, isPrivate: boolean, profile?: string) => ({
     isPrivate,
     kind: WindowActionKind.BrowserOpened as const,
+    profile,
     src,
   }),
 

@@ -158,7 +158,7 @@ fn a_desktop_told_to_open_an_app_tells_the_engine() {
     let answered = reply_to(
         "{\"type\":\"open_app\",\"url\":\"https://example.com/\"}",
         &Desktop {
-            open_app: &|url, id, reuse| {
+            open_app: &|url, id, reuse, _| {
                 told.set(Some((url.to_string(), id.map(str::to_string), reuse)));
                 Ok(())
             },
@@ -180,7 +180,7 @@ fn a_desktop_told_to_reuse_an_app_window_tells_the_engine_which() {
         "{\"type\":\"open_app\",\"url\":\"https://example.com/\",\"id\":\"mail\",\
          \"reuse\":\"navigate\"}",
         &Desktop {
-            open_app: &|url, id, reuse| {
+            open_app: &|url, id, reuse, _| {
                 told.set(Some((url.to_string(), id.map(str::to_string), reuse)));
                 Ok(())
             },
@@ -1215,7 +1215,7 @@ fn nothing_dialed() -> Desktop<'static> {
         media_devices: &|| panic!("only media_devices lists media devices"),
         module: Path::new("/shell.js"),
         open: &|_, _| panic!("only open_url opens a browser window"),
-        open_app: &|_, _, _| panic!("only open_app opens an app window"),
+        open_app: &|_, _, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),

@@ -27,6 +27,11 @@ type Options = {
   nickname: string;
   /** Its name in the launcher, such as `Email - Work`. `nickname` if not given. */
   launcherName?: string;
+  /**
+   * The id of the browser profile its Gmail window and sign-in open in, such
+   * as `work`. By default, the one Gmail's site opens in.
+   */
+  profile?: string;
 };
 
 /**
@@ -40,6 +45,7 @@ export const gmailInbox = ({
   email,
   launcherName,
   nickname,
+  profile,
 }: Options): Inbox =>
   Inbox.Watched({
     account: email,
@@ -47,6 +53,7 @@ export const gmailInbox = ({
     app: {
       appId: gmailAppId(email),
       pageNotifies: true,
+      ...(profile === undefined ? {} : { profile }),
       url: inboxAddress(email),
     },
     icon: EnvelopeSimpleIcon,
@@ -55,16 +62,17 @@ export const gmailInbox = ({
     notifiesAs: nickname,
     open: (domicile, reading) => {
       if (reading?.kind === InboxReadingKind.SignedOut) {
-        deskInbox(domicile)(email, client, nickname).signIn();
+        deskInbox(domicile)(email, client, nickname, profile).signIn();
       } else {
         domicile.browser.openApp(inboxAddress(email), {
           id: gmailAppId(email),
           reuse: AppReuse.Focus,
+          ...(profile === undefined ? {} : { profile }),
         });
       }
     },
     read: perDesktop((domicile) =>
-      asReadings(deskInbox(domicile)(email, client, nickname).inbox),
+      asReadings(deskInbox(domicile)(email, client, nickname, profile).inbox),
     ),
   });
 

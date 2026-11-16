@@ -297,6 +297,7 @@ class MODULES_EXPORT DomicileHost final
                      const String& url,
                      const String& app_id,
                      const String& reuse,
+                     const String& profile,
                      ExceptionState&);
   ScriptPromise<IDLLong> countBrowserWindowMatches(ScriptState*,
                                                    const String& id,
@@ -374,6 +375,7 @@ class MODULES_EXPORT DomicileHost final
       const HeapVector<Member<DomicileFetchHeader>>& headers,
       const String& body,
       const String& sapisid_hash_origin,
+      const String& profile,
       ExceptionState&);
   // Every client window, in the order they appeared. Not const: reading it
   // binds the channel, which is what has the compositor announce them.

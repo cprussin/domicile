@@ -279,6 +279,7 @@ fn open_with_app_opens_an_address_or_module_as_an_app() {
             target: "https://example.com/".to_string(),
             id: None,
             reuse: AppReuse::New,
+            profile: None,
         }
     );
     assert_eq!(run(&["open", "--app"]), Err(CliError::NothingToOpen));
@@ -298,6 +299,7 @@ fn open_with_app_takes_an_id_and_what_to_do_when_its_window_is_open() {
             target: "https://mail.example/".to_string(),
             id: Some("mail".to_string()),
             reuse: AppReuse::New,
+            profile: None,
         }
     );
     for (word, reuse) in [
@@ -320,9 +322,38 @@ fn open_with_app_takes_an_id_and_what_to_do_when_its_window_is_open() {
                 target: "https://mail.example/".to_string(),
                 id: Some("mail".to_string()),
                 reuse,
+                profile: None,
             }
         );
     }
+}
+
+#[test]
+fn open_with_app_takes_a_browser_profile() {
+    assert_eq!(
+        run(&[
+            "open",
+            "--app",
+            "--id",
+            "mail",
+            "--profile",
+            "work",
+            "https://mail.example/"
+        ])
+        .unwrap(),
+        Invocation::OpenAsApp {
+            target: "https://mail.example/".to_string(),
+            id: Some("mail".to_string()),
+            reuse: AppReuse::New,
+            profile: Some("work".to_string()),
+        }
+    );
+    assert_eq!(
+        run(&["open", "--app", "--profile"]),
+        Err(CliError::FlagWithoutValue {
+            flag: "--profile".to_string()
+        })
+    );
 }
 
 #[test]

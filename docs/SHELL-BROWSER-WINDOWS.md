@@ -155,8 +155,11 @@ config's `browser.profiles`. See
 - **`domicile.browserProfiles`** lists them, each with its `id`, `name`,
   `color`, `isPrivate`, and whether it `isDefault` or `isDefaultPrivate`. It
   changes with `browserprofileschanged`.
-- Every browser window is listed with its `profile` id. An app window's is
+- Every browser window is listed with its `profile` id, a site's app window
+  (`openAppWindow`) included. An app module's or Electron app's window has
   `null`.
+- **`domicile.openAppWindow(url, appId, reuse, profile)`** opens a new app
+  window in `profile`, or with `""` where its site goes.
 - **`domicile.openBrowserWindow(url, partition, profile)`** opens a window in
   `profile`. `""` opens it where its site goes: the most specific of the
   config's `browser.sites` that matches `url`, or the default profile.

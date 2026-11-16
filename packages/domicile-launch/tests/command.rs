@@ -60,7 +60,7 @@ fn an_open_app_is_an_open_url_that_asks_for_an_app_window() {
     // A key rather than a new type, so an engine older than it opens a browser
     // window instead of refusing.
     assert_eq!(
-        open_app_line("https://example.com/", None, AppReuse::New),
+        open_app_line("https://example.com/", None, AppReuse::New, None),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"app\":true}\n"
     );
 }
@@ -68,13 +68,13 @@ fn an_open_app_is_an_open_url_that_asks_for_an_app_window() {
 #[test]
 fn an_open_app_with_an_id_names_it_and_how_to_reuse_its_window() {
     assert_eq!(
-        open_app_line("https://example.com/", Some("mail"), AppReuse::Focus),
+        open_app_line("https://example.com/", Some("mail"), AppReuse::Focus, None),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"app\":true,\
          \"app_id\":\"mail\",\"reuse\":\"focus\"}\n"
     );
     // "new" is the engine's default, so the line leaves it out.
     assert_eq!(
-        open_app_line("https://example.com/", Some("mail"), AppReuse::New),
+        open_app_line("https://example.com/", Some("mail"), AppReuse::New, None),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"app\":true,\
          \"app_id\":\"mail\"}\n"
     );
@@ -425,5 +425,13 @@ fn a_host_s_site_data_is_cleared() {
     assert_eq!(
         clear_site_data_line("mail.example"),
         "{\"type\":\"clear_site_data\",\"version\":1,\"host\":\"mail.example\"}\n"
+    );
+}
+
+#[test]
+fn an_open_app_names_its_browser_profile_when_it_has_one() {
+    assert_eq!(
+        open_app_line("https://example.com/", Some("mail"), AppReuse::Focus, Some("work")),
+        "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"profile\":\"work\",\"app\":true,\"app_id\":\"mail\",\"reuse\":\"focus\"}\n"
     );
 }
