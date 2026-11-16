@@ -25,6 +25,16 @@ nix run github:cprussin/domicile/release#simple
   "How to switch" button opens the install docs.
 - With Nix, each desktop is its own app. Install one with
   `nix profile install`.
+- `/release` and `/stable` download from Domicile's binary cache instead of
+  building. `nix run` asks to trust it if you are in `trusted-users`; a NixOS
+  config trusts it for everyone with:
+
+  ```nix
+  nix.settings = {
+    substituters = [ "https://packages.domicile-desktop.com/nix" ];
+    trusted-public-keys = [ "packages.domicile-desktop.com-1:iAulr298MtC52WMi2GPI8bqPEvOXHoQtSRAGOo0ny90=" ];
+  };
+  ```
 - In a Wayland session the desktop opens in a window. On a console login it
   takes the screen; no setting is needed
   ([how](/docs/architecture/A-DESKTOP-ON-A-TTY.md)).
