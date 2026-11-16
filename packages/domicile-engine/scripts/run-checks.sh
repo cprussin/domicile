@@ -21,6 +21,7 @@ SCRIPTS="$ROOT/packages/domicile-engine/scripts"
 FIRST=(
   build-produced-what-the-guards-load
   locales-are-trimmed
+  node-runs-on-the-engine
   unit-tests
   drm-unit-tests
   build-the-compositor
@@ -151,6 +152,7 @@ LAST=(
 
 # Guards with no control run.
 ONCE=(
+  node-runs-on-the-engine
   guard-app-only-in-shell
   guard-asks-promise
   guard-browser-brand

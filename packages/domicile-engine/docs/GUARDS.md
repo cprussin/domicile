@@ -87,6 +87,12 @@ Under `under-wayland.sh` unless marked headless.
 
 Results: [ENGINE-FORK-MEASUREMENTS.md](/docs/architecture/ENGINE-FORK-MEASUREMENTS.md).
 
+## Electron's Node
+
+| Guard | Checks |
+|---|---|
+| `node-runs-on-the-engine.sh` | the build's `node` is the Node `node/NODE_PIN` names, on the checkout's V8; its crypto has `ripemd160` from Electron's BoringSSL patch, and a digest no build has throws (the control); an `AsyncLocalStorage` value survives an `await`, which needs V8's promise hooks (`src/build/args/domicile_node.gn`) |
+
 ## Shell page
 
 Headless.
