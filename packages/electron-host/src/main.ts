@@ -243,7 +243,7 @@ const main = async ([resources, ...args]: string[]) => {
               `${app.getName()} shows a message box before any of its windows has a page, which Domicile's engine can't show yet`,
             );
           }
-          return messageBoxes.ask(over, options);
+          return await messageBoxes.ask(over, options);
         },
         choose: desktop.choose,
         chooseSync: desktop.chooseSync,
