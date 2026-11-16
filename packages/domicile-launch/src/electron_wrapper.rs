@@ -1,0 +1,213 @@
+//! What an Electron app's wrapper scripts give the program they end in: the
+//! environment and the arguments, for `domicile open --electron` to give
+//! `electron-host` instead. See "Running an app" in
+//! `docs/architecture/ELECTRON-APPS.md`.
+//!
+//! Packages start Electron through scripts that set what the app needs:
+//! nixpkgs' `makeWrapper` adds a library to `LD_PRELOAD`, programs to `PATH`,
+//! flags to the command line. Reading those scripts would mean knowing every
+//! way of writing them. Running them doesn't: each runs with `BASH_ENV`
+//! naming a script that replaces bash's `exec` with a function. An `exec` of
+//! another script lets it run, the same way; the `exec` of a program records
+//! the environment and arguments it would have had, and exits before it
+//! runs.
+
+use std::fs;
+use std::io::Read as _;
+use std::os::unix::process::CommandExt as _;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+/// The variables this module sets to follow the wrappers, which the app
+/// doesn't get.
+const OURS: [&str; 2] = ["BASH_ENV", "DOMICILE_ELECTRON_LAUNCH"];
+
+/// Sourced by every bash script the wrappers run. `exec` with only
+/// redirections still applies them, as bash's own does.
+const FOLLOW: &str = r##"
+exec() {
+  if [ $# -eq 0 ]; then builtin exec; return; fi
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -a) shift 2 ;;
+      -c|-l|-cl|-lc) shift ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+  done
+  local start=""
+  IFS= read -r -n 2 start < "$1" 2>/dev/null || true
+  if [ "$start" = "#!" ]; then builtin exec "$@"; fi
+  local out="$DOMICILE_ELECTRON_LAUNCH"
+  printf '%s\0' "$@" > "$out/args"
+  local name
+  for name in $(compgen -e); do
+    printf '%s=%s\0' "$name" "${!name}"
+  done > "$out/env"
+  : > "$out/done"
+  builtin exit 0
+}
+"##;
+
+/// How the app's own command would have started it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Launch {
+    /// The arguments the program would have had, less the path to the app
+    /// a generic Electron is given: the app's `process.argv`.
+    pub args: Vec<String>,
+    /// The environment it would have run in.
+    pub env: Vec<(String, String)>,
+}
+
+/// Why the wrappers' launch isn't known.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum WrapperError {
+    #[error("{program} is no bash script, so there is no wrapper to follow")]
+    NotBash { program: String },
+    #[error("cannot follow {program}: {why}")]
+    Unrunnable { program: String, why: String },
+    #[error(
+        "{program} never started a program within {seconds}s, so what its \
+         wrappers set is unknown"
+    )]
+    NoLaunch { program: String, seconds: u64 },
+    #[error(
+        "{program} ends in {ran}, which runs no app from {resources}, so what \
+         its wrappers set is unknown"
+    )]
+    NotTheApp {
+        program: String,
+        ran: String,
+        resources: String,
+    },
+}
+
+/// Runs `command`, the app's own, as far as the program its wrappers end in,
+/// and gives what that program would have run with. `resources` is the
+/// app's, as `electron_app` found it; the program must run the app there.
+/// Gives up after `wait`.
+pub fn through_wrappers(
+    command: &[String],
+    resources: &Path,
+    wait: Duration,
+) -> Result<Launch, WrapperError> {
+    let program = command.first().cloned().unwrap_or_default();
+    if !is_bash_script(Path::new(&program)) {
+        return Err(WrapperError::NotBash { program });
+    }
+    let unrunnable = |why: std::io::Error| WrapperError::Unrunnable {
+        program: program.clone(),
+        why: why.to_string(),
+    };
+    let out = tempfile::tempdir().map_err(unrunnable)?;
+    let follow = out.path().join("follow.bash");
+    fs::write(&follow, FOLLOW).map_err(unrunnable)?;
+    let mut child = Command::new(&program)
+        .args(&command[1..])
+        .env("BASH_ENV", &follow)
+        .env("DOMICILE_ELECTRON_LAUNCH", out.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        // Its own group, so nothing it starts outlives a give-up.
+        .process_group(0)
+        .spawn()
+        .map_err(unrunnable)?;
+    let started = Instant::now();
+    let done = out.path().join("done");
+    while !done.exists() {
+        if matches!(child.try_wait(), Ok(Some(_))) && !done.exists() {
+            break;
+        }
+        if started.elapsed() > wait {
+            // SAFETY: a plain signal to the group spawned above.
+            unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let _ = child.wait();
+    if !done.exists() {
+        let mut said = String::new();
+        if let Some(mut stderr) = child.stderr.take() {
+            let _ = stderr.read_to_string(&mut said);
+        }
+        if !said.trim().is_empty() {
+            eprintln!("domicile: {program} said: {}", said.trim());
+        }
+        return Err(WrapperError::NoLaunch {
+            program,
+            seconds: wait.as_secs(),
+        });
+    }
+    let read = |name: &str| -> Result<Vec<String>, WrapperError> {
+        let bytes = fs::read(out.path().join(name)).map_err(unrunnable)?;
+        Ok(bytes
+            .split(|byte| *byte == 0)
+            .filter(|part| !part.is_empty())
+            .map(|part| String::from_utf8_lossy(part).into_owned())
+            .collect())
+    };
+    let mut args = read("args")?;
+    let ran = args.remove(0);
+    let canonical = |path: &Path| fs::canonicalize(path).ok();
+    let resources = canonical(resources).unwrap_or_else(|| resources.to_path_buf());
+    let inside = |word: &str| {
+        word.starts_with('/')
+            && canonical(Path::new(word)).is_some_and(|path| path.starts_with(&resources))
+    };
+    // A bundled app's binary sits beside its `resources/`; a generic
+    // Electron is given the app's path as an argument.
+    let beside = canonical(Path::new(&ran))
+        .and_then(|path| path.parent().map(|dir| dir.join("resources")))
+        .and_then(|dir| canonical(&dir))
+        .is_some_and(|dir| dir == resources);
+    if !beside {
+        match args.iter().position(|word| inside(word)) {
+            Some(app) => {
+                args.remove(app);
+            }
+            None => {
+                return Err(WrapperError::NotTheApp {
+                    program,
+                    ran,
+                    resources: resources.display().to_string(),
+                })
+            }
+        }
+    }
+    let env = read("env")?
+        .into_iter()
+        .filter_map(|pair| {
+            let (key, value) = pair.split_once('=')?;
+            Some((key.to_string(), value.to_string()))
+        })
+        .filter(|(key, _)| !OURS.contains(&key.as_str()))
+        .collect();
+    Ok(Launch { args, env })
+}
+
+/// Whether `program`, on `PATH` or not, starts with a `#!` naming bash.
+fn is_bash_script(program: &Path) -> bool {
+    let path: PathBuf = if program.components().count() > 1 {
+        program.to_path_buf()
+    } else {
+        match std::env::var_os("PATH")
+            .into_iter()
+            .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+            .map(|dir| dir.join(program))
+            .find(|candidate| candidate.is_file())
+        {
+            Some(found) => found,
+            None => return false,
+        }
+    };
+    let mut start = [0u8; 256];
+    let read = fs::File::open(path)
+        .and_then(|mut file| file.read(&mut start))
+        .unwrap_or(0);
+    let line = &start[..read];
+    let line = line.split(|byte| *byte == b'\n').next().unwrap_or_default();
+    line.starts_with(b"#!") && String::from_utf8_lossy(line).contains("bash")
+}

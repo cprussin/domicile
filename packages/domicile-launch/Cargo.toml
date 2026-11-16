@@ -20,6 +20,7 @@ oxc_parser.workspace = true
 oxc_span.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 # Session bus, for reporting a failed reload as a notification. Features match
 # the compositor's so the workspace builds zbus once.

@@ -47,6 +47,7 @@ use domicile_launch::control_socket::{
 };
 use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
 use domicile_launch::electron_schemes::{self, schemes_switch};
+use domicile_launch::electron_wrapper::{through_wrappers, WrapperError};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
@@ -205,6 +206,9 @@ fn opened(target: &str) -> Result<ExitCode, String> {
 /// `electron-host`; see `domicile_launch::electron_app`. An app that needs
 /// what the engine doesn't do yet runs on its own Electron instead, with a
 /// notification saying so, when there is a `command` or entry to run.
+/// How long an app's wrappers may take to reach its program.
+const WRAPPERS_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+
 fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String> {
     let applications: Vec<PathBuf> = places()
         .data_dirs
@@ -223,9 +227,28 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
     let env = |name: &str| std::env::var(name).ok();
     let host = electron_host(&myself()?, &env, &|path| path.exists())
         .map_err(|missing| missing.to_string())?;
-    let status = Command::new(&host)
-        .arg(&app.resources)
-        .args(&app.args)
+    let mut run = Command::new(&host);
+    run.arg(&app.resources);
+    // What the app's wrappers set (a preloaded library, programs on PATH,
+    // flags) reaches it on the engine too. An app run straight from its
+    // binary has none.
+    match app
+        .fallback
+        .as_deref()
+        .map(|command| through_wrappers(command, &app.resources, WRAPPERS_WAIT))
+    {
+        Some(Ok(launch)) => {
+            run.args(&launch.args).env_clear().envs(launch.env);
+        }
+        Some(Err(WrapperError::NotBash { .. })) | None => {
+            run.args(&app.args);
+        }
+        Some(Err(why)) => {
+            eprintln!("domicile: {target} runs on the engine without what its wrappers set: {why}");
+            run.args(&app.args);
+        }
+    }
+    let status = run
         .status()
         .map_err(|why| format!("cannot run {}: {why}", host.display()))?;
     match (status.code(), app.fallback) {

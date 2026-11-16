@@ -38,8 +38,15 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   is a directory holding `app.asar` or `app/`, or a program beside a
   `resources/` that does. Packages wrap Electron in scripts (`makeWrapper`
   on NixOS, shell scripts in `/usr/bin`), so the `Exec` rarely names it.
-  The command's arguments, or the `Exec`'s, are the app's `process.argv`.
-  What a wrapper sets (`LD_PRELOAD`, flags) does not reach the app.
+  What the wrappers set reaches the app: when the command is a bash script,
+  it runs with `BASH_ENV` naming a script that replaces `exec`. Each script
+  it execs runs the same way; the `exec` of the program records its
+  environment and arguments and exits before it runs. The app gets that
+  environment (`LD_PRELOAD`, `PATH`) and those arguments, less the app's own
+  path a generic Electron is given, as its `process.argv`
+  ([`electron_wrapper.rs`](../../packages/domicile-launch/src/electron_wrapper.rs)).
+  A command that is no bash script, or that never reaches the app's program
+  within 10 seconds, gives its arguments alone, and the latter is logged.
 - **`electron.apps`** in the desk config lists desktop entry ids. The
   compositor copies each entry into a directory first on the desk's
   `XDG_DATA_DIRS`, with every `Exec` running
