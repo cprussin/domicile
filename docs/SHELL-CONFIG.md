@@ -184,7 +184,8 @@ An edit applies to the running desktop, and windows stay open:
   [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
 - `browser`: browser profiles and the profile each site opens in. Each
   profile has its own sign-ins, site data and extensions, and a private one
-  keeps nothing past its last page. Sites don't pick a profile yet; see
+  keeps nothing past its last page. A page the user takes to a listed site
+  moves to its profile; see
   [BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md).
 - `terminal`: see [Terminal](#terminal).
 - `output.max_scale`: the highest scale advertised for the output that

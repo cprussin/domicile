@@ -5,7 +5,7 @@
 //! An entry's `Exec` rarely names the Electron binary itself: packages wrap
 //! it in scripts that set flags and variables (`makeWrapper` on NixOS, shell
 //! scripts in `/usr/bin`). So the program is followed through symlinks and
-//! through the paths a wrapper script names until one of them is beside an
+//! through the paths a wrapper script, or a compiled wrapper, names until one of them is beside an
 //! app: a directory holding `app.asar`, or an unpacked `app/`.
 
 use std::ffi::OsStr;
@@ -14,9 +14,14 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::mime_apps::launch_command;
 
+use crate::electron_wrapper::compiled_wrapper_command;
+
 /// How many wrapper scripts deep the program is followed. Packages wrap at
 /// most two or three times; more is a script naming itself.
 const WRAPPERS: usize = 6;
+
+/// The largest file read as a wrapper script.
+const SCRIPT_MAX: u64 = 4 << 20;
 
 /// The status `electron-host` exits with when the app needs what the engine
 /// doesn't do yet, such as Node in a page. The app then runs on its own
@@ -155,7 +160,8 @@ fn program(
 /// - An `.asar` file's directory.
 /// - A program beside a `resources/` holding an app, as Electron's binary
 ///   is.
-/// - A script, through each existing absolute path it names, in order.
+/// - A script or compiled wrapper, through each existing absolute path it
+///   names, in order.
 fn resources(at: &Path, wrappers: usize) -> Option<PathBuf> {
     if at.is_dir() {
         return [at.to_path_buf(), at.join("resources")]
@@ -173,11 +179,21 @@ fn resources(at: &Path, wrappers: usize) -> Option<PathBuf> {
     if wrappers == 0 {
         return None;
     }
-    let text = fs::read(at).ok()?;
-    if !text.starts_with(b"#!") {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&text);
+    let text = if let Some(command) = compiled_wrapper_command(at) {
+        command
+    } else {
+        // Only a regular file small enough to be a script: never a device
+        // such as /dev/zero, which a script may name.
+        let meta = fs::metadata(at).ok()?;
+        if !meta.is_file() || meta.len() > SCRIPT_MAX {
+            return None;
+        }
+        let text = fs::read(at).ok()?;
+        if !text.starts_with(b"#!") {
+            return None;
+        }
+        String::from_utf8_lossy(&text).into_owned()
+    };
     let named: Vec<PathBuf> = named_paths(&text)
         .filter_map(|named| fs::canonicalize(named).ok())
         .filter(|named| named != at)

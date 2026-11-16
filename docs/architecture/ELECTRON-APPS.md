@@ -34,19 +34,25 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   entry id or a path into the install
   ([`electron_app.rs`](../../packages/domicile-launch/src/electron_app.rs)).
   The entry's program, or the command's when one is given, is followed
-  through symlinks and through the paths each wrapper script names until one
-  is a directory holding `app.asar` or `app/`, or a program beside a
-  `resources/` that does. Packages wrap Electron in scripts (`makeWrapper`
-  on NixOS, shell scripts in `/usr/bin`), so the `Exec` rarely names it.
+  through symlinks and through the paths each wrapper names until one is a
+  directory holding `app.asar` or `app/`, or a program beside a `resources/`
+  that does. Packages wrap Electron in scripts (`makeWrapper` on NixOS,
+  shell scripts in `/usr/bin`), so the `Exec` rarely names it. On NixOS the
+  wrapper is often compiled (`makeBinaryWrapper`, which wrapGAppsHook3 and
+  wrapQtAppsHook use, as Claude's and ChatGPT's packages do); a compiled
+  wrapper keeps the `makeCWrapper` command that made it, and the paths that
+  command names are followed.
   What the wrappers set reaches the app: when the command is a bash script,
   it runs with `BASH_ENV` naming a script that replaces `exec`. Each script
   it execs runs the same way; the `exec` of the program execs `domicile`
   instead, which records the command line and the environment it got and
-  exits. The app gets that
+  exits. A compiled wrapper is followed by running its `makeCWrapper`
+  command as bash, which sets what the wrapper sets, adds its flags and
+  execs the same way. The app gets that
   environment (`LD_PRELOAD`, `PATH`) and those arguments, less the app's own
   path a generic Electron is given, as its `process.argv`
   ([`electron_wrapper.rs`](../../packages/domicile-launch/src/electron_wrapper.rs)).
-  A command that is no bash script, or that never reaches the app's program
+  A command that is neither a bash script nor a compiled wrapper, or that never reaches the app's program
   within 10 seconds, gives its arguments alone, and the latter is logged.
 - **`electron.apps`** in the desk config lists desktop entry ids. The
   compositor copies each entry into a directory first on the desk's
@@ -273,7 +279,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `dialog` | file dialogs through the file chooser portal ([PORTALS.md](/docs/PORTALS.md)), built in the host (`src/electron/dialog.ts`): Electron's properties, filters, button label and default path become the portal's options, and its URIs come back as paths. The `Sync` calls block on a child process that asks the portal (`src/choose-file.ts`), as Electron's block the main process. Dialogs aren't tied to the app's window yet: Electron windows are the shell's pages, not toplevels a portal can name. `showMessageBox` sends `show_message_box` over the window the app names, or its most recent open one, and resolves with the `message_box_answered` the shell's answer brings (`src/electron/message-boxes.ts`); with no window open it rejects. As Electron, no buttons is one OK, and the cancel button the app names none for is the first labeled Cancel or No. `showMessageBoxSync` throws, as nothing can block for the shell's answer; `showErrorBox` writes to the host's log |
 | `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
 | `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
-| `safeStorage` | Chromium's OSCrypt for Linux, byte for byte, built in the host (`src/electron/safe-storage.ts`), so what an app encrypted on its own Electron decrypts here and back: AES-128-CBC with the PBKDF2 key of a password the Secret Service keeps as "Chromium Safe Storage" with `application` set to the app's name (`src/secret-service.ts`), prefixed `v11`. The password is read, or created, when the app first needs it, blocking on a child process (`src/safe-storage-password.ts`) as Electron blocks on libsecret, so a locked keyring asks to be unlocked then. With no Secret Service, or an unlock refused, the backend is `basic_text`: encryption needs `setUsePlainTextEncryption(true)` and uses the hardcoded `v10` key, as in Electron |
+| `safeStorage` | Chromium's OSCrypt for Linux, byte for byte, built in the host (`src/electron/safe-storage.ts`), so what an app encrypted on its own Electron decrypts here and back: AES-128-CBC with the PBKDF2 key of a password the Secret Service keeps as "Chromium Safe Storage" with `application` set to the app's name (`src/secret-service.ts`), prefixed `v11`. The password is read, or created, when the app first needs it, blocking on a child process (`src/safe-storage-password.ts`) as Electron blocks on libsecret, so a locked keyring asks to be unlocked then, both to read the password and to create it. With no Secret Service, an unlock refused, or a Secret Service that fails (said on stderr), the backend is `basic_text`: encryption needs `setUsePlainTextEncryption(true)` and uses the hardcoded `v10` key, as in Electron |
 | `desktopCapturer`, `setDisplayMediaRequestHandler` | the desktop's share picker, as Electron's own under Wayland. `desktopCapturer.getSources` gives one source, "Screen or window" (`screen:0:0`, or `window:0:0` when only windows are asked for), with an empty thumbnail; a page's `getUserMedia()` with it as `chromeMediaSourceId` opens the picker, which says what is captured, sound included when asked. `getDisplayMedia()` opens the same picker, as Electron's `useSystemPicker` does, so a display media handler is kept but not asked (`src/electron/desktop-capturer.ts`) |
 | `clipboard` | the desktop clipboard through `wl-paste` and `wl-copy`, which the compositor serves with data-control (docs/use/CLIPBOARD.md), built in the host (`src/electron/clipboard.ts`). Each call waits on its command, as Electron's clipboard is synchronous; `selection` is the primary selection. `wl-copy` offers one type per copy, so a `write` of several formats throws, naming them, until the host can offer several. Rich copies in pages go through the engine's own clipboard, which has no such limit. The host's package needs `wl-clipboard` on its `PATH` |
 | `nativeImage` | the image's PNG or JPEG bytes, in the host. PNGs are read and written without a library (`src/png.ts`) for `resize`, `crop` and bitmaps; a JPEG is kept as it came and can't be decoded, so those throw for one. One scale factor, 1 |
