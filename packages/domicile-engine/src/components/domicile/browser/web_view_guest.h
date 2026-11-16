@@ -131,14 +131,19 @@ class BrowserWindowHost {
   virtual WebViewGuest* Find(content::BrowserContext& context,
                              const std::string& id) = 0;
 
-  // Returns the off-the-record context of `context`'s profile, making it on
-  // first use. Private guests' pages live there.
-  virtual content::BrowserContext& PrivateContext(
-      content::BrowserContext& context) = 0;
+  // The context a page of the guest `owner` owns is made in: browser profile
+  // `profile`'s, made on first use. Empty `profile` is `owner` itself, the
+  // default profile, or with `private_browsing` the default private
+  // profile's. A profile the desk does not have is the default one, or the
+  // default private one: a private page is never made outside a private
+  // profile. See docs/architecture/BROWSER-PROFILES.md.
+  virtual content::BrowserContext& ContextFor(content::BrowserContext& owner,
+                                              bool private_browsing,
+                                              const std::string& profile) = 0;
 
   // A private guest's page was made in, or destroyed from, `context`, an
-  // off-the-record context. Private browsing ends when every page made has
-  // been destroyed.
+  // off-the-record context. Its private profile ends when every page made in
+  // it has been destroyed.
   virtual void PrivatePageOpened(content::BrowserContext& context) = 0;
   virtual void PrivatePageClosed(content::BrowserContext& context) = 0;
 };
@@ -235,8 +240,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   //
   // `created` runs once, before the guest is attached or navigated, so tab
   // helpers see the first navigation. `extension_popup`: see
-  // extension_popup(). `private_browsing` makes the page in
-  // BrowserWindowHost::PrivateContext rather than the owner's context.
+  // extension_popup(). `private_browsing` and `profile` make the page in
+  // BrowserWindowHost::ContextFor's context.
   // `partition` gives it storage of its own; see partition().
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
@@ -245,6 +250,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       mojo::PendingRemote<mojom::WebViewGuestClient> client,
       bool extension_popup,
       bool private_browsing,
+      const std::string& profile,
       const std::optional<WebViewPartition>& partition,
       const GuestCreatedCallback& created);
 
@@ -257,7 +263,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   // - `window_id`: the id a <webview window> uses.
   // - `popup_window`: the chrome.windows popup window whose one tab this is;
   //   empty for a tab of the desk's window. See popup_window().
-  // - `private_browsing`, `partition`: as in CreateAndAttach.
+  // - `private_browsing`, `profile`, `partition`: as in CreateAndAttach.
   // - `created`: runs before the first navigation, as in CreateAndAttach.
   //
   // The caller navigates it with Navigate.
@@ -266,6 +272,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       const std::string& window_id,
       std::optional<int> popup_window,
       bool private_browsing,
+      const std::string& profile,
       const std::optional<WebViewPartition>& partition,
       const GuestCreatedCallback& created);
 

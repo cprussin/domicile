@@ -173,9 +173,13 @@ constexpr char kFocusRequestEvent[] = "domicile-focus-request";
 // matters.
 constexpr char kExtensionPopupAttr[] = "extensionpopup";
 
-// Makes the guest's page private: in the off-the-record profile. Read once,
-// on requesting the guest; only presence matters.
+// Makes the guest's page private: in the default private profile, off the
+// record. Read once, on requesting the guest; only presence matters.
 constexpr char kPrivateAttr[] = "private";
+
+// Puts the guest's page in the browser profile it names, by id. Read once, on
+// requesting the guest. See docs/architecture/BROWSER-PROFILES.md.
+constexpr char kProfileAttr[] = "profile";
 
 // Gives the guest's page storage of its own: "persist:<name>" on disk, any
 // other name in memory. Read once, on requesting the guest. See
@@ -389,11 +393,18 @@ void HTMLWebViewElement::RequestGuest() {
                      client_receiver_.BindNewPipeAndPassRemote(task_runner),
                      BrowserWindow(),
                      hasAttribute(AtomicString(kExtensionPopupAttr)),
-                     hasAttribute(AtomicString(kPrivateAttr)), Partition());
+                     hasAttribute(AtomicString(kPrivateAttr)), Profile(),
+                     Partition());
 }
 
 String HTMLWebViewElement::BrowserWindow() const {
   return getAttribute(AtomicString(kWindowAttr));
+}
+
+String HTMLWebViewElement::Profile() const {
+  const AtomicString& profile = getAttribute(AtomicString(kProfileAttr));
+  // Empty, not null, when absent, as Partition.
+  return profile.IsNull() ? g_empty_string : profile.GetString();
 }
 
 String HTMLWebViewElement::Partition() const {

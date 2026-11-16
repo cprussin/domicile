@@ -508,9 +508,13 @@ interface WebViewGuestHost {
   // Ignored with `window`.
   //
   // `private_browsing` is the element's `private` attribute. The guest's page
-  // is then in the profile's off-the-record profile: nothing it stores
-  // outlives the browser, and it shares nothing with the user's pages.
+  // is then in a private profile, off the record: nothing it stores outlives
+  // its last page, and it shares nothing with the user's other pages.
   // Ignored with `window`, whose page already has its profile.
+  //
+  // `profile` is the element's `profile` attribute, empty for none: the
+  // browser profile the guest's page is in, as BrowserWindows.Open takes it.
+  // Ignored with `window`.
   //
   // `partition` is the element's `partition` attribute, empty for none. The
   // guest's page then has storage of its own: "persist:<name>" kept on disk,
@@ -523,6 +527,7 @@ interface WebViewGuestHost {
               string? window,
               bool extension_popup,
               bool private_browsing,
+              string profile,
               string partition);
 };
 

@@ -65,6 +65,7 @@ const listed = (
   parent: undefined,
   partition: "",
   popupWindow: popup.popupWindow === 0 ? undefined : popup.popupWindow,
+  profile: "default",
   title: "",
   toplevelId: undefined,
   url,

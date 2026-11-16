@@ -138,12 +138,31 @@ view.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, (event) => {
   `isPrivate: true`. Draw it so the user can tell.
 - **`<webview private>`** makes your own page private, such as a preview. Set
   `private` before the view enters the document.
-- A private page is in Chrome's off-the-record profile: its cookies, cache and
-  storage stay in memory, shared by every private page and none of the user's.
-- Private data ends when the last private page closes, whether a private
+- A private page is in the default private profile, off the record: its
+  cookies, cache and storage stay in memory, shared by every page of that
+  profile and none of the user's others.
+- Private data ends when the profile's last page closes, whether a private
   window or a `<webview private>`. The next private page starts empty.
 - A private window's new windows are private too.
-- Extensions see no private page.
+- Only the extensions the private profile turns on see its pages.
+
+## Browser profiles
+
+A browser profile is a set of sign-ins, site data and extensions, from the
+config's `browser.profiles`. See
+[BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md).
+
+- **`domicile.browserProfiles`** lists them, each with its `id`, `name`,
+  `color`, `isPrivate`, and whether it `isDefault` or `isDefaultPrivate`. It
+  changes with `browserprofileschanged`.
+- Every browser window is listed with its `profile` id. An app window's is
+  `null`.
+- **`domicile.openBrowserWindow(url, partition, profile)`** opens a window in
+  `profile`; `""` is the default one. **`<webview profile="work">`** puts your
+  own page in one. Set it before the view enters the document.
+- A page's new windows are in its profile.
+- A profile the desk no longer has opens in the default one, or the default
+  private one for a private page.
 
 ## Partitions
 

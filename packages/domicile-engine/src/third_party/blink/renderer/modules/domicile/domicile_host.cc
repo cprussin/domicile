@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_browser_profile.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_browser_window.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_cast_sink.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_picture_in_picture_video.h"
@@ -2310,14 +2311,16 @@ void DomicileHost::FocusRequested(const String& app_id) {
 void DomicileHost::openBrowserWindow(ScriptState*,
                                      const String& url,
                                      const String& partition,
+                                     const String& profile,
                                      ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kBrowser, partition, exception_state);
+  OpenBrowserWindow(url, WindowKind::kBrowser, profile, partition,
+                    exception_state);
 }
 
 void DomicileHost::openPrivateBrowserWindow(ScriptState*,
                                             const String& url,
                                             ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kPrivate, g_empty_string,
+  OpenBrowserWindow(url, WindowKind::kPrivate, g_empty_string, g_empty_string,
                     exception_state);
 }
 
@@ -2407,6 +2410,7 @@ ScriptPromise<IDLLong> DomicileHost::countBrowserWindowMatches(
 
 void DomicileHost::OpenBrowserWindow(const String& url,
                                      WindowKind kind,
+                                     const String& profile,
                                      const String& partition,
                                      ExceptionState& exception_state) {
   // Resolved against this document, as a <webview src> is. An unresolvable
@@ -2428,10 +2432,12 @@ void DomicileHost::OpenBrowserWindow(const String& url,
   if (Ready(exception_state)) {
     switch (kind) {
       case WindowKind::kBrowser:
-        windows_->Open(resolved, /*private_browsing=*/false, partition);
+        windows_->Open(resolved, /*private_browsing=*/false, profile,
+                       partition);
         break;
       case WindowKind::kPrivate:
-        windows_->Open(resolved, /*private_browsing=*/true, partition);
+        windows_->Open(resolved, /*private_browsing=*/true, profile,
+                       partition);
         break;
     }
   }
@@ -2728,7 +2734,9 @@ void DomicileHost::ListBrowserWindows() {
             ? std::nullopt
             : std::optional<int32_t>(window->popup_window),
         window->width, window->height, window->private_browsing,
-        window->partition, window->app, window->app_id, window->captured,
+        window->partition,
+        window->profile.empty() ? String() : String(window->profile),
+        window->app, window->app_id, window->captured,
         toplevel_id == browser_toplevel_ids_.end() ? String()
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,
@@ -2741,6 +2749,26 @@ void DomicileHost::ListBrowserWindows() {
       std::move(listed));
   DispatchEvent(
       *Event::Create(domicile_event_names::Browserwindowschanged()));
+}
+
+// Stored, like WindowsChanged.
+void DomicileHost::ProfilesChanged(
+    Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
+    const String& default_profile,
+    const String& default_private_profile) {
+  HeapVector<Member<DomicileBrowserProfile>> listed;
+  listed.reserve(profiles.size());
+  for (const auto& profile : profiles) {
+    listed.push_back(MakeGarbageCollected<DomicileBrowserProfile>(
+        profile->id, profile->name, profile->color, profile->private_browsing,
+        profile->id == default_profile,
+        profile->id == default_private_profile));
+  }
+  browser_profiles_ =
+      MakeGarbageCollected<FrozenArray<DomicileBrowserProfile>>(
+          std::move(listed));
+  DispatchEvent(
+      *Event::Create(domicile_event_names::Browserprofileschanged()));
 }
 
 // Stored, like WindowsChanged.
@@ -2906,6 +2934,7 @@ ExecutionContext* DomicileHost::GetExecutionContext() const {
 void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
   visitor->Trace(browser_windows_);
+  visitor->Trace(browser_profiles_);
   visitor->Trace(cast_sinks_);
   visitor->Trace(downloads_);
   visitor->Trace(picture_in_picture_videos_);

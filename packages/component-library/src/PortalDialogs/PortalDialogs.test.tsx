@@ -438,6 +438,7 @@ const browserWindow = (id: string, title: string) => ({
   parent: null,
   partition: "",
   popupWindow: null,
+  profile: "default",
   title,
   toplevelId: null,
   url: "https://example.com",

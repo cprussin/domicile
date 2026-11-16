@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
+#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_extension_settings.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -196,9 +197,20 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
   ApplyConfigSettings(*profile, wanted.settings);
 }
 
+// Hands the whole list, resolved, to the desk's browser profiles, which
+// install into each profile the extensions it turns on.
+void HandToBrowserProfiles(base::WeakPtr<Profile> shell, ExtensionList all) {
+  if (shell) {
+    BrowserProfileRegistry::Get().SetExtensions(*shell, std::move(all));
+  }
+}
+
+}  // namespace
+
 // Waits for the extension system to load; until then the registry is empty
 // and every installed extension would look missing.
-void ReconcileWhenReady(base::WeakPtr<Profile> profile, ExtensionList wanted) {
+void ReconcileConfigExtensions(base::WeakPtr<Profile> profile,
+                               ExtensionList wanted) {
   if (!profile) {
     return;
   }
@@ -207,8 +219,6 @@ void ReconcileWhenReady(base::WeakPtr<Profile> profile, ExtensionList wanted) {
       .Post(FROM_HERE,
             base::BindOnce(&Reconcile, profile, std::move(wanted)));
 }
-
-}  // namespace
 
 void LoadUnpackedInto(
     Profile& profile,
@@ -315,7 +325,7 @@ void InstallExtensionsInto(base::WeakPtr<Profile> profile,
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()}, base::BindOnce(&Resolved, wanted),
-      base::BindOnce(&ReconcileWhenReady, std::move(profile)));
+      base::BindOnce(&HandToBrowserProfiles, std::move(profile)));
 }
 
 }  // namespace domicile

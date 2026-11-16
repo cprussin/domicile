@@ -31,6 +31,19 @@ import "url/mojom/url.mojom";
 //
 // See "A browser window" in the Domicile repository's docs/WRITING-A-SHELL.md.
 
+// One of the desk's browser profiles: a set of sign-ins, site data and
+// extensions, as the config's `browser.profiles` names it. See
+// docs/architecture/BROWSER-PROFILES.md in the Domicile repository.
+struct BrowserProfile {
+  // Lowercase letters, digits and `-`.
+  string id;
+  string name;
+  // `#rrggbb`.
+  string color;
+  // Whether it keeps nothing past its last page.
+  bool private_browsing;
+};
+
 // One browser window, as a shell draws it.
 struct BrowserWindow {
   // The name `<webview window>` and Close use: "1", "2", ... in open order. A
@@ -49,9 +62,13 @@ struct BrowserWindow {
   // pixels. 0 on an axis it left unset. For a view, the size its app gave it.
   int32 width;
   int32 height;
-  // Whether the page is in the profile's off-the-record profile. A private
+  // Whether the page is in a private profile, off the record. A private
   // window's new windows are private too.
   bool private_browsing;
+  // The id of the browser profile the page is in (see BrowserProfile). Empty
+  // for a page in no browser profile, such as an Electron app's. A window's
+  // new windows are in its profile.
+  string profile;
   // The page's storage partition, as a <webview>'s `partition` attribute
   // names it. Empty for the profile's own. A window's new windows share it.
   string partition;
@@ -112,10 +129,17 @@ interface BrowserWindows {
 
   // Opens a browser window at `url`; it appears in the next list. A
   // domicile:// address shows about:blank#blocked, as in a <webview>.
-  // `private_browsing` puts its page in the off-the-record profile.
-  // `partition` gives it storage of its own, as a <webview>'s `partition`
-  // attribute does; empty for none. "persist:" with no name is a bad message.
-  Open(url.mojom.Url url, bool private_browsing, string partition);
+  // `profile` puts its page in that browser profile; empty for the default
+  // one, or with `private_browsing` the default private one. A profile the
+  // desk does not have opens in the default one, logged: the shell's list may
+  // be a change behind. A private window never opens outside a private
+  // profile. `partition` gives it storage of its own, as a <webview>'s
+  // `partition` attribute does; empty for none. "persist:" with no name is a
+  // bad message.
+  Open(url.mojom.Url url,
+       bool private_browsing,
+       string profile,
+       string partition);
 
   // Opens an app window at `url`, as `domicile open --app` does; it appears in
   // the next list with `app` set and `app_id`. A domicile:// address shows
@@ -155,4 +179,10 @@ interface BrowserWindowsClient {
   // The whole list, oldest first, on every open, close, navigation or title
   // change. Deltas would leave a page wrong for good after one missed message.
   WindowsChanged(array<BrowserWindow> windows);
+
+  // The desk's browser profiles, in the config's order, and which of them are
+  // the defaults: on SetClient and on every change.
+  ProfilesChanged(array<BrowserProfile> profiles,
+                  string default_profile,
+                  string default_private_profile);
 };

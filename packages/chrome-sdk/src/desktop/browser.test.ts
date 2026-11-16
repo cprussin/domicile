@@ -30,6 +30,7 @@ describe("browser", () => {
         parent: undefined,
         partition: "",
         popupWindow: undefined,
+        profile: "default",
         title: "",
         toplevelId: undefined,
         url: "https://example.com/",

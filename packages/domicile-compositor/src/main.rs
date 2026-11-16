@@ -185,7 +185,8 @@ use crate::chrome_hub::{serve_outbound, ChromeHub};
 use crate::client_requests::ClientRequest;
 use crate::clients::{accept_app_client, sees_privileged_globals, ClientState};
 use crate::config_adoption::{
-    hand_over_the_extensions, hand_over_the_shell_config, theme_on_the_wire,
+    hand_over_the_browser_profiles, hand_over_the_extensions, hand_over_the_shell_config,
+    theme_on_the_wire,
 };
 use crate::configure_answers::ConfigureAnswers;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
@@ -1098,6 +1099,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Extensions, which the browser process installs. See
         // `docs/architecture/EXTENSIONS.md`.
         hand_over_the_extensions(&mut host, &config.extensions);
+        // Browser profiles, which the browser process opens pages in. See
+        // `docs/architecture/BROWSER-PROFILES.md`.
+        hand_over_the_browser_profiles(&mut host, &config.browser);
         // Sites the browser draws dark while the theme is dark.
         host.set_force_dark(config.theme.force_dark.clone());
         // The theme, so the page paints correctly the first time. Set, not

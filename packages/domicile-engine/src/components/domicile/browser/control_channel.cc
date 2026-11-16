@@ -21,6 +21,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
@@ -38,6 +39,12 @@
 
 namespace domicile {
 namespace {
+
+// Storage for SetBrowserProfilesSink's callback.
+BrowserProfilesSink& BrowserProfilesSlot() {
+  static base::NoDestructor<BrowserProfilesSink> sink;
+  return *sink;
+}
 
 // The read buffer. One message is a line of JSON; this is sized for a batch of
 // them rather than for the largest one, because the remainder is carried across
@@ -201,6 +208,7 @@ ControlChannel::ControlChannel(
       extensions_sink_(std::move(extensions_sink)),
       cursor_theme_sink_(std::move(cursor_theme_sink)),
       force_dark_sink_(std::move(force_dark_sink)),
+      page_(page),
       receiver_(this, std::move(receiver)),
       read_buffer_(
           base::MakeRefCounted<net::IOBufferWithSize>(kReadBufferSize)) {
@@ -1287,6 +1295,31 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  // For this process too, like `extensions`: the desk's browser profiles,
+  // which the profile this page is in makes into Chrome profiles. See
+  // chrome/browser/domicile/domicile_browser_profiles.h. Logged when
+  // malformed, for `extensions`' reason: dropped quietly, every page would
+  // open in the profiles it had and nothing would say why.
+  if (*type == "browser_profiles") {
+    std::optional<BrowserProfiles> profiles = ParseBrowserProfiles(message);
+    if (!profiles) {
+      LOG(ERROR) << "domicile: the compositor sent a `browser_profiles` "
+                    "message that does not describe browser profiles, or "
+                    "names a default, a private default or a site's profile "
+                    "it does not list. Pages keep the profiles they had.";
+    } else if (BrowserProfilesSlot().is_null()) {
+      // //chrome sets the sink before the shell can bind a channel, so this
+      // is an engine built without it, and every page would open in the
+      // shell's profile with nothing saying why.
+      LOG(ERROR) << "domicile: the compositor sent `browser_profiles` and "
+                    "this engine has nowhere to put them. Every page opens in "
+                    "the default profile.";
+    } else {
+      BrowserProfilesSlot().Run(page_, *profiles);
+    }
+    return;
+  }
+
   // For this process too, like `extensions`: the pages it draws dark. See
   // components/domicile/browser/force_dark.h.
   if (*type == "force_dark") {
@@ -1982,6 +2015,11 @@ void ControlChannel::DispatchLine(const std::string& line,
   // because layout positions the layer now and the page has stopped reporting
   // where its own boxes are. Cementing them here would make a dying protocol
   // cost an engine release to remove.
+}
+
+void SetBrowserProfilesSink(BrowserProfilesSink sink) {
+  CHECK(BrowserProfilesSlot().is_null() || sink.is_null());
+  BrowserProfilesSlot() = std::move(sink);
 }
 
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,

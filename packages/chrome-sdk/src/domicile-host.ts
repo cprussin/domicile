@@ -245,6 +245,33 @@ export type DomicileAppHost = {
 };
 
 /**
+ * One of the desk's browser profiles, in DomicileHost.browserProfiles: a set
+ * of sign-ins, site data and extensions, as the config's `browser.profiles`
+ * names it. A page is in one profile, and its new windows are in it too. See
+ * docs/architecture/BROWSER-PROFILES.md in the Domicile repository.
+ */
+export type DomicileBrowserProfile = {
+  /**
+   * Lowercase letters, digits and `-`. What DomicileBrowserWindow.profile
+   * and openBrowserWindow() name it by.
+   */
+  readonly id: string;
+  /** The name the user gave it. */
+  readonly name: string;
+  /** Its color, `#rrggbb`. */
+  readonly color: string;
+  /** Whether it keeps nothing past its last page, as private browsing does. */
+  readonly isPrivate: boolean;
+  /** Whether a site no profile lists opens here. Exactly one profile is. */
+  readonly isDefault: boolean;
+  /**
+   * Whether a private window that names no profile opens here. Exactly one
+   * profile is, and it is private.
+   */
+  readonly isDefaultPrivate: boolean;
+};
+
+/**
  * One of the desk's browser windows: a page the browser holds, drawn with
  * `<webview window="id">`. See components/domicile/mojom/browser_windows.mojom.
  *
@@ -274,11 +301,17 @@ export type DomicileBrowserWindow = {
   readonly width: number;
   readonly height: number;
   /**
-   * Whether the page is private: in the off-the-record profile, sharing
-   * nothing with the user's pages and storing nothing past the last private
-   * page. A private window's new windows are private too.
+   * Whether the page is private: in a private profile, off the record,
+   * sharing nothing with the user's other pages and storing nothing past the
+   * profile's last page. A private window's new windows are private too.
    */
   readonly isPrivate: boolean;
+  /**
+   * The id of the browser profile the page is in, one of
+   * DomicileHost.browserProfiles; null for a page in none, such as an
+   * Electron app's. A window's new windows are in its profile.
+   */
+  readonly profile: string | null;
   /**
    * The page's storage partition, as a <webview>'s `partition` attribute
    * names it: "persist:<name>" on disk, any other name in memory. Empty for
@@ -661,6 +694,11 @@ export type DomicileHostEventMap = {
    */
   browserwindowschanged: Event;
   /**
+   * Fires when a profile is added, removed, renamed or recolored, or the
+   * defaults move. Read `browserProfiles` for the current list.
+   */
+  browserprofileschanged: Event;
+  /**
    * Fires when a TV appears or goes, or a cast to one starts or ends. Read
    * `castSinks` for the current list.
    */
@@ -998,12 +1036,16 @@ export type DomicileHost = {
    *
    * `partition` gives its page storage of its own, as a <webview>'s
    * `partition` attribute does. Throws TypeError for "persist:" with no name.
+   *
+   * `profile` opens it in that browser profile, one of `browserProfiles`;
+   * empty for the default one. A profile the desk no longer has opens in the
+   * default one.
    */
-  openBrowserWindow(url: string, partition?: string): void;
+  openBrowserWindow(url: string, partition?: string, profile?: string): void;
   /**
-   * Opens a private browser window at `url`, as openBrowserWindow does. Its
-   * page is in the off-the-record profile; see DomicileBrowserWindow's
-   * `isPrivate`.
+   * Opens a private browser window at `url`, as openBrowserWindow does, in
+   * the default private profile; see DomicileBrowserWindow's `isPrivate`. To
+   * open one in another private profile, name it to openBrowserWindow.
    */
   openPrivateBrowserWindow(url: string): void;
   /**
@@ -1209,6 +1251,13 @@ export type DomicileHost = {
    * [SameObject], for `displays`' reason.
    */
   readonly browserWindows: readonly DomicileBrowserWindow[] | null;
+  /**
+   * The desk's browser profiles, in the config's order: sets of sign-ins,
+   * site data and extensions, as the config's `browser.profiles` names them.
+   * Null until the browser lists them. No [SameObject], for `displays`'
+   * reason. See docs/architecture/BROWSER-PROFILES.md.
+   */
+  readonly browserProfiles: readonly DomicileBrowserProfile[] | null;
   /**
    * The TVs the desktop can cast to: the Google Cast receivers the browser
    * finds, by name. Null until the browser lists them, which it does as soon

@@ -64,6 +64,13 @@ Once `ExtensionSystem::ready()`, reconciling:
 Listing an extension is consent. There is no install prompt, and manifest
 permissions are granted as declared.
 
+Each browser profile is a Chrome profile of its own, so the lists are
+reconciled once per profile: each gets the extensions its
+`browser.profiles.<id>.extensions` turns on, or all of them when it names
+none, and loses the rest it was given (`BrowserProfileRegistry` in
+`chrome/browser/domicile/domicile_browser_profiles.h`). See
+[BROWSER-PROFILES.md](BROWSER-PROFILES.md).
+
 The Settings app removes extensions by editing these lists, and switches
 extensions on and off through `chrome.management`
 ([SETTINGS.md](/docs/SETTINGS.md)).
@@ -134,9 +141,13 @@ reconcile) and `chrome/browser/domicile/domicile_extension_settings.{h,cc}`
 
 ### Private windows
 
-A private page is a `<webview private>`, a guest of the off-the-record
-profile. Its desk is that profile's own `DomicileWindowController`, made the
-first time a private page opens. Chrome's `EventRouter` and
+A private page is a `<webview private>`, a guest of a private browser
+profile's off-the-record profile. The extensions that profile turns on are
+installed into its hidden parent and allowed into private pages, whatever
+`extensions.settings.<id>.private` says (ExtensionsFor in
+`components/domicile/browser/browser_profiles.h`). Its desk is that
+off-the-record profile's own `DomicileWindowController`, made the first time
+a private page opens. Chrome's `EventRouter` and
 `ExtensionTabUtil` already hide an off-the-record window from an extension not
 allowed in private windows, so the desk only has to treat the private desk as
 one more window:

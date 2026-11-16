@@ -13,6 +13,8 @@
 # hosts. Code that does not is in //components/domicile, with the tests.
 source_set("domicile") {
   sources = [
+    "domicile_browser_profiles.cc",
+    "domicile_browser_profiles.h",
     "domicile_browser_windows.cc",
     "domicile_browser_windows.h",
     "domicile_cast_sinks.cc",
@@ -149,6 +151,10 @@ source_set("domicile") {
     # profile is destroyed through Chrome's ProfileDestroyer.
     "//chrome/browser/profiles:profile_manager",
     "//components/domicile:private_pages",
+    # The desk's browser profiles, from the control channel.
+    "//components/crx_file",
+    "//components/domicile:browser_profiles",
+    "//components/domicile:control_channel",
     "//chrome/common:constants",
     "//components/domicile:extension_installer",
     # Each extension's chrome://extensions settings.

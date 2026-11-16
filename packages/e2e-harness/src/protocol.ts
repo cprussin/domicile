@@ -463,6 +463,25 @@ const extensionsSchema = z.looseObject({
   web_store: z.array(z.string()),
 });
 
+// The browser profiles and the profile each site opens in: the config's
+// `browser`. Sent with the handshake and on config reload. The browser process
+// reads it; see `docs/architecture/BROWSER-PROFILES.md`.
+const browserProfilesSchema = z.looseObject({
+  default_private_profile: z.string(),
+  default_profile: z.string(),
+  profiles: z.array(
+    z.looseObject({
+      color: z.string(),
+      extensions: z.array(z.string()).nullable(),
+      id: z.string(),
+      name: z.string(),
+      private: z.boolean(),
+    }),
+  ),
+  sites: z.record(z.string(), z.string()),
+  type: z.literal("browser_profiles"),
+});
+
 // Host names of sites the browser draws dark while the theme is dark: the
 // config's `theme.force_dark`. Sent with the handshake and on config reload.
 // The browser process reads it.
@@ -935,6 +954,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   displayConfiguredSchema,
   browserToplevelIdsSchema,
   keymapSchema,
+  browserProfilesSchema,
   extensionsSchema,
   forceDarkSchema,
   inputMethodSchema,

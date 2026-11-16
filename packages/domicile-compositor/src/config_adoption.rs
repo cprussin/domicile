@@ -9,7 +9,8 @@ use std::time::Instant;
 use tracing::{debug, error, warn};
 
 use domicile_config::{
-    ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, Keymap, LockConfig, Omit, ThemeMode,
+    BrowserConfig, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, Keymap, LockConfig,
+    Omit, ThemeMode,
 };
 use domicile_host::keymaps::Listed;
 use domicile_host::Host;
@@ -52,6 +53,26 @@ pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) 
             .iter()
             .map(|(id, settings)| (id.clone(), settings_on_the_wire(settings)))
             .collect(),
+    );
+}
+
+/// Give the host the config's `browser`, for chromes that connect later.
+pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) {
+    host.set_browser_profiles(
+        browser
+            .profiles
+            .iter()
+            .map(|(id, profile)| domicile_protocol::BrowserProfile {
+                id: id.clone(),
+                name: profile.name.clone(),
+                color: String::from(profile.color),
+                private: profile.private,
+                extensions: profile.extensions.clone(),
+            })
+            .collect(),
+        browser.default_profile.clone(),
+        browser.default_private_profile.clone(),
+        browser.sites.clone(),
     );
 }
 
@@ -132,6 +153,17 @@ impl DomicileCompositor {
             };
             self.hub.broadcast(
                 told.expect("a host that has just been given extensions has them to state"),
+            );
+        }
+        if let Some(browser) = &restated.browser {
+            // Store then broadcast, like the extensions.
+            let told = {
+                let mut host = self.hub.host.lock().unwrap();
+                hand_over_the_browser_profiles(&mut host, browser);
+                host.describe_browser_profiles()
+            };
+            self.hub.broadcast(
+                told.expect("a host that has just been given profiles has them to state"),
             );
         }
         if let Some(sites) = &restated.force_dark {

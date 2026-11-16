@@ -29,6 +29,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         int32_t height,
                         bool is_private,
                         const String& partition,
+                        const String& profile,
                         bool is_app,
                         const String& app_id,
                         bool is_captured,
@@ -51,6 +52,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   int32_t height() const { return height_; }
   bool isPrivate() const { return is_private_; }
   const String& partition() const { return partition_; }
+  const String& profile() const { return profile_; }
   bool isApp() const { return is_app_; }
   const String& appId() const { return app_id_; }
   bool isCaptured() const { return is_captured_; }
@@ -78,6 +80,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   int32_t height_ = 0;
   bool is_private_ = false;
   String partition_;
+  String profile_;
   bool is_app_ = false;
   String app_id_;
   bool is_captured_ = false;

@@ -468,7 +468,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // The `window` attribute for CreateGuest, or a null String if absent.
   String BrowserWindow() const;
 
-  // The `partition` attribute for CreateGuest, or empty if absent.
+  // The `profile` and `partition` attributes for CreateGuest, or empty if
+  // absent.
+  String Profile() const;
   String Partition() const;
 
   // Kept open while the element is in the document: the browser may hold the

@@ -4,10 +4,10 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AdaptiveSync, AppCursorImage, AppFrame, Appearance, ChromeMessage, ClipboardEntry,
-    CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayHdr, DisplayInfo, DisplayTransform,
-    HostMessage, Owner, Passphrase, PointerConstraint, PointerOverWindow, SurfaceRect,
-    PROTOCOL_VERSION,
+    negotiate, AdaptiveSync, AppCursorImage, AppFrame, Appearance, BrowserProfile, ChromeMessage,
+    ClipboardEntry, CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayHdr, DisplayInfo,
+    DisplayTransform, HostMessage, Owner, Passphrase, PointerConstraint, PointerOverWindow,
+    SurfaceRect, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -189,6 +189,39 @@ fn spawn_wire_shape_is_pinned() {
     .unwrap();
     assert_eq!(v["type"], "spawn");
     assert_eq!(v["command"][0], "kitty");
+}
+
+#[test]
+fn browser_profiles_wire_shape_is_pinned() {
+    let v = serde_json::to_value(HostMessage::BrowserProfiles {
+        profiles: vec![BrowserProfile {
+            id: "work".into(),
+            name: "Work".into(),
+            color: "#d97706".into(),
+            private: false,
+            extensions: Some(vec!["aeblfdkhhhdcdjpifhhbdiojplfjncoa".into()]),
+        }],
+        default_profile: "work".into(),
+        default_private_profile: "private".into(),
+        sites: [("github.com/acme".to_string(), "work".to_string())].into(),
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({
+            "type": "browser_profiles",
+            "profiles": [{
+                "id": "work",
+                "name": "Work",
+                "color": "#d97706",
+                "private": false,
+                "extensions": ["aeblfdkhhhdcdjpifhhbdiojplfjncoa"],
+            }],
+            "default_profile": "work",
+            "default_private_profile": "private",
+            "sites": { "github.com/acme": "work" },
+        })
+    );
 }
 
 #[test]

@@ -70,6 +70,20 @@ impl std::fmt::Debug for Passphrase {
     }
 }
 
+/// One browser profile, in [`HostMessage::BrowserProfiles`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserProfile {
+    /// Names its directory: lowercase letters, digits and `-`.
+    pub id: String,
+    pub name: String,
+    /// `#rrggbb`.
+    pub color: String,
+    /// Keeps nothing past its last page.
+    pub private: bool,
+    /// The extension ids it turns on; `None` turns on all of them.
+    pub extensions: Option<Vec<String>>,
+}
+
 /// One extension's chrome://extensions settings, in
 /// [`HostMessage::Extensions`]. Each is left as the user set it when absent.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -949,6 +963,20 @@ pub enum HostMessage {
         web_store: Vec<String>,
         unpacked: Vec<String>,
         settings: BTreeMap<String, ExtensionSettings>,
+    },
+
+    /// The browser profiles and the profile each site opens in: the config's
+    /// `browser`. See `docs/architecture/BROWSER-PROFILES.md`.
+    ///
+    /// Always the full set. Sent with the handshake and on reloads that
+    /// change it. Not sent by a host without a config, whose browser keeps
+    /// one profile and its private one.
+    BrowserProfiles {
+        profiles: Vec<BrowserProfile>,
+        default_profile: String,
+        default_private_profile: String,
+        /// Profile ids by site: a host, `*.host`, or a host and path.
+        sites: BTreeMap<String, String>,
     },
 
     /// Host names of sites the browser draws dark while the theme is dark.

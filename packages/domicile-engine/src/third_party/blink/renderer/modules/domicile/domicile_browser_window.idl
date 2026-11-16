@@ -31,10 +31,15 @@
   readonly attribute long width;
   readonly attribute long height;
 
-  // Whether the page is private: in the off-the-record profile, sharing
-  // nothing with the user's pages and storing nothing past the last private
-  // page. A private window's new windows are private too.
+  // Whether the page is private: in a private profile, off the record,
+  // sharing nothing with the user's other pages and storing nothing past the
+  // profile's last page. A private window's new windows are private too.
   readonly attribute boolean isPrivate;
+
+  // The id of the browser profile the page is in, one of
+  // DomicileHost.browserProfiles; null for a page in none, such as an
+  // Electron app's. A window's new windows are in its profile.
+  readonly attribute DOMString? profile;
 
   // The page's storage partition, as a <webview>'s `partition` attribute
   // names it: "persist:<name>" on disk, any other name in memory. Empty for

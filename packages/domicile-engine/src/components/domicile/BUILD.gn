@@ -1031,6 +1031,22 @@ source_set("extension_installer") {
   public_deps = [ ":extension_settings" ]
 }
 
+# The desk's browser profiles, as the compositor's `browser_profiles` message
+# carries them, and the extensions each turns on. Its own target for
+# :extension_installer's reason: opening pages in a profile is in
+# //chrome/browser/domicile, where a Profile is.
+source_set("browser_profiles") {
+  sources = [
+    "browser/browser_profiles.cc",
+    "browser/browser_profiles.h",
+  ]
+
+  public_deps = [
+    ":extension_installer",
+    "//base",
+  ]
+}
+
 # Each extension's chrome://extensions settings -- private windows, file
 # access, user scripts, site access -- as the config and the Settings app
 # spell them, and which to set so a profile holds the config's. Its own target
@@ -1302,6 +1318,7 @@ source_set("control_channel") {
   ]
 
   public_deps = [
+    ":browser_profiles",
     ":common",
     ":cursor_shape",
     ":desk_activity",
@@ -1365,6 +1382,7 @@ source_set("unit_tests") {
     "browser/electron_protocol_unittest.cc",
     "common/electron_schemes_unittest.cc",
     "renderer/context_bridge_unittest.cc",
+    "browser/browser_profiles_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_settings_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
@@ -1436,6 +1454,7 @@ source_set("unit_tests") {
     ":app_roots",
     ":browser",
     ":browser_pages",
+    ":browser_profiles",
     ":browser_window_capture_target",
     ":browser_window_listing",
     ":color_scheme",
