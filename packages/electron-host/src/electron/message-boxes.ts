@@ -135,3 +135,35 @@ export const createMessageBoxes = (
     },
   };
 };
+
+/**
+ * The window a message box goes over: the one the app named, else its most
+ * recent window with a page, or none when no window has one: the engine
+ * shows a box only over a window's page.
+ */
+export const boxWindow = (
+  named: unknown,
+  windows: {
+    getAllWindows: () => {
+      id: number;
+      isDestroyed: () => boolean;
+      isOpen: () => boolean;
+    }[];
+  },
+): number | undefined => {
+  const shown = windows
+    .getAllWindows()
+    .filter((window) => !window.isDestroyed() && window.isOpen());
+  if (named !== undefined && named !== null) {
+    const { id } = named as { id: unknown };
+    if (typeof id !== "number") {
+      throw new TypeError(
+        "dialog.showMessageBox takes a BrowserWindow, then its options",
+      );
+    }
+    if (shown.some((window) => window.id === id)) {
+      return id;
+    }
+  }
+  return shown.at(-1)?.id;
+};

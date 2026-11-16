@@ -457,6 +457,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
 - [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
 - [ ] engine: `webContents.executeJavaScript` and `mainFrame`, which Claude calls at start and hands itself back on
+- [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [ ] phase 2, engine: Node in the pages of windows that ask for it
 - [ ] phase 2, `electron-host`: the main process on the engine's Node

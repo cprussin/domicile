@@ -20,7 +20,7 @@ import { createDialog } from "./electron/dialog";
 import { createGlobalShortcut } from "./electron/global-shortcut";
 import { createIpcMain } from "./electron/ipc-main";
 import { createMenu } from "./electron/menu";
-import { createMessageBoxes } from "./electron/message-boxes";
+import { boxWindow, createMessageBoxes } from "./electron/message-boxes";
 import {
   MessageChannelMain,
   MessagePortMain,
@@ -234,8 +234,17 @@ const main = async ([resources, ...args]: string[]) => {
       crashReporter: createCrashReporter(),
       desktopCapturer,
       dialog: createDialog({
-        askMessageBox: async (window, options) =>
-          messageBoxes.ask(boxWindow(window, BrowserWindow), options),
+        askMessageBox: async (window, options) => {
+          const over = boxWindow(window, BrowserWindow);
+          if (over === undefined) {
+            // Electron shows it on its own; the engine shows boxes only
+            // over a page.
+            return unsupported(
+              `${app.getName()} shows a message box before any of its windows has a page, which Domicile's engine can't show yet`,
+            );
+          }
+          return messageBoxes.ask(over, options);
+        },
         choose: desktop.choose,
         chooseSync: desktop.chooseSync,
         isDirectory: (path) =>
@@ -332,37 +341,6 @@ const main = async ([resources, ...args]: string[]) => {
     await import(pkg.main);
     markReady();
   }
-};
-
-/**
- * The window a message box goes over: the one the app named, else its most
- * recent open one. Throws with none, as there is nowhere to show it.
- */
-const boxWindow = (
-  named: unknown,
-  windows: {
-    getAllWindows: () => { id: number; isDestroyed: () => boolean }[];
-  },
-): number => {
-  if (named !== undefined && named !== null) {
-    const { id } = named as { id: unknown };
-    if (typeof id !== "number") {
-      throw new TypeError(
-        "dialog.showMessageBox takes a BrowserWindow, then its options",
-      );
-    }
-    return id;
-  }
-  const open = windows
-    .getAllWindows()
-    .filter((window) => !window.isDestroyed());
-  const recent = open.at(-1);
-  if (recent === undefined) {
-    throw new Error(
-      "dialog.showMessageBox needs a window to show over on Domicile, and the app has none open",
-    );
-  }
-  return recent.id;
 };
 
 /** What the app reached for that Electron has and Domicile doesn't do, for its developer. */

@@ -2822,9 +2822,11 @@
               config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "slack" ];
             };
             # Each app's entry, and whether it must run on the engine: an app
-            # still allowed to hand itself back names what it needs.
+            # still allowed to hand itself back names what it needs. Element
+            # finds no keyring here and says so in a message box before its
+            # window has a page, which the engine can't show yet.
             apps = {
-              "element-desktop.desktop" = { package = pkgs.element-desktop; onTheEngine = true; };
+              "element-desktop.desktop" = { package = pkgs.element-desktop; onTheEngine = false; };
               "slack.desktop" = { package = unfree.slack; onTheEngine = false; };
             };
           in
