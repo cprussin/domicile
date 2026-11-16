@@ -45,6 +45,37 @@ export class Session extends EventEmitter {
     this.#permissions = permissions;
   }
 
+  /**
+   * The engine runs a session's service workers itself and doesn't tell the
+   * app of them yet: none are running as far as the app can see, and no
+   * worker events come.
+   */
+  readonly serviceWorkers = Object.assign(new EventEmitter(), {
+    getAllRunning: () => ({}),
+    getFromVersionID: (_versionId: number) => null,
+    getInfoFromVersionID: (_versionId: number) => null,
+    getWorkerFromVersionID: (_versionId: number) => undefined,
+    startWorkerForScope: (scope: string) =>
+      Promise.reject(
+        new Error(
+          `Domicile's engine can't start a service worker for the app yet (${scope})`,
+        ),
+      ),
+  });
+
+  /**
+   * The engine keeps no net log for the app yet: logging never starts, and
+   * asking it to says so.
+   */
+  readonly netLog = {
+    currentlyLogging: false,
+    startLogging: (_path: string, _options?: unknown) =>
+      Promise.reject(
+        new Error("Domicile's engine doesn't keep a net log for the app yet"),
+      ),
+    stopLogging: () => Promise.resolve(),
+  };
+
   #spellCheck = {
     enabled: true,
     languages: ["en-US"],
