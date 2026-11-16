@@ -371,6 +371,9 @@ class ShellWindows : public display::DisplayObserver {
     FitMisplaced(held, all);
     Watch();
     Present(desk, all);
+    // See `Move`.
+    ui::OzonePlatform::GetInstance()->SetDomicilePointerStays(
+        gfx::kNullAcceleratedWidget);
   }
 
   // Fits each of `held` that is on one of `all` to that display's rectangle.
@@ -452,9 +455,13 @@ class ShellWindows : public display::DisplayObserver {
     const gfx::Rect page = PageBoundsOn(*on_host, desk->geometry.box);
     if (content::GetDomicileDeskPageBounds(window) != page) {
       content::SetDomicileDeskPageBounds(window, page);
-      views::Widget::GetWidgetForNativeWindow(window)
-          ->client_view()
-          ->InvalidateLayout();
+      views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
+      widget->client_view()->InvalidateLayout();
+      // Lays the host out before the screen infos below, which place each
+      // monitor by the page's position on screen. The renderer reads its
+      // regions as those monitors less its own position, so a stale position
+      // shifts every region by the distance the host moved.
+      widget->LayoutRootViewIfNecessary();
     }
     content::WebContents* contents =
         host->GetActiveTabInterface()->GetContents();
@@ -598,6 +605,17 @@ class ShellWindows : public display::DisplayObserver {
         VLOG(1) << "domicile: moving the shell window from display "
                 << move.from << " to display " << move.to;
         places_.Move(Identity(held[index].window), move.to);
+        // The pointer stays where it is on screen. Carried along with the
+        // window, a pointer on another monitor would land on the host's new
+        // one, and the shell's focus would follow it there. `Reconcile`
+        // clears this once `Present` opened the presenter for the display
+        // the host left, which takes a pointer that was there.
+        ui::OzonePlatform* const platform = ui::OzonePlatform::GetInstance();
+        platform->SetDomicilePointerStays(held[index]
+                                              .window->GetWindow()
+                                              ->GetNativeWindow()
+                                              ->GetHost()
+                                              ->GetAcceleratedWidget());
         FitTo(held[index].window, to->bounds());
         return;
       }
