@@ -140,6 +140,15 @@ export class Session extends EventEmitter {
     return Promise.resolve();
   }
 
+  /**
+   * The engine signs in with NTLM or Kerberos only where its own policy
+   * allows, as Chrome does, so the app's list changes nothing yet. Slack sets
+   * one as it starts.
+   */
+  allowNTLMCredentialsForDomains(_domains: string): void {
+    // Nothing to do on Domicile: see above.
+  }
+
   /** The engine writes a page's storage out itself. */
   flushStorageData(): void {
     // Nothing to do on Domicile: see above.

@@ -47,6 +47,14 @@ describe(createSessions, () => {
     );
   });
 
+  it("takes the domains an app allows NTLM sign-in for, as Slack sets them", () => {
+    const { sessions } = setUp();
+
+    expect(() =>
+      sessions.defaultSession.allowNTLMCredentialsForDomains("*"),
+    ).not.toThrow();
+  });
+
   it("takes a display media handler, leaving the desktop's picker to answer", () => {
     const { sent, sessions } = setUp();
     let asked = false;
