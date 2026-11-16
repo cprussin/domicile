@@ -2825,17 +2825,24 @@
           let
             unfree = import nixpkgs {
               inherit system;
-              config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "chatgpt" "slack" ];
+              config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "slack" ];
             };
-            # ChatGPT as nixpkgs wraps it: compiled wrappers (wrapGAppsHook3,
-            # wrapQtAppsHook) around a launcher script, as Claude's package
-            # is too. Without its codex, whose build fails here, and with
-            # tectonic's own AWS-LC, as the user's config builds it.
-            chatgpt = unfree.chatgpt.override {
-              tectonic-unwrapped = unfree.tectonic-unwrapped.overrideAttrs {
-                preBuild = "unset AWS_LC_SYS_USE_SYSTEM";
-              };
-              codex = null;
+            # Element behind a compiled wrapper, as nixpkgs' wrapGAppsHook3
+            # makes one for Claude's and ChatGPT's packages (neither of which
+            # this nixpkgs has for Linux): the real makeBinaryWrapper output,
+            # around Element's own scripts.
+            elementCompiled = pkgs.stdenv.mkDerivation {
+              name = "element-desktop-compiled-wrapper";
+              dontUnpack = true;
+              nativeBuildInputs = [ pkgs.makeWrapper pkgs.wrapGAppsHook3 ];
+              dontWrapGApps = true;
+              installPhase = "mkdir -p $out/bin";
+              postFixup = ''
+                makeWrapper ${pkgs.element-desktop}/bin/element-desktop "$out/bin/element-desktop" \
+                  "''${gappsWrapperArgs[@]}" --set-default ELEMENT_WRAPPED compiled
+                head -c 4 "$out/bin/element-desktop" | grep -q ELF \
+                  || (echo "makeWrapper wrote a script here, not a compiled wrapper" >&2; exit 1)
+              '';
             };
             # Each app's `domicile open --electron` arguments, and whether it
             # must run on the engine: an app still allowed to hand itself
@@ -2845,9 +2852,9 @@
             apps = {
               element = { open = "element-desktop.desktop"; package = pkgs.element-desktop; onTheEngine = false; };
               slack = { open = "slack.desktop"; package = unfree.slack; onTheEngine = false; };
-              chatgpt = {
-                open = "${chatgpt}/bin/chatgpt -- ${chatgpt}/bin/chatgpt";
-                package = chatgpt;
+              element-compiled = {
+                open = "${elementCompiled}/bin/element-desktop -- ${elementCompiled}/bin/element-desktop";
+                package = elementCompiled;
                 onTheEngine = false;
               };
             };
@@ -2929,7 +2936,7 @@
                   # CI keeps only the end of the log, so a failure carries
                   # what the app said.
                   tail = "\n".join(said.splitlines()[-30:])
-                  running = machine.execute("pgrep -a -u alice -f 'electron|element|slack|chatgpt|ChatGPT' | cut -c1-160")[1]
+                  running = machine.execute("pgrep -a -u alice -f 'electron|element|slack' | cut -c1-160")[1]
                   if on_the_engine:
                       assert hosted, f"{entry} left the engine:\n{tail}\nrunning:\n{running}"
                       assert "Domicile's Electron doesn't have yet" not in said
@@ -2940,7 +2947,9 @@
                       ), (
                           f"{entry} left the engine without saying why:\n{tail}\nrunning:\n{running}"
                       )
-                  machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer' ; sleep 5")
+                  # An app handed back runs on its own Electron: stopped too, so
+                  # the next app's single-instance lock is its own.
+                  machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer'; pkill -u alice -f 'element|slack'; sleep 5")
 
 
               machine.wait_for_unit("multi-user.target")
