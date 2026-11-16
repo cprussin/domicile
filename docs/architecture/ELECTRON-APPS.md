@@ -319,6 +319,29 @@ Electron does. Node, not Bun: pages run on V8, Bun on JavaScriptCore. The
 main process moves to the same Node, so both sides load one build of each
 native module.
 
+Electron's `main` is on Chromium 160.0.8158.0, three builds from the
+engine's 160.0.8155.0, with Node v26.13.1. So the engine takes Electron's
+Node as Electron builds it, rather than porting a Node to this V8:
+
+1. **Node in the engine.** Electron's Node fork at the commit its `DEPS`
+   names, with its `patches/node`, built by Node's own GN files against the
+   engine's V8 and BoringSSL, linked into the engine. The engine binary runs
+   as plain Node when told to, as `ELECTRON_RUN_AS_NODE` does.
+2. **Node in a page.** A window whose `webPreferences` ask for it
+   (`nodeIntegration`, `contextIsolation: false` with a Node preload,
+   `sandbox: false`) gets an unsandboxed page process with a Node
+   environment in its main world, and libuv run off the renderer's own
+   loop, as Electron's `NodeBindings` does. Every other page stays
+   sandboxed and Node-free. `require("electron")` in the page is the
+   existing preload surface.
+3. **The main process on that Node.** `electron-host` runs on the engine's
+   Node instead of Bun, with `electron` resolved through Node's module hooks,
+   so a native module loads once for both sides.
+4. **`<webview>` in Electron pages**, as Zulip uses it, over the guests the
+   engine already has.
+5. **App by app:** Joplin, Teams for Linux, Zulip and Signal, each leaving
+   the quirks table as it runs.
+
 ## Apps inspected
 
 Inspected 2026-11-13: every `.node` file's imports and every window's
@@ -401,4 +424,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] the quirks table: known phase-2 apps go straight to their own Electron
 - [ ] the quirks table seeds known apps' schemes, once checked against the real apps
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
-- [ ] phase 2: Node in the page
+- [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
+- [ ] phase 2, engine: Node in the pages of windows that ask for it
+- [ ] phase 2, `electron-host`: the main process on the engine's Node
+- [ ] phase 2, engine: `<webview>` in Electron pages
+- [ ] phase 2: Joplin, Teams for Linux, Zulip and Signal on the engine, out of the quirks table
