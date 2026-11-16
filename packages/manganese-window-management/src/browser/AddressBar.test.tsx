@@ -83,6 +83,75 @@ describe("AddressBar", () => {
     });
   });
 
+  describe("the profile button", () => {
+    const PROFILES = [
+      {
+        color: "#0d9488",
+        id: "personal",
+        isDefault: true,
+        isDefaultPrivate: false,
+        isPrivate: false,
+        name: "Personal",
+      },
+      {
+        color: "#d97706",
+        id: "work",
+        isDefault: false,
+        isDefaultPrivate: false,
+        isPrivate: false,
+        name: "Work",
+      },
+    ] as const;
+
+    const withProfiles = (calls: string[]) => ({
+      onMove: (id: string) => {
+        calls.push(`move ${id}`);
+      },
+      onOpenInNew: (id: string) => {
+        calls.push(`open ${id}`);
+      },
+      profile: PROFILES[1],
+      profiles: PROFILES,
+    });
+
+    it("names the page's profile, private or not", () => {
+      render(<AddressBar {...BAR} isPrivate profile={withProfiles([])} />);
+
+      expect(control("Browser profile: Work")).toBeInTheDocument();
+      expect(screen.queryByText("Private")).toBeNull();
+    });
+
+    it("moves the page to another profile", async () => {
+      const calls: string[] = [];
+      render(<AddressBar {...BAR} profile={withProfiles(calls)} />);
+
+      await userEvent.click(control("Browser profile: Work"));
+      await userEvent.click(control("Move this page to Personal"));
+
+      expect(calls).toStrictEqual(["move personal"]);
+    });
+
+    it("leaves the page where it is for its own profile", async () => {
+      const calls: string[] = [];
+      render(<AddressBar {...BAR} profile={withProfiles(calls)} />);
+
+      await userEvent.click(control("Browser profile: Work"));
+      await userEvent.click(control("Work, this page's profile"));
+
+      expect(calls).toStrictEqual([]);
+    });
+
+    it("opens the page in a new window of a profile", async () => {
+      const calls: string[] = [];
+      render(<AddressBar {...BAR} profile={withProfiles(calls)} />);
+
+      await userEvent.click(control("Browser profile: Work"));
+      await userEvent.click(control("Open in a new Personal window"));
+
+      expect(calls).toStrictEqual(["open personal"]);
+    });
+  });
+
   it("puts the site permissions just after the connection", () => {
     render(<AddressBar {...BAR} />);
 

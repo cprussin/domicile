@@ -149,6 +149,9 @@ Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
 - [x] engine: routing and `Reopen`
 - [x] protocol and SDK: the API above, `domicile open --profile`
 - [ ] SDK: `browser.fetch(url, { profile })`, with the bar modules
-- [ ] Manganese: address bar button and menu, tab dots, tray by profile
+- [x] Manganese: address bar button and menu (move the page, open it in a new
+  window of a profile), tab dots
+- [ ] Manganese: pin a site to a profile and switch a profile's extensions
+  from the menu, tray by profile
 - [ ] Settings: Profiles page
 - [ ] bar modules and launcher bookmarks take a profile
