@@ -459,7 +459,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
 - [x] an app's own schemes kept for the next engine start
 - [x] the quirks table: known phase-2 apps go straight to their own Electron
-- [x] known apps' schemes (Element, Claude, Slack, from their own runs) register from the first engine start (`KNOWN` in `packages/domicile-launch/src/electron_schemes.rs`)
+- [x] known apps' schemes (Element, Claude, Slack, ChatGPT, from their own runs) register from the first engine start (`KNOWN` in `packages/domicile-launch/src/electron_schemes.rs`)
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
 - [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
 - [ ] engine: `webContents.executeJavaScript` and `mainFrame`, which Claude calls at start and hands itself back on
