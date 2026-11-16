@@ -258,36 +258,31 @@ ExtensionList ExtensionsFor(
     const BrowserProfile& profile,
     const ExtensionList& all,
     base::FunctionRef<std::string(const std::string&)> unpacked_id) {
-  // A profile that names none turns on all of them, or none when private:
-  // extensions stay out of private pages unless named.
-  const auto on = [&profile](const std::string& id) {
-    return profile.extensions.has_value()
-               ? std::ranges::contains(*profile.extensions, id)
-               : !profile.is_private;
-  };
-  ExtensionList chosen{.settings = all.settings};
-  std::vector<std::string> ids;
-  for (const std::string& id : all.web_store) {
-    if (on(id)) {
-      chosen.web_store.push_back(id);
-      ids.push_back(id);
-    }
-  }
-  for (const std::string& directory : all.unpacked) {
-    std::string id = unpacked_id(directory);
-    if (on(id)) {
-      chosen.unpacked.push_back(directory);
-      ids.push_back(std::move(id));
-    }
-  }
+  ExtensionList chosen = all;
   // A private profile's pages are off the record, where an extension runs
-  // only when allowed to. The profile turning it on is that permission.
+  // only when allowed to. Its switch is that permission: one switched off
+  // runs nowhere.
   if (profile.is_private) {
-    for (const std::string& id : ids) {
+    for (const std::string& id : all.web_store) {
       chosen.settings[id].in_private = true;
+    }
+    for (const std::string& directory : all.unpacked) {
+      chosen.settings[unpacked_id(directory)].in_private = true;
     }
   }
   return chosen;
+}
+
+std::optional<bool> ConfigSwitch(const BrowserProfile& profile,
+                                 std::string_view id) {
+  if (!profile.extensions.has_value()) {
+    return std::nullopt;
+  }
+  return std::ranges::contains(*profile.extensions, id);
+}
+
+bool DefaultSwitch(const BrowserProfile& profile) {
+  return !profile.is_private;
 }
 
 }  // namespace domicile

@@ -144,7 +144,7 @@ view.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, (event) => {
 - Private data ends when the profile's last page closes, whether a private
   window or a `<webview private>`. The next private page starts empty.
 - A private window's new windows are private too.
-- Only the extensions the private profile turns on see its pages.
+- Only the extensions switched on in the private profile see its pages.
 
 ## Browser profiles
 

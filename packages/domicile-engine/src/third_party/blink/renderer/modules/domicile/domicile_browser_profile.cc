@@ -15,7 +15,10 @@ DomicileBrowserProfile::DomicileBrowserProfile(
     bool is_default,
     bool is_default_private,
     const Vector<String>& pinned_sites,
-    const Vector<String>& config_sites)
+    const Vector<String>& config_sites,
+    const Vector<String>& extensions,
+    const Vector<String>& enabled_extensions,
+    const Vector<String>& locked_extensions)
     : id_(id),
       name_(name),
       color_(color),
@@ -25,13 +28,22 @@ DomicileBrowserProfile::DomicileBrowserProfile(
       pinned_sites_(MakeGarbageCollected<FrozenArray<IDLString>>(
           Vector<String>(pinned_sites))),
       config_sites_(MakeGarbageCollected<FrozenArray<IDLString>>(
-          Vector<String>(config_sites))) {}
+          Vector<String>(config_sites))),
+      extensions_(MakeGarbageCollected<FrozenArray<IDLString>>(
+          Vector<String>(extensions))),
+      enabled_extensions_(MakeGarbageCollected<FrozenArray<IDLString>>(
+          Vector<String>(enabled_extensions))),
+      locked_extensions_(MakeGarbageCollected<FrozenArray<IDLString>>(
+          Vector<String>(locked_extensions))) {}
 
 DomicileBrowserProfile::~DomicileBrowserProfile() = default;
 
 void DomicileBrowserProfile::Trace(Visitor* visitor) const {
   visitor->Trace(pinned_sites_);
   visitor->Trace(config_sites_);
+  visitor->Trace(extensions_);
+  visitor->Trace(enabled_extensions_);
+  visitor->Trace(locked_extensions_);
   ScriptWrappable::Trace(visitor);
 }
 

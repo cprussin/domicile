@@ -37,4 +37,16 @@
   // The sites that open here because the config's `browser.sites` names
   // them. Only the config changes these.
   readonly attribute FrozenArray<DOMString> configSites;
+
+  // The ids of the extensions in it, each switched on or off there; empty
+  // until it loads. Every profile has every extension the config names.
+  readonly attribute FrozenArray<DOMString> extensions;
+
+  // Those of `extensions` switched on here.
+  readonly attribute FrozenArray<DOMString> enabledExtensions;
+
+  // Those of `extensions` the config switches here, because it names the
+  // profile's extensions. Only the config changes these
+  // (DomicileHost.setBrowserProfileExtensionEnabled refuses them).
+  readonly attribute FrozenArray<DOMString> lockedExtensions;
 };

@@ -216,6 +216,11 @@ export class FakeDomicileHost {
             calls.push([name, site, profile]);
             return this.pin(site, profile);
           };
+        } else if (name === "setBrowserProfileExtensionEnabled") {
+          return (profile: string, id: string, enabled: boolean) => {
+            calls.push([name, profile, id, enabled]);
+            return this.switchExtension(profile, id, enabled);
+          };
         } else if (name === "reopenBrowserWindow") {
           return (id: string, profile: string) => {
             calls.push([name, id, profile]);
@@ -527,6 +532,43 @@ export class FakeDomicileHost {
               : others,
         };
       }),
+    });
+    return Promise.resolve();
+  }
+
+  /**
+   * Switches extension `id` in profile `profile`, as the engine's
+   * `setBrowserProfileExtensionEnabled` does. Rejects as the engine does for
+   * one the profile does not have, or one in its `lockedExtensions`.
+   */
+  switchExtension(
+    profile: string,
+    id: string,
+    enabled: boolean,
+  ): Promise<void> {
+    const profiles = this.#state.browserProfiles ?? [];
+    const found = profiles.find((each) => each.id === profile);
+    if (found === undefined || !found.extensions.includes(id)) {
+      return Promise.reject(
+        new DOMException(`no extension ${id} is installed`, "OperationError"),
+      );
+    }
+    if (found.lockedExtensions.includes(id)) {
+      return Promise.reject(
+        new DOMException("only the config switches this one", "OperationError"),
+      );
+    }
+    this.set({
+      browserProfiles: profiles.map((each) =>
+        each.id === profile
+          ? {
+              ...each,
+              enabledExtensions: enabled
+                ? [...each.enabledExtensions.filter((on) => on !== id), id]
+                : each.enabledExtensions.filter((on) => on !== id),
+            }
+          : each,
+      ),
     });
     return Promise.resolve();
   }

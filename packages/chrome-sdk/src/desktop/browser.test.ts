@@ -125,10 +125,13 @@ describe("browser", () => {
     const work = {
       color: "#3366ff",
       configSites: [],
+      enabledExtensions: [],
+      extensions: [],
       id: "work",
       isDefault: true,
       isDefaultPrivate: false,
       isPrivate: false,
+      lockedExtensions: [],
       name: "Work",
       pinnedSites: [],
     };
@@ -149,10 +152,13 @@ describe("browser", () => {
     ) => ({
       color: "#3366ff",
       configSites,
+      enabledExtensions: [],
+      extensions: [],
       id,
       isDefault,
       isDefaultPrivate: false,
       isPrivate: false,
+      lockedExtensions: [],
       name: id,
       pinnedSites: [],
     });
@@ -183,6 +189,45 @@ describe("browser", () => {
       "pinBrowserSite",
       "github.com/acme",
       "work",
+    ]);
+  });
+
+  it("switches an extension in a profile, but not one the config switches", async () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    const BITWARDEN = "nngceckbapebfimnlniiiahkandclblb";
+    const ONE_PASSWORD = "aeblfdkhhhdcdjpifhhbdiojplfjncoa";
+    fake.set({
+      browserProfiles: [
+        {
+          color: "#3366ff",
+          configSites: [],
+          enabledExtensions: [ONE_PASSWORD],
+          extensions: [BITWARDEN, ONE_PASSWORD],
+          id: "work",
+          isDefault: true,
+          isDefaultPrivate: false,
+          isPrivate: false,
+          lockedExtensions: [ONE_PASSWORD],
+          name: "Work",
+          pinnedSites: [],
+        },
+      ],
+    });
+
+    await browser.setExtensionEnabled("work", BITWARDEN, true);
+    expect(browser.profiles?.[0]?.enabledExtensions).toEqual([
+      ONE_PASSWORD,
+      BITWARDEN,
+    ]);
+    await expect(
+      browser.setExtensionEnabled("work", ONE_PASSWORD, false),
+    ).rejects.toThrow("only the config");
+    expect(fake.calls[0]).toStrictEqual([
+      "setBrowserProfileExtensionEnabled",
+      "work",
+      BITWARDEN,
+      true,
     ]);
   });
 

@@ -31,6 +31,14 @@ import "url/mojom/url.mojom";
 //
 // See "A browser window" in the Domicile repository's docs/WRITING-A-SHELL.md.
 
+// One extension in a browser profile, switched on or off there.
+struct BrowserProfileExtension {
+  string id;
+  bool enabled;
+  // The config names the profile's extensions, so only it switches this one.
+  bool locked;
+};
+
 // One of the desk's browser profiles: a set of sign-ins, site data and
 // extensions, as the config's `browser.profiles` names it. See
 // docs/architecture/BROWSER-PROFILES.md in the Domicile repository.
@@ -47,6 +55,8 @@ struct BrowserProfile {
   // a host, `*.host`, or a host and path.
   array<string> pinned_sites;
   array<string> config_sites;
+  // Its extensions, each switched on or off in it; empty until it loads.
+  array<BrowserProfileExtension> extensions;
 };
 
 // One browser window, as a shell draws it.
@@ -207,6 +217,14 @@ interface BrowserWindows {
   // that is no key of the config's `browser.sites`, one the config's sites
   // name, and a profile the desk does not have.
   PinSite(string site, string profile) => (string error);
+
+  // Switches extension `id` on or off in browser profile `profile`, kept
+  // across restarts; the profiles are sent again with the change. Answers
+  // with why not, or an empty string: for a profile the desk does not have
+  // or has not loaded, an extension it does not have, and one the config
+  // switches (`locked`).
+  SetExtensionEnabled(string profile, string id, bool enabled)
+      => (string error);
 };
 
 // Browser -> renderer.

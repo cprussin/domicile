@@ -2,6 +2,7 @@ import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { Switch } from "@domicile-desktop/component-library/Switch";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
@@ -13,9 +14,13 @@ import type { CSSProperties } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
-import type { PinnedSite } from "./useBrowserProfile";
+import type { PinnedSite, ProfileExtension } from "./useBrowserProfile";
 
 type Props = {
+  /** The page's profile's extensions, which the menu switches. */
+  extensions?: readonly ProfileExtension[] | undefined;
+  /** Switches extension `id` on or off in the page's profile. */
+  onSwitchExtension: (id: string, on: boolean) => void;
   /** Moves the page to profile `id`, in place. */
   onMove: (id: string) => void;
   /** Opens the page's address in a new window of profile `id`. */
@@ -45,9 +50,11 @@ type Props = {
  * docs/architecture/BROWSER-PROFILES.md.
  */
 export const ProfileMenu = ({
+  extensions = [],
   onMove,
   onOpenInNew,
   onPin,
+  onSwitchExtension,
   pinned,
   profile,
   profiles,
@@ -143,6 +150,41 @@ export const ProfileMenu = ({
           })}
         </List>
       </PanelSection>
+      {extensions.length === 0 ? undefined : (
+        <PanelSection label={`Extensions in ${profile.name}`}>
+          <List>
+            {extensions.map((extension) => (
+              <ListRow
+                end={
+                  <>
+                    {extension.locked ? (
+                      <LockIcon
+                        aria-label={SET_IN_CONFIG}
+                        className={lockStyles}
+                        role="img"
+                      />
+                    ) : undefined}
+                    <Switch
+                      checked={extension.enabled}
+                      disabled={extension.locked}
+                      hideLabel
+                      label={extension.name}
+                      onCheckedChange={(on) => {
+                        onSwitchExtension(extension.id, on);
+                      }}
+                    />
+                  </>
+                }
+                icon={
+                  <img alt="" className={iconStyles} src={extension.icon} />
+                }
+                key={extension.id}
+                label={extension.name}
+              />
+            ))}
+          </List>
+        </PanelSection>
+      )}
       <span className={siteStyles}>
         {pinned === undefined || pinnedTo === undefined ? (
           hostOf(url)
@@ -254,6 +296,11 @@ const dotStyles = css({
 const headingStyles = hstack({ gap: 2 });
 
 const checkStyles = css({ color: "accent" });
+
+const SET_IN_CONFIG = "Set in your config";
+
+// Chrome's 16px toolbar icon size, as the tray's icons.
+const iconStyles = css({ blockSize: 4, inlineSize: 4, objectFit: "contain" });
 
 const lockStyles = css({
   flex: "none",

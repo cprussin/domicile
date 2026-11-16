@@ -3,6 +3,7 @@
 
 #include "chrome/browser/domicile/domicile_browser_profiles.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -30,12 +31,21 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
+#include "extensions/browser/disable_reason.h"
+#include "extensions/browser/extension_registrar.h"
+#include "extensions/browser/extension_system.h"
+#include "extensions/common/extension.h"
 
 namespace domicile {
 namespace {
 
 // The sites the user pinned, in the shell's profile: profile ids by site.
 constexpr char kPinnedSitesPref[] = "domicile.browser_profiles.pinned_sites";
+
+// The config's extensions each Chrome profile has switched to its
+// DefaultSwitch, so the user's later switch is theirs to keep.
+constexpr char kSwitchedPref[] =
+    "domicile.browser_profiles.switched_extensions";
 
 // A profile's directory in the user data directory is this and its id.
 constexpr char kDirectoryPrefix[] = "domicile-";
@@ -364,6 +374,11 @@ void BrowserProfileRegistry::InstallExtensions() {
 
 void BrowserProfileRegistry::InstallExtensionsOf(Profile& profile,
                                                  const BrowserProfile& as) {
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(&profile);
+  if (!extension_registries_.IsObservingSource(registry)) {
+    extension_registries_.AddObservation(registry);
+  }
   ReconcileConfigExtensions(
       profile.GetWeakPtr(),
       ExtensionsFor(as, *extensions_, [](const std::string& directory) {
@@ -371,6 +386,186 @@ void BrowserProfileRegistry::InstallExtensionsOf(Profile& profile,
         // InstallExtensionsInto already made it.
         return crx_file::id_util::GenerateIdForPath(base::FilePath(directory));
       }));
+  // The ones installed already. Each still installing is switched as it
+  // installs (OnExtensionInstalled).
+  extensions::ExtensionSystem::Get(&profile)->ready().Post(
+      FROM_HERE, base::BindOnce(&BrowserProfileRegistry::SwitchExtensions,
+                                weak_factory_.GetWeakPtr(),
+                                profile.GetWeakPtr()));
+}
+
+std::vector<std::string> BrowserProfileRegistry::ConfigExtensionIds() const {
+  std::vector<std::string> ids;
+  if (!extensions_.has_value()) {
+    return ids;
+  }
+  ids = extensions_->web_store;
+  for (const std::string& directory : extensions_->unpacked) {
+    ids.push_back(
+        crx_file::id_util::GenerateIdForPath(base::FilePath(directory)));
+  }
+  return ids;
+}
+
+const BrowserProfile* BrowserProfileRegistry::AsBrowserProfile(
+    Profile& profile) const {
+  if (&profile == shell_) {
+    return profiles_.Find(profiles_.default_profile);
+  }
+  const std::optional<std::string> id = IdOfDirectory(profile);
+  return id.has_value() ? profiles_.Find(*id) : nullptr;
+}
+
+Profile* BrowserProfileRegistry::ExtensionsProfileOf(const std::string& id) {
+  if (id == profiles_.default_profile) {
+    return shell_;
+  }
+  auto loaded = loaded_.find(id);
+  return loaded == loaded_.end() ? nullptr : loaded->second.profile.get();
+}
+
+void BrowserProfileRegistry::SwitchExtensions(base::WeakPtr<Profile> profile) {
+  if (!profile) {
+    return;
+  }
+  const BrowserProfile* as = AsBrowserProfile(*profile);
+  if (as == nullptr) {
+    return;
+  }
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile.get());
+  for (const std::string& id : ConfigExtensionIds()) {
+    if (registry->GetInstalledExtension(id) != nullptr) {
+      SwitchExtension(*profile, *as, id, /*installed_now=*/false);
+    }
+  }
+}
+
+void BrowserProfileRegistry::SwitchExtension(Profile& profile,
+                                             const BrowserProfile& as,
+                                             const std::string& id,
+                                             bool installed_now) {
+  // Switched once, by the config or by DefaultSwitch. From then on a switch
+  // the config does not set is the user's, which Chrome keeps; one the
+  // config stops setting stays where the config left it. One installed
+  // before switches existed keeps the switch the user gave it.
+  const bool first =
+      !std::ranges::contains(profile.GetPrefs()->GetList(kSwitchedPref),
+                             base::Value(id));
+  if (first) {
+    ScopedListPrefUpdate(profile.GetPrefs(), kSwitchedPref)->Append(id);
+  }
+  const std::optional<bool> configured = ConfigSwitch(as, id);
+  if (!configured.has_value() && (!first || !installed_now)) {
+    return;
+  }
+  const bool on = configured.value_or(DefaultSwitch(as));
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(&profile);
+  if (on == registry->enabled_extensions().Contains(id)) {
+    return;
+  }
+  LOG(INFO) << "domicile: extension " << id << " is switched "
+            << (on ? "on" : "off") << " in browser profile " << as.id << ".";
+  extensions::ExtensionRegistrar* registrar =
+      extensions::ExtensionRegistrar::Get(&profile);
+  if (on) {
+    registrar->EnableExtension(id);
+  } else {
+    registrar->DisableExtension(
+        id, {extensions::disable_reason::DISABLE_USER_ACTION});
+  }
+}
+
+std::vector<BrowserProfileRegistry::ExtensionSwitch>
+BrowserProfileRegistry::ExtensionSwitchesOf(const std::string& id) {
+  std::vector<ExtensionSwitch> switches;
+  const BrowserProfile* as = profiles_.Find(id);
+  Profile* profile = ExtensionsProfileOf(id);
+  if (as == nullptr || profile == nullptr) {
+    return switches;
+  }
+  const std::vector<std::string> configured = ConfigExtensionIds();
+  for (const InstalledExtension& extension : ExtensionsOf(*profile)) {
+    switches.push_back(ExtensionSwitch{
+        .id = extension.id,
+        .enabled = extension.enabled,
+        .locked = std::ranges::contains(configured, extension.id) &&
+                  ConfigSwitch(*as, extension.id).has_value()});
+  }
+  return switches;
+}
+
+base::expected<void, std::string> BrowserProfileRegistry::SetExtensionEnabled(
+    Profile& shell,
+    const std::string& id,
+    const std::string& extension,
+    bool enabled) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  UseShell(shell);
+  if (profiles_.Find(id) == nullptr) {
+    return base::unexpected(
+        base::StrCat({"the desk has no browser profile \"", id, "\""}));
+  }
+  Profile* profile = ExtensionsProfileOf(id);
+  if (profile == nullptr) {
+    return base::unexpected(
+        base::StrCat({"browser profile ", id, " is still loading"}));
+  }
+  // SetExtensionEnabledIn refuses one the config switches (IsSwitchLocked).
+  return SetExtensionEnabledIn(*profile, extension, enabled);
+}
+
+bool BrowserProfileRegistry::IsSwitchLocked(
+    Profile& profile,
+    const std::string& extension) const {
+  const BrowserProfile* as = AsBrowserProfile(profile);
+  return as != nullptr && ConfigSwitch(*as, extension).has_value() &&
+         std::ranges::contains(ConfigExtensionIds(), extension);
+}
+
+void BrowserProfileRegistry::ExtensionsChanged() {
+  for (Observer& observer : observers_) {
+    observer.OnBrowserProfilesChanged();
+  }
+}
+
+void BrowserProfileRegistry::OnExtensionLoaded(
+    content::BrowserContext* context,
+    const extensions::Extension* extension) {
+  ExtensionsChanged();
+}
+
+void BrowserProfileRegistry::OnExtensionUnloaded(
+    content::BrowserContext* context,
+    const extensions::Extension* extension,
+    extensions::UnloadedExtensionReason reason) {
+  ExtensionsChanged();
+}
+
+void BrowserProfileRegistry::OnExtensionInstalled(
+    content::BrowserContext* context,
+    const extensions::Extension* extension,
+    bool is_update) {
+  Profile* profile = Profile::FromBrowserContext(context);
+  const BrowserProfile* as = AsBrowserProfile(*profile);
+  if (!is_update && as != nullptr &&
+      std::ranges::contains(ConfigExtensionIds(), extension->id())) {
+    SwitchExtension(*profile, *as, extension->id(), /*installed_now=*/true);
+  }
+  ExtensionsChanged();
+}
+
+void BrowserProfileRegistry::OnExtensionUninstalled(
+    content::BrowserContext* context,
+    const extensions::Extension* extension,
+    extensions::UninstallReason reason) {
+  ExtensionsChanged();
+}
+
+void BrowserProfileRegistry::OnShutdown(
+    extensions::ExtensionRegistry* registry) {
+  extension_registries_.RemoveObservation(registry);
 }
 
 void BrowserProfileRegistry::EndPrivate(const std::string& id) {
@@ -403,6 +598,7 @@ void BrowserProfileRegistry::OnProfileWillBeDestroyed(Profile* profile) {
 
 void RegisterBrowserProfilesPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kPinnedSitesPref);
+  registry->RegisterListPref(kSwitchedPref);
 }
 
 void StartBrowserProfiles() {

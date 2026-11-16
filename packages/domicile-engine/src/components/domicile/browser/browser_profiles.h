@@ -124,13 +124,25 @@ bool IsUserNavigation(bool main_frame,
                       bool post,
                       ui::PageTransition transition);
 
-// The extensions of `all` that `profile` turns on, with every setting. A
-// private profile's are allowed into its private pages.
-// `unpacked_id` gives the id of each of `all.unpacked`.
+// The extensions of `all` to install into `profile`'s Chrome profile, with
+// every setting: all of them, so each profile can switch each one on or off
+// and keep its data while off (ConfigSwitch, DefaultSwitch). A private
+// profile's are allowed into its private pages. `unpacked_id` gives the id
+// of each of `all.unpacked`.
 ExtensionList ExtensionsFor(
     const BrowserProfile& profile,
     const ExtensionList& all,
     base::FunctionRef<std::string(const std::string&)> unpacked_id);
+
+// Whether the config turns extension `id` on in `profile`, or nothing when
+// the profile names no extensions and the user switches them.
+std::optional<bool> ConfigSwitch(const BrowserProfile& profile,
+                                 std::string_view id);
+
+// Whether an extension the config does not switch starts on in `profile`
+// when it is first installed there: on, except in a private profile, whose
+// pages have always been kept from extensions unless allowed.
+bool DefaultSwitch(const BrowserProfile& profile);
 
 }  // namespace domicile
 

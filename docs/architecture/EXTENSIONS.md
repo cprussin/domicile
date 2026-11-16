@@ -65,10 +65,12 @@ Listing an extension is consent. There is no install prompt, and manifest
 permissions are granted as declared.
 
 Each browser profile is a Chrome profile of its own, so the lists are
-reconciled once per profile: each gets the extensions its
-`browser.profiles.<id>.extensions` turns on, or when it names none, all of
-them for a regular profile and none for a private one, and loses the rest it
-was given (`BrowserProfileRegistry` in
+reconciled once per profile: each gets every extension, switched on or off
+in it. A profile whose `browser.profiles.<id>.extensions` names its
+extensions has those on and the rest off, and the user cannot switch them.
+One that names none starts each extension on, or off in a private profile,
+the first time it is installed there, and the user switches it from then on
+(`BrowserProfileRegistry` in
 `chrome/browser/domicile/domicile_browser_profiles.h`). See
 [BROWSER-PROFILES.md](BROWSER-PROFILES.md).
 
@@ -143,8 +145,9 @@ reconcile) and `chrome/browser/domicile/domicile_extension_settings.{h,cc}`
 ### Private windows
 
 A private page is a `<webview private>`, a guest of a private browser
-profile's off-the-record profile. The extensions that profile turns on are
-installed into its hidden parent and allowed into private pages, whatever
+profile's off-the-record profile. Its extensions are installed into its
+hidden parent and allowed into private pages, and those switched on there
+run in them, whatever
 `extensions.settings.<id>.private` says (ExtensionsFor in
 `components/domicile/browser/browser_profiles.h`). Its desk is that
 off-the-record profile's own `DomicileWindowController`, made the first time

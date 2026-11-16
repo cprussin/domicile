@@ -88,20 +88,26 @@ describe("AddressBar", () => {
       {
         color: "#0d9488",
         configSites: [],
+        enabledExtensions: [],
+        extensions: [],
         id: "personal",
         isDefault: true,
         isDefaultPrivate: false,
         isPrivate: false,
+        lockedExtensions: [],
         name: "Personal",
         pinnedSites: [],
       },
       {
         color: "#d97706",
         configSites: [],
+        enabledExtensions: [],
+        extensions: [],
         id: "work",
         isDefault: false,
         isDefaultPrivate: false,
         isPrivate: false,
+        lockedExtensions: [],
         name: "Work",
         pinnedSites: [],
       },
@@ -110,7 +116,15 @@ describe("AddressBar", () => {
     const withProfiles = (
       calls: string[],
       pinned?: { locked: boolean; profile: string; site: string },
+      extensions?: readonly {
+        enabled: boolean;
+        icon: string;
+        id: string;
+        locked: boolean;
+        name: string;
+      }[],
     ) => ({
+      extensions,
       onMove: (id: string) => {
         calls.push(`move ${id}`);
       },
@@ -119,6 +133,9 @@ describe("AddressBar", () => {
       },
       onPin: (id: string) => {
         calls.push(`pin ${id}`);
+      },
+      onSwitchExtension: (id: string, on: boolean) => {
+        calls.push(`switch ${id} ${on ? "on" : "off"}`);
       },
       pinned,
       profile: PROFILES[1],
@@ -227,6 +244,33 @@ describe("AddressBar", () => {
         screen.getByText("Your config opens *.acme.com in Work."),
       ).toBeVisible();
       expect(screen.queryByRole("button", { name: /by default$/ })).toBeNull();
+    });
+
+    it("switches the profile's extensions, but not those the config switches", async () => {
+      const calls: string[] = [];
+      const icon = "data:image/png;base64,";
+      render(
+        <AddressBar
+          {...BAR}
+          profile={withProfiles(calls, undefined, [
+            { enabled: false, icon, id: "b", locked: false, name: "Bitwarden" },
+            { enabled: true, icon, id: "o", locked: true, name: "1Password" },
+          ])}
+        />,
+      );
+
+      await userEvent.click(control("Browser profile: Work"));
+      expect(screen.getByText("Extensions in Work")).toBeVisible();
+      expect(screen.getByRole("switch", { name: "1Password" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      expect(
+        screen.getByRole("img", { name: "Set in your config" }),
+      ).toBeVisible();
+      await userEvent.click(screen.getByRole("switch", { name: "Bitwarden" }));
+
+      expect(calls).toStrictEqual(["switch b on"]);
     });
 
     it("offers no pins for a page that is no web site", async () => {

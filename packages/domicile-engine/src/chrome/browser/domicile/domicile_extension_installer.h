@@ -73,7 +73,8 @@ void WatchConfigExtensions(PrefChangeRegistrar& registrar,
 std::vector<InstalledExtension> ExtensionsOf(Profile& profile);
 
 // Switches extension `id` in `profile` on or off, as its user would, or says
-// why not.
+// why not: one not installed, or one the config switches in the browser
+// profile `profile` is (BrowserProfileRegistry::IsSwitchLocked).
 base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
                                                         const std::string& id,
                                                         bool enabled);

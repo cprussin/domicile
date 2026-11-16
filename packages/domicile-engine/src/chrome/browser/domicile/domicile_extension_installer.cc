@@ -304,6 +304,11 @@ base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
     return base::unexpected(
         base::StrCat({"no extension ", id, " is installed"}));
   }
+  if (BrowserProfileRegistry::Get().IsSwitchLocked(profile, id)) {
+    return base::unexpected(
+        "the desk's config names the extensions this browser profile turns "
+        "on, so only the config switches this one");
+  }
   extensions::ExtensionRegistrar* registrar =
       extensions::ExtensionRegistrar::Get(&profile);
   if (enabled) {

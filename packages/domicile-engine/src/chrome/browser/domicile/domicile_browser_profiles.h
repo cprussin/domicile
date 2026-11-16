@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -21,6 +22,8 @@
 #include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/private_pages.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registry_observer.h"
 
 class PrefRegistrySimple;
 class ScopedProfileKeepAlive;
@@ -51,13 +54,22 @@ namespace domicile {
 // The sites the user pins from a shell (PinSite) are kept in the shell's
 // profile's prefs and go under the config's: the config wins.
 //
+// Every profile has every extension the config names, each switched on or
+// off in it (Chrome's own enabled state, which keeps an extension's data
+// while it is off). A profile whose config names its extensions has those
+// switches set by the config, and the user cannot change them; any other
+// starts each one at DefaultSwitch, and the user switches it from there.
+//
 // One per process, as the desk is. UI thread only.
-class BrowserProfileRegistry final : public ProfileObserver {
+class BrowserProfileRegistry final
+    : public ProfileObserver,
+      public extensions::ExtensionRegistryObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
     // The profiles changed: one was added, removed, renamed or recolored, the
-    // default moved, or a site was pinned.
+    // default moved, a site was pinned, or an extension was installed,
+    // uninstalled or switched in one.
     virtual void OnBrowserProfilesChanged() = 0;
   };
 
@@ -91,6 +103,32 @@ class BrowserProfileRegistry final : public ProfileObserver {
   base::expected<void, std::string> PinSite(Profile& shell,
                                             const std::string& site,
                                             const std::string& profile);
+
+  // One extension in a profile, for a shell's switches.
+  struct ExtensionSwitch {
+    std::string id;
+    bool enabled = false;
+    // The config switches it (ConfigSwitch); the user cannot.
+    bool locked = false;
+  };
+
+  // The extensions in profile `id`, switched on or off; empty for one not
+  // loaded yet, or that the desk does not have.
+  std::vector<ExtensionSwitch> ExtensionSwitchesOf(const std::string& id);
+
+  // Switches extension `extension` on or off in profile `id`, kept across
+  // restarts. Says why not for a profile the desk does not have or has not
+  // loaded yet, an extension the profile does not have, and one the config
+  // switches.
+  base::expected<void, std::string> SetExtensionEnabled(
+      Profile& shell,
+      const std::string& id,
+      const std::string& extension,
+      bool enabled);
+
+  // Whether the config switches extension `extension` in `profile`, a
+  // browser profile's Chrome profile, so the user cannot.
+  bool IsSwitchLocked(Profile& profile, const std::string& extension) const;
 
   // The context profile `id`'s pages are made in, for the shell in `shell`.
   // Loads it if Configure's load has not finished, which blocks. Null for a
@@ -153,10 +191,44 @@ class BrowserProfileRegistry final : public ProfileObserver {
   // extensions.
   void Adopt(const std::string& id, Profile& profile);
 
-  // Installs into every loaded profile, the shell's included, the extensions
-  // it turns on, once the config's extensions are known.
+  // Installs into every loaded profile, the shell's included, the config's
+  // extensions, once they are known, and switches them.
   void InstallExtensions();
   void InstallExtensionsOf(Profile& profile, const BrowserProfile& as);
+
+  // The ids of the config's extensions; empty until SetExtensions.
+  std::vector<std::string> ConfigExtensionIds() const;
+  // The browser profile `profile`, a Chrome profile, is: null for none.
+  const BrowserProfile* AsBrowserProfile(Profile& profile) const;
+  // The Chrome profile browser profile `id`'s extensions are in: the shell's
+  // for the default, the hidden regular one for a private profile. Null for
+  // one not loaded.
+  Profile* ExtensionsProfileOf(const std::string& id);
+  // Switches each of the config's extensions in `profile` as the config
+  // says (SwitchExtension), once its extension system is ready.
+  void SwitchExtensions(base::WeakPtr<Profile> profile);
+  // Switches extension `id` in `profile` as the config says, or, when it was
+  // `installed_now` there and never switched before, to DefaultSwitch.
+  void SwitchExtension(Profile& profile,
+                       const BrowserProfile& as,
+                       const std::string& id,
+                       bool installed_now);
+  // Tells the observers an extension changed in a profile.
+  void ExtensionsChanged();
+
+  // extensions::ExtensionRegistryObserver:
+  void OnExtensionLoaded(content::BrowserContext* context,
+                         const extensions::Extension* extension) override;
+  void OnExtensionUnloaded(content::BrowserContext* context,
+                           const extensions::Extension* extension,
+                           extensions::UnloadedExtensionReason reason) override;
+  void OnExtensionInstalled(content::BrowserContext* context,
+                            const extensions::Extension* extension,
+                            bool is_update) override;
+  void OnExtensionUninstalled(content::BrowserContext* context,
+                              const extensions::Extension* extension,
+                              extensions::UninstallReason reason) override;
+  void OnShutdown(extensions::ExtensionRegistry* registry) override;
 
   // Ends private profile `id`'s off-the-record profile; its last page closed.
   void EndPrivate(const std::string& id);
@@ -177,11 +249,16 @@ class BrowserProfileRegistry final : public ProfileObserver {
   std::map<std::string, Loaded> loaded_;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> observations_{
       this};
+  // Every profile's that InstallExtensionsOf installed into.
+  base::ScopedMultiSourceObservation<extensions::ExtensionRegistry,
+                                     extensions::ExtensionRegistryObserver>
+      extension_registries_{this};
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<BrowserProfileRegistry> weak_factory_{this};
 };
 
-// Registers the pref the sites the user pinned are kept in.
+// Registers the prefs the sites the user pinned are kept in, and which
+// extensions a profile has switched to their DefaultSwitch.
 void RegisterBrowserProfilesPrefs(PrefRegistrySimple* registry);
 
 // Has the control channel hand the compositor's `browser_profiles` to

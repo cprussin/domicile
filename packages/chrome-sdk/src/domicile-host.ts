@@ -280,6 +280,19 @@ export type DomicileBrowserProfile = {
    * them. Only the config changes these.
    */
   readonly configSites: readonly string[];
+  /**
+   * The ids of the extensions in it, each switched on or off there; empty
+   * until it loads. Every profile has every extension the config names.
+   */
+  readonly extensions: readonly string[];
+  /** Those of `extensions` switched on here. */
+  readonly enabledExtensions: readonly string[];
+  /**
+   * Those of `extensions` the config switches here, because it names the
+   * profile's extensions. Only the config changes these
+   * (DomicileHost.setBrowserProfileExtensionEnabled refuses them).
+   */
+  readonly lockedExtensions: readonly string[];
 };
 
 /**
@@ -705,8 +718,10 @@ export type DomicileHostEventMap = {
    */
   browserwindowschanged: Event;
   /**
-   * Fires when a profile is added, removed, renamed or recolored, or the
-   * defaults move. Read `browserProfiles` for the current list.
+   * Fires when a profile is added, removed, renamed or recolored, the
+   * defaults move, a site is pinned, or an extension is installed,
+   * uninstalled or switched in one. Read `browserProfiles` for the current
+   * list.
    */
   browserprofileschanged: Event;
   /**
@@ -1131,6 +1146,20 @@ export type DomicileHost = {
    * no such key, and for a profile the desk does not have.
    */
   pinBrowserSite(site: string, profile: string): Promise<void>;
+  /**
+   * Switches extension `id` on or off in browser profile `profile`, kept
+   * across restarts: it runs in that profile's pages, or nowhere in them, and
+   * keeps its data while off. The profile's `enabledExtensions` shows it from
+   * the next `browserprofileschanged`. Throws TypeError for an empty profile
+   * or id. Rejects with an OperationError saying why for a profile the desk
+   * does not have or has not loaded, an extension it does not have, and one
+   * in its `lockedExtensions`, which only the config switches.
+   */
+  setBrowserProfileExtensionEnabled(
+    profile: string,
+    id: string,
+    enabled: boolean,
+  ): Promise<void>;
   /**
    * The user clicked entry `command` of window `id`'s menu bar
    * (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a

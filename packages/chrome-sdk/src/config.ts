@@ -80,8 +80,9 @@ export type BrowserProfile = {
   color: AccentColor;
   /**
    * The ids of the extensions it turns on, from those `extensions`
-   * installs. Unset turns them all on, or none for a private profile:
-   * extensions stay out of private pages unless named.
+   * installs; the rest are off, and the shell cannot switch them. Unset
+   * leaves the switches to the user: each starts on, or off in a private
+   * profile, whose pages stay away from extensions unless allowed.
    */
   extensions?: string[] | null;
   /** The name the shell shows. */

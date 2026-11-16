@@ -318,6 +318,12 @@ class MODULES_EXPORT DomicileHost final
                                              const String& site,
                                              const String& profile,
                                              ExceptionState&);
+  ScriptPromise<IDLUndefined> setBrowserProfileExtensionEnabled(
+      ScriptState*,
+      const String& profile,
+      const String& id,
+      bool enabled,
+      ExceptionState&);
   void clickBrowserWindowMenu(ScriptState*,
                               const String& id,
                               int32_t command,

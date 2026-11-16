@@ -878,7 +878,7 @@ class Host final : public BrowserWindowHost {
       content::BrowserContext& context,
       const GURL& url,
       const std::optional<WebViewPartition>& partition) override {
-    const BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
     const bool private_browsing = context.IsOffTheRecord();
     return Windows(context).Open(
         url, private_browsing,
@@ -976,7 +976,7 @@ class Host final : public BrowserWindowHost {
     if (context.IsOffTheRecord() || Windows(context).IsApp(guest.window_id())) {
       return std::nullopt;
     }
-    const BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
     return RouteNavigation(registry.profiles(), registry.IdOf(context), from,
                            to);
   }
@@ -1133,6 +1133,22 @@ class BrowserWindowsService final
                                                : pinned.error());
   }
 
+  void SetExtensionEnabled(const std::string& profile,
+                           const std::string& id,
+                           bool enabled,
+                           SetExtensionEnabledCallback callback) override {
+    LOG(INFO) << "domicile: the shell switches " << id
+              << (enabled ? " on" : " off") << " in browser profile "
+              << profile << ".";
+    const base::expected<void, std::string> done =
+        BrowserProfileRegistry::Get().SetExtensionEnabled(
+            *Profile::FromBrowserContext(
+                 render_frame_host().GetBrowserContext())
+                 ->GetOriginalProfile(),
+            profile, id, enabled);
+    std::move(callback).Run(done.has_value() ? std::string() : done.error());
+  }
+
   // DeskWindows::Observer:
   void OnWindowsChanged() override {
     if (client_.is_bound()) {
@@ -1145,13 +1161,20 @@ class BrowserWindowsService final
     if (!client_.is_bound()) {
       return;
     }
-    const BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
     const BrowserProfiles& profiles = registry.profiles();
     std::vector<mojom::BrowserProfilePtr> listed;
     for (const BrowserProfile& profile : profiles.profiles) {
+      std::vector<mojom::BrowserProfileExtensionPtr> extensions;
+      for (const BrowserProfileRegistry::ExtensionSwitch& extension :
+           registry.ExtensionSwitchesOf(profile.id)) {
+        extensions.push_back(mojom::BrowserProfileExtension::New(
+            extension.id, extension.enabled, extension.locked));
+      }
       listed.push_back(mojom::BrowserProfile::New(
           profile.id, profile.name, profile.color, profile.is_private,
-          std::vector<std::string>(), std::vector<std::string>()));
+          std::vector<std::string>(), std::vector<std::string>(),
+          std::move(extensions)));
     }
     for (const auto& [site, id] : profiles.sites) {
       auto profile = std::ranges::find(profiles.profiles, id,

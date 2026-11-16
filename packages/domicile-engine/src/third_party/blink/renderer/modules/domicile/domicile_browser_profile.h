@@ -25,7 +25,10 @@ class MODULES_EXPORT DomicileBrowserProfile final : public ScriptWrappable {
                          bool is_default,
                          bool is_default_private,
                          const Vector<String>& pinned_sites,
-                         const Vector<String>& config_sites);
+                         const Vector<String>& config_sites,
+                         const Vector<String>& extensions,
+                         const Vector<String>& enabled_extensions,
+                         const Vector<String>& locked_extensions);
   ~DomicileBrowserProfile() override;
 
   const String& id() const { return id_; }
@@ -36,6 +39,13 @@ class MODULES_EXPORT DomicileBrowserProfile final : public ScriptWrappable {
   bool isDefaultPrivate() const { return is_default_private_; }
   const FrozenArray<IDLString>& pinnedSites() const { return *pinned_sites_; }
   const FrozenArray<IDLString>& configSites() const { return *config_sites_; }
+  const FrozenArray<IDLString>& extensions() const { return *extensions_; }
+  const FrozenArray<IDLString>& enabledExtensions() const {
+    return *enabled_extensions_;
+  }
+  const FrozenArray<IDLString>& lockedExtensions() const {
+    return *locked_extensions_;
+  }
 
   void Trace(Visitor*) const override;
 
@@ -48,6 +58,9 @@ class MODULES_EXPORT DomicileBrowserProfile final : public ScriptWrappable {
   bool is_default_private_;
   Member<FrozenArray<IDLString>> pinned_sites_;
   Member<FrozenArray<IDLString>> config_sites_;
+  Member<FrozenArray<IDLString>> extensions_;
+  Member<FrozenArray<IDLString>> enabled_extensions_;
+  Member<FrozenArray<IDLString>> locked_extensions_;
 };
 
 }  // namespace blink

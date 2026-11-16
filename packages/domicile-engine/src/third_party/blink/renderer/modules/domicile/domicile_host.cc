@@ -2559,6 +2559,32 @@ ScriptPromise<IDLUndefined> DomicileHost::pinBrowserSite(
   return promise;
 }
 
+ScriptPromise<IDLUndefined> DomicileHost::setBrowserProfileExtensionEnabled(
+    ScriptState* script_state,
+    const String& profile,
+    const String& id,
+    bool enabled,
+    ExceptionState& exception_state) {
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return EmptyPromise();
+  }
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty extension id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->SetExtensionEnabled(
+      profile, id, enabled,
+      BindOnce(&ExtensionAnswered, WrapPersistent(resolver)));
+  return promise;
+}
+
 void DomicileHost::clickBrowserWindowMenu(ScriptState*,
                                           const String& id,
                                           int32_t command,
@@ -2864,11 +2890,23 @@ void DomicileHost::ProfilesChanged(
   HeapVector<Member<DomicileBrowserProfile>> listed;
   listed.reserve(profiles.size());
   for (const auto& profile : profiles) {
+    Vector<String> extensions;
+    Vector<String> enabled;
+    Vector<String> locked;
+    for (const auto& extension : profile->extensions) {
+      extensions.push_back(extension->id);
+      if (extension->enabled) {
+        enabled.push_back(extension->id);
+      }
+      if (extension->locked) {
+        locked.push_back(extension->id);
+      }
+    }
     listed.push_back(MakeGarbageCollected<DomicileBrowserProfile>(
         profile->id, profile->name, profile->color, profile->private_browsing,
         profile->id == default_profile,
         profile->id == default_private_profile, profile->pinned_sites,
-        profile->config_sites));
+        profile->config_sites, extensions, enabled, locked));
   }
   browser_profiles_ =
       MakeGarbageCollected<FrozenArray<DomicileBrowserProfile>>(

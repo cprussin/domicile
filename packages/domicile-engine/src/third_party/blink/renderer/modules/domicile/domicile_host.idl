@@ -410,8 +410,10 @@
   // reason. See docs/architecture/BROWSER-PROFILES.md.
   readonly attribute FrozenArray<DomicileBrowserProfile>? browserProfiles;
 
-  // Fires when a profile is added, removed, renamed or recolored, or the
-  // defaults move. Read `browserProfiles` for the current list.
+  // Fires when a profile is added, removed, renamed or recolored, the
+  // defaults move, a site is pinned, or an extension is installed,
+  // uninstalled or switched in one. Read `browserProfiles` for the current
+  // list.
   attribute EventHandler onbrowserprofileschanged;
 
   // Opens a browser window at `url`, for the shell's own UI such as a `+`
@@ -502,6 +504,17 @@
   // no such key, and for a profile the desk does not have.
   [CallWith=ScriptState, RaisesException] Promise<undefined> pinBrowserSite(
       DOMString site, DOMString profile);
+
+  // Switches extension `id` on or off in browser profile `profile`, kept
+  // across restarts: it runs in that profile's pages, or nowhere in them, and
+  // keeps its data while off. The profile's `enabledExtensions` shows it from
+  // the next `browserprofileschanged`. Throws TypeError for an empty profile
+  // or id. Rejects with an OperationError saying why for a profile the desk
+  // does not have or has not loaded, an extension it does not have, and one
+  // in its `lockedExtensions`, which only the config switches.
+  [CallWith=ScriptState, RaisesException] Promise<undefined>
+      setBrowserProfileExtensionEnabled(
+          DOMString profile, DOMString id, boolean enabled);
 
   // The user clicked entry `command` of window `id`'s menu bar
   // (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a

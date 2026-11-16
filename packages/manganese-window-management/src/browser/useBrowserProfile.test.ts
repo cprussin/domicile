@@ -5,16 +5,20 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import {
   useBrowserProfile,
   usePinnedSite,
+  useProfileExtensions,
   useProfileMark,
 } from "./useBrowserProfile";
 
 const PERSONAL = {
   color: "#0d9488",
   configSites: [],
+  enabledExtensions: [],
+  extensions: [],
   id: "personal",
   isDefault: true,
   isDefaultPrivate: false,
   isPrivate: false,
+  lockedExtensions: [],
   name: "Personal",
   pinnedSites: [],
 };
@@ -22,10 +26,13 @@ const PERSONAL = {
 const WORK = {
   color: "#d97706",
   configSites: [],
+  enabledExtensions: [],
+  extensions: [],
   id: "work",
   isDefault: false,
   isDefaultPrivate: false,
   isPrivate: false,
+  lockedExtensions: [],
   name: "Work",
   pinnedSites: [],
 };
@@ -130,5 +137,64 @@ describe("usePinnedSite", () => {
     );
 
     expect(result.current).toBeUndefined();
+  });
+});
+
+describe("useProfileExtensions", () => {
+  const ICON = "data:image/png;base64,";
+  const installed = (id: string, name: string) => ({
+    configured: [],
+    enabled: true,
+    fileAccess: null,
+    fromConfig: true,
+    icon: ICON,
+    id,
+    inPrivate: null,
+    name,
+    optionsUrl: null,
+    siteAccess: null,
+    sites: [],
+    userScripts: null,
+  });
+
+  it("names a profile's extensions and says which are on and locked", () => {
+    const fake = new FakeDomicileHost();
+    fake.set({
+      installedExtensions: [
+        installed("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "Bitwarden"),
+        installed("oooooooooooooooooooooooooooooooo", "1Password"),
+      ],
+    });
+    const work = {
+      ...WORK,
+      enabledExtensions: ["oooooooooooooooooooooooooooooooo"],
+      extensions: [
+        "oooooooooooooooooooooooooooooooo",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        // Not listed yet: left out until it is.
+        "cccccccccccccccccccccccccccccccc",
+      ],
+      lockedExtensions: ["oooooooooooooooooooooooooooooooo"],
+    };
+    const { result } = renderHook(() =>
+      useProfileExtensions(fake.domicile, work),
+    );
+
+    expect(result.current).toStrictEqual([
+      {
+        enabled: true,
+        icon: ICON,
+        id: "oooooooooooooooooooooooooooooooo",
+        locked: true,
+        name: "1Password",
+      },
+      {
+        enabled: false,
+        icon: ICON,
+        id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        locked: false,
+        name: "Bitwarden",
+      },
+    ]);
   });
 });

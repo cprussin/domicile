@@ -40,8 +40,10 @@ every page and keep one state (one Bitwarden login).
 ```
 
 - **`profiles`**: by id. `extensions` lists the ids from `extensions.web_store`
-  and `extensions.unpacked` that the profile turns on; unset turns on all of
-  them. `private` keeps nothing past the profile's last page.
+  and `extensions.unpacked` that the profile turns on, and locks the profile's
+  extension switches to it. Unset leaves the switches to the user: each
+  starts on, or off in a private profile. `private` keeps nothing past the
+  profile's last page.
 - **`default_profile`**: where an unlisted site opens. Never private.
 - **`default_private_profile`**: where "new private window" opens. Always
   private.
@@ -73,8 +75,12 @@ every page and keep one state (one Bitwarden login).
   guests of every profile. Each window carries its profile id.
 - **One desk per profile.** `chrome.tabs` and `chrome.windows` in a profile see
   only its own pages.
-- **Extensions** are installed into each profile that turns them on and
-  uninstalled from the others. `extensions.settings` applies in every profile.
+- **Extensions** are installed into every profile and switched on or off in
+  each, so one switched off keeps its data. A profile whose config names its
+  `extensions` has those switches set and locked; any other starts each
+  extension at its default the first time it is installed there and the user
+  switches it from then on, which Chrome keeps. `extensions.settings` applies
+  in every profile.
 
 ### Routing
 
@@ -164,5 +170,9 @@ Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
 - [x] engine and SDK: sites the user pins, kept in the shell profile's prefs
   under the config's (the config wins; its sites show locked)
 - [x] Manganese: pin a site to a profile from the menu
-- [ ] Manganese: switch a profile's extensions from the menu, tray by profile
+- [x] engine and SDK: every extension in every profile, switched per profile
+  (`DomicileBrowserProfile.extensions`, `enabledExtensions`,
+  `lockedExtensions`, `setBrowserProfileExtensionEnabled`)
+- [x] Manganese: switch a profile's extensions from the menu
+- [ ] Manganese: tray by profile
 - [ ] Settings: Profiles page

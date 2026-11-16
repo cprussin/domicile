@@ -1,6 +1,12 @@
 import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 /** The desk's browser profiles and the one a window's page is in. */
 export type WindowProfile = {
@@ -171,4 +177,54 @@ const webHostOf = (url: string): string | undefined => {
   } catch {
     return undefined;
   }
+};
+
+/** One extension in a browser profile, for the profile menu's switches. */
+export type ProfileExtension = {
+  id: string;
+  name: string;
+  /** The manifest's icon, as a data URL. */
+  icon: string;
+  /** Switched on in the profile. */
+  enabled: boolean;
+  /** The config switches it in the profile, so the user cannot. */
+  locked: boolean;
+};
+
+/**
+ * The extensions in browser profile `profile`, each switched on or off
+ * there, named and drawn as the desk's installed extensions are. One the
+ * desk does not list yet is left out until it does.
+ */
+export const useProfileExtensions = (
+  domicile: Pick<Domicile, "extensions">,
+  profile: BrowserProfile | undefined,
+): readonly ProfileExtension[] => {
+  const subscribe = useCallback(
+    (changed: () => void) => domicile.extensions.on("installed", changed),
+    [domicile],
+  );
+  const installed = useSyncExternalStore(
+    subscribe,
+    () => domicile.extensions.installed,
+  );
+  return useMemo(() => {
+    if (profile === undefined || installed === undefined) {
+      return [];
+    }
+    return profile.extensions.flatMap((id) => {
+      const listed = installed.find((extension) => extension.id === id);
+      return listed === undefined
+        ? []
+        : [
+            {
+              enabled: profile.enabledExtensions.includes(id),
+              icon: listed.icon,
+              id,
+              locked: profile.lockedExtensions.includes(id),
+              name: listed.name,
+            },
+          ];
+    });
+  }, [installed, profile]);
 };

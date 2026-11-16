@@ -87,8 +87,9 @@ export type BrowserListeners = {
   /** A window opened, closed or changed. */
   change: () => void;
   /**
-   * A profile was added, removed, renamed or recolored, the defaults moved,
-   * or a site was pinned.
+   * A profile was added, removed, renamed or recolored, the defaults moved, a
+   * site was pinned, or an extension was installed, uninstalled or switched
+   * in one.
    */
   profilesChange: () => void;
 };
@@ -137,6 +138,17 @@ export type Browser = {
    * only the config changes.
    */
   pin: (site: string, profile: string) => Promise<void>;
+  /**
+   * Switch extension `id` on or off in browser profile `profile`, kept
+   * across restarts; it keeps its data while off. Rejects with an
+   * `OperationError` for one in the profile's
+   * {@link BrowserProfile.lockedExtensions}, which only the config switches.
+   */
+  setExtensionEnabled: (
+    profile: string,
+    id: string,
+    enabled: boolean,
+  ) => Promise<void>;
   /** Open a browser window, in the profile its site opens in by default. */
   open: (url: string, options?: BrowserWindowOptions) => void;
   /** Open a window in the default private profile. */
@@ -204,6 +216,7 @@ export type BrowserHost = Pick<
   | "pinBrowserSite"
   | "removeEventListener"
   | "reopenBrowserWindow"
+  | "setBrowserProfileExtensionEnabled"
 >;
 
 export const browser = (host: BrowserHost): Browser => {
@@ -267,6 +280,8 @@ export const browser = (host: BrowserHost): Browser => {
     reopen: (id, profile) => {
       host.reopenBrowserWindow(id, profile);
     },
+    setExtensionEnabled: (profile, id, enabled) =>
+      host.setBrowserProfileExtensionEnabled(profile, id, enabled),
     siteFor: async (url) => {
       const site = await host.browserSiteFor(url);
       return site === "" ? undefined : site;

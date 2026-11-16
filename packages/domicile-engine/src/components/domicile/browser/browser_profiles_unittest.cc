@@ -79,7 +79,9 @@ TEST(BrowserProfilesTest, AMessageThatContradictsItselfIsRefused) {
            R"("default_private_profile":"../p","sites":{}})")));
 }
 
-TEST(BrowserProfilesTest, AProfileTurnsOnOnlyTheExtensionsItNames) {
+// Every profile gets every extension, so each can switch each one and keep
+// its data while it is off.
+TEST(BrowserProfilesTest, EveryProfileGetsEveryExtension) {
   const ExtensionList all{
       .web_store = {"aeblfdkhhhdcdjpifhhbdiojplfjncoa",
                     "nngceckbapebfimnlniiiahkandclblb"},
@@ -88,53 +90,51 @@ TEST(BrowserProfilesTest, AProfileTurnsOnOnlyTheExtensionsItNames) {
   const auto unpacked_id = [](const std::string&) {
     return std::string("mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm");
   };
-  const BrowserProfile every{.id = "personal"};
   const BrowserProfile work{.id = "work",
                             .extensions = std::vector<std::string>{
-                                "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
-                                "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"}};
+                                "aeblfdkhhhdcdjpifhhbdiojplfjncoa"}};
 
-  EXPECT_EQ(ExtensionsFor(every, all, unpacked_id).web_store, all.web_store);
   const ExtensionList chosen = ExtensionsFor(work, all, unpacked_id);
-  EXPECT_EQ(chosen.web_store,
-            std::vector<std::string>{"aeblfdkhhhdcdjpifhhbdiojplfjncoa"});
-  EXPECT_EQ(chosen.unpacked, std::vector<std::string>{"/home/me/src/mine"});
+  EXPECT_EQ(chosen.web_store, all.web_store);
+  EXPECT_EQ(chosen.unpacked, all.unpacked);
   // Its pages are not private, so it leaves where its extensions run as set.
-  EXPECT_FALSE(chosen.settings.contains("aeblfdkhhhdcdjpifhhbdiojplfjncoa"));
+  EXPECT_TRUE(chosen.settings.empty());
 }
 
-// A private profile's pages are off the record, so the extensions it turns on
-// run there, and only those.
+// A private profile's pages are off the record, so its extensions are allowed
+// there; its switches say which run.
 TEST(BrowserProfilesTest, APrivateProfilesExtensionsRunInItsPages) {
   const ExtensionList all{
-      .web_store = {"aeblfdkhhhdcdjpifhhbdiojplfjncoa",
-                    "nngceckbapebfimnlniiiahkandclblb"},
+      .web_store = {"nngceckbapebfimnlniiiahkandclblb"},
       .unpacked = {"/home/me/src/mine"},
   };
   const auto unpacked_id = [](const std::string&) {
     return std::string("mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm");
   };
-  const BrowserProfile hidden{.id = "private",
-                              .is_private = true,
-                              .extensions = std::vector<std::string>{
-                                  "nngceckbapebfimnlniiiahkandclblb",
-                                  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"}};
+  const BrowserProfile hidden{.id = "private", .is_private = true};
 
   const ExtensionList chosen = ExtensionsFor(hidden, all, unpacked_id);
-  EXPECT_EQ(chosen.web_store,
-            std::vector<std::string>{"nngceckbapebfimnlniiiahkandclblb"});
   EXPECT_EQ(chosen.settings.at("nngceckbapebfimnlniiiahkandclblb").in_private,
             true);
   EXPECT_EQ(chosen.settings.at("mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm").in_private,
             true);
-  EXPECT_FALSE(chosen.settings.contains("aeblfdkhhhdcdjpifhhbdiojplfjncoa"));
+}
 
-  // One that names none keeps them all out, as a private page has always
-  // been kept from extensions unless they were allowed.
-  const BrowserProfile unnamed{.id = "private", .is_private = true};
-  const ExtensionList none = ExtensionsFor(unnamed, all, unpacked_id);
-  EXPECT_TRUE(none.web_store.empty());
-  EXPECT_TRUE(none.unpacked.empty());
+// A profile that names its extensions switches them for the user; one that
+// names none leaves them to the user, starting on, or off when private.
+TEST(BrowserProfilesTest, TheConfigSwitchesTheExtensionsAProfileNames) {
+  const BrowserProfile work{.id = "work",
+                            .extensions = std::vector<std::string>{
+                                "aeblfdkhhhdcdjpifhhbdiojplfjncoa"}};
+  const BrowserProfile personal{.id = "personal"};
+  const BrowserProfile hidden{.id = "private", .is_private = true};
+
+  EXPECT_EQ(ConfigSwitch(work, "aeblfdkhhhdcdjpifhhbdiojplfjncoa"), true);
+  EXPECT_EQ(ConfigSwitch(work, "nngceckbapebfimnlniiiahkandclblb"), false);
+  EXPECT_EQ(ConfigSwitch(personal, "aeblfdkhhhdcdjpifhhbdiojplfjncoa"),
+            std::nullopt);
+  EXPECT_TRUE(DefaultSwitch(personal));
+  EXPECT_FALSE(DefaultSwitch(hidden));
 }
 
 // The profiles of Message(sites), as ParseBrowserProfiles reads them.

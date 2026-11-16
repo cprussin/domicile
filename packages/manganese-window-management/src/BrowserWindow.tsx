@@ -53,7 +53,11 @@ import { PageViews } from "./browser/PageViews";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
-import { useBrowserProfile, usePinnedSite } from "./browser/useBrowserProfile";
+import {
+  useBrowserProfile,
+  usePinnedSite,
+  useProfileExtensions,
+} from "./browser/useBrowserProfile";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
@@ -306,6 +310,10 @@ export const BrowserWindow = ({
   const address = addressOf(shown.url, sent);
   const pageProfile = useBrowserProfile(domicile, window);
   const pinned = usePinnedSite(domicile, address);
+  const profileExtensions = useProfileExtensions(
+    domicile,
+    pageProfile?.profile,
+  );
   usePageIcon(view, window, onIcon);
   usePageDescription(view, window, onDescription);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
@@ -846,6 +854,7 @@ export const BrowserWindow = ({
                 ? undefined
                 : {
                     ...pageProfile,
+                    extensions: profileExtensions,
                     onMove: (id) => {
                       domicile.browser.reopen(window, id);
                     },
@@ -864,6 +873,18 @@ export const BrowserWindow = ({
                             );
                           });
                       }
+                    },
+                    onSwitchExtension: (id, on) => {
+                      const { profile } = pageProfile;
+                      domicile.browser
+                        .setExtensionEnabled(profile.id, id, on)
+                        .catch((error: unknown) => {
+                          // biome-ignore lint/suspicious/noConsole: the menu offers no switch the engine refuses, so one is a list a change behind
+                          console.error(
+                            `Couldn't switch ${id} ${on ? "on" : "off"} in profile ${profile.id}`,
+                            error,
+                          );
+                        });
                     },
                     pinned,
                   }
