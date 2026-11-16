@@ -143,11 +143,17 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
    * Sends `request` to the engine, unless it's for a page the engine hasn't
    * opened yet, which the engine would refuse: that is said and dropped.
    */
+  /** The last few kinds of request each window was sent, for a refusal. */
+  const sentTo = new Map<number, string[]>();
   const toEngine: Engine["send"] = (request) => {
     const page =
       "window" in request && request.type !== "open_window"
         ? pages.get(request.window as number)
         : undefined;
+    if ("window" in request) {
+      const kinds = sentTo.get(request.window as number) ?? [];
+      sentTo.set(request.window as number, [...kinds.slice(-3), request.type]);
+    }
     if (page !== undefined && !page.isOpen()) {
       warnOnce(
         `unopened ${request.type}`,
@@ -537,6 +543,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     readonly #refused = (why: string) => {
       const loads = this.#loads.splice(0);
+      const sent = (sentTo.get(this.id) ?? []).join(", ");
+      // An app may swallow its load's rejection; the log keeps why.
+      // biome-ignore lint/suspicious/noConsole: a refused window is the engine's word on the app, for the supervisor's log
+      console.error(
+        `electron-host: the engine refused window ${this.id} (last sent: ${sent}): ${why}`,
+      );
       if (loads.length > 0) {
         for (const load of loads) {
           load.reject(new Error(why));
