@@ -40,4 +40,34 @@ describe("Clock", () => {
     expect(screen.getByText("Wednesday 2026-09-16 20:53:41")).toBeVisible();
     jest.useRealTimers();
   });
+
+  it("without seconds, reads the clock only on the minute", () => {
+    jest.useFakeTimers();
+    let reads = 0;
+    render(
+      <ClockOptionsContext value={{ format: "24h", seconds: false }}>
+        <Clock
+          now={() => {
+            reads += 1;
+            // 20 s before the minute, then on it.
+            return reads === 1
+              ? new Date(2026, 8, 16, 20, 53, 40)
+              : new Date(2026, 8, 16, 20, 54, 0);
+          }}
+        />
+      </ClockOptionsContext>,
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(19_999);
+    });
+    expect(reads).toBe(1);
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(reads).toBe(2);
+    expect(screen.getByText("Wednesday 2026-09-16 20:54")).toBeVisible();
+    jest.useRealTimers();
+  });
 });

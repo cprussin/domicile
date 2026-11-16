@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, jest } from "bun:test";
+import { act, render, screen } from "@testing-library/react";
 
 import { LockClock } from "./LockClock";
 
@@ -11,5 +11,28 @@ describe("LockClock", () => {
 
     expect(screen.getByText("08:03")).toBeVisible();
     expect(screen.getByText("Wednesday, September 16")).toBeVisible();
+  });
+
+  it("stops while unlocked, and reads the time afresh on locking", () => {
+    jest.useFakeTimers();
+    let reads = 0;
+    const now = () => {
+      reads += 1;
+      return reads === 1
+        ? new Date(2026, 8, 16, 8, 3, 40)
+        : new Date(2026, 8, 16, 9, 30, 0);
+    };
+    const { rerender } = render(<LockClock locked={false} now={now} />);
+
+    act(() => {
+      jest.advanceTimersByTime(3_600_000);
+    });
+    expect(reads).toBe(1);
+
+    rerender(<LockClock locked now={now} />);
+
+    expect(reads).toBe(2);
+    expect(screen.getByText("09:30")).toBeVisible();
+    jest.useRealTimers();
   });
 });
