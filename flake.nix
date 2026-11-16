@@ -2908,7 +2908,7 @@
                   else:
                       # Every hand-back names what the engine lacks.
                       assert hosted or re.search(
-                          r"Domicile's (Electron doesn't have|engine can't|engine doesn't)", said
+                          r"Domicile's (Electron doesn't have|engine can't|engine doesn't|engine registers only)", said
                       ), (
                           f"{entry} left the engine without saying why:\n{tail}\nrunning:\n{running}"
                       )
