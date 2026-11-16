@@ -66,6 +66,7 @@ fn a_wrappers_environment_and_flags_reach_the_app() {
     let launch = through_wrappers(
         &[wrapper.display().to_string(), "-u".into()],
         &resources,
+        Path::new(env!("CARGO_BIN_EXE_domicile")),
         WAIT,
     )
     .unwrap();
@@ -79,6 +80,12 @@ fn a_wrappers_environment_and_flags_reach_the_app() {
         .unwrap()
         .starts_with("/opt/qemu/bin:"));
     assert_eq!(env_of(&launch, "BASH_ENV"), None);
+    assert_eq!(env_of(&launch, "DOMICILE_ELECTRON_RECORDER"), None);
+    // What the desk gave `domicile open` reaches the app too.
+    assert_eq!(
+        env_of(&launch, "HOME"),
+        std::env::var("HOME").ok().as_deref()
+    );
 }
 
 #[test]
@@ -125,6 +132,7 @@ fn every_wrapper_in_a_chain_has_its_say() {
     let launch = through_wrappers(
         &[wrapper.display().to_string(), "--hidden".into()],
         &fs::canonicalize(root.path().join("element/share/element")).unwrap(),
+        Path::new(env!("CARGO_BIN_EXE_domicile")),
         WAIT,
     )
     .unwrap();
@@ -144,7 +152,12 @@ fn a_program_that_is_no_bash_script_has_no_wrapper_to_follow() {
     let (binary, resources) = bundled(root.path());
 
     assert_eq!(
-        through_wrappers(&[binary.display().to_string()], &resources, WAIT),
+        through_wrappers(
+            &[binary.display().to_string()],
+            &resources,
+            Path::new(env!("CARGO_BIN_EXE_domicile")),
+            WAIT
+        ),
         Err(WrapperError::NotBash {
             program: binary.display().to_string()
         })
@@ -162,7 +175,12 @@ fn a_wrapper_that_never_reaches_the_app_says_so() {
     );
 
     assert!(matches!(
-        through_wrappers(&[wrapper.display().to_string()], &resources, WAIT),
+        through_wrappers(
+            &[wrapper.display().to_string()],
+            &resources,
+            Path::new(env!("CARGO_BIN_EXE_domicile")),
+            WAIT
+        ),
         Err(WrapperError::NoLaunch { .. })
     ));
 }
@@ -179,7 +197,12 @@ fn a_wrapper_ending_in_some_other_program_says_so() {
     );
 
     assert!(matches!(
-        through_wrappers(&[wrapper.display().to_string()], &resources, WAIT),
+        through_wrappers(
+            &[wrapper.display().to_string()],
+            &resources,
+            Path::new(env!("CARGO_BIN_EXE_domicile")),
+            WAIT
+        ),
         Err(WrapperError::NotTheApp { .. })
     ));
 }

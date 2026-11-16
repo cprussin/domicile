@@ -47,7 +47,7 @@ use domicile_launch::control_socket::{
 };
 use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
 use domicile_launch::electron_schemes::{self, schemes_switch};
-use domicile_launch::electron_wrapper::{through_wrappers, WrapperError};
+use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
@@ -123,6 +123,17 @@ const FETCH_WITHIN: &str = "30";
 const WORTH_REPEATING: usize = 20;
 
 fn main() -> ExitCode {
+    // An Electron app's wrappers reached its program: see `electron_wrapper`.
+    let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if args.first().is_some_and(|first| first == RECORD) {
+        return match record(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(said) => {
+                eprintln!("domicile: {said}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     match run() {
         Ok(code) => code,
         Err(said) => {
@@ -227,6 +238,7 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
     let env = |name: &str| std::env::var(name).ok();
     let host = electron_host(&myself()?, &env, &|path| path.exists())
         .map_err(|missing| missing.to_string())?;
+    let recorder = myself()?;
     let mut run = Command::new(&host);
     run.arg(&app.resources);
     // What the app's wrappers set (a preloaded library, programs on PATH,
@@ -235,7 +247,7 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
     match app
         .fallback
         .as_deref()
-        .map(|command| through_wrappers(command, &app.resources, WRAPPERS_WAIT))
+        .map(|command| through_wrappers(command, &app.resources, &recorder, WRAPPERS_WAIT))
     {
         Some(Ok(launch)) => {
             run.args(&launch.args).env_clear().envs(launch.env);

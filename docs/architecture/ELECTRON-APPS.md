@@ -40,8 +40,9 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   on NixOS, shell scripts in `/usr/bin`), so the `Exec` rarely names it.
   What the wrappers set reaches the app: when the command is a bash script,
   it runs with `BASH_ENV` naming a script that replaces `exec`. Each script
-  it execs runs the same way; the `exec` of the program records its
-  environment and arguments and exits before it runs. The app gets that
+  it execs runs the same way; the `exec` of the program execs `domicile`
+  instead, which records the command line and the environment it got and
+  exits. The app gets that
   environment (`LD_PRELOAD`, `PATH`) and those arguments, less the app's own
   path a generic Electron is given, as its `process.argv`
   ([`electron_wrapper.rs`](../../packages/domicile-launch/src/electron_wrapper.rs)).

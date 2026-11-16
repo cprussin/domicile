@@ -8,12 +8,14 @@
 //! flags to the command line. Reading those scripts would mean knowing every
 //! way of writing them. Running them doesn't: each runs with `BASH_ENV`
 //! naming a script that replaces bash's `exec` with a function. An `exec` of
-//! another script lets it run, the same way; the `exec` of a program records
-//! the environment and arguments it would have had, and exits before it
-//! runs.
+//! another script lets it run, the same way; the `exec` of a program execs
+//! `domicile` instead, given [`RECORD`] and the program's command line,
+//! which records them and the environment it got ([`record`]) and exits.
 
+use std::ffi::OsString;
 use std::fs;
 use std::io::Read as _;
+use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -21,7 +23,15 @@ use std::time::{Duration, Instant};
 
 /// The variables this module sets to follow the wrappers, which the app
 /// doesn't get.
-const OURS: [&str; 2] = ["BASH_ENV", "DOMICILE_ELECTRON_LAUNCH"];
+const OURS: [&str; 3] = [
+    "BASH_ENV",
+    "DOMICILE_ELECTRON_LAUNCH",
+    "DOMICILE_ELECTRON_RECORDER",
+];
+
+/// The first argument that makes `domicile` record a launch, which only the
+/// wrappers' `exec` passes.
+pub const RECORD: &str = "--record-electron-launch";
 
 /// Sourced by every bash script the wrappers run. `exec` with only
 /// redirections still applies them, as bash's own does.
@@ -39,14 +49,7 @@ exec() {
   local start=""
   IFS= read -r -n 2 start < "$1" 2>/dev/null || true
   if [ "$start" = "#!" ]; then builtin exec "$@"; fi
-  local out="$DOMICILE_ELECTRON_LAUNCH"
-  printf '%s\0' "$@" > "$out/args"
-  local name
-  for name in $(compgen -e); do
-    printf '%s=%s\0' "$name" "${!name}"
-  done > "$out/env"
-  : > "$out/done"
-  builtin exit 0
+  builtin exec "$DOMICILE_ELECTRON_RECORDER" --record-electron-launch "$@"
 }
 "##;
 
@@ -83,13 +86,42 @@ pub enum WrapperError {
     },
 }
 
+/// Records `args`, a program's command line, and this process's
+/// environment, which the wrappers gave it, where [`through_wrappers`] reads
+/// them: what `domicile` does when given [`RECORD`] first.
+pub fn record(args: &[OsString]) -> Result<(), String> {
+    let out = std::env::var_os("DOMICILE_ELECTRON_LAUNCH")
+        .map(PathBuf::from)
+        .ok_or("only an Electron app's wrappers record their launch")?;
+    let mut written = Vec::new();
+    for arg in args {
+        written.extend_from_slice(arg.as_bytes());
+        written.push(0);
+    }
+    let mut env = Vec::new();
+    for (key, value) in std::env::vars_os() {
+        env.extend_from_slice(key.as_bytes());
+        env.push(b'=');
+        env.extend_from_slice(value.as_bytes());
+        env.push(0);
+    }
+    let write = |name: &str, bytes: &[u8]| {
+        fs::write(out.join(name), bytes)
+            .map_err(|why| format!("cannot record the launch in {}: {why}", out.display()))
+    };
+    write("args", &written)?;
+    write("env", &env)?;
+    write("done", b"")
+}
+
 /// Runs `command`, the app's own, as far as the program its wrappers end in,
 /// and gives what that program would have run with. `resources` is the
 /// app's, as `electron_app` found it; the program must run the app there.
-/// Gives up after `wait`.
+/// `recorder` is a `domicile` that [`record`]s. Gives up after `wait`.
 pub fn through_wrappers(
     command: &[String],
     resources: &Path,
+    recorder: &Path,
     wait: Duration,
 ) -> Result<Launch, WrapperError> {
     let program = command.first().cloned().unwrap_or_default();
@@ -107,6 +139,7 @@ pub fn through_wrappers(
         .args(&command[1..])
         .env("BASH_ENV", &follow)
         .env("DOMICILE_ELECTRON_LAUNCH", out.path())
+        .env("DOMICILE_ELECTRON_RECORDER", recorder)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
