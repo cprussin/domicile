@@ -167,9 +167,18 @@ pub fn engine(
     if platform == NESTED_PLATFORM {
         args.push("--domicile-inhibit-host-shortcuts".into());
     }
-    if !extra.disabled.is_empty() {
-        args.push(format!("{DISABLE_FEATURES}{}", extra.disabled.join(",")).into());
-    }
+    // Chrome's Energy Saver turns on with the OS's power-saver profile and
+    // throttles every frame sink to 30 Hz (`BatterySaverModeManager`), which
+    // on the engine is the whole desk: animations, typing and resizes all at
+    // 30 fps. A desktop sets its own pace, so it never follows the profile.
+    args.push(
+        ["--disable-features=BatterySaverModeFollowsSystemPowerSaver"]
+            .into_iter()
+            .chain(extra.disabled)
+            .collect::<Vec<_>>()
+            .join(",")
+            .into(),
+    );
     args.extend(extra.rest.into_iter().map(OsString::from));
     Spawn {
         args,

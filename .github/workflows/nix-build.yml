@@ -40,11 +40,14 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # `accept-flake-config` substitutes from Domicile's cache in flake.nix
+      # what `stable` already built.
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
             system-features = nixos-test benchmark big-parallel kvm
+            accept-flake-config = true
 
       # The assertions are `distro`' `test:nix`, so they can also be run
       # from a checkout. Bun is here only to run turbo; a nix build has its own

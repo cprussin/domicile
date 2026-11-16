@@ -1,6 +1,14 @@
 {
   description = "Domicile — a Wayland compositor whose renderer is a web engine";
 
+  # Domicile's binary cache, filled for each commit `stable` moves to
+  # (.github/workflows/nix-cache.yml), so `nix run` and configs pinned to
+  # `stable` substitute Domicile instead of building it.
+  nixConfig = {
+    extra-substituters = [ "https://packages.domicile-desktop.com/nix" ];
+    extra-trusted-public-keys = [ "packages.domicile-desktop.com-1:iAulr298MtC52WMi2GPI8bqPEvOXHoQtSRAGOo0ny90=" ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Fetches the packages of a home-manager TS config from its `bun.nix`.
