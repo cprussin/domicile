@@ -370,3 +370,39 @@ const parseJson = (text: string): unknown => {
     }
   }
 };
+
+/**
+ * The engine at `path`, once it's up: the desktop starts its apps as it
+ * comes up, before the engine may be listening, so a socket that isn't there
+ * or isn't answering yet is tried again until `wait` milliseconds have passed.
+ * Any other failure, or one that outlasts the wait, is the answer.
+ */
+export const connectEngineWhenUp = async (
+  connect: () => Promise<Result<Engine, string>>,
+  wait: number,
+  sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
+): Promise<Result<Engine, string>> => {
+  const started = Date.now();
+  for (;;) {
+    const result = await connect();
+    const notUpYet = result.match({
+      Err: (why) =>
+        why.startsWith("can't reach the engine") &&
+        /ENOENT|ECONNREFUSED/.test(why),
+      Ok: () => false,
+    });
+    if (!notUpYet) {
+      return result;
+    }
+    if (Date.now() - started >= wait) {
+      return result.match({
+        Err: (why) =>
+          Err(
+            `${why}, and it still wasn't up after ${Math.round(wait / 1000)}s`,
+          ),
+        Ok: (engine) => Ok(engine),
+      });
+    }
+    await sleep(250);
+  }
+};

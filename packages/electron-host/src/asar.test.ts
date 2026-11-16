@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Err, Ok } from "@cprussin/option-result";
@@ -55,6 +55,33 @@ describe(extractAsar, () => {
       "binary",
     );
     expect(await readFile(join(dir, "out/main.js"), "utf8")).toBe("packed");
+  });
+
+  it("leaves out an unpacked file its package pruned, as Electron only fails reading it", async () => {
+    // nixpkgs deletes other platforms' prebuilt modules from ChatGPT's
+    // app.asar.unpacked, leaving the archive's header naming them.
+    const dir = await scratch();
+    const archive = join(dir, "app.asar");
+    await writeAsar(archive, {
+      "main.js": { content: "packed" },
+      "prebuilds/darwin-arm64/addon.node": { content: "mac", unpacked: true },
+      "prebuilds/linux-x64/addon.node": { content: "linux", unpacked: true },
+    });
+    await rm(join(`${archive}.unpacked`, "prebuilds/darwin-arm64"), {
+      recursive: true,
+    });
+
+    expect(await extractAsar(archive, join(dir, "out"))).toEqual(
+      Ok(join(dir, "out")),
+    );
+    expect(
+      await readFile(join(dir, "out/prebuilds/linux-x64/addon.node"), "utf8"),
+    ).toBe("linux");
+    expect(
+      await stat(join(dir, "out/prebuilds/darwin-arm64/addon.node")).catch(
+        () => undefined,
+      ),
+    ).toBeUndefined();
   });
 
   it("refuses a file that is not an archive", async () => {
