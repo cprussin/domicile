@@ -139,7 +139,25 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   /** Every page by the engine's number: windows' and views'. */
   const pages = new Map<number, Page>();
   const windows = new Map<number, BrowserWindow>();
-  const ports = createPagePorts(engine.send);
+  /**
+   * Sends `request` to the engine, unless it's for a page the engine hasn't
+   * opened yet, which the engine would refuse: that is said and dropped.
+   */
+  const toEngine: Engine["send"] = (request) => {
+    const page =
+      "window" in request && request.type !== "open_window"
+        ? pages.get(request.window as number)
+        : undefined;
+    if (page !== undefined && !page.isOpen()) {
+      warnOnce(
+        `unopened ${request.type}`,
+        `${app.getName()} sent ${request.type} to a window before loading it, which goes nowhere`,
+      );
+      return;
+    }
+    engine.send(request);
+  };
+  const ports = createPagePorts(toEngine);
   let nextId = 1;
 
   /** The event object Electron passes first to a window listener. */
@@ -255,7 +273,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       if (!this.owner.isOpen()) {
         return;
       }
-      engine.send({
+      toEngine({
         args: JSON.parse(JSON.stringify(args)),
         channel,
         type: "ipc_send",
@@ -276,7 +294,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       if (!this.owner.isOpen()) {
         return;
       }
-      engine.send({
+      toEngine({
         channel,
         message: JSON.parse(JSON.stringify([message]))[0],
         ports: ports.give(this.owner.id, transfer),
@@ -335,11 +353,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.#loads.push({ reject, resolve });
       });
       if (this.opened) {
-        engine.send({ type: "load_url", url, window: this.id });
+        toEngine({ type: "load_url", url, window: this.id });
       } else {
         this.opened = true;
         const session = sessionPartition(this.session);
-        engine.send({
+        toEngine({
           type: "open_window",
           url,
           window: this.id,
@@ -363,7 +381,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly destroy = () => {
       if (!this.destroyed) {
         this.end(() => {
-          engine.send({ type: "destroy_window", window: this.id });
+          toEngine({ type: "destroy_window", window: this.id });
         });
       }
     };
@@ -502,7 +520,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     ) => {
       answer
         .then((settled) => {
-          engine.send(
+          toEngine(
             settled.match<EngineRequest>({
               Err: (error) => ({ error, invoke, type: "ipc_reply" }),
               Ok: ({ result }) => ({ invoke, result, type: "ipc_reply" }),
@@ -752,7 +770,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly focus = () => {
       this.assertAlive();
       if (this.opened) {
-        engine.send({ type: "focus_window", window: this.id });
+        toEngine({ type: "focus_window", window: this.id });
       }
     };
 
@@ -763,7 +781,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.emit("close", event);
         if (!event.defaultPrevented) {
           this.end(() => {
-            engine.send({ type: "close_window", window: this.id });
+            toEngine({ type: "close_window", window: this.id });
           });
         }
       }
@@ -941,7 +959,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** Tells the engine the menu bar as it is now, once the window is open. */
     readonly #showMenuBar = () => {
       if (this.opened && !this.destroyed) {
-        engine.send({
+        toEngine({
           auto_hide: this.#menuBarAutoHide,
           menu: this.#menu === null ? null : menus.model(this.#menu),
           type: "set_menu_bar",
@@ -960,7 +978,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         const placed = JSON.stringify(views);
         if (placed !== this.#placed) {
           this.#placed = placed;
-          engine.send({ type: "set_views", views, window: this.id });
+          toEngine({ type: "set_views", views, window: this.id });
         }
       }
     };
