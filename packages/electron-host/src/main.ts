@@ -35,7 +35,7 @@ import type { DesktopStatus } from "./electron/power";
 import { createPowerMonitor, createPowerSaveBlocker } from "./electron/power";
 import { electronProcess } from "./electron/process";
 import { createProtocols } from "./electron/protocol";
-import { createSafeStorage } from "./electron/safe-storage";
+import { createSafeStorage, selectBackend } from "./electron/safe-storage";
 import { createSchemeRegistration } from "./electron/schemes";
 import type { ListedDisplay } from "./electron/screen";
 import { createScreen } from "./electron/screen";
@@ -297,6 +297,12 @@ const main = async ([resources, ...args]: string[]) => {
         }),
       },
       safeStorage: createSafeStorage({
+        backend: () =>
+          selectBackend(
+            app.commandLine.getSwitchValue("password-store"),
+            env.XDG_CURRENT_DESKTOP,
+            (why) => unsupported(`${pkg.productName} ${why}`),
+          ),
         password: () => desktop.safeStoragePassword(app.getName()),
       }),
       screen: createScreen(listDisplays, desktopState.displays),
