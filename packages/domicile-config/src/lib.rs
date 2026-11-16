@@ -921,7 +921,8 @@ pub struct BrowserProfile {
     #[serde(default)]
     pub private: bool,
     /// The ids of the extensions it turns on, from those `extensions`
-    /// installs. Unset turns them all on.
+    /// installs. Unset turns them all on, or none for a private profile:
+    /// extensions stay out of private pages unless named.
     #[serde(default)]
     pub extensions: Option<Vec<String>>,
 }

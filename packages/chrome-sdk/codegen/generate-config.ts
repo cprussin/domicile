@@ -71,8 +71,27 @@ const rustSchema = (): string => {
   }
 };
 
-/** `text` as `biome check` wants it at `target`. */
+/**
+ * `text` as `biome check` wants it at `target`. Run until it stops changing:
+ * one pass can leave a chain biome breaks differently on the next, and the
+ * checked-in file must be what a later `biome check` leaves alone.
+ */
 const formatted = (
+  target: string,
+  command: readonly string[],
+  text: string,
+): string => {
+  for (let pass = 0; pass < 5; pass += 1) {
+    const next = formattedOnce(target, command, text);
+    if (next === text) {
+      return text;
+    }
+    text = next;
+  }
+  throw new Error(`biome ${command.join(" ")} never settled on ${target}`);
+};
+
+const formattedOnce = (
   target: string,
   command: readonly string[],
   text: string,
