@@ -39,6 +39,8 @@ namespace domicile {
 //   {"type":"open_url","version":1,"url":"https://example.com/","app":true}
 //   {"type":"open_url","version":1,"url":"https://example.com/","app":true,
 //    "app_id":"mail","reuse":"focus"}
+//   {"type":"open_url","version":1,"url":"https://example.com/",
+//    "profile":"work"}
 //   -> {"type":"opened"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -186,10 +188,18 @@ struct AppLaunch {
 };
 
 // Carries out `open_url`: opens a browser window at `url`, or with `app` an app
-// window, which the shell draws without an address bar. Runs `opened` once,
-// possibly after returning, as for `run_app`.
-using OpenUrl = base::FunctionRef<
-    void(const GURL& url, std::optional<AppLaunch> app, WindowOpened opened)>;
+// window, which the shell draws without an address bar. A browser window is
+// in browser profile `profile`, one the desk has, or for an empty one the
+// profile `url`'s site opens in. Runs `opened` once, possibly after
+// returning, as for `run_app`.
+using OpenUrl = base::FunctionRef<void(const GURL& url,
+                                       std::optional<AppLaunch> app,
+                                       const std::string& profile,
+                                       WindowOpened opened)>;
+
+// Whether the desk has browser profile `id`, so `open_url` can refuse one it
+// does not instead of opening the window elsewhere.
+using HasBrowserProfile = base::FunctionRef<bool(const std::string& id)>;
 
 // One site's stored setting for one permission.
 struct StoredSitePermission {
@@ -436,6 +446,7 @@ struct CommandActions {
   LoadShell load_shell;
   RunApp run_app;
   OpenUrl open_url;
+  HasBrowserProfile has_browser_profile;
   ListSitePermissions list_site_permissions;
   SetSitePermission set_site_permission;
   LoadUnpacked load_unpacked;

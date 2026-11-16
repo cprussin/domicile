@@ -186,7 +186,8 @@ fn open_takes_one_thing_to_open_as_typed() {
     assert_eq!(
         run(&["open", "~/notes.org"]).unwrap(),
         Invocation::Open {
-            target: "~/notes.org".to_string()
+            target: "~/notes.org".to_string(),
+            profile: None,
         }
     );
     assert_eq!(run(&["open"]), Err(CliError::NothingToOpen));
@@ -194,6 +195,33 @@ fn open_takes_one_thing_to_open_as_typed() {
         run(&["open", "a.txt", "b.txt"]),
         Err(CliError::ExtraToOpen {
             extra: "b.txt".to_string()
+        })
+    );
+}
+
+#[test]
+fn open_with_profile_names_the_browser_profile() {
+    assert_eq!(
+        run(&["open", "--profile", "work", "https://example.com"]).unwrap(),
+        Invocation::Open {
+            target: "https://example.com".to_string(),
+            profile: Some("work".to_string()),
+        }
+    );
+    assert_eq!(
+        run(&["open", "--profile"]),
+        Err(CliError::FlagWithoutValue {
+            flag: "--profile".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["open", "--profile", "work"]),
+        Err(CliError::NothingToOpen)
+    );
+    assert_eq!(
+        run(&["open", "--profile", "work", "a.example", "b.example"]),
+        Err(CliError::ExtraToOpen {
+            extra: "b.example".to_string()
         })
     );
 }

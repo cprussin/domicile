@@ -73,6 +73,7 @@ void AnswerRunApp(const base::DictValue& request,
                   CommandReply reply);
 void AnswerOpenUrl(const base::DictValue& request,
                    OpenUrl open_url,
+                   HasBrowserProfile has_browser_profile,
                    CommandReply reply);
 void AnswerOpened(const std::string& refusal, CommandReply reply, bool opened);
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
@@ -190,7 +191,8 @@ void AnswerCommand(std::string_view line,
     return;
   }
   if (*type == kOpenUrl) {
-    AnswerOpenUrl(*request, actions.open_url, std::move(reply));
+    AnswerOpenUrl(*request, actions.open_url, actions.has_browser_profile,
+                  std::move(reply));
     return;
   }
   if (*type == kListSitePermissionsCommand) {
@@ -401,6 +403,7 @@ base::expected<std::optional<AppLaunch>, std::string> AppLaunchIn(
 
 void AnswerOpenUrl(const base::DictValue& request,
                    OpenUrl open_url,
+                   HasBrowserProfile has_browser_profile,
                    CommandReply reply) {
   const std::string* url = request.FindString("url");
   if (url == nullptr) {
@@ -431,8 +434,29 @@ void AnswerOpenUrl(const base::DictValue& request,
     std::move(reply).Run(RefusedCommand(launch.error()));
     return;
   }
+  // Optional: none is the profile the site opens in.
+  const base::Value* profile = request.Find("profile");
+  if (profile != nullptr &&
+      (!profile->is_string() || profile->GetString().empty())) {
+    std::move(reply).Run(RefusedCommand(
+        "open_url's \"profile\" is the id of a browser profile"));
+    return;
+  }
+  if (profile != nullptr && is_app) {
+    std::move(reply).Run(RefusedCommand(
+        "open_url's \"profile\" is for a browser window; an app window's "
+        "page is in the profile its site opens in"));
+    return;
+  }
+  if (profile != nullptr && !has_browser_profile(profile->GetString())) {
+    std::move(reply).Run(RefusedCommand(base::StrCat(
+        {"the desk has no browser profile \"", profile->GetString(),
+         "\"; the config's browser.profiles names them"})));
+    return;
+  }
   open_url(
       parsed, *launch,
+      profile != nullptr ? profile->GetString() : std::string(),
       base::BindOnce(&AnswerOpened,
                      std::string("this engine has no shell page to open it in"),
                      std::move(reply)));

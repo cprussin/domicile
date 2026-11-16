@@ -2521,6 +2521,7 @@ describe("Shell", () => {
         "openBrowserWindow",
         "https://example.com",
         "",
+        "",
       ]);
     });
 

@@ -1195,14 +1195,19 @@ void StartBrowserWindows() {
   SetNotificationWindowFinder(base::BindRepeating(&NotificationWindowOf));
 }
 
-bool OpenBrowserWindow(const GURL& url) {
+bool OpenBrowserWindow(const GURL& url, const std::string& profile) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {
     return false;
   }
   return DeskWindows::For(
              Profile::FromBrowserContext(shell->GetBrowserContext()))
-             .Open(url, /*private_browsing=*/false, /*profile=*/std::string(),
+             .Open(url, /*private_browsing=*/false,
+                   profile.empty() ? ProfileForUrl(
+                                         BrowserProfileRegistry::Get()
+                                             .profiles(),
+                                         url)
+                                   : profile,
                    /*partition=*/std::nullopt) != nullptr;
 }
 

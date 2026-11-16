@@ -151,7 +151,7 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Run { shell, config } => desktop(shell.as_deref(), config.as_deref()),
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
-        Invocation::Open { target } => opened(&target),
+        Invocation::Open { target, profile } => opened(&target, profile),
         Invocation::Opener { target } => {
             let id = opener(&target, &typed_in()?, &places()).map_err(|why| why.to_string())?;
             if let Some(id) = id {
@@ -220,10 +220,15 @@ fn versioned() -> Result<ExitCode, String> {
 }
 
 /// Opens `target` with what opens its type, in this process's place, or in a
-/// browser window of the running desktop; see `domicile_launch::open`.
-fn opened(target: &str) -> Result<ExitCode, String> {
+/// browser window of the running desktop, in browser profile `profile` when
+/// given; see `domicile_launch::open`. Only a web address takes a profile.
+fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
     match opening(target, &typed_in()?, &places()).map_err(|why| why.to_string())? {
-        Opening::Browse(url) => asked(&Request::OpenUrl { url }),
+        Opening::Browse(url) => asked(&Request::OpenUrl { url, profile }),
+        Opening::Run(_) if profile.is_some() => Err(CliError::ProfileForAFile {
+            target: target.to_string(),
+        }
+        .to_string()),
         Opening::Run(argv) => {
             let (program, args) = argv
                 .split_first()
@@ -1441,8 +1446,8 @@ fn answer_a_command(
                         };
                         load_the_shell(engine, &page, serving, &|| true)
                     },
-                    open: &|url| {
-                        open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    open: &|url, profile| {
+                        open_url(engine, url, profile, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
                     open_app: &|url, id, reuse| {
                         open_app(engine, url, id, reuse, ANSWER_WITHIN)
