@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -6,6 +7,11 @@ import { Button } from "../Button/Button";
 import { DisplayProvider } from "../Screen/DisplayProvider";
 
 import { SlideOver } from "./SlideOver";
+
+loadEmittedStylesheet(
+  document,
+  new URL("../../styled-system/styles.css", import.meta.url),
+);
 
 describe(SlideOver, () => {
   it("does not render the body when closed", () => {
@@ -71,11 +77,25 @@ describe(SlideOver, () => {
     const viewport = screen.getByRole("dialog").parentElement;
     expect(viewport?.style.left).toBe("0px");
     expect(viewport?.style.width).toBe("1920px");
-    // The backdrop too: over the whole page it would blur the gaps between
-    // monitors as well.
+    // The backdrop too, so the other monitor stays undimmed.
     const backdrop = document.querySelector<HTMLElement>("[data-backdrop]");
     expect(backdrop?.style.left).toBe("0px");
     expect(backdrop?.style.width).toBe("1920px");
+  });
+
+  // A blur over the screen redraws all of it whenever a window under it draws
+  // a frame.
+  it("dims without blurring what is under it", () => {
+    render(
+      <SlideOver open title="Transcript">
+        Body
+      </SlideOver>,
+    );
+    const backdrop = document.querySelector("[data-backdrop]");
+    if (backdrop === null) {
+      throw new Error("test: the slide-over drew no backdrop");
+    }
+    expect(globalThis.getComputedStyle(backdrop).backdropFilter).toBe("");
   });
 
   it("renders the trigger and keeps the panel closed until clicked", async () => {

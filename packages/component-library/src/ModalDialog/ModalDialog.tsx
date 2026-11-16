@@ -101,9 +101,9 @@ const ModalDialogComponent = ({
       {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
       <BaseDialog.Portal>
         {/*
-        On the dialog's screen only: its blur costs as much in the gaps
-        between monitors as on them. base-ui's own clear backdrop covers the
-        page, so a press on another screen still closes the dialog.
+        On the dialog's screen only, so other monitors stay undimmed.
+        base-ui's own clear backdrop covers the page, so a press on another
+        screen still closes the dialog.
       */}
         <BaseDialog.Backdrop
           className={backdropStyles({ surface })}
@@ -196,6 +196,8 @@ export const ModalDialog = Object.assign(ModalDialogComponent, {
   CloseButton,
 });
 
+// Dims without a blur: a blur over the screen redraws all of it whenever a
+// window under it draws a frame.
 // Values are literals so Panda's static extractor can see them.
 const backdropStyles = cva({
   base: css.raw({
@@ -215,13 +217,10 @@ const backdropStyles = cva({
   variants: {
     surface: {
       card: {
-        backdropFilter: "blur({spacing.0.5})",
         backgroundColor: "backdrop",
       },
-      // A lighter scrim and stronger blur, so content stays visible through
-      // the glass popup.
+      // A lighter scrim, so content stays visible through the glass popup.
       glass: {
-        backdropFilter: "blur({spacing.2.5}) saturate(140%)",
         backgroundColor:
           "color-mix(in oklab, {colors.backdrop} 55%, transparent)",
       },

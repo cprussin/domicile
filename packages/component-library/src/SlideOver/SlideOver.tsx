@@ -108,6 +108,8 @@ export const SlideOver = Object.assign(SlideOverComponent, {
   Close: BaseDialog.Close,
 });
 
+// Dims without a blur: a blur over the screen redraws all of it whenever a
+// window under it draws a frame.
 const backdropStyles = css({
   _starting: {
     opacity: 0,
@@ -116,7 +118,6 @@ const backdropStyles = css({
     opacity: 0,
     transition: "opacity {durations.fast} {easings.in}",
   },
-  backdropFilter: "blur({spacing.0.5})",
   backgroundColor: "backdrop",
   inset: 0,
   opacity: 1,

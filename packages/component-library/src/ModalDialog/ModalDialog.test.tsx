@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo } from "react";
@@ -156,9 +157,32 @@ describe(ModalDialog, () => {
       expect(viewport?.style.height).toBe("1440px");
     });
 
-    it("dims and blurs only the screen it is on", () => {
-      // A backdrop over the whole page would blur the gaps between monitors
-      // too, which costs as much as the screens themselves.
+    // A blur over the screen redraws all of it whenever a window under it
+    // draws a frame.
+    describe("backdrop", () => {
+      loadEmittedStylesheet(
+        document,
+        new URL("../../styled-system/styles.css", import.meta.url),
+      );
+
+      it.each(["card", "glass"] as const)(
+        "dims without blurring what is under it on %s",
+        (surface) => {
+          const { baseElement } = render(
+            <ModalDialog open surface={surface} title="Settings">
+              Body
+            </ModalDialog>,
+          );
+          const backdrop = baseElement.querySelector("[data-backdrop]");
+          if (backdrop === null) {
+            throw new Error("test: the dialog drew no backdrop");
+          }
+          expect(globalThis.getComputedStyle(backdrop).backdropFilter).toBe("");
+        },
+      );
+    });
+
+    it("dims only the screen it is on", () => {
       const { baseElement } = render(
         <DisplayProvider source={TWO_SCREENS}>
           <ModalDialog open screen="right" title="Settings">

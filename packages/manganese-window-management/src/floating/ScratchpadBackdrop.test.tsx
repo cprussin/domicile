@@ -24,6 +24,24 @@ const backdrop = (container: HTMLElement): HTMLElement => {
 };
 
 describe("ScratchpadBackdrop", () => {
+  // A blur over the whole screen redraws it each time anything under it
+  // changes, such as a video or a blinking cursor.
+  it("dims without blurring the windows under it", () => {
+    const { container } = render(
+      <ScratchpadBackdrop
+        depth={1}
+        motion="resting"
+        onDismiss={nothing}
+        rewound={0}
+        screen={SCREEN}
+      />,
+    );
+
+    expect(
+      globalThis.getComputedStyle(backdrop(container)).backdropFilter,
+    ).toBe("");
+  });
+
   // A press as the window slides away would hide nothing.
   it("lets the pointer through while it fades out", () => {
     const { container } = render(

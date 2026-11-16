@@ -77,10 +77,12 @@ const fadeOf = (motion: WindowMotion): "dropping" | "resting" | "stowing" => {
  * Dims like a `ModalDialog` backdrop. Its fades match the window's slides in
  * `movingStyles`; keyframes are in `panda.config.ts`. Ignores the pointer
  * while fading out.
+ *
+ * No blur: a blur over the screen redraws all of it whenever a window under
+ * it draws a frame.
  */
 const backdropStyles = cva({
   base: {
-    backdropFilter: "blur({spacing.0.5})",
     backgroundColor: "backdrop",
   },
   variants: {
