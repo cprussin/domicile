@@ -762,6 +762,7 @@ export const Desktop = ({
           // `AppWindow`. Extension popups, a portal's sign-in page,
           // applications' dialogs and the lock screen count.
           clientIcons={clientIcons}
+          covered={lock.locked}
           domicile={domicile}
           draggingId={windows.draggingId}
           focusedId={windows.focusedId}

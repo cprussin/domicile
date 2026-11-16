@@ -1269,6 +1269,37 @@ describe("Shell", () => {
         /^Too many tries\. Try again in 2[01] s$/,
       );
     });
+
+    describe("over the windows", () => {
+      // Visibility is a style, so these read the shell's stylesheet.
+      loadEmittedStylesheet(
+        document,
+        new URL("../styled-system/styles.css", import.meta.url),
+      );
+
+      // A window drawing under the blur, such as a video, would re-blur every
+      // screen each frame.
+      it("hides them, so they stop drawing under its blur", async () => {
+        const { container } = await renderShell();
+        clientAppears("term");
+        const windows = appBox(container, "term").closest("main");
+        if (windows === null) {
+          throw new Error("test: the window is outside the stage");
+        }
+
+        act(() => {
+          domicile.fake.set({ locked: true });
+        });
+        expect(globalThis.getComputedStyle(windows).visibility).toBe("hidden");
+
+        act(() => {
+          domicile.fake.set({ locked: false });
+        });
+        expect(globalThis.getComputedStyle(windows).visibility).not.toBe(
+          "hidden",
+        );
+      });
+    });
   });
 
   describe("the clipboard", () => {

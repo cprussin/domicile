@@ -1,7 +1,7 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ReactNode } from "react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
-
+import { cva } from "../styled-system/css";
 import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
@@ -72,6 +72,11 @@ type Props = {
    * and holds the keyboard.
    */
   behindPanel: boolean;
+  /**
+   * Whether a sheet over the whole desk, such as the lock screen, hides every
+   * window. Covered windows fade out and stop drawing.
+   */
+  covered: boolean;
   domicile: Domicile;
   /** The floating window being dragged, if any. */
   draggingId: string | undefined;
@@ -167,6 +172,7 @@ export const Stage = memo(
     activeId,
     behindPanel,
     clientIcons,
+    covered,
     domicile,
     draggingId,
     focusedId,
@@ -288,7 +294,7 @@ export const Stage = memo(
     const { onPlayedOut } = motions;
     const tabsShown = motions.tabs.map(({ tab }) => tab);
     return (
-      <main>
+      <main className={stageStyles({ covered })}>
         <SettleHandoffs>
           {/*
           Before every window, so each float covers its own shadow by document
@@ -1398,6 +1404,27 @@ const Sliding = ({
     </div>
   </div>
 );
+
+// Covered windows fade out and are then hidden, so they stop drawing: a
+// window drawing under the lock screen's blur, such as a video, would re-blur
+// every screen each frame. Uncovered, they show at once, under the sheet as it
+// clears.
+//
+// Only `opacity` and `visibility`, and no `z-index`, so at rest the stage
+// makes no stacking context and windows still stack among the bars.
+const stageStyles = cva({
+  variants: {
+    covered: {
+      false: {},
+      true: {
+        opacity: 0,
+        transition:
+          "opacity {durations.slowest} {easings.out}, visibility {durations.slowest}",
+        visibility: "hidden",
+      },
+    },
+  },
+});
 
 /**
  * The scratchpad window shown on screen `on`, or one sliding off it back to the
