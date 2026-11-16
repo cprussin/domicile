@@ -33,22 +33,20 @@ export const browserProfileSchema = z.strictObject({
 export const browserConfigSchema = z.strictObject({
   default_private_profile: z.string().prefault("private"),
   default_profile: z.string().prefault("default"),
-  profiles: z
-    .record(z.string(), browserProfileSchema)
-    .prefault({
-      default: {
-        color: "#0d9488",
-        extensions: null,
-        name: "Default",
-        private: false,
-      },
-      private: {
-        color: "#a78bfa",
-        extensions: null,
-        name: "Private",
-        private: true,
-      },
-    }),
+  profiles: z.record(z.string(), browserProfileSchema).prefault({
+    default: {
+      color: "#0d9488",
+      extensions: null,
+      name: "Default",
+      private: false,
+    },
+    private: {
+      color: "#a78bfa",
+      extensions: null,
+      name: "Private",
+      private: true,
+    },
+  }),
   sites: z.record(z.string(), z.string()).prefault({}),
 });
 
