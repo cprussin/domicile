@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 /** The wall clock; injectable so tests can freeze it. */
 export const wallClock = (): Date => new Date();
@@ -10,13 +10,28 @@ export const SECOND_MS = 1000;
 export const MINUTE_MS = 60_000;
 
 /**
- * The current time, re-read on each boundary of `step` while mounted and
+ * The longest it waits between readings, whatever `step` is. Timers count on
+ * a clock that stops while the machine sleeps, so a wait for the next minute
+ * set before a sleep would leave the time from before it showing for most of
+ * a minute after the wake (on the lock screen first). The wall clock can also
+ * be set forward.
+ */
+const RECHECK_MS = 5000;
+
+/** Which `step` a reading falls in. */
+const stepOf = (time: Date, step: number): number =>
+  Math.floor(time.getTime() / step);
+
+/**
+ * The current time, changing on each boundary of `step` while mounted and
  * `running`: every second for a clock to the second, on the minute for one to
- * the minute. Each re-read wakes the page and, if the reading changed, draws
- * a frame, so a clock ticks no faster than it changes.
+ * the minute. It reads the clock at each boundary, and at least every
+ * {@link RECHECK_MS}, but only draws again when the reading crosses into a
+ * new step, so a minute clock wakes the page a few times a minute instead of
+ * every second.
  *
- * While not `running`, such as a clock on a hidden sheet, it does not tick at
- * all, and it reads the time afresh when it runs again.
+ * While not `running`, such as a clock on a hidden sheet, it does not read the
+ * clock at all, and it reads it afresh before the first frame it runs again.
  */
 export const useNow = (
   now: typeof wallClock = wallClock,
@@ -24,37 +39,30 @@ export const useNow = (
   running = true,
 ): Date => {
   const [time, setTime] = useState(() => now());
-  // The last reading, to time the next tick from, and whether it went stale
-  // while stopped.
-  const last = useRef(time);
-  const stale = useRef(false);
+  // The reading shown, to tell when the next one crosses a step.
+  const shown = useRef(time);
 
-  useEffect(() => {
+  // A layout effect, so a clock that starts running is right in its first
+  // frame.
+  useLayoutEffect(() => {
     if (running) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const read = () => {
-        last.current = now();
-        setTime(last.current);
-      };
-      const schedule = () => {
+        const current = now();
+        if (stepOf(current, step) !== stepOf(shown.current, step)) {
+          shown.current = current;
+          setTime(current);
+        }
         timer = setTimeout(
-          () => {
-            read();
-            schedule();
-          },
-          step - (last.current.getTime() % step),
+          read,
+          Math.min(step - (current.getTime() % step), RECHECK_MS),
         );
       };
-      if (stale.current) {
-        stale.current = false;
-        read();
-      }
-      schedule();
+      read();
       return () => {
         clearTimeout(timer);
       };
     } else {
-      stale.current = true;
       return undefined;
     }
   }, [now, step, running]);

@@ -18,11 +18,11 @@ type Props = {
    * Whether the desktop is locked. The lock sheet stays mounted to fade, so
    * the clock stops while unlocked rather than ticking on a hidden sheet.
    */
-  locked?: boolean | undefined;
+  locked: boolean;
 };
 
 /** The large clock on the lock screen. */
-export const LockClock = ({ locked = true, now }: Props) => {
+export const LockClock = ({ locked, now }: Props) => {
   const time = useNow(now, MINUTE_MS, locked);
 
   return (
