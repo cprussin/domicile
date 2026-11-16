@@ -2890,17 +2890,21 @@
                   print(f"--- {entry}\n{said}")
                   # A crash, not a hand-back: what fell through to the app.
                   for crash in ["TypeError", "ReferenceError", "is not a function", "Unhandled"]:
-                      assert crash not in said, f"{entry} crashed on the engine: {crash}"
+                      assert crash not in said, f"{entry} crashed on the engine: {crash}\n{said[-3000:]}"
                   # The surface knows every name Electron has: reaching past
                   # it means the surface is stale.
                   assert "doesn't have on Linux" not in said, f"{entry} reached past Electron's surface"
                   hosted = machine.execute(f"pgrep -u alice -f {HOST}")[0] == 0
+                  # CI keeps only the end of the log, so a failure carries
+                  # what the app said.
+                  tail = "\n".join(said.splitlines()[-30:])
+                  running = machine.execute("pgrep -a -u alice -f 'electron|element|slack' | cut -c1-160")[1]
                   if on_the_engine:
-                      assert hosted, f"{entry} left the engine"
+                      assert hosted, f"{entry} left the engine:\n{tail}\nrunning:\n{running}"
                       assert "Domicile's Electron doesn't have yet" not in said
                   else:
                       assert hosted or "Domicile's Electron doesn't have yet" in said, (
-                          f"{entry} left the engine without saying why"
+                          f"{entry} left the engine without saying why:\n{tail}\nrunning:\n{running}"
                       )
                   machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer' ; sleep 5")
 
