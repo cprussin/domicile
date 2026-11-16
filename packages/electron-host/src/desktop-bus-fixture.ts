@@ -188,7 +188,22 @@ const serveSecrets = (
           ),
         ]);
       }
+      case "org.freedesktop.Secret.Service.ReadAlias":
+        return reply(message, "o", [
+          body[0] === "default" ? ITEMS.slice(0, -1) : "/",
+        ]);
       case "org.freedesktop.Secret.Collection.CreateItem": {
+        if (keyring.locked) {
+          // As gnome-keyring answers a locked login keyring.
+          bus.send(
+            Message.newError(
+              message,
+              "org.freedesktop.Secret.Error.IsLocked",
+              "Cannot create an item in a locked collection",
+            ),
+          );
+          return true;
+        }
         const [properties, [, , value]] = body as [
           Record<string, Variant>,
           [string, Buffer, Buffer, string],

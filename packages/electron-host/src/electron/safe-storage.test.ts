@@ -104,3 +104,24 @@ describe("safeStorage without a keyring", () => {
     );
   });
 });
+
+describe("safeStorage when the keyring fails", () => {
+  it("has no key and says why, rather than crash the app", () => {
+    const said: unknown[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => said.push(...args);
+    try {
+      const safeStorage = createSafeStorage({
+        password: () => {
+          throw new Error("the Secret Service is gone");
+        },
+      });
+
+      expect(safeStorage.getSelectedStorageBackend()).toBe("basic_text");
+      expect(safeStorage.isEncryptionAvailable()).toBe(false);
+      expect(String(said[0])).toContain("the Secret Service is gone");
+    } finally {
+      console.error = error;
+    }
+  });
+});
