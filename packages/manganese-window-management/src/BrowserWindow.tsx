@@ -53,6 +53,7 @@ import { PageViews } from "./browser/PageViews";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
+import { useBrowserProfile } from "./browser/useBrowserProfile";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
@@ -303,6 +304,7 @@ export const BrowserWindow = ({
   // the shell did not start (links, redirects, form posts).
   const shown = useShownPage(view);
   const address = addressOf(shown.url, sent);
+  const pageProfile = useBrowserProfile(domicile, window);
   usePageIcon(view, window, onIcon);
   usePageDescription(view, window, onDescription);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
@@ -682,10 +684,13 @@ export const BrowserWindow = ({
     }
   };
 
-  // Opens a link from the page in another browser window, private when this
-  // one is.
+  // Opens a link from the page in another browser window: in this one's
+  // profile when it is private, so the link stays private, and otherwise in
+  // its site's.
   const openWindow = (url: string): void => {
-    if (isPrivate) {
+    if (isPrivate && pageProfile !== undefined) {
+      domicile.browser.open(url, { profile: pageProfile.profile.id });
+    } else if (isPrivate) {
       domicile.browser.openPrivate(url);
     } else {
       domicile.browser.open(url);
@@ -835,6 +840,19 @@ export const BrowserWindow = ({
               run(BrowserCommand.ZoomReset);
             }}
             permissionRequest={permissionRequest}
+            profile={
+              pageProfile === undefined
+                ? undefined
+                : {
+                    ...pageProfile,
+                    onMove: (id) => {
+                      domicile.browser.reopen(window, id);
+                    },
+                    onOpenInNew: (id) => {
+                      domicile.browser.open(address, { profile: id });
+                    },
+                  }
+            }
             security={shown.security}
             sitePermissions={sitePermissions}
             visited={shown.visited}
