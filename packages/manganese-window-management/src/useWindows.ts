@@ -125,7 +125,9 @@ export const useWindows = (
         }
       }
       if (action.kind === WindowActionKind.BrowserOpened) {
-        if (action.isPrivate) {
+        if (action.profile !== undefined) {
+          domicile.browser.open(action.src, { profile: action.profile });
+        } else if (action.isPrivate) {
           domicile.browser.openPrivate(action.src);
         } else {
           domicile.browser.open(action.src);

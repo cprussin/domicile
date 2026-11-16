@@ -187,10 +187,12 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // windows, as a link out of a Chrome app opens in the browser.
   //
   // With an `app_id` and a `reuse` other than kNew, reuses the oldest open app
-  // window with that id instead; see mojom::BrowserWindows.OpenApp.
+  // window with that id instead; see mojom::BrowserWindows.OpenApp. A new
+  // one is in browser profile `profile`.
   bool OpenApp(const GURL& url,
                const std::string& app_id,
-               mojom::AppReuse reuse) {
+               mojom::AppReuse reuse,
+               const std::string& profile) {
     if (!app_id.empty() && reuse != mojom::AppReuse::kNew) {
       auto open = std::ranges::find(windows_, app_id, &Window::app_id);
       if (open != windows_.end()) {
@@ -205,7 +207,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     return Make([&](WebViewGuest& guest) { guest.Navigate(url); },
                 /*popup_window=*/std::nullopt, 0, 0,
-                /*private_browsing=*/false, /*profile=*/std::string(),
+                /*private_browsing=*/false, profile,
                 /*app=*/true, /*partition=*/std::nullopt,
                 /*app_host=*/std::string(), app_id) != nullptr;
   }
@@ -394,7 +396,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
     windows_.push_back(Window{
         id, std::move(guest), std::move(watch), size.width(), size.height(),
-        /*app=*/false, /*app_id=*/std::string(), target_url});
+        /*app=*/false, /*profiled=*/true, /*app_id=*/std::string(),
+        target_url});
     Changed();
   }
 
@@ -653,6 +656,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
     int width = 0;
     int height = 0;
     bool app = false;
+    // Whether its page is in a browser profile: every browser window, and a
+    // site's app window (OpenApp). An app module's or an Electron app's page
+    // is its app's, in none.
+    bool profiled = false;
     // The id OpenApp was given; empty for none.
     std::string app_id;
     // For a window a page opened, the address content navigates it to. Listed
@@ -689,11 +696,11 @@ class DeskWindows final : public base::SupportsUserData::Data,
         base::UTF16ToUTF8(contents.GetTitle()),
         window.guest->popup_window().value_or(0), window.width, window.height,
         contents.GetBrowserContext()->IsOffTheRecord(),
-        // An app window's page is in the shell's profile, in no browser
-        // profile the user picks: listed with none.
-        window.app ? std::string()
-                   : BrowserProfileRegistry::Get().IdOf(
-                         *contents.GetBrowserContext()),
+        // An app module's or Electron app's page is its app's: listed in
+        // no browser profile.
+        window.profiled ? BrowserProfileRegistry::Get().IdOf(
+                              *contents.GetBrowserContext())
+                        : std::string(),
         partition.has_value() ? WebViewPartitionAttribute(*partition)
                               : std::string(),
         window.app, window.app_id, window.captures > 0, window.parent, window.x,
@@ -745,6 +752,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
                               .width = width,
                               .height = height,
                               .app = app,
+                              .profiled = !app || (app_host.empty() &&
+                                                   !partition.has_value()),
                               .app_id = app_id,
                               .view = view});
     Changed();
@@ -1055,8 +1064,14 @@ class BrowserWindowsService final
 
   void OpenApp(const GURL& url,
                const std::string& app_id,
-               mojom::AppReuse reuse) override {
-    windows_->OpenApp(url, app_id, reuse);
+               mojom::AppReuse reuse,
+               const std::string& profile) override {
+    // No profile is the one its site opens in, as for Open.
+    windows_->OpenApp(
+        url, app_id, reuse,
+        profile.empty()
+            ? ProfileForUrl(BrowserProfileRegistry::Get().profiles(), url)
+            : profile);
   }
 
   void CountMatches(const std::string& id,
@@ -1213,14 +1228,19 @@ bool OpenBrowserWindow(const GURL& url, const std::string& profile) {
 
 bool OpenAppWindow(const GURL& url,
                    const std::string& app_id,
-                   mojom::AppReuse reuse) {
+                   mojom::AppReuse reuse,
+                   const std::string& profile) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {
     return false;
   }
   return DeskWindows::For(
              Profile::FromBrowserContext(shell->GetBrowserContext()))
-      .OpenApp(url, app_id, reuse);
+      .OpenApp(url, app_id, reuse,
+               profile.empty()
+                   ? ProfileForUrl(BrowserProfileRegistry::Get().profiles(),
+                                   url)
+                   : profile);
 }
 
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host) {

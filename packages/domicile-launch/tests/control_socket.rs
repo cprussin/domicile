@@ -154,7 +154,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     load: &|_, _| panic!("a question about this desktop reaches no engine"),
                     module: Path::new("/desktops/mine/shell.js"),
                     open: &|_, _| panic!("a question about this desktop reaches no engine"),
-                    open_app: &|_, _, _| panic!("a question about this desktop reaches no engine"),
+                    open_app: &|_, _, _, _| {
+                        panic!("a question about this desktop reaches no engine")
+                    },
                     run_app: &|_, _| panic!("a question about this desktop reaches no engine"),
                     send: &|_| panic!("a question about this desktop reaches no compositor"),
                     power_displays: &|_, _| {

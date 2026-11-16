@@ -56,11 +56,13 @@ void StartBrowserWindows();
 bool OpenBrowserWindow(const GURL& url, const std::string& profile);
 
 // Opens an app window at `url` with `app_id`, or reuses one as `reuse` says,
-// for `domicile open --app`. See mojom::BrowserWindows.OpenApp. Returns false
-// when there is no shell to own it.
+// for `domicile open --app`, in browser profile `profile` or for an empty
+// one the profile `url`'s site opens in. See mojom::BrowserWindows.OpenApp.
+// Returns false when there is no shell to own it.
 bool OpenAppWindow(const GURL& url,
                    const std::string& app_id,
-                   mojom::AppReuse reuse);
+                   mojom::AppReuse reuse,
+                   const std::string& profile);
 
 // Opens an app window at `url`, an app module's address, pinned to the app
 // at `app_host` so it may show that app and no other domicile:// address.

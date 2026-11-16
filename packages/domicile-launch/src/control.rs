@@ -59,6 +59,10 @@ pub enum Request {
         id: Option<String>,
         #[serde(default)]
         reuse: AppReuse,
+        /// The browser profile a new window opens in, or with none the one
+        /// its site opens in.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
     },
     /// Run the app module `module` under `root` in an app window. The client
     /// resolves both ([`crate::app_entry`]). See
@@ -394,10 +398,11 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 pub type OpenUrl<'a> = &'a dyn Fn(&str, Option<&str>) -> Result<(), String>;
 
 /// Tells the engine to open an address in an app window with an id, or to
-/// reuse the open one as [`AppReuse`] says.
+/// reuse the open one as [`AppReuse`] says, a new one in a browser profile or
+/// with none in the one its site opens in.
 ///
 /// [`crate::command_socket::open_app`] in a desktop; a closure in tests.
-pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse) -> Result<(), String>;
+pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse, Option<&str>) -> Result<(), String>;
 
 /// Tells the engine to run an app module.
 ///
@@ -682,12 +687,17 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
-        Ok(Request::OpenApp { url, id, reuse }) => {
-            to_line(&match (desktop.open_app)(&url, id.as_deref(), reuse) {
+        Ok(Request::OpenApp {
+            url,
+            id,
+            reuse,
+            profile,
+        }) => to_line(
+            &match (desktop.open_app)(&url, id.as_deref(), reuse, profile.as_deref()) {
                 Ok(()) => Response::Opened,
                 Err(why) => Response::Refused { why },
-            })
-        }
+            },
+        ),
         Ok(Request::RunApp { root, module }) => to_line(&match (desktop.run_app)(&root, &module) {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },

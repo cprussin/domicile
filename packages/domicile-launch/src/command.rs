@@ -182,11 +182,16 @@ pub fn open_url_line(url: &str, profile: Option<&str>) -> String {
 ///
 /// With `id`, the window is that app's, and `reuse` says what to do when one
 /// of its windows is open.
-pub fn open_app_line(url: &str, id: Option<&str>, reuse: AppReuse) -> String {
+pub fn open_app_line(
+    url: &str,
+    id: Option<&str>,
+    reuse: AppReuse,
+    profile: Option<&str>,
+) -> String {
     line(&Command::OpenUrl {
         url,
         version: VERSION,
-        profile: None,
+        profile,
         app: true,
         app_id: id,
         reuse,

@@ -73,6 +73,7 @@ describe(gmailInbox, () => {
         "https://mail.google.com/mail/?authuser=me%40example.com",
         "gmail:me@example.com",
         "focus",
+        "",
       ],
     ]);
   });

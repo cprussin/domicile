@@ -37,7 +37,15 @@ export type NoticeDesk = {
 };
 
 /** The account mail arrived for. */
-export type MailAccount = { email: string; nickname: string };
+/**
+ * An account whose mail is notified, and the browser profile its Gmail
+ * window opens in: its site's, as the engine routes it, when `undefined`.
+ */
+export type MailAccount = {
+  email: string;
+  nickname: string;
+  profile?: string | undefined;
+};
 
 /**
  * Notifies the desk of mail that arrived, under the account's nickname: a
@@ -75,6 +83,7 @@ export const mailNotices = (
       shown.set(id, {
         email: account.email,
         opens: notice.opens,
+        profile: account.profile,
         unread: notice.messages,
       });
     }
@@ -94,7 +103,12 @@ export const mailNotices = (
  * One notification still up: its account, the Gmail place a press opens, and
  * its unread messages.
  */
-type Shown = { email: string; opens: string; unread: readonly string[] };
+type Shown = {
+  email: string;
+  opens: string;
+  profile: string | undefined;
+  unread: readonly string[];
+};
 
 type Notice = {
   summary: string;
@@ -233,7 +247,7 @@ const follow = async (
           waiting.get(pressed.email)?.();
           waiting.set(
             pressed.email,
-            open(desk.browser, pressed.email, pressed.opens),
+            open(desk.browser, pressed.email, pressed.opens, pressed.profile),
           );
         }
         break;

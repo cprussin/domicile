@@ -34,6 +34,9 @@ Ask the running desktop:
   domicile open --app --id <id> [--reuse new|focus|navigate] <url>
                                         Open a site as app <id>; with focus or
                                         navigate, reuse its open window
+  domicile open --app --profile <id> <url>
+                                        Open a site as an app in browser
+                                        profile <id>
   domicile open --which <file|url>      Print the app open would use
   domicile open --electron <entry|path> [-- <command>...]
                                         Run an installed Electron app on the
@@ -303,6 +306,9 @@ pub enum Invocation {
         target: String,
         id: Option<String>,
         reuse: AppReuse,
+        /// The browser profile a new window opens in, or with none its
+        /// site's.
+        profile: Option<String>,
     },
     /// Print the desktop file id of the application [`Invocation::Open`]
     /// would run for this, or nothing for a web address. The launcher lists
@@ -463,16 +469,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             Verb::Opening => {
                 let first = args.next();
                 let flag = first.clone().filter(|word| word == APP || word == WHICH);
-                let (id, reuse) = match flag.as_deref() {
+                let (id, reuse, profile) = match flag.as_deref() {
                     Some(APP) => app_flags(&mut args)?,
-                    _ => (None, AppReuse::New),
+                    _ => (None, AppReuse::New, None),
                 };
                 let target = if flag.is_some() { args.next() } else { first };
                 match (target, args.next()) {
                     (None, _) => Err(CliError::NothingToOpen),
                     (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
                     (Some(target), None) => Ok(match flag.as_deref() {
-                        Some(APP) => Invocation::OpenAsApp { target, id, reuse },
+                        Some(APP) => Invocation::OpenAsApp {
+                            target,
+                            id,
+                            reuse,
+                            profile,
+                        },
                         Some(_) => Invocation::Opener { target },
                         None => Invocation::Open {
                             target,
@@ -691,18 +702,22 @@ const ID: &str = "--id";
 /// `open --app`'s flag saying what to do when the app's window is open.
 const REUSE: &str = "--reuse";
 
-/// `open --app`'s `--id` and `--reuse`, in either order, before the target.
+/// `open --app`'s `--id`, `--reuse` and `--profile`, in any order, before the
+/// target.
 fn app_flags(
     args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
-) -> Result<(Option<String>, AppReuse), CliError> {
+) -> Result<(Option<String>, AppReuse, Option<String>), CliError> {
     let mut id = None;
     let mut reuse = AppReuse::New;
-    while let Some(flag) = args.next_if(|word| word == ID || word == REUSE) {
+    let mut profile = None;
+    while let Some(flag) = args.next_if(|word| word == ID || word == REUSE || word == PROFILE) {
         let value = args
             .next()
             .ok_or_else(|| CliError::FlagWithoutValue { flag: flag.clone() })?;
         if flag == ID {
             id = Some(value);
+        } else if flag == PROFILE {
+            profile = Some(value);
         } else {
             reuse = match value.as_str() {
                 "new" => AppReuse::New,
@@ -715,7 +730,7 @@ fn app_flags(
     if reuse != AppReuse::New && id.is_none() {
         return Err(CliError::ReuseWithoutId);
     }
-    Ok((id, reuse))
+    Ok((id, reuse, profile))
 }
 
 /// A listing's flag for printing JSON rather than a table.

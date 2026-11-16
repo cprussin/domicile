@@ -149,7 +149,10 @@ interface BrowserWindows {
   // With an `app_id` and a `reuse` other than kNew, the oldest open app window
   // with that id is reused instead, and only a new one is listed. The match is
   // made here, so two quick calls never open two windows.
-  OpenApp(url.mojom.Url url, string app_id, AppReuse reuse);
+  //
+  // A new window is in browser profile `profile`, or for an empty one the
+  // profile `url`'s site opens in, as Open's is.
+  OpenApp(url.mojom.Url url, string app_id, AppReuse reuse, string profile);
 
   // How many elements in window `id`'s main document match the CSS
   // `selector`, as a <webview>'s CountMatches counts them. Null for an

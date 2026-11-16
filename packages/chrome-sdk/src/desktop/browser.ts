@@ -37,7 +37,7 @@ export type BrowserWindowOptions = {
 export type FetchHeader = DomicileFetchHeader;
 export type FetchResponse = DomicileFetchResponse;
 
-/** A fetch with the cookies of the profile the browser windows use. */
+/** A fetch with the cookies of a browser profile. */
 export type FetchInit = {
   /** `GET` by default. */
   method?: "GET" | "POST";
@@ -49,6 +49,12 @@ export type FetchInit = {
    * computed from the SAPISID cookie the page never sees.
    */
   sapisidHashOrigin?: string;
+  /**
+   * The id of the browser profile whose cookies to send, one of
+   * {@link Browser.profiles}; the default profile's by default. A private
+   * profile keeps none to send, and is refused.
+   */
+  profile?: string;
 };
 
 /** What {@link Browser.openApp} does when an app window with its id is open. */
@@ -70,6 +76,11 @@ export type AppWindowOptions = {
   id?: string;
   /** {@link AppReuse.New} by default. Any other needs an `id`. */
   reuse?: AppReuse;
+  /**
+   * The id of the browser profile a new window opens in, one of
+   * {@link Browser.profiles}. By default, the profile its site opens in.
+   */
+  profile?: string;
 };
 
 export type BrowserListeners = {
@@ -150,9 +161,9 @@ export type Browser = {
     checkboxChecked: boolean,
   ) => void;
   /**
-   * Fetch `url` from the browser process with its cookies. Resolves whatever
-   * the status; rejects with a NetworkError for a refusal or a network
-   * failure.
+   * Fetch `url` from the browser process with a browser profile's cookies.
+   * Resolves whatever the status; rejects with a NetworkError for a refusal
+   * or a network failure.
    */
   fetch: (url: string, init?: FetchInit) => Promise<FetchResponse>;
   on: On<BrowserListeners>;
@@ -198,7 +209,13 @@ export const browser = (host: BrowserHost): Browser => {
       host.countBrowserWindowMatches(id, selector),
     fetch: (
       url,
-      { method = "GET", headers = [], body, sapisidHashOrigin } = {},
+      {
+        method = "GET",
+        headers = [],
+        body,
+        sapisidHashOrigin,
+        profile = "",
+      } = {},
     ) =>
       host.fetchWithCookies(
         url,
@@ -206,6 +223,7 @@ export const browser = (host: BrowserHost): Browser => {
         headers,
         body ?? null,
         sapisidHashOrigin ?? null,
+        profile,
       ),
     on: on<BrowserListeners>({
       change: (listener) =>
@@ -216,8 +234,8 @@ export const browser = (host: BrowserHost): Browser => {
     open: (url, { partition = "", profile = "" } = {}) => {
       host.openBrowserWindow(url, partition, profile);
     },
-    openApp: (url, { id = "", reuse = AppReuse.New } = {}) => {
-      host.openAppWindow(url, id, reuseName(reuse));
+    openApp: (url, { id = "", reuse = AppReuse.New, profile = "" } = {}) => {
+      host.openAppWindow(url, id, reuseName(reuse), profile);
     },
     openPrivate: (url) => {
       host.openPrivateBrowserWindow(url);

@@ -110,17 +110,19 @@ pub fn run_app(
 }
 
 /// Tells the engine at `socket` to open `url` in an app window, as app `id`'s
-/// when there is one, reusing its open window as `reuse` says.
+/// when there is one, reusing its open window as `reuse` says, and a new one
+/// in browser profile `profile` or with none its site's.
 pub fn open_app(
     socket: &Path,
     url: &str,
     id: Option<&str>,
     reuse: AppReuse,
+    profile: Option<&str>,
     patience: Duration,
 ) -> Result<(), CommandError> {
     carry_out(
         socket,
-        &open_app_line(url, id, reuse),
+        &open_app_line(url, id, reuse, profile),
         Reply::Opened,
         patience,
     )

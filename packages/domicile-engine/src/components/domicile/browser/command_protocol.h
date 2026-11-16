@@ -41,6 +41,8 @@ namespace domicile {
 //    "app_id":"mail","reuse":"focus"}
 //   {"type":"open_url","version":1,"url":"https://example.com/",
 //    "profile":"work"}
+//   {"type":"open_url","version":1,"url":"https://example.com/","app":true,
+//    "app_id":"mail","reuse":"focus","profile":"work"}
 //   -> {"type":"opened"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -188,8 +190,8 @@ struct AppLaunch {
 };
 
 // Carries out `open_url`: opens a browser window at `url`, or with `app` an app
-// window, which the shell draws without an address bar. A browser window is
-// in browser profile `profile`, one the desk has, or for an empty one the
+// window, which the shell draws without an address bar. A new window is in
+// browser profile `profile`, one the desk has, or for an empty one the
 // profile `url`'s site opens in. Runs `opened` once, possibly after
 // returning, as for `run_app`.
 using OpenUrl = base::FunctionRef<void(const GURL& url,

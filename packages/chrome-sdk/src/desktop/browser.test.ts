@@ -88,7 +88,7 @@ describe("browser", () => {
       ["openBrowserWindow", "https://a.example/", "", ""],
       ["openBrowserWindow", "https://b.example/", "persist:work", ""],
       ["openPrivateBrowserWindow", "https://c.example/"],
-      ["openAppWindow", "https://d.example/", "", "new"],
+      ["openAppWindow", "https://d.example/", "", "new", ""],
       ["closeBrowserWindow", "1"],
       ["clickBrowserWindowMenu", "2", 7],
       ["answerBrowserWindowMessageBox", "2", 1, true],
@@ -137,6 +137,17 @@ describe("browser", () => {
     stop();
   });
 
+  it("opens an app window in a profile", () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    browser.openApp("https://mail.example/", { profile: "work" });
+
+    expect(fake.calls).toStrictEqual([
+      ["openAppWindow", "https://mail.example/", "", "new", "work"],
+    ]);
+    expect(browser.windows?.map(({ profile }) => profile)).toEqual(["work"]);
+  });
+
   it("opens an app window with an id, reusing the open one as asked", () => {
     const fake = new FakeDomicileHost();
     const { browser } = desktop(fake.host);
@@ -151,9 +162,9 @@ describe("browser", () => {
     });
 
     expect(fake.calls).toStrictEqual([
-      ["openAppWindow", "https://mail.example/", "mail", "new"],
-      ["openAppWindow", "https://mail.example/", "mail", "focus"],
-      ["openAppWindow", "https://mail.example/t/1", "mail", "navigate"],
+      ["openAppWindow", "https://mail.example/", "mail", "new", ""],
+      ["openAppWindow", "https://mail.example/", "mail", "focus", ""],
+      ["openAppWindow", "https://mail.example/t/1", "mail", "navigate", ""],
     ]);
   });
 
@@ -181,6 +192,7 @@ describe("browser", () => {
         body: "{}",
         headers: [{ name: "Content-Type", value: "application/json" }],
         method: "POST",
+        profile: "work",
         sapisidHashOrigin: "https://mail.example",
       })
       .catch(() => {
@@ -188,7 +200,15 @@ describe("browser", () => {
       });
 
     expect(fake.calls).toStrictEqual([
-      ["fetchWithCookies", "https://mail.example/feed", "GET", [], null, null],
+      [
+        "fetchWithCookies",
+        "https://mail.example/feed",
+        "GET",
+        [],
+        null,
+        null,
+        "",
+      ],
       [
         "fetchWithCookies",
         "https://mail.example/api",
@@ -196,6 +216,7 @@ describe("browser", () => {
         [{ name: "Content-Type", value: "application/json" }],
         "{}",
         "https://mail.example",
+        "work",
       ],
     ]);
   });

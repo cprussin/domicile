@@ -2360,6 +2360,7 @@ void DomicileHost::openAppWindow(ScriptState*,
                                  const String& url,
                                  const String& app_id,
                                  const String& reuse,
+                                 const String& profile,
                                  ExceptionState& exception_state) {
   // Resolved against this document, as openBrowserWindow's is.
   const KURL resolved = window_->CompleteURL(url);
@@ -2381,7 +2382,7 @@ void DomicileHost::openAppWindow(ScriptState*,
     return;
   }
   if (Ready(exception_state)) {
-    windows_->OpenApp(resolved, app_id, *named);
+    windows_->OpenApp(resolved, app_id, *named, profile);
   }
 }
 
@@ -2718,6 +2719,7 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
     const HeapVector<Member<DomicileFetchHeader>>& headers,
     const String& body,
     const String& sapisid_hash_origin,
+    const String& profile,
     ExceptionState& exception_state) {
   const KURL resolved = window_->CompleteURL(url);
   if (!resolved.IsValid()) {
@@ -2747,7 +2749,7 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
   auto promise = resolver->Promise();
   // The browser checks the method and the body: see shell_fetch.h.
   shell_fetch_->Fetch(resolved, method, std::move(sent), body,
-                      sapisid_hash_origin,
+                      sapisid_hash_origin, profile,
                       BindOnce(&Fetched, WrapPersistent(resolver)));
   return promise;
 }

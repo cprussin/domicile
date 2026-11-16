@@ -54,6 +54,8 @@ window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
   app: its own window, without an address bar
   ([WEB-APPS.md](architecture/WEB-APPS.md)).
   - `--id <id>` makes a site's window app `<id>`'s.
+  - `--profile <id>` opens a new window in that browser profile rather than
+    its site's.
   - `--reuse focus` brings `<id>`'s open window to the front instead of
     opening another; `--reuse navigate` also loads the address in it. Both
     need `--id`. `new`, the default, always opens a window.

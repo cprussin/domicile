@@ -268,7 +268,7 @@ void OpenUrlOnceTheShellHasAPage(const GURL& url,
   if (!has_a_page) {
     std::move(opened).Run(false);
   } else if (app.has_value()) {
-    std::move(opened).Run(OpenAppWindow(url, app->id, app->reuse));
+    std::move(opened).Run(OpenAppWindow(url, app->id, app->reuse, profile));
   } else {
     std::move(opened).Run(OpenBrowserWindow(url, profile));
   }

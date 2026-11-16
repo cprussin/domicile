@@ -160,15 +160,29 @@ fn run() -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         Invocation::OpenElectron { target, command } => electron_opened(&target, &command),
-        Invocation::OpenAsApp { target, id, reuse } => {
+        Invocation::OpenAsApp {
+            target,
+            id,
+            reuse,
+            profile,
+        } => {
             let here = typed_in()?;
             match app_opening(&target, &here).map_err(|why| why.to_string())? {
                 AppOpening::Module(_) if id.is_some() => Err(format!(
                     "--id is for a site; {target} is an app module, which opens \
                      a window of its own each time"
                 )),
+                AppOpening::Module(_) if profile.is_some() => Err(format!(
+                    "--profile is for a site; {target} is an app module, whose \
+                     page is its app's, in no browser profile"
+                )),
                 AppOpening::Module(entry) => ran_app(&entry, &here),
-                AppOpening::Address(url) => asked(&Request::OpenApp { url, id, reuse }),
+                AppOpening::Address(url) => asked(&Request::OpenApp {
+                    url,
+                    id,
+                    reuse,
+                    profile,
+                }),
             }
         }
         // Absolute here, since the compositor does not share this working
@@ -1449,8 +1463,8 @@ fn answer_a_command(
                     open: &|url, profile| {
                         open_url(engine, url, profile, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
-                    open_app: &|url, id, reuse| {
-                        open_app(engine, url, id, reuse, ANSWER_WITHIN)
+                    open_app: &|url, id, reuse, profile| {
+                        open_app(engine, url, id, reuse, profile, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
                     run_app: &|root, module| {

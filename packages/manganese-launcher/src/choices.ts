@@ -149,7 +149,7 @@ export const launchOf = (choice: Launchable): Launch => {
       return Launch.Opened(choice.row.path);
     }
     case ChoiceKind.Bookmark: {
-      return Launch.Browsed(choice.url, false);
+      return Launch.Browsed(choice.url, false, choice.profile);
     }
     case ChoiceKind.Site:
     case ChoiceKind.Search:

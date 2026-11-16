@@ -15,22 +15,33 @@ export type MailBrowser = Pick<Browser, "on" | "openApp" | "windows">;
  * click in Gmail does, so Gmail keeps its inbox list beside the message.
  * Loading the message's address afresh shows the message alone. With no such
  * page open, it loads the inbox first. Returns a function that stops waiting
- * for Gmail to start.
+ * for Gmail to start. A new window is in browser profile `profile`, or its
+ * site's when `undefined`.
  */
 export const openMail = (
   browser: MailBrowser,
   email: string,
   place: string,
+  profile?: string,
 ): (() => void) => {
   const id = gmailAppId(email);
+  const inProfile = profile === undefined ? {} : { profile };
   const show = (started: URL) => {
     started.hash = place;
-    browser.openApp(started.href, { id, reuse: AppReuse.Navigate });
+    browser.openApp(started.href, {
+      id,
+      reuse: AppReuse.Navigate,
+      ...inProfile,
+    });
   };
   const open = listed(browser, id);
   const started = open === undefined ? undefined : startedAt(open.url);
   if (started === undefined) {
-    browser.openApp(inboxAddress(email), { id, reuse: AppReuse.Navigate });
+    browser.openApp(inboxAddress(email), {
+      id,
+      reuse: AppReuse.Navigate,
+      ...inProfile,
+    });
     return whenStarted(browser, id, show);
   } else {
     show(started);

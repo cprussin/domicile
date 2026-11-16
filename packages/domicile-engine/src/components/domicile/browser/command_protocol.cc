@@ -442,12 +442,6 @@ void AnswerOpenUrl(const base::DictValue& request,
         "open_url's \"profile\" is the id of a browser profile"));
     return;
   }
-  if (profile != nullptr && is_app) {
-    std::move(reply).Run(RefusedCommand(
-        "open_url's \"profile\" is for a browser window; an app window's "
-        "page is in the profile its site opens in"));
-    return;
-  }
   if (profile != nullptr && !has_browser_profile(profile->GetString())) {
     std::move(reply).Run(RefusedCommand(base::StrCat(
         {"the desk has no browser profile \"", profile->GetString(),

@@ -192,8 +192,8 @@ export class FakeDomicileHost {
         } else if (name === "openAppWindow") {
           return (...args: Parameters<DomicileHost["openAppWindow"]>) => {
             calls.push([name, ...args]);
-            const [url, appId = "", reuse = "new"] = args;
-            this.openApp(url, appId, reuse);
+            const [url, appId = "", reuse = "new", profile = ""] = args;
+            this.openApp(url, appId, reuse, profile);
           };
         } else if (name === "reopenBrowserWindow") {
           return (id: string, profile: string) => {
@@ -266,7 +266,8 @@ export class FakeDomicileHost {
    * and `appId`. Ids count up from `"1"`; the asked-for size is 0 unless
    * `width` and `height` give one. With a `parent`, it is an Electron app's
    * view in that window, at `x` and `y`. It is in `profile`, or as the
-   * engine picks: none for an app window, else the default private profile
+   * engine picks: none for an app window (an app module's or Electron
+   * app's; `openApp` names one), else the default private profile
    * when `isPrivate` and the default one otherwise, from `browserProfiles`
    * or the config's own `default` and `private`.
    */
@@ -326,7 +327,7 @@ export class FakeDomicileHost {
           parent,
           partition,
           popupWindow,
-          profile: isApp ? null : (profile ?? fallback),
+          profile: profile ?? (isApp ? null : fallback),
           title: "",
           toplevelId: null,
           url,
@@ -343,14 +344,25 @@ export class FakeDomicileHost {
    * window with `appId` unless `reuse` is "new", loading `url` in it for
    * "navigate", and otherwise opens one.
    */
-  openApp(url: string, appId: string, reuse: string): void {
+  openApp(url: string, appId: string, reuse: string, profile = ""): void {
     const windows = this.#state.browserWindows ?? [];
     const open =
       appId === "" || reuse === "new"
         ? undefined
         : windows.find((window) => window.appId === appId);
     if (open === undefined) {
-      this.openBrowser(url, { appId, isApp: true });
+      // A site's app window is in a profile, as a browser window is: the
+      // fake routes no site, so the default one when none is named.
+      this.openBrowser(url, {
+        appId,
+        isApp: true,
+        profile:
+          profile === ""
+            ? ((this.#state.browserProfiles ?? []).find(
+                (each) => each.isDefault,
+              )?.id ?? "default")
+            : profile,
+      });
     } else if (reuse === "navigate") {
       this.set({
         browserWindows: windows.map((window) =>
