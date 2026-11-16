@@ -452,9 +452,13 @@ class ShellWindows : public display::DisplayObserver {
     const gfx::Rect page = PageBoundsOn(*on_host, desk->geometry.box);
     if (content::GetDomicileDeskPageBounds(window) != page) {
       content::SetDomicileDeskPageBounds(window, page);
-      views::Widget::GetWidgetForNativeWindow(window)
-          ->client_view()
-          ->InvalidateLayout();
+      views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
+      widget->client_view()->InvalidateLayout();
+      // Lays the host out before the screen infos below, which place each
+      // monitor by the page's position on screen. The renderer reads its
+      // regions as those monitors less its own position, so a stale position
+      // shifts every region by the distance the host moved.
+      widget->LayoutRootViewIfNecessary();
     }
     content::WebContents* contents =
         host->GetActiveTabInterface()->GetContents();
