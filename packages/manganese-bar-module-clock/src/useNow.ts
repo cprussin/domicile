@@ -23,6 +23,35 @@ const stepOf = (time: Date, step: number): number =>
   Math.floor(time.getTime() / step);
 
 /**
+ * Reads `now` at each boundary of `step` and at least every
+ * {@link RECHECK_MS}, handing a reading to `show` when it crosses into a new
+ * step past `shown`. Returns what stops it.
+ */
+const tick = (
+  now: typeof wallClock,
+  step: number,
+  shown: { current: Date },
+  show: (time: Date) => void,
+): (() => void) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const read = () => {
+    const current = now();
+    if (stepOf(current, step) !== stepOf(shown.current, step)) {
+      shown.current = current;
+      show(current);
+    }
+    timer = setTimeout(
+      read,
+      Math.min(step - (current.getTime() % step), RECHECK_MS),
+    );
+  };
+  read();
+  return () => {
+    clearTimeout(timer);
+  };
+};
+
+/**
  * The current time, changing on each boundary of `step` while mounted and
  * `running`: every second for a clock to the second, on the minute for one to
  * the minute. It reads the clock at each boundary, and at least every
@@ -44,28 +73,10 @@ export const useNow = (
 
   // A layout effect, so a clock that starts running is right in its first
   // frame.
-  useLayoutEffect(() => {
-    if (running) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const read = () => {
-        const current = now();
-        if (stepOf(current, step) !== stepOf(shown.current, step)) {
-          shown.current = current;
-          setTime(current);
-        }
-        timer = setTimeout(
-          read,
-          Math.min(step - (current.getTime() % step), RECHECK_MS),
-        );
-      };
-      read();
-      return () => {
-        clearTimeout(timer);
-      };
-    } else {
-      return undefined;
-    }
-  }, [now, step, running]);
+  useLayoutEffect(
+    () => (running ? tick(now, step, shown, setTime) : undefined),
+    [now, step, running],
+  );
 
   return time;
 };
