@@ -104,7 +104,10 @@ pub fn compiled_wrapper_command(program: &Path) -> Option<String> {
         return None;
     }
     const START: &[u8] = b"\nmakeCWrapper ";
-    let at = bytes.windows(START.len()).position(|window| window == START)? + 1;
+    let at = bytes
+        .windows(START.len())
+        .position(|window| window == START)?
+        + 1;
     let rest = &bytes[at..];
     let end = [&b"\n\n\n#"[..], b"\0"]
         .iter()
@@ -189,7 +192,12 @@ fn follow_compiled(out: &Path, command: &str, args: &[OsString]) -> Result<(), S
         .suffix(".bash")
         .tempfile_in(out)
         .and_then(|file| file.keep().map_err(|kept| kept.error))
-        .map_err(|why| format!("cannot write a compiled wrapper's script in {}: {why}", out.display()))?
+        .map_err(|why| {
+            format!(
+                "cannot write a compiled wrapper's script in {}: {why}",
+                out.display()
+            )
+        })?
         .1;
     fs::write(&script, format!("{MAKE_C_WRAPPER}{command}\n"))
         .map_err(|why| format!("cannot write {}: {why}", script.display()))?;

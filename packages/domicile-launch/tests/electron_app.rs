@@ -267,7 +267,10 @@ fn binary_wrapper(root: &Path, path: &str, strings: &[&Path]) -> PathBuf {
     let (program, rest) = strings.split_first().expect("a program");
     let mut command = format!("makeCWrapper '{}'", program.display());
     for string in rest {
-        command.push_str(&format!(" \\\n    --set 'CHATGPT_EXECUTABLE' '{}'", string.display()));
+        command.push_str(&format!(
+            " \\\n    --set 'CHATGPT_EXECUTABLE' '{}'",
+            string.display()
+        ));
     }
     bytes.extend_from_slice(
         format!(
@@ -290,7 +293,11 @@ fn compiled_wrappers_are_followed_to_the_app_they_run() {
     // wrapper, which sets the app's Electron binary in a variable and runs a
     // launcher script that names no path of its own.
     let root = tempfile::tempdir().unwrap();
-    write(root.path(), "chatgpt/lib/chatgpt/resources/app.asar", "asar");
+    write(
+        root.path(),
+        "chatgpt/lib/chatgpt/resources/app.asar",
+        "asar",
+    );
     let electron = script(root.path(), "chatgpt/lib/chatgpt/ChatGPT", "\x7fELF");
     let launcher = script(
         root.path(),

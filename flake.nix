@@ -2825,15 +2825,31 @@
           let
             unfree = import nixpkgs {
               inherit system;
-              config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "slack" ];
+              config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "chatgpt" "slack" ];
             };
-            # Each app's entry, and whether it must run on the engine: an app
-            # still allowed to hand itself back names what it needs. Element
-            # finds no keyring here and says so in a message box before its
-            # window has a page, which the engine can't show yet.
+            # ChatGPT as nixpkgs wraps it: compiled wrappers (wrapGAppsHook3,
+            # wrapQtAppsHook) around a launcher script, as Claude's package
+            # is too. Without its codex, whose build fails here, and with
+            # tectonic's own AWS-LC, as the user's config builds it.
+            chatgpt = unfree.chatgpt.override {
+              tectonic-unwrapped = unfree.tectonic-unwrapped.overrideAttrs {
+                preBuild = "unset AWS_LC_SYS_USE_SYSTEM";
+              };
+              codex = null;
+            };
+            # Each app's `domicile open --electron` arguments, and whether it
+            # must run on the engine: an app still allowed to hand itself
+            # back names what it needs. Element finds no keyring here and
+            # says so in a message box before its window has a page, which
+            # the engine can't show yet.
             apps = {
-              "element-desktop.desktop" = { package = pkgs.element-desktop; onTheEngine = false; };
-              "slack.desktop" = { package = unfree.slack; onTheEngine = false; };
+              element = { open = "element-desktop.desktop"; package = pkgs.element-desktop; onTheEngine = false; };
+              slack = { open = "slack.desktop"; package = unfree.slack; onTheEngine = false; };
+              chatgpt = {
+                open = "${chatgpt}/bin/chatgpt -- ${chatgpt}/bin/chatgpt";
+                package = chatgpt;
+                onTheEngine = false;
+              };
             };
           in
           pkgs.testers.runNixOSTest {
@@ -2858,7 +2874,7 @@
               environment.loginShellInit =
                 let
                   config = pkgs.writeText "domicile.json" (builtins.toJSON {
-                    electron.apps = builtins.attrNames apps;
+                    electron.apps = [ "element-desktop.desktop" "slack.desktop" ];
                   });
                 in
                 ''
@@ -2877,7 +2893,7 @@
               import re
 
               WAIT = dt.timedelta(seconds=300)
-              APPS = json.loads(${pkgs.lib.escapeShellArg (builtins.toJSON (builtins.mapAttrs (_: app: app.onTheEngine) apps))})
+              APPS = json.loads(${pkgs.lib.escapeShellArg (builtins.toJSON (builtins.mapAttrs (_: app: { inherit (app) open onTheEngine; }) apps))})
               HOST = "electron-host/src/main.ts"
 
 
@@ -2891,9 +2907,9 @@
                   )
 
 
-              def starts(entry, on_the_engine):
+              def starts(entry, open, on_the_engine):
                   log = f"/tmp/{entry}.log"
-                  machine.succeed(in_the_desk(f"domicile open --electron {entry}") + f" >{log} 2>&1 &")
+                  machine.succeed(in_the_desk(f"domicile open --electron {open}") + f" >{log} 2>&1 &")
                   machine.sleep(60)
                   said = machine.succeed(f"cat {log}")
                   print(f"--- {entry}\n{said}")
@@ -2903,11 +2919,17 @@
                   # The surface knows every name Electron has: reaching past
                   # it means the surface is stale.
                   assert "doesn't have on Linux" not in said, f"{entry} reached past Electron's surface"
+                  # Found through its wrappers, scripts or compiled, and run
+                  # with what they set.
+                  assert "doesn't look like an Electron app" not in said, f"{entry} wasn't found:\n{said[-3000:]}"
+                  assert "without what its wrappers set" not in said, f"{entry} lost its wrappers:\n{said[-3000:]}"
+                  # The schemes it registered, which the next start brings.
+                  print(machine.execute("cat /home/alice/.local/state/domicile/electron-schemes.json 2>&1")[1])
                   hosted = machine.execute(f"pgrep -u alice -f {HOST}")[0] == 0
                   # CI keeps only the end of the log, so a failure carries
                   # what the app said.
                   tail = "\n".join(said.splitlines()[-30:])
-                  running = machine.execute("pgrep -a -u alice -f 'electron|element|slack' | cut -c1-160")[1]
+                  running = machine.execute("pgrep -a -u alice -f 'electron|element|slack|chatgpt|ChatGPT' | cut -c1-160")[1]
                   if on_the_engine:
                       assert hosted, f"{entry} left the engine:\n{tail}\nrunning:\n{running}"
                       assert "Domicile's Electron doesn't have yet" not in said
@@ -2926,8 +2948,8 @@
                   machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
                   machine.wait_until_succeeds("pgrep -u alice -f bin/domicile-compositor", timeout=WAIT)
                   machine.sleep(20)
-                  for entry, on_the_engine in APPS.items():
-                      starts(entry, on_the_engine)
+                  for entry, app in APPS.items():
+                      starts(entry, app["open"], app["onTheEngine"])
               except Exception:
                   machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                   for command in [

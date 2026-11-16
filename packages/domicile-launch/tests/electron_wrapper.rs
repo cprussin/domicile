@@ -262,8 +262,16 @@ fn compiled_wrappers_have_their_say_too() {
     // compiled wrappers, then a launcher script that execs the Electron
     // binary a variable names.
     let root = tempfile::tempdir().unwrap();
-    write(root.path(), "chatgpt/lib/chatgpt/resources/app.asar", "asar");
-    let electron = write(root.path(), "chatgpt/lib/chatgpt/ChatGPT", "\x7fELF never run");
+    write(
+        root.path(),
+        "chatgpt/lib/chatgpt/resources/app.asar",
+        "asar",
+    );
+    let electron = write(
+        root.path(),
+        "chatgpt/lib/chatgpt/ChatGPT",
+        "\x7fELF never run",
+    );
     let launcher = write(
         root.path(),
         "chatgpt/bin/.chatgpt-wrapped_",
@@ -317,7 +325,9 @@ fn compiled_wrappers_have_their_say_too() {
     assert_eq!(env_of(&launch, "CHATGPT_EXECUTABLE"), electron.to_str());
     assert_eq!(env_of(&launch, "GIO_EXTRA_MODULES"), Some("/gio"));
     assert_eq!(env_of(&launch, "CODEX_RESOURCES"), Some("/cache"));
-    assert!(env_of(&launch, "PATH").unwrap().starts_with("/opt/node/bin:"));
+    assert!(env_of(&launch, "PATH")
+        .unwrap()
+        .starts_with("/opt/node/bin:"));
     assert_eq!(env_of(&launch, "BASH_ENV"), None);
     assert_eq!(env_of(&launch, "DOMICILE_ELECTRON_BASH"), None);
 }
