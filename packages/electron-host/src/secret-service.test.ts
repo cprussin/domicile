@@ -53,6 +53,33 @@ describe("readSafeStoragePassword", () => {
     expect(desktopBus.keyring.locked).toBe(false);
   });
 
+  it("unlocks a locked keyring to create the password there", async () => {
+    // A keyring the login didn't unlock, as on lyra: the item can't be made
+    // until the user unlocks it.
+    desktopBus.keyring.locked = true;
+
+    const password = await readSafeStoragePassword(bus, "Element-locked");
+
+    expect(desktopBus.keyring.locked).toBe(false);
+    expect(password).toBe(desktopBus.secrets.at(-1)?.secret);
+    expect(desktopBus.secrets.at(-1)?.attributes.application).toBe(
+      "Element-locked",
+    );
+  });
+
+  it("has no password to create when the user won't unlock the keyring", async () => {
+    desktopBus.keyring.locked = true;
+    desktopBus.keyring.dismiss = true;
+    try {
+      expect(
+        await readSafeStoragePassword(bus, "Never-unlocked"),
+      ).toBeUndefined();
+    } finally {
+      desktopBus.keyring.locked = false;
+      desktopBus.keyring.dismiss = false;
+    }
+  });
+
   it("has no password when the user won't unlock the keyring", async () => {
     desktopBus.keyring.locked = true;
     desktopBus.keyring.dismiss = true;

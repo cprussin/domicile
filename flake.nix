@@ -2827,13 +2827,36 @@
               inherit system;
               config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "slack" ];
             };
-            # Each app's entry, and whether it must run on the engine: an app
-            # still allowed to hand itself back names what it needs. Element
-            # finds no keyring here and says so in a message box before its
-            # window has a page, which the engine can't show yet.
+            # Element behind a compiled wrapper, as nixpkgs' wrapGAppsHook3
+            # makes one for Claude's and ChatGPT's packages (neither of which
+            # this nixpkgs has for Linux): the real makeBinaryWrapper output,
+            # around Element's own scripts.
+            elementCompiled = pkgs.stdenv.mkDerivation {
+              name = "element-desktop-compiled-wrapper";
+              dontUnpack = true;
+              nativeBuildInputs = [ pkgs.makeWrapper pkgs.wrapGAppsHook3 ];
+              dontWrapGApps = true;
+              installPhase = "mkdir -p $out/bin";
+              postFixup = ''
+                makeWrapper ${pkgs.element-desktop}/bin/element-desktop "$out/bin/element-desktop" \
+                  "''${gappsWrapperArgs[@]}" --set-default ELEMENT_WRAPPED compiled
+                head -c 4 "$out/bin/element-desktop" | grep -q ELF \
+                  || (echo "makeWrapper wrote a script here, not a compiled wrapper" >&2; exit 1)
+              '';
+            };
+            # Each app's `domicile open --electron` arguments, and whether it
+            # must run on the engine: an app still allowed to hand itself
+            # back names what it needs. Element finds no keyring here and
+            # says so in a message box before its window has a page, which
+            # the engine can't show yet.
             apps = {
-              "element-desktop.desktop" = { package = pkgs.element-desktop; onTheEngine = false; };
-              "slack.desktop" = { package = unfree.slack; onTheEngine = false; };
+              element = { open = "element-desktop.desktop"; package = pkgs.element-desktop; onTheEngine = false; };
+              slack = { open = "slack.desktop"; package = unfree.slack; onTheEngine = false; };
+              element-compiled = {
+                open = "${elementCompiled}/bin/element-desktop -- ${elementCompiled}/bin/element-desktop";
+                package = elementCompiled;
+                onTheEngine = false;
+              };
             };
           in
           pkgs.testers.runNixOSTest {
@@ -2858,7 +2881,7 @@
               environment.loginShellInit =
                 let
                   config = pkgs.writeText "domicile.json" (builtins.toJSON {
-                    electron.apps = builtins.attrNames apps;
+                    electron.apps = [ "element-desktop.desktop" "slack.desktop" ];
                   });
                 in
                 ''
@@ -2877,7 +2900,7 @@
               import re
 
               WAIT = dt.timedelta(seconds=300)
-              APPS = json.loads(${pkgs.lib.escapeShellArg (builtins.toJSON (builtins.mapAttrs (_: app: app.onTheEngine) apps))})
+              APPS = json.loads(${pkgs.lib.escapeShellArg (builtins.toJSON (builtins.mapAttrs (_: app: { inherit (app) open onTheEngine; }) apps))})
               HOST = "electron-host/src/main.ts"
 
 
@@ -2891,9 +2914,9 @@
                   )
 
 
-              def starts(entry, on_the_engine):
+              def starts(entry, open, on_the_engine):
                   log = f"/tmp/{entry}.log"
-                  machine.succeed(in_the_desk(f"domicile open --electron {entry}") + f" >{log} 2>&1 &")
+                  machine.succeed(in_the_desk(f"domicile open --electron {open}") + f" >{log} 2>&1 &")
                   machine.sleep(60)
                   said = machine.succeed(f"cat {log}")
                   print(f"--- {entry}\n{said}")
@@ -2903,6 +2926,12 @@
                   # The surface knows every name Electron has: reaching past
                   # it means the surface is stale.
                   assert "doesn't have on Linux" not in said, f"{entry} reached past Electron's surface"
+                  # Found through its wrappers, scripts or compiled, and run
+                  # with what they set.
+                  assert "doesn't look like an Electron app" not in said, f"{entry} wasn't found:\n{said[-3000:]}"
+                  assert "without what its wrappers set" not in said, f"{entry} lost its wrappers:\n{said[-3000:]}"
+                  # The schemes it registered, which the next start brings.
+                  print(machine.execute("cat /home/alice/.local/state/domicile/electron-schemes.json 2>&1")[1])
                   hosted = machine.execute(f"pgrep -u alice -f {HOST}")[0] == 0
                   # CI keeps only the end of the log, so a failure carries
                   # what the app said.
@@ -2918,7 +2947,9 @@
                       ), (
                           f"{entry} left the engine without saying why:\n{tail}\nrunning:\n{running}"
                       )
-                  machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer' ; sleep 5")
+                  # An app handed back runs on its own Electron: stopped too, so
+                  # the next app's single-instance lock is its own.
+                  machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer'; pkill -u alice -f 'element|slack'; sleep 5")
 
 
               machine.wait_for_unit("multi-user.target")
@@ -2926,8 +2957,8 @@
                   machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
                   machine.wait_until_succeeds("pgrep -u alice -f bin/domicile-compositor", timeout=WAIT)
                   machine.sleep(20)
-                  for entry, on_the_engine in APPS.items():
-                      starts(entry, on_the_engine)
+                  for entry, app in APPS.items():
+                      starts(entry, app["open"], app["onTheEngine"])
               except Exception:
                   machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                   for command in [

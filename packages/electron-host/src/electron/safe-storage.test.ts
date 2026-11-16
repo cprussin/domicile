@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 
 import { createSafeStorage } from "./safe-storage";
 
@@ -102,5 +102,26 @@ describe("safeStorage without a keyring", () => {
     expect(() => safeStorage.decryptString(HELLO_V11)).toThrow(
       "Error while decrypting",
     );
+  });
+});
+
+describe("safeStorage when the keyring fails", () => {
+  it("has no key and says why, rather than crash the app", () => {
+    const said = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const safeStorage = createSafeStorage({
+        password: () => {
+          throw new Error("the Secret Service is gone");
+        },
+      });
+
+      expect(safeStorage.getSelectedStorageBackend()).toBe("basic_text");
+      expect(safeStorage.isEncryptionAvailable()).toBe(false);
+      expect(String(said.mock.calls[0]?.[0])).toContain(
+        "the Secret Service is gone",
+      );
+    } finally {
+      said.mockRestore();
+    }
   });
 });

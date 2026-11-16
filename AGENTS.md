@@ -188,6 +188,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/COLOR.md](/docs/architecture/COLOR.md) | 10-bit client formats and scanout, `wp_color_management_v1`, and opt-in HDR per display on Chromium's color pipeline. The plan. |
 | [/docs/architecture/APP-MODULES.md](/docs/architecture/APP-MODULES.md) | Apps as modules: `domicile open --app <entry.js>` calls `main(root, host)` on `domicile://app-<id>/`; History and Settings as app modules instead of extensions. |
 | [/docs/architecture/ELECTRON-APPS.md](/docs/architecture/ELECTRON-APPS.md) | Electron apps on the engine: `electron-host` runs the main process with a stand-in `electron` module, windows are app windows, preload and IPC over the Electron socket. The plan. |
+| [/docs/architecture/BROWSER-PROFILES.md](/docs/architecture/BROWSER-PROFILES.md) | Browser profiles: a Chrome profile per profile, sites mapped to profiles, moving a page between them. The plan. |
 
 [`/docs/KNOWN-GAPS.md`](/docs/KNOWN-GAPS.md) lists known gaps, each pointing at the doc
 with the detail. Read it before substantial work. Remove a gap when it's fixed.

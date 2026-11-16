@@ -59,12 +59,31 @@ const decrypt = (key: Buffer, ciphertext: Buffer) => {
   }
 };
 
+/**
+ * The app's password, or none when the Secret Service fails, as Electron then
+ * has no key: the app goes on, without encryption, rather than crash. Said on
+ * stderr, as the failure is the desktop's keyring's, not the app's.
+ */
+const readPassword = (
+  dependencies: SafeStorageDependencies,
+): SafeStoragePassword => {
+  try {
+    return dependencies.password();
+  } catch (why) {
+    // biome-ignore lint/suspicious/noConsole: the desktop's keyring failed, which only the log can say
+    console.error(
+      `electron-host: safeStorage has no key, as reading it failed: ${why instanceof Error ? why.message : String(why)}`,
+    );
+    return { password: undefined };
+  }
+};
+
 /** Builds Electron's `safeStorage` for one app. */
 export const createSafeStorage = (dependencies: SafeStorageDependencies) => {
   let password: SafeStoragePassword | undefined;
   let usePlainText = false;
   const keyring = () => {
-    password ??= dependencies.password();
+    password ??= readPassword(dependencies);
     return password.password === undefined
       ? undefined
       : keyOf(password.password);
