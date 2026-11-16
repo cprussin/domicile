@@ -228,7 +228,7 @@ TEST_F(PictureInPictureVideosTest, TheShellsControlsReachTheVideosPage) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
       videos_.List("4", gfx::Rect(), &controls_);
   std::unique_ptr<PictureInPictureVideos::Listing> other_listing =
-      videos_.List("5", &other);
+      videos_.List("5", gfx::Rect(), &other);
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
 
   shell->Act("1", Action::kPause);
