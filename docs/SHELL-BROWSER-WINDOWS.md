@@ -163,7 +163,14 @@ config's `browser.profiles`. See
 - **`domicile.openBrowserWindow(url, partition, profile)`** opens a window in
   `profile`. `""` opens it where its site goes: the most specific of the
   config's `browser.sites` that matches `url`, or the default profile.
-  **`domicile.browserProfileFor(url)`** resolves to that profile's id.
+  **`domicile.browserProfileFor(url)`** resolves to that profile's id, and
+  **`domicile.browserSiteFor(url)`** to the `browser.sites` entry that
+  matched, or `""`.
+- **`domicile.pinBrowserSite(site, profile)`** opens a site in a profile from
+  now on, as a profile menu's pin does. The engine keeps the pin across
+  restarts and lists it in the profile's `pinnedSites`. The config wins: a
+  site in its `browser.sites` is in the profile's `configSites` and the pin is
+  refused. Pinning to the default profile removes the pin.
 - **`<webview profile="work">`** puts your own page in one. Set it before the
   view enters the document.
 - **The engine moves pages between profiles.** When the user takes a window

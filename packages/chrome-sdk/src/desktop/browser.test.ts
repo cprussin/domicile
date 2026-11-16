@@ -124,17 +124,66 @@ describe("browser", () => {
     expect(browser.profiles).toBeUndefined();
     const work = {
       color: "#3366ff",
+      configSites: [],
       id: "work",
       isDefault: true,
       isDefaultPrivate: false,
       isPrivate: false,
       name: "Work",
+      pinnedSites: [],
     };
     fake.set({ browserProfiles: [work] });
 
     expect(browser.profiles).toStrictEqual([work]);
     expect(changes).toBe(1);
     stop();
+  });
+
+  it("pins a site to a profile and finds the site that routes an address", async () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    const profile = (
+      id: string,
+      isDefault: boolean,
+      configSites: string[],
+    ) => ({
+      color: "#3366ff",
+      configSites,
+      id,
+      isDefault,
+      isDefaultPrivate: false,
+      isPrivate: false,
+      name: id,
+      pinnedSites: [],
+    });
+    fake.set({
+      browserProfiles: [
+        profile("personal", true, []),
+        profile("work", false, ["*.acme.com"]),
+      ],
+    });
+
+    await browser.pin("github.com/acme", "work");
+    expect(await browser.siteFor("https://github.com/acme/repo")).toBe(
+      "github.com/acme",
+    );
+    expect(await browser.siteFor("https://docs.acme.com/")).toBe("*.acme.com");
+    expect(await browser.siteFor("https://github.com/")).toBeUndefined();
+    // The default profile unpins it.
+    await browser.pin("github.com/acme", "personal");
+    expect(browser.profiles?.map(({ pinnedSites }) => pinnedSites)).toEqual([
+      [],
+      [],
+    ]);
+    // Only the config moves its own sites.
+    await expect(browser.pin("*.acme.com", "personal")).rejects.toThrow(
+      "only the config",
+    );
+    expect(fake.calls[0]).toStrictEqual([
+      "pinBrowserSite",
+      "github.com/acme",
+      "work",
+    ]);
   });
 
   it("opens an app window in a profile", () => {

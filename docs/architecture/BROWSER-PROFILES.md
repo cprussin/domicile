@@ -82,6 +82,10 @@ The engine picks the profile, so every shell, `domicile open`, `window.open`
 and `chrome.tabs.create` behave the same.
 
 - `profileFor(url)`: the most specific `sites` match, else `default_profile`.
+- **Pinned sites:** the profile menu pins a site to a profile. The engine keeps
+  pins in the shell profile's prefs and adds them under the config's `sites`:
+  a site the config names keeps the config's profile and shows locked. Pinning
+  to the default profile removes the pin.
 - **New windows** with no opener open in `profileFor(url)`, unless the caller
   names a profile.
 - **Top-level navigations the user starts** (link clicks, the address bar,
@@ -110,6 +114,9 @@ same window id, so the shell keeps its place and group. The window's
 | `openBrowserWindow(url, { profile })` | Opens in `profile`, or by routing when unset. |
 | `reopenBrowserWindow(id, profile)` | Moves a window's page to `profile`. |
 | `browserProfileFor(url)` | Routing's answer for `url`. |
+| `browserSiteFor(url)` | The site entry that routes `url`, if any. |
+| `pinBrowserSite(site, profile)` | Pins a site to a profile, kept by the engine. |
+| `DomicileBrowserProfile.pinnedSites` / `configSites` | The sites that open in it, by who set them. |
 | `browser.fetch(url, { profile })` | Fetches with `profile`'s cookies. |
 | `InstalledExtension.profiles` | The profiles an extension is on in. |
 
@@ -154,6 +161,8 @@ Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
   `domicile open --app --profile`
 - [x] Manganese: address bar button and menu (move the page, open it in a new
   window of a profile), tab dots
-- [ ] Manganese: pin a site to a profile and switch a profile's extensions
-  from the menu, tray by profile
+- [x] engine and SDK: sites the user pins, kept in the shell profile's prefs
+  under the config's (the config wins; its sites show locked)
+- [x] Manganese: pin a site to a profile from the menu
+- [ ] Manganese: switch a profile's extensions from the menu, tray by profile
 - [ ] Settings: Profiles page

@@ -136,6 +136,17 @@ export const describedWindow = (
   ...fields,
 });
 
+/** Whether rank `a` sorts after `b`, part by part. An empty `b` is none. */
+const moreSpecific = (a: readonly number[], b: readonly number[]): boolean => {
+  for (const [index, part] of a.entries()) {
+    const other = b[index];
+    if (other === undefined || part !== other) {
+      return other === undefined || part > other;
+    }
+  }
+  return false;
+};
+
 /** The methods that return a promise. The fake's never settle. */
 const ASKS = new Set([
   "browserProfileFor",
@@ -194,6 +205,16 @@ export class FakeDomicileHost {
             calls.push([name, ...args]);
             const [url, appId = "", reuse = "new", profile = ""] = args;
             this.openApp(url, appId, reuse, profile);
+          };
+        } else if (name === "browserSiteFor") {
+          return (url: string) => {
+            calls.push([name, url]);
+            return Promise.resolve(this.siteFor(url));
+          };
+        } else if (name === "pinBrowserSite") {
+          return (site: string, profile: string) => {
+            calls.push([name, site, profile]);
+            return this.pin(site, profile);
           };
         } else if (name === "reopenBrowserWindow") {
           return (id: string, profile: string) => {
@@ -430,6 +451,84 @@ export class FakeDomicileHost {
         window.id === id ? { ...window, profile } : window,
       ),
     });
+  }
+
+  /**
+   * The site of `browserProfiles`' sites that routes `url`, as the engine's
+   * `browserSiteFor` matches it: the most specific, a path over a host and a
+   * host over `*.host`. Empty for none.
+   */
+  siteFor(url: string): string {
+    let address: URL;
+    try {
+      address = new URL(url);
+    } catch {
+      return "";
+    }
+    if (address.protocol !== "http:" && address.protocol !== "https:") {
+      return "";
+    }
+    const sites = (this.#state.browserProfiles ?? []).flatMap((profile) => [
+      ...profile.pinnedSites,
+      ...profile.configSites,
+    ]);
+    const rank = (site: string): number[] | undefined => {
+      const slash = site.indexOf("/");
+      const host = slash === -1 ? site : site.slice(0, slash);
+      const path = slash === -1 ? "" : site.slice(slash);
+      const wildcard = host.startsWith("*.");
+      const parent = wildcard ? host.slice(2) : host;
+      const hostMatches = wildcard
+        ? address.hostname === parent || address.hostname.endsWith(`.${parent}`)
+        : address.hostname === host;
+      const pathMatches =
+        path === "" ||
+        address.pathname === path ||
+        address.pathname.startsWith(`${path}/`);
+      return hostMatches && pathMatches
+        ? [path.split("/").length, wildcard ? 0 : 1, host.length]
+        : undefined;
+    };
+    let best = "";
+    let bestRank: number[] = [];
+    for (const site of sites) {
+      const ranked = rank(site);
+      if (ranked !== undefined && moreSpecific(ranked, bestRank)) {
+        best = site;
+        bestRank = ranked;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Pins `site` to profile `id`, as the engine's `pinBrowserSite` does: out of
+   * every profile's `pinnedSites`, then into `id`'s unless it is the default.
+   * Rejects as the engine does for one of the config's sites.
+   */
+  pin(site: string, id: string): Promise<void> {
+    const profiles = this.#state.browserProfiles ?? [];
+    if (profiles.some((profile) => profile.configSites.includes(site))) {
+      return Promise.reject(
+        new DOMException(
+          `the desk's config opens ${site}; only the config changes that`,
+          "OperationError",
+        ),
+      );
+    }
+    this.set({
+      browserProfiles: profiles.map((profile) => {
+        const others = profile.pinnedSites.filter((each) => each !== site);
+        return {
+          ...profile,
+          pinnedSites:
+            profile.id === id && !profile.isDefault
+              ? [...others, site]
+              : others,
+        };
+      }),
+    });
+    return Promise.resolve();
   }
 
   /** The engine closed browser window `id`. `closeBrowserWindow` calls this too. */

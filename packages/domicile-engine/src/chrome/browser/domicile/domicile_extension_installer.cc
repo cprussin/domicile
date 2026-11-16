@@ -318,6 +318,7 @@ base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(kAddedPref);
   RegisterExtensionSettingsPrefs(registry);
+  RegisterBrowserProfilesPrefs(registry);
 }
 
 void InstallExtensionsInto(base::WeakPtr<Profile> profile,

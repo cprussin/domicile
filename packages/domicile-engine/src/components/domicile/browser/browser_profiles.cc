@@ -171,21 +171,59 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
   return profiles;
 }
 
-const std::string& ProfileForUrl(const BrowserProfiles& profiles,
-                                 const GURL& url) {
-  if (!url.SchemeIsHTTPOrHTTPS()) {
-    return profiles.default_profile;
+BrowserProfiles WithPinnedSites(const BrowserProfiles& config,
+                                const PinnedSites& pinned) {
+  BrowserProfiles profiles = config;
+  for (const auto& [site, profile] : pinned) {
+    if (profile != config.default_profile && config.Find(profile) != nullptr) {
+      // emplace leaves the config's own entry for the site.
+      profiles.sites.emplace(site, profile);
+    }
   }
-  const std::string* best = &profiles.default_profile;
+  return profiles;
+}
+
+bool IsSiteKey(std::string_view site) {
+  std::string_view host = site;
+  if (const size_t slash = site.find('/'); slash != std::string_view::npos) {
+    host = site.substr(0, slash);
+    const std::string_view path = site.substr(slash);
+    if (path.size() < 2 || path.ends_with('/') ||
+        path.find_first_of("?#") != std::string_view::npos) {
+      return false;
+    }
+  }
+  if (host.starts_with("*.")) {
+    host.remove_prefix(2);
+  }
+  return !host.empty() && !host.starts_with('.') && !host.ends_with('.') &&
+         std::ranges::all_of(host, [](char c) {
+           return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                  c == '-' || c == '.';
+         });
+}
+
+const std::string* SiteForUrl(const BrowserProfiles& profiles,
+                              const GURL& url) {
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    return nullptr;
+  }
+  const std::string* best = nullptr;
   std::optional<std::tuple<size_t, bool, size_t>> best_match;
-  for (const auto& [site, profile] : profiles.sites) {
-    const auto match = SiteMatch(site, url);
+  for (const auto& entry : profiles.sites) {
+    const auto match = SiteMatch(entry.first, url);
     if (match.has_value() && (!best_match.has_value() || *match > *best_match)) {
-      best = &profile;
+      best = &entry.first;
       best_match = match;
     }
   }
-  return *best;
+  return best;
+}
+
+const std::string& ProfileForUrl(const BrowserProfiles& profiles,
+                                 const GURL& url) {
+  const std::string* site = SiteForUrl(profiles, url);
+  return site == nullptr ? profiles.default_profile : profiles.sites.at(*site);
 }
 
 std::optional<std::string> RouteNavigation(const BrowserProfiles& profiles,

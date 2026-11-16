@@ -311,6 +311,13 @@ class MODULES_EXPORT DomicileHost final
   ScriptPromise<IDLString> browserProfileFor(ScriptState*,
                                              const String& url,
                                              ExceptionState&);
+  ScriptPromise<IDLString> browserSiteFor(ScriptState*,
+                                          const String& url,
+                                          ExceptionState&);
+  ScriptPromise<IDLUndefined> pinBrowserSite(ScriptState*,
+                                             const String& site,
+                                             const String& profile,
+                                             ExceptionState&);
   void clickBrowserWindowMenu(ScriptState*,
                               const String& id,
                               int32_t command,

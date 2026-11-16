@@ -42,6 +42,11 @@ struct BrowserProfile {
   string color;
   // Whether it keeps nothing past its last page.
   bool private_browsing;
+  // The sites that open here because the user pinned them (PinSite), and
+  // because the config's `browser.sites` names them. Keys of `browser.sites`:
+  // a host, `*.host`, or a host and path.
+  array<string> pinned_sites;
+  array<string> config_sites;
 };
 
 // One browser window, as a shell draws it.
@@ -190,6 +195,18 @@ interface BrowserWindows {
   // sites that matches it, else the default profile. See
   // components/domicile/browser/browser_profiles.h.
   ProfileFor(url.mojom.Url url) => (string profile);
+
+  // The site that routes `url`: the key of the config's or the user's sites
+  // that ProfileFor matched, or null when none did and it opens in the
+  // default profile.
+  SiteFor(url.mojom.Url url) => (string? site);
+
+  // Opens `site` in browser profile `profile` from now on, kept across
+  // restarts; the default profile unpins it. The profiles are sent again
+  // with the change. Answers with why not, or an empty string: for a site
+  // that is no key of the config's `browser.sites`, one the config's sites
+  // name, and a profile the desk does not have.
+  PinSite(string site, string profile) => (string error);
 };
 
 // Browser -> renderer.

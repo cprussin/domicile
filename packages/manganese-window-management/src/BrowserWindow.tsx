@@ -53,7 +53,7 @@ import { PageViews } from "./browser/PageViews";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
-import { useBrowserProfile } from "./browser/useBrowserProfile";
+import { useBrowserProfile, usePinnedSite } from "./browser/useBrowserProfile";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
@@ -305,6 +305,7 @@ export const BrowserWindow = ({
   const shown = useShownPage(view);
   const address = addressOf(shown.url, sent);
   const pageProfile = useBrowserProfile(domicile, window);
+  const pinned = usePinnedSite(domicile, address);
   usePageIcon(view, window, onIcon);
   usePageDescription(view, window, onDescription);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
@@ -851,6 +852,20 @@ export const BrowserWindow = ({
                     onOpenInNew: (id) => {
                       domicile.browser.open(address, { profile: id });
                     },
+                    onPin: (id) => {
+                      if (pinned !== undefined) {
+                        domicile.browser
+                          .pin(pinned.site, id)
+                          .catch((error: unknown) => {
+                            // biome-ignore lint/suspicious/noConsole: the menu offers no pin the engine refuses, so one is a list a change behind
+                            console.error(
+                              `Couldn't pin ${pinned.site} to profile ${id}`,
+                              error,
+                            );
+                          });
+                      }
+                    },
+                    pinned,
                   }
             }
             security={shown.security}

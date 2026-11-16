@@ -4,9 +4,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_BROWSER_PROFILE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_BROWSER_PROFILE_H_
 
+#include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
+#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
@@ -19,7 +23,9 @@ class MODULES_EXPORT DomicileBrowserProfile final : public ScriptWrappable {
                          const String& color,
                          bool is_private,
                          bool is_default,
-                         bool is_default_private);
+                         bool is_default_private,
+                         const Vector<String>& pinned_sites,
+                         const Vector<String>& config_sites);
   ~DomicileBrowserProfile() override;
 
   const String& id() const { return id_; }
@@ -28,6 +34,8 @@ class MODULES_EXPORT DomicileBrowserProfile final : public ScriptWrappable {
   bool isPrivate() const { return is_private_; }
   bool isDefault() const { return is_default_; }
   bool isDefaultPrivate() const { return is_default_private_; }
+  const FrozenArray<IDLString>& pinnedSites() const { return *pinned_sites_; }
+  const FrozenArray<IDLString>& configSites() const { return *config_sites_; }
 
   void Trace(Visitor*) const override;
 
@@ -38,6 +46,8 @@ class MODULES_EXPORT DomicileBrowserProfile final : public ScriptWrappable {
   bool is_private_;
   bool is_default_;
   bool is_default_private_;
+  Member<FrozenArray<IDLString>> pinned_sites_;
+  Member<FrozenArray<IDLString>> config_sites_;
 };
 
 }  // namespace blink

@@ -1,6 +1,6 @@
 import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 /** The desk's browser profiles and the one a window's page is in. */
 export type WindowProfile = {
@@ -76,4 +76,99 @@ export const useProfileMark = (
       ? undefined
       : profile.color;
   });
+};
+
+/** Where a page's site opens, for the profile menu's pins. */
+export type PinnedSite = {
+  /**
+   * The site: the entry of the config's or the user's sites that routes the
+   * page, or the page's host when none does.
+   */
+  site: string;
+  /** The id of the profile the site opens in. */
+  profile: string;
+  /** Whether the config's own sites name it, so only the config moves it. */
+  locked: boolean;
+};
+
+/**
+ * Where `url`'s site opens and whether the user can pin it elsewhere;
+ * `undefined` for an address that is no web site, such as a new tab page, and
+ * until the engine answers.
+ */
+export const usePinnedSite = (
+  domicile: Pick<Domicile, "browser">,
+  url: string,
+): PinnedSite | undefined => {
+  const subscribe = useCallback(
+    (changed: () => void) => domicile.browser.on("profilesChange", changed),
+    [domicile],
+  );
+  const profiles = useSyncExternalStore(
+    subscribe,
+    () => domicile.browser.profiles,
+  );
+  // The engine's answer, for the address and profiles it was asked with.
+  const [routed, setRouted] = useState<{
+    profiles: typeof profiles;
+    site: string | undefined;
+    url: string;
+  }>();
+  const host = webHostOf(url);
+  useEffect(() => {
+    if (host === undefined || profiles === undefined) {
+      return;
+    }
+    let current = true;
+    domicile.browser.siteFor(url).then(
+      (site) => {
+        if (current) {
+          setRouted({ profiles, site, url });
+        }
+      },
+      // A page whose address the engine will not route opens in the default
+      // profile; there is nothing to pin.
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [domicile, host, profiles, url]);
+  if (
+    host === undefined ||
+    profiles === undefined ||
+    routed === undefined ||
+    routed.url !== url ||
+    routed.profiles !== profiles
+  ) {
+    return undefined;
+  }
+  const { site } = routed;
+  const configured = profiles.find(
+    (profile) => site !== undefined && profile.configSites.includes(site),
+  );
+  const pinned = profiles.find(
+    (profile) => site !== undefined && profile.pinnedSites.includes(site),
+  );
+  const fallback = profiles.find((profile) => profile.isDefault);
+  const opensIn = configured ?? pinned ?? fallback;
+  return opensIn === undefined
+    ? undefined
+    : {
+        locked: configured !== undefined,
+        profile: opensIn.id,
+        site: site ?? host,
+      };
+};
+
+/** `url`'s host when it is a web address, which routing pins by. */
+const webHostOf = (url: string): string | undefined => {
+  try {
+    const { hostname, protocol } = new URL(url);
+    return (protocol === "http:" || protocol === "https:") && hostname !== ""
+      ? hostname
+      : undefined;
+  } catch {
+    return undefined;
+  }
 };
