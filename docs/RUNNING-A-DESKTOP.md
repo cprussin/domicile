@@ -238,7 +238,9 @@ settings; headless and EIS input do not pass through libinput.
 whitespace: `DOMICILE_ENGINE_ARGS='--log-level=0 --enable-features=Vulkan'`.
 
 - Its `--enable-features` and `--disable-features` values join the launcher's,
-  so the built-in `LibinputHandleTouchpad,LibinputHandleMouse` stay on. A
+  so the built-in `LibinputHandleTouchpad,LibinputHandleMouse` stay on and
+  `BatterySaverModeFollowsSystemPowerSaver` stays off. Without that, Chrome's
+  Energy Saver caps the whole desk at 30 fps on the power-saver profile. A
   feature in both lists is disabled.
 - Every other switch goes after the launcher's, and the last copy of a switch
   wins.
