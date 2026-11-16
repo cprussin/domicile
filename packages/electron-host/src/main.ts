@@ -195,6 +195,7 @@ const main = async ([resources, ...args]: string[]) => {
       BrowserWindow,
       WebContents,
       WebContentsView,
+      WebFrameMain,
       webContents,
       webContentsOf,
     } = createBrowserWindow(
@@ -334,6 +335,7 @@ const main = async ([resources, ...args]: string[]) => {
         UtilityProcess: UtilityProcess.prototype,
         WebContents: WebContents.prototype,
         WebContentsView: WebContentsView.prototype,
+        WebFrameMain: WebFrameMain.prototype,
       },
       app.getName(),
       { unsupported, warn },

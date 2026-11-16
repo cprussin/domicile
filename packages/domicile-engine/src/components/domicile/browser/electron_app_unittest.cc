@@ -82,6 +82,16 @@ class FakeDesk final : public ElectronDesk {
                   const std::string& args_json) override {
     calls.push_back("send " + id + " " + channel + " " + args_json);
   }
+  void ExecuteJavaScript(
+      const std::string& id,
+      const std::string& code,
+      bool user_gesture,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done)
+      override {
+    calls.push_back("run " + id + " " + code +
+                    (user_gesture ? " with a gesture" : ""));
+    ran.push_back(std::move(done));
+  }
   void PostToPage(const std::string& id,
                   const std::string& channel,
                   const std::string& message_json,
@@ -164,6 +174,10 @@ class FakeDesk final : public ElectronDesk {
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
+  // Each ExecuteJavaScript's answer, oldest first.
+  std::vector<
+      base::OnceCallback<void(base::expected<base::Value, std::string>)>>
+      ran;
   // A ClearStorage that has not finished.
   base::OnceClosure waiting;
 };
@@ -610,6 +624,29 @@ TEST_F(ElectronAppTest, TheAppsSendReachesItsWindowsPage) {
              R"("args":[1,"a"]})");
 
   EXPECT_EQ(desk_.calls, Lines{R"(send 10 ping [1,"a"])"});
+}
+
+TEST_F(ElectronAppTest, TheAppsJavaScriptRunsInItsWindowsPageAndAnswers) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(R"({"type":"execute_javascript","window":2,"call":1,)"
+             R"("code":"document.title","user_gesture":true})");
+  app_->Take(R"({"type":"execute_javascript","window":2,"call":2,)"
+             R"("code":"throw 1"})");
+  ASSERT_EQ(desk_.calls,
+            (Lines{"run 10 document.title with a gesture", "run 10 throw 1"}));
+  std::move(desk_.ran[1]).Run(base::unexpected("Uncaught 1"));
+  std::move(desk_.ran[0]).Run(base::Value("A"));
+
+  EXPECT_EQ(sent_, (Lines{R"({"call":2,"error":"Uncaught 1",)"
+                          R"("type":"javascript_result","window":2})"
+                          "\n",
+                          R"({"call":1,"result":"A",)"
+                          R"("type":"javascript_result","window":2})"
+                          "\n"}));
 }
 
 TEST_F(ElectronAppTest, APagesSendSyncIsAnsweredByTheAppsReply) {

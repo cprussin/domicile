@@ -97,6 +97,13 @@ export type EngineRequest =
       /** The names of the app's ports that go with it, each "m" and a number. */
       readonly ports: string[];
     }
+  | {
+      readonly type: "execute_javascript";
+      readonly window: number;
+      readonly call: number;
+      readonly code: string;
+      readonly user_gesture?: true;
+    }
   | ShowMessageBoxMessage
   | PortRequest
   | ProtocolRequest
@@ -164,6 +171,14 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("page_gone"), window: z.number() }),
+  /** What the app's executeJavaScript `call` gave, or why it gave nothing. */
+  z.object({
+    call: z.number(),
+    error: z.string().optional(),
+    result: z.unknown().optional(),
+    type: z.literal("javascript_result"),
+    window: z.number(),
+  }),
   /** The size the shell gives a page, a window's or a view's. */
   z.object({
     height: z.number(),

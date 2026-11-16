@@ -230,6 +230,16 @@ class ElectronDesk {
   virtual void SendToPage(const std::string& id,
                           const std::string& channel,
                           const std::string& args_json) = 0;
+  // webContents.executeJavaScript: runs `code` in the main world of window
+  // `id`'s page, as if the user had acted when `user_gesture`, and runs
+  // `done` once with what it gave, after a promise it gives settles, or why
+  // it gave nothing, which a page that goes first is.
+  virtual void ExecuteJavaScript(
+      const std::string& id,
+      const std::string& code,
+      bool user_gesture,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)>
+          done) = 0;
   // webContents.postMessage: `message_json` on `channel`, and a port in the
   // page for each of `ports`.
   virtual void PostToPage(const std::string& id,
