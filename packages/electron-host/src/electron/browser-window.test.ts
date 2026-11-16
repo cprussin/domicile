@@ -319,6 +319,16 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("drops what it sends before its page opens, as Electron has no page to give it", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow({ show: false });
+
+    window.webContents.send("ready", 1);
+    window.webContents.postMessage("port", { a: 1 });
+
+    expect(sent).toEqual([]);
+  });
+
   it("answers its page's sendSync with the returnValue a listener sets", async () => {
     const { BrowserWindow, ipcMain, say, sent } = setUp();
     void new BrowserWindow();

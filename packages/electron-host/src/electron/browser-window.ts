@@ -251,6 +251,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
      */
     readonly send = (channel: string, ...args: unknown[]) => {
       this.owner.assertAlive();
+      // Before its page opens there's no page to hear it, as in Electron.
+      if (!this.owner.isOpen()) {
+        return;
+      }
       engine.send({
         args: JSON.parse(JSON.stringify(args)),
         channel,
@@ -269,6 +273,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       transfer: readonly MessagePortMain[] = [],
     ) => {
       this.owner.assertAlive();
+      if (!this.owner.isOpen()) {
+        return;
+      }
       engine.send({
         channel,
         message: JSON.parse(JSON.stringify([message]))[0],
@@ -291,6 +298,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly session: Session;
     protected title: string;
     protected opened = false;
+    /** Whether the engine has its page: whether a load has started. */
+    readonly isOpen = () => this.opened;
     protected destroyed = false;
     #loads: { resolve: () => void; reject: (why: Error) => void }[] = [];
     readonly #preload: string | undefined;
