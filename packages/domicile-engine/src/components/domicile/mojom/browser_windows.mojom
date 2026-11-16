@@ -129,8 +129,9 @@ interface BrowserWindows {
 
   // Opens a browser window at `url`; it appears in the next list. A
   // domicile:// address shows about:blank#blocked, as in a <webview>.
-  // `profile` puts its page in that browser profile; empty for the default
-  // one, or with `private_browsing` the default private one. A profile the
+  // `profile` puts its page in that browser profile; empty for the one
+  // routing gives `url` (ProfileFor), or with `private_browsing` the default
+  // private one. A profile the
   // desk does not have opens in the default one, logged: the shell's list may
   // be a change behind. A private window never opens outside a private
   // profile. `partition` gives it storage of its own, as a <webview>'s
@@ -172,6 +173,20 @@ interface BrowserWindows {
   // meanwhile, or shows none, is an answer that raced it and does nothing. A
   // `response` the box has no button for is a bad message.
   AnswerMessageBox(string id, int32 response, bool checkbox_checked);
+
+  // Moves window `id`'s page to browser profile `profile`: a new page under
+  // the same id, given the old one's back and forward list as addresses and
+  // titles, which reloads its current entry. The window keeps its place in
+  // the list, and its <webview> is told to show the new page
+  // (WebViewGuestClient.Replaced). An unknown window or profile, an app
+  // window, or the profile the page is already in, does nothing, logged: the
+  // shell's lists may be a change behind.
+  Reopen(string id, string profile);
+
+  // The browser profile `url` opens in: the most specific of the config's
+  // sites that matches it, else the default profile. See
+  // components/domicile/browser/browser_profiles.h.
+  ProfileFor(url.mojom.Url url) => (string profile);
 };
 
 // Browser -> renderer.

@@ -868,6 +868,13 @@ interface WebViewGuestClient {
   // Modifiers only, so typed text stays in the guest. `key` and `code` are
   // KeyboardEvent values.
   UnhandledModifierUp(string key, string code);
+
+  // The browser window this element shows was given a new page in its
+  // place, in another browser profile (BrowserWindows.Reopen, or a link to
+  // another profile's site), and this pipe is closed. The element asks for
+  // the window again, in a new placeholder frame, and shows the new page.
+  // Whatever the old page asked the shell is withdrawn.
+  Replaced();
 };
 
 // One guest, for the life of the element that requested it.

@@ -325,6 +325,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // KeyboardEvent on this element. See UnhandledModifierUp in
   // components/domicile/mojom/web_view_guest.mojom.
   void UnhandledModifierUp(const String& key, const String& code) override;
+  // The window this shows has a new page, in another browser profile: shows
+  // it in a new placeholder. See WebViewGuestClient.Replaced.
+  void Replaced() override;
 
   // Dispatches `domicile-key-delivered`, which names no key. See KeyDelivered
   // in components/domicile/mojom/web_view_guest.mojom.

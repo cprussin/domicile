@@ -2455,6 +2455,54 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   }
 }
 
+namespace {
+
+// The browser's answer to browserProfileFor().
+void SettleBrowserProfile(ScriptPromiseResolver<IDLString>* resolver,
+                          const String& profile) {
+  resolver->Resolve(profile);
+}
+
+}  // namespace
+
+void DomicileHost::reopenBrowserWindow(ScriptState*,
+                                       const String& id,
+                                       const String& profile,
+                                       ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  }
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->Reopen(id, profile);
+  }
+}
+
+ScriptPromise<IDLString> DomicileHost::browserProfileFor(
+    ScriptState* script_state,
+    const String& url,
+    ExceptionState& exception_state) {
+  // Resolved against this document, as openBrowserWindow's is.
+  const KURL resolved = window_->CompleteURL(url);
+  if (!resolved.IsValid()) {
+    exception_state.ThrowTypeError("url must be an address");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->ProfileFor(
+      resolved, BindOnce(&SettleBrowserProfile, WrapPersistent(resolver)));
+  return promise;
+}
+
 void DomicileHost::clickBrowserWindowMenu(ScriptState*,
                                           const String& id,
                                           int32_t command,

@@ -45,8 +45,10 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # PictureInPictureVideos 15, ElectronProtocol 52, ElectronApp 58,
 # ElectronPermissionFor 2, ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4,
-# BrowserProfiles 4.
+# BrowserProfiles 7.
 #
+# 840, and it was 837 — routing a page to its site's profile is three more
+# BrowserProfiles cases. Before that
 # 837, and it was 832 — the desk's browser profiles are four BrowserProfiles
 # cases and one ControlChannel case. Before that
 # 832, and it was 830 — a desktop getUserMedia(), as Electron apps capture a
@@ -294,7 +296,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=837
+FLOOR=840
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

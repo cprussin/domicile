@@ -449,6 +449,76 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
   }
 
+  // Moves window `id`'s page to browser profile `profile`, as `move` says; see
+  // mojom::BrowserWindows.Reopen. The new page takes the window's place in
+  // the list, and the old one lingers as a closed window's does, muted.
+  void Reopen(const std::string& id,
+              const std::string& profile,
+              const PageMove& move) {
+    auto found = std::ranges::find(windows_, id, &Window::id);
+    if (found == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to move browser window " << id
+                   << ", which is not open, to browser profile " << profile
+                   << ".";
+      return;
+    }
+    if (found->app) {
+      LOG(WARNING) << "domicile: asked to move app window " << id
+                   << " to browser profile " << profile
+                   << "; an app window's page is its app's, and stays.";
+      return;
+    }
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    if (registry.profiles().Find(profile) == nullptr) {
+      LOG(WARNING) << "domicile: asked to move browser window " << id
+                   << " to browser profile " << profile
+                   << ", which the desk does not have; it stays.";
+      return;
+    }
+    WebViewGuest& old = *found->guest;
+    if (registry.IdOf(*old.contents().GetBrowserContext()) == profile) {
+      LOG(INFO) << "domicile: browser window " << id
+                << " is already in browser profile " << profile << ".";
+      return;
+    }
+    content::WebContents* shell = ShellContentsIn(profile_);
+    if (shell == nullptr) {
+      LOG(WARNING) << "domicile: no shell to move browser window " << id
+                   << " in.";
+      return;
+    }
+    std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
+        *shell, id, old.popup_window(), /*private_browsing=*/false, profile,
+        old.partition(), base::BindRepeating(&AttachTabHelpers));
+    WatchProfileOf(*guest);
+    auto watch = std::make_unique<Watch>(
+        guest->contents(), id,
+        base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
+    guest->MoveHistoryFrom(old, move);
+    std::unique_ptr<WebViewGuest> replaced =
+        std::exchange(found->guest, std::move(guest));
+    found->watch = std::move(watch);
+    found->opened_at = GURL();
+    // Its <webview> asks for the window again, and gets the new page.
+    replaced->Replaced();
+    replaced->contents().SetAudioMuted(true);
+    closing_.push_back({id, std::move(replaced)});
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(), id),
+        kLinger);
+    // The profile-routing guard greps for this.
+    LOG(INFO) << "domicile: moved browser window " << id
+              << " to browser profile " << profile << ".";
+    Changed();
+  }
+
+  // Whether window `id` is an app window.
+  bool IsApp(const std::string& id) const {
+    auto found = std::ranges::find(windows_, id, &Window::id);
+    return found != windows_.end() && found->app;
+  }
+
   // Closes window `id` once its page agrees; see WebViewGuest::AskToClose. An
   // unknown id is a close that raced another.
   void AskToClose(const std::string& id) {
@@ -793,14 +863,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
 // the shell's, for a page in any browser profile (BrowserProfileRegistry).
 class Host final : public BrowserWindowHost {
  public:
-  // A page's new window is in its profile, private if it is.
+  // A page's new window with no opener, or an extension's new tab, is in the
+  // profile its site opens in; a private page's stays in its profile.
   WebViewGuest* Open(
       content::BrowserContext& context,
       const GURL& url,
       const std::optional<WebViewPartition>& partition) override {
-    return Windows(context).Open(url, context.IsOffTheRecord(),
-                                 BrowserProfileRegistry::Get().IdOf(context),
-                                 partition);
+    const BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    const bool private_browsing = context.IsOffTheRecord();
+    return Windows(context).Open(
+        url, private_browsing,
+        private_browsing ? registry.IdOf(context)
+                         : ProfileForUrl(registry.profiles(), url),
+        partition);
   }
 
   // As Open, in `source`'s context and partition.
@@ -883,6 +958,27 @@ class Host final : public BrowserWindowHost {
                             : shell;
   }
 
+  std::optional<std::string> ProfileToMoveTo(WebViewGuest& guest,
+                                             const GURL& from,
+                                             const GURL& to) override {
+    content::BrowserContext& context = *guest.contents().GetBrowserContext();
+    // A private page never leaves private browsing, and an app window's page
+    // is its app's.
+    if (context.IsOffTheRecord() || Windows(context).IsApp(guest.window_id())) {
+      return std::nullopt;
+    }
+    const BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    return RouteNavigation(registry.profiles(), registry.IdOf(context), from,
+                           to);
+  }
+
+  void Reopen(WebViewGuest& guest,
+              const std::string& profile,
+              const PageMove& move) override {
+    Windows(*guest.contents().GetBrowserContext())
+        .Reopen(guest.window_id(), profile, move);
+  }
+
   void PrivatePageOpened(content::BrowserContext& context) override {
     BrowserProfileRegistry::Get().PrivatePageOpened(context);
   }
@@ -946,7 +1042,13 @@ class BrowserWindowsService final
           "have.");
       return;
     }
-    windows_->Open(url, private_browsing, profile, *parsed);
+    // No profile is the one its site opens in, or the default private one.
+    windows_->Open(url, private_browsing,
+                   profile.empty() && !private_browsing
+                       ? ProfileForUrl(
+                             BrowserProfileRegistry::Get().profiles(), url)
+                       : profile,
+                   *parsed);
   }
 
   void OpenApp(const GURL& url,
@@ -985,6 +1087,15 @@ class BrowserWindowsService final
           "domicile: a message box was answered with a button it doesn't "
           "have.");
     }
+  }
+
+  void Reopen(const std::string& id, const std::string& profile) override {
+    windows_->Reopen(id, profile, PageMove());
+  }
+
+  void ProfileFor(const GURL& url, ProfileForCallback callback) override {
+    std::move(callback).Run(
+        ProfileForUrl(BrowserProfileRegistry::Get().profiles(), url));
   }
 
   // DeskWindows::Observer:

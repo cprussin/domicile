@@ -784,10 +784,29 @@ source_set("browser_page_throttle") {
 
   deps = [
     ":browser_pages",
+    ":profile_route_throttle",
     ":web_view_guest",
     ":web_view_url",
     ":will_navigate_throttle",
     "//base",
+  ]
+}
+
+# Moves a browser window's page to the profile of the site the user takes it
+# to. :browser_page_throttle adds it.
+source_set("profile_route_throttle") {
+  sources = [
+    "browser/profile_route_throttle.cc",
+    "browser/profile_route_throttle.h",
+  ]
+
+  public_deps = [ "//content/public/browser" ]
+
+  deps = [
+    ":browser_profiles",
+    ":web_view_guest",
+    "//base",
+    "//ui/base",
   ]
 }
 
@@ -1044,6 +1063,8 @@ source_set("browser_profiles") {
   public_deps = [
     ":extension_installer",
     "//base",
+    "//ui/base",
+    "//url",
   ]
 }
 

@@ -59,6 +59,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/restore_type.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
@@ -1406,6 +1407,80 @@ void WebViewGuest::TakeHistoryStep(WebViewGuest& source, HistoryStep step) {
   // The history-in-a-new-window guard greps for this.
   LOG(INFO) << "domicile: browser window " << window_id_
             << " took a step through a copy of another page's history.";
+}
+
+void WebViewGuest::MoveHistoryFrom(WebViewGuest& source,
+                                   const PageMove& move) {
+  CHECK(guest_contents_);
+  CHECK(source.guest_contents_);
+
+  content::NavigationController& from =
+      source.guest_contents_->GetController();
+  content::NavigationController& history = guest_contents_->GetController();
+  // A page that never committed has only its initial entry, and no history.
+  if (!from.GetLastCommittedEntry()->IsInitialEntry()) {
+    const int current = from.GetLastCommittedEntryIndex();
+    const int count = move.kind == PageMove::Kind::kNavigate
+                          ? current + 1
+                          : from.GetEntryCount();
+    // Fresh entries, not copies: a copy carries its SiteInstance and page
+    // state, which belong to the other profile.
+    std::vector<std::unique_ptr<content::NavigationEntry>> entries;
+    for (int i = 0; i < count; ++i) {
+      content::NavigationEntry& entry = *from.GetEntryAtIndex(i);
+      std::unique_ptr<content::NavigationEntry> moved =
+          content::NavigationController::CreateNavigationEntry(
+              entry.GetURL(), content::Referrer(),
+              /*initiator_origin=*/std::nullopt,
+              /*initiator_base_url=*/std::nullopt,
+              ui::PAGE_TRANSITION_RELOAD,
+              /*is_renderer_initiated=*/false,
+              /*extra_headers=*/std::string(),
+              guest_contents_->GetBrowserContext(),
+              /*blob_url_loader_factory=*/nullptr);
+      moved->SetTitle(entry.GetTitle());
+      entries.push_back(std::move(moved));
+    }
+    const int selected =
+        move.kind == PageMove::Kind::kHistory
+            ? std::clamp(current + move.offset, 0, count - 1)
+            : current;
+    history.Restore(selected, content::RestoreType::kRestored, &entries);
+  }
+
+  if (move.kind == PageMove::Kind::kNavigate) {
+    // As Navigate: a page's link may name an address no <webview> shows.
+    const bool may_show = MayShowInWebView(move.url, app_host_);
+    content::NavigationController::LoadURLParams params(
+        may_show ? move.url : GURL(content::kBlockedURL));
+    params.referrer = move.referrer;
+    params.transition_type = move.transition;
+    history.LoadURLWithParams(params);
+  } else {
+    history.LoadIfNecessary();
+  }
+  LOG(INFO) << "domicile: browser window " << window_id_
+            << " took its old page's history.";
+}
+
+void WebViewGuest::Replaced() {
+  // Before the pipe closes, so the element hears it.
+  client_->Replaced();
+  receiver_.reset();
+  Unclient();
+  find_text_.clear();
+  LOG(INFO) << "domicile: browser window " << window_id_
+            << "'s page was replaced by one in another browser profile.";
+}
+
+std::optional<std::string> WebViewGuest::ProfileToMoveTo(const GURL& from,
+                                                         const GURL& to) {
+  return Host().ProfileToMoveTo(*this, from, to);
+}
+
+void WebViewGuest::MoveToProfile(const std::string& profile,
+                                 const PageMove& move) {
+  Host().Reopen(*this, profile, move);
 }
 
 void WebViewGuest::GoForward() {

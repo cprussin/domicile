@@ -303,6 +303,13 @@ class MODULES_EXPORT DomicileHost final
                                                    const String& selector,
                                                    ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  void reopenBrowserWindow(ScriptState*,
+                           const String& id,
+                           const String& profile,
+                           ExceptionState&);
+  ScriptPromise<IDLString> browserProfileFor(ScriptState*,
+                                             const String& url,
+                                             ExceptionState&);
   void clickBrowserWindowMenu(ScriptState*,
                               const String& id,
                               int32_t command,

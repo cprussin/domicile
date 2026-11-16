@@ -105,6 +105,7 @@ TOGETHER=(
   guard-webview-survives-load-shell
   guard-webview-hidden
   guard-webview-moved
+  guard-profile-routing
   guard-webview-paused
   guard-animation-main-frames
   guard-webview-crash

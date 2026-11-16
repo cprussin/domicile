@@ -7,6 +7,7 @@
 
 #include "base/logging.h"
 #include "components/domicile/browser/browser_pages.h"
+#include "components/domicile/browser/profile_route_throttle.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/browser/web_view_url.h"
 #include "components/domicile/browser/will_navigate_throttle.h"
@@ -24,6 +25,8 @@ void BrowserPageThrottle::MaybeCreateAndAdd(
     // After this one, so the shell is never asked about a page it may not
     // show.
     WillNavigateThrottle::Add(registry);
+    // After the shell's answer, so a navigation it cancels moves nothing.
+    ProfileRouteThrottle::Add(registry);
   }
 }
 

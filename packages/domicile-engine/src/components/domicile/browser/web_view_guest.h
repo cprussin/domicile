@@ -43,6 +43,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/referrer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -55,6 +56,7 @@
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -75,6 +77,27 @@ class WebViewGuest;
 
 // A step through a guest's history.
 enum class HistoryStep { kBack, kForward };
+
+// How a window's page moved to another browser profile loads there. See
+// WebViewGuest::MoveHistoryFrom.
+struct PageMove {
+  enum class Kind {
+    // Reloads the page's current entry: the user moved it.
+    kReload,
+    // Loads `url` after the page's current entry, as the link or the address
+    // bar that took it to another profile's site would have.
+    kNavigate,
+    // Takes `offset` steps through its history, as back or forward to
+    // another profile's site would have.
+    kHistory,
+  };
+
+  Kind kind = Kind::kReload;
+  GURL url;
+  content::Referrer referrer;
+  ui::PageTransition transition = ui::PAGE_TRANSITION_LINK;
+  int offset = 0;
+};
 
 // Holds the desk's browser windows, one per profile. Implemented in //chrome
 // (//chrome/browser/domicile/domicile_browser_windows.h) because a window's
@@ -130,6 +153,21 @@ class BrowserWindowHost {
   // Returns window `id` in `context`, or null.
   virtual WebViewGuest* Find(content::BrowserContext& context,
                              const std::string& id) = 0;
+
+  // The browser profile window `guest`'s page moves to as the user takes it
+  // from `from` to `to`, or nothing when it stays: never for a private page
+  // or an app window. See RouteNavigation in browser_profiles.h.
+  virtual std::optional<std::string> ProfileToMoveTo(WebViewGuest& guest,
+                                                     const GURL& from,
+                                                     const GURL& to) = 0;
+
+  // Moves window `guest`'s page to browser profile `profile`: a new page
+  // under the same window id takes its place, given its history and loaded
+  // as `move` says, and `guest` is destroyed on a later task. See
+  // mojom::BrowserWindows.Reopen.
+  virtual void Reopen(WebViewGuest& guest,
+                      const std::string& profile,
+                      const PageMove& move) = 0;
 
   // The context a page of the guest `owner` owns is made in: browser profile
   // `profile`'s, made on first use. Empty `profile` is `owner` itself, the
@@ -338,6 +376,26 @@ class WebViewGuest : public mojom::WebViewGuest,
   // there, as Chrome's middle-clicked back button does with a cloned tab. In
   // place of the first Navigate. See BrowserWindowHost::OpenHistoryStep.
   void TakeHistoryStep(WebViewGuest& source, HistoryStep step);
+
+  // Gives a new window's page `source`'s back and forward list, as addresses
+  // and titles, and loads as `move` says. In place of the first Navigate.
+  // Only addresses cross: two profiles share no page state, so the page
+  // reloads and form input and POST bodies stay behind. A link drops what
+  // was forward of the page, as following it would. See
+  // BrowserWindowHost::Reopen.
+  void MoveHistoryFrom(WebViewGuest& source, const PageMove& move);
+
+  // This window's page was replaced by `MoveHistoryFrom`'s: tells its
+  // <webview>, which asks for the window again, and lets go of it.
+  void Replaced();
+
+  // The browser profile this window's page moves to as the user takes it
+  // from `from` to `to`, or nothing; see BrowserWindowHost::ProfileToMoveTo.
+  std::optional<std::string> ProfileToMoveTo(const GURL& from, const GURL& to);
+
+  // Asks the host to move this window's page to `profile` as `move` says.
+  // Posted by ProfileRouteThrottle, so never under the page's own stack.
+  void MoveToProfile(const std::string& profile, const PageMove& move);
 
   // The storage partition the page was made in, or nothing for its profile's
   // own. A partitioned page has a guest SiteInstance, so its new windows share

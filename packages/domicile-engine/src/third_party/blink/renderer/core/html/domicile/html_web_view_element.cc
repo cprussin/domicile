@@ -831,6 +831,30 @@ void HTMLWebViewElement::UnhandledModifierUp(const String& key,
       AtomicString(kGuestKeyupEvent), init));
 }
 
+void HTMLWebViewElement::Replaced() {
+  // The old page's asks go with it, as when it withdraws them.
+  PermissionRequestWithdrawn();
+  DeviceRequestWithdrawn();
+  DialogWithdrawn();
+  SignInWithdrawn();
+  PromptWithdrawn();
+  IdentityWithdrawn();
+  PickerWithdrawn();
+  if (external_app_) {
+    external_app_->DismissIfUnanswered();
+  }
+  host_.reset();
+  guest_.reset();
+  client_receiver_.reset();
+  // The old page is attached to the placeholder frame, and stays there until
+  // the frame goes, so the new page needs a new one. Removing the frame
+  // detaches the old page, which the browser destroys. Inserting this element
+  // makes a placeholder and asks for the window the same way, and the window
+  // id now names the new page.
+  DisconnectContentFrame();
+  DidNotifySubtreeInsertionsToDocument();
+}
+
 void HTMLWebViewElement::ZoomChanged(double factor) {
   zoom_ = factor;
 

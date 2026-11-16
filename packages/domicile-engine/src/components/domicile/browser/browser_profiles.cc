@@ -5,8 +5,10 @@
 
 #include <algorithm>
 #include <set>
+#include <tuple>
 #include <utility>
 
+#include "url/gurl.h"
 
 namespace domicile {
 namespace {
@@ -76,6 +78,40 @@ bool Consistent(const BrowserProfiles& profiles) {
          });
 }
 
+// How specifically `site` matches `url`, or nothing when it does not. Higher
+// is more specific: path segments, then an exact host, then host length.
+std::optional<std::tuple<size_t, bool, size_t>> SiteMatch(
+    std::string_view site,
+    const GURL& url) {
+  std::string_view host = site;
+  std::string_view path;
+  if (const size_t slash = site.find('/'); slash != std::string_view::npos) {
+    host = site.substr(0, slash);
+    path = site.substr(slash);
+  }
+  const std::string_view url_host = url.host();
+  const bool wildcard = host.starts_with("*.");
+  if (wildcard) {
+    const std::string_view parent = host.substr(2);
+    if (url_host != parent &&
+        !(url_host.ends_with(parent) &&
+          url_host[url_host.size() - parent.size() - 1] == '.')) {
+      return std::nullopt;
+    }
+  } else if (url_host != host) {
+    return std::nullopt;
+  }
+  if (!path.empty()) {
+    const std::string_view url_path = url.path();
+    if (!(url_path == path ||
+          (url_path.starts_with(path) && url_path[path.size()] == '/'))) {
+      return std::nullopt;
+    }
+  }
+  return std::tuple(static_cast<size_t>(std::ranges::count(path, '/')),
+                    !wildcard, host.size());
+}
+
 }  // namespace
 
 BrowserProfiles::BrowserProfiles() = default;
@@ -133,6 +169,51 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
     return std::nullopt;
   }
   return profiles;
+}
+
+const std::string& ProfileForUrl(const BrowserProfiles& profiles,
+                                 const GURL& url) {
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    return profiles.default_profile;
+  }
+  const std::string* best = &profiles.default_profile;
+  std::optional<std::tuple<size_t, bool, size_t>> best_match;
+  for (const auto& [site, profile] : profiles.sites) {
+    const auto match = SiteMatch(site, url);
+    if (match.has_value() && (!best_match.has_value() || *match > *best_match)) {
+      best = &profile;
+      best_match = match;
+    }
+  }
+  return *best;
+}
+
+std::optional<std::string> RouteNavigation(const BrowserProfiles& profiles,
+                                           const std::string& page_profile,
+                                           const GURL& from,
+                                           const GURL& to) {
+  if (!to.SchemeIsHTTPOrHTTPS()) {
+    return std::nullopt;
+  }
+  const std::string& target = ProfileForUrl(profiles, to);
+  if (target == ProfileForUrl(profiles, from) || target == page_profile) {
+    return std::nullopt;
+  }
+  return target;
+}
+
+bool IsUserNavigation(bool main_frame,
+                      bool same_document,
+                      bool renderer_initiated,
+                      bool user_gesture,
+                      bool post,
+                      ui::PageTransition transition) {
+  if (!main_frame || same_document || post ||
+      ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_RELOAD)) {
+    return false;
+  }
+  return (transition & ui::PAGE_TRANSITION_FORWARD_BACK) ||
+         !renderer_initiated || user_gesture;
 }
 
 ExtensionList ExtensionsFor(

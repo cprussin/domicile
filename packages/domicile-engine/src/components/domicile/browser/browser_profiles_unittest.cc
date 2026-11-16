@@ -11,6 +11,7 @@
 #include "base/json/json_reader.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace domicile {
 namespace {
@@ -133,6 +134,96 @@ TEST(BrowserProfilesTest, APrivateProfilesExtensionsRunInItsPages) {
   const ExtensionList none = ExtensionsFor(unnamed, all, unpacked_id);
   EXPECT_TRUE(none.web_store.empty());
   EXPECT_TRUE(none.unpacked.empty());
+}
+
+// The profiles of Message(sites), as ParseBrowserProfiles reads them.
+BrowserProfiles WithSites(const std::string& sites) {
+  std::optional<BrowserProfiles> profiles =
+      ParseBrowserProfiles(Dict(Message(sites)));
+  CHECK(profiles);
+  return *std::move(profiles);
+}
+
+TEST(BrowserProfilesTest, TheMostSpecificSiteWins) {
+  const BrowserProfiles profiles = WithSites(
+      R"({"*.acme.com":"work","mail.acme.com":"incognito",)"
+      R"("github.com/acme":"work","github.com/acme/public":"incognito"})");
+  const auto profile_for = [&profiles](const char* url) {
+    return ProfileForUrl(profiles, GURL(url));
+  };
+
+  // `*.host` is the host and its subdomains, not a host that ends the same.
+  EXPECT_EQ(profile_for("https://acme.com/"), "work");
+  EXPECT_EQ(profile_for("https://docs.acme.com/x"), "work");
+  EXPECT_EQ(profile_for("https://notacme.com/"), "personal");
+  // A host beats `*.host`.
+  EXPECT_EQ(profile_for("https://mail.acme.com/"), "incognito");
+  // A path is its segments, not a prefix of one.
+  EXPECT_EQ(profile_for("https://github.com/acme"), "work");
+  EXPECT_EQ(profile_for("https://github.com/acme/repo?q=1"), "work");
+  EXPECT_EQ(profile_for("https://github.com/acmecorp"), "personal");
+  EXPECT_EQ(profile_for("https://github.com/acme/public/x"), "incognito");
+  EXPECT_EQ(profile_for("https://github.com/"), "personal");
+  // Only web addresses are routed.
+  EXPECT_EQ(profile_for("about:blank"), "personal");
+  EXPECT_EQ(profile_for("chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/"
+                        "x.html"),
+            "personal");
+}
+
+TEST(BrowserProfilesTest, APageMovesWhenRoutingDisagreesAtEitherEnd) {
+  const BrowserProfiles profiles =
+      WithSites(R"({"*.acme.com":"work"})");
+  const GURL personal("https://news.example/");
+  const GURL personal_too("https://mail.example/");
+  const GURL work("https://docs.acme.com/");
+  const GURL work_too("https://mail.acme.com/");
+
+  EXPECT_EQ(RouteNavigation(profiles, "personal", personal, work), "work");
+  EXPECT_EQ(RouteNavigation(profiles, "work", work, personal), "personal");
+  // Within one profile's sites it stays.
+  EXPECT_EQ(RouteNavigation(profiles, "work", work, work_too), std::nullopt);
+  EXPECT_EQ(RouteNavigation(profiles, "personal", personal, personal_too),
+            std::nullopt);
+  // A page the user moved to Work stays there on its own site...
+  EXPECT_EQ(RouteNavigation(profiles, "work", personal, personal_too),
+            std::nullopt);
+  // ...and follows routing when it leaves for another profile's site.
+  EXPECT_EQ(RouteNavigation(profiles, "incognito", personal, work), "work");
+  // Already where routing would put it.
+  EXPECT_EQ(RouteNavigation(profiles, "work", personal, work), std::nullopt);
+  // From a page that is no site, such as a new tab page.
+  EXPECT_EQ(RouteNavigation(profiles, "personal", GURL("about:blank"), work),
+            "work");
+  // To one that is no site.
+  EXPECT_EQ(
+      RouteNavigation(profiles, "work", work, GURL("about:blank")),
+      std::nullopt);
+}
+
+TEST(BrowserProfilesTest, OnlyNavigationsTheUserTookMoveAPage) {
+  const auto user = [](bool renderer_initiated, bool user_gesture,
+                       ui::PageTransition transition) {
+    return IsUserNavigation(/*main_frame=*/true, /*same_document=*/false,
+                            renderer_initiated, user_gesture, /*post=*/false,
+                            transition);
+  };
+  // A click, the address bar, back and forward.
+  EXPECT_TRUE(user(true, true, ui::PAGE_TRANSITION_LINK));
+  EXPECT_TRUE(user(false, false, ui::PAGE_TRANSITION_TYPED));
+  EXPECT_TRUE(user(false, false, ui::PageTransitionFromInt(
+                                     ui::PAGE_TRANSITION_LINK |
+                                     ui::PAGE_TRANSITION_FORWARD_BACK)));
+  // The page's own script, and reloads.
+  EXPECT_FALSE(user(true, false, ui::PAGE_TRANSITION_LINK));
+  EXPECT_FALSE(user(false, false, ui::PAGE_TRANSITION_RELOAD));
+  // A subframe, a fragment, a POST.
+  EXPECT_FALSE(IsUserNavigation(false, false, true, true, false,
+                                ui::PAGE_TRANSITION_LINK));
+  EXPECT_FALSE(IsUserNavigation(true, true, true, true, false,
+                                ui::PAGE_TRANSITION_LINK));
+  EXPECT_FALSE(IsUserNavigation(true, false, true, true, true,
+                                ui::PAGE_TRANSITION_FORM_SUBMIT));
 }
 
 }  // namespace

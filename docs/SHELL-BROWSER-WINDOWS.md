@@ -158,9 +158,25 @@ config's `browser.profiles`. See
 - Every browser window is listed with its `profile` id. An app window's is
   `null`.
 - **`domicile.openBrowserWindow(url, partition, profile)`** opens a window in
-  `profile`; `""` is the default one. **`<webview profile="work">`** puts your
-  own page in one. Set it before the view enters the document.
-- A page's new windows are in its profile.
+  `profile`. `""` opens it where its site goes: the most specific of the
+  config's `browser.sites` that matches `url`, or the default profile.
+  **`domicile.browserProfileFor(url)`** resolves to that profile's id.
+- **`<webview profile="work">`** puts your own page in one. Set it before the
+  view enters the document.
+- **The engine moves pages between profiles.** When the user takes a window
+  to a site of another profile with a link, the address bar or back and
+  forward, the page moves there in place. A page you moved by hand stays
+  while it stays on the same site. Redirects, a page's own script and pages
+  with an opener stay where they are, so a sign-in finishes where it started.
+- **`domicile.reopenBrowserWindow(id, profile)`** moves window `id` to
+  `profile`, for the user picking a profile. The page reloads there.
+- **A moved window keeps its id.** Its `<webview window>` shows the new page
+  on its own, and the next list shows its new `profile`. The back and forward
+  list comes along as addresses. Form input does not, and anything the old
+  page was asking, such as a permission, is withdrawn.
+- A page's new window with no opener opens where its site goes, as above. A
+  private page's new windows stay in its profile, and a private page never
+  moves on its own.
 - A profile the desk no longer has opens in the default one, or the default
   private one for a private page.
 
