@@ -85,14 +85,56 @@ describe("browser", () => {
     browser.answerMessageBox("2", 1, true);
 
     expect(fake.calls).toStrictEqual([
-      ["openBrowserWindow", "https://a.example/", ""],
-      ["openBrowserWindow", "https://b.example/", "persist:work"],
+      ["openBrowserWindow", "https://a.example/", "", ""],
+      ["openBrowserWindow", "https://b.example/", "persist:work", ""],
       ["openPrivateBrowserWindow", "https://c.example/"],
       ["openAppWindow", "https://d.example/", "", "new"],
       ["closeBrowserWindow", "1"],
       ["clickBrowserWindowMenu", "2", 7],
       ["answerBrowserWindowMessageBox", "2", 1, true],
     ]);
+  });
+
+  it("opens a window in a profile and moves one to another", () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    browser.open("https://a.example/", { profile: "work" });
+    browser.reopen("1", "personal");
+    browser.profileFor("https://b.example/").catch(() => {
+      /* never answered */
+    });
+
+    expect(fake.calls).toStrictEqual([
+      ["openBrowserWindow", "https://a.example/", "", "work"],
+      ["reopenBrowserWindow", "1", "personal"],
+      ["browserProfileFor", "https://b.example/"],
+    ]);
+    expect(browser.windows?.map(({ profile }) => profile)).toEqual([
+      "personal",
+    ]);
+  });
+
+  it("lists the browser profiles and says when they change", () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    let changes = 0;
+    const stop = browser.on("profilesChange", () => {
+      changes += 1;
+    });
+    expect(browser.profiles).toBeUndefined();
+    const work = {
+      color: "#3366ff",
+      id: "work",
+      isDefault: true,
+      isDefaultPrivate: false,
+      isPrivate: false,
+      name: "Work",
+    };
+    fake.set({ browserProfiles: [work] });
+
+    expect(browser.profiles).toStrictEqual([work]);
+    expect(changes).toBe(1);
+    stop();
   });
 
   it("opens an app window with an id, reusing the open one as asked", () => {

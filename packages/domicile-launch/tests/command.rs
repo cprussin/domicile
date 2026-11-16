@@ -42,8 +42,16 @@ fn a_run_app_names_the_apps_root_and_module() {
 #[test]
 fn an_open_url_names_the_version_it_is_written_in() {
     assert_eq!(
-        open_url_line("https://example.com/?q=\"x\""),
+        open_url_line("https://example.com/?q=\"x\"", None),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/?q=\\\"x\\\"\"}\n"
+    );
+}
+
+#[test]
+fn an_open_url_names_its_browser_profile_when_it_has_one() {
+    assert_eq!(
+        open_url_line("https://example.com/", Some("work")),
+        "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"profile\":\"work\"}\n"
     );
 }
 

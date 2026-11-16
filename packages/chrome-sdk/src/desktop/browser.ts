@@ -2,6 +2,7 @@
 // `<webview window="id">`, and fetches with the browser's cookies.
 
 import type {
+  DomicileBrowserProfile,
   DomicileBrowserWindow,
   DomicileFetchHeader,
   DomicileFetchResponse,
@@ -14,6 +15,24 @@ import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
 
 export type BrowserWindow = Defined<DomicileBrowserWindow>;
+
+/**
+ * One of the desk's browser profiles: a set of sign-ins, site data and
+ * extensions, as the config's `browser.profiles` names it.
+ */
+export type BrowserProfile = DomicileBrowserProfile;
+
+/** How {@link Browser.open} opens its window. */
+export type BrowserWindowOptions = {
+  /** Storage of the window's own, as a `<webview>`'s `partition` has. */
+  partition?: string;
+  /**
+   * The id of the browser profile to open it in, one of
+   * {@link Browser.profiles}. By default, the profile its site opens in
+   * ({@link Browser.profileFor}).
+   */
+  profile?: string;
+};
 
 export type FetchHeader = DomicileFetchHeader;
 export type FetchResponse = DomicileFetchResponse;
@@ -56,6 +75,11 @@ export type AppWindowOptions = {
 export type BrowserListeners = {
   /** A window opened, closed or changed. */
   change: () => void;
+  /**
+   * A profile was added, removed, renamed or recolored, or the defaults
+   * moved.
+   */
+  profilesChange: () => void;
 };
 
 export type Browser = {
@@ -74,10 +98,28 @@ export type Browser = {
    * wherever your layout puts it. See docs/SHELL-BROWSER-WINDOWS.md.
    */
   readonly views: readonly BrowserWindow[] | undefined;
-  /** Open a browser window, with storage of its own under `partition`. */
-  open: (url: string, options?: { partition?: string }) => void;
-  /** Open a window in the off-the-record profile. */
+  /**
+   * The desk's browser profiles, in the config's order; `undefined` until
+   * the browser lists them.
+   */
+  readonly profiles: readonly BrowserProfile[] | undefined;
+  /**
+   * The id of the browser profile `url` opens in: the most specific of the
+   * config's `browser.sites` that matches it, else the default profile.
+   * Rejects with a TypeError for an invalid `url`.
+   */
+  profileFor: (url: string) => Promise<string>;
+  /** Open a browser window, in the profile its site opens in by default. */
+  open: (url: string, options?: BrowserWindowOptions) => void;
+  /** Open a window in the default private profile. */
   openPrivate: (url: string) => void;
+  /**
+   * Move window `id`'s page to browser profile `profile` in place: the
+   * window keeps its id and its history's addresses, and its page loads
+   * again in the new profile. An unknown window or profile, or an app
+   * window, stays as it is.
+   */
+  reopen: (id: string, profile: string) => void;
   /**
    * Open an app window, with no address bar, or reuse the oldest one with
    * `id` as `reuse` says. The browser matches the window, so two quick calls
@@ -120,6 +162,8 @@ export type BrowserHost = Pick<
   DomicileHost,
   | "addEventListener"
   | "answerBrowserWindowMessageBox"
+  | "browserProfileFor"
+  | "browserProfiles"
   | "browserWindows"
   | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
@@ -129,6 +173,7 @@ export type BrowserHost = Pick<
   | "openBrowserWindow"
   | "openPrivateBrowserWindow"
   | "removeEventListener"
+  | "reopenBrowserWindow"
 >;
 
 export const browser = (host: BrowserHost): Browser => {
@@ -165,15 +210,24 @@ export const browser = (host: BrowserHost): Browser => {
     on: on<BrowserListeners>({
       change: (listener) =>
         hostEvent(host, "browserwindowschanged", () => listener()),
+      profilesChange: (listener) =>
+        hostEvent(host, "browserprofileschanged", () => listener()),
     }),
-    open: (url, { partition = "" } = {}) => {
-      host.openBrowserWindow(url, partition);
+    open: (url, { partition = "", profile = "" } = {}) => {
+      host.openBrowserWindow(url, partition, profile);
     },
     openApp: (url, { id = "", reuse = AppReuse.New } = {}) => {
       host.openAppWindow(url, id, reuseName(reuse));
     },
     openPrivate: (url) => {
       host.openPrivateBrowserWindow(url);
+    },
+    profileFor: (url) => host.browserProfileFor(url),
+    get profiles() {
+      return host.browserProfiles ?? undefined;
+    },
+    reopen: (id, profile) => {
+      host.reopenBrowserWindow(id, profile);
     },
     get views() {
       return viewsOf(host.browserWindows);

@@ -317,10 +317,12 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             Response::Stored => Ok(json!({"type": "stored"})),
             other => Err(refusal_or_surprise(other)),
         },
-        AppRequest::OpenUrl { url } => match (host.ask)(&Request::OpenUrl { url })? {
-            Response::Opened => Ok(json!({"type": "opened"})),
-            other => Err(refusal_or_surprise(other)),
-        },
+        AppRequest::OpenUrl { url } => {
+            match (host.ask)(&Request::OpenUrl { url, profile: None })? {
+                Response::Opened => Ok(json!({"type": "opened"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
         AppRequest::History(query) => match (host.ask)(&Request::History(query))? {
             Response::History { items } => Ok(json!({"type": "history", "items": items})),
             other => Err(refusal_or_surprise(other)),

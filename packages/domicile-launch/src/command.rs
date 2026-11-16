@@ -163,11 +163,13 @@ pub fn run_app_line(root: &Path, module: &Path) -> String {
     })
 }
 
-/// The request to open `url` in the shell. The engine validates `url`.
-pub fn open_url_line(url: &str) -> String {
+/// The request to open `url` in the shell, in browser profile `profile` or
+/// with none in the one its site opens in. The engine validates both.
+pub fn open_url_line(url: &str, profile: Option<&str>) -> String {
     line(&Command::OpenUrl {
         url,
         version: VERSION,
+        profile,
         app: false,
         app_id: None,
         reuse: AppReuse::New,
@@ -184,6 +186,7 @@ pub fn open_app_line(url: &str, id: Option<&str>, reuse: AppReuse) -> String {
     line(&Command::OpenUrl {
         url,
         version: VERSION,
+        profile: None,
         app: true,
         app_id: id,
         reuse,
@@ -352,6 +355,9 @@ enum Command<'a> {
     OpenUrl {
         version: u32,
         url: &'a str,
+        // Left out when none, the profile the site opens in.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        profile: Option<&'a str>,
         // Left out when false, so a browser window's line is the one every
         // engine reads.
         #[serde(skip_serializing_if = "std::ops::Not::not")]

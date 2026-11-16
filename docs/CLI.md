@@ -46,6 +46,10 @@ takes the same forms as `domicile [shell]`.
 Open a file or folder with its type's default app, or a link in a browser
 window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
 
+- `domicile open --profile <id> <url>` opens a link in browser profile `<id>`
+  ([BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md)). Without it, a
+  link opens in the profile its site opens in. A profile the config doesn't
+  name is an error.
 - `domicile open --app <url|module>` opens a site or an app module as an
   app: its own window, without an address bar
   ([WEB-APPS.md](architecture/WEB-APPS.md)).

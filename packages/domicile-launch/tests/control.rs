@@ -104,14 +104,31 @@ fn a_desktop_told_to_open_an_address_tells_the_engine() {
     let told = Cell::new(None);
     let answered = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
-        &|url| {
-            told.set(Some(url.to_string()));
+        &|url, profile| {
+            told.set(Some((url.to_string(), profile.map(str::to_string))));
             Ok(())
         },
     );
 
-    assert_eq!(told.take(), Some("https://example.com/".to_string()));
+    assert_eq!(
+        told.take(),
+        Some(("https://example.com/".to_string(), None))
+    );
     assert_eq!(answered, Response::Opened);
+}
+
+#[test]
+fn a_desktop_hands_the_engine_the_profile_an_address_opens_in() {
+    let told = Cell::new(None);
+    answered_opening(
+        "{\"type\":\"open_url\",\"url\":\"https://example.com/\",\"profile\":\"work\"}",
+        &|_, profile| {
+            told.set(profile.map(str::to_string));
+            Ok(())
+        },
+    );
+
+    assert_eq!(told.take(), Some("work".to_string()));
 }
 
 #[test]
@@ -186,7 +203,7 @@ fn a_desktop_told_to_reuse_an_app_window_tells_the_engine_which() {
 fn an_engine_that_would_not_open_the_address_is_quoted() {
     let Response::Refused { why } = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
-        &|_| Err("this engine has no shell page to open it in".to_string()),
+        &|_, _| Err("this engine has no shell page to open it in".to_string()),
     ) else {
         panic!("an engine that refused the address is not one that opened it");
     };
@@ -1197,7 +1214,7 @@ fn nothing_dialed() -> Desktop<'static> {
         load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
         media_devices: &|| panic!("only media_devices lists media devices"),
         module: Path::new("/shell.js"),
-        open: &|_| panic!("only open_url opens a browser window"),
+        open: &|_, _| panic!("only open_url opens a browser window"),
         open_app: &|_, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),

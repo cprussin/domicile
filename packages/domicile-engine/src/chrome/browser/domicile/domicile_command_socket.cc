@@ -23,6 +23,7 @@
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
 #include "chrome/browser/domicile/domicile_extension_settings.h"
@@ -38,6 +39,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/domicile/browser/app_roots.h"
+#include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/browser/shell_swap.h"
@@ -259,6 +261,7 @@ void RunAppInAnAppWindow(const base::FilePath& root,
 // shell sees it in its window list. See domicile_browser_windows.h.
 void OpenUrlOnceTheShellHasAPage(const GURL& url,
                                  std::optional<AppLaunch> app,
+                                 const std::string& profile,
                                  WindowOpened opened,
                                  bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -267,16 +270,23 @@ void OpenUrlOnceTheShellHasAPage(const GURL& url,
   } else if (app.has_value()) {
     std::move(opened).Run(OpenAppWindow(url, app->id, app->reuse));
   } else {
-    std::move(opened).Run(OpenBrowserWindow(url));
+    std::move(opened).Run(OpenBrowserWindow(url, profile));
   }
 }
 
 // Opens the window once the shell window shows a page, which owns it.
 void OpenUrlInABrowserWindow(const GURL& url,
                              std::optional<AppLaunch> app,
+                             const std::string& profile,
                              WindowOpened opened) {
-  WhenTheShellWindowCanTakeIt(base::BindOnce(
-      &OpenUrlOnceTheShellHasAPage, url, std::move(app), std::move(opened)));
+  WhenTheShellWindowCanTakeIt(base::BindOnce(&OpenUrlOnceTheShellHasAPage, url,
+                                             std::move(app), profile,
+                                             std::move(opened)));
+}
+
+// Whether the config names browser profile `id`.
+bool DeskHasBrowserProfile(const std::string& id) {
+  return BrowserProfileRegistry::Get().profiles().Find(id) != nullptr;
 }
 
 // The site settings of the shell's profile, which browser windows share, or
@@ -544,6 +554,7 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                 {.load_shell = &LoadShellIntoTheShellWindow,
                  .run_app = &RunAppInAnAppWindow,
                  .open_url = &OpenUrlInABrowserWindow,
+                 .has_browser_profile = &DeskHasBrowserProfile,
                  .list_site_permissions = &ListShellSitePermissions,
                  .set_site_permission = &SetShellSitePermission,
                  .load_unpacked = &LoadUnpackedIntoTheShellProfile,

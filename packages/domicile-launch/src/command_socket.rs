@@ -84,8 +84,18 @@ pub fn load_shell(
 }
 
 /// Tells the engine at `socket` to open `url` in the shell.
-pub fn open_url(socket: &Path, url: &str, patience: Duration) -> Result<(), CommandError> {
-    carry_out(socket, &open_url_line(url), Reply::Opened, patience)
+pub fn open_url(
+    socket: &Path,
+    url: &str,
+    profile: Option<&str>,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &open_url_line(url, profile),
+        Reply::Opened,
+        patience,
+    )
 }
 
 /// Tells the engine at `socket` to run the app module `module` under `root`

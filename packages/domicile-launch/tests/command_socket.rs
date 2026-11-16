@@ -54,11 +54,11 @@ fn the_engine_is_sent_the_address_and_says_it_opened_it() {
     let (_scratch, path) = scratch();
     let heard = an_engine(&path, Some("{\"type\":\"opened\"}\n"));
 
-    open_url(&path, "https://example.com/", BRIEFLY).expect("the engine opened it");
+    open_url(&path, "https://example.com/", None, BRIEFLY).expect("the engine opened it");
 
     assert_eq!(
         heard.join().expect("the engine was listening"),
-        open_url_line("https://example.com/")
+        open_url_line("https://example.com/", None)
     );
 }
 

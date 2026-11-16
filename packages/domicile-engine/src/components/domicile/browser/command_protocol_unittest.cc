@@ -53,6 +53,7 @@ struct Told {
   bool opened = false;
   std::string url;
   std::optional<AppLaunch> app;
+  std::string profile;
   bool set = false;
   std::string origin;
   std::optional<WebViewPermission> permission;
@@ -181,15 +182,21 @@ std::string Answer(std::string_view line,
   };
   auto open_url = [told, has_window](const GURL& url,
                                      std::optional<AppLaunch> app,
+                                     const std::string& profile,
                                      WindowOpened opened) {
     told->opened = true;
     told->url = url.spec();
     told->app = app;
+    told->profile = profile;
     if (told->hold_open) {
       told->held_open = std::move(opened);
       return;
     }
     std::move(opened).Run(has_window);
+  };
+  // The desk's profiles are `default` and `work`.
+  auto has_browser_profile = [](const std::string& id) {
+    return id == "default" || id == "work";
   };
   auto list_site_permissions =
       [has_window]() -> std::optional<SitePermissionList> {
@@ -347,6 +354,7 @@ std::string Answer(std::string_view line,
                 {.load_shell = load_shell,
                  .run_app = run_app,
                  .open_url = open_url,
+                 .has_browser_profile = has_browser_profile,
                  .list_site_permissions = list_site_permissions,
                  .set_site_permission = set_site_permission,
                  .load_unpacked = load_unpacked,
@@ -586,6 +594,59 @@ TEST(CommandProtocolTest, HandsTheShellTheAddressARequestNames) {
   EXPECT_EQ(told.url, "https://example.com/a?b=c");
   EXPECT_EQ(told.app, std::nullopt);
   EXPECT_FALSE(told.asked);
+}
+
+TEST(CommandProtocolTest, OpensABrowserWindowInTheProfileARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("profile":"work"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "opened");
+  EXPECT_EQ(told.profile, "work");
+
+  // None is the profile the site opens in, which the action works out.
+  Answer(R"({"type":"open_url","version":1,"url":"https://example.com/"})",
+         &told);
+  EXPECT_EQ(told.profile, "");
+}
+
+TEST(CommandProtocolTest, RefusesAProfileTheDeskDoesNotHave) {
+  // Opening it in another profile would put the page among the wrong
+  // sign-ins without a word.
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("profile":"wrok"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("\"wrok\""));
+  EXPECT_FALSE(told.opened);
+}
+
+TEST(CommandProtocolTest, RefusesAProfileThatIsNoId) {
+  for (const char* profile : {R"("")", "7", "null"}) {
+    Told told;
+    const std::string reply =
+        Answer(base::StrCat({R"({"type":"open_url","version":1,)",
+                             R"("url":"https://example.com/","profile":)",
+                             profile, "}"}),
+               &told);
+    EXPECT_EQ(TypeOf(reply), "refused") << profile;
+    EXPECT_THAT(WhyOf(reply), HasSubstr("\"profile\"")) << profile;
+    EXPECT_FALSE(told.opened) << profile;
+  }
+}
+
+TEST(CommandProtocolTest, RefusesAProfileForAnAppWindow) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":true,"profile":"work"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("app window"));
+  EXPECT_FALSE(told.opened);
 }
 
 TEST(CommandProtocolTest, OpensAnAppWindowWhenARequestAsksForOne) {

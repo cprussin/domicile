@@ -64,7 +64,7 @@ describe("signIn", () => {
     await signedIn;
 
     expect(fake.calls).toStrictEqual([
-      ["openBrowserWindow", consentAddress(CLIENT, EMAIL, STATE), ""],
+      ["openBrowserWindow", consentAddress(CLIENT, EMAIL, STATE), "", ""],
       ["closeBrowserWindow", "1"],
     ]);
     expect(storedToken(EMAIL, storage)).toStrictEqual(Some("r"));

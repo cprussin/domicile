@@ -147,7 +147,8 @@ Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
   opened in a profile, windows listed with their profile
 - [x] engine: extensions per profile, a desk per profile
 - [x] engine: routing and `Reopen`
-- [ ] protocol and SDK: the API above, `domicile open --profile`
+- [x] protocol and SDK: the API above, `domicile open --profile`
+- [ ] SDK: `browser.fetch(url, { profile })`, with the bar modules
 - [ ] Manganese: address bar button and menu, tab dots, tray by profile
 - [ ] Settings: Profiles page
 - [ ] bar modules and launcher bookmarks take a profile

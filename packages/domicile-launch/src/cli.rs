@@ -29,6 +29,7 @@ Ask the running desktop:
   domicile load-shell <shell>           Serve another shell, or a new build
   domicile open <file|folder|url>       Open with its default app, a link in
                                         a browser window
+  domicile open --profile <id> <url>    Open a link in browser profile <id>
   domicile open --app <url|module>      Open a site or app module as an app
   domicile open --app --id <id> [--reuse new|focus|navigate] <url>
                                         Open a site as app <id>; with focus or
@@ -142,6 +143,12 @@ pub enum CliError {
          domicile open --app --id mail --reuse focus https://mail.example\n"
     )]
     ReuseWithoutId,
+    #[error(
+        "--profile picks the browser profile a web address opens in, and \
+         {target} is no web address:\n\n    \
+         domicile open --profile work https://example.com\n"
+    )]
+    ProfileForAFile { target: String },
     #[error("--reuse is new, focus or navigate, and was given {given}.")]
     UnknownReuse { given: String },
     #[error("{flag} takes a value, and was given none.")]
@@ -280,8 +287,12 @@ pub enum Invocation {
     /// Open this file, folder or address with what opens its type; see
     /// [`crate::open`]. A web address opens in a new browser window.
     ///
-    /// Kept as typed; it is relative to the working directory.
-    Open { target: String },
+    /// Kept as typed; it is relative to the working directory. A web address
+    /// opens in browser profile `profile`, or the one its site opens in.
+    Open {
+        target: String,
+        profile: Option<String>,
+    },
     /// Tell the running desktop to open this as an app: an existing file as
     /// an app module ([`crate::app_entry`]), anything else as a site in a
     /// browser window without an address bar ([`crate::address`]).
@@ -435,6 +446,20 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     Some(extra) => Err(CliError::ExtraToOpen { extra }),
                 }
             }
+            Verb::Opening if args.peek().is_some_and(|word| word == PROFILE) => {
+                args.next();
+                let profile = args.next().ok_or_else(|| CliError::FlagWithoutValue {
+                    flag: PROFILE.to_string(),
+                })?;
+                match (args.next(), args.next()) {
+                    (None, _) => Err(CliError::NothingToOpen),
+                    (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
+                    (Some(target), None) => Ok(Invocation::Open {
+                        target,
+                        profile: Some(profile),
+                    }),
+                }
+            }
             Verb::Opening => {
                 let first = args.next();
                 let flag = first.clone().filter(|word| word == APP || word == WHICH);
@@ -449,7 +474,10 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     (Some(target), None) => Ok(match flag.as_deref() {
                         Some(APP) => Invocation::OpenAsApp { target, id, reuse },
                         Some(_) => Invocation::Opener { target },
-                        None => Invocation::Open { target },
+                        None => Invocation::Open {
+                            target,
+                            profile: None,
+                        },
                     }),
                 }
             }
@@ -653,6 +681,9 @@ const APP: &str = "--app";
 
 /// `open`'s flag for running an installed Electron app on the engine.
 const ELECTRON: &str = "--electron";
+
+/// `open`'s flag naming the browser profile a web address opens in.
+const PROFILE: &str = "--profile";
 
 /// `open --app`'s flag naming the app a site's window belongs to.
 const ID: &str = "--id";
