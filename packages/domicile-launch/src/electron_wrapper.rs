@@ -23,8 +23,9 @@ use std::time::{Duration, Instant};
 
 /// The variables this module sets to follow the wrappers, which the app
 /// doesn't get.
-const OURS: [&str; 3] = [
+const OURS: [&str; 4] = [
     "BASH_ENV",
+    "DOMICILE_ELECTRON_BASH",
     "DOMICILE_ELECTRON_LAUNCH",
     "DOMICILE_ELECTRON_RECORDER",
 ];
@@ -36,6 +37,7 @@ pub const RECORD: &str = "--record-electron-launch";
 /// Sourced by every bash script the wrappers run. `exec` with only
 /// redirections still applies them, as bash's own does.
 const FOLLOW: &str = r##"
+export DOMICILE_ELECTRON_BASH="$BASH"
 exec() {
   if [ $# -eq 0 ]; then builtin exec; return; fi
   while [ $# -gt 0 ]; do
@@ -53,6 +55,68 @@ exec() {
 }
 "##;
 
+/// What a compiled wrapper's `makeCWrapper` command does, as bash: what the
+/// C it compiles to does, flag by flag, ending in an `exec` that [`FOLLOW`]
+/// catches. The command follows it, then `"$@"` is the wrapper's arguments.
+const MAKE_C_WRAPPER: &str = r##"
+makeCWrapper() {
+  local program="$1" before=() after=() flags
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --set) export "$2=$3"; shift 3 ;;
+      --set-default) [ -n "${!2+set}" ] || export "$2=$3"; shift 3 ;;
+      --unset) unset "$2"; shift 2 ;;
+      --prefix|--prefix-unchecked)
+        if [ -n "${!2:-}" ]; then export "$2=$4$3${!2}"; else export "$2=$4"; fi
+        shift 4 ;;
+      --suffix|--suffix-unchecked)
+        if [ -n "${!2:-}" ]; then export "$2=${!2}$3$4"; else export "$2=$4"; fi
+        shift 4 ;;
+      --chdir) cd "$2" || exit 1; shift 2 ;;
+      --add-flag) before+=("$2"); shift 2 ;;
+      --append-flag) after+=("$2"); shift 2 ;;
+      --add-flags) read -ra flags <<< "$2"; before+=("${flags[@]}"); shift 2 ;;
+      --append-flags) read -ra flags <<< "$2"; after+=("${flags[@]}"); shift 2 ;;
+      --argv0) shift 2 ;;
+      --inherit-argv0|--resolve-argv0) shift ;;
+      *) echo "domicile: makeCWrapper has no $1" >&2; exit 1 ;;
+    esac
+  done
+  exec "$program" "${before[@]}" "${WRAPPER_ARGS[@]}" "${after[@]}"
+}
+WRAPPER_ARGS=("$@")
+set --
+"##;
+
+/// The largest file read as a compiled wrapper, which is tens of kilobytes.
+const COMPILED_WRAPPER_MAX: u64 = 4 << 20;
+
+/// The `makeCWrapper` command a compiled wrapper at `program` keeps, or
+/// `None` when it's no compiled wrapper.
+pub fn compiled_wrapper_command(program: &Path) -> Option<String> {
+    let meta = fs::metadata(program).ok()?;
+    if !meta.is_file() || meta.len() > COMPILED_WRAPPER_MAX {
+        return None;
+    }
+    let bytes = fs::read(program).ok()?;
+    if !bytes.starts_with(b"\x7fELF") {
+        return None;
+    }
+    const START: &[u8] = b"\nmakeCWrapper ";
+    let at = bytes
+        .windows(START.len())
+        .position(|window| window == START)?
+        + 1;
+    let rest = &bytes[at..];
+    let end = [&b"\n\n\n#"[..], b"\0"]
+        .iter()
+        .filter_map(|stop| rest.windows(stop.len()).position(|window| window == *stop))
+        .min()
+        .unwrap_or(rest.len());
+    Some(String::from_utf8_lossy(&rest[..end]).into_owned())
+}
+
 /// How the app's own command would have started it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Launch {
@@ -66,7 +130,7 @@ pub struct Launch {
 /// Why the wrappers' launch isn't known.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum WrapperError {
-    #[error("{program} is no bash script, so there is no wrapper to follow")]
+    #[error("{program} is no bash script or compiled wrapper, so there is no wrapper to follow")]
     NotBash { program: String },
     #[error("cannot follow {program}: {why}")]
     Unrunnable { program: String, why: String },
@@ -93,6 +157,12 @@ pub fn record(args: &[OsString]) -> Result<(), String> {
     let out = std::env::var_os("DOMICILE_ELECTRON_LAUNCH")
         .map(PathBuf::from)
         .ok_or("only an Electron app's wrappers record their launch")?;
+    if let Some(command) = args
+        .first()
+        .and_then(|program| compiled_wrapper_command(Path::new(program)))
+    {
+        return follow_compiled(&out, &command, &args[1..]);
+    }
     let mut written = Vec::new();
     for arg in args {
         written.extend_from_slice(arg.as_bytes());
@@ -114,6 +184,38 @@ pub fn record(args: &[OsString]) -> Result<(), String> {
     write("done", b"")
 }
 
+/// Runs a compiled wrapper's `makeCWrapper` `command` as bash, given `args`,
+/// in this process: see [`MAKE_C_WRAPPER`].
+fn follow_compiled(out: &Path, command: &str, args: &[OsString]) -> Result<(), String> {
+    let script = tempfile::Builder::new()
+        .prefix("compiled-")
+        .suffix(".bash")
+        .tempfile_in(out)
+        .and_then(|file| file.keep().map_err(|kept| kept.error))
+        .map_err(|why| {
+            format!(
+                "cannot write a compiled wrapper's script in {}: {why}",
+                out.display()
+            )
+        })?
+        .1;
+    fs::write(&script, format!("{MAKE_C_WRAPPER}{command}\n"))
+        .map_err(|why| format!("cannot write {}: {why}", script.display()))?;
+    let bash = std::env::var_os("DOMICILE_ELECTRON_BASH")
+        .filter(|bash| !bash.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("PATH")
+                .into_iter()
+                .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+                .map(|dir| dir.join("bash"))
+                .find(|candidate| candidate.is_file())
+        })
+        .ok_or("following a compiled wrapper needs bash, and there's none on PATH")?;
+    let why = Command::new(&bash).arg(&script).args(args).exec();
+    Err(format!("cannot run {}: {why}", bash.display()))
+}
+
 /// Runs `command`, the app's own, as far as the program its wrappers end in,
 /// and gives what that program would have run with. `resources` is the
 /// app's, as `electron_app` found it; the program must run the app there.
@@ -125,7 +227,8 @@ pub fn through_wrappers(
     wait: Duration,
 ) -> Result<Launch, WrapperError> {
     let program = command.first().cloned().unwrap_or_default();
-    if !is_bash_script(Path::new(&program)) {
+    let compiled = compiled_wrapper_command(Path::new(&program)).is_some();
+    if !compiled && !is_bash_script(Path::new(&program)) {
         return Err(WrapperError::NotBash { program });
     }
     let unrunnable = |why: std::io::Error| WrapperError::Unrunnable {
@@ -135,7 +238,14 @@ pub fn through_wrappers(
     let out = tempfile::tempdir().map_err(unrunnable)?;
     let follow = out.path().join("follow.bash");
     fs::write(&follow, FOLLOW).map_err(unrunnable)?;
-    let mut follow_wrappers = Command::new(&program);
+    // A compiled wrapper starts as the recorder, which follows it.
+    let mut follow_wrappers = if compiled {
+        let mut recorder = Command::new(recorder);
+        recorder.arg(RECORD).arg(&program);
+        recorder
+    } else {
+        Command::new(&program)
+    };
     follow_wrappers
         .args(&command[1..])
         .env("BASH_ENV", &follow)

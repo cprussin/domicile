@@ -1,0 +1,151 @@
+# Browser profiles
+
+A browser profile is a set of sign-ins, site data and extensions. Pages of
+every profile share the desktop's windows and tab groups. The config maps
+sites to profiles, so a page opens in its site's profile without a picker, and
+the user can move any page to another profile.
+
+## Problem
+
+Every browser window shares one Chrome profile, plus one off-the-record profile
+for private windows. A user with a work and a personal account has to sign out
+and in, or use a private window, and every extension sees every page: a work
+password manager reads personal sites.
+
+`<webview partition>` does not fix this. A partition splits cookies and
+storage, but extensions belong to the Chrome profile, so they would still see
+every page and keep one state (one Bitwarden login).
+
+## Design
+
+### Config
+
+```json
+{
+  "browser": {
+    "profiles": {
+      "personal": { "name": "Personal", "color": "#0d9488" },
+      "work": {
+        "name": "Work",
+        "color": "#d97706",
+        "extensions": ["aeblfdkhhhdcdjpifhhbdiojplfjncoa"]
+      },
+      "private": { "name": "Private", "color": "#a78bfa", "private": true }
+    },
+    "default_profile": "personal",
+    "default_private_profile": "private",
+    "sites": { "*.acme.com": "work", "github.com/acme": "work" }
+  }
+}
+```
+
+- **`profiles`**: by id. `extensions` lists the ids from `extensions.web_store`
+  and `extensions.unpacked` that the profile turns on; unset turns on all of
+  them. `private` keeps nothing past the profile's last page.
+- **`default_profile`**: where an unlisted site opens. Never private.
+- **`default_private_profile`**: where "new private window" opens. Always
+  private.
+- **`sites`**: a map, so a site has one profile. Keys are a host, `*.host`, or
+  a host and path prefix. The most specific match wins. A site never maps to
+  `default_profile`; the config is refused if one does.
+- **Unset `browser`**: one default profile, `default`, and one private one,
+  `private`.
+- `extensions.settings.<id>.private` is gone: a private profile's
+  `extensions` replaces it.
+
+### Engine
+
+- **One Chrome profile per browser profile.** Each has its own cookies,
+  storage, cache, history, permissions, extensions and extension state.
+- **The default profile is the shell's profile**, today's user data directory,
+  so existing sign-ins stay.
+- **Other profiles** live under `Profiles/<id>` in the user data directory,
+  created through `ProfileManager` when a page first opens in one.
+- **A private profile** is the primary off-the-record profile of a hidden
+  regular profile `<id>`. Chrome gives an off-the-record profile its parent's
+  extensions, so the hidden profile holds the private profile's extension
+  set. No page opens in the hidden profile itself.
+- **Guests** are made in their profile's context, as private guests are
+  (`ContextFor` in `web_view_guest.cc`). `partition` still splits storage
+  inside a profile.
+- **One window list.** `DeskWindows` stays on the shell's profile and lists
+  guests of every profile. Each window carries its profile id.
+- **One desk per profile.** `chrome.tabs` and `chrome.windows` in a profile see
+  only its own pages.
+- **Extensions** are installed into each profile that turns them on and
+  uninstalled from the others. `extensions.settings` applies in every profile.
+
+### Routing
+
+The engine picks the profile, so every shell, `domicile open`, `window.open`
+and `chrome.tabs.create` behave the same.
+
+- `profileFor(url)`: the most specific `sites` match, else `default_profile`.
+- **New windows** with no opener open in `profileFor(url)`, unless the caller
+  names a profile.
+- **Top-level navigations the user starts** (link clicks, the address bar,
+  back and forward) move the page to `profileFor(target)` when it differs from
+  `profileFor(current)`. Comparing both ends keeps a page the user moved by
+  hand in its profile while it stays on the same site.
+- **Redirects, iframes and popups with an opener** stay in the page's
+  profile, so sign-in flows complete where they started.
+
+### Moving a page
+
+`ReopenIn(window, profile)` makes a new guest in the target profile under the
+same window id, so the shell keeps its place and group.
+
+- The back and forward list moves as URLs and titles. Page state, form input
+  and POST bodies do not; the page reloads.
+- Routing swaps pages the same way.
+
+### SDK
+
+| API | Does |
+|---|---|
+| `host.browserProfiles` + `browserprofileschanged` | The profiles: id, name, color, private, default. |
+| `DomicileBrowserWindow.profile` | The window's profile id. |
+| `openBrowserWindow(url, { profile })` | Opens in `profile`, or by routing when unset. |
+| `reopenBrowserWindow(id, profile)` | Moves a window's page to `profile`. |
+| `profileForUrl(url)` | Routing's answer for `url`. |
+| `browser.fetch(url, { profile })` | Fetches with `profile`'s cookies. |
+| `InstalledExtension.profiles` | The profiles an extension is on in. |
+
+`domicile open --profile <id> <url>` and launcher bookmarks name a profile the
+same way.
+
+### Manganese
+
+Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
+
+- A profile button at the start of the address bar opens the profile menu:
+  move the page, pin the site to a profile, open in a new tab of a profile,
+  the profile's extensions.
+- Tabs outside the default profile carry the profile's color on their icon.
+- The tray shows the focused page's profile's extensions.
+- Settings has a Profiles page: a card per profile and one Sites list.
+- Gmail and Messages bar modules take a `profile` option.
+
+## Key decisions
+
+- **Chrome profiles over partitions:** extensions and their state are per
+  Chrome profile.
+- **Swap in place over a new tab** for a link to another profile's site: the
+  user asked for it, and back swaps back.
+- **Unlisted sites go to the default profile** rather than inheriting the
+  opener's: one rule to predict.
+- **Private is a profile option** rather than a mode of each profile: a
+  private Work profile is one more profile.
+
+## Plan
+
+- [ ] config: `browser`, the JSON schema, home-manager options; drop
+  `extensions.settings.*.private`
+- [ ] engine: a Chrome profile per browser profile, private profiles, guests
+  opened in a profile, windows listed with their profile
+- [ ] engine: extensions per profile, a desk per profile
+- [ ] engine: routing and `ReopenIn`
+- [ ] protocol and SDK: the API above, `domicile open --profile`
+- [ ] Manganese: address bar button and menu, tab dots, tray by profile
+- [ ] Settings: Profiles page
+- [ ] bar modules and launcher bookmarks take a profile

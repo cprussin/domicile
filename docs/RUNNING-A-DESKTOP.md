@@ -25,6 +25,16 @@ nix run github:cprussin/domicile/release#simple
   "How to switch" button opens the install docs.
 - With Nix, each desktop is its own app. Install one with
   `nix profile install`.
+- `/release` and `/stable` download from Domicile's binary cache instead of
+  building. `nix run` asks to trust it if you are in `trusted-users`; a NixOS
+  config trusts it for everyone with:
+
+  ```nix
+  nix.settings = {
+    substituters = [ "https://packages.domicile-desktop.com/nix" ];
+    trusted-public-keys = [ "packages.domicile-desktop.com-1:iAulr298MtC52WMi2GPI8bqPEvOXHoQtSRAGOo0ny90=" ];
+  };
+  ```
 - In a Wayland session the desktop opens in a window. On a console login it
   takes the screen; no setting is needed
   ([how](/docs/architecture/A-DESKTOP-ON-A-TTY.md)).
@@ -228,7 +238,9 @@ settings; headless and EIS input do not pass through libinput.
 whitespace: `DOMICILE_ENGINE_ARGS='--log-level=0 --enable-features=Vulkan'`.
 
 - Its `--enable-features` and `--disable-features` values join the launcher's,
-  so the built-in `LibinputHandleTouchpad,LibinputHandleMouse` stay on. A
+  so the built-in `LibinputHandleTouchpad,LibinputHandleMouse` stay on and
+  `BatterySaverModeFollowsSystemPowerSaver` stays off. Without that, Chrome's
+  Energy Saver caps the whole desk at 30 fps on the power-saver profile. A
   feature in both lists is disabled.
 - Every other switch goes after the launcher's, and the last copy of a switch
   wins.

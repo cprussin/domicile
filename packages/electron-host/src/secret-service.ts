@@ -49,6 +49,12 @@ const busDaemon = (bus: MessageBus, member: string, body: unknown[]) =>
     body,
   );
 
+/** Whether `why` is the Secret Service refusing a locked collection. */
+const isLocked = (why: unknown) =>
+  why instanceof Error &&
+  (why as Error & { type?: string }).type ===
+    "org.freedesktop.Secret.Error.IsLocked";
+
 /** Whether a Secret Service runs on `bus`, or would start when asked. */
 const hasSecretService = async (bus: MessageBus) => {
   const [running] = await busDaemon(bus, "NameHasOwner", [SECRETS]);
@@ -154,26 +160,47 @@ export const readSafeStoragePassword = async (
       return Buffer.from(secret[2]).toString("utf8");
     }
     const password = randomBytes(16).toString("base64");
-    const [, prompt] = (await call(
-      bus,
-      SECRETS,
-      DEFAULT_COLLECTION,
-      "org.freedesktop.Secret.Collection",
-      "CreateItem",
-      "a{sv}(oayays)b",
-      [
-        {
-          "org.freedesktop.Secret.Item.Attributes": new Variant("a{ss}", {
-            application,
-            "xdg:schema": SCHEMA,
-          }),
-          "org.freedesktop.Secret.Item.Label": new Variant("s", LABEL),
-        },
-        [session, Buffer.alloc(0), Buffer.from(password), "text/plain"],
-        false,
-      ],
-    )) as [string, string];
-    return (await prompted(bus, prompt)) ? password : undefined;
+    const create = () =>
+      call(
+        bus,
+        SECRETS,
+        DEFAULT_COLLECTION,
+        "org.freedesktop.Secret.Collection",
+        "CreateItem",
+        "a{sv}(oayays)b",
+        [
+          {
+            "org.freedesktop.Secret.Item.Attributes": new Variant("a{ss}", {
+              application,
+              "xdg:schema": SCHEMA,
+            }),
+            "org.freedesktop.Secret.Item.Label": new Variant("s", LABEL),
+          },
+          [session, Buffer.alloc(0), Buffer.from(password), "text/plain"],
+          false,
+        ],
+      ) as Promise<[string, string]>;
+    let created: [string, string];
+    try {
+      created = await create();
+    } catch (why) {
+      if (!isLocked(why)) {
+        throw why;
+      }
+      // A keyring the login didn't unlock: unlock it through its prompt, as
+      // libsecret does for Electron, then make the item.
+      const [collection] = (await service("ReadAlias", "s", ["default"])) as [
+        string,
+      ];
+      const [, prompt] = (await service("Unlock", "ao", [
+        [collection === "/" ? DEFAULT_COLLECTION : collection],
+      ])) as [string[], string];
+      if (!(await prompted(bus, prompt))) {
+        return undefined;
+      }
+      created = await create();
+    }
+    return (await prompted(bus, created[1])) ? password : undefined;
   } finally {
     await call(
       bus,

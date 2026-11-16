@@ -234,3 +234,100 @@ fn a_wrapper_still_open_for_writing_runs_once_it_is_closed() {
 
     assert!(launch.is_ok(), "{launch:?}");
 }
+
+/// A compiled wrapper as nixpkgs' `makeBinaryWrapper` writes it: an ELF
+/// program that keeps, as text, the `makeCWrapper` command that made it.
+fn compiled(root: &Path, path: &str, command: &str) -> PathBuf {
+    let mut bytes = b"\x7fELF\x02\x01\x01\0\0\0\0\0\0\0\0\0\x03\0\x3e\0\xe8\x1f\0".to_vec();
+    bytes.extend_from_slice(
+        format!(
+            "\n\n\n# {rule}\n# The C-code for this binary wrapper has been generated \
+             using the following command:\n\n\n{command}\n\n\n# (Use `nix-shell -p \
+             makeBinaryWrapper` to get access to makeCWrapper in your shell)\n# {rule}\n\n\n\0",
+            rule = "-".repeat(84),
+        )
+        .as_bytes(),
+    );
+    bytes.extend_from_slice(b"\x90\xc3\0");
+    let at = root.join(path);
+    fs::create_dir_all(at.parent().expect("a parent")).unwrap();
+    fs::write(&at, bytes).unwrap();
+    fs::set_permissions(&at, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::canonicalize(at).unwrap()
+}
+
+#[test]
+fn compiled_wrappers_have_their_say_too() {
+    // As nixpkgs wraps ChatGPT, and the user's config wraps it again: two
+    // compiled wrappers, then a launcher script that execs the Electron
+    // binary a variable names.
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "chatgpt/lib/chatgpt/resources/app.asar",
+        "asar",
+    );
+    let electron = write(
+        root.path(),
+        "chatgpt/lib/chatgpt/ChatGPT",
+        "\x7fELF never run",
+    );
+    let launcher = write(
+        root.path(),
+        "chatgpt/bin/.chatgpt-wrapped_",
+        &format!(
+            "#! {} -e\nexport CODEX_RESOURCES=/cache\n\
+             exec \"$CHATGPT_EXECUTABLE\" --from-launcher \"$@\"\n",
+            bash()
+        ),
+    );
+    let inner = compiled(
+        root.path(),
+        "chatgpt/bin/.chatgpt-wrapped",
+        &format!(
+            "makeCWrapper '{}' \\\n    --set 'CHATGPT_EXECUTABLE' '{}' \\\n    \
+             --prefix 'PATH' ':' '/opt/node/bin' \\\n    \
+             --set-default 'GIO_EXTRA_MODULES' '/gio' \\\n    \
+             --add-flags '--password-store=gnome-libsecret --x'",
+            launcher.display(),
+            electron.display()
+        ),
+    );
+    let outer = compiled(
+        root.path(),
+        "chatgpt/bin/chatgpt",
+        &format!(
+            "makeCWrapper '{}' \\\n    --set-default 'NIXOS_OZONE_WL' '1' \\\n    \
+             --append-flag 'it'\\''s last'",
+            inner.display()
+        ),
+    );
+
+    let launch = through_wrappers(
+        &[outer.display().to_string(), "--hidden".into()],
+        &fs::canonicalize(root.path().join("chatgpt/lib/chatgpt/resources")).unwrap(),
+        Path::new(env!("CARGO_BIN_EXE_domicile")),
+        WAIT,
+    )
+    .unwrap();
+
+    assert_eq!(
+        launch.args,
+        vec![
+            "--from-launcher".to_string(),
+            "--password-store=gnome-libsecret".into(),
+            "--x".into(),
+            "--hidden".into(),
+            "it's last".into(),
+        ]
+    );
+    assert_eq!(env_of(&launch, "NIXOS_OZONE_WL"), Some("1"));
+    assert_eq!(env_of(&launch, "CHATGPT_EXECUTABLE"), electron.to_str());
+    assert_eq!(env_of(&launch, "GIO_EXTRA_MODULES"), Some("/gio"));
+    assert_eq!(env_of(&launch, "CODEX_RESOURCES"), Some("/cache"));
+    assert!(env_of(&launch, "PATH")
+        .unwrap()
+        .starts_with("/opt/node/bin:"));
+    assert_eq!(env_of(&launch, "BASH_ENV"), None);
+    assert_eq!(env_of(&launch, "DOMICILE_ELECTRON_BASH"), None);
+}

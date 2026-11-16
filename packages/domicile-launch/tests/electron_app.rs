@@ -257,3 +257,66 @@ fn the_entry_electron_apps_wrote_gives_the_apps_own_command() {
         Some(vec![slack.display().to_string(), "-s".into()])
     );
 }
+
+/// A compiled wrapper as nixpkgs' `makeBinaryWrapper` writes it: an ELF
+/// program whose strings name what it sets and runs, and that keeps the
+/// `makeCWrapper` command that made it.
+fn binary_wrapper(root: &Path, path: &str, strings: &[&Path]) -> PathBuf {
+    let mut bytes = b"\x7fELF\x02\x01\x01\0\0\0\0\0\0\0\0\0\x03\0\x3e\0".to_vec();
+    bytes.extend_from_slice(&[0xe8, 0x1f, 0x00, 0x48, 0x89, 0xc7]);
+    let (program, rest) = strings.split_first().expect("a program");
+    let mut command = format!("makeCWrapper '{}'", program.display());
+    for string in rest {
+        command.push_str(&format!(
+            " \\\n    --set 'CHATGPT_EXECUTABLE' '{}'",
+            string.display()
+        ));
+    }
+    bytes.extend_from_slice(
+        format!(
+            "\n\n\n# ---\n# The C-code for this binary wrapper has been generated \
+             using the following command:\n\n\n{command}\n\n\n# (Use `nix-shell -p \
+             makeBinaryWrapper` to get access to makeCWrapper in your shell)\n\0"
+        )
+        .as_bytes(),
+    );
+    let at = root.join(path);
+    fs::create_dir_all(at.parent().expect("a parent")).unwrap();
+    fs::write(&at, bytes).unwrap();
+    fs::set_permissions(&at, fs::Permissions::from_mode(0o755)).unwrap();
+    at
+}
+
+#[test]
+fn compiled_wrappers_are_followed_to_the_app_they_run() {
+    // As nixpkgs wraps ChatGPT and Claude: wrapGAppsHook3 compiles the
+    // wrapper, which sets the app's Electron binary in a variable and runs a
+    // launcher script that names no path of its own.
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "chatgpt/lib/chatgpt/resources/app.asar",
+        "asar",
+    );
+    let electron = script(root.path(), "chatgpt/lib/chatgpt/ChatGPT", "\x7fELF");
+    let launcher = script(
+        root.path(),
+        "chatgpt/bin/.chatgpt-wrapped",
+        "#!/bin/sh\nexec \"$CHATGPT_EXECUTABLE\" \"$@\"\n",
+    );
+    let wrapper = binary_wrapper(root.path(), "chatgpt/bin/chatgpt", &[&launcher, &electron]);
+
+    let found = electron_app(
+        wrapper.to_str().unwrap(),
+        &[wrapper.display().to_string()],
+        root.path(),
+        &[],
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(
+        found.resources,
+        canonical(root.path().join("chatgpt/lib/chatgpt/resources"))
+    );
+}
