@@ -7,7 +7,6 @@
 #include <set>
 #include <utility>
 
-#include "base/containers/contains.h"
 
 namespace domicile {
 namespace {
@@ -144,7 +143,7 @@ ExtensionList ExtensionsFor(
   // extensions stay out of private pages unless named.
   const auto on = [&profile](const std::string& id) {
     return profile.extensions.has_value()
-               ? base::Contains(*profile.extensions, id)
+               ? std::ranges::contains(*profile.extensions, id)
                : !profile.is_private;
   };
   ExtensionList chosen{.settings = all.settings};
