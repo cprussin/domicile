@@ -2929,9 +2929,9 @@
                   # A crash, not a hand-back: what fell through to the app.
                   for crash in ["TypeError", "ReferenceError", "is not a function", "Unhandled"]:
                       assert crash not in said, f"{entry} crashed on the engine: {crash}\n{said[-3000:]}"
-                  # The surface knows every name Electron has: reaching past
-                  # it means the surface is stale.
-                  assert "doesn't have on Linux" not in said, f"{entry} reached past Electron's surface"
+                  # A read of a name Electron doesn't have on Linux is logged,
+                  # not refused: apps probe for macOS's (Slack reads app.dock),
+                  # and a call of one hands the app back with a reason.
                   # Found through its wrappers, scripts or compiled, and run
                   # with what they set.
                   assert "doesn't look like an Electron app" not in said, f"{entry} wasn't found:\n{said[-3000:]}"
@@ -2959,7 +2959,14 @@
                       )
                   # An app handed back runs on its own Electron: stopped too, so
                   # the next app's single-instance lock is its own.
-                  machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer'; pkill -u alice -f 'element|slack'; sleep 5")
+                  # Not the engine's renderers, whose being killed takes the
+                  # engine down in a DCHECK build.
+                  machine.execute(
+                      f"pkill -u alice -f {HOST}; "
+                      "for p in $(pgrep -u alice -f -- '--type=renderer'); do "
+                      "grep -q chrome-unwrapped /proc/$p/cmdline || kill $p; done; "
+                      "pkill -u alice -f 'element|slack'; sleep 5"
+                  )
 
 
               machine.wait_for_unit("multi-user.target")
