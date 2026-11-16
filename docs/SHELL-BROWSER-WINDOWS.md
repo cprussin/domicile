@@ -612,7 +612,11 @@ and pause. Each has the browser window it plays in (`window`), its
 own size, which controls the site offers, and its length and position.
 
 Show one with `<app picture-in-picture="id">`: the element draws the page's
-own video, stretched to its box. Tell the page how big it is shown with
+own video, stretched to its box. It fires `PICTURE_IN_PICTURE_SHOWN_EVENT`
+(`@domicile-desktop/sdk/desktop/picture-in-picture`) once it embeds the
+video's first surface: show the element, or start its motion, from there
+rather than over an empty box. It keeps its last frame after the video leaves
+picture-in-picture, for a fade. Tell the page how big it is shown with
 `pictureInPicture.resize(id, width, height)`, move it with
 `pictureInPicture.seek(id, seconds)`, and act on it with
 `pictureInPicture.act(id, action)`:
@@ -629,8 +633,9 @@ in the shape it has now.
 
 Manganese floats each video over every window, in the bottom-right corner of
 its window's screen, with its controls and progress bar under the pointer. It
-grows out of its place in the page, and "Back to tab" shrinks it back in
-before acting.
+grows out of its place in the page once drawn; "Back to tab" and close
+shrink it back in before acting, and it fades there once the page has the
+video again.
 
 ## Crashed pages
 

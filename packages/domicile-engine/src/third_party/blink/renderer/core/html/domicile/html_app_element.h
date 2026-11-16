@@ -205,8 +205,9 @@ class CORE_EXPORT HTMLAppElement final
   void OnSurfaceLost();
 
   // Ask the browser for the surface of the video `picture-in-picture` names,
-  // and embed each it sends. A no-op without a frame or without the
-  // attribute.
+  // and embed each it sends; the first fires
+  // `domicile-picture-in-picture-shown`. A no-op without a frame or without
+  // the attribute.
   void ShowPictureInPicture();
 
   bool CreateLayer();
@@ -287,6 +288,8 @@ class CORE_EXPORT HTMLAppElement final
   HeapMojoReceiver<domicile::mojom::blink::PictureInPictureVideoSurface,
                    HTMLAppElement>
       picture_in_picture_surface_;
+  // Whether the shown video's first surface was embedded and said so.
+  bool picture_in_picture_shown_ = false;
 };
 
 }  // namespace blink

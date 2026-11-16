@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
+#include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
@@ -89,6 +90,12 @@ int32_t RoundHalfUp(double value) {
 // html_attribute_names.json5, as <webview>'s `window` is not: the list is
 // Blink's, and every name in it recompiles most of Blink.
 constexpr char kPictureInPictureAttr[] = "picture-in-picture";
+
+// The video's first surface is embedded, so the element draws it from the
+// next frame: a shell shows the element, or starts its motion, from here
+// rather than over an empty box.
+constexpr char kPictureInPictureShownEvent[] =
+    "domicile-picture-in-picture-shown";
 
 // The app's default handler must finish before Chromium decides whether a
 // pinch wheel may zoom the shell. Only native-window regions block that ACK.
@@ -680,6 +687,7 @@ bool HTMLAppElement::MapToContent(const MouseEvent& event,
 void HTMLAppElement::ShowPictureInPicture() {
   // A new id, or none: the old video's surface is no longer this element's.
   picture_in_picture_surface_.reset();
+  picture_in_picture_shown_ = false;
   const AtomicString& id = getAttribute(AtomicString(kPictureInPictureAttr));
   if (id.empty()) {
     return;
@@ -711,6 +719,10 @@ void HTMLAppElement::ShowPictureInPicture() {
 void HTMLAppElement::SurfaceChanged(const viz::SurfaceId& surface_id) {
   surface_layer_bridge_->SetStretchContentToFillBounds(true);
   surface_layer_bridge_->EmbedSurface(surface_id);
+  if (!picture_in_picture_shown_) {
+    picture_in_picture_shown_ = true;
+    DispatchEvent(*Event::Create(AtomicString(kPictureInPictureShownEvent)));
+  }
 }
 
 void HTMLAppElement::Trace(Visitor* visitor) const {
