@@ -1038,8 +1038,8 @@ export type DomicileHost = {
    * `partition` attribute does. Throws TypeError for "persist:" with no name.
    *
    * `profile` opens it in that browser profile, one of `browserProfiles`;
-   * empty for the default one. A profile the desk no longer has opens in the
-   * default one.
+   * empty for the one `url`'s site opens in (browserProfileFor). A profile
+   * the desk no longer has opens in the default one.
    */
   openBrowserWindow(url: string, partition?: string, profile?: string): void;
   /**
@@ -1076,6 +1076,23 @@ export type DomicileHost = {
    * on its <webview>; Cancel keeps the window. An unknown id does nothing.
    */
   closeBrowserWindow(id: string): void;
+  /**
+   * Moves window `id`'s page to browser profile `profile`, one of
+   * `browserProfiles`, as a new page under the same id: the window keeps its
+   * place, its <webview> shows the new page, and its back and forward list
+   * comes along as addresses. The page reloads; what was typed into it is
+   * not kept. Throws TypeError for an empty id or profile. An unknown window
+   * or profile, or an app window, does nothing: the shell's lists may be a
+   * change behind.
+   */
+  reopenBrowserWindow(id: string, profile: string): void;
+  /**
+   * The browser profile `url` opens in: the most specific of the config's
+   * `browser.sites` that matches it, else the default profile. The engine
+   * routes every new window and every page the user takes to another site
+   * by this. Throws TypeError for a `url` that is no address.
+   */
+  browserProfileFor(url: string): Promise<string>;
   /**
    * The user clicked entry `command` of window `id`'s menu bar
    * (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a

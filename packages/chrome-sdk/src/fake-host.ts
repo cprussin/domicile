@@ -138,6 +138,7 @@ export const describedWindow = (
 
 /** The methods that return a promise. The fake's never settle. */
 const ASKS = new Set([
+  "browserProfileFor",
   "configureExtension",
   "confinePointer",
   "countBrowserWindowMatches",
@@ -193,6 +194,11 @@ export class FakeDomicileHost {
             calls.push([name, ...args]);
             const [url, appId = "", reuse = "new"] = args;
             this.openApp(url, appId, reuse);
+          };
+        } else if (name === "reopenBrowserWindow") {
+          return (id: string, profile: string) => {
+            calls.push([name, id, profile]);
+            this.moveBrowser(id, profile);
           };
         } else if (name === "closeBrowserWindow") {
           return (id: string) => {
@@ -397,6 +403,19 @@ export class FakeDomicileHost {
     this.set({
       browserWindows: (this.#state.browserWindows ?? []).map((window) =>
         window.id === id ? { ...window, messageBox: box } : window,
+      ),
+    });
+  }
+
+  /**
+   * The engine moved browser window `id`'s page to browser profile `profile`,
+   * as for a link to another profile's site. `reopenBrowserWindow` calls this
+   * too.
+   */
+  moveBrowser(id: string, profile: string): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, profile } : window,
       ),
     });
   }
