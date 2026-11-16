@@ -149,25 +149,56 @@ void ElectronPage::ReportSize(std::string_view heard) {
   }
 }
 
+void ElectronPage::ExecuteJavaScript(
+    const std::string& code,
+    bool user_gesture,
+    base::OnceCallback<void(base::expected<base::Value, std::string>)> done) {
+  if (!frame_.is_bound()) {
+    std::move(done).Run(
+        base::unexpected("the page has no document to run it in yet"));
+    return;
+  }
+  frame_->ExecuteJavaScript(
+      code, user_gesture,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(
+              [](base::OnceCallback<void(
+                     base::expected<base::Value, std::string>)> done,
+                 std::optional<base::Value> result) {
+                if (result.has_value()) {
+                  std::move(done).Run(std::move(*result));
+                } else {
+                  // Blink keeps the exception for the page's console.
+                  std::move(done).Run(base::unexpected(
+                      "the script threw, or gave what can't be carried to "
+                      "the app; the page's console says which"));
+                }
+              },
+              std::move(done)),
+          std::optional<base::Value>()));
+}
+
 void ElectronPage::ReadyToCommitNavigation(
     content::NavigationHandle* navigation) {
-  if (preload_.empty() || !navigation->IsInPrimaryMainFrame() ||
-      navigation->IsSameDocument() || navigation->IsErrorPage()) {
+  if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument()) {
     return;
   }
   // The document going took its ports and listeners: the app forgets them
   // before the new one's can arrive.
-  if (frame_.is_bound()) {
+  if (frame_.is_bound() && !preload_.empty()) {
     calls_.gone.Run();
   }
   // Associated with the frame's channel, as the commit is, so the preload
-  // arrives first and the next Deliver after.
+  // arrives first and the next Deliver or script after. Every document gets
+  // one, for the app's scripts; only one the preload runs in hears IPC.
   frame_.reset();
   receiver_.reset();
   navigation->GetRenderFrameHost()
       ->GetRemoteAssociatedInterfaces()
       ->GetInterface(&frame_);
-  frame_->Preload(preload_, receiver_.BindNewEndpointAndPassRemote());
+  if (!preload_.empty() && !navigation->IsErrorPage()) {
+    frame_->Preload(preload_, receiver_.BindNewEndpointAndPassRemote());
+  }
 }
 
 std::optional<base::ListValue> ElectronPage::ArgsFrom(

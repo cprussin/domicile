@@ -503,6 +503,48 @@ TEST(ElectronProtocolTest, IpcSendCarriesItsChannelAndArguments) {
             (ElectronRefusal{.why = "\"args\" must be an array", .window = 2}));
 }
 
+TEST(ElectronProtocolTest, ExecuteJavaScriptCarriesItsCodeAndGesture) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"call":5,"code":"1 + 1",)"
+      R"("user_gesture":true})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(
+      std::get<ElectronExecuteJavaScript>(*request),
+      (ElectronExecuteJavaScript{
+          .window = 2, .call = 5, .code = "1 + 1", .user_gesture = true}));
+
+  const auto without_gesture = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"call":6,"code":"x"})");
+  ASSERT_TRUE(without_gesture.has_value()) << without_gesture.error().why;
+  EXPECT_FALSE(
+      std::get<ElectronExecuteJavaScript>(*without_gesture).user_gesture);
+
+  const auto refused = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"call":7})");
+  ASSERT_FALSE(refused.has_value());
+  EXPECT_EQ(refused.error(),
+            (ElectronRefusal{.why = "\"code\" must be a string", .window = 2}));
+  const auto no_call = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"code":"x"})");
+  ASSERT_FALSE(no_call.has_value());
+  EXPECT_EQ(no_call.error().window, 2);
+}
+
+TEST(ElectronProtocolTest, AJavaScriptResultIsTheWindowsOneLine) {
+  EXPECT_EQ(ElectronJavaScriptResult(2, 5, base::Value(2)),
+            "{\"call\":5,\"result\":2,\"type\":\"javascript_result\","
+            "\"window\":2}\n");
+  EXPECT_EQ(ElectronJavaScriptResult(2, 6, base::unexpected("it threw")),
+            "{\"call\":6,\"error\":\"it threw\",\"type\":"
+            "\"javascript_result\",\"window\":2}\n");
+  // Bytes have no JSON, so the app hears why instead of nothing.
+  EXPECT_EQ(
+      ElectronJavaScriptResult(2, 7, base::Value(base::Value::BlobStorage{1})),
+      "{\"call\":7,\"error\":\"the script's result can't be carried to the "
+      "app\",\"type\":\"javascript_result\",\"window\":2}\n");
+}
+
 TEST(ElectronProtocolTest, IpcReplyCarriesAResultOrWhyItFailed) {
   const auto result = ParseElectronRequest(
       R"({"type":"ipc_reply","invoke":3,"result":{"ok":true}})");

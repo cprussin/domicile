@@ -65,6 +65,9 @@ class ElectronPreload final
   void DeliverToPort(const std::string& port,
                      const std::string& data_json) override;
   void ClosePort(const std::string& port) override;
+  void ExecuteJavaScript(const std::string& code,
+                         bool user_gesture,
+                         ExecuteJavaScriptCallback callback) override;
 
  private:
   struct Next {

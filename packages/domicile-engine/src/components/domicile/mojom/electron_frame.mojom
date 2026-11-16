@@ -3,6 +3,8 @@
 
 module domicile.mojom;
 
+import "mojo/public/mojom/base/values.mojom";
+
 // An Electron app window's main frame, for its preload and IPC. See
 // docs/architecture/ELECTRON-APPS.md.
 //
@@ -31,6 +33,13 @@ interface ElectronFrame {
 
   // The main process closed port `port`.
   ClosePort(string port);
+
+  // webContents.executeJavaScript: runs `code` in the document's main world,
+  // as if the user had acted when `user_gesture`, and answers with what it
+  // gave once a promise it gives settles. No result when it threw or gave
+  // what has no JSON; the page's console says which.
+  ExecuteJavaScript(string code, bool user_gesture)
+      => (mojo_base.mojom.Value? result);
 };
 
 // The renderer to the browser, for the document that ran the preload.

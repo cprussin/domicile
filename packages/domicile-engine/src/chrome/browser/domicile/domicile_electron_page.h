@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/mojom/electron_frame.mojom.h"
@@ -52,6 +53,12 @@ class ElectronPage final : public content::WebContentsObserver,
   void DeliverPost(const std::string& channel,
                    const std::string& message_json,
                    const std::vector<std::string>& ports);
+  // webContents.executeJavaScript, in the document now up: `done` runs once,
+  // with what the code gave or why it gave nothing.
+  void ExecuteJavaScript(
+      const std::string& code,
+      bool user_gesture,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done);
   // The user clicked entry `command` of the window's menu bar.
   void MenuClicked(int command);
 
@@ -110,7 +117,8 @@ class ElectronPage final : public content::WebContentsObserver,
   const std::string preload_;
   const ElectronPageCalls calls_;
   const base::WeakPtr<ElectronSession> session_;
-  // The document that last committed with the preload, or is about to.
+  // The document that last committed, or is about to: its preload, IPC and
+  // the app's scripts.
   mojo::AssociatedRemote<mojom::ElectronFrame> frame_;
   mojo::AssociatedReceiver<mojom::ElectronFrameHost> receiver_{this};
   // The size last told to the app, so a resize that changes nothing says

@@ -26,6 +26,8 @@
 #include "base/no_destructor.h"
 #include "base/task/bind_post_task.h"
 #include "base/threading/sequence_bound.h"
+#include "base/types/expected.h"
+#include "base/values.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_electron_storage.h"
@@ -96,6 +98,18 @@ class ChromeElectronDesk final : public ElectronDesk {
                   const std::string& args_json) override {
     if (ElectronPage* page = ElectronPageOf(id)) {
       page->Deliver(channel, args_json);
+    }
+  }
+  void ExecuteJavaScript(
+      const std::string& id,
+      const std::string& code,
+      bool user_gesture,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done)
+      override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->ExecuteJavaScript(code, user_gesture, std::move(done));
+    } else {
+      std::move(done).Run(base::unexpected("the window's page is gone"));
     }
   }
   void PostToPage(const std::string& id,
