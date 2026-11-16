@@ -33,6 +33,12 @@ out="$(nix build --no-link --print-out-paths .#domicile)"
   echo "libexec/domicile/engine holds no chrome" >&2
   exit 1
 }
+# Its three lines, joined with `|`.
+version="$("$out/bin/domicile" --version | tr '\n' '|')"
+grep -qE '^domicile [^|]+\|commit +[0-9a-f]{40}(-dirty)?\|engine +s[0-9a-f]{12}, [^|]+\|$' <<<"$version" || {
+  echo "domicile --version does not name the version, commit and engine: $version" >&2
+  exit 1
+}
 [ -x "$out/libexec/domicile/electron-host" ] &&
   [ -f "$(sed -n 's/^exec [^ ]* \([^ ]*\) .*/\1/p' "$out/libexec/domicile/electron-host")" ] || {
   echo "libexec/domicile/electron-host is missing or runs no main.ts, so" >&2

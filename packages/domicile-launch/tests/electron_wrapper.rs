@@ -206,3 +206,31 @@ fn a_wrapper_ending_in_some_other_program_says_so() {
         Err(WrapperError::NotTheApp { .. })
     ));
 }
+
+#[test]
+fn a_wrapper_still_open_for_writing_runs_once_it_is_closed() {
+    let root = tempfile::tempdir().unwrap();
+    let (binary, resources) = bundled(root.path());
+    let wrapper = write(
+        root.path(),
+        "bin/claude",
+        &format!("#! {}\nexec \"{}\" \"$@\"\n", bash(), binary.display()),
+    );
+    // As another thread's fork leaves it for a moment: open for writing, so
+    // exec fails with ETXTBSY until it closes.
+    let writer = fs::OpenOptions::new().append(true).open(&wrapper).unwrap();
+    let closer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(200));
+        drop(writer);
+    });
+
+    let launch = through_wrappers(
+        &[wrapper.display().to_string()],
+        &resources,
+        Path::new(env!("CARGO_BIN_EXE_domicile")),
+        WAIT,
+    );
+    closer.join().unwrap();
+
+    assert!(launch.is_ok(), "{launch:?}");
+}

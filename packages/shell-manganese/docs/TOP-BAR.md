@@ -139,7 +139,8 @@ export const Shell = runManganese({
 
 ## Clock
 
-- Reads like `Wednesday 2026-09-16 20:53:40` and ticks every second.
+- Reads like `Wednesday 2026-09-16 20:53:40` and ticks every second. Without
+  seconds it changes on the minute, and reads the time every few seconds.
 - The shell options `clock.format` (`24h` or `12h`) and `clock.seconds` change
   that, e.g. `Wednesday 2026-09-16 08:53 PM`. See the
   [README](../README.md#configure).

@@ -371,6 +371,24 @@ compositor would refuse it. home-manager runs it on the file it writes.
 Print the commands. `--help` and `-h` do the same, also after a verb, except
 that `send-shell --help` prints the shell's own commands.
 
+## `domicile --version`
+
+Print the version, the commit it was built from, and the engine.
+
+```text
+domicile 1.2.0
+commit   144a93c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7
+engine   s2ffe1826ced0, checked build of Chromium 7703634 at 246fa60eff4e, built 2026-11-15T09:12:44Z
+```
+
+- The first two lines are `libexec/domicile/version`, which the flake and the
+  distribution packages write.
+- The engine line is from its release's `PROVENANCE`.
+- A missing file fails, naming it.
+
+Any other flag before or after a shell is refused rather than taken as the
+shell.
+
 ## While locked
 
 `screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`

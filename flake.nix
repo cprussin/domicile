@@ -442,6 +442,7 @@
       #   bin/domicile-recorder       what the compositor records the
       #                               screen with
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
+      #   libexec/domicile/version    the version and commit `--version` prints
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/electron-host
       #                               runs an Electron app's main process
@@ -472,6 +473,11 @@
           };
         } ''
         mkdir -p "$out/bin" "$out/libexec/domicile"
+        # What `domicile --version` prints first. `packages/distro/stage.sh`
+        # writes the same.
+        printf 'domicile %s\ncommit   %s\n' \
+          ${(builtins.fromJSON (builtins.readFile ./packages/domicile/package.json)).version} \
+          ${self.rev or self.dirtyRev} > "$out/libexec/domicile/version"
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         # `BROWSER` inside a desktop. Copied for the same reason as above.
@@ -2797,6 +2803,134 @@
                       "tail -8 /tmp/open.log | cut -c1-200",
                       "tail -30 /tmp/electron.log | cut -c1-200",
                       "ls /run/user/1000; pgrep -a -u alice -f electron | cut -c1-200",
+                      "grep -iE 'electron' /tmp/domicile.log | tail -8 | cut -c1-200 || true",
+                      "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                  ]:
+                      print(f"$ {command}")
+                      print(machine.execute(f"{command} 2>&1")[1])
+                  raise
+            '';
+          };
+
+        # Real Electron apps start on the desk's engine: each goes through
+        # `domicile open --electron` with no network, as far as its startup
+        # goes. An Electron API the host doesn't have must hand the app to its
+        # own Electron with a reason, never crash it, and an app the host runs
+        # fully stays on the engine. Claude and ChatGPT aren't in nixpkgs, so
+        # the host's unit tests and its surface check cover them. See "Every
+        # API" in docs/architecture/ELECTRON-APPS.md.
+        #
+        # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
+        electron-apps-start-on-a-tty =
+          let
+            unfree = import nixpkgs {
+              inherit system;
+              config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "slack" ];
+            };
+            # Each app's entry, and whether it must run on the engine: an app
+            # still allowed to hand itself back names what it needs. Element
+            # finds no keyring here and says so in a message box before its
+            # window has a page, which the engine can't show yet.
+            apps = {
+              "element-desktop.desktop" = { package = pkgs.element-desktop; onTheEngine = false; };
+              "slack.desktop" = { package = unfree.slack; onTheEngine = false; };
+            };
+          in
+          pkgs.testers.runNixOSTest {
+            name = "electron-apps-start-on-a-tty";
+            nodes.machine = {
+              imports = [ self.nixosModules.domicile ];
+              programs.domicile.enable = true;
+              xdg.portal.enable = true;
+              virtualisation = {
+                memorySize = 6144;
+                # See `tty-on-a-card-with-no-3d`.
+                useNixStoreImage = true;
+                cores = 2;
+                qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
+              };
+              users.users.alice = {
+                isNormalUser = true;
+                uid = 1000;
+                extraGroups = [ "domicile" "video" "input" ];
+              };
+              services.getty.autologinUser = "alice";
+              environment.loginShellInit =
+                let
+                  config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                    electron.apps = builtins.attrNames apps;
+                  });
+                in
+                ''
+                  if [ "$(tty)" = /dev/tty1 ]; then
+                    mkdir -p ~/.config/domicile
+                    cp ${config} ~/.config/domicile/domicile.json
+                    exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                  fi
+                '';
+              environment.systemPackages = map (app: app.package) (builtins.attrValues apps);
+              fonts.enableDefaultPackages = true;
+            };
+            testScript = ''
+              import datetime as dt
+              import json
+              import re
+
+              WAIT = dt.timedelta(seconds=300)
+              APPS = json.loads(${pkgs.lib.escapeShellArg (builtins.toJSON (builtins.mapAttrs (_: app: app.onTheEngine) apps))})
+              HOST = "electron-host/src/main.ts"
+
+
+              def in_the_desk(command):
+                  """`command`, as alice, in the environment the desk's apps get."""
+                  return (
+                      "su alice -c 'env $(tr \"\\0\" \"\\n\" "
+                      "</proc/$(pgrep -u alice -o -f bin/domicile-compositor)/environ "
+                      "| grep -E \"^(DOMICILE_|XDG_|DBUS_|PATH=|WAYLAND_)\") "
+                      f"{command}'"
+                  )
+
+
+              def starts(entry, on_the_engine):
+                  log = f"/tmp/{entry}.log"
+                  machine.succeed(in_the_desk(f"domicile open --electron {entry}") + f" >{log} 2>&1 &")
+                  machine.sleep(60)
+                  said = machine.succeed(f"cat {log}")
+                  print(f"--- {entry}\n{said}")
+                  # A crash, not a hand-back: what fell through to the app.
+                  for crash in ["TypeError", "ReferenceError", "is not a function", "Unhandled"]:
+                      assert crash not in said, f"{entry} crashed on the engine: {crash}\n{said[-3000:]}"
+                  # The surface knows every name Electron has: reaching past
+                  # it means the surface is stale.
+                  assert "doesn't have on Linux" not in said, f"{entry} reached past Electron's surface"
+                  hosted = machine.execute(f"pgrep -u alice -f {HOST}")[0] == 0
+                  # CI keeps only the end of the log, so a failure carries
+                  # what the app said.
+                  tail = "\n".join(said.splitlines()[-30:])
+                  running = machine.execute("pgrep -a -u alice -f 'electron|element|slack' | cut -c1-160")[1]
+                  if on_the_engine:
+                      assert hosted, f"{entry} left the engine:\n{tail}\nrunning:\n{running}"
+                      assert "Domicile's Electron doesn't have yet" not in said
+                  else:
+                      # Every hand-back names what the engine lacks.
+                      assert hosted or re.search(
+                          r"Domicile's (Electron doesn't have|engine can't|engine doesn't|engine registers only)", said
+                      ), (
+                          f"{entry} left the engine without saying why:\n{tail}\nrunning:\n{running}"
+                      )
+                  machine.execute(f"pkill -u alice -f {HOST}; pkill -u alice -f -- '--type=renderer' ; sleep 5")
+
+
+              machine.wait_for_unit("multi-user.target")
+              try:
+                  machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                  machine.wait_until_succeeds("pgrep -u alice -f bin/domicile-compositor", timeout=WAIT)
+                  machine.sleep(20)
+                  for entry, on_the_engine in APPS.items():
+                      starts(entry, on_the_engine)
+              except Exception:
+                  machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                  for command in [
                       "grep -iE 'electron' /tmp/domicile.log | tail -8 | cut -c1-200 || true",
                       "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
                   ]:

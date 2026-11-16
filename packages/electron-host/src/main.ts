@@ -10,13 +10,17 @@ import { readAppPackage } from "./app-package";
 import { watchAppearance } from "./appearance";
 import { connectDesktop, runCommand, runCommandSync } from "./desktop";
 import { createApp } from "./electron/app";
+import { createAutoUpdater } from "./electron/auto-updater";
 import { createBrowserWindow } from "./electron/browser-window";
 import { createClipboard } from "./electron/clipboard";
+import { completeElectron, completeInstances } from "./electron/complete";
+import { createCrashReporter } from "./electron/crash-reporter";
 import { desktopCapturer } from "./electron/desktop-capturer";
 import { createDialog } from "./electron/dialog";
+import { createGlobalShortcut } from "./electron/global-shortcut";
 import { createIpcMain } from "./electron/ipc-main";
 import { createMenu } from "./electron/menu";
-import { createMessageBoxes } from "./electron/message-boxes";
+import { boxWindow, createMessageBoxes } from "./electron/message-boxes";
 import {
   MessageChannelMain,
   MessagePortMain,
@@ -24,16 +28,24 @@ import {
 import { nativeImage } from "./electron/native-image";
 import type { Appearance } from "./electron/native-theme";
 import { createNativeTheme } from "./electron/native-theme";
+import { net } from "./electron/net";
 import { createNotification } from "./electron/notification";
 import { createPermissions } from "./electron/permissions";
+import type { DesktopStatus } from "./electron/power";
+import { createPowerMonitor, createPowerSaveBlocker } from "./electron/power";
+import { electronProcess } from "./electron/process";
 import { createProtocols } from "./electron/protocol";
 import { createSafeStorage } from "./electron/safe-storage";
 import { createSchemeRegistration } from "./electron/schemes";
+import type { ListedDisplay } from "./electron/screen";
+import { createScreen } from "./electron/screen";
 import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
 import { createShell } from "./electron/shell";
+import { createSystemPreferences } from "./electron/system-preferences";
+import { createContentTracing, createNetLog } from "./electron/tracing";
 import { createTray } from "./electron/tray";
-import { utilityProcess } from "./electron/utility-process";
+import { UtilityProcess, utilityProcess } from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
 import { connectEngine } from "./engine";
@@ -72,8 +84,11 @@ const main = async ([resources, ...args]: string[]) => {
       );
     }
     const configHome = env.XDG_CONFIG_HOME ?? join(home, ".config");
-    const { app, markReady } = createApp({
+    // How this host was started, so `app.relaunch` can start it again.
+    const host = [process.execPath, ...process.argv.slice(1, 3)];
+    const { app, hooks, markReady } = createApp({
       appPath,
+      env,
       paths: electronPaths({
         env,
         execPath: process.execPath,
@@ -83,6 +98,28 @@ const main = async ([resources, ...args]: string[]) => {
         userDirs: await readOptional(join(configHome, "user-dirs.dirs")),
       }),
       pkg,
+      relaunch: (relaunchArgs) => {
+        Bun.spawn([...host, ...relaunchArgs], {
+          // biome-ignore lint/style/noProcessEnv: a relaunch runs as this host did
+          env: process.env,
+          stdio: ["ignore", "inherit", "inherit"],
+        }).unref();
+      },
+      runSync: (command) => {
+        try {
+          const ran = runCommandSync(command, { output: true });
+          return {
+            code: ran.code,
+            output: `${ran.stdout.toString()}${ran.stderr}`,
+          };
+        } catch (error) {
+          // A command the desktop lacks, as a shell answers it.
+          return {
+            code: 127,
+            output: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
     });
     const socket =
       env.DOMICILE_ELECTRON_SOCK ??
@@ -145,37 +182,69 @@ const main = async ([resources, ...args]: string[]) => {
         }
       },
     });
-    const { BrowserView, BrowserWindow, WebContentsView, webContentsOf } =
-      createBrowserWindow(
-        engine,
-        app,
-        ipc,
-        session,
-        {
-          applicationMenu: Menu.getApplicationMenu,
-          click: (menu, command, window) => {
-            click(menu, command, undefined, BrowserWindow.fromId(window));
-          },
-          model,
+    const {
+      BrowserView,
+      BrowserWindow,
+      WebContents,
+      WebContentsView,
+      webContents,
+      webContentsOf,
+    } = createBrowserWindow(
+      engine,
+      app,
+      ipc,
+      session,
+      {
+        applicationMenu: Menu.getApplicationMenu,
+        click: (menu, command, window) => {
+          click(menu, command, undefined, BrowserWindow.fromId(window));
         },
-        undefined,
-        unsupported,
-      );
+        model,
+      },
+      undefined,
+      unsupported,
+    );
     const messageBoxes = createMessageBoxes(engine.send);
     engine.events.on("window", (event) => {
       if (event.type === "message_box_answered") {
         messageBoxes.hear(event);
       }
     });
-    const electron = {
+    const desktopState = subscribeDesktop();
+    hooks.focus = () => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.show();
+        window.focus();
+      }
+    };
+    hooks.applicationMenu = {
+      get: Menu.getApplicationMenu,
+      set: (menu) =>
+        Menu.setApplicationMenu(
+          menu as Parameters<typeof Menu.setApplicationMenu>[0],
+        ),
+    };
+    const electron: Record<string, unknown> = {
       app,
+      autoUpdater: createAutoUpdater(),
       BrowserView,
       BrowserWindow,
       clipboard: createClipboard({ run: runCommandSync }),
+      contentTracing: createContentTracing(tmpdir),
+      crashReporter: createCrashReporter(),
       desktopCapturer,
       dialog: createDialog({
-        askMessageBox: async (window, options) =>
-          messageBoxes.ask(boxWindow(window, BrowserWindow), options),
+        askMessageBox: async (window, options) => {
+          const over = boxWindow(window, BrowserWindow);
+          if (over === undefined) {
+            // Electron shows it on its own; the engine shows boxes only
+            // over a page.
+            return unsupported(
+              `${app.getName()} shows a message box before any of its windows has a page, which Domicile's engine can't show yet`,
+            );
+          }
+          return await messageBoxes.ask(over, options);
+        },
         choose: desktop.choose,
         chooseSync: desktop.chooseSync,
         isDirectory: (path) =>
@@ -185,6 +254,7 @@ const main = async ([resources, ...args]: string[]) => {
           console.error(text);
         },
       }),
+      globalShortcut: createGlobalShortcut(warn),
       ipcMain,
       Menu,
       MenuItem,
@@ -196,6 +266,16 @@ const main = async ([resources, ...args]: string[]) => {
       }),
       nativeImage,
       nativeTheme,
+      net,
+      netLog: createNetLog(),
+      powerMonitor: createPowerMonitor(desktopState.statuses),
+      powerSaveBlocker: createPowerSaveBlocker(() => {
+        const inhibitor = Bun.spawn(
+          ["domicile", "inhibit-idle", "--", "sleep", "infinity"],
+          { stdio: ["ignore", "ignore", "inherit"] },
+        );
+        return { stop: () => inhibitor.kill() };
+      }),
       protocol: {
         ...session.defaultSession.protocol,
         registerSchemesAsPrivileged: createSchemeRegistration({
@@ -211,8 +291,10 @@ const main = async ([resources, ...args]: string[]) => {
       safeStorage: createSafeStorage({
         password: () => desktop.safeStoragePassword(app.getName()),
       }),
+      screen: createScreen(listDisplays, desktopState.displays),
       session,
       shell: createShell(runCommand),
+      systemPreferences: createSystemPreferences(() => false),
       Tray: createTray({
         connect: desktop.connect,
         menus: { click, model },
@@ -220,16 +302,40 @@ const main = async ([resources, ...args]: string[]) => {
       }),
       utilityProcess,
       WebContentsView,
+      webContents,
     };
+    completeElectron(electron, app.getName(), { unsupported, warn });
+    completeInstances(
+      {
+        BrowserView: BrowserView.prototype,
+        BrowserWindow: BrowserWindow.prototype,
+        Menu: Object.getPrototypeOf(new Menu()),
+        MenuItem: Object.getPrototypeOf(new MenuItem({ label: "" })),
+        MessagePortMain: MessagePortMain.prototype,
+        NativeImage: Object.getPrototypeOf(nativeImage.createEmpty()),
+        Notification: (electron.Notification as { prototype: object })
+          .prototype,
+        Session: Object.getPrototypeOf(session.defaultSession),
+        Tray: (electron.Tray as { prototype: object }).prototype,
+        UtilityProcess: UtilityProcess.prototype,
+        WebContents: WebContents.prototype,
+        WebContentsView: WebContentsView.prototype,
+      },
+      app.getName(),
+      { unsupported, warn },
+    );
     Bun.plugin({
       name: "electron",
       setup: (build) => {
+        // `default` for `import electron from "electron"`, which Electron's
+        // CommonJS module answers with the whole module.
+        const exports = { ...electron, default: electron };
         for (const name of ["electron", "electron/main"]) {
-          build.module(name, () => ({ exports: electron, loader: "object" }));
+          build.module(name, () => ({ exports, loader: "object" }));
         }
       },
     });
-    Object.assign(process, { resourcesPath: mirror, type: "browser" });
+    Object.assign(process, electronProcess(mirror));
     Object.assign(process.versions, { electron: ELECTRON_VERSION });
     process.argv = [process.execPath, ...args];
     await import(pkg.main);
@@ -237,35 +343,90 @@ const main = async ([resources, ...args]: string[]) => {
   }
 };
 
-/**
- * The window a message box goes over: the one the app named, else its most
- * recent open one. Throws with none, as there is nowhere to show it.
- */
-const boxWindow = (
-  named: unknown,
-  windows: {
-    getAllWindows: () => { id: number; isDestroyed: () => boolean }[];
-  },
-): number => {
-  if (named !== undefined && named !== null) {
-    const { id } = named as { id: unknown };
-    if (typeof id !== "number") {
-      throw new TypeError(
-        "dialog.showMessageBox takes a BrowserWindow, then its options",
-      );
-    }
-    return id;
-  }
-  const open = windows
-    .getAllWindows()
-    .filter((window) => !window.isDestroyed());
-  const recent = open.at(-1);
-  if (recent === undefined) {
+/** What the app reached for that Electron has and Domicile doesn't do, for its developer. */
+const warn = (why: string) => {
+  // biome-ignore lint/suspicious/noConsole: an Electron API that does less on Domicile, for the desktop's log
+  console.error(`electron-host: ${why}`);
+};
+
+/** The desktop's displays now, from `domicile list-displays --json`. */
+const listDisplays = (): ListedDisplay[] => {
+  const ran = runCommandSync(["domicile", "list-displays", "--json"], {
+    output: true,
+  });
+  if (ran.code !== 0) {
     throw new Error(
-      "dialog.showMessageBox needs a window to show over on Domicile, and the app has none open",
+      `domicile list-displays failed, so the app can't see the screens: ${ran.stderr.trim()}`,
     );
   }
-  return recent.id;
+  return JSON.parse(ran.stdout.toString()) as ListedDisplay[];
+};
+
+/**
+ * `domicile subscribe displays status`, started the first time a module asks
+ * for either, and handed to every module that asked.
+ */
+const subscribeDesktop = () => {
+  const displays: ((listed: readonly ListedDisplay[]) => void)[] = [];
+  const statuses: ((status: DesktopStatus) => void)[] = [];
+  let started = false;
+  const start = () => {
+    if (started) {
+      return;
+    }
+    started = true;
+    let child: ReturnType<typeof Bun.spawn<"ignore", "pipe", "inherit">>;
+    try {
+      child = Bun.spawn(["domicile", "subscribe", "displays", "status"], {
+        stdio: ["ignore", "pipe", "inherit"],
+      });
+    } catch (error) {
+      warn(
+        `can't follow the desktop's displays and lock with domicile subscribe: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+    child.unref();
+    void (async () => {
+      let pending = "";
+      const decoder = new TextDecoder();
+      for await (const chunk of child.stdout) {
+        const lines = (pending + decoder.decode(chunk, { stream: true })).split(
+          "\n",
+        );
+        pending = lines.pop() ?? "";
+        for (const line of lines.filter((l) => l.trim() !== "")) {
+          const message = JSON.parse(line) as {
+            type: string;
+            displays?: ListedDisplay[];
+            status?: DesktopStatus;
+          } & DesktopStatus;
+          if (
+            message.type === "display_list" &&
+            message.displays !== undefined
+          ) {
+            for (const hear of displays) {
+              hear(message.displays);
+            }
+          } else if (message.type === "status") {
+            for (const hear of statuses) {
+              hear(message.status ?? message);
+            }
+          }
+        }
+      }
+    })();
+  };
+  return {
+    displays: (hear: (listed: readonly ListedDisplay[]) => void) => {
+      displays.push(hear);
+      start();
+    },
+    statuses: (hear: (status: DesktopStatus) => void) => {
+      statuses.push(hear);
+      start();
+    },
+  };
 };
 
 /** The desktop's services on its session bus, or the host fails, naming why. */

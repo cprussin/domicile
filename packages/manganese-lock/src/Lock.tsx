@@ -160,7 +160,7 @@ export const Lock = memo(
           data-lock-content=""
           style={useScreenRegion(screen)}
         >
-          <LockClock />
+          <LockClock locked={locked} />
           <div className={entryStyles}>
             <form
               className={formStyles({ shaken: shaken(refusals), wrong })}

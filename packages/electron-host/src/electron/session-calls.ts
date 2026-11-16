@@ -3,6 +3,8 @@
 // answers with a `session_result`. See "Requests" in
 // docs/architecture/ELECTRON-APPS.md.
 
+import { EventEmitter } from "node:events";
+
 /** The calls the host makes on a session, by their names on the wire. */
 export type SessionCallMessage = {
   readonly type: "session_call";
@@ -141,7 +143,9 @@ export const createSessionCalls = (
             defined({ origin: options.origin, storages: options.storages }),
           ),
         ),
-      cookies: {
+      // An EventEmitter, as Electron's is. The engine doesn't report cookie
+      // changes yet, so `changed` never fires.
+      cookies: Object.assign<EventEmitter, Cookies>(new EventEmitter(), {
         flushStore: () => nothing(call(session, "cookies_flush")),
         get: async (filter) =>
           (await call(session, "cookies_get", {
@@ -173,7 +177,7 @@ export const createSessionCalls = (
               }),
             }),
           ),
-      },
+      }),
       getUserAgent: () => userAgent,
       setUserAgent: (agent) => {
         userAgent = agent;

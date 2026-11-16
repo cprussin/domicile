@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use domicile_launch::components::{
-    app_module, builder, components, electron_host, our_shell, Components,
+    app_module, builder, components, electron_host, engine, our_shell, version_file, Components,
 };
 
 fn nothing(_: &str) -> Option<String> {
@@ -196,4 +196,21 @@ fn a_missing_app_module_names_where_it_looked() {
         PathBuf::from("/usr/libexec/domicile/app-modules/settings")
     );
     assert_eq!(missing.variable, "DOMICILE_APP_MODULES");
+}
+
+#[test]
+fn the_version_file_is_beside_the_engine() {
+    assert_eq!(
+        version_file(Path::new("/usr/bin/domicile")),
+        PathBuf::from("/usr/libexec/domicile/version")
+    );
+}
+
+#[test]
+fn the_engine_is_found_without_a_compositor() {
+    let beside = |path: &Path| path == Path::new("/usr/libexec/domicile/engine");
+    assert_eq!(
+        engine(Path::new("/usr/bin/domicile"), &nothing, &beside),
+        Ok(PathBuf::from("/usr/libexec/domicile/engine"))
+    );
 }

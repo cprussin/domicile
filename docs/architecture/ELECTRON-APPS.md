@@ -214,9 +214,9 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   `stream`, `codeCache` and `allowServiceWorkers` are not yet, and don't
   hold an app back. A scheme the engine keeps for itself is refused without
   being kept ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
-  An app's first run with a new scheme falls back; the quirks table can
-  seed known apps' schemes to spare it, once their privileges are checked
-  against the real apps.
+  An app's first run with a new scheme falls back. Known apps' schemes, as
+  their own runs recorded them, register from the first start (`KNOWN` in
+  `packages/domicile-launch/src/electron_schemes.rs`) to spare them that.
 - **Not yet:** a handler's redirect (the load fails loudly), a request body
   that is a file or a stream, and requests from an Electron page's workers,
   which go to the network.
@@ -312,12 +312,66 @@ command to fall back to, and the status is passed on. An app the quirks
 table names as needing Node exits with status 3 before its main runs, so its
 own Electron starts without a window opening on the engine first.
 
+### Every API
+
+An app must never find a plain `undefined` where Electron has an API: that
+is a `TypeError` in the app's main, which takes the app down with no reason
+given and no fallback. `scripts/electron-surface.ts` reads `electron.d.ts`
+from Electron 45.2.1 and the newest release of each of the twelve majors
+before it, and writes `src/electron/surface.ts`: every module, its methods
+and properties, which exist only on macOS or Windows, and each instance
+class's members with its parents'. Regenerate it with
+`bun scripts/electron-surface.ts` when Electron ships a major.
+
+At start the host fills what it lacks from the surface
+(`src/electron/complete.ts`):
+
+- A Linux method the host doesn't have exits with status 3, naming it, so the
+  app runs on its own Electron, as for [unsupported apps](#unsupported-apps).
+- A macOS or Windows method does nothing and gives `undefined`, as
+  Electron's does on Linux.
+- A property the host doesn't have logs once and reads as `undefined`; an
+  object may still set it.
+- A name Electron itself doesn't have logs once ("doesn't have on Linux"):
+  the surface is stale or the app is probing.
+
+What the host has is real where the engine can do it and a stated answer
+where the shell owns it: window state reads as shown and normal, because
+the shell lays windows out, and `globalShortcut` refuses with a warning,
+because shortcuts are the shell's. `screen` and `powerMonitor` follow the
+desk through `domicile subscribe` from their first use. The
+`electron-apps-start-on-a-tty` VM test starts Element and Slack as packaged
+and fails on a crash or on Element leaving the engine.
+
 ### Phase 2: Node in the page
 
 The engine embeds Node in the page processes of apps that ask for it, as
 Electron does. Node, not Bun: pages run on V8, Bun on JavaScriptCore. The
 main process moves to the same Node, so both sides load one build of each
 native module.
+
+Electron's `main` is on Chromium 160.0.8158.0, three builds from the
+engine's 160.0.8155.0, with Node v26.13.1. So the engine takes Electron's
+Node as Electron builds it, rather than porting a Node to this V8:
+
+1. **Node in the engine.** Electron's Node fork at the commit its `DEPS`
+   names, with its `patches/node`, built by Node's own GN files against the
+   engine's V8 and BoringSSL, linked into the engine. The engine binary runs
+   as plain Node when told to, as `ELECTRON_RUN_AS_NODE` does.
+2. **Node in a page.** A window whose `webPreferences` ask for it
+   (`nodeIntegration`, `contextIsolation: false` with a Node preload,
+   `sandbox: false`) gets an unsandboxed page process with a Node
+   environment in its main world, and libuv run off the renderer's own
+   loop, as Electron's `NodeBindings` does. Every other page stays
+   sandboxed and Node-free. `require("electron")` in the page is the
+   existing preload surface.
+3. **The main process on that Node.** `electron-host` runs on the engine's
+   Node instead of Bun, with `electron` resolved through Node's module hooks,
+   so a native module loads once for both sides.
+4. **`<webview>` in Electron pages**, as Zulip uses it, over the guests the
+   engine already has.
+5. **App by app:** Joplin, Teams for Linux, Zulip and Signal, each leaving
+   the quirks table as it runs.
 
 ## Apps inspected
 
@@ -399,6 +453,13 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
 - [x] an app's own schemes kept for the next engine start
 - [x] the quirks table: known phase-2 apps go straight to their own Electron
-- [ ] the quirks table seeds known apps' schemes, once checked against the real apps
+- [x] known apps' schemes (Element, Claude, from their own runs) register from the first engine start (`KNOWN` in `packages/domicile-launch/src/electron_schemes.rs`)
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
-- [ ] phase 2: Node in the page
+- [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
+- [ ] engine: `webContents.executeJavaScript` and `mainFrame`, which Claude calls at start and hands itself back on
+- [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
+- [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
+- [ ] phase 2, engine: Node in the pages of windows that ask for it
+- [ ] phase 2, `electron-host`: the main process on the engine's Node
+- [ ] phase 2, engine: `<webview>` in Electron pages
+- [ ] phase 2: Joplin, Teams for Linux, Zulip and Signal on the engine, out of the quirks table

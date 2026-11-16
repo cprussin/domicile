@@ -135,7 +135,8 @@ pub fn through_wrappers(
     let out = tempfile::tempdir().map_err(unrunnable)?;
     let follow = out.path().join("follow.bash");
     fs::write(&follow, FOLLOW).map_err(unrunnable)?;
-    let mut child = Command::new(&program)
+    let mut follow_wrappers = Command::new(&program);
+    follow_wrappers
         .args(&command[1..])
         .env("BASH_ENV", &follow)
         .env("DOMICILE_ELECTRON_LAUNCH", out.path())
@@ -144,9 +145,8 @@ pub fn through_wrappers(
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         // Its own group, so nothing it starts outlives a give-up.
-        .process_group(0)
-        .spawn()
-        .map_err(unrunnable)?;
+        .process_group(0);
+    let mut child = spawn_when_not_busy(&mut follow_wrappers).map_err(unrunnable)?;
     let started = Instant::now();
     let done = out.path().join("done");
     while !done.exists() {
@@ -219,6 +219,28 @@ pub fn through_wrappers(
         .filter(|(key, _)| !OURS.contains(&key.as_str()))
         .collect();
     Ok(Launch { args, env })
+}
+
+/// How long [`spawn_when_not_busy`] keeps trying.
+const BUSY_WAIT: Duration = Duration::from_secs(2);
+
+/// Spawns `command`, waiting out `ETXTBSY`. A script just written is busy
+/// while any process forked before its writer closed it still holds the
+/// writer's descriptor, until that process execs: another thread's spawn
+/// can make it so for a moment, and an installer's write the same.
+fn spawn_when_not_busy(command: &mut Command) -> std::io::Result<std::process::Child> {
+    let started = Instant::now();
+    loop {
+        match command.spawn() {
+            Err(why)
+                if why.kind() == std::io::ErrorKind::ExecutableFileBusy
+                    && started.elapsed() < BUSY_WAIT =>
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            spawned => return spawned,
+        }
+    }
 }
 
 /// Whether `program`, on `PATH` or not, starts with a `#!` naming bash.

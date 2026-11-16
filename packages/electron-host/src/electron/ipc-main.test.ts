@@ -135,3 +135,31 @@ describe(createIpcMain, () => {
     expect(heard).toEqual([3, [port1], "hi"]);
   });
 });
+
+describe("a page's own webContents.ipc", () => {
+  it("hears only its page, and answers that page's invokes ahead of ipcMain", async () => {
+    const { IpcMain } = await import("./ipc-main");
+    const routes = createIpcMain();
+    const own = new IpcMain();
+    const page = { id: 1, ipc: own, send: () => undefined };
+    const other = { id: 2, send: () => undefined };
+    const heard: string[] = [];
+    own.on("hi", (_event, word) => heard.push(`own ${word}`));
+    routes.ipcMain.on("hi", (event, word) =>
+      heard.push(`main ${event.sender.id} ${word}`),
+    );
+    own.handle("who", () => "own");
+    routes.ipcMain.handle("who", () => "main");
+
+    routes.receive(page, "hi", ["a"]);
+    routes.receive(other, "hi", ["b"]);
+
+    expect(heard).toEqual(["own a", "main 1 a", "main 2 b"]);
+    expect(
+      (await routes.invoke(page, "who", [])).unwrapOr({ result: "none" }),
+    ).toEqual({ result: "own" });
+    expect(
+      (await routes.invoke(other, "who", [])).unwrapOr({ result: "none" }),
+    ).toEqual({ result: "main" });
+  });
+});
