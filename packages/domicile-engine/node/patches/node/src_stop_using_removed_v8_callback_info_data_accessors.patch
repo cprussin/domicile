@@ -5,7 +5,7 @@ Date: Fri, 30 Oct 2026 13:30:36 +0000
 Subject: src: stop using removed v8 callback info Data() accessors
 
 V8 removed the deprecated `FunctionCallbackInfo<T>::Data()` and
-`PropertyCallbackInfo<T>::Data()` accessors in favour of `DataV2()`,
+`PropertyCallbackInfo<T>::Data()` accessors in favor of `DataV2()`,
 which returns `v8::Local<v8::Data>` instead of `v8::Local<v8::Value>`.
 `WasmStreaming::Unpack()` now takes `Local<Data>` directly.
 

@@ -4,7 +4,7 @@ From: "electron-claude[bot]"
 Date: Fri, 6 Nov 2026 13:32:42 +0000
 Subject: src: stop using deprecated ArrayBufferView::Buffer()
 
-V8 deprecated `v8::ArrayBufferView::Buffer()` in favour of
+V8 deprecated `v8::ArrayBufferView::Buffer()` in favor of
 `GetBuffer()`, which returns the new `v8::ArrayBufferBase` type that
 covers both ArrayBuffer and SharedArrayBuffer. Switch the headers that
 embedders compile with `-Werror` to `GetBuffer()`.

@@ -293,7 +293,7 @@ index f1e8928d37ebf47225dbfd394fbf1163e1d9f666..3420b3dd882d65c29e4539cc66716914
 + * again the embedder re-reads uv_backend_timeout(), which returns 0 for a
 + * non-empty pending/watcher queue and accounts for newly started timers, so an
 + * interrupt would only cost a syscall plus a spurious wakeup. The depth is
-+ * only touched from the loop thread, so it needs no synchronisation.
++ * only touched from the loop thread, so it needs no synchronization.
 + *
 + * uv_async_send() deliberately calls uv__loop_interrupt() directly and is not
 + * subject to this gating; it is the cross-thread wakeup primitive.

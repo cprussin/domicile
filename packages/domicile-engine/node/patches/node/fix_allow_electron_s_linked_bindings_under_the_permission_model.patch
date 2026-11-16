@@ -9,7 +9,7 @@ throw ERR_ACCESS_DENIED when the permission model is enabled without
 linked bindings (electron_common_*, electron_browser_*, ...), and its
 own bootstrap script (node_init and friends) reaches them through
 process._linkedBinding(), so with that change `electron --permission`
-in ELECTRON_RUN_AS_NODE mode can no longer initialise Electron's Node.js
+in ELECTRON_RUN_AS_NODE mode can no longer initialize Electron's Node.js
 integration (ASAR support etc.) and logs a CompileAndCall error.
 
 In an Electron build the linked-binding list only ever contains
@@ -17,7 +17,7 @@ Electron's own runtime modules; applications cannot link bindings into
 the binary and real native addons still go through process.dlopen(),
 which remains gated on --allow-addons. Exempt the electron_* bindings
 from the addon check so the runtime can bootstrap, while keeping the
-upstream behaviour for any other name.
+upstream behavior for any other name.
 
 Upstream has since added EnvironmentFlags::kNoAddonPermissionForLinkedBindings
 (https://github.com/nodejs/node/pull/66067), which embedders can set to
