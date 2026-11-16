@@ -585,6 +585,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   base::CallbackListSubscription AddFocusedCallback(
       base::RepeatingClosure focused);
 
+  // Keeps this page at its full frame rate under Energy Saver, even unfocused.
+  // An Electron window's, which is an app rather than a page. See
+  // unfocused_web_views.h.
+  void KeepFullFrameRate();
+
   // The page's zoom factor, for chrome.tabs. ZoomTo expects a factor already
   // within blink's range (see DeskZoomFactor in
   // //components/domicile:desk_tabs) and reports the change like SetZoom.
@@ -1290,6 +1295,9 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See AddFocusedCallback.
   base::RepeatingClosureList focused_callbacks_;
+
+  // See KeepFullFrameRate.
+  bool full_frame_rate_ = false;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;

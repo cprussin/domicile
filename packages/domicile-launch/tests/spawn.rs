@@ -736,24 +736,7 @@ fn a_machine_that_disables_features_gets_one_flag_for_them() {
         .collect();
     assert_eq!(
         lists,
-        ["--disable-features=BatterySaverModeFollowsSystemPowerSaver,Vulkan,LibinputHandleMouse"],
-        "{args:?}"
-    );
-}
-
-#[test]
-fn the_desk_keeps_its_frame_rate_on_power_saver() {
-    // Energy Saver follows the OS's power-saver profile and caps every frame
-    // sink at 30 Hz, the whole desk on the engine.
-    let args = args_of(&engine(
-        Path::new("/l/engine"),
-        &shell(),
-        "drm",
-        &runtime(),
-        None,
-    ));
-    assert!(
-        args.contains(&"--disable-features=BatterySaverModeFollowsSystemPowerSaver".to_string()),
+        ["--disable-features=Vulkan,LibinputHandleMouse"],
         "{args:?}"
     );
 }

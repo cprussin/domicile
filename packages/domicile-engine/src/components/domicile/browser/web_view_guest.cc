@@ -43,6 +43,7 @@
 #include "components/domicile/browser/screen_capture.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
+#include "components/domicile/browser/unfocused_web_views.h"
 #include "components/permissions/permissions_client.h"
 #include "components/domicile/browser/web_view_url.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
@@ -821,6 +822,8 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
       std::make_unique<GuestLink>(weak_factory_.GetWeakPtr()));
   Observe(guest_contents_);
   guest_contents_->SetDelegate(this);
+  UnfocusedWebViews::Get().Track(
+      this, guest_contents_->GetPrimaryMainFrame()->GetGlobalId());
 
   // After SetDelegate, which some helpers need, and before the first
   // navigation, which some record.
@@ -996,6 +999,8 @@ WebViewGuest::WebViewGuest(content::WebContents& shell,
 // page is reported closed after, so private browsing never ends under it.
 WebViewGuest::~WebViewGuest() {
   owned_guest_contents_.reset();
+  // A guest whose page outlives it, or never had one.
+  UnfocusedWebViews::Get().Untrack(this);
   if (private_context_) {
     Host().PrivatePageClosed(*private_context_);
   }
@@ -2394,6 +2399,10 @@ void WebViewGuest::ProceedPastWarning() {
 }
 
 void WebViewGuest::PrimaryPageChanged(content::Page& page) {
+  // A cross-site page has a main frame, and frame sink, of its own.
+  if (!full_frame_rate_) {
+    UnfocusedWebViews::Get().Track(this, page.GetMainDocument().GetGlobalId());
+  }
   EnableAutoResize();
   EndFind();
   if (!reported_favicon_.is_empty()) {
@@ -3049,7 +3058,13 @@ base::CallbackListSubscription WebViewGuest::AddFocusedCallback(
 }
 
 void WebViewGuest::Focused() {
+  UnfocusedWebViews::Get().Focus(this);
   focused_callbacks_.Notify();
+}
+
+void WebViewGuest::KeepFullFrameRate() {
+  full_frame_rate_ = true;
+  UnfocusedWebViews::Get().Untrack(this);
 }
 
 base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(
@@ -3058,6 +3073,7 @@ base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(
 }
 
 void WebViewGuest::WebContentsDestroyed() {
+  UnfocusedWebViews::Get().Untrack(this);
   zoom_subscription_ = {};
   settings_observation_.Reset();
   download_manager_observation_.Reset();
