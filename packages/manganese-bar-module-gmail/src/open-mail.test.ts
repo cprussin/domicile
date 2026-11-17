@@ -61,6 +61,16 @@ describe("openMail", () => {
     ]);
   });
 
+  it("names no account when the account has a browser profile of its own", () => {
+    const fake = withGmail("https://mail.google.com/chat/u/0/#chat/home");
+
+    openMail(fake.domicile.browser, EMAIL, "#inbox/t1", "work");
+
+    expect(navigations(fake).map(([, url]) => url)).toStrictEqual([
+      "https://mail.google.com/mail/",
+    ]);
+  });
+
   it("waits for a window the browser lists later", () => {
     const fake = new FakeDomicileHost();
     const { browser } = fake.domicile;

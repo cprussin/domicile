@@ -10,8 +10,13 @@ import { gmailInbox } from "./gmail-inbox";
 const CLIENT = { id: "client.apps.googleusercontent.com", secret: "s3cret" };
 const EMAIL = "me@example.com";
 
-const inbox = () => {
-  const made = gmailInbox({ client: CLIENT, email: EMAIL, nickname: "Work" });
+const inbox = (profile?: string) => {
+  const made = gmailInbox({
+    client: CLIENT,
+    email: EMAIL,
+    nickname: "Work",
+    ...(profile === undefined ? {} : { profile }),
+  });
   if (made.kind === InboxKind.Watched) {
     return made;
   } else {
@@ -95,5 +100,14 @@ describe(gmailInbox, () => {
         nickname: "Work",
       }).launcherName,
     ).toBe("Email - Work");
+  });
+
+  it("opens in its browser profile, whose sign-in is the account's, naming no account", () => {
+    expect(inbox("work").app).toEqual({
+      appId: "gmail:me@example.com",
+      pageNotifies: true,
+      profile: "work",
+      url: "https://mail.google.com/mail/",
+    });
   });
 });

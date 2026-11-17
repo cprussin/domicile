@@ -29,7 +29,9 @@ type Options = {
   launcherName?: string;
   /**
    * The id of the browser profile its Gmail window and sign-in open in, such
-   * as `work`. By default, the one Gmail's site opens in.
+   * as `work`. By default, the one Gmail's site opens in. Given one, the
+   * window opens Gmail's own address, with the profile's Google sign-in,
+   * rather than picking the account by its address.
    */
   profile?: string;
 };
@@ -54,7 +56,7 @@ export const gmailInbox = ({
       appId: gmailAppId(email),
       pageNotifies: true,
       ...(profile === undefined ? {} : { profile }),
-      url: inboxAddress(email),
+      url: inboxAddress(email, profile),
     },
     icon: EnvelopeSimpleIcon,
     ...(launcherName === undefined ? {} : { launcherName }),
@@ -64,7 +66,7 @@ export const gmailInbox = ({
       if (reading?.kind === InboxReadingKind.SignedOut) {
         deskInbox(domicile)(email, client, nickname, profile).signIn();
       } else {
-        domicile.browser.openApp(inboxAddress(email), {
+        domicile.browser.openApp(inboxAddress(email, profile), {
           id: gmailAppId(email),
           reuse: AppReuse.Focus,
           ...(profile === undefined ? {} : { profile }),

@@ -37,7 +37,7 @@ export const openMail = (
   const open = listed(browser, id);
   const started = open === undefined ? undefined : startedAt(open.url);
   if (started === undefined) {
-    browser.openApp(inboxAddress(email), {
+    browser.openApp(inboxAddress(email, profile), {
       id,
       reuse: AppReuse.Navigate,
       ...inProfile,
