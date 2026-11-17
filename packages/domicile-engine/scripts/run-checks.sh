@@ -64,6 +64,7 @@ TOGETHER=(
   guard-webview-browser-page
   guard-webview-history
   guard-webview-history-new-window
+  guard-webview-history-menu
   guard-webview-untrusted-cert
   guard-webview-find
   guard-webview-click

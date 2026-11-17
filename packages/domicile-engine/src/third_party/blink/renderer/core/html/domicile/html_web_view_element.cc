@@ -15,6 +15,8 @@
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_domicile_history.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_domicile_history_entry.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_domicile_media_device.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_domicile_media_devices.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event_init.h"
@@ -517,6 +519,60 @@ void HTMLWebViewElement::goBackInNewWindow() {
 void HTMLWebViewElement::goForwardInNewWindow() {
   if (guest_.is_bound()) {
     guest_->GoForwardInNewWindow();
+  }
+}
+
+namespace {
+
+HeapVector<Member<DomicileHistoryEntry>> HistoryListed(
+    const Vector<domicile::mojom::blink::WebViewHistoryEntryPtr>& entries) {
+  HeapVector<Member<DomicileHistoryEntry>> listed;
+  listed.reserve(entries.size());
+  for (const auto& entry : entries) {
+    auto* page = DomicileHistoryEntry::Create();
+    page->setId(entry->id);
+    page->setUrl(entry->url.GetString());
+    page->setTitle(entry->title);
+    page->setFavicon(entry->favicon);
+    listed.push_back(page);
+  }
+  return listed;
+}
+
+void ResolveHistory(ScriptPromiseResolver<DomicileHistory>* resolver,
+                    domicile::mojom::blink::WebViewHistoryPtr history) {
+  auto* answer = DomicileHistory::Create();
+  answer->setBack(HistoryListed(history->back));
+  answer->setForward(HistoryListed(history->forward));
+  resolver->Resolve(answer);
+}
+
+}  // namespace
+
+ScriptPromise<DomicileHistory> HTMLWebViewElement::history(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  if (!guest_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "This <webview> has no page yet.");
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<DomicileHistory>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  guest_->ListHistory(BindOnce(&ResolveHistory, WrapPersistent(resolver)));
+  return promise;
+}
+
+void HTMLWebViewElement::goToHistoryEntry(int32_t id) {
+  if (guest_.is_bound()) {
+    guest_->GoToHistoryEntry(id);
+  }
+}
+
+void HTMLWebViewElement::goToHistoryEntryInNewWindow(int32_t id) {
+  if (guest_.is_bound()) {
+    guest_->GoToHistoryEntryInNewWindow(id);
   }
 }
 
