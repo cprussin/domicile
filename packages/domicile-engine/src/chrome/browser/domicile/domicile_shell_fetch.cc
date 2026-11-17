@@ -239,6 +239,48 @@ class ShellFetchService final
       std::move(callback).Run(nullptr, *refusal);
       return;
     }
+    if (profile.empty()) {
+      FetchIn(url, method, std::move(headers), body, sapisid_hash_origin,
+              profile, std::move(callback));
+      return;
+    }
+    // A profile still loading would block the UI thread on the disk, so the
+    // fetch waits for it.
+    BrowserProfileRegistry::Get().WhenLoaded(
+        *Profile::FromBrowserContext(render_frame_host().GetBrowserContext())
+             ->GetOriginalProfile(),
+        profile,
+        base::BindOnce(&ShellFetchService::FetchLoaded,
+                       weak_factory_.GetWeakPtr(), url, method,
+                       std::move(headers), body, sapisid_hash_origin, profile,
+                       std::move(callback)));
+  }
+
+  // Fetch, once its profile has loaded (BrowserProfileRegistry::WhenLoaded).
+  // The desk can drop the profile meanwhile, so it is checked again.
+  void FetchLoaded(const GURL& url,
+                   const std::string& method,
+                   std::vector<mojom::ShellFetchHeaderPtr> headers,
+                   const std::optional<std::string>& body,
+                   const std::optional<std::string>& sapisid_hash_origin,
+                   const std::string& profile,
+                   FetchCallback callback) {
+    if (std::optional<std::string> refusal = ProfileRefusal(profile)) {
+      std::move(callback).Run(nullptr, *refusal);
+      return;
+    }
+    FetchIn(url, method, std::move(headers), body, sapisid_hash_origin,
+            profile, std::move(callback));
+  }
+
+  // Fetch, with its profile loaded.
+  void FetchIn(const GURL& url,
+               const std::string& method,
+               std::vector<mojom::ShellFetchHeaderPtr> headers,
+               const std::optional<std::string>& body,
+               const std::optional<std::string>& sapisid_hash_origin,
+               const std::string& profile,
+               FetchCallback callback) {
     content::StoragePartition* partition = PartitionOf(profile);
     if (partition == nullptr) {
       std::move(callback).Run(
