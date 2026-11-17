@@ -141,12 +141,13 @@ export const ScreenCastDialog = ({
         : [],
     ),
     ...(body.browserWindows
-      ? browserWindows.map(({ id, title }) => ({
+      ? browserWindows.map(({ appId, id, title }) => ({
           ...browserChoice(
             id,
             title,
             pageIcon(id),
             shownArea(body.desk, shown, ShownWindowKind.Browser, id),
+            appId === "" ? undefined : apps(appId),
           ),
           source: Source.BrowserWindow({ id, title }),
         }))

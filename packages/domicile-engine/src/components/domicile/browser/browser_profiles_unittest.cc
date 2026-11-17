@@ -255,6 +255,24 @@ TEST(BrowserProfilesTest, APageMovesWhenRoutingDisagreesAtEitherEnd) {
       std::nullopt);
 }
 
+TEST(BrowserProfilesTest, AProfileGetsTheExtensionsTheUserInstalledInAnother) {
+  const UserExtension rabby{"acmacodkjbdgmoleebolmdjonilkdbch", ""};
+  const UserExtension ublock{"ddkjiahejlhfcafbddmgiahcphecmpfh", ""};
+  const UserExtension mine{"abcdefghijklmnopabcdefghijklmnop",
+                           "/home/me/src/mine"};
+  const std::vector<std::vector<UserExtension>> each = {
+      {rabby, ublock}, {mine, rabby}, {}};
+  // A profile with none gets each once, in the order first found.
+  EXPECT_EQ(UserExtensionsMissing(each, {}, {}),
+            (std::vector<UserExtension>{rabby, ublock, mine}));
+  // One with some gets the rest.
+  EXPECT_EQ(UserExtensionsMissing(each, {rabby.id, mine.id}, {}),
+            (std::vector<UserExtension>{ublock}));
+  // The config's own are the config's to install.
+  EXPECT_EQ(UserExtensionsMissing(each, {}, {ublock.id}),
+            (std::vector<UserExtension>{rabby, mine}));
+}
+
 TEST(BrowserProfilesTest, OnlyNavigationsTheUserTookMoveAPage) {
   const auto user = [](bool renderer_initiated, bool user_gesture,
                        ui::PageTransition transition) {

@@ -57,6 +57,7 @@ fn run() -> Result<(), String> {
             choose_folder(&bus, "Load an unpacked extension")
         },
         read: &|path| std::fs::read_to_string(path),
+        read_bytes: &|path| std::fs::read(path),
         writable: &writable,
         write: &|path, text| std::fs::write(path, text),
     };

@@ -13,6 +13,8 @@
     window.guard = null;
     delete window.guard;
     window.guard.send("page", {
+      // What the preload's own emit gave its listener.
+      emitted: window.guard.emitted,
       kept: window.guard === was,
       // What the page can see of the preload's world: only what it exposed.
       require: typeof require,

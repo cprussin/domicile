@@ -655,6 +655,9 @@ std::string AnswerExtensions(ListExtensions list_extensions) {
     if (extension.options_url.is_valid()) {
       entry.Set("options_url", extension.options_url.spec());
     }
+    if (!extension.icon_path.empty()) {
+      entry.Set("icon_path", extension.icon_path);
+    }
     listed.Append(std::move(entry));
   }
   base::DictValue reply;

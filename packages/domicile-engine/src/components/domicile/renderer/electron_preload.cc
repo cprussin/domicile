@@ -64,14 +64,30 @@ constexpr char kBootstrap[] = R"JS(
   // An error in a listener or the preload reaches the console, as an uncaught
   // one, and stops nothing else.
   const report = (error) => queueMicrotask(() => { throw error; });
-  const listen = (channel, listener, once) => {
+  const listen = (channel, listener, once, first = false) => {
     if (typeof listener !== 'function') {
       throw new TypeError('an ipcRenderer listener must be a function');
     }
     const key = String(channel);
     const list = listeners.get(key) ?? [];
-    list.push({ listener, once });
+    if (first) list.unshift({ listener, once });
+    else list.push({ listener, once });
     listeners.set(key, list);
+  };
+  // Runs `channel`'s listeners with `args` as given, as Node's
+  // EventEmitter.emit does. Says whether any listened.
+  const run = (channel, args) => {
+    const list = listeners.get(channel);
+    if (!list) return false;
+    for (const entry of [...list]) {
+      if (entry.once) ipcRenderer.removeListener(channel, entry.listener);
+      try {
+        entry.listener(...args);
+      } catch (error) {
+        report(error);
+      }
+    }
+    return true;
   };
   const unsupported = (what) => () => {
     throw new Error(`${what} does not work on Domicile yet`);
@@ -112,6 +128,35 @@ constexpr char kBootstrap[] = R"JS(
     once(channel, listener) {
       listen(channel, listener, true);
       return ipcRenderer;
+    },
+    prependListener(channel, listener) {
+      listen(channel, listener, false, true);
+      return ipcRenderer;
+    },
+    prependOnceListener(channel, listener) {
+      listen(channel, listener, true, true);
+      return ipcRenderer;
+    },
+    // ipcRenderer is an EventEmitter: a preload may emit on it to reach its
+    // own listeners, which nothing sends to the main process.
+    emit(channel, ...args) {
+      return run(String(channel), args);
+    },
+    listeners(channel) {
+      return (listeners.get(String(channel)) ?? []).map(
+          (entry) => entry.listener);
+    },
+    rawListeners(channel) {
+      return ipcRenderer.listeners(channel);
+    },
+    eventNames() {
+      return [...listeners.keys()];
+    },
+    setMaxListeners() {
+      return ipcRenderer;
+    },
+    getMaxListeners() {
+      return 0;
     },
     removeListener(channel, listener) {
       const key = String(channel);
@@ -183,16 +228,7 @@ constexpr char kBootstrap[] = R"JS(
     report(error);
   }
   const emit = (channel, event, args) => {
-    const list = listeners.get(channel);
-    if (!list) return;
-    for (const entry of [...list]) {
-      if (entry.once) ipcRenderer.removeListener(channel, entry.listener);
-      try {
-        entry.listener(event, ...args);
-      } catch (error) {
-        report(error);
-      }
-    }
+    run(channel, [event, ...args]);
   };
   return {
     deliver(channel, json) {

@@ -1692,8 +1692,9 @@ const windowNamed = (
 };
 
 /**
- * A window's icon URL: a client's from its desktop entry, a browser window's
- * page icon.
+ * A window's icon URL: a client's from its desktop entry, an app window's
+ * from its app's (an Electron app's, whose page icon isn't its own), else a
+ * browser window's page icon.
  */
 const iconOf = (
   window: ShellWindow,
@@ -1701,7 +1702,8 @@ const iconOf = (
 ): string | undefined =>
   window.kind === WindowKind.App
     ? clientIcons.get(window.desktopId)
-    : window.icon;
+    : ((window.appId === "" ? undefined : clientIcons.get(window.appId)) ??
+      window.icon);
 
 /** A browser window's page description; a client's window has none. */
 const descriptionOf = (window: ShellWindow): string | undefined =>

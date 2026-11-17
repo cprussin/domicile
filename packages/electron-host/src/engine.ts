@@ -53,6 +53,10 @@ export type EngineRequest =
       readonly session?: string;
       /** A view (`WebContentsView`), shown only as part of a window. */
       readonly view?: true;
+      /** A window's own title, which the desktop shows over its page's. */
+      readonly title?: string;
+      /** A window that opens hidden, as `show: false`. */
+      readonly hidden?: true;
     }
   | {
       readonly type: "set_views";
@@ -62,6 +66,16 @@ export type EngineRequest =
     }
   | { readonly type: "load_url"; readonly window: number; readonly url: string }
   | { readonly type: "focus_window"; readonly window: number }
+  | {
+      readonly type: "set_title";
+      readonly window: number;
+      readonly title: string;
+    }
+  | {
+      readonly type: "set_hidden";
+      readonly window: number;
+      readonly hidden: boolean;
+    }
   | { readonly type: "close_window"; readonly window: number }
   | { readonly type: "destroy_window"; readonly window: number }
   | {
@@ -132,6 +146,8 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("window_closed"), window: z.number() }),
+  // The user asked to close the window: the app's `close` listeners decide.
+  z.object({ type: z.literal("close_asked"), window: z.number() }),
   z.object({
     args: z.array(z.unknown()),
     channel: z.string(),

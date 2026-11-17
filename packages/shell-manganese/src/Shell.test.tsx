@@ -824,6 +824,7 @@ const extensionsInstalled = (popped = true): void => {
         id: CLICKED,
         name: "Clicked",
         popup: null,
+        profile: "default",
         title: "Clicked",
       },
       {
@@ -834,6 +835,7 @@ const extensionsInstalled = (popped = true): void => {
         id: POPPED,
         name: "Popped",
         popup: `chrome-extension://${POPPED}/popup.html`,
+        profile: "default",
         title: "Popped",
       },
     ],

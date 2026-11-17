@@ -1762,6 +1762,26 @@ describe("PortalDialogs", () => {
       expect(within(blank).queryByRole("presentation")).not.toBeInTheDocument();
     });
 
+    it("names an app window by its app, with the app's icon over its page's", async () => {
+      const host = new FakeHost();
+      host.fake.set({
+        browserWindows: [
+          { ...browserWindow("1", "Notes"), appId: "firefox", isApp: true },
+        ],
+      });
+      const element = iconed("1", "data:image/png;base64,page");
+      render(<PortalDialogs domicile={host.with(desktop())} />);
+      host.push([frozen(1, "screenshot")]);
+
+      const notes = await screen.findByRole("radio", {
+        name: "Firefox: Notes",
+      });
+      element.remove();
+      expect(
+        within(notes).getByRole("presentation").getAttribute("src"),
+      ).toStartWith("data:image/svg+xml");
+    });
+
     it("saves a window the shell shows from its own frame, without what is over it", async () => {
       const host = new FakeHost();
       render(
