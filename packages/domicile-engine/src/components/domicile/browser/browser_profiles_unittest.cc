@@ -186,6 +186,22 @@ TEST(BrowserProfilesTest, ASiteForAnAddressIsTheEntryThatRoutesIt) {
   EXPECT_EQ(site_for("about:blank"), "(none)");
 }
 
+TEST(BrowserProfilesTest, AnExtensionsPageOpensInTheProfileThatAskedForIt) {
+  const BrowserProfiles profiles = WithSites(R"({"github.com/acme":"work"})");
+
+  EXPECT_EQ(ProfileForNewWindow(
+                profiles, "work",
+                GURL("chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/"
+                     "app/app.html#/setup")),
+            "work");
+  // A web address goes by its site, whoever asked.
+  EXPECT_EQ(ProfileForNewWindow(profiles, "work", GURL("https://example.com/")),
+            profiles.default_profile);
+  EXPECT_EQ(ProfileForNewWindow(profiles, profiles.default_profile,
+                                GURL("https://github.com/acme/repo")),
+            "work");
+}
+
 TEST(BrowserProfilesTest, PinnedSitesGoUnderTheConfigs) {
   const BrowserProfiles config = WithSites(R"({"*.acme.com":"work"})");
   const BrowserProfiles profiles = WithPinnedSites(

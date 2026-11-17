@@ -226,6 +226,12 @@ const std::string& ProfileForUrl(const BrowserProfiles& profiles,
   return site == nullptr ? profiles.default_profile : profiles.sites.at(*site);
 }
 
+const std::string& ProfileForNewWindow(const BrowserProfiles& profiles,
+                                       const std::string& asker,
+                                       const GURL& url) {
+  return url.SchemeIsHTTPOrHTTPS() ? ProfileForUrl(profiles, url) : asker;
+}
+
 std::optional<std::string> RouteNavigation(const BrowserProfiles& profiles,
                                            const std::string& page_profile,
                                            const GURL& from,
