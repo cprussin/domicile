@@ -273,10 +273,10 @@ std::string Answer(std::string_view line,
     }
     return base::ok();
   };
-  auto list_browser_profiles =
-      [has_window]() -> std::optional<BrowserProfileList> {
+  auto list_browser_profiles = [has_window](BrowserProfilesFound found) {
     if (!has_window) {
-      return std::nullopt;
+      std::move(found).Run(std::nullopt);
+      return;
     }
     BrowserProfileList list;
     list.default_profile = "personal";
@@ -289,7 +289,7 @@ std::string Answer(std::string_view line,
         {.id = kExtensionId, .enabled = true, .locked = true});
     list.sites.push_back(
         {.site = "github.com/acme", .profile = "work", .pinned = true});
-    return list;
+    std::move(found).Run(std::move(list));
   };
   auto pin_browser_site =
       [told, has_window](const std::string& site,

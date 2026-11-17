@@ -352,10 +352,14 @@ struct BrowserProfileList {
   std::vector<ListedBrowserSite> sites;
 };
 
-// Carries out `browser_profiles`. Returns nothing if there is no shell, and
-// so no profiles to read.
-using ListBrowserProfiles =
-    base::FunctionRef<std::optional<BrowserProfileList>()>;
+// Runs once with what `browser_profiles` lists, or nothing if there is no
+// shell, and so no profiles to read.
+using BrowserProfilesFound =
+    base::OnceCallback<void(std::optional<BrowserProfileList>)>;
+
+// Carries out `browser_profiles`: runs `found` once every profile has
+// loaded, so each lists its extensions, possibly after returning.
+using ListBrowserProfiles = base::FunctionRef<void(BrowserProfilesFound found)>;
 
 // Carries out `pin_browser_site`: opens `site` in `profile` from now on (the
 // default profile unpins it), or says why not.
@@ -550,7 +554,7 @@ using CommandReply = base::OnceCallback<void(std::string)>;
 
 // Answers one request line (without its newline). `reply` runs once: before
 // this returns, except for `load_shell`, `run_app`, `open_url`,
-// `load_unpacked`, `history`, `visits`, `delete_history`,
+// `load_unpacked`, `browser_profiles`, `history`, `visits`, `delete_history`,
 // `clear_browsing_data`, `site_data` and `clear_site_data`, which answer once
 // their action is done.
 void AnswerCommand(std::string_view line,

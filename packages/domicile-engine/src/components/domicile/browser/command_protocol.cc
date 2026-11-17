@@ -93,7 +93,9 @@ std::string AnswerSetExtensionEnabled(const base::DictValue& request,
                                       SetExtensionEnabled set_extension_enabled);
 std::string AnswerConfigureExtension(const base::DictValue& request,
                                      ConfigureExtension configure_extension);
-std::string AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles);
+std::string BrowserProfilesLine(const std::optional<BrowserProfileList>& list);
+void AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles,
+                           CommandReply reply);
 std::string AnswerPinBrowserSite(const base::DictValue& request,
                                  PinBrowserSite pin_browser_site);
 std::string AnswerMediaDevices(ListMediaDevices list_media_devices);
@@ -251,7 +253,7 @@ void AnswerCommand(std::string_view line,
     return;
   }
   if (*type == kBrowserProfiles) {
-    std::move(reply).Run(AnswerBrowserProfiles(actions.list_browser_profiles));
+    AnswerBrowserProfiles(actions.list_browser_profiles, std::move(reply));
     return;
   }
   if (*type == kPinBrowserSite) {
@@ -684,8 +686,7 @@ std::string AnswerSetExtensionEnabled(
   return Done("set");
 }
 
-std::string AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles) {
-  const std::optional<BrowserProfileList> list = list_browser_profiles();
+std::string BrowserProfilesLine(const std::optional<BrowserProfileList>& list) {
   if (!list) {
     return RefusedCommand(
         "this engine has no shell, and so no browser profiles to list");
@@ -723,6 +724,15 @@ std::string AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles) {
   reply.Set("profiles", std::move(profiles));
   reply.Set("sites", std::move(sites));
   return Line(std::move(reply));
+}
+
+void AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles,
+                           CommandReply reply) {
+  list_browser_profiles(base::BindOnce(
+      [](CommandReply reply, std::optional<BrowserProfileList> list) {
+        std::move(reply).Run(BrowserProfilesLine(list));
+      },
+      std::move(reply)));
 }
 
 std::string AnswerPinBrowserSite(const base::DictValue& request,

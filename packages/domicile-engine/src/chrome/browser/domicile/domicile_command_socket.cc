@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -427,12 +428,8 @@ base::expected<void, std::string> SetShellExtensionEnabled(
 }
 
 // The desk's browser profiles, their extension switches and the sites that
-// open outside the default, for the Settings app.
-std::optional<BrowserProfileList> ListDeskBrowserProfiles() {
-  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (ShellProfile() == nullptr) {
-    return std::nullopt;
-  }
+// open outside the default, as they are now.
+BrowserProfileList BrowserProfilesNow() {
   BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
   const BrowserProfiles& profiles = registry.profiles();
   BrowserProfileList list;
@@ -459,6 +456,38 @@ std::optional<BrowserProfileList> ListDeskBrowserProfiles() {
         .pinned = !registry.IsConfigSite(site)});
   }
   return list;
+}
+
+// The desk's browser profiles for the Settings app, once each has loaded:
+// ExtensionSwitchesOf has nothing for a profile that has not.
+void ListDeskBrowserProfiles(BrowserProfilesFound found) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(found).Run(std::nullopt);
+    return;
+  }
+  BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+  const std::vector<BrowserProfile>& profiles = registry.profiles().profiles;
+  base::RepeatingClosure loaded = base::BarrierClosure(
+      profiles.size(), base::BindOnce(
+                           [](BrowserProfilesFound found) {
+                             // The shell may have gone while they loaded.
+                             if (ShellProfile() == nullptr) {
+                               std::move(found).Run(std::nullopt);
+                               return;
+                             }
+                             std::move(found).Run(BrowserProfilesNow());
+                           },
+                           std::move(found)));
+  // Copied: the compositor may send new profiles while one loads.
+  std::vector<std::string> ids;
+  for (const BrowserProfile& each : profiles) {
+    ids.push_back(each.id);
+  }
+  for (const std::string& id : ids) {
+    registry.WhenLoaded(*profile->GetOriginalProfile(), id, loaded);
+  }
 }
 
 base::expected<void, std::string> PinDeskBrowserSite(
