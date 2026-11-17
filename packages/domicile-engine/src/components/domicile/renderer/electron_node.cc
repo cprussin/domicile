@@ -42,15 +42,16 @@ namespace domicile {
 namespace {
 
 // Run by Node as it starts, where Electron runs its renderer's `node_init`:
-// with Node's process object and its internal require, the preload's
-// `electron`, and what the browser said of the window. It makes Node look as
-// it does in an Electron renderer, then loads the preload.
+// with Node's process object and the require Node gives an embedder, which
+// loads only the modules a user may (`module`, not Node's internal ones), the
+// preload's `electron`, and what the browser said of the window. It makes Node
+// look as it does in an Electron renderer, then loads the preload.
 constexpr char kNodeInit[] = R"JS(
-(function (process, internalRequire, electron, options) {
+(function (process, builtinRequire, electron, options) {
   'use strict';
-  const { Module } = internalRequire('internal/modules/cjs/loader');
-  const path = internalRequire('path');
-  const timers = internalRequire('timers');
+  const Module = builtinRequire('module');
+  const path = builtinRequire('path');
+  const timers = builtinRequire('timers');
   const world = globalThis;
 
   // require('electron') is the preload's contextBridge and ipcRenderer.
@@ -113,8 +114,6 @@ constexpr char kNodeInit[] = R"JS(
   if (options.integration && !options.contextIsolated) {
     // The page's own world gets Node's module globals, its file's directory
     // the base of its relative requires.
-    const { makeRequireFunction } =
-        internalRequire('internal/modules/helpers');
     let filename = path.join(options.appPath, 'index.html');
     if (world.location.protocol === 'file:') {
       filename = path.normalize(
@@ -125,7 +124,16 @@ constexpr char kNodeInit[] = R"JS(
     page.paths = Module._nodeModulePaths(path.dirname(filename));
     page.loaded = true;
     world.module = page;
-    world.require = makeRequireFunction(page);
+    // As Node's own require of a module: its requires, resolved from it.
+    const require = (id) => page.require(id);
+    require.resolve = (request, resolveOptions) =>
+        Module._resolveFilename(request, page, false, resolveOptions);
+    require.resolve.paths = (request) =>
+        Module._resolveLookupPaths(request, page);
+    require.main = process.mainModule;
+    require.extensions = Module._extensions;
+    require.cache = Module._cache;
+    world.require = require;
     world.__filename = filename;
     world.__dirname = path.dirname(filename);
   }
