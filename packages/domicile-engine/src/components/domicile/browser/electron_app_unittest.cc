@@ -38,13 +38,16 @@ class FakeDesk final : public ElectronDesk {
                                   const std::string& preload,
                                   ElectronPageCalls page_calls,
                                   base::WeakPtr<ElectronSession> session,
-                                  bool view) override {
+                                  bool view,
+                                  const std::string& title,
+                                  bool hidden) override {
     if (!has_shell) {
       return std::nullopt;
     }
-    calls.push_back(std::string(view ? "open view " : "open ") + url.spec() +
-                    " as " + app_id +
-                    (preload.empty() ? "" : " with " + preload));
+    calls.push_back(
+        std::string(view ? "open view " : "open ") + url.spec() + " as " +
+        app_id + (preload.empty() ? "" : " with " + preload) +
+        (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
     partitions.emplace(id, partition);
@@ -55,6 +58,12 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("load " + id + " " + url.spec());
   }
   void Focus(const std::string& id) override { calls.push_back("focus " + id); }
+  void SetTitle(const std::string& id, const std::string& title) override {
+    calls.push_back("title " + id + " " + title);
+  }
+  void SetHidden(const std::string& id, bool hidden) override {
+    calls.push_back(std::string(hidden ? "hide " : "show ") + id);
+  }
   void AskToClose(const std::string& id) override {
     calls.push_back("ask to close " + id);
   }
@@ -478,6 +487,54 @@ TEST_F(ElectronAppTest, AClickOnTheMenuBarReachesTheApp) {
   sent_.clear();
   page.menu_clicked.Run(8);
   EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, TheUserClosingAWindowAsksTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  desk_.calls.clear();
+
+  page.close_asked.Run();
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"close_asked\",\"window\":3}\n"});
+  // Only the app closes it.
+  EXPECT_TRUE(desk_.calls.empty());
+
+  // A close that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.close_asked.Run();
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, AWindowHasItsOwnTitleAndMayHide) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("title":"Claude","hidden":true})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+
+  app_->Take(R"({"type":"set_title","window":1,"title":"Claude 2"})");
+  app_->Take(R"({"type":"set_hidden","window":1,"hidden":false})");
+  app_->Take(R"({"type":"set_hidden","window":1,"hidden":true})");
+  app_->Take(R"({"type":"set_title","window":2,"title":"no"})");
+  app_->Take(R"({"type":"set_hidden","window":2,"hidden":true})");
+  app_->Take(R"({"type":"set_hidden","window":9,"hidden":true})");
+
+  EXPECT_EQ(desk_.calls,
+            (Lines{"open https://a.test/ as com.anthropic.Claude titled Claude "
+                   "hidden",
+                   "open view https://a.test/ as com.anthropic.Claude",
+                   "title 10 Claude 2", "show 10", "hide 10"}));
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window has a title\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window has hiding\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 9 is not "
+                   "open\",\"window\":9}\n"}));
 }
 
 TEST_F(ElectronAppTest, AMessageBoxGoesOverItsWindowAndItsAnswerBack) {

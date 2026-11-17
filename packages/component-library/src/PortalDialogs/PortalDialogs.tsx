@@ -142,6 +142,8 @@ export const PortalDialogs = memo(
     const apps = useApps(domicile, [
       ...requests.flatMap(appIds),
       ...sessions.map((session) => session.appId),
+      // App windows the pickers offer are named and drawn as their apps.
+      ...(domicile.browser.windows ?? []).map((window) => window.appId),
     ]);
 
     const { portals } = domicile;

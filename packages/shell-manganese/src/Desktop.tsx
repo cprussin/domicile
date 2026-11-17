@@ -202,8 +202,9 @@ export const Desktop = ({
   const { act } = windows;
   const clientIcons = useClientIcons(
     domicile,
-    windows.windows.flatMap((window) =>
-      window.kind === WindowKind.App ? [window.desktopId] : [],
+    // An app window draws its app's icon, when its app has one.
+    windows.windows.map((window) =>
+      window.kind === WindowKind.App ? window.desktopId : window.appId,
     ),
     desktopClientIcons,
   );
@@ -649,7 +650,8 @@ export const Desktop = ({
   // Frames with their bars; the page's own boxes leave those out and still
   // count a hidden tab.
   const shownWindows = useCallback(() => shownWindowsOf(screens), [screens]);
-  // Closed inboxes' windows, which keep running, are no one's to pick.
+  // Closed inboxes' windows and windows their apps hid, which keep running,
+  // are no one's to pick.
   const closedBrowsers = useMemo(() => closedBrowsersOf(windows), [windows]);
   // Shared, so the stage sees a change only when one is shown or hidden.
   const shutIds = useMemo(() => shutIdsOf(windows), [windows]);

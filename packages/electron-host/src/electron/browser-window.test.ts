@@ -28,15 +28,22 @@ describe(createBrowserWindow, () => {
     expect(given.webContents.session).toBe(named.webContents.session);
     expect(sent).toEqual([
       { scheme: "file", session: "persist:cowork", type: "handle_protocol" },
-      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
       {
         session: "persist:cowork",
+        title: "Notes",
         type: "open_window",
         url: "https://notes.test/",
         window: 2,
       },
       {
         session: "persist:cowork",
+        title: "Notes",
         type: "open_window",
         url: "https://notes.test/",
         window: 3,
@@ -52,7 +59,12 @@ describe(createBrowserWindow, () => {
     void window.loadURL("https://notes.test/b");
 
     expect(sent).toEqual([
-      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
       { type: "load_url", url: "https://notes.test/b", window: 1 },
     ]);
   });
@@ -74,6 +86,7 @@ describe(createBrowserWindow, () => {
 
     expect(sent).toEqual([
       {
+        title: "Notes",
         type: "open_window",
         url: "file:///cache/x/resources/app.asar/dist/index.html",
         window: 1,
@@ -138,6 +151,113 @@ describe(createBrowserWindow, () => {
     closed.close();
 
     expect(sent).toEqual([{ type: "close_window", window: 2 }]);
+  });
+
+  it("tells the engine the title the window shows, its own over its page's", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const kept = new BrowserWindow({ title: "Mine" });
+    const taken = new BrowserWindow();
+    kept.on("page-title-updated", (event: { preventDefault: () => void }) =>
+      event.preventDefault(),
+    );
+    void kept.loadURL("https://a.test/");
+    void taken.loadURL("https://b.test/");
+
+    say({ title: "Page", type: "title_changed", window: 1 });
+    say({ title: "Page", type: "title_changed", window: 2 });
+    kept.setTitle("Still mine");
+
+    expect(sent).toEqual([
+      {
+        title: "Mine",
+        type: "open_window",
+        url: "https://a.test/",
+        window: 1,
+      },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://b.test/",
+        window: 2,
+      },
+      { title: "Page", type: "set_title", window: 2 },
+      { title: "Still mine", type: "set_title", window: 1 },
+    ]);
+  });
+
+  it("puts the user's close to the app's close listeners", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const kept = new BrowserWindow();
+    const closed = new BrowserWindow();
+    void kept.loadURL("https://a.test/");
+    void closed.loadURL("https://b.test/");
+    kept.on("close", (event: { preventDefault: () => void }) => {
+      event.preventDefault();
+      kept.hide();
+    });
+    sent.length = 0;
+
+    say({ type: "close_asked", window: 1 });
+    say({ type: "close_asked", window: 2 });
+
+    expect(sent).toEqual([
+      { hidden: true, type: "set_hidden", window: 1 },
+      { type: "close_window", window: 2 },
+    ]);
+    expect(kept.isDestroyed()).toBe(false);
+  });
+
+  it("hides and shows a window, which opens hidden with show: false", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow({ show: false });
+    const heard: string[] = [];
+    window.on("show", () => heard.push("show"));
+    window.on("hide", () => heard.push("hide"));
+    void window.loadURL("https://a.test/");
+    say({ type: "window_loaded", window: 1 });
+
+    expect(window.isVisible()).toBe(false);
+    window.show();
+    expect(window.isVisible()).toBe(true);
+    window.show();
+    window.hide();
+    window.hide();
+    expect(window.isVisible()).toBe(false);
+    window.showInactive();
+
+    expect(sent).toEqual([
+      {
+        hidden: true,
+        title: "Notes",
+        type: "open_window",
+        url: "https://a.test/",
+        window: 1,
+      },
+      { hidden: false, type: "set_hidden", window: 1 },
+      { type: "focus_window", window: 1 },
+      { type: "focus_window", window: 1 },
+      { hidden: true, type: "set_hidden", window: 1 },
+      { hidden: false, type: "set_hidden", window: 1 },
+    ]);
+    expect(heard).toEqual(["show", "hide", "show"]);
+  });
+
+  it("hides a window not yet open by opening it hidden", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+
+    window.hide();
+    void window.loadURL("https://a.test/");
+
+    expect(sent).toEqual([
+      {
+        hidden: true,
+        title: "Notes",
+        type: "open_window",
+        url: "https://a.test/",
+        window: 1,
+      },
+    ]);
   });
 
   it("destroys without asking", () => {
@@ -216,6 +336,7 @@ describe(createBrowserWindow, () => {
     expect(sent).toEqual([
       {
         preload: "source of /app/preload.js",
+        title: "Notes",
         type: "open_window",
         url: "https://notes.test/",
         window: 1,
@@ -491,7 +612,12 @@ describe("a window's menu bar", () => {
     void window.loadURL("https://notes.test/");
 
     expect(sent).toEqual([
-      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
       {
         auto_hide: false,
         menu: [entry(1, "New Note")],
@@ -561,6 +687,32 @@ describe("a window's menu bar", () => {
     ]);
     expect(window.isMenuBarVisible()).toBe(false);
     expect(window.isMenuBarAutoHide()).toBe(false);
+  });
+
+  it("has Electron's properties for it, as Element's settings read them", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    menus.Menu.setApplicationMenu(
+      menus.Menu.buildFromTemplate([{ label: "New Note" }]),
+    );
+    const window = new BrowserWindow({ autoHideMenuBar: true });
+    void window.loadURL("https://notes.test/");
+
+    const autoHid = window.autoHideMenuBar;
+    window.autoHideMenuBar = false;
+    window.menuBarVisible = false;
+
+    expect(autoHid).toBe(true);
+    expect([window.autoHideMenuBar, window.menuBarVisible]).toEqual([
+      false,
+      false,
+    ]);
+    expect(
+      menuBars(sent).map(({ auto_hide, visible }) => ({ auto_hide, visible })),
+    ).toEqual([
+      { auto_hide: true, visible: true },
+      { auto_hide: false, visible: true },
+      { auto_hide: false, visible: false },
+    ]);
   });
 
   it("tells the engine nothing before the window opens", () => {

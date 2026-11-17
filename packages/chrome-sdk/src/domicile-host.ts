@@ -378,8 +378,11 @@ export type DomicileBrowserWindow = {
   readonly x: number;
   readonly y: number;
   /**
-   * Whether the view's app hid it. Keep a hidden view laid out, out of
-   * sight, as a page draws only while laid out. False for every window.
+   * Whether its Electron app hid it. Keep a hidden view laid out, out of
+   * sight, as a page draws only while laid out. A hidden window is open, its
+   * page running, but the app wants it out of sight (win.hide, or `show:
+   * false`): don't show it until it is shown again. Its app shows it and
+   * then asks for focus. False for every other window.
    */
   readonly isHidden: boolean;
   /**
