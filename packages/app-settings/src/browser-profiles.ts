@@ -15,6 +15,7 @@ export type ConfigProfile = BrowserConfig["profiles"][string];
 
 /** The colors a new profile and the color row pick from. */
 export const PROFILE_COLORS = [
+  "#06b6d4",
   "#0d9488",
   "#d97706",
   "#2563eb",
@@ -115,6 +116,7 @@ export const withoutProfile = (
   const { [id]: _removed, ...profiles } = browser.profiles;
   return {
     ...browser,
+    order: browser.order.filter((each) => each !== id),
     profiles,
     sites: Object.fromEntries(
       Object.entries(browser.sites).filter(([, profile]) => profile !== id),
@@ -184,4 +186,36 @@ export const withSite = (
         ? others
         : { ...others, [site]: profile },
   };
+};
+
+/**
+ * The profile ids in the order the desk lists them, as `domicile-config`'s
+ * `ordered_profiles` has it: `order`'s, then the rest by id.
+ */
+export const profileOrder = (browser: BrowserConfig): string[] => {
+  const listed = browser.order.filter((id) => id in browser.profiles);
+  const rest = Object.keys(browser.profiles)
+    .filter((id) => !listed.includes(id))
+    .toSorted();
+  return [...listed, ...rest];
+};
+
+/**
+ * `browser` with profile `id` moved `by` places in the order, which then
+ * names every profile. A move past either end leaves it at that end.
+ */
+export const withProfileMoved = (
+  browser: BrowserConfig,
+  id: string,
+  by: number,
+): BrowserConfig => {
+  const order = profileOrder(browser);
+  const from = order.indexOf(id);
+  if (from === -1) {
+    throw new Error(`The config has no browser profile ${id}`);
+  }
+  const to = Math.min(Math.max(from + by, 0), order.length - 1);
+  order.splice(from, 1);
+  order.splice(to, 0, id);
+  return { ...browser, order };
 };

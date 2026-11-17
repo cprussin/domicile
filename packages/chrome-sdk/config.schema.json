@@ -24,6 +24,14 @@
           "description": "The profile a site opens in when `sites` names none. Not private.",
           "type": "string"
         },
+        "order": {
+          "default": [],
+          "description": "The order the shell lists the profiles in, by id. Profiles it leaves\nout follow, by id.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "profiles": {
           "additionalProperties": {
             "$ref": "#/$defs/BrowserProfile"
@@ -988,6 +996,7 @@
       "default": {
         "default_private_profile": "private",
         "default_profile": "default",
+        "order": [],
         "profiles": {
           "default": {
             "color": "#0d9488",

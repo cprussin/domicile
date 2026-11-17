@@ -62,3 +62,20 @@ fn the_configs_browser_profiles_reach_the_chrome_and_follow_an_edit() {
         })
         .expect("an edit sends the profiles again");
 }
+
+#[test]
+fn the_chrome_gets_the_profiles_in_the_configs_order() {
+    let ordered = A_WORK_PROFILE.replace(
+        r#""sites": {"#,
+        r#""order": ["work", "default"], "sites": {"#,
+    );
+    let compositor = Compositor::started_with(&ordered);
+    let mut chrome = compositor.chrome();
+
+    chrome
+        .wait_for(|message| {
+            ids_and_sites(message).map(|(ids, _)| ids)
+                == Some(vec!["work".into(), "default".into(), "private".into()])
+        })
+        .expect("the profiles come in the config's order, then the rest by id");
+}

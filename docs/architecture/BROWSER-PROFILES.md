@@ -32,6 +32,7 @@ every page and keep one state (one Bitwarden login).
       },
       "private": { "name": "Private", "color": "#a78bfa", "private": true }
     },
+    "order": ["personal", "work", "private"],
     "default_profile": "personal",
     "default_private_profile": "private",
     "sites": { "*.acme.com": "work", "github.com/acme": "work" }
@@ -44,6 +45,9 @@ every page and keep one state (one Bitwarden login).
   extension switches to it. Unset leaves the switches to the user: each
   starts on, or off in a private profile. `private` keeps nothing past the
   profile's last page.
+- **`order`**: the order the compositor sends the profiles in, and so the
+  order the shell and Settings list them in: these ids, then the rest by id.
+  Each id must be a profile, once.
 - **`default_profile`**: where an unlisted site opens. Never private.
 - **`default_private_profile`**: where "new private window" opens. Always
   private.

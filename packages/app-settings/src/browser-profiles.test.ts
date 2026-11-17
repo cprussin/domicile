@@ -4,14 +4,17 @@ import type { BrowserConfig } from "./browser-profiles";
 import {
   isProfileSite,
   profileIdFor,
+  profileOrder,
   withDefault,
   withoutProfile,
+  withProfileMoved,
   withSite,
 } from "./browser-profiles";
 
 const BROWSER: BrowserConfig = {
   default_private_profile: "private",
   default_profile: "personal",
+  order: [],
   profiles: {
     personal: {
       color: "#0d9488",
@@ -71,6 +74,39 @@ describe(withoutProfile, () => {
     expect(() => withoutProfile(BROWSER, "personal")).toThrow(
       "personal is a default profile, which can't be removed",
     );
+  });
+
+  it("takes the profile out of the order", () => {
+    const browser = { ...BROWSER, order: ["work", "personal"] };
+    expect(withoutProfile(browser, "work").order).toStrictEqual(["personal"]);
+  });
+});
+
+describe(profileOrder, () => {
+  it("lists the order's profiles, then the rest by id", () => {
+    expect(profileOrder({ ...BROWSER, order: ["work"] })).toStrictEqual([
+      "work",
+      "personal",
+      "private",
+    ]);
+  });
+});
+
+describe(withProfileMoved, () => {
+  it("moves a profile and writes the whole order", () => {
+    expect(withProfileMoved(BROWSER, "work", -1).order).toStrictEqual([
+      "personal",
+      "work",
+      "private",
+    ]);
+  });
+
+  it("stops at either end", () => {
+    expect(withProfileMoved(BROWSER, "personal", -1).order).toStrictEqual([
+      "personal",
+      "private",
+      "work",
+    ]);
   });
 });
 

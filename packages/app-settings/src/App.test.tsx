@@ -1,7 +1,13 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import type { Options } from "@domicile-desktop/sdk/options";
 import { defineOptions, option } from "@domicile-desktop/sdk/options";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
@@ -1181,6 +1187,37 @@ describe(App, () => {
       });
     });
 
+    it("moves a profile in the config's order", async () => {
+      const { host, user } = await openProfiles();
+      const personal = await profileCard("Personal");
+      expect(
+        personal.getByRole("button", { name: "Move Personal up" }),
+      ).toBeDisabled();
+      const work = await profileCard("Work");
+      await user.click(work.getByRole("button", { name: "Move Work up" }));
+      // Unordered, the config lists them by id: personal, private, work.
+      await waitFor(() => {
+        expect(written(host.writes).browser.order).toEqual([
+          "personal",
+          "work",
+          "private",
+        ]);
+      });
+    });
+
+    it("sets any color from the well", async () => {
+      const { host } = await openProfiles();
+      const work = await profileCard("Work");
+      const well = work.getByLabelText("Work's color, any color");
+      fireEvent.change(well, { target: { value: "#2bd96b" } });
+      fireEvent.blur(well);
+      await waitFor(() => {
+        expect(written(host.writes).browser.profiles.work?.color).toBe(
+          "#2bd96b",
+        );
+      });
+    });
+
     it("adds and removes a profile in the config", async () => {
       const { host, user } = await openProfiles();
       await user.type(
@@ -1190,7 +1227,7 @@ describe(App, () => {
       await user.click(screen.getByRole("button", { name: "Add profile" }));
       await waitFor(() => {
         expect(written(host.writes).browser.profiles["side-project"]).toEqual({
-          color: "#2563eb",
+          color: "#06b6d4",
           name: "Side Project",
           private: false,
         });

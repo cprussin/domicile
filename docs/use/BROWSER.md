@@ -41,6 +41,7 @@ The button at the start of the address bar shows the page's profile. Click it
 to:
 
 - Move the page to another profile, or open it in a new window of one.
+  Middle-click a profile to open the page in a new window of it.
 - Open this site in a profile from now on.
 - Switch the profile's extensions on and off.
 
@@ -49,9 +50,10 @@ Following a link to another profile's site moves the page there.
 
 <!-- tab: Settings app -->
 
-Open **Settings**, then **Profiles**: a card for each profile with its
-extension switches, and the sites that open outside your default profile.
-Add a profile or change its color in the config file.
+Open **Settings**, then **Profiles**: a card for each profile with its color
+and extension switches, and the sites that open outside your default profile.
+The arrows on a card move the profile up or down, in Settings and in the
+profile menu. The rainbow circle after the colors picks any color.
 
 <!-- tab: Config file -->
 
@@ -63,12 +65,16 @@ Add a profile or change its color in the config file.
       "work": { "name": "Work", "color": "#d97706" },
       "private": { "name": "Private", "color": "#a78bfa", "private": true }
     },
+    "order": ["personal", "work", "private"],
     "default_profile": "personal",
     "default_private_profile": "private",
     "sites": { "*.acme.com": "work" }
   }
 }
 ```
+
+`order` is the order the profile menu and Settings list the profiles in.
+Profiles it leaves out follow, by id.
 
 <!-- /tabs -->
 

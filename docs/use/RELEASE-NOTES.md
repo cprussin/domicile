@@ -29,6 +29,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 - Pop a video out of its page to float it over everything. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2116](https://github.com/cprussin/domicile/pull/2116) · [#2177](https://github.com/cprussin/domicile/pull/2177)
 - HDR per monitor in Settings, and 10-bit color without banding. [Monitors](MONITORS.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
 - Press and hold Back or Forward to jump to any page before or after. [#2251](https://github.com/cprussin/domicile/pull/2251)
+- Put your browser profiles in any order and give them any color, in Settings. [Profiles](BROWSER.md#profiles) · [PR_NUMBER](https://github.com/cprussin/domicile/pull/PR_NUMBER)
 - The tray's menu pins icons and switches extensions. [#2137](https://github.com/cprussin/domicile/pull/2137)
 - Tap Super, or swipe up with four fingers, for the overview. [#2065](https://github.com/cprussin/domicile/pull/2065) · [#2148](https://github.com/cprussin/domicile/pull/2148)
 - The night light fades in and out. [#2181](https://github.com/cprussin/domicile/pull/2181)

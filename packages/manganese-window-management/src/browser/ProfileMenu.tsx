@@ -14,6 +14,7 @@ import type { CSSProperties } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import { inkOn } from "./profile-ink";
 import type { PinnedSite, ProfileExtension } from "./useBrowserProfile";
 
 type Props = {
@@ -139,6 +140,11 @@ export const ProfileMenu = ({
                     ? `${each.name}, this page's profile`
                     : `Move this page to ${each.name}`
                 }
+                // As a middle-click on a link: a copy, in a new window.
+                onMiddlePress={() => {
+                  setOpen(false);
+                  onOpenInNew(each.id);
+                }}
                 onPress={() => {
                   setOpen(false);
                   if (!current) {
@@ -258,12 +264,13 @@ const hostOf = (url: string): string => {
 
 /**
  * Inline style handing the profile's color to the styles below as
- * `--profile-color`. Inline because the color is the config's, at runtime.
+ * `--profile-color`, and the text color on it as `--profile-ink`. Inline because the color is the config's, at runtime.
  */
 const colored = (
   profile: BrowserProfile,
 ): CSSProperties & Record<`--${string}`, string> => ({
   "--profile-color": profile.color,
+  "--profile-ink": inkOn(profile.color),
 });
 
 // A solid capsule in the profile's color before the address, as the private
@@ -281,7 +288,7 @@ const chipStyles = hstack({
   blockSize: 6,
   border: "none",
   borderRadius: "full",
-  color: "white",
+  color: "var(--profile-ink)",
   cursor: "pointer",
   flex: "none",
   fontSize: "sm",

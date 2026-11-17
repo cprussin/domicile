@@ -775,6 +775,18 @@ fn profiles_map_sites_to_profiles() {
 }
 
 #[test]
+fn profiles_list_in_their_order_then_by_id() {
+    let browser = Config::parse(&browser_config(r#", "order": ["work"]"#))
+        .unwrap()
+        .browser;
+    let ids: Vec<&str> = browser
+        .ordered_profiles()
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert_eq!(ids, ["work", "incognito", "personal"]);
+}
+
+#[test]
 fn a_profile_config_that_contradicts_itself_is_refused() {
     let refused = [
         // A site in a profile that doesn't exist.
@@ -784,6 +796,9 @@ fn a_profile_config_that_contradicts_itself_is_refused() {
         // A site that is no host.
         browser_config(r#", "sites": { "https://acme.com": "work" }"#),
         browser_config(r#", "sites": { "acme.com/": "work" }"#),
+        // An order naming a profile that doesn't exist, or one twice.
+        browser_config(r#", "order": ["office"]"#),
+        browser_config(r#", "order": ["work", "work"]"#),
     ];
     for text in refused {
         let err = Config::parse(&text).unwrap_err();

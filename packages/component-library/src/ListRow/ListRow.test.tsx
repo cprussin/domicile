@@ -157,6 +157,29 @@ describe(ListRow, () => {
       expect(pressed).toStrictEqual(["pin", "row"]);
     });
 
+    it("takes a middle-click apart from a click", async () => {
+      const pressed: string[] = [];
+      render(
+        <List label="Profiles">
+          <ListRow
+            label="Work"
+            onMiddlePress={() => {
+              pressed.push("middle");
+            }}
+            onPress={() => {
+              pressed.push("press");
+            }}
+          />
+        </List>,
+      );
+      const row = screen.getByRole("button", { name: "Work" });
+
+      await userEvent.pointer({ keys: "[MouseMiddle]", target: row });
+      await userEvent.click(row);
+
+      expect(pressed).toStrictEqual(["middle", "press"]);
+    });
+
     it("says it is busy while its request is out", () => {
       render(
         <List>

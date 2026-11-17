@@ -61,6 +61,11 @@ export type BrowserConfig = {
   /** The profile a site opens in when `sites` names none. Not private. */
   default_profile?: string;
   /**
+   * The order the shell lists the profiles in, by id. Profiles it leaves
+   * out follow, by id.
+   */
+  order?: string[];
+  /**
    * The profiles, by id. An id is a directory name: lowercase letters,
    * digits and `-`.
    */

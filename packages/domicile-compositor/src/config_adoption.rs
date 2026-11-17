@@ -60,8 +60,7 @@ pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) 
 pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) {
     host.set_browser_profiles(
         browser
-            .profiles
-            .iter()
+            .ordered_profiles()
             .map(|(id, profile)| domicile_protocol::BrowserProfile {
                 id: id.clone(),
                 name: profile.name.clone(),

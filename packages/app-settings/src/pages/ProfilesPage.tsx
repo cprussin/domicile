@@ -3,6 +3,8 @@ import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Select } from "@domicile-desktop/component-library/Select";
 import { Switch } from "@domicile-desktop/component-library/Switch";
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
@@ -21,8 +23,10 @@ import {
   withNewProfile,
   withoutProfile,
   withProfileChanged,
+  withProfileMoved,
   withSite,
 } from "../browser-profiles";
+import { ColorWell } from "../ColorWell";
 import type { ConfigEditor, Report } from "../config-editor";
 import { ExtensionIcon } from "../ExtensionIcon";
 import type { Extensions } from "../extensions";
@@ -88,14 +92,16 @@ export const ProfilesPage = ({
           {failure instanceof Error ? failure.message : String(failure)}
         </Notice>
       )}
-      {(listed === undefined ? [] : inCardOrder(listed)).map((profile) => (
+      {(listed?.profiles ?? []).map((profile, at, profiles) => (
         <ProfileCard
           change={change}
           extensionIcon={(id) => installed.get(id)?.icon}
           extensionName={(id) => installed.get(id)?.name ?? id}
+          first={at === 0}
           isDefault={profile.id === listed?.defaultProfile}
           isDefaultPrivate={profile.id === listed?.defaultPrivateProfile}
           key={profile.id}
+          last={at === profiles.length - 1}
           onSwitch={(extension, enabled) => {
             host
               .setExtensionEnabled(extension, enabled, profile.id)
@@ -142,27 +148,12 @@ export const ProfilesPage = ({
   );
 };
 
-/**
- * The default profile first and the default private one last, with the rest
- * by name between.
- */
-const inCardOrder = (listed: BrowserProfiles) => {
-  const rank = (id: string) => {
-    if (id === listed.defaultProfile) {
-      return 0;
-    } else if (id === listed.defaultPrivateProfile) {
-      return 2;
-    } else {
-      return 1;
-    }
-  };
-  return listed.profiles.toSorted(
-    (a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name),
-  );
-};
-
 type ProfileCardProps = {
   profile: BrowserProfile;
+  /** First in the order, so it can't move up. */
+  first: boolean;
+  /** Last in the order, so it can't move down. */
+  last: boolean;
   isDefault: boolean;
   isDefaultPrivate: boolean;
   /** Changes the config's `browser`, or `undefined` when it can't change. */
@@ -181,12 +172,17 @@ const ProfileCard = ({
   change,
   extensionIcon,
   extensionName,
+  first,
   isDefault,
   isDefaultPrivate,
+  last,
   onSwitch,
   profile,
 }: ProfileCardProps) => {
   const nameId = useId();
+  const profileColor = profile.color.toLowerCase();
+  // Picked from the swatches, else from the well, which then shows it.
+  const swatched = PROFILE_COLORS.some((color) => color === profileColor);
   const on = profile.extensions
     .filter(({ enabled }) => enabled)
     .map(({ id }) => id);
@@ -207,6 +203,26 @@ const ProfileCard = ({
         )}
         {change !== undefined && (
           <span className={cardActionsStyles}>
+            <IconButton
+              disabled={first}
+              label={`Move ${profile.name} up`}
+              onClick={() => {
+                change((browser) => withProfileMoved(browser, profile.id, -1));
+              }}
+              size="sm"
+            >
+              <ArrowUpIcon size={14} />
+            </IconButton>
+            <IconButton
+              disabled={last}
+              label={`Move ${profile.name} down`}
+              onClick={() => {
+                change((browser) => withProfileMoved(browser, profile.id, 1));
+              }}
+              size="sm"
+            >
+              <ArrowDownIcon size={14} />
+            </IconButton>
             {!isDefault && !isDefaultPrivate && (
               <Button
                 onClick={() => {
@@ -241,7 +257,7 @@ const ProfileCard = ({
           >
             {PROFILE_COLORS.map((color) => (
               <button
-                aria-checked={color === profile.color}
+                aria-checked={color === profileColor}
                 aria-label={color}
                 className={swatchStyles}
                 disabled={change === undefined}
@@ -256,6 +272,18 @@ const ProfileCard = ({
                 type="button"
               />
             ))}
+            <ColorWell
+              disabled={change === undefined}
+              label={`${profile.name}'s color, any color`}
+              onCommit={(color) => {
+                change?.((browser) =>
+                  withProfileChanged(browser, profile.id, { color }),
+                );
+              }}
+              rainbow={swatched}
+              shape="round"
+              value={profile.color}
+            />
           </div>
         </SettingRow>
         <SettingRow
@@ -547,7 +575,7 @@ const cardBodyStyles = flex({
   padding: 4,
 });
 
-const swatchesStyles = flex({ gap: 2 });
+const swatchesStyles = flex({ align: "center", gap: 2 });
 
 const swatchStyles = circle({
   _checked: {

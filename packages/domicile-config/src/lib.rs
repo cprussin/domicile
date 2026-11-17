@@ -872,6 +872,9 @@ pub struct BrowserConfig {
     /// The profiles, by id. An id is a directory name: lowercase letters,
     /// digits and `-`.
     pub profiles: BTreeMap<String, BrowserProfile>,
+    /// The order the shell lists the profiles in, by id. Profiles it leaves
+    /// out follow, by id.
+    pub order: Vec<String>,
     /// The profile a site opens in when `sites` names none. Not private.
     pub default_profile: String,
     /// The profile a new private window opens in. Private.
@@ -902,6 +905,7 @@ impl Default for BrowserConfig {
                     profile("Private", [0xa7, 0x8b, 0xfa], true),
                 ),
             ]),
+            order: Vec::new(),
             default_profile: "default".to_string(),
             default_private_profile: "private".to_string(),
             sites: BTreeMap::new(),
@@ -946,6 +950,20 @@ fn is_profile_site(site: &str) -> bool {
 }
 
 impl BrowserConfig {
+    /// The profiles in [`BrowserConfig::order`]: those it lists, then the
+    /// rest by id.
+    pub fn ordered_profiles(&self) -> impl Iterator<Item = (&String, &BrowserProfile)> {
+        let listed = self
+            .order
+            .iter()
+            .filter_map(|id| self.profiles.get_key_value(id));
+        let rest = self
+            .profiles
+            .iter()
+            .filter(|(id, _)| !self.order.contains(id));
+        listed.chain(rest)
+    }
+
     fn validate(&self) -> Result<(), ConfigError> {
         let invalid = |message: String| Err(ConfigError::Validation(message));
         let profile = |id: &str| self.profiles.get(id);
@@ -954,6 +972,17 @@ impl BrowserConfig {
                 "browser.profiles {id:?} is not a profile id, which is lowercase letters, \
                  digits and `-`"
             ));
+        }
+        if let Some(id) = self.order.iter().find(|id| profile(id).is_none()) {
+            return invalid(format!("browser.order {id:?} is not in browser.profiles"));
+        }
+        if let Some((_, id)) = self
+            .order
+            .iter()
+            .enumerate()
+            .find(|(at, id)| self.order[..*at].contains(id))
+        {
+            return invalid(format!("browser.order names {id:?} twice"));
         }
         let extension = self
             .profiles

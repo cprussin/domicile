@@ -33,6 +33,7 @@ export const browserProfileSchema = z.strictObject({
 export const browserConfigSchema = z.strictObject({
   default_private_profile: z.string().prefault("private"),
   default_profile: z.string().prefault("default"),
+  order: z.array(z.string()).prefault([]),
   profiles: z.record(z.string(), browserProfileSchema).prefault({
     default: {
       color: "#0d9488",
@@ -504,6 +505,7 @@ export const configSchema = z.strictObject({
   browser: browserConfigSchema.prefault({
     default_private_profile: "private",
     default_profile: "default",
+    order: [],
     profiles: {
       default: {
         color: "#0d9488",

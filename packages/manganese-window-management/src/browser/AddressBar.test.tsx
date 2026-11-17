@@ -181,6 +181,20 @@ describe("AddressBar", () => {
 
       expect(calls).toStrictEqual(["open personal"]);
     });
+
+    it("opens the page in a new window of a profile middle-clicked", async () => {
+      const calls: string[] = [];
+      render(<AddressBar {...BAR} profile={withProfiles(calls)} />);
+
+      await userEvent.click(control("Browser profile: Work"));
+      await userEvent.pointer({
+        keys: "[MouseMiddle]",
+        target: control("Move this page to Personal"),
+      });
+
+      expect(calls).toStrictEqual(["open personal"]);
+    });
+
     it("pins the page's site to a profile", async () => {
       const calls: string[] = [];
       render(
