@@ -57,6 +57,13 @@ export type Extensions = {
   /** Switches extension `id` on or off. Rejects for one not installed. */
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
   /**
+   * Shows browser profile `profile`'s extensions in `list`, and has
+   * `activate` click them there, on its active page: as a browser's toolbar
+   * shows its window's profile's. Name the profile of the page last focused.
+   * The default profile's until called, and while `profile` loads.
+   */
+  setProfile: (profile: string) => void;
+  /**
    * Uninstalls extension `id`. Rejects for one the desk's config installed,
    * which comes back on the next start.
    */
@@ -72,6 +79,7 @@ export type ExtensionsHost = Pick<
   | "installedExtensions"
   | "removeEventListener"
   | "setExtensionEnabled"
+  | "setExtensionsProfile"
   | "uninstallExtension"
 >;
 
@@ -100,11 +108,19 @@ export const extensions = (host: ExtensionsHost): Extensions => {
       installed: (listener) =>
         hostEvent(host, "installedextensionschanged", () => listener()),
       popup: (listener) =>
-        hostEvent(host, "extensionpopuprequested", ({ extensionId, popup }) =>
-          listener(extensionPopupSchema.parse({ id: extensionId, popup })),
+        hostEvent(
+          host,
+          "extensionpopuprequested",
+          ({ extensionId, popup, profile }) =>
+            listener(
+              extensionPopupSchema.parse({ id: extensionId, popup, profile }),
+            ),
         ),
     }),
     setEnabled: (id, enabled) => host.setExtensionEnabled(id, enabled),
+    setProfile: (profile) => {
+      host.setExtensionsProfile(profile);
+    },
     uninstall: (id) => host.uninstallExtension(id),
   };
 };

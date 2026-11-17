@@ -200,7 +200,11 @@ export const TrayIconsMenu = ({
                     onActivate(action.id);
                     domicile.extensions.activate(action.id);
                     if (action.popup !== undefined) {
-                      onOpen({ id: action.id, popup: action.popup });
+                      onOpen({
+                        id: action.id,
+                        popup: action.popup,
+                        profile: action.profile,
+                      });
                     }
                   }}
                   onSettings={onSettings}
