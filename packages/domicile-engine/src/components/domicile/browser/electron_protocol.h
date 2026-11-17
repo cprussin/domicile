@@ -247,6 +247,19 @@ struct ElectronSendToPage {
   base::ListValue args;
 };
 
+// webContents.executeJavaScript: runs `code` in the main world of window
+// `window`'s page, as if the user had acted when `user_gesture`, and answers
+// with ElectronJavaScriptResult under `call`, once a promise it gives settles.
+struct ElectronExecuteJavaScript {
+  ElectronWindow window;
+  int call = 0;
+  std::string code;
+  bool user_gesture = false;
+
+  friend bool operator==(const ElectronExecuteJavaScript&,
+                         const ElectronExecuteJavaScript&) = default;
+};
+
 // webContents.postMessage: `message` and the main process's ends of `ports`
 // to window `window`'s page, on `channel`.
 struct ElectronPostToPage {
@@ -573,7 +586,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronPermissionAnswer,
                                      ElectronSetViews,
                                      ElectronSetMenuBar,
-                                     ElectronShowMessageBox>;
+                                     ElectronShowMessageBox,
+                                     ElectronExecuteJavaScript>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -603,6 +617,12 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
 // The lines the engine sends, each ending in a newline.
 // `schemes` are the apps' own schemes the engine registered as it started.
 std::string ElectronReady(const std::vector<ElectronScheme>& schemes);
+// The answer to window `window`'s executeJavaScript `call`: what the code
+// gave, or why it gave nothing.
+std::string ElectronJavaScriptResult(
+    ElectronWindow window,
+    int call,
+    const base::expected<base::Value, std::string>& result);
 // The answer to session call `call`: its result (null when it has none), or
 // why it failed.
 std::string ElectronSessionResult(

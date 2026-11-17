@@ -2360,6 +2360,7 @@ void DomicileHost::openAppWindow(ScriptState*,
                                  const String& url,
                                  const String& app_id,
                                  const String& reuse,
+                                 const String& profile,
                                  ExceptionState& exception_state) {
   // Resolved against this document, as openBrowserWindow's is.
   const KURL resolved = window_->CompleteURL(url);
@@ -2381,7 +2382,7 @@ void DomicileHost::openAppWindow(ScriptState*,
     return;
   }
   if (Ready(exception_state)) {
-    windows_->OpenApp(resolved, app_id, *named);
+    windows_->OpenApp(resolved, app_id, *named, profile);
   }
 }
 
@@ -2500,6 +2501,61 @@ ScriptPromise<IDLString> DomicileHost::browserProfileFor(
   auto promise = resolver->Promise();
   windows_->ProfileFor(
       resolved, BindOnce(&SettleBrowserProfile, WrapPersistent(resolver)));
+  return promise;
+}
+
+namespace {
+
+// The browser's answer to browserSiteFor(): empty for none.
+void SettleBrowserSite(ScriptPromiseResolver<IDLString>* resolver,
+                       const String& site) {
+  resolver->Resolve(site.IsNull() ? g_empty_string : site);
+}
+
+}  // namespace
+
+ScriptPromise<IDLString> DomicileHost::browserSiteFor(
+    ScriptState* script_state,
+    const String& url,
+    ExceptionState& exception_state) {
+  // Resolved against this document, as browserProfileFor's is.
+  const KURL resolved = window_->CompleteURL(url);
+  if (!resolved.IsValid()) {
+    exception_state.ThrowTypeError("url must be an address");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->SiteFor(resolved,
+                    BindOnce(&SettleBrowserSite, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLUndefined> DomicileHost::pinBrowserSite(
+    ScriptState* script_state,
+    const String& site,
+    const String& profile,
+    ExceptionState& exception_state) {
+  if (site.empty()) {
+    exception_state.ThrowTypeError("site must be a site, such as a host");
+    return EmptyPromise();
+  }
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->PinSite(site, profile,
+                    BindOnce(&ExtensionAnswered, WrapPersistent(resolver)));
   return promise;
 }
 
@@ -2718,6 +2774,7 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
     const HeapVector<Member<DomicileFetchHeader>>& headers,
     const String& body,
     const String& sapisid_hash_origin,
+    const String& profile,
     ExceptionState& exception_state) {
   const KURL resolved = window_->CompleteURL(url);
   if (!resolved.IsValid()) {
@@ -2747,7 +2804,7 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
   auto promise = resolver->Promise();
   // The browser checks the method and the body: see shell_fetch.h.
   shell_fetch_->Fetch(resolved, method, std::move(sent), body,
-                      sapisid_hash_origin,
+                      sapisid_hash_origin, profile,
                       BindOnce(&Fetched, WrapPersistent(resolver)));
   return promise;
 }
@@ -2810,7 +2867,8 @@ void DomicileHost::ProfilesChanged(
     listed.push_back(MakeGarbageCollected<DomicileBrowserProfile>(
         profile->id, profile->name, profile->color, profile->private_browsing,
         profile->id == default_profile,
-        profile->id == default_private_profile));
+        profile->id == default_private_profile, profile->pinned_sites,
+        profile->config_sites));
   }
   browser_profiles_ =
       MakeGarbageCollected<FrozenArray<DomicileBrowserProfile>>(

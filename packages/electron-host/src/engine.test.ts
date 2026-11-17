@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { Err } from "@cprussin/option-result";
+import { EventEmitter } from "node:events";
+import type { Result } from "@cprussin/option-result";
+import { Err, Ok } from "@cprussin/option-result";
 import type { Engine } from "./engine";
-import { connectEngine } from "./engine";
+import { connectEngine, connectEngineWhenUp } from "./engine";
 import type { FakeEngine } from "./engine-fixture";
 import { startFakeEngine } from "./engine-fixture";
 
@@ -169,5 +171,57 @@ describe(connectEngine, () => {
     fake.drop();
 
     expect(await lost).toBe("the engine closed this app's connection");
+  });
+});
+
+describe(connectEngineWhenUp, () => {
+  const notUp: Result<Engine, string> = Err(
+    "can't reach the engine at /run/electron.sock: connect ENOENT /run/electron.sock",
+  );
+
+  it("tries again until the desktop's engine is listening", async () => {
+    const engine = { events: new EventEmitter() } as unknown as Engine;
+    const answers: Result<Engine, string>[] = [notUp, notUp, Ok(engine)];
+    let tries = 0;
+
+    const result = await connectEngineWhenUp(
+      () => Promise.resolve(answers[tries++] ?? notUp),
+      10_000,
+      () => Promise.resolve(),
+    );
+
+    expect(result).toEqual(Ok(engine));
+    expect(tries).toBe(3);
+  });
+
+  it("says how long it waited for an engine that never came up", async () => {
+    const result = await connectEngineWhenUp(
+      () => Promise.resolve(notUp),
+      0,
+      () => Promise.resolve(),
+    );
+
+    expect(
+      result.match({ Err: (why) => why, Ok: () => "connected" }),
+    ).toContain("still wasn't up after 0s");
+  });
+
+  it("answers a refusal at once", async () => {
+    let tries = 0;
+    const refused: Result<Engine, string> = Err(
+      "the engine refused this app: version 2",
+    );
+
+    expect(
+      await connectEngineWhenUp(
+        () => {
+          tries += 1;
+          return Promise.resolve(refused);
+        },
+        10_000,
+        () => Promise.resolve(),
+      ),
+    ).toEqual(refused);
+    expect(tries).toBe(1);
   });
 });

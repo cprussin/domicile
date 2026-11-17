@@ -269,6 +269,17 @@ export type DomicileBrowserProfile = {
    * profile is, and it is private.
    */
   readonly isDefaultPrivate: boolean;
+  /**
+   * The sites that open here because the user pinned them
+   * (DomicileHost.pinBrowserSite). Each is a host, `*.host`, or a host and
+   * path, as the config's `browser.sites` keys are.
+   */
+  readonly pinnedSites: readonly string[];
+  /**
+   * The sites that open here because the config's `browser.sites` names
+   * them. Only the config changes these.
+   */
+  readonly configSites: readonly string[];
 };
 
 /**
@@ -1060,8 +1071,17 @@ export type DomicileHost = {
    * The browser matches the window, so two quick calls never open two.
    * Throws TypeError for another `reuse`, and for "focus" or "navigate" with
    * no `appId`.
+   *
+   * `profile` opens a new window in that browser profile, one of
+   * `browserProfiles`; empty for the one `url`'s site opens in
+   * (browserProfileFor), as for openBrowserWindow.
    */
-  openAppWindow(url: string, appId?: string, reuse?: string): void;
+  openAppWindow(
+    url: string,
+    appId?: string,
+    reuse?: string,
+    profile?: string,
+  ): void;
   /**
    * How many elements in browser window `id`'s main document match the CSS
    * `selector`, as a <webview>'s countMatches() counts them. A hidden window
@@ -1093,6 +1113,24 @@ export type DomicileHost = {
    * by this. Throws TypeError for a `url` that is no address.
    */
   browserProfileFor(url: string): Promise<string>;
+  /**
+   * The site that routes `url` to its profile: the entry of the config's
+   * `browser.sites`, or of the sites the user pinned, that browserProfileFor
+   * matched. Empty when none did, so it opens in the default profile.
+   * Throws TypeError for a `url` that is no address.
+   */
+  browserSiteFor(url: string): Promise<string>;
+  /**
+   * Opens `site` in browser profile `profile` from now on, kept across
+   * restarts; the default profile unpins it. `site` is a host, `*.host`, or
+   * a host and path, as the config's `browser.sites` keys are; it shows in
+   * the profile's `pinnedSites` from the next `browserprofileschanged`.
+   * Pages already open stay where they are. Throws TypeError for an empty
+   * site or profile. Rejects with an OperationError saying why for a site
+   * the config's sites name, which only the config changes, for one that is
+   * no such key, and for a profile the desk does not have.
+   */
+  pinBrowserSite(site: string, profile: string): Promise<void>;
   /**
    * The user clicked entry `command` of window `id`'s menu bar
    * (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a
@@ -1159,8 +1197,9 @@ export type DomicileHost = {
   resizePictureInPictureVideo(id: string, width: number, height: number): void;
   /**
    * Sends `method`, "GET" or "POST", to `url` from the browser process with
-   * the cookies of the profile the ordinary browser windows use, so a bar
-   * item can read a site the user is signed in to. A POST sends `body`, as a
+   * the cookies of browser profile `profile`, one of `browserProfiles`, or
+   * for an empty one the default profile's, so a bar item can read a site
+   * the user is signed in to. A POST sends `body`, as a
    * same-origin CORS request from `url`'s own origin.
    * Resolves with the response, whatever its status. Rejects with a
    * NetworkError for a network failure or a refusal: an address that is not
@@ -1174,6 +1213,9 @@ export type DomicileHost = {
    * SAPISIDHASH` header Google's first-party APIs take, computed from the
    * SAPISID cookie, and follows no redirect. The page never sees the cookie.
    *
+   * Also rejects with a NetworkError for a profile the desk does not have,
+   * or a private one, which keeps no sign-ins to fetch with.
+   *
    * Handled by the browser process, over its own pipe: see
    * components/domicile/mojom/shell_fetch.mojom.
    */
@@ -1183,6 +1225,7 @@ export type DomicileHost = {
     headers: readonly DomicileFetchHeader[],
     body: string | null,
     sapisidHashOrigin: string | null,
+    profile?: string,
   ): Promise<DomicileFetchResponse>;
   /**
    * The screens of the desktop.

@@ -124,6 +124,12 @@ pub const KNOWN: &str = r#"{
     { "scheme": "cowork-artifact-read", "privileges": ["standard", "secure", "corsEnabled", "supportFetchAPI"] },
     { "scheme": "cowork-file", "privileges": ["standard", "secure", "supportFetchAPI"] },
     { "scheme": "sentry-ipc", "privileges": ["secure", "bypassCSP", "corsEnabled", "supportFetchAPI"] }
+  ],
+  "openai-codex-electron": [
+    { "scheme": "codex-sandbox", "privileges": ["standard", "secure", "corsEnabled", "supportFetchAPI"] }
+  ],
+  "slack-desktop": [
+    { "scheme": "slack-webapp-dev", "privileges": ["standard", "secure", "bypassCSP", "corsEnabled", "supportFetchAPI"] }
   ]
 }"#;
 

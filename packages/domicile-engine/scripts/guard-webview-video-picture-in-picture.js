@@ -19,6 +19,9 @@
 //         source=…                     window is the one drawn here, and
 //                                      `source` where it was in its page
 //                                      (x,y,widthxheight, or none)
+//   GUARD pip-sized id=… source=…      the first list giving a video a
+//                                      size, and its source then
+//   GUARD pip-shown id=…               its element drew its first surface
 //   GUARD pip-closed id=…              it closed that video
 //   GUARD pip-none                     the list emptied after a video
 //
@@ -57,6 +60,7 @@ export const HostShell = (_root, desktop) => {
   });
 
   const shown = new Map();
+  const sized = new Set();
   let listed = false;
   desktop.addEventListener("pictureinpicturevideoschanged", () => {
     const videos = desktop.pictureInPictureVideos ?? [];
@@ -68,10 +72,17 @@ export const HostShell = (_root, desktop) => {
       say(
         `pip id=${video.id} ours=${drawn.has(video.window)} size=${video.width}x${video.height} playing=${video.playing} source=${source}`,
       );
+      if (!sized.has(video.id) && video.width > 0 && video.height > 0) {
+        sized.add(video.id);
+        say(`pip-sized id=${video.id} source=${source}`);
+      }
       if (!shown.has(video.id)) {
         const app = document.createElement("app");
         app.style.inlineSize = "320px";
         app.style.blockSize = "180px";
+        app.addEventListener("domicile-picture-in-picture-shown", () => {
+          say(`pip-shown id=${video.id}`);
+        });
         app.setAttribute("picture-in-picture", video.id);
         document.body.append(app);
         shown.set(video.id, app);

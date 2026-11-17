@@ -97,6 +97,13 @@ export type EngineRequest =
       /** The names of the app's ports that go with it, each "m" and a number. */
       readonly ports: string[];
     }
+  | {
+      readonly type: "execute_javascript";
+      readonly window: number;
+      readonly call: number;
+      readonly code: string;
+      readonly user_gesture?: true;
+    }
   | ShowMessageBoxMessage
   | PortRequest
   | ProtocolRequest
@@ -164,6 +171,14 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("page_gone"), window: z.number() }),
+  /** What the app's executeJavaScript `call` gave, or why it gave nothing. */
+  z.object({
+    call: z.number(),
+    error: z.string().optional(),
+    result: z.unknown().optional(),
+    type: z.literal("javascript_result"),
+    window: z.number(),
+  }),
   /** The size the shell gives a page, a window's or a view's. */
   z.object({
     height: z.number(),
@@ -368,5 +383,41 @@ const parseJson = (text: string): unknown => {
     } else {
       throw error;
     }
+  }
+};
+
+/**
+ * The engine at `path`, once it's up: the desktop starts its apps as it
+ * comes up, before the engine may be listening, so a socket that isn't there
+ * or isn't answering yet is tried again until `wait` milliseconds have passed.
+ * Any other failure, or one that outlasts the wait, is the answer.
+ */
+export const connectEngineWhenUp = async (
+  connect: () => Promise<Result<Engine, string>>,
+  wait: number,
+  sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
+): Promise<Result<Engine, string>> => {
+  const started = Date.now();
+  for (;;) {
+    const result = await connect();
+    const notUpYet = result.match({
+      Err: (why) =>
+        why.startsWith("can't reach the engine") &&
+        /ENOENT|ECONNREFUSED/.test(why),
+      Ok: () => false,
+    });
+    if (!notUpYet) {
+      return result;
+    }
+    if (Date.now() - started >= wait) {
+      return result.match({
+        Err: (why) =>
+          Err(
+            `${why}, and it still wasn't up after ${Math.round(wait / 1000)}s`,
+          ),
+        Ok: (engine) => Ok(engine),
+      });
+    }
+    await sleep(250);
   }
 };

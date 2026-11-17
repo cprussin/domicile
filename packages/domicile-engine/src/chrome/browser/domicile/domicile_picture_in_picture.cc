@@ -84,9 +84,9 @@ class ShellVideoOverlayWindow : public content::VideoOverlayWindow,
     if (listing_) {
       return;
     }
-    listing_ = Videos().List(WindowOf(controller_->GetWebContents()), this);
+    listing_ = Videos().List(WindowOf(controller_->GetWebContents()),
+                             SourceInPage(*controller_), this);
     listing_->SetSize(natural_size_);
-    listing_->SetSource(SourceInPage(*controller_));
     listing_->SetPlaying(playing_);
     listing_->SetControls(can_play_, can_previous_track_, can_next_track_);
     listing_->SetPosition(duration_, position_, rate_);

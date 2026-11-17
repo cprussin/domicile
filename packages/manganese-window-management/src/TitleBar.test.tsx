@@ -149,6 +149,22 @@ describe("TitleBar's icon", () => {
     );
   });
 
+  // A page outside the default browser profile says so on its tab.
+  it("marks the icon in the color it is given", () => {
+    const { container } = render(<TitleBar {...barProps} mark="#d97706" />);
+
+    expect(
+      (icon(container).querySelector("[data-mark]") as HTMLElement | null)
+        ?.style.backgroundColor,
+    ).toBe("#d97706");
+  });
+
+  it("leaves the icon unmarked by default", () => {
+    const { container } = render(<TitleBar {...barProps} />);
+
+    expect(icon(container).querySelector("[data-mark]")).toBeNull();
+  });
+
   // Every bar has an icon, so titles line up.
   it("draws a stand-in for a window with no icon", () => {
     const { container } = render(<TitleBar {...barProps} icon={undefined} />);

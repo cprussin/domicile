@@ -85,14 +85,116 @@ describe("browser", () => {
     browser.answerMessageBox("2", 1, true);
 
     expect(fake.calls).toStrictEqual([
-      ["openBrowserWindow", "https://a.example/", ""],
-      ["openBrowserWindow", "https://b.example/", "persist:work"],
+      ["openBrowserWindow", "https://a.example/", "", ""],
+      ["openBrowserWindow", "https://b.example/", "persist:work", ""],
       ["openPrivateBrowserWindow", "https://c.example/"],
-      ["openAppWindow", "https://d.example/", "", "new"],
+      ["openAppWindow", "https://d.example/", "", "new", ""],
       ["closeBrowserWindow", "1"],
       ["clickBrowserWindowMenu", "2", 7],
       ["answerBrowserWindowMessageBox", "2", 1, true],
     ]);
+  });
+
+  it("opens a window in a profile and moves one to another", () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    browser.open("https://a.example/", { profile: "work" });
+    browser.reopen("1", "personal");
+    browser.profileFor("https://b.example/").catch(() => {
+      /* never answered */
+    });
+
+    expect(fake.calls).toStrictEqual([
+      ["openBrowserWindow", "https://a.example/", "", "work"],
+      ["reopenBrowserWindow", "1", "personal"],
+      ["browserProfileFor", "https://b.example/"],
+    ]);
+    expect(browser.windows?.map(({ profile }) => profile)).toEqual([
+      "personal",
+    ]);
+  });
+
+  it("lists the browser profiles and says when they change", () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    let changes = 0;
+    const stop = browser.on("profilesChange", () => {
+      changes += 1;
+    });
+    expect(browser.profiles).toBeUndefined();
+    const work = {
+      color: "#3366ff",
+      configSites: [],
+      id: "work",
+      isDefault: true,
+      isDefaultPrivate: false,
+      isPrivate: false,
+      name: "Work",
+      pinnedSites: [],
+    };
+    fake.set({ browserProfiles: [work] });
+
+    expect(browser.profiles).toStrictEqual([work]);
+    expect(changes).toBe(1);
+    stop();
+  });
+
+  it("pins a site to a profile and finds the site that routes an address", async () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    const profile = (
+      id: string,
+      isDefault: boolean,
+      configSites: string[],
+    ) => ({
+      color: "#3366ff",
+      configSites,
+      id,
+      isDefault,
+      isDefaultPrivate: false,
+      isPrivate: false,
+      name: id,
+      pinnedSites: [],
+    });
+    fake.set({
+      browserProfiles: [
+        profile("personal", true, []),
+        profile("work", false, ["*.acme.com"]),
+      ],
+    });
+
+    await browser.pin("github.com/acme", "work");
+    expect(await browser.siteFor("https://github.com/acme/repo")).toBe(
+      "github.com/acme",
+    );
+    expect(await browser.siteFor("https://docs.acme.com/")).toBe("*.acme.com");
+    expect(await browser.siteFor("https://github.com/")).toBeUndefined();
+    // The default profile unpins it.
+    await browser.pin("github.com/acme", "personal");
+    expect(browser.profiles?.map(({ pinnedSites }) => pinnedSites)).toEqual([
+      [],
+      [],
+    ]);
+    // Only the config moves its own sites.
+    await expect(browser.pin("*.acme.com", "personal")).rejects.toThrow(
+      "only the config",
+    );
+    expect(fake.calls[0]).toStrictEqual([
+      "pinBrowserSite",
+      "github.com/acme",
+      "work",
+    ]);
+  });
+
+  it("opens an app window in a profile", () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    browser.openApp("https://mail.example/", { profile: "work" });
+
+    expect(fake.calls).toStrictEqual([
+      ["openAppWindow", "https://mail.example/", "", "new", "work"],
+    ]);
+    expect(browser.windows?.map(({ profile }) => profile)).toEqual(["work"]);
   });
 
   it("opens an app window with an id, reusing the open one as asked", () => {
@@ -109,9 +211,9 @@ describe("browser", () => {
     });
 
     expect(fake.calls).toStrictEqual([
-      ["openAppWindow", "https://mail.example/", "mail", "new"],
-      ["openAppWindow", "https://mail.example/", "mail", "focus"],
-      ["openAppWindow", "https://mail.example/t/1", "mail", "navigate"],
+      ["openAppWindow", "https://mail.example/", "mail", "new", ""],
+      ["openAppWindow", "https://mail.example/", "mail", "focus", ""],
+      ["openAppWindow", "https://mail.example/t/1", "mail", "navigate", ""],
     ]);
   });
 
@@ -139,6 +241,7 @@ describe("browser", () => {
         body: "{}",
         headers: [{ name: "Content-Type", value: "application/json" }],
         method: "POST",
+        profile: "work",
         sapisidHashOrigin: "https://mail.example",
       })
       .catch(() => {
@@ -146,7 +249,15 @@ describe("browser", () => {
       });
 
     expect(fake.calls).toStrictEqual([
-      ["fetchWithCookies", "https://mail.example/feed", "GET", [], null, null],
+      [
+        "fetchWithCookies",
+        "https://mail.example/feed",
+        "GET",
+        [],
+        null,
+        null,
+        "",
+      ],
       [
         "fetchWithCookies",
         "https://mail.example/api",
@@ -154,6 +265,7 @@ describe("browser", () => {
         [{ name: "Content-Type", value: "application/json" }],
         "{}",
         "https://mail.example",
+        "work",
       ],
     ]);
   });

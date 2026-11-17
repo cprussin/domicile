@@ -296,6 +296,12 @@ describe("launchOf", () => {
     );
   });
 
+  it("browses a bookmark in the browser profile it names", () => {
+    expect(
+      launchOf(Choice.Bookmark({ ...MAIL, profile: "work" })),
+    ).toStrictEqual(Launch.Browsed("https://mail.example.com", false, "work"));
+  });
+
   it("browses a site, a tagged one, or any kind of search", () => {
     expect(launchOf(Choice.Site("https://example.com", false))).toStrictEqual(
       Launch.Browsed("https://example.com", false),

@@ -36,6 +36,8 @@ export const Shell = runManganese({
      its secret as secret.
 - `email`: the Google account.
 - `nickname`: its name on the bar.
+- `profile`: the browser profile its Gmail window and sign-in open in, such
+  as `"work"`. Without one, Gmail's site decides.
 
 What it shows, and how it reads the inbox:
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md#gmail).

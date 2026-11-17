@@ -136,6 +136,17 @@ export const describedWindow = (
   ...fields,
 });
 
+/** Whether rank `a` sorts after `b`, part by part. An empty `b` is none. */
+const moreSpecific = (a: readonly number[], b: readonly number[]): boolean => {
+  for (const [index, part] of a.entries()) {
+    const other = b[index];
+    if (other === undefined || part !== other) {
+      return other === undefined || part > other;
+    }
+  }
+  return false;
+};
+
 /** The methods that return a promise. The fake's never settle. */
 const ASKS = new Set([
   "browserProfileFor",
@@ -192,8 +203,18 @@ export class FakeDomicileHost {
         } else if (name === "openAppWindow") {
           return (...args: Parameters<DomicileHost["openAppWindow"]>) => {
             calls.push([name, ...args]);
-            const [url, appId = "", reuse = "new"] = args;
-            this.openApp(url, appId, reuse);
+            const [url, appId = "", reuse = "new", profile = ""] = args;
+            this.openApp(url, appId, reuse, profile);
+          };
+        } else if (name === "browserSiteFor") {
+          return (url: string) => {
+            calls.push([name, url]);
+            return Promise.resolve(this.siteFor(url));
+          };
+        } else if (name === "pinBrowserSite") {
+          return (site: string, profile: string) => {
+            calls.push([name, site, profile]);
+            return this.pin(site, profile);
           };
         } else if (name === "reopenBrowserWindow") {
           return (id: string, profile: string) => {
@@ -266,7 +287,8 @@ export class FakeDomicileHost {
    * and `appId`. Ids count up from `"1"`; the asked-for size is 0 unless
    * `width` and `height` give one. With a `parent`, it is an Electron app's
    * view in that window, at `x` and `y`. It is in `profile`, or as the
-   * engine picks: none for an app window, else the default private profile
+   * engine picks: none for an app window (an app module's or Electron
+   * app's; `openApp` names one), else the default private profile
    * when `isPrivate` and the default one otherwise, from `browserProfiles`
    * or the config's own `default` and `private`.
    */
@@ -326,7 +348,7 @@ export class FakeDomicileHost {
           parent,
           partition,
           popupWindow,
-          profile: isApp ? null : (profile ?? fallback),
+          profile: profile ?? (isApp ? null : fallback),
           title: "",
           toplevelId: null,
           url,
@@ -343,14 +365,25 @@ export class FakeDomicileHost {
    * window with `appId` unless `reuse` is "new", loading `url` in it for
    * "navigate", and otherwise opens one.
    */
-  openApp(url: string, appId: string, reuse: string): void {
+  openApp(url: string, appId: string, reuse: string, profile = ""): void {
     const windows = this.#state.browserWindows ?? [];
     const open =
       appId === "" || reuse === "new"
         ? undefined
         : windows.find((window) => window.appId === appId);
     if (open === undefined) {
-      this.openBrowser(url, { appId, isApp: true });
+      // A site's app window is in a profile, as a browser window is: the
+      // fake routes no site, so the default one when none is named.
+      this.openBrowser(url, {
+        appId,
+        isApp: true,
+        profile:
+          profile === ""
+            ? ((this.#state.browserProfiles ?? []).find(
+                (each) => each.isDefault,
+              )?.id ?? "default")
+            : profile,
+      });
     } else if (reuse === "navigate") {
       this.set({
         browserWindows: windows.map((window) =>
@@ -418,6 +451,84 @@ export class FakeDomicileHost {
         window.id === id ? { ...window, profile } : window,
       ),
     });
+  }
+
+  /**
+   * The site of `browserProfiles`' sites that routes `url`, as the engine's
+   * `browserSiteFor` matches it: the most specific, a path over a host and a
+   * host over `*.host`. Empty for none.
+   */
+  siteFor(url: string): string {
+    let address: URL;
+    try {
+      address = new URL(url);
+    } catch {
+      return "";
+    }
+    if (address.protocol !== "http:" && address.protocol !== "https:") {
+      return "";
+    }
+    const sites = (this.#state.browserProfiles ?? []).flatMap((profile) => [
+      ...profile.pinnedSites,
+      ...profile.configSites,
+    ]);
+    const rank = (site: string): number[] | undefined => {
+      const slash = site.indexOf("/");
+      const host = slash === -1 ? site : site.slice(0, slash);
+      const path = slash === -1 ? "" : site.slice(slash);
+      const wildcard = host.startsWith("*.");
+      const parent = wildcard ? host.slice(2) : host;
+      const hostMatches = wildcard
+        ? address.hostname === parent || address.hostname.endsWith(`.${parent}`)
+        : address.hostname === host;
+      const pathMatches =
+        path === "" ||
+        address.pathname === path ||
+        address.pathname.startsWith(`${path}/`);
+      return hostMatches && pathMatches
+        ? [path.split("/").length, wildcard ? 0 : 1, host.length]
+        : undefined;
+    };
+    let best = "";
+    let bestRank: number[] = [];
+    for (const site of sites) {
+      const ranked = rank(site);
+      if (ranked !== undefined && moreSpecific(ranked, bestRank)) {
+        best = site;
+        bestRank = ranked;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Pins `site` to profile `id`, as the engine's `pinBrowserSite` does: out of
+   * every profile's `pinnedSites`, then into `id`'s unless it is the default.
+   * Rejects as the engine does for one of the config's sites.
+   */
+  pin(site: string, id: string): Promise<void> {
+    const profiles = this.#state.browserProfiles ?? [];
+    if (profiles.some((profile) => profile.configSites.includes(site))) {
+      return Promise.reject(
+        new DOMException(
+          `the desk's config opens ${site}; only the config changes that`,
+          "OperationError",
+        ),
+      );
+    }
+    this.set({
+      browserProfiles: profiles.map((profile) => {
+        const others = profile.pinnedSites.filter((each) => each !== site);
+        return {
+          ...profile,
+          pinnedSites:
+            profile.id === id && !profile.isDefault
+              ? [...others, site]
+              : others,
+        };
+      }),
+    });
+    return Promise.resolve();
   }
 
   /** The engine closed browser window `id`. `closeBrowserWindow` calls this too. */

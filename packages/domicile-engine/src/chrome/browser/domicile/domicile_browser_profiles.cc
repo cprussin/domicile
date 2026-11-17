@@ -21,9 +21,10 @@
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
-#include "components/crx_file/id_util.h"
 #include "components/domicile/browser/control_channel.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -31,6 +32,9 @@
 
 namespace domicile {
 namespace {
+
+// The sites the user pinned, in the shell's profile: profile ids by site.
+constexpr char kPinnedSitesPref[] = "domicile.browser_profiles.pinned_sites";
 
 // A profile's directory in the user data directory is this and its id.
 constexpr char kDirectoryPrefix[] = "domicile-";
@@ -81,7 +85,7 @@ BrowserProfileRegistry& BrowserProfileRegistry::Get() {
 }
 
 BrowserProfileRegistry::BrowserProfileRegistry()
-    : profiles_(DefaultBrowserProfiles()) {}
+    : config_(DefaultBrowserProfiles()), profiles_(DefaultBrowserProfiles()) {}
 
 BrowserProfileRegistry::~BrowserProfileRegistry() = default;
 
@@ -103,8 +107,11 @@ void BrowserProfileRegistry::Configure(Profile& shell,
     observations_.RemoveObservation(it->second.profile);
     it = loaded_.erase(it);
   }
-  const bool changed = profiles != profiles_;
-  profiles_ = std::move(profiles);
+  config_ = std::move(profiles);
+  // Loads and installs before telling the observers, so a page they open in
+  // a new profile finds it.
+  const BrowserProfiles before = profiles_;
+  profiles_ = WithPinnedSites(config_, pinned_);
   for (const BrowserProfile& profile : profiles_.profiles) {
     if (profile.id != profiles_.default_profile &&
         !loaded_.contains(profile.id)) {
@@ -112,17 +119,76 @@ void BrowserProfileRegistry::Configure(Profile& shell,
     }
   }
   InstallExtensions();
-  if (changed) {
+  if (profiles_ != before) {
     for (Observer& observer : observers_) {
       observer.OnBrowserProfilesChanged();
     }
   }
 }
 
-void BrowserProfileRegistry::SetExtensions(Profile& shell, ExtensionList all) {
+bool BrowserProfileRegistry::IsConfigSite(const std::string& site) const {
+  return config_.sites.contains(site);
+}
+
+base::expected<void, std::string> BrowserProfileRegistry::PinSite(
+    Profile& shell,
+    const std::string& site,
+    const std::string& profile) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  UseShell(shell);
+  if (!IsSiteKey(site)) {
+    return base::unexpected(base::StrCat(
+        {"\"", site,
+         "\" is no site: a lowercase host, *. and a host, or a host and a "
+         "path"}));
+  }
+  if (IsConfigSite(site)) {
+    return base::unexpected(base::StrCat(
+        {"the desk's config opens ", site, " in profile ",
+         config_.sites.at(site), "; only the config changes that"}));
+  }
+  if (config_.Find(profile) == nullptr) {
+    return base::unexpected(
+        base::StrCat({"the desk has no browser profile \"", profile, "\""}));
+  }
+  {
+    ScopedDictPrefUpdate pinned(shell.GetPrefs(), kPinnedSitesPref);
+    if (profile == config_.default_profile) {
+      pinned->Remove(site);
+    } else {
+      pinned->Set(site, profile);
+    }
+  }
+  if (profile == config_.default_profile) {
+    pinned_.erase(site);
+  } else {
+    pinned_[site] = profile;
+  }
+  LOG(INFO) << "domicile: " << site << " opens in browser profile " << profile
+            << " from now on.";
+  Update();
+  return base::ok();
+}
+
+void BrowserProfileRegistry::Update() {
+  BrowserProfiles profiles = WithPinnedSites(config_, pinned_);
+  if (profiles == profiles_) {
+    return;
+  }
+  profiles_ = std::move(profiles);
+  for (Observer& observer : observers_) {
+    observer.OnBrowserProfilesChanged();
+  }
+}
+
+void BrowserProfileRegistry::SetExtensions(
+    Profile& shell,
+    ExtensionList all,
+    std::map<std::string, std::string> unpacked_ids) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   UseShell(shell);
   extensions_ = std::move(all);
+  unpacked_ids_ = std::move(unpacked_ids);
   InstallExtensions();
 }
 
@@ -148,6 +214,25 @@ Profile* BrowserProfileRegistry::ContextOf(Profile& shell,
     ProfileDestroyer::DestroyOTRProfileImmediately(loaded.ending.get());
   }
   return home->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+}
+
+void BrowserProfileRegistry::WhenLoaded(Profile& shell,
+                                        const std::string& id,
+                                        base::OnceClosure ready) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  UseShell(shell);
+  if (id == profiles_.default_profile || profiles_.Find(id) == nullptr ||
+      loaded_.contains(id)) {
+    std::move(ready).Run();
+    return;
+  }
+  std::vector<base::OnceClosure>& waiting = waiting_[id];
+  waiting.push_back(std::move(ready));
+  if (waiting.size() == 1) {
+    // ProfileManager answers every load of one directory, so a second start
+    // while Configure's is under way only adds an answer.
+    StartLoading(id);
+  }
 }
 
 std::string BrowserProfileRegistry::IdOf(
@@ -219,6 +304,19 @@ void BrowserProfileRegistry::UseShell(Profile& shell) {
                  << shell_->GetPath();
   shell_ = &shell;
   observations_.AddObservation(&shell);
+  for (const auto [site, profile] :
+       shell.GetPrefs()->GetDict(kPinnedSitesPref)) {
+    // Written only by PinSite. Anything else was edited by hand, so it says
+    // so and leaves the rest.
+    if (!profile.is_string() || !IsSiteKey(site)) {
+      LOG(ERROR) << "domicile: the pinned site \"" << site
+                 << "\" in the shell's prefs is no site and profile id; it "
+                    "is left out.";
+      continue;
+    }
+    pinned_[site] = profile.GetString();
+  }
+  Update();
   // Chrome asks which profile to start in once there are two. A desk's
   // profiles are not Chrome's to pick between: the shell's is the one it
   // starts.
@@ -230,7 +328,10 @@ Profile* BrowserProfileRegistry::Load(const std::string& id) {
   if (auto loaded = loaded_.find(id); loaded != loaded_.end()) {
     return loaded->second.profile;
   }
-  // Configure started loading it, and a page wants it before that finished.
+  // A page that did not wait for WhenLoaded. This blocks the UI thread on
+  // the disk, which DCHECK builds refuse.
+  LOG(ERROR) << "domicile: browser profile " << id
+             << " was wanted before it loaded; loading it now blocks.";
   Profile* profile =
       g_browser_process->profile_manager()->GetProfile(DirectoryOf(id));
   if (profile == nullptr) {
@@ -249,17 +350,26 @@ void BrowserProfileRegistry::StartLoading(const std::string& id) {
 }
 
 void BrowserProfileRegistry::OnLoaded(const std::string& id, Profile* profile) {
+  // Runs what waited, after the profile is adopted or not: each then makes
+  // its page, or falls back as ContextOf does for a profile that would not
+  // load.
+  std::vector<base::OnceClosure> waiting;
+  if (auto found = waiting_.find(id); found != waiting_.end()) {
+    waiting = std::move(found->second);
+    waiting_.erase(found);
+  }
   if (profile == nullptr) {
     LOG(ERROR) << "domicile: browser profile " << id << " would not load from "
                << DirectoryOf(id) << ".";
-    return;
+  } else if (!loaded_.contains(id) && profiles_.Find(id) != nullptr &&
+             id != profiles_.default_profile) {
+    // Not when loaded already by a page that could not wait, or no longer
+    // configured.
+    Adopt(id, *profile);
   }
-  // Loaded already by a page that could not wait, or no longer configured.
-  if (loaded_.contains(id) || profiles_.Find(id) == nullptr ||
-      id == profiles_.default_profile) {
-    return;
+  for (base::OnceClosure& ready : waiting) {
+    std::move(ready).Run();
   }
-  Adopt(id, *profile);
 }
 
 void BrowserProfileRegistry::Adopt(const std::string& id, Profile& profile) {
@@ -290,10 +400,13 @@ void BrowserProfileRegistry::InstallExtensionsOf(Profile& profile,
                                                  const BrowserProfile& as) {
   ReconcileConfigExtensions(
       profile.GetWeakPtr(),
-      ExtensionsFor(as, *extensions_, [](const std::string& directory) {
-        // As the unpacked installer names it: by its resolved path, which
-        // InstallExtensionsInto already made it.
-        return crx_file::id_util::GenerateIdForPath(base::FilePath(directory));
+      ExtensionsFor(as, *extensions_, [this](const std::string& directory) {
+        // As the unpacked installer names it: by its manifest's key, else its
+        // resolved path (InstallExtensionsInto found both).
+        auto found = unpacked_ids_.find(directory);
+        CHECK(found != unpacked_ids_.end())
+            << "no id for unpacked extension " << directory;
+        return found->second;
       }));
 }
 
@@ -323,6 +436,10 @@ void BrowserProfileRegistry::OnProfileWillBeDestroyed(Profile* profile) {
   std::erase_if(loaded_, [profile](const auto& entry) {
     return entry.second.profile == profile;
   });
+}
+
+void RegisterBrowserProfilesPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterDictionaryPref(kPinnedSitesPref);
 }
 
 void StartBrowserProfiles() {

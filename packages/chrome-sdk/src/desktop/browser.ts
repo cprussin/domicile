@@ -2,6 +2,7 @@
 // `<webview window="id">`, and fetches with the browser's cookies.
 
 import type {
+  DomicileBrowserProfile,
   DomicileBrowserWindow,
   DomicileFetchHeader,
   DomicileFetchResponse,
@@ -15,10 +16,28 @@ import { hostEvent, on } from "./subscribe";
 
 export type BrowserWindow = Defined<DomicileBrowserWindow>;
 
+/**
+ * One of the desk's browser profiles: a set of sign-ins, site data and
+ * extensions, as the config's `browser.profiles` names it.
+ */
+export type BrowserProfile = DomicileBrowserProfile;
+
+/** How {@link Browser.open} opens its window. */
+export type BrowserWindowOptions = {
+  /** Storage of the window's own, as a `<webview>`'s `partition` has. */
+  partition?: string;
+  /**
+   * The id of the browser profile to open it in, one of
+   * {@link Browser.profiles}. By default, the profile its site opens in
+   * ({@link Browser.profileFor}).
+   */
+  profile?: string;
+};
+
 export type FetchHeader = DomicileFetchHeader;
 export type FetchResponse = DomicileFetchResponse;
 
-/** A fetch with the cookies of the profile the browser windows use. */
+/** A fetch with the cookies of a browser profile. */
 export type FetchInit = {
   /** `GET` by default. */
   method?: "GET" | "POST";
@@ -30,6 +49,12 @@ export type FetchInit = {
    * computed from the SAPISID cookie the page never sees.
    */
   sapisidHashOrigin?: string;
+  /**
+   * The id of the browser profile whose cookies to send, one of
+   * {@link Browser.profiles}; the default profile's by default. A private
+   * profile keeps none to send, and is refused.
+   */
+  profile?: string;
 };
 
 /** What {@link Browser.openApp} does when an app window with its id is open. */
@@ -51,11 +76,21 @@ export type AppWindowOptions = {
   id?: string;
   /** {@link AppReuse.New} by default. Any other needs an `id`. */
   reuse?: AppReuse;
+  /**
+   * The id of the browser profile a new window opens in, one of
+   * {@link Browser.profiles}. By default, the profile its site opens in.
+   */
+  profile?: string;
 };
 
 export type BrowserListeners = {
   /** A window opened, closed or changed. */
   change: () => void;
+  /**
+   * A profile was added, removed, renamed or recolored, the defaults moved,
+   * or a site was pinned.
+   */
+  profilesChange: () => void;
 };
 
 export type Browser = {
@@ -74,10 +109,45 @@ export type Browser = {
    * wherever your layout puts it. See docs/SHELL-BROWSER-WINDOWS.md.
    */
   readonly views: readonly BrowserWindow[] | undefined;
-  /** Open a browser window, with storage of its own under `partition`. */
-  open: (url: string, options?: { partition?: string }) => void;
-  /** Open a window in the off-the-record profile. */
+  /**
+   * The desk's browser profiles, in the config's order; `undefined` until
+   * the browser lists them.
+   */
+  readonly profiles: readonly BrowserProfile[] | undefined;
+  /**
+   * The id of the browser profile `url` opens in: the most specific of the
+   * config's `browser.sites` that matches it, else the default profile.
+   * Rejects with a TypeError for an invalid `url`.
+   */
+  profileFor: (url: string) => Promise<string>;
+  /**
+   * The site that routes `url` to its profile: the entry of the config's
+   * `browser.sites`, or of a profile's {@link BrowserProfile.pinnedSites},
+   * that {@link Browser.profileFor} matched. `undefined` when none did, so it
+   * opens in the default profile. Rejects with a TypeError for an invalid
+   * `url`.
+   */
+  siteFor: (url: string) => Promise<string | undefined>;
+  /**
+   * Open `site` in browser profile `profile` from now on, kept across
+   * restarts; the default profile unpins it. `site` is a host, `*.host`, or a
+   * host and path, as the config's `browser.sites` keys are. Pages already
+   * open stay where they are. Rejects with an `OperationError` for a site one
+   * of the config's sites names ({@link BrowserProfile.configSites}), which
+   * only the config changes.
+   */
+  pin: (site: string, profile: string) => Promise<void>;
+  /** Open a browser window, in the profile its site opens in by default. */
+  open: (url: string, options?: BrowserWindowOptions) => void;
+  /** Open a window in the default private profile. */
   openPrivate: (url: string) => void;
+  /**
+   * Move window `id`'s page to browser profile `profile` in place: the
+   * window keeps its id and its history's addresses, and its page loads
+   * again in the new profile. An unknown window or profile, or an app
+   * window, stays as it is.
+   */
+  reopen: (id: string, profile: string) => void;
   /**
    * Open an app window, with no address bar, or reuse the oldest one with
    * `id` as `reuse` says. The browser matches the window, so two quick calls
@@ -108,9 +178,9 @@ export type Browser = {
     checkboxChecked: boolean,
   ) => void;
   /**
-   * Fetch `url` from the browser process with its cookies. Resolves whatever
-   * the status; rejects with a NetworkError for a refusal or a network
-   * failure.
+   * Fetch `url` from the browser process with a browser profile's cookies.
+   * Resolves whatever the status; rejects with a NetworkError for a refusal
+   * or a network failure.
    */
   fetch: (url: string, init?: FetchInit) => Promise<FetchResponse>;
   on: On<BrowserListeners>;
@@ -120,6 +190,9 @@ export type BrowserHost = Pick<
   DomicileHost,
   | "addEventListener"
   | "answerBrowserWindowMessageBox"
+  | "browserProfileFor"
+  | "browserProfiles"
+  | "browserSiteFor"
   | "browserWindows"
   | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
@@ -128,7 +201,9 @@ export type BrowserHost = Pick<
   | "openAppWindow"
   | "openBrowserWindow"
   | "openPrivateBrowserWindow"
+  | "pinBrowserSite"
   | "removeEventListener"
+  | "reopenBrowserWindow"
 >;
 
 export const browser = (host: BrowserHost): Browser => {
@@ -153,7 +228,13 @@ export const browser = (host: BrowserHost): Browser => {
       host.countBrowserWindowMatches(id, selector),
     fetch: (
       url,
-      { method = "GET", headers = [], body, sapisidHashOrigin } = {},
+      {
+        method = "GET",
+        headers = [],
+        body,
+        sapisidHashOrigin,
+        profile = "",
+      } = {},
     ) =>
       host.fetchWithCookies(
         url,
@@ -161,19 +242,34 @@ export const browser = (host: BrowserHost): Browser => {
         headers,
         body ?? null,
         sapisidHashOrigin ?? null,
+        profile,
       ),
     on: on<BrowserListeners>({
       change: (listener) =>
         hostEvent(host, "browserwindowschanged", () => listener()),
+      profilesChange: (listener) =>
+        hostEvent(host, "browserprofileschanged", () => listener()),
     }),
-    open: (url, { partition = "" } = {}) => {
-      host.openBrowserWindow(url, partition);
+    open: (url, { partition = "", profile = "" } = {}) => {
+      host.openBrowserWindow(url, partition, profile);
     },
-    openApp: (url, { id = "", reuse = AppReuse.New } = {}) => {
-      host.openAppWindow(url, id, reuseName(reuse));
+    openApp: (url, { id = "", reuse = AppReuse.New, profile = "" } = {}) => {
+      host.openAppWindow(url, id, reuseName(reuse), profile);
     },
     openPrivate: (url) => {
       host.openPrivateBrowserWindow(url);
+    },
+    pin: (site, profile) => host.pinBrowserSite(site, profile),
+    profileFor: (url) => host.browserProfileFor(url),
+    get profiles() {
+      return host.browserProfiles ?? undefined;
+    },
+    reopen: (id, profile) => {
+      host.reopenBrowserWindow(id, profile);
+    },
+    siteFor: async (url) => {
+      const site = await host.browserSiteFor(url);
+      return site === "" ? undefined : site;
     },
     get views() {
       return viewsOf(host.browserWindows);

@@ -29,10 +29,14 @@ Ask the running desktop:
   domicile load-shell <shell>           Serve another shell, or a new build
   domicile open <file|folder|url>       Open with its default app, a link in
                                         a browser window
+  domicile open --profile <id> <url>    Open a link in browser profile <id>
   domicile open --app <url|module>      Open a site or app module as an app
   domicile open --app --id <id> [--reuse new|focus|navigate] <url>
                                         Open a site as app <id>; with focus or
                                         navigate, reuse its open window
+  domicile open --app --profile <id> <url>
+                                        Open a site as an app in browser
+                                        profile <id>
   domicile open --which <file|url>      Print the app open would use
   domicile open --electron <entry|path> [-- <command>...]
                                         Run an installed Electron app on the
@@ -142,6 +146,12 @@ pub enum CliError {
          domicile open --app --id mail --reuse focus https://mail.example\n"
     )]
     ReuseWithoutId,
+    #[error(
+        "--profile picks the browser profile a web address opens in, and \
+         {target} is no web address:\n\n    \
+         domicile open --profile work https://example.com\n"
+    )]
+    ProfileForAFile { target: String },
     #[error("--reuse is new, focus or navigate, and was given {given}.")]
     UnknownReuse { given: String },
     #[error("{flag} takes a value, and was given none.")]
@@ -280,8 +290,12 @@ pub enum Invocation {
     /// Open this file, folder or address with what opens its type; see
     /// [`crate::open`]. A web address opens in a new browser window.
     ///
-    /// Kept as typed; it is relative to the working directory.
-    Open { target: String },
+    /// Kept as typed; it is relative to the working directory. A web address
+    /// opens in browser profile `profile`, or the one its site opens in.
+    Open {
+        target: String,
+        profile: Option<String>,
+    },
     /// Tell the running desktop to open this as an app: an existing file as
     /// an app module ([`crate::app_entry`]), anything else as a site in a
     /// browser window without an address bar ([`crate::address`]).
@@ -292,6 +306,9 @@ pub enum Invocation {
         target: String,
         id: Option<String>,
         reuse: AppReuse,
+        /// The browser profile a new window opens in, or with none its
+        /// site's.
+        profile: Option<String>,
     },
     /// Print the desktop file id of the application [`Invocation::Open`]
     /// would run for this, or nothing for a web address. The launcher lists
@@ -435,21 +452,43 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     Some(extra) => Err(CliError::ExtraToOpen { extra }),
                 }
             }
+            Verb::Opening if args.peek().is_some_and(|word| word == PROFILE) => {
+                args.next();
+                let profile = args.next().ok_or_else(|| CliError::FlagWithoutValue {
+                    flag: PROFILE.to_string(),
+                })?;
+                match (args.next(), args.next()) {
+                    (None, _) => Err(CliError::NothingToOpen),
+                    (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
+                    (Some(target), None) => Ok(Invocation::Open {
+                        target,
+                        profile: Some(profile),
+                    }),
+                }
+            }
             Verb::Opening => {
                 let first = args.next();
                 let flag = first.clone().filter(|word| word == APP || word == WHICH);
-                let (id, reuse) = match flag.as_deref() {
+                let (id, reuse, profile) = match flag.as_deref() {
                     Some(APP) => app_flags(&mut args)?,
-                    _ => (None, AppReuse::New),
+                    _ => (None, AppReuse::New, None),
                 };
                 let target = if flag.is_some() { args.next() } else { first };
                 match (target, args.next()) {
                     (None, _) => Err(CliError::NothingToOpen),
                     (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
                     (Some(target), None) => Ok(match flag.as_deref() {
-                        Some(APP) => Invocation::OpenAsApp { target, id, reuse },
+                        Some(APP) => Invocation::OpenAsApp {
+                            target,
+                            id,
+                            reuse,
+                            profile,
+                        },
                         Some(_) => Invocation::Opener { target },
-                        None => Invocation::Open { target },
+                        None => Invocation::Open {
+                            target,
+                            profile: None,
+                        },
                     }),
                 }
             }
@@ -654,24 +693,31 @@ const APP: &str = "--app";
 /// `open`'s flag for running an installed Electron app on the engine.
 const ELECTRON: &str = "--electron";
 
+/// `open`'s flag naming the browser profile a web address opens in.
+const PROFILE: &str = "--profile";
+
 /// `open --app`'s flag naming the app a site's window belongs to.
 const ID: &str = "--id";
 
 /// `open --app`'s flag saying what to do when the app's window is open.
 const REUSE: &str = "--reuse";
 
-/// `open --app`'s `--id` and `--reuse`, in either order, before the target.
+/// `open --app`'s `--id`, `--reuse` and `--profile`, in any order, before the
+/// target.
 fn app_flags(
     args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
-) -> Result<(Option<String>, AppReuse), CliError> {
+) -> Result<(Option<String>, AppReuse, Option<String>), CliError> {
     let mut id = None;
     let mut reuse = AppReuse::New;
-    while let Some(flag) = args.next_if(|word| word == ID || word == REUSE) {
+    let mut profile = None;
+    while let Some(flag) = args.next_if(|word| word == ID || word == REUSE || word == PROFILE) {
         let value = args
             .next()
             .ok_or_else(|| CliError::FlagWithoutValue { flag: flag.clone() })?;
         if flag == ID {
             id = Some(value);
+        } else if flag == PROFILE {
+            profile = Some(value);
         } else {
             reuse = match value.as_str() {
                 "new" => AppReuse::New,
@@ -684,7 +730,7 @@ fn app_flags(
     if reuse != AppReuse::New && id.is_none() {
         return Err(CliError::ReuseWithoutId);
     }
-    Ok((id, reuse))
+    Ok((id, reuse, profile))
 }
 
 /// A listing's flag for printing JSON rather than a table.

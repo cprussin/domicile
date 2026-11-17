@@ -8,19 +8,23 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/types/expected.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/private_pages.h"
 
+class PrefRegistrySimple;
 class ScopedProfileKeepAlive;
 
 namespace content {
@@ -46,13 +50,16 @@ namespace domicile {
 // PostProfileInit like the shell's, so chrome.tabs in it lists only its own.
 // Every profile's windows are listed together, by the shell's DeskWindows.
 //
+// The sites the user pins from a shell (PinSite) are kept in the shell's
+// profile's prefs and go under the config's: the config wins.
+//
 // One per process, as the desk is. UI thread only.
 class BrowserProfileRegistry final : public ProfileObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
-    // The profiles changed: one was added, removed, renamed or recolored, or
-    // the default moved.
+    // The profiles changed: one was added, removed, renamed or recolored, the
+    // default moved, or a site was pinned.
     virtual void OnBrowserProfilesChanged() = 0;
   };
 
@@ -65,16 +72,41 @@ class BrowserProfileRegistry final : public ProfileObserver {
   // each one, and closes the pages of any it no longer lists.
   void Configure(Profile& shell, BrowserProfiles profiles);
 
-  // Every extension the desk's config names, their directories resolved. Each
-  // profile gets the ones it turns on (ExtensionsFor).
-  void SetExtensions(Profile& shell, ExtensionList all);
+  // Every extension the desk's config names, their directories resolved, and
+  // each unpacked directory's id. Each profile gets the ones it turns on
+  // (ExtensionsFor).
+  void SetExtensions(Profile& shell,
+                     ExtensionList all,
+                     std::map<std::string, std::string> unpacked_ids);
 
-  // The desk's profiles: DefaultBrowserProfiles until the compositor sends
+  // The desk's profiles, with the sites the user pinned under the config's
+  // (WithPinnedSites): DefaultBrowserProfiles until the compositor sends
   // them.
   const BrowserProfiles& profiles() const { return profiles_; }
 
+  // Whether `site` is one of the config's own sites, which the user cannot
+  // pin elsewhere.
+  bool IsConfigSite(const std::string& site) const;
+
+  // Opens `site` in profile `profile` from now on, kept across restarts. The
+  // default profile unpins it, as a site never maps to it. Says why not for
+  // a site that is no key of the config's `browser.sites`, one the config's
+  // sites name, or a profile the desk does not have. Pages already open stay
+  // where they are.
+  base::expected<void, std::string> PinSite(Profile& shell,
+                                            const std::string& site,
+                                            const std::string& profile);
+
+  // Runs `ready` once profile `id` has loaded, so ContextOf makes its
+  // context without blocking: at once for the default profile, one already
+  // loaded, or one the desk does not have; otherwise when its load ends,
+  // whether or not it loaded. Starts the load if it has not started.
+  void WhenLoaded(Profile& shell, const std::string& id,
+                  base::OnceClosure ready);
+
   // The context profile `id`'s pages are made in, for the shell in `shell`.
-  // Loads it if Configure's load has not finished, which blocks. Null for a
+  // Call it from WhenLoaded's `ready`: loading here blocks the UI thread,
+  // which a page that did not wait does, logged as the bug it is. Null for a
   // profile the desk does not have.
   Profile* ContextOf(Profile& shell, const std::string& id);
 
@@ -121,6 +153,10 @@ class BrowserProfileRegistry final : public ProfileObserver {
   // Sets the shell's profile. A desk has one shell, in one profile.
   void UseShell(Profile& shell);
 
+  // Recomputes the profiles from the config's and the pins, and tells the
+  // observers when that changed them.
+  void Update();
+
   // Profile `id`'s `domicile-<id>`, loading it now if it is not yet.
   Profile* Load(const std::string& id);
   // Starts loading profile `id`'s `domicile-<id>`, without blocking.
@@ -142,16 +178,28 @@ class BrowserProfileRegistry final : public ProfileObserver {
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
   raw_ptr<Profile> shell_ = nullptr;
+  // The compositor's, as the config has them.
+  BrowserProfiles config_;
+  // The user's, from the shell's prefs once the shell is known.
+  PinnedSites pinned_;
+  // config_ with pinned_ (WithPinnedSites).
   BrowserProfiles profiles_;
   // The config's extensions, once SetExtensions has them.
   std::optional<ExtensionList> extensions_;
+  // The id of each of extensions_'s unpacked directories.
+  std::map<std::string, std::string> unpacked_ids_;
   // By id. Never the default profile, which is the shell's.
   std::map<std::string, Loaded> loaded_;
+  // What waits on each profile that is loading (WhenLoaded), by id.
+  std::map<std::string, std::vector<base::OnceClosure>> waiting_;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> observations_{
       this};
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<BrowserProfileRegistry> weak_factory_{this};
 };
+
+// Registers the pref the sites the user pinned are kept in.
+void RegisterBrowserProfilesPrefs(PrefRegistrySimple* registry);
 
 // Has the control channel hand the compositor's `browser_profiles` to
 // BrowserProfileRegistry, for the shell whose channel heard them. Once, from

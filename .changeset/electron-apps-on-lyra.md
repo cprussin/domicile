@@ -3,6 +3,9 @@
 "@domicile-desktop/electron-host": patch
 ---
 
-`domicile open --electron` finds apps behind nixpkgs' compiled wrappers, as Claude's and ChatGPT's packages are, and runs them with what those wrappers set.
+Electron apps start on the engine more reliably:
 
-An app's first secret no longer crashes it when the login keyring is locked: the keyring asks to be unlocked, as with the app's own Electron, and a keyring that fails leaves the app without encryption, as Electron does.
+- Apps started at login wait up to a minute for the engine instead of failing at once.
+- An app whose package removed some of its unpacked files (nixpkgs' ChatGPT) starts.
+- safeStorage picks its backend the way Chromium does, from `--password-store` and the desktop, so Element no longer migrates its store and relaunches forever. `app.commandLine` now answers the switches the app was started with.
+- `session.allowNTLMCredentialsForDomains` is accepted, and Slack's `slack-webapp-dev` and ChatGPT's `codex-sandbox` schemes register from the engine's first start, so neither falls back on its first run.

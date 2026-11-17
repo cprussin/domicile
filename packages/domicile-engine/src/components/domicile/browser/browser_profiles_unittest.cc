@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/browser_profiles.h"
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -169,6 +170,59 @@ TEST(BrowserProfilesTest, TheMostSpecificSiteWins) {
   EXPECT_EQ(profile_for("chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/"
                         "x.html"),
             "personal");
+}
+
+TEST(BrowserProfilesTest, ASiteForAnAddressIsTheEntryThatRoutesIt) {
+  const BrowserProfiles profiles =
+      WithSites(R"({"*.acme.com":"work","github.com/acme":"work"})");
+  const auto site_for = [&profiles](const char* url) -> std::string {
+    const std::string* site = SiteForUrl(profiles, GURL(url));
+    return site == nullptr ? "(none)" : *site;
+  };
+
+  EXPECT_EQ(site_for("https://docs.acme.com/x"), "*.acme.com");
+  EXPECT_EQ(site_for("https://github.com/acme/repo"), "github.com/acme");
+  EXPECT_EQ(site_for("https://github.com/"), "(none)");
+  EXPECT_EQ(site_for("about:blank"), "(none)");
+}
+
+TEST(BrowserProfilesTest, PinnedSitesGoUnderTheConfigs) {
+  const BrowserProfiles config = WithSites(R"({"*.acme.com":"work"})");
+  const BrowserProfiles profiles = WithPinnedSites(
+      config, {{"github.com/acme", "work"},
+               {"news.example", "incognito"},
+               // The config's own site keeps the config's profile.
+               {"*.acme.com", "incognito"},
+               // No site maps to the default profile.
+               {"mail.example", "personal"},
+               // A profile the config no longer has.
+               {"old.example", "gone"}});
+
+  EXPECT_EQ(profiles.sites,
+            (std::map<std::string, std::string>{
+                {"*.acme.com", "work"},
+                {"github.com/acme", "work"},
+                {"news.example", "incognito"}}));
+  EXPECT_EQ(ProfileForUrl(profiles, GURL("https://news.example/")),
+            "incognito");
+}
+
+TEST(BrowserProfilesTest, ASiteKeyIsAHostAWildcardOrAHostAndPath) {
+  EXPECT_TRUE(IsSiteKey("github.com"));
+  EXPECT_TRUE(IsSiteKey("*.acme.com"));
+  EXPECT_TRUE(IsSiteKey("github.com/acme"));
+  EXPECT_TRUE(IsSiteKey("github.com/acme/public"));
+  EXPECT_TRUE(IsSiteKey("localhost"));
+
+  EXPECT_FALSE(IsSiteKey(""));
+  EXPECT_FALSE(IsSiteKey("GitHub.com"));
+  EXPECT_FALSE(IsSiteKey("https://github.com"));
+  EXPECT_FALSE(IsSiteKey("github.com/"));
+  EXPECT_FALSE(IsSiteKey("github.com/acme/"));
+  EXPECT_FALSE(IsSiteKey("github.com/acme?x"));
+  EXPECT_FALSE(IsSiteKey("*."));
+  EXPECT_FALSE(IsSiteKey(".github.com"));
+  EXPECT_FALSE(IsSiteKey("github.com:443"));
 }
 
 TEST(BrowserProfilesTest, APageMovesWhenRoutingDisagreesAtEitherEnd) {

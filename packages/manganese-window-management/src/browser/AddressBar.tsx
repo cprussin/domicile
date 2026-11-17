@@ -28,6 +28,7 @@ import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 import type { MediaDeviceChoice } from "./media-devices";
+import { ProfileMenu } from "./ProfileMenu";
 import { SitePermissions } from "./SitePermissions";
 import {
   isFullyZoomedIn,
@@ -35,6 +36,9 @@ import {
   isUnzoomed,
   zoomPercent,
 } from "./zoom-steps";
+
+/** What the profile button shows and does; see {@link ProfileMenu}. */
+export type ProfileChoice = Omit<Parameters<typeof ProfileMenu>[0], "url">;
 
 type Props = {
   /**
@@ -56,6 +60,12 @@ type Props = {
   mediaDevices?: MediaDeviceChoice | undefined;
   /** Whether the window is private, which the bar says in its own color. */
   isPrivate: boolean;
+  /**
+   * The page's browser profile and the others, for the profile button; or
+   * nothing while the engine has not listed them, when a private page is
+   * labeled Private instead.
+   */
+  profile?: ProfileChoice | undefined;
   /** How far the page has loaded, from 0 to 1. Shown only while `loading`. */
   loadProgress: number;
   /** Whether a page is loading, which turns Reload into Stop. */
@@ -91,8 +101,8 @@ type Props = {
 };
 
 /**
- * A browser window's toolbar: history controls, a private label for a private
- * window, address field with the connection and site permissions, and zoom.
+ * A browser window's toolbar: history controls, the page's browser profile,
+ * address field with the connection and site permissions, and zoom.
  * The desk's downloads show on the bar instead.
  *
  * Follows Chromium's layout, which users already know.
@@ -118,6 +128,7 @@ export const AddressBar = ({
   onZoomOut,
   onZoomReset,
   permissionRequest,
+  profile,
   security,
   sitePermissions,
   visited,
@@ -184,11 +195,15 @@ export const AddressBar = ({
           <AnimatedReloadIcon loading={loading} size={16} />
         </Button>
       </div>
-      {isPrivate && (
-        <span className={privateStyles}>
-          <DetectiveIcon size={16} weight="fill" />
-          Private
-        </span>
+      {profile === undefined ? (
+        isPrivate && (
+          <span className={privateStyles}>
+            <DetectiveIcon size={16} weight="fill" />
+            Private
+          </span>
+        )
+      ) : (
+        <ProfileMenu {...profile} url={address} />
       )}
       <Autocomplete
         aria-label="Address"
