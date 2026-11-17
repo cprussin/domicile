@@ -1,0 +1,160 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 17 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a resize to a closed Widget ends its renderer
+
+On lyra a page hung on resize after a blink.mojom.Widget reply arrived
+"after the interface disconnected". The host kept its closed Widget,
+was never rebound, and dropped every later resize and move.
+
+- blink_widget_'s disconnect is recorded with its reason.
+- A resize or move (SynchronizeVisualProperties, SendScreenRects) more
+  than two seconds after the close logs the widget, renderer, origin
+  and close reason at ERROR and ends the renderer with
+  RESULT_CODE_HUNG. The page shows as crashed with Reload.
+- Only hosts that would send to the Widget are checked: an inactive
+  RenderViewHost's widget, which keeps a closed Widget on purpose, is
+  skipped. Rebinding or the renderer exiting clears the record.
+- Why the Widget closed is not known yet; the logged reason is there
+  to tell.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ .../renderer_host/render_widget_host_impl.cc  | 49 +++++++++++++++++++
+ .../renderer_host/render_widget_host_impl.h   | 13 +++++
+ 2 files changed, 62 insertions(+)
+
+diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
+index 187461d..99cfa33 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.cc
++++ b/content/browser/renderer_host/render_widget_host_impl.cc
+@@ -25,6 +25,7 @@
+ #include "base/i18n/rtl.h"
+ #include "base/lazy_instance.h"
+ #include "base/location.h"
++#include "base/logging.h"
+ #include "base/memory/ptr_util.h"
+ #include "base/memory/safety_checks.h"
+ #include "base/metrics/field_trial.h"
+@@ -167,6 +168,7 @@
+ #include "ui/gfx/image/image_skia.h"
+ #include "ui/gfx/skbitmap_operations.h"
+ #include "ui/snapshot/snapshot.h"
++#include "url/gurl.h"
+ 
+ #if BUILDFLAG(IS_ANDROID)
+ #include "content/browser/renderer_host/input/fling_scheduler_android.h"
+@@ -195,6 +197,10 @@ using blink::WebMouseWheelEvent;
+ namespace content {
+ namespace {
+ 
++// DOMICILE: how long a Widget may stay closed before a resize or move ends
++// its renderer. A host that is being torn down or rebound is done by then.
++constexpr base::TimeDelta kDomicileDeadWidgetGrace = base::Seconds(2);
++
+ constexpr gfx::Rect kInvalidScreenRect(std::numeric_limits<int>::max(),
+                                        std::numeric_limits<int>::max(),
+                                        0,
+@@ -694,6 +700,12 @@ void RenderWidgetHostImpl::SendScreenRects() {
+   if (!view_) {
+     return;
+   }
++  // DOMICILE: an inactive RenderViewHost's widget keeps its closed Widget on
++  // purpose, so only an active one is checked.
++  if ((!owner_delegate_ || owner_delegate_->IsMainFrameActive()) &&
++      DomicileEndedDeadWidget()) {
++    return;
++  }
+   // Throttle to one update at a time.
+   if (waiting_for_screen_rects_ack_) {
+     return;
+@@ -767,6 +779,39 @@ void RenderWidgetHostImpl::BindWidgetInterfaces(
+       GetUIThreadTaskRunner({BrowserTaskType::kUserInput}));
+   blink_widget_.Bind(std::move(widget),
+                      GetUIThreadTaskRunner({BrowserTaskType::kUserInput}));
++  domicile_widget_closed_at_ = base::TimeTicks();
++  blink_widget_.set_disconnect_with_reason_handler(base::BindOnce(
++      &RenderWidgetHostImpl::DomicileOnWidgetClosed, base::Unretained(this)));
++}
++
++void RenderWidgetHostImpl::DomicileOnWidgetClosed(
++    uint32_t reason,
++    const std::string& description) {
++  domicile_widget_closed_at_ = base::TimeTicks::Now();
++  domicile_widget_close_reason_ = reason;
++  domicile_widget_close_description_ = description;
++}
++
++bool RenderWidgetHostImpl::DomicileEndedDeadWidget() {
++  if (domicile_widget_closed_at_.is_null() || destroyed_ ||
++      base::TimeTicks::Now() - domicile_widget_closed_at_ <
++          kDomicileDeadWidgetGrace ||
++      !GetProcess()->IsInitializedAndNotDead()) {
++    return false;
++  }
++  LOG(ERROR) << "domicile: widget " << GetRoutingID() << " of renderer "
++             << GetProcess()->GetDeprecatedID() << " on "
++             << GURL(GetMainFrameLastCommittedURLSpec())
++                    .DeprecatedGetOriginAsURL()
++                    .spec()
++             << " was resized or moved "
++             << (base::TimeTicks::Now() - domicile_widget_closed_at_)
++             << " after its Widget closed (reason "
++             << domicile_widget_close_reason_ << ", \""
++             << domicile_widget_close_description_
++             << "\"); ending the renderer";
++  GetProcess()->Shutdown(RESULT_CODE_HUNG);
++  return true;
+ }
+ 
+ void RenderWidgetHostImpl::BindPopupWidgetInterface(
+@@ -1356,6 +1401,9 @@ bool RenderWidgetHostImpl::SynchronizeVisualProperties(
+   if (!view_) {
+     return false;
+   }
++  if (DomicileEndedDeadWidget()) {
++    return false;
++  }
+ 
+   // Record fullscreen state transitions before checking
+   // `visual_properties_ack_pending_` so that a fullscreen change and revert
+@@ -2446,6 +2494,7 @@ void RenderWidgetHostImpl::RendererExited() {
+   fullscreen_grant_count_ = 0;
+ 
+   blink_widget_.reset();
++  domicile_widget_closed_at_ = base::TimeTicks();
+ 
+   // No need to perform a deferred show after the renderer crashes, and this
+   // wouldn't work anyway as it requires a valid `blink_widget_`.
+diff --git a/content/browser/renderer_host/render_widget_host_impl.h b/content/browser/renderer_host/render_widget_host_impl.h
+index 32e6932..b58dce0 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.h
++++ b/content/browser/renderer_host/render_widget_host_impl.h
+@@ -1288,6 +1288,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl
+   // widgets that don't have focus to still handle key presses.
+   bool KeyPressListenersHandleEvent(const input::NativeWebKeyboardEvent& event);
+ 
++  // DOMICILE: a renderer can close its Widget while this host stays active
++  // and is never rebound. Every later resize and move then goes nowhere and
++  // the page hangs. These record the close and, on a resize or move more
++  // than kDomicileDeadWidgetGrace after it, log and end the renderer so the
++  // page shows as crashed with Reload.
++  void DomicileOnWidgetClosed(uint32_t reason, const std::string& description);
++  bool DomicileEndedDeadWidget();
++
+   void WindowSnapshotReachedScreen(int snapshot_id);
+ 
+   void OnSnapshotFromSurfaceReceived(
+@@ -1434,6 +1442,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
+   // True if |Destroy()| has been called.
+   bool destroyed_ = false;
+ 
++  // DOMICILE: when and why blink_widget_ last closed; null while it is open.
++  base::TimeTicks domicile_widget_closed_at_;
++  uint32_t domicile_widget_close_reason_ = 0;
++  std::string domicile_widget_close_description_;
++
+   // Handles mojo connections for RenderInputRouterDelegate[Client] interface to
+   // allow sycing information between the Browser and the GPU process for input
+   // handling with InputVizard.
