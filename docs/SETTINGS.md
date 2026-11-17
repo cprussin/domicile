@@ -19,6 +19,15 @@ not in the Extensions page or any extension list.
   engine; this works with a read-only config. The config's own uninstall by
   editing its `extensions` lists
   ([EXTENSIONS.md](architecture/EXTENSIONS.md#from-the-settings-app)).
+- **Profiles:** a card per browser profile with its color, whether it is
+  private, and its extension switches, and one list of the sites that open
+  outside the default profile, each with its profile
+  ([BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md)). **Add profile**,
+  **Make default**, a color, Private and removing a profile change the config.
+  An extension switch and a site added here are saved by the desktop, as the
+  address bar's profile menu saves them; one the config sets changes in the
+  config, and is locked when the config is read-only. Adding a site that is
+  already listed is refused, pointing at its row.
 - **Site permissions:** each permission with the sites that have a setting of
   their own for it, or each site with all its permissions. **Remove site**
   clears all of a site's own settings. Changes take effect at once in open
@@ -69,6 +78,8 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
                                                                      monitors
                                                                                                     extensions,
                                                                                                     set_extension_enabled,
+                                                                                                    browser_profiles,
+                                                                                                    pin_browser_site,
                                                                                                     configure_extension,
                                                                                                     media_devices,
                                                                                                     set_media_device,
@@ -88,6 +99,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 | Writable | `access(W_OK)` on the file, following links. |
 | Shell options | `settings_files` names the shell's `options.json`, beside its module. The host reads it with the config and checks `shell_options` writes against it. |
 | Extensions | The engine's `extensions`, `set_extension_enabled`, `configure_extension`, `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
+| Profiles | The engine's `browser_profiles`, `pin_browser_site` and `set_extension_enabled` with a `profile`, on the desk's `BrowserProfileRegistry` ([BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md)). The profiles themselves are the config's `browser`. |
 | Picking a folder | The host calls the `FileChooser` portal's `OpenFile` with `directory`, which the shell draws ([PORTALS.md](PORTALS.md)). A page cannot learn the path of a folder from `<input type="file">`. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
 | Site data | The engine's `site_data` and `clear_site_data` commands. They read and remove the shell profile's data through Chrome's `BrowsingDataModel`, as `chrome://settings/content/all` does. |

@@ -140,6 +140,52 @@ const extensionSchema = z
 /** An extension in the browser windows' profile. */
 export type InstalledExtension = z.output<typeof extensionSchema>;
 
+const profileExtensionSchema = z.object({
+  enabled: z.boolean(),
+  id: z.string(),
+  locked: z.boolean(),
+});
+
+/**
+ * One extension's switch in a browser profile. `locked` when the config
+ * switches it, so only the config changes it.
+ */
+export type ProfileExtension = z.infer<typeof profileExtensionSchema>;
+
+const browserProfileSchema = z.object({
+  color: z.string(),
+  extensions: z.array(profileExtensionSchema),
+  id: z.string(),
+  name: z.string(),
+  private: z.boolean(),
+});
+
+/** A browser profile, as the desktop runs it. */
+export type BrowserProfile = z.infer<typeof browserProfileSchema>;
+
+const browserSiteSchema = z.object({
+  pinned: z.boolean(),
+  profile: z.string(),
+  site: z.string(),
+});
+
+/**
+ * A site that opens in a profile other than the default. `pinned` when the
+ * user chose it, from a browser window or Settings; otherwise the config
+ * lists it.
+ */
+export type BrowserSite = z.infer<typeof browserSiteSchema>;
+
+/** Every browser profile, and where each listed site opens. */
+export type BrowserProfiles = {
+  /** Where a link opens when no site names a profile. */
+  defaultProfile: string;
+  /** Where a private window opens when nothing names a profile. */
+  defaultPrivateProfile: string;
+  profiles: BrowserProfile[];
+  sites: BrowserSite[];
+};
+
 /** Which list a device is in. */
 export type MediaKind = "camera" | "microphone";
 
@@ -184,7 +230,22 @@ export type SettingsHost = {
   configExtensions: () => Promise<string[]>;
   /** Every extension in the browser windows' profile. */
   extensions: () => Promise<InstalledExtension[]>;
-  setExtensionEnabled: (id: string, enabled: boolean) => Promise<void>;
+  /**
+   * Switches an extension on or off: in every profile, or in `profile` alone.
+   * The engine refuses a switch the config sets.
+   */
+  setExtensionEnabled: (
+    id: string,
+    enabled: boolean,
+    profile?: string,
+  ) => Promise<void>;
+  /** The browser profiles the desktop runs, and where each listed site opens. */
+  browserProfiles: () => Promise<BrowserProfiles>;
+  /**
+   * Opens `site` in `profile` from now on; the default profile unpins it. The
+   * engine refuses a site the config lists.
+   */
+  pinBrowserSite: (site: string, profile: string) => Promise<void>;
   /** Changes each of `settings` that is set; the engine refuses one `id` cannot use. */
   configureExtension: (
     id: string,
@@ -263,6 +324,19 @@ export const spawnedHost = (
     });
 
   return {
+    browserProfiles: async () => {
+      const reply = await ask({ type: "browser_profiles" });
+      if (reply.type === "browser_profiles") {
+        return {
+          defaultPrivateProfile: reply.default_private_profile,
+          defaultProfile: reply.default_profile,
+          profiles: reply.profiles,
+          sites: reply.sites,
+        };
+      } else {
+        throw unexpected(reply, "browser_profiles");
+      }
+    },
     chooseFolder: async () => {
       const reply = await ask({ type: "choose_folder" });
       if (reply.type === "folder") {
@@ -343,6 +417,12 @@ export const spawnedHost = (
         throw unexpected(reply, "opened");
       }
     },
+    pinBrowserSite: async (site, profile) => {
+      const reply = await ask({ profile, site, type: "pin_browser_site" });
+      if (reply.type !== "stored") {
+        throw unexpected(reply, "stored");
+      }
+    },
     read: async () => {
       const reply = await ask({ type: "read" });
       if (reply.type === "files") {
@@ -356,10 +436,11 @@ export const spawnedHost = (
         throw unexpected(reply, "files");
       }
     },
-    setExtensionEnabled: async (extension, enabled) => {
+    setExtensionEnabled: async (extension, enabled, profile) => {
       const reply = await ask({
         enabled,
         extension,
+        ...(profile === undefined ? {} : { profile }),
         type: "set_extension_enabled",
       });
       if (reply.type !== "stored") {
@@ -461,6 +542,14 @@ const replySchema = z.discriminatedUnion("type", [
     type: z.literal("extensions"),
   }),
   z.object({ id: z.number(), type: z.literal("opened") }),
+  z.object({
+    default_private_profile: z.string(),
+    default_profile: z.string(),
+    id: z.number(),
+    profiles: z.array(browserProfileSchema),
+    sites: z.array(browserSiteSchema),
+    type: z.literal("browser_profiles"),
+  }),
   z.object({
     id: z.number(),
     sites: z.array(siteDataSchema),

@@ -8,7 +8,12 @@ import { App } from "./App";
 import { hostExtensions } from "./extensions";
 import type { FakeHostState } from "./fake-host";
 import { fakeHost } from "./fake-host";
-import type { InstalledExtension, Monitor, SettingsFiles } from "./host";
+import type {
+  BrowserProfiles,
+  InstalledExtension,
+  Monitor,
+  SettingsFiles,
+} from "./host";
 
 const CONFIG_PATH = "/home/me/.config/domicile/domicile.json";
 const SHELL_PATH = "/home/me/.config/domicile/shell.ts";
@@ -109,9 +114,12 @@ const renderApp = async (
     configExtensions = [],
     monitors,
     options,
+    profiles,
     refuse,
     writable = true,
   }: {
+    /** The browser profiles the engine runs. */
+    profiles?: BrowserProfiles;
     /** The folder the picker returns; `null` for a canceled picker. */
     chosen?: string | null;
     config?: Record<string, unknown>;
@@ -131,6 +139,7 @@ const renderApp = async (
     installed: structuredClone(INSTALLED),
     media: structuredClone(MEDIA),
     monitors,
+    profiles: structuredClone(profiles),
     refuse,
     siteData: structuredClone(SITE_DATA),
     sites: structuredClone(SITES),
@@ -148,6 +157,55 @@ const written = (writes: { file: string; text: string }[]) => {
   expect(last?.file).toBe("config");
   return JSON.parse(last?.text ?? "");
 };
+
+/** The config's profiles, as the Profiles page tests start them. */
+const BROWSER = {
+  default_private_profile: "private",
+  default_profile: "personal",
+  profiles: {
+    personal: { color: "#0d9488", name: "Personal" },
+    private: { color: "#a78bfa", name: "Private", private: true },
+    work: { color: "#d97706", extensions: [UBLOCK], name: "Work" },
+  },
+  sites: { "*.acme.com": "work" },
+};
+
+/** What the engine runs for {@link BROWSER}, with a site the user pinned. */
+const PROFILES: BrowserProfiles = {
+  defaultPrivateProfile: "private",
+  defaultProfile: "personal",
+  profiles: [
+    {
+      color: "#0d9488",
+      extensions: [{ enabled: false, id: UBLOCK, locked: false }],
+      id: "personal",
+      name: "Personal",
+      private: false,
+    },
+    {
+      color: "#d97706",
+      extensions: [{ enabled: true, id: UBLOCK, locked: true }],
+      id: "work",
+      name: "Work",
+      private: false,
+    },
+    {
+      color: "#a78bfa",
+      extensions: [{ enabled: false, id: UBLOCK, locked: false }],
+      id: "private",
+      name: "Private",
+      private: true,
+    },
+  ],
+  sites: [
+    { pinned: false, profile: "work", site: "*.acme.com" },
+    { pinned: true, profile: "work", site: "github.com/acme" },
+  ],
+};
+
+/** A profile's card on the Profiles page. */
+const profileCard = async (name: string) =>
+  within(await screen.findByRole("region", { name }));
 
 const choose = async (
   user: ReturnType<typeof userEvent.setup>,
@@ -993,6 +1051,149 @@ describe(App, () => {
       });
       await waitFor(() => {
         expect(screen.queryByText("mail.example")).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("profiles", () => {
+    const openProfiles = (writable = true) =>
+      renderApp("Profiles", {
+        config: { browser: BROWSER },
+        profiles: PROFILES,
+        writable,
+      });
+
+    it("switches an extension in one profile through the desktop", async () => {
+      const { host, user } = await openProfiles();
+      const personal = await profileCard("Personal");
+      await user.click(
+        personal.getByRole("switch", {
+          name: "uBlock Origin Lite in Personal",
+        }),
+      );
+      await waitFor(() => {
+        expect(host.switched).toEqual([
+          { enabled: true, id: UBLOCK, profile: "personal" },
+        ]);
+      });
+      expect(host.writes).toEqual([]);
+    });
+
+    it("switches an extension the config locks in the config", async () => {
+      const { host, user } = await openProfiles();
+      const work = await profileCard("Work");
+      await user.click(
+        work.getByRole("switch", { name: "uBlock Origin Lite in Work" }),
+      );
+      await waitFor(() => {
+        expect(written(host.writes).browser.profiles.work.extensions).toEqual(
+          [],
+        );
+      });
+      expect(host.switched).toEqual([]);
+    });
+
+    it("locks what the config sets when the config is read-only", async () => {
+      await openProfiles(false);
+      const work = await profileCard("Work");
+      expect(
+        work.getByRole("switch", { name: "uBlock Origin Lite in Work" }),
+      ).toHaveAttribute("aria-disabled", "true");
+      expect(
+        screen.getByRole("combobox", { name: "Where *.acme.com opens" }),
+      ).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "Remove *.acme.com" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", { name: "Where github.com/acme opens" }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByRole("button", { name: "Make default" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("adds a site through the desktop", async () => {
+      const { host, user } = await openProfiles();
+      await user.type(
+        await screen.findByRole("textbox", { name: "Add a site" }),
+        "Chase.com",
+      );
+      await choose(user, "Profile to open it in", "Private");
+      await user.click(screen.getByRole("button", { name: "Add" }));
+      await waitFor(() => {
+        expect(host.pinned).toEqual([
+          { profile: "private", site: "chase.com" },
+        ]);
+      });
+      expect(
+        await screen.findByRole("combobox", { name: "Where chase.com opens" }),
+      ).toHaveTextContent("Private");
+    });
+
+    it("refuses a site that is already listed, pointing at its row", async () => {
+      const { host, user } = await openProfiles();
+      await user.type(
+        await screen.findByRole("textbox", { name: "Add a site" }),
+        "github.com/acme",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "github.com/acme already opens in Work. Change its profile in its row above.",
+      );
+      expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+      expect(host.pinned).toEqual([]);
+    });
+
+    it("moves the config's site in the config and the user's through the desktop", async () => {
+      const { host, user } = await openProfiles();
+      await screen.findByRole("combobox", { name: "Where *.acme.com opens" });
+      await choose(user, "Where *.acme.com opens", "Private");
+      await waitFor(() => {
+        expect(written(host.writes).browser.sites).toEqual({
+          "*.acme.com": "private",
+        });
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Remove github.com/acme" }),
+      );
+      await waitFor(() => {
+        expect(host.pinned).toEqual([
+          { profile: "personal", site: "github.com/acme" },
+        ]);
+      });
+    });
+
+    it("makes a profile the default, unlisting its sites", async () => {
+      const { host, user } = await openProfiles();
+      const work = await profileCard("Work");
+      await user.click(work.getByRole("button", { name: "Make default" }));
+      await waitFor(() => {
+        const { browser } = written(host.writes);
+        expect(browser.default_profile).toBe("work");
+        expect(browser.sites).toEqual({});
+      });
+    });
+
+    it("adds and removes a profile in the config", async () => {
+      const { host, user } = await openProfiles();
+      await user.type(
+        await screen.findByRole("textbox", { name: "New profile's name" }),
+        "Side Project",
+      );
+      await user.click(screen.getByRole("button", { name: "Add profile" }));
+      await waitFor(() => {
+        expect(written(host.writes).browser.profiles["side-project"]).toEqual({
+          color: "#2563eb",
+          name: "Side Project",
+          private: false,
+        });
+      });
+      const work = await profileCard("Work");
+      await user.click(work.getByRole("button", { name: "Remove Work" }));
+      await waitFor(() => {
+        const { browser } = written(host.writes);
+        expect(Object.keys(browser.profiles)).not.toContain("work");
+        expect(browser.sites).toEqual({});
       });
     });
   });

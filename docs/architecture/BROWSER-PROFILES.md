@@ -175,4 +175,5 @@ Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
   `lockedExtensions`, `setBrowserProfileExtensionEnabled`)
 - [x] Manganese: switch a profile's extensions from the menu
 - [ ] Manganese: tray by profile
-- [ ] Settings: Profiles page
+- [x] Settings: Profiles page (`browser_profiles` and `pin_browser_site` on the
+  command socket)

@@ -25,6 +25,7 @@ import { LauncherPage } from "./pages/LauncherPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
 import { PowerPage } from "./pages/PowerPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
+import { ProfilesPage } from "./pages/ProfilesPage";
 import { ShellPage } from "./pages/ShellPage";
 import { SiteDataPage } from "./pages/SiteDataPage";
 import { StartupPage } from "./pages/StartupPage";
@@ -159,6 +160,17 @@ const PageContent = ({
     case PageId.Extensions:
       return (
         <ExtensionsPage
+          {...named}
+          editor={editor}
+          extensions={extensions}
+          host={host}
+          readOnly={state === undefined ? undefined : whyReadOnly(state)}
+          report={report}
+        />
+      );
+    case PageId.Profiles:
+      return (
+        <ProfilesPage
           {...named}
           editor={editor}
           extensions={extensions}

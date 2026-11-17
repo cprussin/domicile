@@ -286,6 +286,13 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html","settings":{"private":false,"site_access":"all_sites"}}]}
 
 {"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
+{"type":"set_extension_enabled","version":1,"id":"…","enabled":true,"profile":"work"}
+{"type":"set"}   |   {"type":"refused","why":"…"}
+
+{"type":"browser_profiles","version":1}
+{"type":"browser_profiles","default_profile":"personal","default_private_profile":"private","profiles":[{"id":"work","name":"Work","color":"#d97706","private":false,"extensions":[{"id":"…","enabled":true,"locked":true}]}],"sites":[{"site":"github.com/acme","profile":"work","pinned":true}]}
+
+{"type":"pin_browser_site","version":1,"site":"github.com/acme","profile":"work"}
 {"type":"set"}   |   {"type":"refused","why":"…"}
 
 {"type":"configure_extension","version":1,"id":"…","settings":{"private":true,"site_access":["github.com"]}}
@@ -365,6 +372,16 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   config's `extensions.settings`; `configure_extension` changes the ones it
   names, and refuses one the extension cannot use
   ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#settings)).
+- `browser_profiles`, `pin_browser_site` and `set_extension_enabled` with a
+  `profile` are the Settings app's Profiles page
+  ([BROWSER-PROFILES.md](/docs/architecture/BROWSER-PROFILES.md)), as the
+  shell's `browserProfiles`, `pinBrowserSite` and
+  `setBrowserProfileExtensionEnabled`. Without a `profile`,
+  `set_extension_enabled` switches the shell profile's extension. A profile's
+  `extensions` is empty while it loads; `locked` is a switch the config's
+  `extensions` list sets. A site is `pinned` when the user pinned it, and the
+  config's otherwise. Pinning a site to the default profile unpins it; a site
+  the config lists is refused.
 - `media_devices` and `set_media_device` are the Settings app's too. They list
   each kind's devices in the order of Chrome's device ranking in the shell
   profile's prefs, and move one to the top. A site that names no device gets
