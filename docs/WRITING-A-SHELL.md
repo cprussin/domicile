@@ -80,11 +80,32 @@ domicile ./my-desktop/dist/shell.js
 - The module path is the whole interface. Name the file what you like.
 - Domicile serves the directory the module is in, over `domicile://`.
 
-**Dev loop:** run `vite build --watch` next to `domicile ./dist/shell.js`.
-Nothing reloads automatically (the page runs under `--app`, with no reload
-button). To load a rebuilt bundle, run `domicile load-shell ./dist/shell.js`
-in a terminal inside the desktop. Any shell works, and windows stay put
+To load a rebuilt bundle, run `domicile load-shell ./dist/shell.js` in a
+terminal inside the desktop. Any shell works, and windows stay put
 ([THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md)).
+
+### Hot module replacement
+
+While you work on a shell, serve it from its source instead, in a terminal
+inside the desktop:
+
+```sh
+domicile dev ./my-desktop/src/shell.tsx
+```
+
+- Vite serves your source, and the shell updates as you save. An edit to a
+  module that accepts updates keeps the page's state. With
+  `@vitejs/plugin-react` in your `vite.config`, that is any React component
+  (Fast Refresh).
+- An edit nothing accepts, such as one to the entry itself, reloads the shell.
+  Windows stay open.
+- Ctrl-C goes back to the shell you had.
+- Your `vite.config` applies, as in a build. `import.meta.hot` works as in
+  any Vite app, including `import.meta.hot.send` and custom events.
+- No port opens: the engine reaches the dev server over a socket only you can
+  open
+  ([DOMICILE-SCHEME.md](/docs/architecture/DOMICILE-SCHEME.md#dev-server)).
+- The Settings app shows no options for a shell served this way.
 
 **If your page's renderer dies,** the engine ends with a FATAL line saying
 so, and the supervisor starts it again. That is a bug in Domicile, not

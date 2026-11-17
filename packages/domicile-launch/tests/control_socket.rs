@@ -3,7 +3,7 @@
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_launch::cli::MonitorMode;
@@ -151,8 +151,12 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     capture: &|_| panic!("a question about this desktop reaches no engine"),
                     record: &|| panic!("a question about this desktop records nothing"),
                     files: &domicile_launch::control::SettingsFiles::default(),
-                    load: &|_, _| panic!("a question about this desktop reaches no engine"),
-                    module: Path::new("/desktops/mine/shell.js"),
+                    load: &|_| panic!("a question about this desktop reaches no engine"),
+                    shell: &domicile_launch::shell_path::Shell {
+                        files: domicile_launch::shell_path::ShellFiles::Directory,
+                        module: PathBuf::from("shell.js"),
+                        root: PathBuf::from("/desktops/mine"),
+                    },
                     open: &|_, _| panic!("a question about this desktop reaches no engine"),
                     open_app: &|_, _, _, _| {
                         panic!("a question about this desktop reaches no engine")
@@ -225,7 +229,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
     assert_eq!(
         ask(&path, &Request::WhichShell, Some(BRIEFLY)).expect("a desktop is running"),
         Response::Shell {
-            module: PathBuf::from("/desktops/mine/shell.js")
+            module: PathBuf::from("/desktops/mine/shell.js"),
+            root: PathBuf::from("/desktops/mine"),
+            dev_server: false,
         }
     );
     serving.join().expect("the desktop answered");

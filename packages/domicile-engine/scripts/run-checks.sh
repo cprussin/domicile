@@ -126,6 +126,7 @@ TOGETHER=(
   guard-shell-crash
   guard-app-only-in-shell
   guard-domicile-fetch
+  guard-shell-hmr
   guard-shell-workers
   guard-shell-pdf
   guard-pdf-scaled-text
@@ -162,6 +163,7 @@ ONCE=(
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch
+  guard-shell-hmr
   guard-electron-menu-bar
   guard-electron-message-box
   guard-electron-preload

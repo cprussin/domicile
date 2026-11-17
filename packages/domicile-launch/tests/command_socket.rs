@@ -26,6 +26,7 @@ use domicile_launch::command_socket::{
 use domicile_launch::extensions::{ExtensionSettings, InstalledExtension};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -38,18 +39,12 @@ fn the_engine_is_sent_the_shell_and_says_it_is_serving_it() {
     let (_scratch, path) = scratch();
     let heard = an_engine(&path, Some("{\"type\":\"loaded\"}\n"));
 
-    load_shell(
-        &path,
-        Path::new("/desktops/other"),
-        Path::new("shell.js"),
-        BRIEFLY,
-    )
-    .expect("the engine loaded it");
+    load_shell(&path, &other(), BRIEFLY).expect("the engine loaded it");
 
     // The bytes on the socket match the line `command.rs` checks.
     assert_eq!(
         heard.join().expect("the engine was listening"),
-        load_shell_line(Path::new("/desktops/other"), Path::new("shell.js"))
+        load_shell_line(&other(),)
     );
 }
 
@@ -74,13 +69,7 @@ fn an_engine_that_refused_is_carried_back_in_its_own_words() {
         Some("{\"type\":\"refused\",\"why\":\"load_shell needs a module\"}\n"),
     );
 
-    let why = load_shell(
-        &path,
-        Path::new("/desktops/other"),
-        Path::new("shell.js"),
-        BRIEFLY,
-    )
-    .expect_err("the engine refused it");
+    let why = load_shell(&path, &other(), BRIEFLY).expect_err("the engine refused it");
 
     assert_eq!(
         why,
@@ -107,13 +96,7 @@ fn an_engine_whose_shell_page_has_not_committed_says_it_has_no_shell_window() {
         ),
     );
 
-    let why = load_shell(
-        &path,
-        Path::new("/desktops/other"),
-        Path::new("shell.js"),
-        BRIEFLY,
-    )
-    .expect_err("the engine refused it");
+    let why = load_shell(&path, &other(), BRIEFLY).expect_err("the engine refused it");
 
     assert_eq!(why, CommandError::NoShellWindow);
     assert!(
@@ -130,13 +113,7 @@ fn an_engine_that_is_not_there_is_said_rather_than_waited_for() {
     // rather than hang the user's terminal.
     let (_scratch, path) = scratch();
 
-    let why = load_shell(
-        &path,
-        Path::new("/desktops/other"),
-        Path::new("shell.js"),
-        BRIEFLY,
-    )
-    .expect_err("nothing is bound there");
+    let why = load_shell(&path, &other(), BRIEFLY).expect_err("nothing is bound there");
 
     assert_eq!(
         why,
@@ -153,13 +130,7 @@ fn an_engine_that_takes_the_command_and_says_nothing_is_not_a_shell_that_loaded(
     let (_scratch, path) = scratch();
     let heard = an_engine(&path, None);
 
-    let why = load_shell(
-        &path,
-        Path::new("/desktops/other"),
-        Path::new("shell.js"),
-        BRIEFLY,
-    )
-    .expect_err("the engine never answered");
+    let why = load_shell(&path, &other(), BRIEFLY).expect_err("the engine never answered");
 
     assert_eq!(
         why,
@@ -574,4 +545,13 @@ fn the_engine_is_told_to_disable_while_typing_and_says_what_it_does() {
         heard.join().expect("the engine was listening"),
         disable_while_typing_line(Some(false))
     );
+}
+
+/// The shell these tests load.
+fn other() -> Shell {
+    Shell {
+        files: ShellFiles::Directory,
+        module: PathBuf::from("shell.js"),
+        root: PathBuf::from("/desktops/other"),
+    }
 }

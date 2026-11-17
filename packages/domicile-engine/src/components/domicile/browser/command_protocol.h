@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "components/domicile/browser/extension_settings.h"
+#include "components/domicile/browser/shell_source.h"
 #include "components/domicile/mojom/browser_windows.mojom-shared.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
@@ -28,6 +29,11 @@ namespace domicile {
 // serves. Each connection carries one JSON request line and one reply line.
 //
 //   {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
+//   {"type":"load_shell","version":1,"root":"/run/user/1000/dev.sock",
+//    "module":"@domicile/shell.js","dev_server":true}
+//                                      (`domicile dev`: the root is a dev
+//                                       server's socket; see
+//                                       shell_dev_server.h)
 //   -> {"type":"loaded"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -183,6 +189,7 @@ using ShellLoaded =
 // be loading and the new shell has yet to run.
 using LoadShell = base::FunctionRef<void(const base::FilePath& root,
                                          const std::string& module,
+                                         ShellFiles files,
                                          ShellLoaded loaded)>;
 
 // Runs once with whether `run_app` or `open_url` opened its window: false if

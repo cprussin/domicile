@@ -14,6 +14,7 @@ use domicile_launch::extensions::{
 };
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
@@ -30,10 +31,36 @@ fn a_desktop_says_which_shell_it_is_running() {
         answered(
             "{\"type\":\"which_shell\"}",
             Path::new("/desktops/mine/shell.js"),
-            &|_, _| panic!("a question is answered where it lands, not dialed on"),
+            &|_| panic!("a question is answered where it lands, not dialed on"),
         ),
         Response::Shell {
-            module: PathBuf::from("/desktops/mine/shell.js")
+            module: PathBuf::from("/desktops/mine/shell.js"),
+            root: PathBuf::from("/desktops/mine"),
+            dev_server: false,
+        }
+    );
+}
+
+#[test]
+fn a_desktop_says_when_its_shell_comes_from_a_dev_server() {
+    // `domicile dev` loads the shell it replaced again from this answer, so
+    // it must say where that shell's files come from.
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"which_shell\"}",
+            &Desktop {
+                shell: &Shell {
+                    files: ShellFiles::DevServer,
+                    module: PathBuf::from("domicile-dev-shell.js"),
+                    root: PathBuf::from("/run/dev.sock"),
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::Shell {
+            module: PathBuf::from("/run/dev.sock/domicile-dev-shell.js"),
+            root: PathBuf::from("/run/dev.sock"),
+            dev_server: true,
         }
     );
 }
@@ -46,22 +73,52 @@ fn a_desktop_told_to_load_a_shell_tells_the_engine_and_says_what_it_serves() {
     let answered = answered(
         "{\"type\":\"load_shell\",\"root\":\"/desktops/other\",\"module\":\"shell.js\"}",
         Path::new("/desktops/mine/shell.js"),
-        &|root, module| {
-            told.set(Some((root.to_path_buf(), module.to_path_buf())));
+        &|shell| {
+            told.set(Some(shell.clone()));
             Ok(())
         },
     );
 
     assert_eq!(
         told.take(),
-        Some((PathBuf::from("/desktops/other"), PathBuf::from("shell.js")))
+        Some(Shell {
+            root: PathBuf::from("/desktops/other"),
+            module: PathBuf::from("shell.js"),
+            files: ShellFiles::Directory,
+        })
     );
     // Replies with the new shell, as `which-shell` would.
     assert_eq!(
         answered,
         Response::Shell {
-            module: PathBuf::from("/desktops/other/shell.js")
+            module: PathBuf::from("/desktops/other/shell.js"),
+            root: PathBuf::from("/desktops/other"),
+            dev_server: false,
         }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_load_a_shell_from_a_dev_server_tells_the_engine_so() {
+    // `domicile dev` sends this: the root is the dev server's socket.
+    let told = Cell::new(None);
+    answered(
+        "{\"type\":\"load_shell\",\"root\":\"/run/user/1000/domicile-dev.7.sock\",\
+         \"module\":\"domicile-dev-shell.js\",\"dev_server\":true}",
+        Path::new("/desktops/mine/shell.js"),
+        &|shell| {
+            told.set(Some(shell.clone()));
+            Ok(())
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some(Shell {
+            root: PathBuf::from("/run/user/1000/domicile-dev.7.sock"),
+            module: PathBuf::from("domicile-dev-shell.js"),
+            files: ShellFiles::DevServer,
+        })
     );
 }
 
@@ -72,7 +129,7 @@ fn an_engine_that_refused_the_shell_is_quoted_to_whoever_typed_the_command() {
     let Response::Refused { why } = answered(
         "{\"type\":\"load_shell\",\"root\":\"/desktops/other\",\"module\":\"shell.js\"}",
         Path::new("/desktops/mine/shell.js"),
-        &|_, _| Err("this engine has no shell window to load a shell into".to_string()),
+        &|_| Err("this engine has no shell window to load a shell into".to_string()),
     ) else {
         panic!("an engine that refused the shell is not a desktop that loaded it");
     };
@@ -86,7 +143,7 @@ fn an_engine_that_refused_the_shell_is_quoted_to_whoever_typed_the_command() {
 fn a_line_that_is_not_a_request_is_refused_and_quoted_back() {
     // The refusal quotes the line so the client sees what was rejected.
     let Response::Refused { why } =
-        answered("{\"type\":\"reboot\"}", Path::new("/shell.js"), &|_, _| {
+        answered("{\"type\":\"reboot\"}", Path::new("/shell.js"), &|_| {
             panic!("a line that is not a request reaches no engine")
         })
     else {
@@ -631,7 +688,7 @@ fn a_desktop_says_which_files_the_settings_app_edits() {
             "{\"type\":\"settings_files\"}",
             &Desktop {
                 files: &files,
-                module: Path::new("/home/me/.cache/domicile/abc/shell.js"),
+                shell: &served_from("/home/me/.cache/domicile/abc/shell.js"),
                 ..nothing_dialed()
             }
         ),
@@ -1212,10 +1269,10 @@ fn nothing_dialed() -> Desktop<'static> {
         extensions: &|| panic!("only extensions lists every extension"),
         files: &NO_FILES,
         history: &|_| panic!("only history searches the history"),
-        load: &|_, _| panic!("only load_shell loads anything"),
+        load: &|_| panic!("only load_shell loads anything"),
         load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
         media_devices: &|| panic!("only media_devices lists media devices"),
-        module: Path::new("/shell.js"),
+        shell: Box::leak(Box::new(served_from("/shell.js"))),
         open: &|_, _| panic!("only open_url opens a browser window"),
         open_app: &|_, _, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
@@ -1259,10 +1316,20 @@ fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
         line,
         &Desktop {
             load,
-            module,
+            shell: &served_from(module),
             ..nothing_dialed()
         },
     )
+}
+
+/// The shell `module` names, served from its directory.
+fn served_from(module: impl AsRef<Path>) -> Shell {
+    let module = module.as_ref();
+    Shell {
+        files: ShellFiles::Directory,
+        module: PathBuf::from(module.file_name().expect("a module is a file")),
+        root: module.parent().expect("a module is in a directory").into(),
+    }
 }
 
 /// [`answered`], for `open_url`.
@@ -1305,7 +1372,7 @@ fn a_virtual_monitor_is_refused_on_a_connection_that_is_not_held() {
         "{\"type\":\"virtual_monitor\",\"name\":\"Pane\",\"width\":1280,\
          \"height\":720,\"refresh_mhz\":60000}",
         Path::new("/shell.js"),
-        &|_, _| panic!("a monitor reaches no engine"),
+        &|_| panic!("a monitor reaches no engine"),
     );
     assert!(matches!(refused, Response::Refused { .. }), "{refused:?}");
 }
@@ -1316,7 +1383,7 @@ fn a_resize_with_no_monitor_held_is_refused() {
         "{\"type\":\"resize_virtual_monitor\",\"width\":1280,\"height\":720,\
          \"refresh_mhz\":60000}",
         Path::new("/shell.js"),
-        &|_, _| panic!("a resize reaches no engine"),
+        &|_| panic!("a resize reaches no engine"),
     );
     assert!(matches!(refused, Response::Refused { .. }), "{refused:?}");
 }

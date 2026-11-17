@@ -27,6 +27,9 @@ Ask the running desktop:
 
   domicile which-shell                  Print the shell it serves
   domicile load-shell <shell>           Serve another shell, or a new build
+  domicile dev <entry>                  Serve a shell's source with hot module
+                                        replacement until stopped, then go
+                                        back to the shell it replaced
   domicile open <file|folder|url>       Open with its default app, a link in
                                         a browser window
   domicile open --profile <id> <url>    Open a link in browser profile <id>
@@ -130,6 +133,17 @@ pub enum CliError {
          started — so there is no --config here either."
     )]
     ExtraToLoad { extra: String },
+    #[error(
+        "dev takes the file your shell's source starts at, and was given \
+         nothing:\n\n    \
+         domicile dev ./my-desktop/src/shell.tsx\n"
+    )]
+    NoEntryToServe,
+    #[error(
+        "dev serves one shell, and it was given {extra} as well. Stop the \
+         other domicile dev first, or give the one entry that imports both."
+    )]
+    ExtraToServe { extra: String },
     #[error(
         "open takes the file, folder or address to open, and was given \
          nothing:\n\n    \
@@ -287,6 +301,12 @@ pub enum Invocation {
     ///
     /// Kept as typed; `shell_path` resolves it against the filesystem.
     Load { shell: String },
+    /// Serve the shell whose source starts at this entry from a dev server,
+    /// with hot module replacement, until stopped; then load the shell it
+    /// replaced again.
+    ///
+    /// Kept as typed; it is relative to the working directory.
+    Dev { entry: String },
     /// Open this file, folder or address with what opens its type; see
     /// [`crate::open`]. A web address opens in a new browser window.
     ///
@@ -436,6 +456,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NoShellToLoad),
                 (Some(shell), None) => Ok(Invocation::Load { shell }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToLoad { extra }),
+            },
+            Verb::Developing => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NoEntryToServe),
+                (Some(entry), None) => Ok(Invocation::Dev { entry }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToServe { extra }),
             },
             Verb::Opening if args.peek().is_some_and(|word| word == ELECTRON) => {
                 args.next();
@@ -752,6 +777,8 @@ enum Verb {
     Asking(Request),
     /// `load-shell`, which takes a shell.
     Loading,
+    /// `dev`, which takes an entry.
+    Developing,
     /// `open`, which takes `--app` or nothing, then a target.
     Opening,
     /// `install-app`, which takes an address.
@@ -795,6 +822,7 @@ fn verb(word: &str) -> Option<Verb> {
     match word {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
         "load-shell" => Some(Verb::Loading),
+        "dev" => Some(Verb::Developing),
         "open" => Some(Verb::Opening),
         "install-app" => Some(Verb::Installing),
         "uninstall-app" => Some(Verb::Uninstalling),

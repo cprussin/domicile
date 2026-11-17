@@ -295,13 +295,17 @@ source_set("shell_origin") {
   ]
 }
 
-# Serving the shell over domicile://.
+# Serving the shell over domicile://, from a directory or, for `domicile dev`,
+# a dev server.
 #
 # A target of its own rather than part of :browser, because this depends on
 # //content and :browser deliberately does not -- that is a property worth
-# keeping, and the one thing here that needs content is its file loader.
+# keeping, and the things here that need content are its file loader and the
+# IO thread the dev server's socket is read on.
 source_set("shell_scheme") {
   sources = [
+    "browser/shell_dev_server.cc",
+    "browser/shell_dev_server.h",
     "browser/shell_url_loader_factory.cc",
     "browser/shell_url_loader_factory.h",
   ]
@@ -314,6 +318,7 @@ source_set("shell_scheme") {
     "//base",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
     "//net",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
@@ -430,6 +435,7 @@ source_set("command_protocol") {
   public_deps = [
     ":common",
     ":extension_settings",
+    ":shell_source",
     "//base",
     "//components/domicile/mojom",
     "//url",
@@ -1468,6 +1474,7 @@ source_set("unit_tests") {
     "browser/shell_fetch_unittest.cc",
     "browser/shell_origin_unittest.cc",
     "browser/shell_death_unittest.cc",
+    "browser/shell_dev_server_unittest.cc",
     "browser/shell_swap_unittest.cc",
     "browser/shell_window_wait_unittest.cc",
     "browser/shell_windows_unittest.cc",
@@ -1613,6 +1620,8 @@ source_set("unit_tests") {
     "//media",
     "//media/capture/mojom:video_capture_buffer",
     "//media/mojo/mojom",
+    # TestURLLoaderClient, for the dev server's loader.
+    "//services/network:test_support",
     "//services/viz/privileged/mojom/compositing",
     "//skia",
     "//testing/gmock",

@@ -47,6 +47,7 @@ struct Told {
   bool asked = false;
   base::FilePath root;
   std::string module;
+  std::optional<ShellFiles> files;
   bool ran = false;
   base::FilePath app_root;
   std::string app_module;
@@ -158,10 +159,11 @@ std::string Answer(std::string_view line,
                    bool has_window = true) {
   auto load_shell = [told, has_window](const base::FilePath& root,
                                        const std::string& module,
-                                       ShellLoaded loaded) {
+                                       ShellFiles files, ShellLoaded loaded) {
     told->asked = true;
     told->root = root;
     told->module = module;
+    told->files = files;
     if (told->hold_load) {
       told->held_load = std::move(loaded);
       return;
@@ -450,8 +452,37 @@ TEST(CommandProtocolTest, LoadsTheShellARequestNames) {
   EXPECT_TRUE(told.asked);
   EXPECT_EQ(told.root, base::FilePath("/home/someone/desktop/dist"));
   EXPECT_EQ(told.module, "desktop.js");
+  EXPECT_EQ(told.files, ShellFiles::kDirectory);
   // The reply is one line and includes its newline.
   EXPECT_EQ(reply.find('\n'), reply.size() - 1);
+}
+
+// `domicile dev`: the root is the dev server's socket.
+TEST(CommandProtocolTest, LoadsAShellFromTheDevServerARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"load_shell","version":1,"root":"/run/user/1000/dev.sock",)"
+      R"("module":"@domicile/shell.js","dev_server":true})",
+      &told);
+
+  EXPECT_EQ(TypeOf(reply), "loaded");
+  EXPECT_EQ(told.root, base::FilePath("/run/user/1000/dev.sock"));
+  EXPECT_EQ(told.module, "@domicile/shell.js");
+  EXPECT_EQ(told.files, ShellFiles::kDevServer);
+}
+
+TEST(CommandProtocolTest, RefusesADevServerThatIsNotABoolean) {
+  // Read as false, it would serve the socket as a directory: a blank shell
+  // with no reason given.
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"load_shell","version":1,"root":"/run/user/1000/dev.sock",)"
+      R"("module":"@domicile/shell.js","dev_server":"yes"})",
+      &told);
+
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("dev_server"));
+  EXPECT_FALSE(told.asked);
 }
 
 // An app module, opened by `domicile run-app`. See

@@ -36,6 +36,12 @@ inline constexpr char kDomicileAppHostPrefix[] = "app-";
 // Directory the shell's files are read from.
 inline constexpr char kDomicileShellRootSwitch[] = "domicile-shell-root";
 
+// Present when --domicile-shell-root names a dev server's unix socket rather
+// than a directory: `domicile dev` serves the shell with hot module
+// replacement. See components/domicile/browser/shell_dev_server.h.
+inline constexpr char kDomicileShellDevServerSwitch[] =
+    "domicile-shell-dev-server";
+
 // The compositor's control socket (its --chrome-socket): a unix stream of
 // newline-delimited JSON.
 inline constexpr char kDomicileControlSocketSwitch[] =

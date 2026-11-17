@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::shell_path::{Shell, ShellPathError};
+use domicile_launch::shell_path::{Shell, ShellFiles, ShellPathError};
 use domicile_launch::shell_source::{imports_a_package, shell_source, ShellSource};
 
 const HERE: &str = "/home/me/desk";
@@ -47,6 +47,7 @@ fn a_bundle_is_served_as_it_is() {
             )]
         ),
         Ok(ShellSource::Module(Shell {
+            files: ShellFiles::Directory,
             root: "/home/me/desk/dist".into(),
             module: "shell.js".into(),
         }))
@@ -99,6 +100,7 @@ fn a_word_that_is_a_file_where_it_was_typed_is_the_file() {
             &[("/home/me/desk/shell.js", "export const Shell = () => {};")]
         ),
         Ok(ShellSource::Module(Shell {
+            files: ShellFiles::Directory,
             root: "/home/me/desk".into(),
             module: "shell.js".into(),
         }))
@@ -119,6 +121,7 @@ fn a_packaged_desktop_s_module_is_its_own() {
             &|_| Some(String::new()),
         ),
         Ok(ShellSource::Module(Shell {
+            files: ShellFiles::Directory,
             root: "/nix/store/x-page".into(),
             module: "shell.js".into(),
         }))

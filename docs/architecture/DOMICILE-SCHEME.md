@@ -64,6 +64,32 @@ The fork writes the shell's HTML document
   rendering until then, so the crossfade is into the shell, not an empty white
   page
 
+## Dev server
+
+`domicile dev <entry>` serves a shell from its source with Vite, for hot
+module replacement
+([WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#hot-module-replacement)). The
+page stays on `domicile://shell/`, so it keeps its origin, its CSP and its
+capabilities, and no TCP port opens.
+
+- The builder runs Vite's dev server on a unix socket in `XDG_RUNTIME_DIR`,
+  mode 600 (`packages/domicile-builder/src/serve.ts`).
+- `load_shell` with `"dev_server": true`, or `--domicile-shell-dev-server` at
+  launch, makes the shell root that socket. The supervisor passes the switch
+  again when it restarts the engine.
+- The engine still writes the document. It imports `domicile-dev-shell.js`,
+  which runs what Vite's plugins add to a page (its client, React's Fast
+  Refresh preamble), then exports the entry's `Shell`.
+- Every other request under `domicile://shell/` goes to the socket as one
+  HTTP/1.0 request on its own connection, with its path, query, method and
+  body. The response streams back as it arrives, with `Cache-Control:
+  no-store` (`components/domicile/browser/shell_dev_server.{h,cc}`).
+- A WebSocket to the page's own origin is not possible, so Vite's client gets
+  its updates from one long `GET /@domicile/hmr`, one JSON message per line,
+  and sends its messages with `POST /@domicile/hmr?client=<id>`.
+- When the dev server is gone, the page's imports fail, and the engine logs
+  why.
+
 ## `domicile://home/`
 
 The user's home directory, for launcher previews (an `<img>`, `<video>` or PDF
