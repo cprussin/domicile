@@ -326,6 +326,7 @@ fn every_installed_extension_is_the_desktop_s() {
                 "enabled": true,
                 "options_url": null,
                 "settings": {"file_access": false},
+                "icon": "data:image/png;base64,iVBORw==",
             }],
         })
     );
@@ -616,6 +617,7 @@ fn the_host_watches_the_directory_of_each_file_once() {
 
 /// An extension id.
 const ID: &str = "abcdefghijklmnopabcdefghijklmnop";
+const ICON: &str = "/home/me/.config/domicile/Extensions/tabs/icon128.png";
 
 static FILES: std::sync::LazyLock<SettingsFiles> = std::sync::LazyLock::new(|| SettingsFiles {
     config: Some(PathBuf::from("/home/me/.config/domicile/domicile.json")),
@@ -707,6 +709,7 @@ impl Fake {
                                     file_access: Some(false),
                                     ..ExtensionSettings::default()
                                 },
+                                icon_path: Some(ICON.to_string()),
                             }],
                         },
                         Request::SetExtensionEnabled { .. } => Response::Stored,
@@ -778,6 +781,10 @@ impl Fake {
                     Some("/nix/store/x-shell.ts") => {
                         Ok("export const Shell = runManganese();".to_string())
                     }
+                    _ => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+                },
+                read_bytes: &|path| match path.to_str() {
+                    Some(ICON) => Ok(vec![0x89, b'P', b'N', b'G']),
                     _ => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
                 },
                 home: Some(Path::new("/home/me")),
