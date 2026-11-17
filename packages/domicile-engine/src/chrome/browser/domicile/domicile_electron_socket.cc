@@ -69,9 +69,11 @@ class ChromeElectronDesk final : public ElectronDesk {
                                   const std::string& preload,
                                   ElectronPageCalls calls,
                                   base::WeakPtr<ElectronSession> session,
-                                  bool view) override {
+                                  bool view,
+                                  const std::string& title,
+                                  bool hidden) override {
     return OpenElectronWindow(url, app_id, partition, preload, std::move(calls),
-                              std::move(session), view);
+                              std::move(session), view, title, hidden);
   }
   void SetViews(const std::string& id,
                 std::vector<ElectronDeskView> views) override {
@@ -89,6 +91,12 @@ class ChromeElectronDesk final : public ElectronDesk {
     LoadBrowserWindow(id, url);
   }
   void Focus(const std::string& id) override { FocusBrowserWindow(id); }
+  void SetTitle(const std::string& id, const std::string& title) override {
+    SetElectronTitle(id, title);
+  }
+  void SetHidden(const std::string& id, bool hidden) override {
+    SetElectronHidden(id, hidden);
+  }
   void AskToClose(const std::string& id) override {
     AskToCloseBrowserWindow(id);
   }

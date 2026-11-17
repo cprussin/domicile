@@ -321,17 +321,25 @@ describe(spawnedHost, () => {
       };
       processes[0]?.answer({
         extensions: [
-          { ...extension, options_url: "chrome-extension://a/options.html" },
-          { ...extension, options_url: null },
+          {
+            ...extension,
+            icon: "data:image/png;base64,iVBORw==",
+            options_url: "chrome-extension://a/options.html",
+          },
+          { ...extension, icon: null, options_url: null },
           extension,
         ],
         id: 1,
         type: "extensions",
       });
       expect(await asked).toEqual([
-        { ...extension, optionsUrl: "chrome-extension://a/options.html" },
-        { ...extension, optionsUrl: undefined },
-        { ...extension, optionsUrl: undefined },
+        {
+          ...extension,
+          icon: "data:image/png;base64,iVBORw==",
+          optionsUrl: "chrome-extension://a/options.html",
+        },
+        { ...extension, icon: undefined, optionsUrl: undefined },
+        { ...extension, icon: undefined, optionsUrl: undefined },
       ]);
     });
 

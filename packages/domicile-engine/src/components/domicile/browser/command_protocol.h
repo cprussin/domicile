@@ -73,7 +73,8 @@ namespace domicile {
 //   -> {"type":"extensions","extensions":[{"id":"...","name":"...",
 //       "description":"...","version":"1.0","enabled":true,
 //       "settings":{"private":false,"site_access":"all_sites"},
-//       "options_url":"chrome-extension://.../options.html"}]}
+//       "options_url":"chrome-extension://.../options.html",
+//       "icon_path":"/home/.../icons/128.png"}]}
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"set_extension_enabled","version":1,"id":"...","enabled":false}
@@ -293,6 +294,10 @@ struct InstalledExtension {
   ExtensionSettings settings;
   // Empty when the extension has no options page.
   GURL options_url;
+  // The absolute path of its manifest icon closest to 128px, for a list to
+  // draw; empty when its manifest names none. A path rather than the image,
+  // so listing reads no files.
+  std::string icon_path;
 };
 
 // Carries out `extensions`: every extension in the shell's profile, apps,

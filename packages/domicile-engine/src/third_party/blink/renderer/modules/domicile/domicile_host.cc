@@ -1240,6 +1240,19 @@ void DomicileHost::activateExtension(ScriptState*,
   }
 }
 
+// Over the tray's pipe, as activateExtension().
+void DomicileHost::setExtensionsProfile(ScriptState*,
+                                        const String& profile,
+                                        ExceptionState& exception_state) {
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    tray_->SetProfile(profile);
+  }
+}
+
 namespace {
 
 // The browser's answer to a change asked of an extension: empty for done, or
@@ -2105,7 +2118,7 @@ void DomicileHost::ExtensionsChanged(
         extension->id, extension->name, extension->title, extension->icon,
         extension->badge_text, extension->badge_color,
         extension->popup.empty() ? String() : extension->popup,
-        extension->enabled));
+        extension->enabled, extension->profile));
   }
   extensions_ =
       MakeGarbageCollected<FrozenArray<DomicileExtension>>(std::move(tray));
@@ -2129,9 +2142,11 @@ void DomicileHost::InstalledChanged(
 }
 
 // Dispatched, not held: see onextensionpopuprequested in the IDL.
-void DomicileHost::PopupRequested(const String& id, const String& popup) {
+void DomicileHost::PopupRequested(const String& id,
+                                  const String& popup,
+                                  const String& profile) {
   DispatchEvent(*MakeGarbageCollected<DomicileExtensionPopupEvent>(
-      domicile_event_names::Extensionpopuprequested(), id, popup));
+      domicile_event_names::Extensionpopuprequested(), id, popup, profile));
 }
 
 // An answer to searchFiles(): it settles the promise that asked it.

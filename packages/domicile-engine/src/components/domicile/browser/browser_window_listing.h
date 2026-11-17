@@ -20,6 +20,9 @@ struct ListedBrowserWindow {
   std::string id;
   // The page's title. Empty when it has none.
   std::string title;
+  // The title an Electron app gave its window, which the desktop shows
+  // instead of the page's. Empty for none.
+  std::string app_title;
   // The app window's id, or empty for any other window.
   std::string app_id;
   // The address it shows, or the one it is opening before its first
@@ -31,6 +34,9 @@ struct ListedBrowserWindow {
   // a capture tool never lists it, and its app hears it closed only when it
   // leaves this list.
   bool view = false;
+  // Whether it is an Electron app's window the app hid: open, its page
+  // running, but out of sight, so a capture tool doesn't list it.
+  bool hidden = false;
 
   friend bool operator==(const ListedBrowserWindow&,
                          const ListedBrowserWindow&) = default;

@@ -61,6 +61,8 @@ class ElectronPage final : public content::WebContentsObserver,
       base::OnceCallback<void(base::expected<base::Value, std::string>)> done);
   // The user clicked entry `command` of the window's menu bar.
   void MenuClicked(int command);
+  // The user asked to close the window: the app decides.
+  void CloseAsked();
 
   // A message on a port, and the main process closing one:
   void DeliverToPort(const std::string& port, const std::string& data_json);

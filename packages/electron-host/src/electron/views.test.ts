@@ -141,7 +141,12 @@ describe("WebContentsView", () => {
     load(view.webContents, "app://notes/chat");
 
     expect(sent).toEqual([
-      { type: "open_window", url: "app://notes/", window: window.id },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "app://notes/",
+        window: window.id,
+      },
       {
         type: "open_window",
         url: "app://notes/chat",

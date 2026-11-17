@@ -32,7 +32,7 @@
 //! {"id":9,"type":"set_media_device","kind":"camera","device":"…"}
 //!   {"id":9,"type":"stored"}
 //! {"id":10,"type":"extensions"}
-//!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…,"settings":{…}}]}   (options_url null if none)
+//!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…,"settings":{…},"icon":"data:image/png;base64,…"}]}   (options_url and icon null if none)
 //! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false}
 //! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false,"profile":"work"}
 //!   {"id":11,"type":"stored"}
@@ -73,7 +73,7 @@ use serde_json::{json, Value};
 
 use crate::config_path::is_module;
 use crate::control::{Request, Response, SettingsFiles};
-use crate::extensions::ExtensionSettings;
+use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
 use crate::shell_options::problems;
@@ -88,6 +88,8 @@ pub struct Host<'a> {
     /// Asks the running desktop over its control socket.
     pub ask: &'a dyn Fn(&Request) -> Result<Response, String>,
     pub read: &'a dyn Fn(&Path) -> std::io::Result<String>,
+    /// Reads a file that is not text, such as an extension's icon.
+    pub read_bytes: &'a dyn Fn(&Path) -> std::io::Result<Vec<u8>>,
     /// The user's home directory, which a leading `~` names.
     pub home: Option<&'a Path>,
     /// Shows the desktop's folder picker: the folder, or `None` if canceled.
@@ -306,7 +308,11 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
         }
         AppRequest::Extensions => match (host.ask)(&Request::Extensions)? {
             Response::Extensions { extensions } => {
-                Ok(json!({"type": "extensions", "extensions": extensions}))
+                let listed: Vec<Value> = extensions
+                    .into_iter()
+                    .map(|extension| with_icon(extension, host))
+                    .collect();
+                Ok(json!({"type": "extensions", "extensions": listed}))
             }
             other => Err(refusal_or_surprise(other)),
         },
@@ -428,6 +434,60 @@ fn file(path: Option<&Path>, host: &Host) -> Result<Value, String> {
     })
     .transpose()
     .map(|found| found.unwrap_or(Value::Null))
+}
+
+/// `extension` as the Settings app takes it: its icon as a `data:` URL in
+/// place of the icon's path, since the app cannot read files. Null when it has
+/// no icon, or the icon cannot be read, so the app draws its own placeholder.
+fn with_icon(extension: InstalledExtension, host: &Host) -> Value {
+    let icon = extension
+        .icon_path
+        .as_deref()
+        .and_then(|path| icon_data_url(Path::new(path), host));
+    let mut value = json!(extension);
+    if let Some(entry) = value.as_object_mut() {
+        entry.remove("icon_path");
+        entry.insert("icon".to_string(), icon.map_or(Value::Null, Value::String));
+    }
+    value
+}
+
+/// The image at `path` as a `data:` URL, or `None` for a file that cannot be
+/// read or is not an image a manifest may name.
+fn icon_data_url(path: &Path, host: &Host) -> Option<String> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    let mime = match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "svg" => "image/svg+xml",
+        _ => return None,
+    };
+    let bytes = (host.read_bytes)(path).ok()?;
+    Some(format!("data:{mime};base64,{}", base64(&bytes)))
+}
+
+/// Standard base64, with padding.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let triple = chunk.iter().enumerate().fold(0_u32, |acc, (at, byte)| {
+            acc | u32::from(*byte) << (16 - 8 * at)
+        });
+        for at in 0..4 {
+            if at <= chunk.len() {
+                let index = (triple >> (18 - 6 * at)) & 0x3f;
+                encoded.push(char::from(ALPHABET[index as usize]));
+            } else {
+                encoded.push('=');
+            }
+        }
+    }
+    encoded
 }
 
 fn read(path: &Path, host: &Host) -> Result<String, String> {
