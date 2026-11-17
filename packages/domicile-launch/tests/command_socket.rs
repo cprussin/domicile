@@ -397,6 +397,7 @@ fn the_engine_lists_every_installed_extension() {
             enabled: true,
             options_url: None,
             settings: ExtensionSettings::default(),
+            icon_path: None,
         }]
     );
     assert_eq!(

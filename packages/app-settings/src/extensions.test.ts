@@ -7,6 +7,7 @@ import type { InstalledExtension } from "./host";
 const UBLOCK: InstalledExtension = {
   description: "An efficient content blocker.",
   enabled: true,
+  icon: undefined,
   id: "ddkjiahejlhfcafbddmgiahcphecmpfh",
   name: "uBlock Origin Lite",
   optionsUrl:

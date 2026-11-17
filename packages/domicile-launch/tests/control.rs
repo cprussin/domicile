@@ -1163,6 +1163,7 @@ fn an_extension() -> InstalledExtension {
             site_access: Some(SiteAccess::Mode(SiteAccessMode::AllSites)),
             ..ExtensionSettings::default()
         },
+        icon_path: Some("/ext/dark/128.png".to_string()),
     }
 }
 

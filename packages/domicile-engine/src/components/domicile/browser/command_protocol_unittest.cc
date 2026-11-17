@@ -110,6 +110,7 @@ std::vector<InstalledExtension> InstalledExtensions() {
   dark.settings.sites = {"github.com"};
   dark.options_url =
       GURL("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html");
+  dark.icon_path = "/extensions/dark/icons/128.png";
   InstalledExtension quiet;
   quiet.id = "ponmlkjihgfedcbaponmlkjihgfedcba";
   quiet.name = "Quiet";
@@ -1039,7 +1040,8 @@ TEST(CommandProtocolTest, ListsTheProfilesExtensions) {
           R"("enabled":true,)"
           R"("settings":{"file_access":true,"site_access":["github.com"]},)"
           R"("options_url":)"
-          R"("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html"},)"
+          R"("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html",)"
+          R"("icon_path":"/extensions/dark/icons/128.png"},)"
           R"({"id":"ponmlkjihgfedcbaponmlkjihgfedcba","name":"Quiet",)"
           R"("description":"","version":"1.0","enabled":false,)"
           R"("settings":{}}]})",
