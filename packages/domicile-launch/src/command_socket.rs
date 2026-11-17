@@ -11,13 +11,14 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
 
+use crate::browser_profiles::BrowserProfileList;
 use crate::command::{
-    clear_browsing_data_line, clear_site_data_line, config_extensions_line,
+    browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
     configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
     history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
-    visits_line, Reply, NO_SHELL_WINDOW,
+    open_url_line, pin_browser_site_line, reply, run_app_line, set_extension_enabled_line,
+    set_media_device_line, set_site_permission_line, site_data_line, site_permissions_line,
+    uninstall_extension_line, visits_line, Reply, NO_SHELL_WINDOW,
 };
 use crate::control::AppReuse;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -223,16 +224,45 @@ pub fn extensions(
     }
 }
 
-/// Tells the engine at `socket` to enable or disable extension `id`.
+/// Tells the engine at `socket` to enable or disable extension `id`, in
+/// browser profile `profile` or the shell's own.
 pub fn set_extension_enabled(
     socket: &Path,
     id: &str,
     enabled: bool,
+    profile: Option<&str>,
     patience: Duration,
 ) -> Result<(), CommandError> {
     carry_out(
         socket,
-        &set_extension_enabled_line(id, enabled),
+        &set_extension_enabled_line(id, enabled, profile),
+        Reply::Set,
+        patience,
+    )
+}
+
+/// Asks the engine at `socket` for the desk's browser profiles.
+pub fn browser_profiles(
+    socket: &Path,
+    patience: Duration,
+) -> Result<BrowserProfileList, CommandError> {
+    match answered(socket, &browser_profiles_line(), patience)? {
+        Reply::BrowserProfiles(list) => Ok(list),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Tells the engine at `socket` to open `site` in browser profile `profile`
+/// from now on.
+pub fn pin_browser_site(
+    socket: &Path,
+    site: &str,
+    profile: &str,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &pin_browser_site_line(site, profile),
         Reply::Set,
         patience,
     )

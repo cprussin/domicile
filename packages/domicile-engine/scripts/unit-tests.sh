@@ -22,7 +22,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 56,
 # WindowDiff 7, EngineEventQueue 9, ShortcutRegistry 14, ShellURLLoaderFactory
-# 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 61,
+# 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 64,
 # DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 10,
 # ShellWindowPlaces 8, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, BufferColor 4, ExtensionInstaller 3,
@@ -47,6 +47,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4,
 # BrowserProfiles 11, UnfocusedWebViews 7.
 #
+# 858, and it was 855 — the Settings app's Profiles page is three more
+# CommandProtocol cases. Before that
 # 855, and it was 854 — a profile's extension switches are one more
 # BrowserProfiles case than the extensions it turned on were. Before that
 # 854, and it was 851 — sites the user pins to a profile are three more
@@ -304,7 +306,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=855
+FLOOR=858
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

@@ -36,6 +36,7 @@ pub mod address;
 pub mod app_entry;
 pub mod app_host;
 pub mod arguments;
+pub mod browser_profiles;
 pub mod build_progress;
 pub mod cli;
 pub mod command;

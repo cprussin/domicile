@@ -4,12 +4,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    clear_browsing_data_line, clear_site_data_line, config_extensions_line,
+    browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
     configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
     history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
-    visits_line, Reply,
+    open_url_line, pin_browser_site_line, reply, run_app_line, set_extension_enabled_line,
+    set_media_device_line, set_site_permission_line, site_data_line, site_permissions_line,
+    uninstall_extension_line, visits_line, Reply,
 };
 use domicile_launch::control::AppReuse;
 use domicile_launch::extensions::{
@@ -269,8 +269,32 @@ fn an_extension_s_settings_are_changed_by_id_naming_only_those_that_change() {
 #[test]
 fn an_extension_is_enabled_or_disabled_by_id() {
     assert_eq!(
-        set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false),
+        set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false, None),
         "{\"type\":\"set_extension_enabled\",\"version\":1,\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"enabled\":false}\n"
+    );
+}
+
+#[test]
+fn an_extension_is_switched_in_the_browser_profile_the_line_names() {
+    assert_eq!(
+        set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", true, Some("work")),
+        "{\"type\":\"set_extension_enabled\",\"version\":1,\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"enabled\":true,\"profile\":\"work\"}\n"
+    );
+}
+
+#[test]
+fn a_question_about_browser_profiles_names_the_version_it_is_written_in() {
+    assert_eq!(
+        browser_profiles_line(),
+        "{\"type\":\"browser_profiles\",\"version\":1}\n"
+    );
+}
+
+#[test]
+fn a_site_is_pinned_to_the_browser_profile_the_line_names() {
+    assert_eq!(
+        pin_browser_site_line("github.com/acme", "work"),
+        "{\"type\":\"pin_browser_site\",\"version\":1,\"site\":\"github.com/acme\",\"profile\":\"work\"}\n"
     );
 }
 

@@ -34,6 +34,11 @@
 //! {"id":10,"type":"extensions"}
 //!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…,"settings":{…}}]}   (options_url null if none)
 //! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false}
+//! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false,"profile":"work"}
+//!   {"id":11,"type":"stored"}
+//! {"id":11,"type":"browser_profiles"}
+//!   {"id":11,"type":"browser_profiles","default_profile":"personal","default_private_profile":"private","profiles":[{"id":"work","name":"Work","color":"#d97706","private":false,"extensions":[{"id":…,"enabled":true,"locked":false}]}],"sites":[{"site":"github.com/acme","profile":"work","pinned":true}]}
+//! {"id":11,"type":"pin_browser_site","site":"github.com/acme","profile":"work"}
 //!   {"id":11,"type":"stored"}
 //! {"id":11,"type":"configure_extension","extension":"…","settings":{"private":true}}
 //!   {"id":11,"type":"stored"}
@@ -174,6 +179,13 @@ enum AppRequest {
     SetExtensionEnabled {
         extension: String,
         enabled: bool,
+        #[serde(default)]
+        profile: Option<String>,
+    },
+    BrowserProfiles,
+    PinBrowserSite {
+        site: String,
+        profile: String,
     },
     // `extension`, since the message's own `id` is the request's.
     ConfigureExtension {
@@ -298,11 +310,28 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             }
             other => Err(refusal_or_surprise(other)),
         },
-        AppRequest::SetExtensionEnabled { extension, enabled } => {
-            match (host.ask)(&Request::SetExtensionEnabled {
-                id: extension,
-                enabled,
-            })? {
+        AppRequest::SetExtensionEnabled {
+            extension,
+            enabled,
+            profile,
+        } => match (host.ask)(&Request::SetExtensionEnabled {
+            id: extension,
+            enabled,
+            profile,
+        })? {
+            Response::Stored => Ok(json!({"type": "stored"})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::BrowserProfiles => match (host.ask)(&Request::BrowserProfiles)? {
+            Response::BrowserProfiles(list) => {
+                let mut reply = serde_json::to_value(list).map_err(|why| why.to_string())?;
+                reply["type"] = json!("browser_profiles");
+                Ok(reply)
+            }
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::PinBrowserSite { site, profile } => {
+            match (host.ask)(&Request::PinBrowserSite { site, profile })? {
                 Response::Stored => Ok(json!({"type": "stored"})),
                 other => Err(refusal_or_surprise(other)),
             }

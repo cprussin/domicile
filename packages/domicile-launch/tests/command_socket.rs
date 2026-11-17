@@ -6,18 +6,22 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use domicile_launch::browser_profiles::{
+    BrowserProfileList, ListedBrowserProfile, ListedBrowserSite, ProfileExtension,
+};
 use domicile_launch::command::{
-    clear_browsing_data_line, clear_site_data_line, config_extensions_line,
+    browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
     configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
     history_line, load_shell_line, load_unpacked_line, media_devices_line, open_url_line,
-    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
-    site_permissions_line, uninstall_extension_line, visits_line,
+    pin_browser_site_line, set_extension_enabled_line, set_media_device_line,
+    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
+    visits_line,
 };
 use domicile_launch::command_socket::{
-    clear_browsing_data, clear_site_data, config_extensions, configure_extension, delete_history,
-    disable_while_typing, extensions, history, load_shell, load_unpacked, media_devices, open_url,
-    set_extension_enabled, set_media_device, set_site_permission, site_data, site_permissions,
-    uninstall_extension, visits, CommandError,
+    browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
+    delete_history, disable_while_typing, extensions, history, load_shell, load_unpacked,
+    media_devices, open_url, pin_browser_site, set_extension_enabled, set_media_device,
+    set_site_permission, site_data, site_permissions, uninstall_extension, visits, CommandError,
 };
 use domicile_launch::extensions::{ExtensionSettings, InstalledExtension};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
@@ -261,6 +265,56 @@ fn the_engine_lists_media_devices() {
 }
 
 #[test]
+fn the_engine_lists_the_desks_browser_profiles() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"browser_profiles\",\"default_profile\":\"personal\",\"default_private_profile\":\"private\",\"profiles\":[{\"id\":\"work\",\"name\":\"Work\",\"color\":\"#3b82f6\",\"private\":false,\"extensions\":[{\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"enabled\":true,\"locked\":true}]}],\"sites\":[{\"site\":\"github.com/acme\",\"profile\":\"work\",\"pinned\":true}]}\n"),
+    );
+
+    assert_eq!(
+        browser_profiles(&path, BRIEFLY).expect("the engine listed them"),
+        BrowserProfileList {
+            default_profile: "personal".to_string(),
+            default_private_profile: "private".to_string(),
+            profiles: vec![ListedBrowserProfile {
+                id: "work".to_string(),
+                name: "Work".to_string(),
+                color: "#3b82f6".to_string(),
+                private: false,
+                extensions: vec![ProfileExtension {
+                    id: "abcdefghijklmnopabcdefghijklmnop".to_string(),
+                    enabled: true,
+                    locked: true,
+                }],
+            }],
+            sites: vec![ListedBrowserSite {
+                site: "github.com/acme".to_string(),
+                profile: "work".to_string(),
+                pinned: true,
+            }],
+        }
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        browser_profiles_line()
+    );
+}
+
+#[test]
+fn the_engine_is_told_to_pin_a_site_and_says_it_stored_it() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
+
+    pin_browser_site(&path, "github.com/acme", "work", BRIEFLY).expect("the engine stored it");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        pin_browser_site_line("github.com/acme", "work")
+    );
+}
+
+#[test]
 fn the_engine_is_sent_a_preferred_media_device_and_says_it_stored_it() {
     let (_scratch, path) = scratch();
     let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
@@ -356,12 +410,18 @@ fn the_engine_is_told_to_disable_an_extension_and_says_it_stored_it() {
     let (_scratch, path) = scratch();
     let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
 
-    set_extension_enabled(&path, "abcdefghijklmnopabcdefghijklmnop", false, BRIEFLY)
-        .expect("the engine stored it");
+    set_extension_enabled(
+        &path,
+        "abcdefghijklmnopabcdefghijklmnop",
+        false,
+        None,
+        BRIEFLY,
+    )
+    .expect("the engine stored it");
 
     assert_eq!(
         heard.join().expect("the engine was listening"),
-        set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false)
+        set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false, None)
     );
 }
 

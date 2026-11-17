@@ -194,7 +194,11 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                         panic!("a question about this desktop reaches no engine")
                     },
                     extensions: &|| panic!("a question about this desktop reaches no engine"),
-                    set_extension_enabled: &|_, _| {
+                    set_extension_enabled: &|_, _, _| {
+                        panic!("a question about this desktop reaches no engine")
+                    },
+                    browser_profiles: &|| panic!("a question about this desktop reaches no engine"),
+                    pin_browser_site: &|_, _| {
                         panic!("a question about this desktop reaches no engine")
                     },
                     configure_extension: &|_, _| {

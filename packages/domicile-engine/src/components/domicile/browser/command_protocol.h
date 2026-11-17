@@ -77,6 +77,23 @@ namespace domicile {
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"set_extension_enabled","version":1,"id":"...","enabled":false}
+//   {"type":"set_extension_enabled","version":1,"id":"...","enabled":false,
+//    "profile":"work"}
+//   -> {"type":"set"}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"browser_profiles","version":1}
+//   -> {"type":"browser_profiles","default_profile":"personal",
+//       "default_private_profile":"private",
+//       "profiles":[{"id":"work","name":"Work","color":"#d97706",
+//                    "private":false,"extensions":[{"id":"...",
+//                    "enabled":true,"locked":false}]}],
+//       "sites":[{"site":"github.com/acme","profile":"work",
+//                 "pinned":true}]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"pin_browser_site","version":1,"site":"github.com/acme",
+//    "profile":"work"}
 //   -> {"type":"set"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -284,10 +301,68 @@ struct InstalledExtension {
 using ListExtensions =
     base::FunctionRef<std::optional<std::vector<InstalledExtension>>()>;
 
-// Carries out `set_extension_enabled`, or says why it did not.
+// Carries out `set_extension_enabled` in browser profile `profile`, the
+// shell's own when empty, or says why it did not.
 using SetExtensionEnabled =
-    base::FunctionRef<base::expected<void, std::string>(const std::string& id,
-                                                       bool enabled)>;
+    base::FunctionRef<base::expected<void, std::string>(
+        const std::string& id,
+        bool enabled,
+        const std::string& profile)>;
+
+// One extension's switch in a browser profile, as `browser_profiles` lists
+// it. `locked` when the config switches it, so the user cannot.
+struct ListedProfileExtension {
+  std::string id;
+  bool enabled = false;
+  bool locked = false;
+};
+
+// A browser profile, as `browser_profiles` lists it.
+struct ListedBrowserProfile {
+  ListedBrowserProfile();
+  ListedBrowserProfile(const ListedBrowserProfile&);
+  ListedBrowserProfile& operator=(const ListedBrowserProfile&);
+  ~ListedBrowserProfile();
+
+  std::string id;
+  std::string name;
+  std::string color;
+  bool is_private = false;
+  std::vector<ListedProfileExtension> extensions;
+};
+
+// A site the desk opens in a profile other than the default: the config's
+// (`pinned` false), or one the user pinned.
+struct ListedBrowserSite {
+  std::string site;
+  std::string profile;
+  bool pinned = false;
+};
+
+// Everything `browser_profiles` lists.
+struct BrowserProfileList {
+  BrowserProfileList();
+  BrowserProfileList(const BrowserProfileList&);
+  BrowserProfileList& operator=(const BrowserProfileList&);
+  ~BrowserProfileList();
+
+  std::vector<ListedBrowserProfile> profiles;
+  std::string default_profile;
+  std::string default_private_profile;
+  std::vector<ListedBrowserSite> sites;
+};
+
+// Carries out `browser_profiles`. Returns nothing if there is no shell, and
+// so no profiles to read.
+using ListBrowserProfiles =
+    base::FunctionRef<std::optional<BrowserProfileList>()>;
+
+// Carries out `pin_browser_site`: opens `site` in `profile` from now on (the
+// default profile unpins it), or says why not.
+using PinBrowserSite =
+    base::FunctionRef<base::expected<void, std::string>(
+        const std::string& site,
+        const std::string& profile)>;
 
 // Carries out `configure_extension`: sets each of `settings` that is set, or
 // says why it did not.
@@ -457,6 +532,8 @@ struct CommandActions {
   ListExtensions list_extensions;
   SetExtensionEnabled set_extension_enabled;
   ConfigureExtension configure_extension;
+  ListBrowserProfiles list_browser_profiles;
+  PinBrowserSite pin_browser_site;
   ListMediaDevices list_media_devices;
   SetMediaDevice set_media_device;
   SearchHistory search_history;

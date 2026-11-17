@@ -17,6 +17,7 @@ use domicile_protocol::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::browser_profiles::BrowserProfileList;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
@@ -101,8 +102,20 @@ pub enum Request {
     SetMediaDevice { kind: MediaKind, id: String },
     /// Report every extension installed in the engine's profile.
     Extensions,
-    /// Enable or disable an extension.
-    SetExtensionEnabled { id: String, enabled: bool },
+    /// Enable or disable an extension, in browser profile `profile` or the
+    /// shell's own.
+    SetExtensionEnabled {
+        id: String,
+        enabled: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
+    },
+    /// Report the desk's browser profiles and the sites that open outside the
+    /// default one.
+    BrowserProfiles,
+    /// Open `site` in browser profile `profile` from now on. The default
+    /// profile unpins it.
+    PinBrowserSite { site: String, profile: String },
     /// Change each of `settings` that is set on an extension.
     ConfigureExtension {
         id: String,
@@ -306,6 +319,9 @@ pub enum Response {
     /// Answers `extensions`.
     Extensions { extensions: Vec<InstalledExtension> },
 
+    /// Answers `browser_profiles`.
+    BrowserProfiles(BrowserProfileList),
+
     /// Answers `history`.
     History { items: Vec<HistoryItem> },
 
@@ -476,7 +492,19 @@ pub type ListExtensions<'a> = &'a dyn Fn() -> Result<Vec<InstalledExtension>, St
 ///
 /// [`crate::command_socket::set_extension_enabled`] in a desktop; a closure in
 /// tests.
-pub type SetExtensionEnabled<'a> = &'a dyn Fn(&str, bool) -> Result<(), String>;
+pub type SetExtensionEnabled<'a> = &'a dyn Fn(&str, bool, Option<&str>) -> Result<(), String>;
+
+/// Asks the engine for the desk's browser profiles.
+///
+/// [`crate::command_socket::browser_profiles`] in a desktop; a closure in
+/// tests.
+pub type ListBrowserProfiles<'a> = &'a dyn Fn() -> Result<BrowserProfileList, String>;
+
+/// Tells the engine to open a site in a browser profile from now on.
+///
+/// [`crate::command_socket::pin_browser_site`] in a desktop; a closure in
+/// tests.
+pub type PinBrowserSite<'a> = &'a dyn Fn(&str, &str) -> Result<(), String>;
 
 /// Tells the engine to change an extension's settings.
 ///
@@ -614,6 +642,8 @@ pub struct Desktop<'a> {
     pub extensions: ListExtensions<'a>,
     pub set_extension_enabled: SetExtensionEnabled<'a>,
     pub configure_extension: ConfigureExtension<'a>,
+    pub browser_profiles: ListBrowserProfiles<'a>,
+    pub pin_browser_site: PinBrowserSite<'a>,
     pub history: SearchHistory<'a>,
     pub visits: ListVisits<'a>,
     pub delete_history: DeleteHistory<'a>,
@@ -763,8 +793,22 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(extensions) => Response::Extensions { extensions },
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::SetExtensionEnabled { id, enabled }) => {
-            to_line(&match (desktop.set_extension_enabled)(&id, enabled) {
+        Ok(Request::SetExtensionEnabled {
+            id,
+            enabled,
+            profile,
+        }) => to_line(
+            &match (desktop.set_extension_enabled)(&id, enabled, profile.as_deref()) {
+                Ok(()) => Response::Stored,
+                Err(why) => Response::Refused { why },
+            },
+        ),
+        Ok(Request::BrowserProfiles) => to_line(&match (desktop.browser_profiles)() {
+            Ok(list) => Response::BrowserProfiles(list),
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::PinBrowserSite { site, profile }) => {
+            to_line(&match (desktop.pin_browser_site)(&site, &profile) {
                 Ok(()) => Response::Stored,
                 Err(why) => Response::Refused { why },
             })

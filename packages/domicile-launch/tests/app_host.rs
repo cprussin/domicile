@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::app_host::{answer, read_message, watched, write_message, Host};
+use domicile_launch::browser_profiles::{
+    BrowserProfileList, ListedBrowserProfile, ListedBrowserSite, ProfileExtension,
+};
 use domicile_launch::control::{Request, Response, SettingsFiles};
 use domicile_launch::extensions::{
     ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
@@ -342,6 +345,73 @@ fn an_extension_is_disabled_on_the_desktop() {
         Some(&Request::SetExtensionEnabled {
             id: ID.to_string(),
             enabled: false,
+            profile: None,
+        })
+    );
+}
+
+#[test]
+fn an_extension_is_switched_in_the_browser_profile_the_app_names() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({
+            "id": 31,
+            "type": "set_extension_enabled",
+            "extension": ID,
+            "enabled": true,
+            "profile": "work",
+        })),
+        json!({"id": 31, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::SetExtensionEnabled {
+            id: ID.to_string(),
+            enabled: true,
+            profile: Some("work".to_string()),
+        })
+    );
+}
+
+#[test]
+fn the_desks_browser_profiles_are_the_desktop_s() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 32, "type": "browser_profiles"})),
+        json!({
+            "id": 32,
+            "type": "browser_profiles",
+            "default_profile": "personal",
+            "default_private_profile": "private",
+            "profiles": [{
+                "id": "work",
+                "name": "Work",
+                "color": "#3b82f6",
+                "private": false,
+                "extensions": [{"id": ID, "enabled": false, "locked": false}],
+            }],
+            "sites": [{"site": "github.com/acme", "profile": "work", "pinned": false}],
+        })
+    );
+}
+
+#[test]
+fn a_site_is_pinned_to_a_browser_profile_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({
+            "id": 33,
+            "type": "pin_browser_site",
+            "site": "github.com/acme",
+            "profile": "work",
+        })),
+        json!({"id": 33, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::PinBrowserSite {
+            site: "github.com/acme".to_string(),
+            profile: "work".to_string(),
         })
     );
 }
@@ -640,6 +710,27 @@ impl Fake {
                             }],
                         },
                         Request::SetExtensionEnabled { .. } => Response::Stored,
+                        Request::BrowserProfiles => Response::BrowserProfiles(BrowserProfileList {
+                            default_profile: "personal".to_string(),
+                            default_private_profile: "private".to_string(),
+                            profiles: vec![ListedBrowserProfile {
+                                id: "work".to_string(),
+                                name: "Work".to_string(),
+                                color: "#3b82f6".to_string(),
+                                private: false,
+                                extensions: vec![ProfileExtension {
+                                    id: ID.to_string(),
+                                    enabled: false,
+                                    locked: false,
+                                }],
+                            }],
+                            sites: vec![ListedBrowserSite {
+                                site: "github.com/acme".to_string(),
+                                profile: "work".to_string(),
+                                pinned: false,
+                            }],
+                        }),
+                        Request::PinBrowserSite { .. } => Response::Stored,
                         Request::ConfigureExtension { .. } => Response::Stored,
                         Request::OpenUrl { .. } => Response::Opened,
                         Request::History(_) => Response::History {

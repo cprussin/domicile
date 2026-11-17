@@ -25,10 +25,11 @@ use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, USAGE};
 use domicile_launch::command_socket::{
-    clear_browsing_data, clear_site_data, config_extensions, configure_extension, delete_history,
-    disable_while_typing, extensions, history, load_shell, load_unpacked, media_devices, open_app,
-    open_url, run_app, set_extension_enabled, set_media_device, set_site_permission, site_data,
-    site_permissions, uninstall_extension, visits,
+    browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
+    delete_history, disable_while_typing, extensions, history, load_shell, load_unpacked,
+    media_devices, open_app, open_url, pin_browser_site, run_app, set_extension_enabled,
+    set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
+    visits,
 };
 use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
@@ -717,6 +718,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::ConfigExtensions { .. }
         | Response::MediaDevices(_)
         | Response::Extensions { .. }
+        | Response::BrowserProfiles(_)
         | Response::History { .. }
         | Response::Visits { .. }
         | Response::Deleted
@@ -1510,8 +1512,15 @@ fn answer_a_command(
                     extensions: &|| {
                         extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
-                    set_extension_enabled: &|id, enabled| {
-                        set_extension_enabled(engine, id, enabled, ANSWER_WITHIN)
+                    set_extension_enabled: &|id, enabled, profile| {
+                        set_extension_enabled(engine, id, enabled, profile, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    browser_profiles: &|| {
+                        browser_profiles(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    pin_browser_site: &|site, profile| {
+                        pin_browser_site(engine, site, profile, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
                     configure_extension: &|id, settings| {

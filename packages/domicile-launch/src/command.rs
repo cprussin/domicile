@@ -80,6 +80,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::browser_profiles::BrowserProfileList;
 use crate::control::AppReuse;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
@@ -125,6 +126,9 @@ pub enum Reply {
     MediaDevices(MediaDevices),
     /// Every extension installed in the engine's profile.
     Extensions { extensions: Vec<InstalledExtension> },
+    /// The desk's browser profiles and the sites that open outside the
+    /// default one.
+    BrowserProfiles(BrowserProfileList),
     /// The history rows a search found, newest first.
     History { items: Vec<HistoryItem> },
     /// When a page was visited, in milliseconds since the epoch.
@@ -255,12 +259,28 @@ pub fn extensions_line() -> String {
     line(&Command::Extensions { version: VERSION })
 }
 
-/// The request to enable or disable extension `id`.
-pub fn set_extension_enabled_line(id: &str, enabled: bool) -> String {
+/// The request to enable or disable extension `id`, in browser profile
+/// `profile` or the shell's own.
+pub fn set_extension_enabled_line(id: &str, enabled: bool, profile: Option<&str>) -> String {
     line(&Command::SetExtensionEnabled {
         version: VERSION,
         id,
         enabled,
+        profile,
+    })
+}
+
+/// The request for the desk's browser profiles.
+pub fn browser_profiles_line() -> String {
+    line(&Command::BrowserProfiles { version: VERSION })
+}
+
+/// The request to open `site` in browser profile `profile` from now on.
+pub fn pin_browser_site_line(site: &str, profile: &str) -> String {
+    line(&Command::PinBrowserSite {
+        version: VERSION,
+        site,
+        profile,
     })
 }
 
@@ -409,6 +429,16 @@ enum Command<'a> {
         version: u32,
         id: &'a str,
         enabled: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        profile: Option<&'a str>,
+    },
+    BrowserProfiles {
+        version: u32,
+    },
+    PinBrowserSite {
+        version: u32,
+        site: &'a str,
+        profile: &'a str,
     },
     ConfigureExtension {
         version: u32,

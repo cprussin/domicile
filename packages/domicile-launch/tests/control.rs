@@ -843,7 +843,8 @@ fn a_desktop_told_to_disable_an_extension_tells_the_engine() {
     let answered = reply_to(
         "{\"type\":\"set_extension_enabled\",\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"enabled\":false}",
         &Desktop {
-            set_extension_enabled: &|id, enabled| {
+            set_extension_enabled: &|id, enabled, profile| {
+                assert_eq!(profile, None, "no profile is the shell's");
                 told.replace(Some((id.to_string(), enabled)));
                 Ok(())
             },
@@ -1233,7 +1234,9 @@ fn nothing_dialed() -> Desktop<'static> {
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),
         theme: &|_| panic!("only theme reads or sets the theme"),
-        set_extension_enabled: &|_, _| panic!("only set_extension_enabled enables one"),
+        set_extension_enabled: &|_, _, _| panic!("only set_extension_enabled enables one"),
+        browser_profiles: &|| panic!("only browser_profiles lists the profiles"),
+        pin_browser_site: &|_, _| panic!("only pin_browser_site pins a site"),
         configure_extension: &|_, _| panic!("only configure_extension configures one"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),

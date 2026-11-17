@@ -64,6 +64,9 @@ struct Told {
   std::string device;
   std::string toggled;
   std::optional<bool> enabled;
+  std::string toggled_in;
+  std::string pinned_site;
+  std::string pinned_to;
   std::string configured;
   std::optional<ExtensionSettings> settings;
   std::optional<HistorySearch> search;
@@ -248,10 +251,12 @@ std::string Answer(std::string_view line,
     return InstalledExtensions();
   };
   auto set_extension_enabled =
-      [told, has_window](const std::string& id,
-                         bool enabled) -> base::expected<void, std::string> {
+      [told, has_window](const std::string& id, bool enabled,
+                         const std::string& profile)
+      -> base::expected<void, std::string> {
     told->toggled = id;
     told->enabled = enabled;
+    told->toggled_in = profile;
     if (!has_window) {
       return base::unexpected("no shell");
     }
@@ -263,6 +268,35 @@ std::string Answer(std::string_view line,
       -> base::expected<void, std::string> {
     told->configured = id;
     told->settings = settings;
+    if (!has_window) {
+      return base::unexpected("no shell");
+    }
+    return base::ok();
+  };
+  auto list_browser_profiles =
+      [has_window]() -> std::optional<BrowserProfileList> {
+    if (!has_window) {
+      return std::nullopt;
+    }
+    BrowserProfileList list;
+    list.default_profile = "personal";
+    list.default_private_profile = "private";
+    ListedBrowserProfile& work = list.profiles.emplace_back();
+    work.id = "work";
+    work.name = "Work";
+    work.color = "#d97706";
+    work.extensions.push_back(
+        {.id = kExtensionId, .enabled = true, .locked = true});
+    list.sites.push_back(
+        {.site = "github.com/acme", .profile = "work", .pinned = true});
+    return list;
+  };
+  auto pin_browser_site =
+      [told, has_window](const std::string& site,
+                         const std::string& profile)
+      -> base::expected<void, std::string> {
+    told->pinned_site = site;
+    told->pinned_to = profile;
     if (!has_window) {
       return base::unexpected("no shell");
     }
@@ -363,6 +397,8 @@ std::string Answer(std::string_view line,
                  .list_extensions = list_extensions,
                  .set_extension_enabled = set_extension_enabled,
                  .configure_extension = configure_extension,
+                 .list_browser_profiles = list_browser_profiles,
+                 .pin_browser_site = pin_browser_site,
                  .list_media_devices = list_media_devices,
                  .set_media_device = set_media_device,
                  .search_history = search_history,
@@ -1022,6 +1058,59 @@ TEST(CommandProtocolTest, SwitchesAnExtensionOnOrOff) {
             "set");
   EXPECT_EQ(told.toggled, kExtensionId);
   EXPECT_EQ(told.enabled, false);
+}
+
+// The Settings app's Profiles page.
+TEST(CommandProtocolTest, SwitchesAnExtensionInTheProfileARequestNames) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_extension_enabled","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
+                          R"("enabled":true,"profile":"work"})",
+                          &told)),
+            "set");
+  EXPECT_EQ(told.toggled_in, "work");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_extension_enabled","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
+                          R"("enabled":true,"profile":3})",
+                          &told)),
+            "refused");
+}
+
+TEST(CommandProtocolTest, ListsTheDesksBrowserProfiles) {
+  Told told;
+  EXPECT_EQ(
+      base::JSONReader::ReadDict(
+          Answer(R"({"type":"browser_profiles","version":1})", &told),
+          base::JSON_PARSE_RFC),
+      base::JSONReader::ReadDict(
+          R"({"type":"browser_profiles","default_profile":"personal",)"
+          R"("default_private_profile":"private",)"
+          R"("profiles":[{"id":"work","name":"Work","color":"#d97706",)"
+          R"("private":false,"extensions":[)"
+          R"({"id":"abcdefghijklmnopabcdefghijklmnop","enabled":true,)"
+          R"("locked":true}]}],)"
+          R"("sites":[{"site":"github.com/acme","profile":"work",)"
+          R"("pinned":true}]})",
+          base::JSON_PARSE_RFC));
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"browser_profiles","version":1})", &told,
+                          /*has_window=*/false)),
+            "refused");
+}
+
+TEST(CommandProtocolTest, PinsASiteToTheProfileARequestNames) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"pin_browser_site","version":1,)"
+                          R"("site":"github.com/acme","profile":"work"})",
+                          &told)),
+            "set");
+  EXPECT_EQ(told.pinned_site, "github.com/acme");
+  EXPECT_EQ(told.pinned_to, "work");
+  Told missing;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"pin_browser_site","version":1,)"
+                          R"("site":"github.com/acme"})",
+                          &missing)),
+            "refused");
+  EXPECT_EQ(missing.pinned_site, "");
 }
 
 TEST(CommandProtocolTest, RefusesASwitchWithoutAnIdAndAnEnabled) {

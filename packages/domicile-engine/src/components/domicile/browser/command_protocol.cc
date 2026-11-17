@@ -40,6 +40,8 @@ constexpr char kConfigExtensions[] = "config_extensions";
 constexpr char kExtensions[] = "extensions";
 constexpr char kSetExtensionEnabled[] = "set_extension_enabled";
 constexpr char kConfigureExtension[] = "configure_extension";
+constexpr char kBrowserProfiles[] = "browser_profiles";
+constexpr char kPinBrowserSite[] = "pin_browser_site";
 constexpr char kMediaDevices[] = "media_devices";
 constexpr char kSetMediaDevice[] = "set_media_device";
 constexpr char kHistory[] = "history";
@@ -91,6 +93,9 @@ std::string AnswerSetExtensionEnabled(const base::DictValue& request,
                                       SetExtensionEnabled set_extension_enabled);
 std::string AnswerConfigureExtension(const base::DictValue& request,
                                      ConfigureExtension configure_extension);
+std::string AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles);
+std::string AnswerPinBrowserSite(const base::DictValue& request,
+                                 PinBrowserSite pin_browser_site);
 std::string AnswerMediaDevices(ListMediaDevices list_media_devices);
 std::string AnswerSetMediaDevice(const base::DictValue& request,
                                  SetMediaDevice set_media_device);
@@ -114,6 +119,19 @@ std::string AnswerDisableWhileTyping(const base::DictValue& request,
                                      DisableWhileTyping disable_while_typing);
 
 }  // namespace
+
+ListedBrowserProfile::ListedBrowserProfile() = default;
+ListedBrowserProfile::ListedBrowserProfile(const ListedBrowserProfile&) =
+    default;
+ListedBrowserProfile& ListedBrowserProfile::operator=(
+    const ListedBrowserProfile&) = default;
+ListedBrowserProfile::~ListedBrowserProfile() = default;
+
+BrowserProfileList::BrowserProfileList() = default;
+BrowserProfileList::BrowserProfileList(const BrowserProfileList&) = default;
+BrowserProfileList& BrowserProfileList::operator=(const BrowserProfileList&) =
+    default;
+BrowserProfileList::~BrowserProfileList() = default;
 
 SitePermissionList::SitePermissionList() = default;
 SitePermissionList::SitePermissionList(const SitePermissionList&) = default;
@@ -230,6 +248,15 @@ void AnswerCommand(std::string_view line,
   if (*type == kConfigureExtension) {
     std::move(reply).Run(
         AnswerConfigureExtension(*request, actions.configure_extension));
+    return;
+  }
+  if (*type == kBrowserProfiles) {
+    std::move(reply).Run(AnswerBrowserProfiles(actions.list_browser_profiles));
+    return;
+  }
+  if (*type == kPinBrowserSite) {
+    std::move(reply).Run(
+        AnswerPinBrowserSite(*request, actions.pin_browser_site));
     return;
   }
   if (*type == kMediaDevices) {
@@ -644,10 +671,73 @@ std::string AnswerSetExtensionEnabled(
         "set_extension_enabled needs an \"id\" and whether it is "
         "\"enabled\"");
   }
-  const base::expected<void, std::string> set =
-      set_extension_enabled(*id, *enabled);
+  const base::Value* profile = request.Find("profile");
+  if (profile != nullptr && !profile->is_string()) {
+    return RefusedCommand(
+        "set_extension_enabled's \"profile\" is a browser profile's id");
+  }
+  const base::expected<void, std::string> set = set_extension_enabled(
+      *id, *enabled, profile == nullptr ? std::string() : profile->GetString());
   if (!set.has_value()) {
     return RefusedCommand(set.error());
+  }
+  return Done("set");
+}
+
+std::string AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles) {
+  const std::optional<BrowserProfileList> list = list_browser_profiles();
+  if (!list) {
+    return RefusedCommand(
+        "this engine has no shell, and so no browser profiles to list");
+  }
+  base::ListValue profiles;
+  for (const ListedBrowserProfile& profile : list->profiles) {
+    base::ListValue extensions;
+    for (const ListedProfileExtension& extension : profile.extensions) {
+      base::DictValue entry;
+      entry.Set("id", extension.id);
+      entry.Set("enabled", extension.enabled);
+      entry.Set("locked", extension.locked);
+      extensions.Append(std::move(entry));
+    }
+    base::DictValue entry;
+    entry.Set("id", profile.id);
+    entry.Set("name", profile.name);
+    entry.Set("color", profile.color);
+    entry.Set("private", profile.is_private);
+    entry.Set("extensions", std::move(extensions));
+    profiles.Append(std::move(entry));
+  }
+  base::ListValue sites;
+  for (const ListedBrowserSite& site : list->sites) {
+    base::DictValue entry;
+    entry.Set("site", site.site);
+    entry.Set("profile", site.profile);
+    entry.Set("pinned", site.pinned);
+    sites.Append(std::move(entry));
+  }
+  base::DictValue reply;
+  reply.Set("type", kBrowserProfiles);
+  reply.Set("default_profile", list->default_profile);
+  reply.Set("default_private_profile", list->default_private_profile);
+  reply.Set("profiles", std::move(profiles));
+  reply.Set("sites", std::move(sites));
+  return Line(std::move(reply));
+}
+
+std::string AnswerPinBrowserSite(const base::DictValue& request,
+                                 PinBrowserSite pin_browser_site) {
+  const std::string* site = request.FindString("site");
+  const std::string* profile = request.FindString("profile");
+  if (site == nullptr || profile == nullptr) {
+    return RefusedCommand(
+        "pin_browser_site needs a \"site\" and the \"profile\" to open it "
+        "in");
+  }
+  const base::expected<void, std::string> pinned =
+      pin_browser_site(*site, *profile);
+  if (!pinned.has_value()) {
+    return RefusedCommand(pinned.error());
   }
   return Done("set");
 }
