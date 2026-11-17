@@ -392,11 +392,11 @@ TEST_F(ElectronAppTest, AWindowsPreloadReachesTheDesk) {
 TEST_F(ElectronAppTest, AWindowsNodeReachesTheDesk) {
   Hello();
 
-  app_->Take(R"({"type":"open_window","window":1,"url":"file:///a/i.html",)"
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
              R"("node":{"preload":"/a/preload.js"}})");
 
-  EXPECT_EQ(desk_.calls, Lines{"open file:///a/i.html as com.anthropic.Claude "
-                               "with node"});
+  EXPECT_EQ(desk_.calls,
+            Lines{"open https://a.test/ as com.anthropic.Claude with node"});
 }
 
 using Answer = std::optional<base::expected<base::Value, std::string>>;
