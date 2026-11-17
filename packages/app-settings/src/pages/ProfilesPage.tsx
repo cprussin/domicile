@@ -87,12 +87,12 @@ export const ProfilesPage = ({
           {failure instanceof Error ? failure.message : String(failure)}
         </Notice>
       )}
-      {listed?.profiles.map((profile) => (
+      {(listed === undefined ? [] : inCardOrder(listed)).map((profile) => (
         <ProfileCard
           change={change}
           extensionName={(id) => names.get(id) ?? id}
-          isDefault={profile.id === listed.defaultProfile}
-          isDefaultPrivate={profile.id === listed.defaultPrivateProfile}
+          isDefault={profile.id === listed?.defaultProfile}
+          isDefaultPrivate={profile.id === listed?.defaultPrivateProfile}
           key={profile.id}
           onSwitch={(extension, enabled) => {
             host
@@ -137,6 +137,25 @@ export const ProfilesPage = ({
         </section>
       )}
     </Page>
+  );
+};
+
+/**
+ * The default profile first and the default private one last, with the rest
+ * by name between.
+ */
+const inCardOrder = (listed: BrowserProfiles) => {
+  const rank = (id: string) => {
+    if (id === listed.defaultProfile) {
+      return 0;
+    } else if (id === listed.defaultPrivateProfile) {
+      return 2;
+    } else {
+      return 1;
+    }
+  };
+  return listed.profiles.toSorted(
+    (a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name),
   );
 };
 
@@ -482,7 +501,8 @@ const cardStyles = flex({
 const cardHeadStyles = flex({
   align: "center",
   gap: 2.5,
-  paddingBlock: 3,
+  minBlockSize: 14,
+  paddingBlock: 2,
   paddingInline: 4,
 });
 
@@ -512,11 +532,12 @@ const cardActionsStyles = flex({
   marginInlineStart: "auto",
 });
 
+// Padded as the other pages' cards are, so the first row clears the head's
+// border as far as the last clears the card's edge.
 const cardBodyStyles = flex({
   borderBlockStart: "1px solid {colors.border}",
   direction: "column",
-  paddingBlockEnd: 3,
-  paddingInline: 4,
+  padding: 4,
 });
 
 const swatchesStyles = flex({ gap: 2 });
@@ -547,7 +568,7 @@ const rowTitleStyles = css({
 
 const extensionListStyles = grid({
   gap: 2,
-  gridTemplateColumns: "repeat(auto-fill, minmax({spacing.56}, 1fr))",
+  gridTemplateColumns: "repeat(auto-fill, minmax({spacing.64}, 1fr))",
   listStyle: "none",
   margin: 0,
   padding: 0,
