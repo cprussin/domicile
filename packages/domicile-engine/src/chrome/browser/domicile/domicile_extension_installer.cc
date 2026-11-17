@@ -7,6 +7,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -44,7 +45,6 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest.h"
-#include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_handlers/description_info.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
@@ -326,10 +326,12 @@ namespace {
 // the biggest. Empty when the manifest names none.
 std::string IconPathOf(const extensions::Extension& extension) {
   constexpr int kSize = 128;
-  const ExtensionIconSet& icons = extensions::IconsInfo::GetIcons(&extension);
-  std::string relative = icons.Get(kSize, ExtensionIconSet::Match::kBigger);
+  // The set's type as icons_handler.h names it, wherever it lives.
+  const auto& icons = extensions::IconsInfo::GetIcons(&extension);
+  using IconSet = std::remove_cvref_t<decltype(icons)>;
+  std::string relative = icons.Get(kSize, IconSet::Match::kBigger);
   if (relative.empty()) {
-    relative = icons.Get(kSize, ExtensionIconSet::Match::kSmaller);
+    relative = icons.Get(kSize, IconSet::Match::kSmaller);
   }
   if (relative.empty()) {
     return std::string();
