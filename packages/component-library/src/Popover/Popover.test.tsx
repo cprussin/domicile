@@ -396,6 +396,11 @@ describe(Popover, () => {
     });
 
     it("closes when focus moves to something outside it", async () => {
+      // Focus moves at once, which also logs a focus thief; that has its own
+      // test below.
+      const errors = spyOn(console, "error").mockImplementation(
+        () => undefined,
+      );
       render(
         <>
           <Popover title="Connection" trigger={<Button>Details</Button>}>
@@ -411,6 +416,7 @@ describe(Popover, () => {
       });
 
       await waitForElementToBeRemoved(() => screen.queryByText("Body"));
+      errors.mockRestore();
     });
 
     it("says what took focus when that shuts it as it opens", async () => {
