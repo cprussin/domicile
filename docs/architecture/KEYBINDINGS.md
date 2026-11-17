@@ -116,7 +116,8 @@ domicile list-bindings       ─▶ ... ─▶ compositor (which_shell_bindings)
   back its chords on `unbind`.
 - **Each page claims for itself.** `ShortcutRegistry` keeps a chord while any
   page claims it. A reloading page's claims stay until its successor lets go
-  of that chord, so a reload leaves no gap.
+  of that chord, so a reload leaves no gap. `domicile load-shell` to another
+  shell drops the old shell's claims once its page closes.
 - **A layout change moves the grab.** The old key is given back once no chord
   is on it.
 - **A window's shortcuts inhibitor wins.** A client holding

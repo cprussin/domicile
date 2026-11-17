@@ -55,13 +55,19 @@ class ShellSwapTest : public testing::Test {
   // The module under its root that each load served.
   void Load() { loads_.push_back(source_.Root().Append(source_.Module())); }
 
+  void Changed() { changed_at_.push_back(loads_.size()); }
+
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   ShellSource source_{Serving("/run/splash", "splash.js")};
   std::vector<base::FilePath> loads_;
   std::vector<ShellOutcome> answers_;
+  // How many loads had run each time the swap said the shell changed.
+  std::vector<size_t> changed_at_;
   ShellSwap swap_{source_,
                   base::BindRepeating(&ShellSwapTest::Load,
+                                      base::Unretained(this)),
+                  base::BindRepeating(&ShellSwapTest::Changed,
                                       base::Unretained(this)),
                   kPatience};
 };
@@ -98,6 +104,24 @@ TEST_F(ShellSwapTest, StaysOnTheSameShellReloadedWhenItDidNotRun) {
 
   EXPECT_THAT(loads_, ElementsAre(base::FilePath("/run/splash/splash.js")));
   EXPECT_THAT(answers_, ElementsAre(std::make_optional<std::string>(kWhy)));
+}
+
+TEST_F(ShellSwapTest, SaysTheShellChangedBeforeLoadingAnother) {
+  Swap("/x/dist", "shell.js");
+  EXPECT_THAT(changed_at_, ElementsAre(0u));
+}
+
+// Going back is another change: the shell that did not run may have claimed.
+TEST_F(ShellSwapTest, SaysTheShellChangedWhenGoingBack) {
+  Swap("/x/dist", "shell.js");
+  Heard(kWhy);
+  EXPECT_THAT(changed_at_, ElementsAre(0u, 1u));
+}
+
+// A reload keeps its claims, so no chord reaches the focused window meanwhile.
+TEST_F(ShellSwapTest, TheSameShellAgainIsNoChange) {
+  Swap("/run/splash", "splash.js");
+  EXPECT_TRUE(changed_at_.empty());
 }
 
 TEST_F(ShellSwapTest, TakesASilentShellAsLoadedAfterItsPatience) {
