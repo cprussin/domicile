@@ -347,7 +347,7 @@ fi
 
 annotate_from "guard-electron-node: $FAILURE" "$ENGINE_LOG"
 echo "what the engine died of, if it did:" >&2
-grep -n -A45 -E "FATAL|Check failed|Received signal" "$ENGINE_LOG" | head -150 >&2
+grep -n -A45 -E "FATAL|Check failed|check failed|Fatal error in|Received signal" "$ENGINE_LOG" | head -150 >&2
 echo "how Node's loop turned, if it did:" >&2
 grep -E "Node.js (turn|wait)" "$ENGINE_LOG" | head -40 >&2
 echo "the app heard:" >&2
