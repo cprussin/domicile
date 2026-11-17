@@ -11,15 +11,29 @@ import { useTrayState } from "./tray-context";
 export const Tray = () => {
   const domicile = useDomicile();
   const { screen } = useBar();
-  const { clicked, extensions, installed, items, open, opened, order, pins } =
-    useTrayState();
+  const {
+    clicked,
+    extensions,
+    installed,
+    items,
+    open,
+    opened,
+    order,
+    pins,
+    profile,
+  } = useTrayState();
+  // The page's profile's: an extension switched off there has no action.
+  const shown =
+    profile === undefined
+      ? extensions
+      : extensions.filter(({ id }) => profile.enabledExtensions.includes(id));
   return (
     <TrayRow
       domicile={domicile}
       end={
         <TrayIconsMenu
           domicile={domicile}
-          extensions={extensions}
+          extensions={shown}
           installed={installed}
           items={items}
           onActivate={(id) => {
@@ -34,10 +48,11 @@ export const Tray = () => {
             domicile.processes.launch(["domicile-settings"]);
           }}
           onUnpin={pins.unpin}
+          profile={profile}
           unpinned={pins.unpinned}
         />
       }
-      extensions={extensions}
+      extensions={shown}
       items={items}
       onActivate={(id) => {
         clicked(screen, id);

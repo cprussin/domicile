@@ -51,8 +51,6 @@ enum SiteAccess {
 // An extension's chrome://extensions settings. Each is null where it is not
 // being set, or where the extension cannot use it.
 struct ExtensionSettings {
-  // Runs in private windows.
-  bool? in_private;
   // Runs on file:// pages.
   bool? file_access;
   // May use chrome.userScripts.

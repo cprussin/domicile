@@ -253,8 +253,6 @@ export type ElectronConfig = {
 export type ExtensionSettings = {
   /** Runs on local files (`file://` pages). Chrome's default is no. */
   file_access?: boolean | null;
-  /** Runs in private windows. Chrome's default is no. */
-  private?: boolean | null;
   /** Which of the sites it asks for it runs on. Chrome's default is all. */
   site_access?: SiteAccess | null;
   /**

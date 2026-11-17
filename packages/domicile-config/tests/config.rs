@@ -1002,7 +1002,6 @@ fn a_desk_sets_its_extensions_settings() {
   "extensions": {
     "settings": {
       "ddkjiahejlhfcafbddmgiahcphecmpfh": {
-        "private": true,
         "file_access": false,
         "site_access": ["github.com", "*.example.com"]
       },
@@ -1017,7 +1016,6 @@ fn a_desk_sets_its_extensions_settings() {
     assert_eq!(
         extensions.settings["ddkjiahejlhfcafbddmgiahcphecmpfh"],
         ExtensionSettings {
-            in_private: Some(true),
             file_access: Some(false),
             user_scripts: None,
             site_access: Some(SiteAccess::Sites(vec![
@@ -1038,7 +1036,8 @@ fn a_desk_sets_its_extensions_settings() {
 
 #[test]
 fn rejects_settings_for_an_id_that_is_not_one() {
-    let message = refusal(r#"{ "extensions": { "settings": { "ublock": { "private": true } } } }"#);
+    let message =
+        refusal(r#"{ "extensions": { "settings": { "ublock": { "file_access": true } } } }"#);
     assert!(message.contains("ublock"), "{message}");
 }
 
@@ -2057,4 +2056,12 @@ fn a_config_may_name_its_json_schema() {
     )
     .unwrap();
     assert_eq!(config.input.keyboard.xkb_layout, "us");
+}
+
+#[test]
+fn an_extension_s_private_setting_is_refused_as_private_profiles_switch_it() {
+    // A private browser profile's `extensions` says what runs in private
+    // windows (docs/architecture/BROWSER-PROFILES.md).
+    let text = r#"{ "extensions": { "settings": { "ddkjiahejlhfcafbddmgiahcphecmpfh": { "private": true } } } }"#;
+    assert!(Config::parse(text).is_err());
 }

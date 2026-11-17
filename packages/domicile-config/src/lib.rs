@@ -1041,9 +1041,6 @@ pub struct ExtensionsConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ExtensionSettings {
-    /// Runs in private windows. Chrome's default is no.
-    #[serde(rename = "private")]
-    pub in_private: Option<bool>,
     /// Runs on local files (`file://` pages). Chrome's default is no.
     pub file_access: Option<bool>,
     /// May run the user scripts you add to it (`chrome.userScripts`), as

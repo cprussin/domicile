@@ -35,7 +35,7 @@
 {"type":"window_acted","refused":"the desktop is locked"}
 {"type":"display_configured","refused":"no monitor HDMI-A-9 is plugged in; domicile list-displays lists them"}
 {"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
-{"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"],"settings":{"ddkjiahejlhfcafbddmgiahcphecmpfh":{"private":true,"file_access":false,"site_access":["github.com","*.example.com"]},"eimadpbcbfnmbkopoojfekhnkhdbieeh":{"user_scripts":true,"site_access":"on_click"}}}
+{"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"],"settings":{"ddkjiahejlhfcafbddmgiahcphecmpfh":{"file_access":false,"site_access":["github.com","*.example.com"]},"eimadpbcbfnmbkopoojfekhnkhdbieeh":{"user_scripts":true,"site_access":"on_click"}}}
 {"type":"force_dark","sites":["mail.google.com"]}
 {"type":"input_method","composing":true}
 {"type":"composition","serial":1794500000000001,"preedit":{"text":"ni","cursor_begin":2,"cursor_end":2},"commit":"x","delete":[1,0]}

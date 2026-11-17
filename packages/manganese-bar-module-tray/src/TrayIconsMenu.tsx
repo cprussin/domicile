@@ -9,6 +9,7 @@ import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Switch } from "@domicile-desktop/component-library/Switch";
+import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   Extension,
@@ -52,6 +53,11 @@ type Props = {
   onSettings: () => void;
   /** Keep icon `key` out of the tray. */
   onUnpin: (key: string) => void;
+  /**
+   * The last focused page's browser profile, whose switches the menu shows;
+   * `undefined` before the engine lists profiles.
+   */
+  profile: BrowserProfile | undefined;
   /** The keys of the icons kept out of the tray. */
   unpinned: ReadonlySet<string>;
 };
@@ -59,8 +65,9 @@ type Props = {
 /**
  * The button at the end of the tray, and its menu of every tray icon:
  * applications' and every installed extension, each pinned to the tray or
- * not. Extensions also switch on and off, and their `⋯` menu holds their
- * options, what they can read, and uninstalling.
+ * not. Extensions also switch on and off in the last focused page's browser
+ * profile, and their `⋯` menu holds their options, what they can read, and
+ * uninstalling.
  *
  * Clicking a row does what clicking its icon does. An unpinned extension's
  * popup opens from the tray, where its icon shows while it is open.
@@ -75,6 +82,7 @@ export const TrayIconsMenu = ({
   onPin,
   onSettings,
   onUnpin,
+  profile,
   unpinned,
 }: Props) => {
   const [open, setOpen] = useState(false);
@@ -164,7 +172,13 @@ export const TrayIconsMenu = ({
           </PanelSection>
         )}
         {installed.length > 0 && (
-          <PanelSection label="Extensions">
+          <PanelSection
+            label={
+              profile === undefined
+                ? "Extensions"
+                : `Extensions in ${profile.name}`
+            }
+          >
             <List>
               {installed.map((extension) => (
                 <ExtensionRow
@@ -173,6 +187,14 @@ export const TrayIconsMenu = ({
                   domicile={domicile}
                   extension={extension}
                   key={extension.id}
+                  locked={
+                    profile?.lockedExtensions.includes(extension.id) ?? false
+                  }
+                  on={
+                    profile === undefined
+                      ? extension.enabled
+                      : profile.enabledExtensions.includes(extension.id)
+                  }
                   onActivate={(action) => {
                     setOpen(false);
                     onActivate(action.id);
@@ -182,6 +204,20 @@ export const TrayIconsMenu = ({
                     }
                   }}
                   onSettings={onSettings}
+                  onSwitch={(on) => {
+                    ask(
+                      profile === undefined
+                        ? `switch ${extension.name} ${on ? "on" : "off"}`
+                        : `switch ${extension.name} ${on ? "on" : "off"} in ${profile.name}`,
+                      profile === undefined
+                        ? domicile.extensions.setEnabled(extension.id, on)
+                        : domicile.browser.setExtensionEnabled(
+                            profile.id,
+                            extension.id,
+                            on,
+                          ),
+                    );
+                  }}
                   pin={pinOf(extensionKey(extension.id), extension.name)}
                 />
               ))}
@@ -265,10 +301,16 @@ type ExtensionRowProps = {
   ask: (what: string, request: Promise<void>) => void;
   domicile: Domicile;
   extension: InstalledExtension;
+  /** Whether it is on in the profile the menu shows. */
+  on: boolean;
+  /** The config switches it in that profile, so the menu cannot. */
+  locked: boolean;
   /** Its row was clicked: click `action`. */
   onActivate: (action: Extension) => void;
   /** Open the Settings app. */
   onSettings: () => void;
+  /** Switch it on or off in the profile the menu shows. */
+  onSwitch: (on: boolean) => void;
   /** Its pin button. */
   pin: ReactNode;
 };
@@ -282,25 +324,26 @@ const ExtensionRow = ({
   ask,
   domicile,
   extension,
+  locked,
+  on,
   onActivate,
   onSettings,
+  onSwitch,
   pin,
 }: ExtensionRowProps) => {
   const [uninstalling, setUninstalling] = useState(false);
-  const { enabled, id, name } = extension;
+  const { id, name } = extension;
+  const enabled = on;
   const controls = (
     <>
       {enabled && pin}
+      {locked && lockIcon}
       <Switch
         checked={enabled}
+        disabled={locked}
         hideLabel
         label={name}
-        onCheckedChange={(on) => {
-          ask(
-            `switch ${name} ${on ? "on" : "off"}`,
-            domicile.extensions.setEnabled(id, on),
-          );
-        }}
+        onCheckedChange={onSwitch}
       />
       <ExtensionMore
         ask={ask}
@@ -391,7 +434,6 @@ const ExtensionMore = ({
     fileAccess,
     fromConfig,
     id,
-    inPrivate,
     name,
     optionsUrl,
     siteAccess,
@@ -450,17 +492,6 @@ const ExtensionMore = ({
             </Menu.RadioItem>
           </Menu.RadioGroup>
         </Menu.Submenu>
-      )}
-      {inPrivate !== undefined && (
-        <Menu.CheckboxItem
-          checked={inPrivate}
-          onCheckedChange={(checked) => {
-            configure({ inPrivate: checked });
-          }}
-          {...lock("inPrivate")}
-        >
-          Allow in private windows
-        </Menu.CheckboxItem>
       )}
       {fileAccess !== undefined && (
         <Menu.CheckboxItem

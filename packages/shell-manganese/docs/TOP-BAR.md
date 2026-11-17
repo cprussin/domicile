@@ -549,9 +549,14 @@ extension with an action. See
   - **Rows** click as their icon does. An unpinned extension's popup opens
     from the row's icon, shown while the popup is open. Right-clicking an
     app's name opens its own menu.
-  - **Switch** turns an extension on or off entirely.
+  - **Extensions in <profile>** are the last focused browser page's
+    profile's ([BROWSER-PROFILES.md](/docs/architecture/BROWSER-PROFILES.md)):
+    the tray shows the actions of those switched on there, and each **Switch**
+    turns one on or off in that profile. One the config switches there is
+    locked. Focusing an app keeps the last page's profile; before any page,
+    it is the default profile's.
   - **⋯** holds an extension's options page (in a browser window), what
-    websites it can read, private windows, local files and user scripts,
+    websites it can read, local files and user scripts,
     each where it can use them, and Uninstall…, which asks first. "On sites
     you choose…" opens Settings. A setting the config sets is grayed with a
     lock, saying "Set in your config"; an extension the config installed has

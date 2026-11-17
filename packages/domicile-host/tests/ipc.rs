@@ -274,7 +274,7 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
     let private = ExtensionSettings {
-        in_private: Some(true),
+        file_access: Some(true),
         ..ExtensionSettings::default()
     };
     session.host_mut().set_extensions(

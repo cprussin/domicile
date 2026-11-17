@@ -150,7 +150,7 @@ SiteAccess SiteAccessFromMojom(mojom::SiteAccess access) {
 
 mojom::ExtensionSettingsPtr SettingsAsMojom(const ExtensionSettings& settings) {
   return mojom::ExtensionSettings::New(
-      settings.in_private, settings.file_access, settings.user_scripts,
+      settings.file_access, settings.user_scripts,
       settings.site_access.has_value()
           ? std::make_optional(SiteAccessAsMojom(*settings.site_access))
           : std::nullopt,
@@ -162,7 +162,6 @@ mojom::ExtensionSettingsPtr SettingsAsMojom(const ExtensionSettings& settings) {
 base::expected<ExtensionSettings, std::string> SettingsFromMojom(
     const mojom::ExtensionSettings& wanted) {
   ExtensionSettings settings;
-  settings.in_private = wanted.in_private;
   settings.file_access = wanted.file_access;
   settings.user_scripts = wanted.user_scripts;
   if (wanted.site_access.has_value()) {

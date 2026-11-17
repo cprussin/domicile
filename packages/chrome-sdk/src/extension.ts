@@ -63,17 +63,16 @@ const unset = <T extends z.ZodType>(schema: T) =>
 
 /**
  * One installed extension, switched on or off. Each setting is `undefined`
- * when the extension cannot use it, such as `inPrivate` for one that only
- * reads pages it is clicked on.
+ * when the extension cannot use it, such as `fileAccess` for one that asks for
+ * no local files. Private windows are a private browser profile's, whose
+ * switches say what runs there.
  */
 export const installedExtensionSchema = z.object({
   /**
    * The settings the desk's config sets. A shell shows them locked: the
    * engine refuses to change them.
    */
-  configured: z.array(
-    z.enum(["inPrivate", "fileAccess", "userScripts", "siteAccess"]),
-  ),
+  configured: z.array(z.enum(["fileAccess", "userScripts", "siteAccess"])),
   /** `false` when switched off: it runs nowhere and has no action. */
   enabled: z.boolean(),
   fileAccess: unset(z.boolean()),
@@ -82,7 +81,6 @@ export const installedExtensionSchema = z.object({
   /** The manifest's icon, as a PNG data URL. */
   icon: z.string().startsWith(PNG_DATA_URL),
   id: z.string().regex(EXTENSION_ID),
-  inPrivate: unset(z.boolean()),
   name: z.string(),
   /** The page to open for the extension's own options. */
   optionsUrl: unset(z.string().startsWith("chrome-extension://")),
@@ -97,7 +95,6 @@ export type InstalledExtension = z.infer<typeof installedExtensionSchema>;
 /** The settings to change on one installed extension. Absent ones are kept. */
 export type ExtensionSettings = {
   fileAccess?: boolean;
-  inPrivate?: boolean;
   siteAccess?: SiteAccess;
   sites?: readonly string[];
   userScripts?: boolean;

@@ -11,7 +11,8 @@ not in the Extensions page or any extension list.
   as it is made, and the desktop reloads it.
 - **Extensions:** switch an extension on or off and open its options through
   the engine. While one is on, change the settings it can use: site access,
-  private windows, local files and user scripts. A setting the config sets
+  local files and user scripts. What runs in private windows is a private
+  profile's extension switches, on the Profiles page. A setting the config sets
   changes in the config, and is locked when the config is read-only; the rest
   change through the engine
   ([EXTENSIONS.md](architecture/EXTENSIONS.md#settings)). Load an unpacked folder, picked in the desktop's file

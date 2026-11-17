@@ -190,10 +190,6 @@ export const extensionSettingsSchema = z.strictObject({
     .boolean()
     .nullish()
     .transform((value) => value ?? undefined),
-  private: z
-    .boolean()
-    .nullish()
-    .transform((value) => value ?? undefined),
   site_access: siteAccessSchema
     .nullish()
     .transform((value) => value ?? undefined),

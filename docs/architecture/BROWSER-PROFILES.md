@@ -155,7 +155,8 @@ Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
 ## Plan
 
 - [x] config: `browser`, the JSON schema, home-manager options
-- [ ] config: drop `extensions.settings.*.private`
+- [x] config: drop `extensions.settings.*.private` (the SDK's `inPrivate`
+  too)
 - [x] engine: a Chrome profile per browser profile, private profiles, guests
   opened in a profile, windows listed with their profile
 - [x] engine: extensions per profile, a desk per profile
@@ -174,6 +175,6 @@ Mockup: `/mnt/project-files/browser-profiles/mockup.html` in the project.
   (`DomicileBrowserProfile.extensions`, `enabledExtensions`,
   `lockedExtensions`, `setBrowserProfileExtensionEnabled`)
 - [x] Manganese: switch a profile's extensions from the menu
-- [ ] Manganese: tray by profile
+- [x] Manganese: tray by profile (the last focused page's)
 - [x] Settings: Profiles page (`browser_profiles` and `pin_browser_site` on the
   command socket)

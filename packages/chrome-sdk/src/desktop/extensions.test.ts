@@ -20,7 +20,6 @@ const installed = {
   fromConfig: true,
   icon: "data:image/png;base64,AA==",
   id: "abcdefghijklmnopabcdefghijklmnop",
-  inPrivate: null,
   name: "Dark Reader",
   optionsUrl: null,
   siteAccess: "specific_sites" as const,
@@ -100,7 +99,6 @@ describe("extensions", () => {
       expect(desktop(fake.host).extensions.installed).toStrictEqual([
         {
           ...installed,
-          inPrivate: undefined,
           optionsUrl: undefined,
           userScripts: undefined,
         },

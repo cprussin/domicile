@@ -215,7 +215,7 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
     assert_eq!(
         reply(
             "{\"type\":\"extensions\",\"extensions\":[\
-             {\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Dark Reader\",\"description\":\"Dark mode\",\"version\":\"4.9\",\"enabled\":true,\"options_url\":\"chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html\",\"settings\":{\"private\":true,\"site_access\":[\"github.com\"]}},\
+             {\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Dark Reader\",\"description\":\"Dark mode\",\"version\":\"4.9\",\"enabled\":true,\"options_url\":\"chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html\",\"settings\":{\"file_access\":true,\"site_access\":[\"github.com\"]}},\
              {\"id\":\"bcdefghijklmnopabcdefghijklmnopa\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":false,\"settings\":{}}]}"
         )
         .unwrap(),
@@ -232,7 +232,7 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
                             .to_string()
                     ),
                     settings: ExtensionSettings {
-                        in_private: Some(true),
+                        file_access: Some(true),
                         site_access: Some(SiteAccess::Sites(vec!["github.com".to_string()])),
                         ..ExtensionSettings::default()
                     },
@@ -257,12 +257,12 @@ fn an_extension_s_settings_are_changed_by_id_naming_only_those_that_change() {
         configure_extension_line(
             "abcdefghijklmnopabcdefghijklmnop",
             &ExtensionSettings {
-                in_private: Some(true),
+                file_access: Some(true),
                 site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
                 ..ExtensionSettings::default()
             }
         ),
-        "{\"type\":\"configure_extension\",\"version\":1,\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"settings\":{\"private\":true,\"site_access\":\"on_click\"}}\n"
+        "{\"type\":\"configure_extension\",\"version\":1,\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"settings\":{\"file_access\":true,\"site_access\":\"on_click\"}}\n"
     );
 }
 
