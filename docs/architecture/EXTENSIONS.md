@@ -66,7 +66,9 @@ permissions are granted as declared.
 
 Each browser profile is a Chrome profile of its own, so the lists are
 reconciled once per profile: each gets every extension, switched on or off
-in it. A profile whose `browser.profiles.<id>.extensions` names its
+in it. An extension the user installs in one profile goes into the others
+too, from the Web Store or its unpacked directory, and one they uninstall
+leaves them all. A profile whose `browser.profiles.<id>.extensions` names its
 extensions has those on and the rest off, and the user cannot switch them.
 One that names none starts each extension on, or off in a private profile,
 the first time it is installed there, and the user switches it from then on
