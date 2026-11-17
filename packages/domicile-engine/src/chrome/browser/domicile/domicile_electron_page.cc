@@ -4,24 +4,36 @@
 #include "chrome/browser/domicile/domicile_electron_page.h"
 
 #include <algorithm>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/command_line.h"
+#include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/strings/strcat.h"
+#include "base/supports_user_data.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_protocol.h"
+#include "components/domicile/common/electron_node_switches.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
+#include "content/public/common/result_codes.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/switches.h"
 
 namespace domicile {
 namespace {
@@ -45,28 +57,108 @@ ElectronAnswer Answering(
       std::move(callback));
 }
 
+// Marks a renderer a Node page's navigation goes to, before it starts.
+const char kForNodeKey[] = "domicile-electron-node-pending";
+// Marks a renderer started for a Node page.
+const char kNodeRendererKey[] = "domicile-electron-node-renderer";
+
+mojom::ElectronNodePtr ToMojom(const ElectronNode& node) {
+  return mojom::ElectronNode::New(node.preload, node.integration,
+                                  node.context_isolation, node.resources_path,
+                                  node.app_path, node.electron_version,
+                                  base::flat_map<std::string, std::string>(
+                                      node.env.begin(), node.env.end()));
+}
+
 }  // namespace
 
 ElectronPage::ElectronPage(content::WebContents* contents,
                            std::string preload,
+                           std::optional<ElectronNode> node,
                            ElectronPageCalls calls,
                            base::WeakPtr<ElectronSession> session)
     : content::WebContentsObserver(contents),
       content::WebContentsUserData<ElectronPage>(*contents),
       preload_(std::move(preload)),
+      node_(std::move(node)),
       calls_(std::move(calls)),
-      session_(std::move(session)) {}
+      session_(std::move(session)) {
+  // The protocol keeps a Node page's preload in node_->preload.
+  CHECK(!node_.has_value() || preload_.empty());
+}
 
 ElectronPage::~ElectronPage() = default;
 
 // static
 void ElectronPage::Attach(content::WebContents& contents,
                           std::string preload,
+                          std::optional<ElectronNode> node,
                           ElectronPageCalls calls,
                           base::WeakPtr<ElectronSession> session) {
   CHECK(!FromWebContents(&contents));
-  CreateForWebContents(&contents, std::move(preload), std::move(calls),
-                       std::move(session));
+  CreateForWebContents(&contents, std::move(preload), std::move(node),
+                       std::move(calls), std::move(session));
+}
+
+// static
+void ElectronPage::MainFrameNavigatesInto(
+    content::RenderFrameHost& frame,
+    content::SiteInstance& site_instance) {
+  content::WebContents* contents =
+      content::WebContents::FromRenderFrameHost(&frame);
+  ElectronPage* page = contents ? FromWebContents(contents) : nullptr;
+  if (page == nullptr || !page->node_.has_value()) {
+    return;
+  }
+  content::RenderProcessHost* host = site_instance.GetProcess();
+  if (host->IsInitializedAndNotDead() && !IsNodeRenderer(*host)) {
+    // Its page commits into a sandboxed renderer, which
+    // ReadyToCommitNavigation then ends.
+    LOG(ERROR) << "domicile: an Electron page with Node.js navigates into "
+                  "renderer "
+               << host->GetDeprecatedID()
+               << ", which started sandboxed, without Node.js.";
+    return;
+  }
+  if (!host->GetUserData(kForNodeKey)) {
+    host->SetUserData(kForNodeKey,
+                      std::make_unique<base::SupportsUserData::Data>());
+  }
+}
+
+// static
+void ElectronPage::AppendRendererSwitches(content::RenderProcessHost& host,
+                                          base::CommandLine& command_line) {
+  if (!host.GetUserData(kForNodeKey)) {
+    return;
+  }
+  host.SetUserData(kNodeRendererKey,
+                   std::make_unique<base::SupportsUserData::Data>());
+  command_line.AppendSwitch(sandbox::policy::switches::kNoSandbox);
+  command_line.AppendSwitch(switches::kNoZygote);
+  command_line.AppendSwitch(kDomicileElectronNodeSwitch);
+  const std::string js_flags =
+      command_line.GetSwitchValueASCII(blink::switches::kJavaScriptFlags);
+  command_line.AppendSwitchASCII(
+      blink::switches::kJavaScriptFlags,
+      js_flags.empty() ? std::string(kElectronNodeJsFlag)
+                       : base::StrCat({js_flags, " ", kElectronNodeJsFlag}));
+  LOG(INFO) << "domicile: renderer " << host.GetDeprecatedID()
+            << " starts for an Electron page with Node.js, unsandboxed.";
+}
+
+// static
+bool ElectronPage::IsNodeRenderer(content::RenderProcessHost& host) {
+  return host.GetUserData(kNodeRendererKey) != nullptr;
+}
+
+// static
+bool ElectronPage::IsForNode(content::RenderProcessHost& host) {
+  return host.GetUserData(kForNodeKey) != nullptr || IsNodeRenderer(host);
+}
+
+bool ElectronPage::HasPreload() const {
+  return !preload_.empty() || node_.has_value();
 }
 
 // static
@@ -189,7 +281,7 @@ void ElectronPage::ReadyToCommitNavigation(
   }
   // The document going took its ports and listeners: the app forgets them
   // before the new one's can arrive.
-  if (frame_.is_bound() && !preload_.empty()) {
+  if (frame_.is_bound() && HasPreload()) {
     calls_.gone.Run();
   }
   // Associated with the frame's channel, as the commit is, so the preload
@@ -200,8 +292,22 @@ void ElectronPage::ReadyToCommitNavigation(
   navigation->GetRenderFrameHost()
       ->GetRemoteAssociatedInterfaces()
       ->GetInterface(&frame_);
-  if (!preload_.empty() && !navigation->IsErrorPage()) {
-    frame_->Preload(preload_, receiver_.BindNewEndpointAndPassRemote());
+  if (HasPreload() && !navigation->IsErrorPage()) {
+    content::RenderProcessHost* process =
+        navigation->GetRenderFrameHost()->GetProcess();
+    if (node_.has_value() && !IsNodeRenderer(*process)) {
+      // Chromium put the page in a renderer started for another, sandboxed
+      // and without Node: the engine's bug, and the page would run without
+      // what it was written for. Loudly, and only this page's renderer.
+      LOG(ERROR) << "domicile: an Electron page with Node.js is about to "
+                    "commit in renderer "
+                 << process->GetDeprecatedID()
+                 << ", which was not started for Node; ending it.";
+      process->Shutdown(content::RESULT_CODE_KILLED);
+      return;
+    }
+    frame_->Preload(preload_, node_.has_value() ? ToMojom(*node_) : nullptr,
+                    receiver_.BindNewEndpointAndPassRemote());
   }
 }
 

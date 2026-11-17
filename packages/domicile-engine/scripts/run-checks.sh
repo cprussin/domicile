@@ -134,6 +134,7 @@ TOGETHER=(
   guard-app-module
   guard-electron-socket
   guard-electron-preload
+  guard-electron-node
   guard-electron-protocol
   guard-electron-menu-bar
   guard-electron-message-box
@@ -166,6 +167,7 @@ ONCE=(
   guard-shell-hmr
   guard-electron-menu-bar
   guard-electron-message-box
+  guard-electron-node
   guard-electron-preload
   guard-electron-protocol
   guard-electron-permissions

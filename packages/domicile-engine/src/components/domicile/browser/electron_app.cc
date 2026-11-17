@@ -350,7 +350,7 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
   };
   const std::optional<std::string> id =
       desk_->Open(open.url, hello_->app_id, *partition, open.preload,
-                  std::move(calls), SessionNamed(open.session).GetWeakPtr(),
+                  open.node, std::move(calls), SessionNamed(open.session).GetWeakPtr(),
                   open.view, open.title, open.hidden);
   if (!id.has_value()) {
     send_.Run(

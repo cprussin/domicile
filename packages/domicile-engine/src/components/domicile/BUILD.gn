@@ -196,6 +196,11 @@ source_set("common") {
 # the switch the supervisor passes. Its own target beside :common, which is
 # Domicile's scheme and nothing else: the browser, the renderer and
 # chrome/common's scheme registration all read it, and it needs //base.
+# The switch a renderer started for Node.js in an Electron page carries.
+source_set("electron_node_switches") {
+  sources = [ "common/electron_node_switches.h" ]
+}
+
 source_set("electron_schemes") {
   sources = [
     "common/electron_schemes.cc",
@@ -888,6 +893,32 @@ source_set("context_bridge") {
 # The renderer half of an Electron app window: its preload, in an isolated
 # world, and its IPC. //chrome's renderer client attaches it to every main
 # frame; it acts only on a preload the browser sends.
+# Node.js in the page of an Electron window that isn't sandboxed, as
+# Electron's renderer has it: Electron's Node, at //third_party/electron_node,
+# linked into the renderer. See "Phase 2" in docs/architecture/ELECTRON-APPS.md.
+source_set("electron_node") {
+  sources = [
+    "renderer/electron_node.cc",
+    "renderer/electron_node.h",
+  ]
+
+  public_deps = [
+    "//components/domicile/mojom",
+    "//third_party/electron_node:libnode",
+    "//v8",
+  ]
+
+  deps = [
+    ":electron_node_switches",
+    "//base",
+    "//components/version_info",
+    "//gin",
+
+    # Node starts each page's environment from scratch, not from a snapshot.
+    "//third_party/electron_node:node_snapshot_stub",
+  ]
+}
+
 source_set("electron_preload") {
   sources = [
     "renderer/electron_preload.cc",
@@ -903,6 +934,7 @@ source_set("electron_preload") {
 
   deps = [
     ":context_bridge",
+    ":electron_node",
     "//base",
     "//gin",
     "//third_party/blink/public:blink",

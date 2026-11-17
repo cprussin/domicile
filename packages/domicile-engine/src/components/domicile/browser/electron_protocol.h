@@ -40,7 +40,14 @@ namespace domicile {
 //    "title":"Claude",                     (the window's own title, which
 //                                           the desktop shows over its
 //                                           page's; left out for none)
-//    "hidden":true}                        (show: false; left out is shown)
+//    "hidden":true,                        (show: false; left out is shown)
+//    "node":{"preload":"/abs/preload.js",  (a window that isn't sandboxed:
+//            "integration":false,           Node.js in its page; see
+//            "context_isolation":true,      ElectronNode. Left out, the
+//            "resources_path":"/abs",       page is sandboxed. With it the
+//            "app_path":"/abs/app",         preload is a file, so the
+//            "electron_version":"45.2.1",   top-level "preload" is left
+//            "env":{"HOME":"/home/a"}}}     out)
 //   -> {"type":"window_opened","window":1}
 //   -> {"type":"window_refused","window":1,"why":"..."}
 //
@@ -175,11 +182,40 @@ struct ElectronHello {
   WebViewPartition partition;
 };
 
+// Node.js in a window's page, as Electron gives a window that isn't
+// sandboxed: its preload loads through Node's require, in its own world, or
+// in the page's without context isolation, where with nodeIntegration the
+// page keeps Node's globals. See "Phase 2" in
+// docs/architecture/ELECTRON-APPS.md.
+struct ElectronNode {
+  // The preload's file; empty for none.
+  std::string preload;
+  // nodeIntegration: Node's require and globals in the page's own world.
+  // Electron gives them only without context isolation.
+  bool integration = false;
+  // contextIsolation: the preload runs in a world of its own, not the
+  // page's.
+  bool context_isolation = true;
+  // process.resourcesPath, and the app's directory, which a page that isn't
+  // a file searches for modules from.
+  std::string resources_path;
+  std::string app_path;
+  // process.versions.electron: the Electron the app is told it runs on.
+  std::string electron_version;
+  // The main process's environment, which an Electron page's process.env
+  // is.
+  std::vector<std::pair<std::string, std::string>> env;
+
+  friend bool operator==(const ElectronNode&, const ElectronNode&) = default;
+};
+
 struct ElectronOpenWindow {
   ElectronWindow window;
   GURL url;
-  // The preload's source; empty for none.
+  // The preload's source, for a sandboxed page; empty for none.
   std::string preload;
+  // Node.js in the page, for a window that isn't sandboxed; none when it is.
+  std::optional<ElectronNode> node;
   // Its Electron partition; empty for the app's own session.
   std::string session;
   // A WebContentsView's page rather than a BrowserWindow: listed to the shell
