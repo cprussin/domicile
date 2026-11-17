@@ -346,10 +346,25 @@ void AnswerLoadShell(const base::DictValue& request,
     return;
   }
 
+  // Left out is a directory. Anything but a boolean is refused rather than
+  // read as one, so a sender's mistake does not serve a socket as a
+  // directory.
+  ShellFiles files = ShellFiles::kDirectory;
+  if (const base::Value* dev_server = request.Find("dev_server")) {
+    if (!dev_server->is_bool()) {
+      std::move(reply).Run(RefusedCommand(
+          "load_shell's \"dev_server\" says whether the root is a dev "
+          "server's socket: true or false"));
+      return;
+    }
+    files = dev_server->GetBool() ? ShellFiles::kDevServer
+                                  : ShellFiles::kDirectory;
+  }
+
   // The root and module are not checked here. `domicile load-shell` validates
   // the path first (`shell_path` in domicile-launch), and a module that fails
   // to run is refused once the page says so.
-  load_shell(shell_root, *module,
+  load_shell(shell_root, *module, files,
              base::BindOnce(
                  [](CommandReply reply,
                     base::expected<void, std::string> loaded) {

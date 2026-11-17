@@ -38,8 +38,10 @@ base::CommandLine Serving(const std::string& root, const std::string& module) {
 class ShellSwapTest : public testing::Test {
  protected:
   // Swaps to `module` under `root`, keeping the answer in `answers_`.
-  void Swap(const std::string& root, const std::string& module) {
-    swap_.Swap(base::FilePath(root), module,
+  void Swap(const std::string& root,
+            const std::string& module,
+            ShellFiles files = ShellFiles::kDirectory) {
+    swap_.Swap(base::FilePath(root), module, files,
                base::BindOnce(
                    [](std::vector<ShellOutcome>* answers, const ShellOutcome& ran) {
                      answers->push_back(ran);
@@ -94,6 +96,18 @@ TEST_F(ShellSwapTest, GoesBackToTheOldShellWhenTheNewOneDidNotRun) {
   ASSERT_TRUE(answers_[0].has_value());
   EXPECT_THAT(*answers_[0], HasSubstr(kWhy));
   EXPECT_THAT(*answers_[0], HasSubstr("/run/splash/splash.js"));
+}
+
+TEST_F(ShellSwapTest, GoesBackFromADevServerToTheFilesItReplaced) {
+  // `domicile dev` on a shell that throws: the shell before comes back from
+  // its directory, not from a socket path read as one.
+  Swap("/run/user/1000/domicile-dev.sock", "@domicile/shell.js",
+       ShellFiles::kDevServer);
+  EXPECT_EQ(source_.Files(), ShellFiles::kDevServer);
+  Heard(kWhy);
+
+  EXPECT_EQ(source_.Root(), base::FilePath("/run/splash"));
+  EXPECT_EQ(source_.Files(), ShellFiles::kDirectory);
 }
 
 TEST_F(ShellSwapTest, StaysOnTheSameShellReloadedWhenItDidNotRun) {

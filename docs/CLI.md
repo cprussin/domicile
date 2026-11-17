@@ -41,6 +41,20 @@ takes the same forms as `domicile [shell]`.
 - A module rebuilt in place has no old shell to go back to, so it stays on its
   error screen.
 
+## `domicile dev <entry>`
+
+Serve a shell from its source, with hot module replacement, until Ctrl-C.
+Then the desktop goes back to the shell it replaced. `<entry>` is the file the
+shell's source starts at, such as `src/shell.tsx`
+([WRITING-A-SHELL.md](WRITING-A-SHELL.md#hot-module-replacement)).
+
+- An edit Vite can apply in place keeps the page's state. Any other edit
+  reloads the shell, and windows stay open, as with `load-shell`.
+- The dev server's log, such as each update it sends, prints in this
+  terminal.
+- A failed build or a dev server that stops prints why, and the desktop goes
+  back to the shell it replaced.
+
 ## `domicile open <file|folder|url>`
 
 Open a file or folder with its type's default app, or a link in a browser

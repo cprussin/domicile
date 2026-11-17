@@ -207,7 +207,10 @@ domicile load-shell ./my-desktop/dist/shell.js
 - `load-shell` changes only the shell. It does not apply compositor config.
   On load, `announce_open_apps` sends the new page the desktop and its open
   windows, and the browser sends its browser windows.
-- The desktop needs no dev mode.
+- The desktop needs no dev mode. `domicile dev <entry>` is a client too: it
+  runs the builder's dev server and sends `load-shell` for it, so edits apply
+  in place and keep the page's state
+  ([WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#hot-module-replacement)).
 
 `packages/dev-shell/bin/dev-shell.sh` is the watch script built on it:
 
@@ -231,6 +234,7 @@ domicile load-shell ./my-desktop/dist/shell.js
 
 A reload or `load-shell` restarts nothing: every window keeps running, and only
 state kept in the shell's page starts over ([No watch mode](#no-watch-mode)).
+An engine restarted under `domicile dev` serves the dev server again.
 
 ```
 the engine exited (signal: 9 (SIGKILL))
@@ -449,6 +453,11 @@ Wire, one line each way:
 {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
 {"type":"loaded"}   |   {"type":"refused","why":"…"}
 ```
+
+- `"dev_server": true` makes `root` the socket of `domicile dev`'s dev server
+  rather than a directory
+  ([DOMICILE-SCHEME.md](/docs/architecture/DOMICILE-SCHEME.md#dev-server)).
+  It is left out otherwise, so an older engine reads every other line.
 
 - The request carries a version, and the engine refuses one it does not
   support. The engine and the supervisor ship separately (`engine-release.nix`
