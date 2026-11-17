@@ -79,6 +79,10 @@ domicile ./my-desktop/dist/shell.js
 
 - The module path is the whole interface. Name the file what you like.
 - Domicile serves the directory the module is in, over `domicile://`.
+- Every shell has the origin `domicile://shell`, so all shells share
+  localStorage, IndexedDB, Cache Storage and cookies. A shell loaded later,
+  or a new version of yours, reads what earlier ones stored. Prefix your keys
+  and database names, and handle data in an older format.
 
 To load a rebuilt bundle, run `domicile load-shell ./dist/shell.js` in a
 terminal inside the desktop. Any shell works, and windows stay put
