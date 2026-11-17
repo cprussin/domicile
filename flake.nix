@@ -437,6 +437,11 @@
         exec ${pkgs.bun}/bin/bun ${shellWorkspace}/packages/electron-host/src/main.ts "$@"
       '';
 
+      # Loads graphics libraries as the compositor and the engine do, with
+      # this flake's glibc. The NixOS module runs it on the system's driver.
+      domicileGraphicsProbe = pkgs.writeCBin "domicile-graphics-probe"
+        (builtins.readFile ./packages/distro/graphics-probe.c);
+
       # Domicile, laid out so that `domicile` can find the rest of itself.
       #
       #   bin/domicile
@@ -454,6 +459,9 @@
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/electron-host
       #                               runs an Electron app's main process
+      #   libexec/domicile/graphics-probe
+      #                               loads a graphics driver as the
+      #                               compositor and the engine would
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
       #                               `@domicile-desktop/manganese` names,
       #                               and the splash
@@ -519,6 +527,7 @@
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
         cp ${domicileElectronHost} "$out/libexec/domicile/electron-host"
+        cp ${domicileGraphicsProbe}/bin/domicile-graphics-probe "$out/libexec/domicile/graphics-probe"
         mkdir -p "$out/libexec/domicile/shells"
         ln -s ${shellPage "manganese"} "$out/libexec/domicile/shells/manganese"
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
@@ -1378,8 +1387,8 @@
         # system.
         nixos-module =
           let
-            machine = pkgs.nixos {
-              imports = [ self.nixosModules.domicile ];
+            machineWith = extra: pkgs.nixos {
+              imports = [ self.nixosModules.domicile extra ];
               programs.domicile.enable = true;
               # The module does not enable a display manager itself.
               services.displayManager.enable = true;
@@ -1390,7 +1399,22 @@
                 fsType = "tmpfs";
               };
               system.stateVersion = pkgs.lib.trivial.release;
+              hardware.graphics.enable = true;
             };
+            machine = machineWith { };
+            # The check that Domicile loads the system's driver, with that
+            # driver `graphics`.
+            loadsDriver = graphics: pkgs.lib.findFirst
+              (check: check.name == "domicile-loads-the-graphics-driver")
+              (throw "the module adds no check that Domicile loads the graphics driver")
+              (machineWith { hardware.graphics.package = graphics; }).config.system.checks;
+            # A driver no glibc loads.
+            unloadableDriver = pkgs.runCommand "unloadable-driver" { } ''
+              mkdir -p "$out/lib/gbm"
+              echo "not a library" > "$out/lib/libEGL_mesa.so.0"
+              echo "not a library" > "$out/lib/gbm/dri_gbm.so"
+            '';
+            refusedDriver = pkgs.testers.testBuildFailure (loadsDriver unloadableDriver);
             # The sessions the display manager receives. NixOS rejects a
             # package missing the file its `providedSessions` names.
             inherit (machine.config.services.displayManager.sessionData) sessionNames;
@@ -1448,6 +1472,17 @@
             # declare it, and without it a locked desk opens to nothing.
             [ ${pkgs.lib.boolToString (machine.config.security.pam.services ? domicile)} = true ] || {
               echo "the module declared no domicile PAM service" >&2
+              exit 1
+            }
+
+            # The system build loads the system's driver with Domicile's
+            # glibc: this nixpkgs' mesa loads, and a driver that does not load
+            # fails the build saying how to fix it.
+            test -e ${loadsDriver pkgs.mesa}
+            grep -qF 'cannot load ${unloadableDriver}/lib/libEGL_mesa.so.0' ${refusedDriver}/testBuildFailure.log &&
+              grep -qF 'inputs.domicile.inputs.nixpkgs.follows' ${refusedDriver}/testBuildFailure.log || {
+              echo "a driver Domicile cannot load did not fail the build saying why:" >&2
+              cat ${refusedDriver}/testBuildFailure.log >&2
               exit 1
             }
 

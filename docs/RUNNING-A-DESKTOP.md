@@ -383,6 +383,17 @@ It provides:
   services bound to `graphical-session.target` and `~/.config/autostart`
   entries start with it. The package is also on the system profile, so the
   portal finds `domicile-mimeapps.list`.
+- **A build check that Domicile loads your graphics driver**, when
+  `hardware.graphics.enable` is set. The compositor and the engine load the
+  driver in `/run/opengl-driver` with Domicile's own glibc, so a driver from a
+  newer nixpkgs does not load and the desktop draws without the graphics card.
+  The check fails the system build instead. Fix it by building Domicile from
+  your nixpkgs:
+
+  ```nix
+  inputs.domicile.inputs.nixpkgs.follows = "nixpkgs";
+  ```
+
 - **Portal routing**, when `xdg.portal.enable` is set. Domicile is the only
   backend and the shell draws every dialog. `domicile-portals.conf` sends
   `Secret` to `gnome-keyring`, which you install (`oo7-portal` works too).
