@@ -957,17 +957,21 @@ class DeskWindows final : public base::SupportsUserData::Data,
 class Host final : public BrowserWindowHost {
  public:
   // A page's new window with no opener, or an extension's new tab, is in the
-  // profile its site opens in; a private page's stays in its profile.
+  // profile its site opens in, and an extension's own page in the profile
+  // that asked for it (ProfileForNewWindow); a private page's stays in its
+  // profile.
   WebViewGuest* Open(
       content::BrowserContext& context,
       const GURL& url,
       const std::optional<WebViewPartition>& partition) override {
     BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
     const bool private_browsing = context.IsOffTheRecord();
+    const std::string asker = registry.IdOf(context);
     return Windows(context).Open(
         url, private_browsing,
-        private_browsing ? registry.IdOf(context)
-                         : ProfileForUrl(registry.profiles(), url),
+        private_browsing
+            ? asker
+            : ProfileForNewWindow(registry.profiles(), asker, url),
         partition);
   }
 

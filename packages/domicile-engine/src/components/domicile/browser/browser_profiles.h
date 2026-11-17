@@ -104,6 +104,15 @@ const std::string* SiteForUrl(const BrowserProfiles& profiles, const GURL& url);
 const std::string& ProfileForUrl(const BrowserProfiles& profiles,
                                  const GURL& url);
 
+// The profile a new window at `url` opens in, asked for from profile
+// `asker`: by its site (ProfileForUrl) for a web address, else `asker`'s own.
+// An extension's page, such as one chrome.tabs.create opens, must open where
+// the extension is switched on: in another profile it is off, and its page is
+// blank.
+const std::string& ProfileForNewWindow(const BrowserProfiles& profiles,
+                                       const std::string& asker,
+                                       const GURL& url);
+
 // The profile a page in profile `page_profile` moves to as the user takes it
 // from `from` to `to`, or nothing when it stays. It moves when routing puts
 // the two addresses in different profiles and `to`'s is not the page's own:
