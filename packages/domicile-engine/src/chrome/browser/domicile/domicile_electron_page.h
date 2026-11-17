@@ -75,6 +75,12 @@ class ElectronPage final : public content::WebContentsObserver,
   // ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost.
   static bool RefusesSpareRenderer(const GURL& site_url);
 
+  // Whether `host` may take a navigation to `site_url`: a Node page's takes
+  // only a renderer marked for Node, never one that started sandboxed. From
+  // ChromeContentBrowserClient::IsSuitableHost.
+  static bool IsSuitableHost(content::RenderProcessHost& host,
+                             const GURL& site_url);
+
   // Starts `host` for Node.js when it is to run a Node page: unsandboxed and
   // without the zygote, as Electron starts such a renderer, marked for the
   // renderer to start Node. As it is about to launch, from

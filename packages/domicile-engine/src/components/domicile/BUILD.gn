@@ -192,15 +192,15 @@ source_set("common") {
   sources = [ "common/domicile_scheme.h" ]
 }
 
-# Electron apps' own schemes, which every process registers as it starts from
-# the switch the supervisor passes. Its own target beside :common, which is
-# Domicile's scheme and nothing else: the browser, the renderer and
-# chrome/common's scheme registration all read it, and it needs //base.
 # The switch a renderer started for Node.js in an Electron page carries.
 source_set("electron_node_switches") {
   sources = [ "common/electron_node_switches.h" ]
 }
 
+# Electron apps' own schemes, which every process registers as it starts from
+# the switch the supervisor passes. Its own target beside :common, which is
+# Domicile's scheme and nothing else: the browser, the renderer and
+# chrome/common's scheme registration all read it, and it needs //base.
 source_set("electron_schemes") {
   sources = [
     "common/electron_schemes.cc",
@@ -890,9 +890,6 @@ source_set("context_bridge") {
   public_deps = [ "//v8" ]
 }
 
-# The renderer half of an Electron app window: its preload, in an isolated
-# world, and its IPC. //chrome's renderer client attaches it to every main
-# frame; it acts only on a preload the browser sends.
 # Node.js in the page of an Electron window that isn't sandboxed, as
 # Electron's renderer has it: Electron's Node, at //third_party/electron_node,
 # linked into the renderer. See "Phase 2" in docs/architecture/ELECTRON-APPS.md.
@@ -919,6 +916,9 @@ source_set("electron_node") {
   ]
 }
 
+# The renderer half of an Electron app window: its preload, in an isolated
+# world, and its IPC. //chrome's renderer client attaches it to every main
+# frame; it acts only on a preload the browser sends.
 source_set("electron_preload") {
   sources = [
     "renderer/electron_preload.cc",

@@ -85,7 +85,6 @@ base::expected<ElectronRequest, ElectronRefusal> RefuseRequest(std::string why,
       ElectronRefusal{.why = std::move(why), .request = request});
 }
 
-// The "session" a request names: "" when it names none and may leave it out.
 // An open_window's "node", which `request` has.
 base::expected<ElectronNode, std::string> NodeIn(const base::Value& node) {
   if (!node.is_dict()) {
@@ -143,6 +142,7 @@ base::expected<ElectronNode, std::string> NodeIn(const base::Value& node) {
   return made;
 }
 
+// The "session" a request names: "" when it names none and may leave it out.
 base::expected<std::string, std::string> SessionIn(
     const base::DictValue& request,
     bool optional) {

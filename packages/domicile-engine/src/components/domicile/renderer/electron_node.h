@@ -75,6 +75,8 @@ class ElectronNodeEnvironment final {
   // timer does from the page's own task: wakes the thread, which then waits
   // only until the loop's earliest timer.
   static void Activate(const v8::FunctionCallbackInfo<v8::Value>& info);
+  // The wakeup in a turn: runs Node's queued ticks.
+  static void Woken(uv_async_t* handle);
 
   const raw_ptr<v8::Isolate> isolate_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

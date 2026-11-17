@@ -17,10 +17,6 @@ ipcRenderer.send("preload", {
   isolated: process.contextIsolated,
   node: typeof process.versions.node,
   type: process.type,
-  // A renderer started for Node has no seccomp filter: Electron's too.
-  unsandboxed: /^Seccomp:\s+0$/m.test(
-    fs.readFileSync("/proc/self/status", "utf8"),
-  ),
 });
 
 // Node's own loop turns: a timer and a file read each call back.

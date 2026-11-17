@@ -126,7 +126,9 @@ void ElectronPage::MainFrameNavigatesInto(
   content::WebContents* contents =
       content::WebContents::FromRenderFrameHost(&frame);
   ElectronPage* page = contents ? FromWebContents(contents) : nullptr;
-  if (page == nullptr || !page->node_.has_value()) {
+  // A prerendering page has no preload; only the window's own page has Node.
+  if (page == nullptr || !page->node_.has_value() ||
+      !frame.IsInPrimaryMainFrame()) {
     return;
   }
   if (site_instance.HasProcess()) {
@@ -162,6 +164,12 @@ bool ElectronPage::RefusesSpareRenderer(const GURL& site_url) {
   return std::ranges::any_of(
       PendingNodeSites(),
       [&](const PendingNodeSite& site) { return site.site_url == site_url; });
+}
+
+// static
+bool ElectronPage::IsSuitableHost(content::RenderProcessHost& host,
+                                  const GURL& site_url) {
+  return !RefusesSpareRenderer(site_url) || IsForNode(host);
 }
 
 namespace {
@@ -350,13 +358,26 @@ void ElectronPage::ReadyToCommitNavigation(
   navigation->GetRenderFrameHost()
       ->GetRemoteAssociatedInterfaces()
       ->GetInterface(&frame_);
+  content::RenderProcessHost* process =
+      navigation->GetRenderFrameHost()->GetProcess();
+  if (!node_.has_value() && IsNodeRenderer(*process)) {
+    // A sandboxed page in a renderer without the sandbox: the engine's bug.
+    LOG(ERROR) << "domicile: a sandboxed Electron page is about to commit "
+                  "in renderer "
+               << process->GetDeprecatedID()
+               << ", which was started unsandboxed for Node.js; ending it.";
+    process->Shutdown(content::RESULT_CODE_KILLED);
+    return;
+  }
+  LOG(INFO) << "domicile: an Electron page commits in renderer "
+            << process->GetDeprecatedID()
+            << (node_.has_value() ? " (Node.js)" : " (sandboxed)");
   if (HasPreload() && !navigation->IsErrorPage()) {
-    content::RenderProcessHost* process =
-        navigation->GetRenderFrameHost()->GetProcess();
     if (node_.has_value() && !IsNodeRenderer(*process)) {
       // Chromium put the page in a renderer started for another, sandboxed
       // and without Node: the engine's bug, and the page would run without
-      // what it was written for. Loudly, and only this page's renderer.
+      // what it was written for. Loudly: IsSuitableHost keeps others' renderers
+      // from a Node page, so this one should be its own.
       LOG(ERROR) << "domicile: an Electron page with Node.js is about to "
                     "commit in renderer "
                  << process->GetDeprecatedID()

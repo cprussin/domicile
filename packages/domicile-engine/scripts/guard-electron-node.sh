@@ -21,9 +21,14 @@
 # and asserts:
 #
 #   ready       the socket took the hello
-#   preloaded   window 1's preload ran on Node, in an unsandboxed renderer:
-#               Node's process, the app's environment, Electron's versions,
-#               the app's own module by a relative require, and `electron`
+#   preloaded   window 1's preload ran on Node: Node's process, the app's
+#               environment, Electron's versions, the app's own module by a
+#               relative require, and `electron`
+#
+# and, from the engine's log, that each Node page committed in a renderer
+# of its own, started for Node, and the sandboxed page in none of those. The
+# engine runs with --no-sandbox here, as every guard does, so the sandbox
+# itself is not what this measures.
 #   integrated  window 1's page has Node's require, its relative requires
 #               from the app's directory
 #   looped      a Node timer and a file read in window 1's preload called back
@@ -226,7 +231,7 @@ print("measured: %d %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     preload_1 == {"chrome": "string", "electron": "45.2.1", "env": "yes",
                   "helper": 42, "isolated": False, "node": "string",
-                  "type": "renderer", "unsandboxed": True},
+                  "type": "renderer"},
     page_1 == {"dirname": "string", "helper": 42, "joined": "a/b",
                "process": "object"},
     ticked is True and read is True,
@@ -239,20 +244,33 @@ print("measured: %d %d %d %d %d %d %d" % (
 PY
 
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
-# The browser started each Node page's renderer for it: one line each.
-OWN="$(grep -c "starts for an Electron page with Node.js" "$ENGINE_LOG")"
-echo
-echo "measured: $MEASURED (renderers started for Node: $OWN)"
-echo "  (ready preloaded integrated looped isolated stripped unnoded)"
-if [ "${MEASURED%% *}" = "1" ] && [ "$OWN" -lt 3 ]; then
-  MEASURED="own-renderers-missing"
+# Each page's renderer, from the engine's log: the three Node pages each in
+# one of their own, and the sandboxed page in none of those. RENDERERS says
+# which, for the verdict.
+NODE_IDS="$(sed -n 's/.*an Electron page commits in renderer \([0-9]*\) (Node.js).*/\1/p' "$ENGINE_LOG" | sort -u)"
+SANDBOXED_IDS="$(sed -n 's/.*an Electron page commits in renderer \([0-9]*\) (sandboxed).*/\1/p' "$ENGINE_LOG" | sort -u)"
+RENDERERS=ok
+if [ "$(printf '%s\n' "$NODE_IDS" | grep -c .)" -lt 3 ]; then
+  RENDERERS=shared
+elif [ -n "$SANDBOXED_IDS" ] &&
+  [ -n "$(comm -12 <(printf '%s\n' "$NODE_IDS") <(printf '%s\n' "$SANDBOXED_IDS"))" ]; then
+  RENDERERS=shared
+elif ! grep -q "starts for an Electron page with Node.js" "$ENGINE_LOG"; then
+  RENDERERS=unmarked
 fi
+echo
+echo "measured: $MEASURED (Node renderers: $(echo $NODE_IDS); sandboxed: $(echo $SANDBOXED_IDS); $RENDERERS)"
+echo "  (ready preloaded integrated looped isolated stripped unnoded)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-node-guard.sh`
 # runs this block directly. MEASURED is "<ready> <preloaded> <integrated>
-# <looped> <isolated> <stripped> <unnoded>", or own-renderers-missing.
+# <looped> <isolated> <stripped> <unnoded>"; RENDERERS, ok when left out,
+# says whether each Node page had a renderer of its own.
 FAILURE=""
 PASSED=""
+if [ "${MEASURED%% *}" = "1" ] && [ "${RENDERERS:-ok}" != ok ]; then
+  MEASURED="own-renderers-missing"
+fi
 case "$MEASURED" in
 "1 1 1 1 1 1 1")
   PASSED="each Electron window that isn't sandboxed got a renderer started \
@@ -261,10 +279,12 @@ electron, Node's loop called back, the page's own world had Node only with \
 nodeIntegration and no context isolation, and a sandboxed window had none"
   ;;
 "own-renderers-missing")
-  FAILURE="A NODE PAGE RAN IN A RENDERER NOT STARTED FOR IT: \
-ContentBrowserClient::MainFrameNavigatesInto must mark the renderer before \
-it starts, and ElectronPage::AppendRendererSwitches start it unsandboxed with \
-the Node switch (patch 0236) -- the engine's log has which renderers started"
+  FAILURE="A NODE PAGE SHARED A RENDERER, or ran in one not started for it: \
+ContentBrowserClient::MainFrameNavigatesInto and SiteInstanceGotProcessAndSite \
+must mark the renderer before it starts, IsSuitableHost and MayReuseHost keep \
+it the page's own, and ElectronPage::AppendRendererSwitches start it \
+unsandboxed with the Node switch (patch 0236) -- the engine's log has which \
+renderer each page committed in"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello -- \

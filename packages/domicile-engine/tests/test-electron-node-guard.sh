@@ -33,9 +33,10 @@ expect() {
   fi
 }
 
-verdict() { # $1 MEASURED
+verdict() { # $1 MEASURED, $2 RENDERERS
   (
     MEASURED="$1"
+    RENDERERS="${2:-ok}"
     eval "$BLOCK"
     if [ -n "$PASSED" ]; then
       echo "pass"
@@ -47,9 +48,10 @@ verdict() { # $1 MEASURED
   )
 }
 
-says() { # $1 MEASURED, $2 what the sentence must contain
+says() { # $1 MEASURED, $2 what the sentence must contain, $3 RENDERERS
   case "$(
     MEASURED="$1"
+    RENDERERS="${3:-ok}"
     eval "$BLOCK"
     echo "$FAILURE"
   )" in
@@ -59,17 +61,21 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<ready> <preloaded> <integrated> <looped> <isolated>
-# <stripped> <unnoded>", or own-renderers-missing.
+# <stripped> <unnoded>"; RENDERERS is ok, shared or unmarked.
 echo "the claim — Node in the pages of windows that aren't sandboxed"
 expect "Node where each window asked for it, and only there, is the pass" \
   "pass" "$(verdict "1 1 1 1 1 1 1")"
 expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0 0")"
 expect "and points at the socket's guard" "yes" \
   "$(says "0 0 0 0 0 0 0" "guard-electron-socket.sh")"
-expect "a Node page in a renderer not started for it is a failure" "fail" \
-  "$(verdict "own-renderers-missing")"
+expect "Node pages sharing a renderer is a failure, all else passing" "fail" \
+  "$(verdict "1 1 1 1 1 1 1" shared)"
 expect "and names the hook that marks it" "yes" \
-  "$(says "own-renderers-missing" "MainFrameNavigatesInto")"
+  "$(says "1 1 1 1 1 1 1" "MainFrameNavigatesInto" shared)"
+expect "a renderer never marked for Node is a failure" "fail" \
+  "$(verdict "1 1 1 1 1 1 1" unmarked)"
+expect "no hello stays the socket's failure, whatever the renderers" "yes" \
+  "$(says "0 0 0 0 0 0 0" "guard-electron-socket.sh" shared)"
 expect "a preload without Node is a failure" "fail" \
   "$(verdict "1 0 0 0 0 0 1")"
 expect "and names where Node starts" "yes" \

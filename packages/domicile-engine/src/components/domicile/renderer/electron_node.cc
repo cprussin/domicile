@@ -62,6 +62,16 @@ constexpr char kNodeInit[] = R"JS(
     return Reflect.apply(load, this, [request, parent, isMain]);
   };
 
+  // A preload keeps process, global and Buffer after the page's world loses
+  // them, as Electron wraps every module (Electron's
+  // pass_all_globals_through_require.patch passes them).
+  Module.wrapper = [
+    '(function (exports, require, module, __filename, __dirname, process, ' +
+        'global, Buffer) { return function (exports, require, module, ' +
+        '__filename, __dirname) { ',
+    '\n}.call(this, exports, require, module, __filename, __dirname); });',
+  ];
+
   const fixed = (object, key, value) => {
     Object.defineProperty(object, key, { value, enumerable: true });
   };
@@ -90,8 +100,9 @@ constexpr char kNodeInit[] = R"JS(
   world.setImmediate = timers.setImmediate;
   world.clearImmediate = timers.clearImmediate;
 
-  // An exception no handler takes reaches the page's console and its error
-  // event, as an uncaught one in the page's own script does, instead of
+  // An exception no handler takes reaches the console as an uncaught one in
+  // the world's own script does (from the preload's world, not the page's
+  // error event), instead of
   // ending the renderer as Node's default would.
   const uncaught = (error) => {
     if (process.listenerCount('uncaughtException') > 1) return;
@@ -165,7 +176,13 @@ void StartNodeOnce() {
       node::ProcessInitializationFlags::kNoInitializeV8 |
       node::ProcessInitializationFlags::kNoInitializeNodeV8Platform |
       node::ProcessInitializationFlags::kEnableStdioInheritance |
-      node::ProcessInitializationFlags::kNoDefaultSignalHandling;
+      node::ProcessInitializationFlags::kNoDefaultSignalHandling |
+      // Chromium already set these up, and the engine's environment is not
+      // Node's to read: a NODE_OPTIONS there would run in every Node page.
+      node::ProcessInitializationFlags::kDisableNodeOptionsEnv |
+      node::ProcessInitializationFlags::kNoParseGlobalDebugVariables |
+      node::ProcessInitializationFlags::kNoAdjustResourceLimits |
+      node::ProcessInitializationFlags::kNoICU;
   std::shared_ptr<node::InitializationResult> result =
       node::InitializeOncePerProcess(
           args, static_cast<node::ProcessInitializationFlags::Flags>(flags));
@@ -228,6 +245,9 @@ std::unique_ptr<ElectronNodeEnvironment> ElectronNodeEnvironment::Start(
   v8::HandleScope handle_scope(isolate);
   v8::Context::Scope context_scope(context);
 
+  // Node's start and the app's preload run with explicit checkpoints, as
+  // Node does everywhere.
+  ExplicitMicrotasks microtasks(context->GetMicrotaskQueue());
   CHECK(node::InitializeContext(context).FromMaybe(false))
       << "domicile: Node.js did not take an Electron page's context";
   self->isolate_data_ = node::CreateIsolateData(isolate, &self->loop_,
@@ -323,7 +343,9 @@ ElectronNodeEnvironment::ElectronNodeEnvironment(v8::Isolate* isolate)
   // it waits on that too.
   CHECK_EQ(uv_loop_configure(&loop_, UV_LOOP_INTERRUPT_ON_IO_CHANGE), 0);
   // With nothing else on the loop, the thread still waits rather than spins.
-  CHECK_EQ(uv_async_init(&loop_, &wakeup_, nullptr), 0);
+  CHECK_EQ(uv_async_init(&loop_, &wakeup_, &ElectronNodeEnvironment::Woken),
+           0);
+  wakeup_.data = this;
   CHECK_EQ(uv_sem_init(&turn_, 0), 0);
   epoll_ = epoll_create1(EPOLL_CLOEXEC);
   PCHECK(epoll_ >= 0);
@@ -430,6 +452,20 @@ void ElectronNodeEnvironment::Poll(void* arg) {
         FROM_HERE,
         base::BindOnce(&ElectronNodeEnvironment::RunOnce, self->weak_this_));
   }
+}
+
+// static
+void ElectronNodeEnvironment::Woken(uv_async_t* handle) {
+  auto* self = static_cast<ElectronNodeEnvironment*>(handle->data);
+  if (!self->environment_ || self->closing_) {
+    return;
+  }
+  // In RunOnce's turn: its context and explicit microtasks. Closing the scope
+  // runs the ticks queued from the page's side, as Electron's OnCallNextTick
+  // does, which no Node callback would otherwise run.
+  v8::HandleScope handle_scope(self->isolate_);
+  node::CallbackScope scope(self->isolate_, v8::Object::New(self->isolate_),
+                            {0, 0});
 }
 
 // static
