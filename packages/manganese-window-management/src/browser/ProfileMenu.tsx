@@ -268,20 +268,28 @@ const colored = (
 
 // A solid capsule in the profile's color before the address, as the private
 // label was, so the page's profile shows on every page.
+// Hovered and pressed as the shared Button's tinted variants are.
 const chipStyles = hstack({
   _focusVisible: { outline: "2px solid {colors.accent}", outlineOffset: 1 },
-  backgroundColor: "var(--profile-color)",
+  backgroundColor: {
+    _activeEnabled:
+      "color-mix(in oklab, var(--profile-color) 80%, {colors.background})",
+    _hoverEnabled:
+      "color-mix(in oklab, var(--profile-color) 70%, {colors.foreground})",
+    base: "var(--profile-color)",
+  },
   blockSize: 6,
   border: "none",
   borderRadius: "full",
   color: "white",
-  cursor: "default",
+  cursor: "pointer",
   flex: "none",
   fontSize: "sm",
   fontWeight: "semibold",
   gap: 1,
   paddingInlineEnd: 2,
   paddingInlineStart: 2.5,
+  transition: "background-color {durations.fastest} {easings.linear}",
 });
 
 const dotStyles = css({
