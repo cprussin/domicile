@@ -689,6 +689,32 @@ describe("a window's menu bar", () => {
     expect(window.isMenuBarAutoHide()).toBe(false);
   });
 
+  it("has Electron's properties for it, as Element's settings read them", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    menus.Menu.setApplicationMenu(
+      menus.Menu.buildFromTemplate([{ label: "New Note" }]),
+    );
+    const window = new BrowserWindow({ autoHideMenuBar: true });
+    void window.loadURL("https://notes.test/");
+
+    const autoHid = window.autoHideMenuBar;
+    window.autoHideMenuBar = false;
+    window.menuBarVisible = false;
+
+    expect(autoHid).toBe(true);
+    expect([window.autoHideMenuBar, window.menuBarVisible]).toEqual([
+      false,
+      false,
+    ]);
+    expect(
+      menuBars(sent).map(({ auto_hide, visible }) => ({ auto_hide, visible })),
+    ).toEqual([
+      { auto_hide: true, visible: true },
+      { auto_hide: false, visible: true },
+      { auto_hide: false, visible: false },
+    ]);
+  });
+
   it("tells the engine nothing before the window opens", () => {
     const { BrowserWindow, menus, sent } = setUp();
     const window = new BrowserWindow();

@@ -334,6 +334,24 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly getUserAgent = () => "";
     readonly setAudioMuted = (_muted: boolean) => undefined;
     readonly isAudioMuted = () => false;
+    get audioMuted() {
+      return this.isAudioMuted();
+    }
+    set audioMuted(muted: boolean) {
+      this.setAudioMuted(muted);
+    }
+    get backgroundThrottling() {
+      return this.getBackgroundThrottling();
+    }
+    set backgroundThrottling(allowed: boolean) {
+      this.setBackgroundThrottling(allowed);
+    }
+    get userAgent() {
+      return this.getUserAgent();
+    }
+    set userAgent(userAgent: string) {
+      this.setUserAgent(userAgent);
+    }
     readonly isCurrentlyAudible = () => false;
     // The shell zooms pages: the app's zoom is kept, not applied.
     readonly getZoomFactor = () => this.zoomFactor;
@@ -1153,6 +1171,62 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     };
 
     readonly isMenuBarAutoHide = () => this.#menuBarAutoHide;
+
+    // Electron's properties for what the methods above set and read.
+    get autoHideMenuBar() {
+      return this.isMenuBarAutoHide();
+    }
+    set autoHideMenuBar(autoHide: boolean) {
+      this.setAutoHideMenuBar(autoHide);
+    }
+    get menuBarVisible() {
+      return this.isMenuBarVisible();
+    }
+    set menuBarVisible(visible: boolean) {
+      this.setMenuBarVisibility(visible);
+    }
+    get fullScreen() {
+      return this.isFullScreen();
+    }
+    set fullScreen(flag: boolean) {
+      this.setFullScreen(flag);
+    }
+    get simpleFullScreen() {
+      return this.isSimpleFullScreen();
+    }
+    set simpleFullScreen(flag: boolean) {
+      this.setSimpleFullScreen(flag);
+    }
+    get fullScreenable() {
+      return this.isFullScreenable();
+    }
+    set fullScreenable(flag: boolean) {
+      this.setFullScreenable(flag);
+    }
+    get kiosk() {
+      return this.isKiosk();
+    }
+    set kiosk(flag: boolean) {
+      this.setKiosk(flag);
+    }
+    get resizable() {
+      return this.isResizable();
+    }
+    set resizable(flag: boolean) {
+      this.setResizable(flag);
+    }
+    get visibleOnAllWorkspaces() {
+      return this.isVisibleOnAllWorkspaces();
+    }
+    set visibleOnAllWorkspaces(flag: boolean) {
+      this.setVisibleOnAllWorkspaces(flag);
+    }
+    get shadow() {
+      return this.hasShadow();
+    }
+    set shadow(flag: boolean) {
+      this.setHasShadow(flag);
+    }
 
     /** Tells the engine the menu bar as it is now, once the window is open. */
     readonly #showMenuBar = () => {
