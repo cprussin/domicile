@@ -178,6 +178,12 @@ void StartNodeOnce() {
       base::CommandLine::ForCurrentProcess()->GetProgram().value(),
       // The renderer's V8 already took the trap handler; V8 takes it once.
       "--disable-wasm-trap-handler",
+      // Node turns this on unless told not to, but this renderer's isolate
+      // was made without it, its builtins for source phase imports marked
+      // disabled: a function V8 later points at one of them stops V8
+      // ("!new_code->is_disabled_builtin()"). V8's flags must stay as the
+      // isolate was made.
+      "--no-js-source-phase-imports",
   };
   const uint64_t flags =
       node::ProcessInitializationFlags::kNoInitializeCppgc |
