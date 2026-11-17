@@ -35,13 +35,23 @@ namespace domicile {
 //
 //   {"type":"open_window","window":1,"url":"https://claude.ai/",
 //    "preload":"...the preload's source...",       ("preload" may be left out)
-//    "session":"persist:cowork"}           (Electron's partition; left out
+//    "session":"persist:cowork",           (Electron's partition; left out
 //                                           or "" is the app's own session)
+//    "title":"Claude",                     (the window's own title, which
+//                                           the desktop shows over its
+//                                           page's; left out for none)
+//    "hidden":true}                        (show: false; left out is shown)
 //   -> {"type":"window_opened","window":1}
 //   -> {"type":"window_refused","window":1,"why":"..."}
 //
 //   {"type":"load_url","window":1,"url":"https://claude.ai/new"}
 //   {"type":"focus_window","window":1}
+//   {"type":"set_title","window":1,"title":"Claude"}
+//                                          (win.setTitle, and a page title
+//                                           the app let through)
+//   {"type":"set_hidden","window":1,"hidden":true}
+//                                          (win.hide, and win.show with
+//                                           false)
 //   {"type":"close_window","window":1}     (the page may refuse)
 //   {"type":"destroy_window","window":1}   (closes without asking)
 //   {"type":"ipc_send","window":1,"channel":"c","args":[...]}
@@ -83,6 +93,9 @@ namespace domicile {
 //   {"type":"window_loaded","window":1}
 //   {"type":"title_changed","window":1,"title":"Claude"}
 //   {"type":"window_closed","window":1}
+//   {"type":"close_asked","window":1}      (the user asked to close the
+//                                           window: the app decides, as a
+//                                           BrowserWindow's `close` event)
 //   {"type":"ipc_message","window":1,"channel":"c","args":[...]}
 //                                          (ipcRenderer.send)
 //   {"type":"ipc_invoke","window":1,"invoke":3,"channel":"c","args":[...]}
@@ -172,6 +185,11 @@ struct ElectronOpenWindow {
   // A WebContentsView's page rather than a BrowserWindow: listed to the shell
   // only while a window holds it (ElectronSetViews).
   bool view = false;
+  // A window's own title, which the desktop shows instead of its page's;
+  // empty for none. Never a view's.
+  std::string title;
+  // Whether the window opens hidden, as `show: false`. Never a view.
+  bool hidden = false;
 };
 
 // Where a window holds one of its views, in CSS pixels from the top left of
@@ -234,6 +252,20 @@ struct ElectronFocusWindow {
 
 struct ElectronCloseWindow {
   ElectronWindow window;
+};
+
+// win.setTitle, and a page title the app let through: the title the desktop
+// shows for `window` from now on, over its page's.
+struct ElectronSetTitle {
+  ElectronWindow window;
+  std::string title;
+};
+
+// win.hide and win.show: a hidden window stays open, its page running, and
+// the desktop doesn't show it.
+struct ElectronSetHidden {
+  ElectronWindow window;
+  bool hidden = false;
 };
 
 struct ElectronDestroyWindow {
@@ -587,7 +619,9 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSetViews,
                                      ElectronSetMenuBar,
                                      ElectronShowMessageBox,
-                                     ElectronExecuteJavaScript>;
+                                     ElectronExecuteJavaScript,
+                                     ElectronSetTitle,
+                                     ElectronSetHidden>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -637,6 +671,8 @@ std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);
 std::string ElectronWindowLoaded(ElectronWindow window);
 std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
+// The user asked to close `window`, which closes only if the app closes it.
+std::string ElectronCloseAsked(ElectronWindow window);
 // The size, in CSS pixels, the shell gave window or view `window`'s page.
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.

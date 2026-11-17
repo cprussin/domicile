@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "components/domicile/browser/extension_settings.h"
+#include "components/domicile/browser/shell_source.h"
 #include "components/domicile/mojom/browser_windows.mojom-shared.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
@@ -28,6 +29,11 @@ namespace domicile {
 // serves. Each connection carries one JSON request line and one reply line.
 //
 //   {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
+//   {"type":"load_shell","version":1,"root":"/run/user/1000/dev.sock",
+//    "module":"@domicile/shell.js","dev_server":true}
+//                                      (`domicile dev`: the root is a dev
+//                                       server's socket; see
+//                                       shell_dev_server.h)
 //   -> {"type":"loaded"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -73,7 +79,8 @@ namespace domicile {
 //   -> {"type":"extensions","extensions":[{"id":"...","name":"...",
 //       "description":"...","version":"1.0","enabled":true,
 //       "settings":{"private":false,"site_access":"all_sites"},
-//       "options_url":"chrome-extension://.../options.html"}]}
+//       "options_url":"chrome-extension://.../options.html",
+//       "icon_path":"/home/.../icons/128.png"}]}
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"set_extension_enabled","version":1,"id":"...","enabled":false}
@@ -182,6 +189,7 @@ using ShellLoaded =
 // be loading and the new shell has yet to run.
 using LoadShell = base::FunctionRef<void(const base::FilePath& root,
                                          const std::string& module,
+                                         ShellFiles files,
                                          ShellLoaded loaded)>;
 
 // Runs once with whether `run_app` or `open_url` opened its window: false if
@@ -293,6 +301,10 @@ struct InstalledExtension {
   ExtensionSettings settings;
   // Empty when the extension has no options page.
   GURL options_url;
+  // The absolute path of its manifest icon closest to 128px, for a list to
+  // draw; empty when its manifest names none. A path rather than the image,
+  // so listing reads no files.
+  std::string icon_path;
 };
 
 // Carries out `extensions`: every extension in the shell's profile, apps,

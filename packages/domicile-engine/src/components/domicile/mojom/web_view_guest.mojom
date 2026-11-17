@@ -459,6 +459,26 @@ struct WebViewDevice {
   string name;
 };
 
+// A page in a guest's history, as WebViewGuest.ListHistory lists it.
+struct WebViewHistoryEntry {
+  // The entry's NavigationEntry unique id, which GoToHistoryEntry takes. Never
+  // reused within a guest's history.
+  int32 id;
+  // The address, as the address bar would show it (the virtual URL).
+  url.mojom.Url url;
+  // The title, or the address when the page has none.
+  string title;
+  // The page's favicon as a `data:image/png` URL, or empty when it has none.
+  string favicon;
+};
+
+// A guest's history either side of its current page, nearest first, as
+// Chrome's back and forward menus list it.
+struct WebViewHistory {
+  array<WebViewHistoryEntry> back;
+  array<WebViewHistoryEntry> forward;
+};
+
 // A camera or microphone, as WebViewGuest.ListMediaDevices lists it.
 struct WebViewMediaDevice {
   // The system's id for it, which SetMediaDevice takes.
@@ -905,6 +925,19 @@ interface WebViewGuest {
   // is private. With no entry to go to, nothing opens.
   GoBackInNewWindow();
   GoForwardInNewWindow();
+
+  // The pages either side of the current one, for a back or forward menu.
+  ListHistory() => (WebViewHistory history);
+
+  // Goes to the history entry with unique id `id`, as picking it from
+  // Chrome's back or forward menu does. An id no longer in the history, or the
+  // current page's, is a no-op, not an error: the history can change between
+  // listing and picking.
+  GoToHistoryEntry(int32 id);
+
+  // As GoToHistoryEntry, in a new browser window with a copy of the history,
+  // as GoBackInNewWindow does. The guest stays on its page.
+  GoToHistoryEntryInNewWindow(int32 id);
 
   // Stops loading, via `WebContents::Stop`; NavigationController has no Stop.
   Stop();

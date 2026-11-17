@@ -197,6 +197,16 @@ void ElectronApp::Take(std::string_view line) {
     if (const std::optional<std::string> id = IdOf(focus->window)) {
       desk_->Focus(*id);
     }
+  } else if (const auto* title = std::get_if<ElectronSetTitle>(&*request)) {
+    if (const std::optional<std::string> id =
+            WindowIdOf(title->window, "a title")) {
+      desk_->SetTitle(*id, title->title);
+    }
+  } else if (const auto* hidden = std::get_if<ElectronSetHidden>(&*request)) {
+    if (const std::optional<std::string> id =
+            WindowIdOf(hidden->window, "hiding")) {
+      desk_->SetHidden(*id, hidden->hidden);
+    }
   } else if (const auto* close = std::get_if<ElectronCloseWindow>(&*request)) {
     if (const std::optional<std::string> id = IdOf(close->window)) {
       desk_->AskToClose(*id);
@@ -333,13 +343,15 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
                                   weak_factory_.GetWeakPtr(), open.window),
       .resized = base::BindRepeating(&ElectronApp::PageResized,
                                      weak_factory_.GetWeakPtr(), open.window),
-      .menu_clicked =
-          base::BindRepeating(&ElectronApp::MenuClicked,
-                              weak_factory_.GetWeakPtr(), open.window),
+      .menu_clicked = base::BindRepeating(
+          &ElectronApp::MenuClicked, weak_factory_.GetWeakPtr(), open.window),
+      .close_asked = base::BindRepeating(
+          &ElectronApp::CloseAsked, weak_factory_.GetWeakPtr(), open.window),
   };
-  const std::optional<std::string> id = desk_->Open(
-      open.url, hello_->app_id, *partition, open.preload, std::move(calls),
-      SessionNamed(open.session).GetWeakPtr(), open.view);
+  const std::optional<std::string> id =
+      desk_->Open(open.url, hello_->app_id, *partition, open.preload,
+                  std::move(calls), SessionNamed(open.session).GetWeakPtr(),
+                  open.view, open.title, open.hidden);
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
@@ -509,6 +521,24 @@ void ElectronApp::MenuClicked(ElectronWindow number, int command) {
   if (windows_.contains(number)) {
     send_.Run(ElectronMenuClicked(number, command));
   }
+}
+
+void ElectronApp::CloseAsked(ElectronWindow number) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronCloseAsked(number));
+  }
+}
+
+std::optional<std::string> ElectronApp::WindowIdOf(ElectronWindow number,
+                                                   std::string_view what) {
+  std::optional<std::string> id = IdOf(number);
+  if (id.has_value() && windows_.at(number).view) {
+    send_.Run(ElectronWindowRefused(
+        number, base::StrCat({"window ", base::NumberToString(number),
+                              " is a view, and only a window has ", what})));
+    return std::nullopt;
+  }
+  return id;
 }
 
 void ElectronApp::SetMenuBar(const ElectronSetMenuBar& bar) {

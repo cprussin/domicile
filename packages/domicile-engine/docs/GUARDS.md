@@ -106,6 +106,7 @@ Headless.
 | `guard-notification-window.sh` | a page's notification names its browser window in `x-domicile-browser-window`, and the shell's names none, on a private bus with a stand-in server (patch 0172) |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
+| `guard-shell-hmr.sh` | a shell served by `domicile-builder --serve` and loaded with `load_shell` `dev_server` takes Vite's updates: an edit it accepts applies in place with its state kept, and an edit to its entry reloads it (the control) |
 | `guard-shell-workers.sh` | the shell starts dedicated and shared workers, classic and module, from scripts beside it, and each worker's own import loads (patch 0226) |
 | `guard-shell-pdf.sh` | Chrome's PDF viewer starts on a PDF from `domicile://home/` in the shell's `<iframe>`, as the launcher's preview shows one (patch 0154) |
 | `guard-pdf-scaled-text.sh` | a PDF in an `<iframe>` drawn at 0.8, as on a monitor below the desk's highest density, keeps its thin lines evenly: the viewer's bitmap is downscaled filtered, not nearest-neighbor (patch 0211) |
@@ -126,6 +127,7 @@ Headless.
 | `guard-webview-notifications.sh` | a page must ask before it notifies, even in a profile that stores an allow-all default (patch 0105) |
 | `guard-webview-history.sh` | back, forward, reload and stop; the element's navigation state, load progress, address and connection security |
 | `guard-webview-history-new-window.sh` | `goBackInNewWindow()` opens a window one step back through a copy of the view's history, and the view stays put |
+| `guard-webview-history-menu.sh` | `history()` lists the pages behind and ahead with their titles; `goToHistoryEntry()` goes to one, and does nothing for a missing id; `goToHistoryEntryInNewWindow()` opens one in a new window and the view stays put |
 | `guard-webview-untrusted-cert.sh` | an https page with a self-signed certificate reads `security` `dangerous`; the same certificate trusted reads `secure` |
 | `guard-webview-find.sh` | find in page, including a cross-site frame; find next starts from the active match (patch 0073) |
 | `guard-webview-keyboard.sh` | a desktop shortcut pressed in a guest is caught; an unclaimed Ctrl+R goes to the shell as `domicile-guest-keydown`; a lone Alt let go goes as `domicile-guest-keyup`, and a plain key's release does not |

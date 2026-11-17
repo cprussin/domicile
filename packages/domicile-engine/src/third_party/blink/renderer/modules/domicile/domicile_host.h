@@ -240,6 +240,9 @@ class MODULES_EXPORT DomicileHost final
   void grabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void ungrabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
+  void setExtensionsProfile(ScriptState*,
+                            const String& profile,
+                            ExceptionState&);
   ScriptPromise<IDLUndefined> setExtensionEnabled(ScriptState*,
                                                   const String& id,
                                                   bool enabled,
@@ -499,7 +502,9 @@ class MODULES_EXPORT DomicileHost final
   void InstalledChanged(
       Vector<domicile::mojom::blink::InstalledExtensionPtr> extensions)
       override;
-  void PopupRequested(const String& id, const String& popup) override;
+  void PopupRequested(const String& id,
+                      const String& popup,
+                      const String& profile) override;
 
   // domicile::mojom::blink::BrowserWindowsClient:
   void WindowsChanged(

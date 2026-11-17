@@ -18,6 +18,7 @@ import {
   reduceWindows,
   screenHolding,
   screenOfApp,
+  shutIdsOf,
   WindowAction,
   workspaceHere,
   workspaceNamed,
@@ -431,6 +432,78 @@ describe("the browser windows the engine lists", () => {
 });
 
 // A dialog, such as pinentry, or a window a floating rule names.
+describe("the windows their apps hide", () => {
+  /** Electron window `id`, as the engine lists it, `hidden` or not. */
+  const app = (id: string, hidden: boolean) => ({
+    ...listed(id, "file:///app/index.html"),
+    appId: "slack",
+    isApp: true,
+    isHidden: hidden,
+  });
+
+  /** Slack's window listed and shown beside kitty. */
+  const shown = () =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([app("1", false)], []),
+    );
+
+  it("opens a window its app hid on no workspace, its page running", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([app("1", true)], []),
+    );
+
+    expect(state.windows.map(({ id }) => id)).toContain(BROWSER("1"));
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+    expect(shutIdsOf(state)).toEqual([BROWSER("1")]);
+  });
+
+  it("takes the window off its workspace when its app hides it", () => {
+    const state = reduce(
+      shown(),
+      WindowAction.BrowserWindowsListed([app("1", true)], []),
+    );
+
+    expect(state.windows.map(({ id }) => id)).toContain(BROWSER("1"));
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
+    expect(closedBrowsersOf(state)).toEqual(["1"]);
+  });
+
+  it("shows the window on the workspace on screen when its app shows it", () => {
+    const hidden = reduce(
+      shown(),
+      WindowAction.BrowserWindowsListed([app("1", true)], []),
+    );
+    const state = reduce(
+      hidden,
+      WindowAction.BrowserWindowsListed([app("1", false)], []),
+    );
+
+    expect(windowsOn(workspaceHere(state))).toEqual([
+      APP("kitty"),
+      BROWSER("1"),
+    ]);
+    expect(shutIdsOf(state)).toEqual([]);
+  });
+
+  it("leaves a window where it is when its listing changes otherwise", () => {
+    const before = shown();
+    const state = reduce(
+      before,
+      WindowAction.BrowserWindowsListed(
+        [{ ...app("1", false), title: "Slack" }],
+        [],
+      ),
+    );
+
+    expect(windowsOn(workspaceHere(state))).toEqual(
+      windowsOn(workspaceHere(before)),
+    );
+  });
+});
+
 describe("the apps that run in the background", () => {
   /** App window `id` of app `appId`, as the engine lists it. */
   const app = (id: string, appId: string) => ({

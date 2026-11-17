@@ -6,6 +6,8 @@
 //!
 //! ```text
 //! {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
+//! {"type":"load_shell","version":1,"root":"/run/user/1000/dev.sock",
+//!  "module":"domicile-dev-shell.js","dev_server":true}
 //! {"type":"loaded"}   |   {"type":"refused","why":"…"}
 //!
 //! {"type":"open_url","version":1,"url":"https://example.com/"}
@@ -85,6 +87,7 @@ use crate::control::AppReuse;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
+use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
 use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -145,14 +148,15 @@ pub enum Reply {
     Refused { why: String },
 }
 
-/// The request to serve the shell `module` from `root`.
+/// The request to serve `shell`.
 ///
-/// `root` must be absolute; the engine refuses relative paths. Resolve user
+/// Its root must be absolute; the engine refuses relative paths. Resolve user
 /// input with [`crate::shell_path`] first.
-pub fn load_shell_line(root: &Path, module: &Path) -> String {
+pub fn load_shell_line(shell: &Shell) -> String {
     line(&Command::LoadShell {
-        module,
-        root,
+        module: &shell.module,
+        root: &shell.root,
+        dev_server: shell.files == ShellFiles::DevServer,
         version: VERSION,
     })
 }
@@ -371,6 +375,9 @@ enum Command<'a> {
         version: u32,
         root: &'a Path,
         module: &'a Path,
+        /// Left out for a directory, which every engine reads.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        dev_server: bool,
     },
     RunApp {
         version: u32,

@@ -93,6 +93,7 @@ const INSTALLED: InstalledExtension[] = [
   {
     description: "An efficient content blocker.",
     enabled: true,
+    icon: undefined,
     id: UBLOCK,
     name: "uBlock Origin Lite",
     optionsUrl: `chrome-extension://${UBLOCK}/dashboard.html`,

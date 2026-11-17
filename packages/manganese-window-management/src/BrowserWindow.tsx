@@ -50,6 +50,7 @@ import { PagePopup } from "./browser/PagePopup";
 import { PageProblem } from "./browser/PageProblem";
 import { PageTooltip } from "./browser/PageTooltip";
 import { PageViews } from "./browser/PageViews";
+import { pageHistoryFor } from "./browser/page-history";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
@@ -810,6 +811,8 @@ export const BrowserWindow = ({
             address={address}
             canGoBack={canGoBack}
             canGoForward={canGoForward}
+            // Cheap, so read each render rather than memoized with the view.
+            history={view === null ? undefined : pageHistoryFor(view)}
             holdZoom={zoomShown}
             isPrivate={isPrivate}
             loading={loading}
@@ -835,6 +838,9 @@ export const BrowserWindow = ({
               withView((loaded) => {
                 loaded.setSitePermission(permission, setting);
               });
+            }}
+            onShowAllHistory={() => {
+              domicile.processes.launch(["domicile-history"]);
             }}
             onStop={drive((loaded) => {
               loaded.stop();

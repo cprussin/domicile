@@ -788,7 +788,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-o0pCW7PAFYwctEnf6ZOefYQLXoriXpvGJD4rgfV5oQ4=";
+        outputHash = "sha256-zGTetsFFnzMle+Ts2uvm9L1wtm3OTJnc90UoUF22xGg=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -814,7 +814,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-KyfPs41cv+sa9iNopCgWE6yK7dKQLlbY9GC8eY+GCxg=";
+        outputHash = "sha256-YIcDvtoKQyhmEuc8OoXCqatbqTXqix5nYcmpYVVy3K4=";
       };
 
 
@@ -2992,7 +2992,8 @@
                   running = machine.execute("pgrep -a -u alice -f 'electron|element|slack' | cut -c1-160")[1]
                   if on_the_engine:
                       assert hosted, f"{entry} left the engine:\n{tail}\nrunning:\n{running}"
-                      assert "Domicile's Electron doesn't have yet" not in said
+                      lacks = [line for line in said.splitlines() if "Domicile's Electron doesn't have yet" in line]
+                      assert not lacks, f"{entry} reached for what Domicile's Electron lacks:\n" + "\n".join(lacks)
                   else:
                       # Every hand-back names what the engine lacks.
                       assert hosted or re.search(

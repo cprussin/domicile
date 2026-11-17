@@ -1,15 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { ConnectionSafety } from "@domicile-desktop/manganese-address/connection-safety";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../../styled-system/css";
 import { AddressBar } from "./AddressBar";
+import type { PageHistoryChoice } from "./page-history";
 
 /** Shared props; each case overrides what it tests. */
 const BAR = {
   address: "https://example.com",
   canGoBack: false,
   canGoForward: false,
+  history: undefined,
   holdZoom: false,
   isPrivate: false,
   loading: false,
@@ -21,6 +23,7 @@ const BAR = {
   onNavigate: () => undefined,
   onReload: () => undefined,
   onSetSitePermission: () => undefined,
+  onShowAllHistory: () => undefined,
   onStop: () => undefined,
   onZoomIn: () => undefined,
   onZoomOut: () => undefined,
@@ -439,6 +442,199 @@ describe("AddressBar", () => {
       );
 
       expect(calls).toStrictEqual([]);
+    });
+  });
+
+  // As Chrome's back and forward menus.
+  describe("the history menus", () => {
+    const entry = (id: number, title: string) => ({
+      favicon: "",
+      id,
+      title,
+      url: `https://example.com/${id}`,
+    });
+
+    /** A history with `back` behind the page and `forward` ahead of it. */
+    const historyOf = (
+      back: ReturnType<typeof entry>[],
+      forward: ReturnType<typeof entry>[] = [],
+      went: string[] = [],
+    ): PageHistoryChoice => ({
+      go: (id) => {
+        went.push(`go ${id}`);
+      },
+      goInNewWindow: (id) => {
+        went.push(`new window ${id}`);
+      },
+      list: () => Promise.resolve({ back, forward }),
+    });
+
+    const menuItems = async (): Promise<string[]> => {
+      const menu = await screen.findByRole("menu", undefined, {
+        timeout: 2000,
+      });
+      return within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent ?? "");
+    };
+
+    it("lists the pages behind on a right click on Back, nearest first", async () => {
+      render(
+        <AddressBar
+          {...BAR}
+          canGoBack
+          history={historyOf([entry(2, "Two"), entry(1, "One")])}
+        />,
+      );
+
+      fireEvent.contextMenu(control("Back"));
+
+      expect(await menuItems()).toStrictEqual([
+        "Two",
+        "One",
+        "Show full history",
+      ]);
+    });
+
+    it("lists the pages ahead on a right click on Forward", async () => {
+      render(
+        <AddressBar
+          {...BAR}
+          canGoForward
+          history={historyOf([entry(1, "One")], [entry(3, "Three")])}
+        />,
+      );
+
+      fireEvent.contextMenu(control("Forward"));
+
+      expect(await menuItems()).toStrictEqual(["Three", "Show full history"]);
+    });
+
+    it("opens on holding Back, without going back", async () => {
+      const calls: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          canGoBack
+          history={historyOf([entry(1, "One")])}
+          onBack={() => {
+            calls.push("back");
+          }}
+        />,
+      );
+
+      // Found first: the open menu hides the rest of the page from queries.
+      const back = control("Back");
+      fireEvent.pointerDown(back, { button: 0 });
+      expect(await menuItems()).toStrictEqual(["One", "Show full history"]);
+      fireEvent.pointerUp(back, { button: 0 });
+      fireEvent.click(back, { detail: 1 });
+
+      expect(calls).toStrictEqual([]);
+    });
+
+    // The release after a long press lands on the menu's backdrop, so no
+    // click follows it to the button.
+    it("still goes back from the keyboard after a long press", async () => {
+      const calls: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          canGoBack
+          history={historyOf([entry(1, "One")])}
+          onBack={() => {
+            calls.push("back");
+          }}
+        />,
+      );
+      const back = control("Back");
+      fireEvent.pointerDown(back, { button: 0 });
+      await menuItems();
+      fireEvent.click(back, { detail: 0 });
+
+      expect(calls).toStrictEqual(["back"]);
+    });
+
+    it("goes back on a slow click from an engine without history entries", async () => {
+      const calls: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          canGoBack
+          onBack={() => {
+            calls.push("back");
+          }}
+        />,
+      );
+      const back = control("Back");
+      fireEvent.pointerDown(back, { button: 0 });
+      await new Promise((resolve) => {
+        setTimeout(resolve, 600);
+      });
+      fireEvent.pointerUp(back, { button: 0 });
+      fireEvent.click(back, { detail: 1 });
+
+      expect(calls).toStrictEqual(["back"]);
+    });
+
+    it("lists at most twelve pages, as Chrome does", async () => {
+      const back = Array.from({ length: 20 }, (_, index) =>
+        entry(index, `Page ${index}`),
+      );
+      render(<AddressBar {...BAR} canGoBack history={historyOf(back)} />);
+
+      fireEvent.contextMenu(control("Back"));
+
+      expect(await menuItems()).toHaveLength(13);
+    });
+
+    it("goes to a picked page, or opens it in a new window on a middle click", async () => {
+      const went: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          canGoBack
+          history={historyOf([entry(2, "Two"), entry(1, "One")], [], went)}
+        />,
+      );
+
+      fireEvent.contextMenu(control("Back"));
+      await menuItems();
+      fireEvent(screen.getByRole("menuitem", { name: "Two" }), middleClick());
+      fireEvent.contextMenu(control("Back"));
+      await menuItems();
+      await userEvent.click(screen.getByRole("menuitem", { name: "One" }));
+
+      expect(went).toStrictEqual(["new window 2", "go 1"]);
+    });
+
+    it("opens the History app from Show full history", async () => {
+      const opened = new Promise<void>((resolve) => {
+        render(
+          <AddressBar
+            {...BAR}
+            canGoBack
+            history={historyOf([entry(1, "One")])}
+            onShowAllHistory={resolve}
+          />,
+        );
+      });
+
+      fireEvent.contextMenu(control("Back"));
+      await menuItems();
+      await userEvent.click(
+        screen.getByRole("menuitem", { name: "Show full history" }),
+      );
+
+      await opened;
+    });
+
+    it("opens nothing from an engine without history entries", () => {
+      render(<AddressBar {...BAR} canGoBack />);
+
+      fireEvent.contextMenu(control("Back"));
+
+      expect(screen.queryByRole("menu")).toBeNull();
     });
   });
 

@@ -7,9 +7,12 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -55,11 +58,13 @@ namespace domicile {
 // The sites the user pins from a shell (PinSite) are kept in the shell's
 // profile's prefs and go under the config's: the config wins.
 //
-// Every profile has every extension the config names, each switched on or
-// off in it (Chrome's own enabled state, which keeps an extension's data
-// while it is off). A profile whose config names its extensions has those
-// switches set by the config, and the user cannot change them; any other
-// starts each one at DefaultSwitch, and the user switches it from there.
+// Every profile has every extension the config names, and every one the
+// user installed in any profile, each switched on or off in it (Chrome's own
+// enabled state, which keeps an extension's data while it is off). A profile
+// whose config names its extensions has the config's switched by the config,
+// and the user cannot change them; any other extension starts at
+// DefaultSwitch the first time it is installed there, and the user switches
+// it from there. One the user uninstalls from a profile leaves every profile.
 //
 // One per process, as the desk is. UI thread only.
 class BrowserProfileRegistry final
@@ -141,6 +146,11 @@ class BrowserProfileRegistry final
   // browser profile's Chrome profile, so the user cannot.
   bool IsSwitchLocked(Profile& profile, const std::string& extension) const;
 
+  // The Chrome profile browser profile `id`'s extensions are in: the shell's
+  // for the default, the hidden regular one for a private profile. Null for
+  // one not loaded, or that the desk does not have.
+  Profile* ExtensionsProfileOf(const std::string& id);
+
   // The context profile `id`'s pages are made in, for the shell in `shell`.
   // Call it from WhenLoaded's `ready`: loading here blocks the UI thread,
   // which a page that did not wait does, logged as the bug it is. Null for a
@@ -208,19 +218,32 @@ class BrowserProfileRegistry final
   void InstallExtensions();
   void InstallExtensionsOf(Profile& profile, const BrowserProfile& as);
 
+  // Installs into each profile whose extensions are ready every extension
+  // the user installed in another (UserExtensionsMissing): from the Web
+  // Store, or from its unpacked directory.
+  void MirrorUserExtensions();
+  // An unpacked directory MirrorUserExtensions loaded into a profile ended
+  // loading: `load` is the profile's path and the directory.
+  void OnMirroredUnpackedLoaded(
+      const std::pair<base::FilePath, std::string>& load,
+      base::expected<std::string, std::string> loaded);
+  // Uninstalls extension `id` from every profile but `from`, where the user
+  // uninstalled it.
+  void UninstallEverywhere(Profile& from, const std::string& id);
+  // The Chrome profiles that hold extensions and whose extension systems are
+  // ready: the shell's and each loaded one's.
+  std::vector<Profile*> ReadyExtensionProfiles();
+
   // The ids of the config's extensions; empty until SetExtensions.
   std::vector<std::string> ConfigExtensionIds() const;
   // The browser profile `profile`, a Chrome profile, is: null for none.
   const BrowserProfile* AsBrowserProfile(Profile& profile) const;
-  // The Chrome profile browser profile `id`'s extensions are in: the shell's
-  // for the default, the hidden regular one for a private profile. Null for
-  // one not loaded.
-  Profile* ExtensionsProfileOf(const std::string& id);
   // Switches each of the config's extensions in `profile` as the config
   // says (SwitchExtension), once its extension system is ready.
   void SwitchExtensions(base::WeakPtr<Profile> profile);
-  // Switches extension `id` in `profile` as the config says, or, when it was
-  // `installed_now` there and never switched before, to DefaultSwitch.
+  // Switches extension `id` in `profile` as the config says, for one of the
+  // config's, or, when it was `installed_now` there and never switched
+  // before, to DefaultSwitch.
   void SwitchExtension(Profile& profile,
                        const BrowserProfile& as,
                        const std::string& id,
@@ -259,6 +282,9 @@ class BrowserProfileRegistry final
   std::optional<ExtensionList> extensions_;
   // The id of each of extensions_'s unpacked directories.
   std::map<std::string, std::string> unpacked_ids_;
+  // The unpacked directories MirrorUserExtensions is loading, each with the
+  // path of the profile it loads into.
+  std::set<std::pair<base::FilePath, std::string>> loading_unpacked_;
   // By id. Never the default profile, which is the shell's.
   std::map<std::string, Loaded> loaded_;
   // What waits on each profile that is loading (WhenLoaded), by id.

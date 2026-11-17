@@ -48,6 +48,7 @@ use domicile_launch::control_socket::{
     address, advertised, ask, hold, listen, serve_one, take, Control, PATIENCE as ANSWER_WITHIN,
     VARIABLE,
 };
+use domicile_launch::dev::{dev_socket, going_back, loading};
 use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
@@ -74,7 +75,7 @@ use domicile_launch::restart::{
 };
 use domicile_launch::serving::serve;
 use domicile_launch::session::Session;
-use domicile_launch::shell_path::Shell;
+use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::software_compositing::{self, on_the_cpu};
 use domicile_launch::spawn::{
@@ -152,6 +153,7 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Run { shell, config } => desktop(shell.as_deref(), config.as_deref()),
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
+        Invocation::Dev { entry } => developed(&entry),
         Invocation::Open { target, profile } => opened(&target, profile),
         Invocation::Opener { target } => {
             let id = opener(&target, &typed_in()?, &places()).map_err(|why| why.to_string())?;
@@ -437,6 +439,7 @@ fn curl(url: &str) -> Result<Fetched, String> {
 fn shell_to_load(shell: &str) -> Result<Request, String> {
     let page = shell_named(shell, None, None)?;
     Ok(Request::LoadShell {
+        dev_server: false,
         module: page.module,
         root: page.root,
     })
@@ -503,6 +506,7 @@ fn wanted(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<W
                 Wanted::Ours(Shell {
                     root,
                     module: PathBuf::from("shell.js"),
+                    files: ShellFiles::Directory,
                 })
             })
             .map_err(|missing| missing.to_string()),
@@ -532,16 +536,10 @@ fn built(
     let env = |name: &str| std::env::var(name).ok();
     let builder =
         builder(binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
-    let cache = env("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| env("HOME").map(|home| PathBuf::from(home).join(".cache")))
-        .ok_or("nowhere to keep built shells -- neither XDG_CACHE_HOME nor HOME is set")?
-        .join("domicile")
-        .join("shells");
     let mut child = Command::new(&builder)
         .args(asked)
         .arg("--cache")
-        .arg(&cache)
+        .arg(shells_cache()?)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
@@ -590,6 +588,174 @@ fn built(
         _ => Err(format!(
             "the shell builder stopped ({status}) without saying it built anything\n{}",
             log.join("\n")
+        )),
+    }
+}
+
+/// Where the builder keeps built shells and dev servers' dependencies.
+fn shells_cache() -> Result<PathBuf, String> {
+    let env = |name: &str| std::env::var(name).ok();
+    Ok(env("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        .ok_or("nowhere to keep built shells -- neither XDG_CACHE_HOME nor HOME is set")?
+        .join("domicile")
+        .join("shells"))
+}
+
+/// `domicile dev <entry>`: serves the shell whose source starts at `entry`
+/// from the builder's dev server, with hot module replacement, until Ctrl-C;
+/// then loads the shell it replaced again and stops the dev server.
+///
+/// The dev server's log, such as each update it sends, goes to this
+/// terminal.
+fn developed(entry: &str) -> Result<ExitCode, String> {
+    let desktop =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let typed = typed_in()?.join(entry);
+    let entry = std::fs::canonicalize(&typed)
+        .ok()
+        .filter(|found| found.is_file())
+        .ok_or_else(|| {
+            format!(
+                "there is no file at {} to serve. dev takes the file your \
+                 shell's source starts at, such as src/shell.tsx.",
+                typed.display()
+            )
+        })?;
+    let back = going_back(
+        ask(&desktop, &Request::WhichShell, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())?,
+    )?;
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").ok_or(
+        "XDG_RUNTIME_DIR is not set, and the dev server's socket goes there so \
+         only you can open it",
+    )?;
+    let socket = dev_socket(Path::new(&runtime), std::process::id());
+    let builder = builder(&myself()?, &|name| std::env::var(name).ok(), &|path| {
+        path.exists()
+    })
+    .map_err(|missing| missing.to_string())?;
+    // Ctrl-C reaches only this process, which loads the old shell before it
+    // stops the dev server, so the page never asks a server that is gone.
+    catch_interrupts();
+    let mut server = Command::new(&builder)
+        .arg("--serve")
+        .arg(&entry)
+        .arg("--socket")
+        .arg(&socket)
+        .arg("--cache")
+        .arg(shells_cache()?)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .process_group(0)
+        .spawn()
+        .map_err(|why| {
+            format!(
+                "cannot start the shell builder {}: {why}",
+                builder.display()
+            )
+        })?;
+    let stdout = server
+        .stdout
+        .take()
+        .ok_or("the shell builder has no stdout")?;
+    let (said, heard_from) = channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let heard = match line {
+                Ok(line) => heard(&line),
+                Err(why) => BuilderHeard::Failed(format!("cannot read the dev server: {why}")),
+            };
+            // Nobody listens once `domicile dev` is stopping.
+            if said.send(heard).is_err() {
+                break;
+            }
+        }
+    });
+    let mut loaded = false;
+    let served = developing(&desktop, &entry, &heard_from, &mut loaded);
+    // Also after a failure: the page cannot load from a server that is gone.
+    let restored = loaded.then(|| asked_quietly(&desktop, &back));
+    let stopped = stop(&mut server);
+    if let Some(Err(why)) = restored {
+        return Err(format!(
+            "the dev server stopped, and the shell it replaced did not load \
+             again: {why}. Load it yourself with domicile load-shell."
+        ));
+    }
+    served.and(stopped).map(|()| ExitCode::SUCCESS)
+}
+
+/// Stops the dev server, which closes Vite and its socket, and waits for it.
+fn stop(server: &mut std::process::Child) -> Result<(), String> {
+    // SAFETY: `kill` takes any pid and signal. The child is unreaped, so its
+    // pid is still its own.
+    if unsafe { libc::kill(server.id() as libc::pid_t, libc::SIGTERM) } != 0 {
+        return Err(format!(
+            "cannot stop the dev server: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    match server.wait() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("the dev server did not stop cleanly ({status})")),
+        Err(why) => Err(format!("cannot wait for the dev server to stop: {why}")),
+    }
+}
+
+/// Loads the dev server's shell once it serves, setting `loaded`, and passes
+/// on its log, until a stop or why the dev server failed.
+fn developing(
+    desktop: &Path,
+    entry: &Path,
+    heard_from: &Receiver<BuilderHeard>,
+    loaded: &mut bool,
+) -> Result<(), String> {
+    let terminal = std::io::stderr().is_terminal();
+    while !interrupted() {
+        match heard_from.recv_timeout(ASK_EVERY) {
+            Ok(BuilderHeard::Step(step)) => {
+                if terminal {
+                    eprint!("\r\x1b[K{}", bar(&step));
+                    let _ = std::io::stderr().flush();
+                }
+            }
+            Ok(BuilderHeard::Serving(shell)) => {
+                if terminal {
+                    eprint!("\r\x1b[K");
+                }
+                asked_quietly(desktop, &loading(&shell))?;
+                *loaded = true;
+                eprintln!(
+                    "domicile: serving {} with hot module replacement. Press \
+                     Ctrl-C to go back to the shell it replaced.",
+                    entry.display()
+                );
+            }
+            Ok(BuilderHeard::Log(said)) => eprintln!("{said}"),
+            Ok(BuilderHeard::Failed(why)) => {
+                return Err(format!("the dev server failed: {why}"));
+            }
+            Ok(other) => {
+                return Err(format!("the shell builder answered dev with {other:?}"));
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("the dev server stopped by itself".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Sends the `load_shell` `request` to the desktop, and passes on a refusal
+/// as an error.
+fn asked_quietly(desktop: &Path, request: &Request) -> Result<(), String> {
+    match ask(desktop, request, Some(LOAD_WITHIN + ANSWER_WITHIN)).map_err(|why| why.to_string())? {
+        Response::Shell { .. } => Ok(()),
+        Response::Refused { why } => Err(why),
+        other => Err(format!(
+            "the desktop answered load-shell with {other:?}, which is not a shell"
         )),
     }
 }
@@ -662,7 +828,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
     match answer {
-        Response::Shell { module } => {
+        Response::Shell { module, .. } => {
             println!("{}", module.display());
             Ok(ExitCode::SUCCESS)
         }
@@ -1450,18 +1616,12 @@ fn answer_a_command(
             answer(
                 line,
                 &ControlDesktop {
-                    module: &page.root.join(&page.module),
+                    shell: &page,
                     files,
                     // Asked once: the client stops waiting after `LOAD_WITHIN`
                     // plus `ANSWER_WITHIN`, so a retry could load a shell after
                     // it reported a failure.
-                    load: &|root, module| {
-                        let page = Shell {
-                            module: module.to_path_buf(),
-                            root: root.to_path_buf(),
-                        };
-                        load_the_shell(engine, &page, serving, &|| true)
-                    },
+                    load: &|page| load_the_shell(engine, page, serving, &|| true),
                     open: &|url, profile| {
                         open_url(engine, url, profile, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
@@ -1676,7 +1836,7 @@ fn load_the_shell(
     serve(
         page,
         serving,
-        &|page| load_shell(engine, &page.root, &page.module, LOAD_WITHIN),
+        &|page| load_shell(engine, page, LOAD_WITHIN),
         given_up,
         &mut || std::thread::sleep(ASK_EVERY),
     )

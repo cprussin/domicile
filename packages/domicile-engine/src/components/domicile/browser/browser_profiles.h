@@ -6,6 +6,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -133,6 +134,26 @@ ExtensionList ExtensionsFor(
     const BrowserProfile& profile,
     const ExtensionList& all,
     base::FunctionRef<std::string(const std::string&)> unpacked_id);
+
+// An extension the user installed in a profile, from the Web Store or a
+// Settings app's "load unpacked", which every other profile installs too.
+struct UserExtension {
+  std::string id;
+  // The directory it loads from, or empty for one from the Web Store.
+  std::string unpacked;
+
+  friend bool operator==(const UserExtension&,
+                         const UserExtension&) = default;
+};
+
+// The extensions the user installed in any profile (`each`, one list per
+// profile) that a profile with `installed` lacks, once each by id, in the
+// order first found. The config's own (`config_ids`) are left to the config,
+// which installs them everywhere already.
+std::vector<UserExtension> UserExtensionsMissing(
+    const std::vector<std::vector<UserExtension>>& each,
+    const std::set<std::string>& installed,
+    const std::set<std::string>& config_ids);
 
 // Whether the config turns extension `id` on in `profile`, or nothing when
 // the profile names no extensions and the user switches them.

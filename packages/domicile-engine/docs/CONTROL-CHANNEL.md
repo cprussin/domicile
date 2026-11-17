@@ -283,7 +283,7 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"config_extensions","ids":["…"]}
 
 {"type":"extensions","version":1}
-{"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html","settings":{"private":false,"site_access":"all_sites"}}]}
+{"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html","settings":{"private":false,"site_access":"all_sites"},"icon_path":"/home/…/icons/128.png"}]}
 
 {"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
 {"type":"set_extension_enabled","version":1,"id":"…","enabled":true,"profile":"work"}
@@ -368,7 +368,9 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   ([APP-MODULES.md](/docs/architecture/APP-MODULES.md#domiciles-own-state)).
   `extensions` lists the shell profile's extensions, without apps, themes or
   Chrome's components; `options_url` is left out when there is no options
-  page. `settings` has each setting the extension can use, spelled as the
+  page. `icon_path` is the file of its manifest icon closest to 128px, left
+  out when the manifest names none: a path, so listing reads no files, which
+  `domicile-app-host` turns into the image Settings draws. `settings` has each setting the extension can use, spelled as the
   config's `extensions.settings`; `configure_extension` changes the ones it
   names, and refuses one the extension cannot use
   ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#settings)).

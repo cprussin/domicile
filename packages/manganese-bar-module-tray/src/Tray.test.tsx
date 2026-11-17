@@ -25,6 +25,7 @@ const counter: Extension = {
   id: "ponmlkjihgfedcbaponmlkjihgfedcba",
   name: "Counter",
   popup: undefined,
+  profile: "default",
   title: "Counter",
 };
 
@@ -59,7 +60,7 @@ type Move = [readonly string[], string, string];
 type TrayProps = {
   domicile?: Domicile;
   onUnpin?: (key: string) => void;
-  opened?: { id: string; popup: string } | undefined;
+  opened?: { id: string; popup: string; profile: string } | undefined;
   unpinned?: ReadonlySet<string>;
   extensions?: readonly Extension[];
   items?: readonly TrayItem[];
@@ -123,7 +124,11 @@ describe("Tray", () => {
 
     it("shows an unpinned extension while its popup is open", () => {
       renderTray({
-        opened: { id: counter.id, popup: "chrome-extension://x/popup.html" },
+        opened: {
+          id: counter.id,
+          popup: "chrome-extension://x/popup.html",
+          profile: "default",
+        },
         unpinned: new Set([COUNTER]),
       });
 

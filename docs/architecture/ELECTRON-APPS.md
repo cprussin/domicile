@@ -149,7 +149,28 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     views. `BrowserWindow.fromWebContents` finds the window holding a view's
     page.
 - **`loadURL`, `loadFile`, title, show, focus and close** map to existing
-  window requests. Window size and position are not the app's to set: the
+  window requests.
+  - **Title:** a window has its own title, which the desktop shows (the
+    shell's tab, capture tools) over its page's: `title` with `open_window`,
+    then `set_title {window, title}` on `setTitle` and on each page title the
+    app's `page-title-updated` listeners let through. An app that prevents
+    them, as Claude Desktop does, keeps its own.
+  - **Close:** the user closing a window doesn't close it. The engine says
+    `close_asked {window}`, and the host emits the window's `close` event;
+    only if no listener prevents it does the host ask with `close_window`.
+    An app that closes to its tray, as Slack and Element do, prevents it and
+    hides the window.
+  - **Hide and show:** `hide()`, `show()`, `showInactive()` and `show:
+    false` send `set_hidden {window, hidden}` (`hidden` with `open_window`).
+    A hidden window stays open, its page running; the engine lists it with
+    `isHidden`, which tells the shell to keep it out of sight, and leaves it
+    out of capture tools' lists. `show()` also focuses it. Manganese takes a
+    hidden window off its workspace and puts it on the one on screen when it
+    is shown.
+  - **Icon:** an Electron window is listed with its app's desktop id
+    (`appId`), and Manganese draws the app's icon from its desktop entry for
+    it, in its title bar and in the screenshot and screen cast pickers, over
+    the page's icon. Window size and position are not the app's to set: the
   shell lays out windows. A window's size reads as the shell gave it
   (`getContentBounds`, `getBounds`, `getSize`), and `resize` fires as it
   changes; before the shell gives one, it is the size the app asked for.
@@ -462,6 +483,9 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] known apps' schemes (Element, Claude, Slack, ChatGPT, from their own runs) register from the first engine start (`KNOWN` in `packages/domicile-launch/src/electron_schemes.rs`)
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
 - [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
+- [x] engine: a window's own title (`set_title`), hidden windows (`set_hidden`), and the user's close asking the app (`close_asked`); `ipcRenderer` is an EventEmitter (`emit` reaches the preload's own listeners, which Element's preload relies on)
+- [x] `electron-host`: `setTitle`, `hide`, `show`, `showInactive`, `show: false`, and the `close` event for the user's close
+- [x] Manganese: hidden Electron windows off every workspace; app windows drawn with their app's icon
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
