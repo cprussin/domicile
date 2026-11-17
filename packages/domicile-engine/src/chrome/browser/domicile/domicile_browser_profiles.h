@@ -8,7 +8,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
@@ -92,8 +94,16 @@ class BrowserProfileRegistry final : public ProfileObserver {
                                             const std::string& site,
                                             const std::string& profile);
 
+  // Runs `ready` once profile `id` has loaded, so ContextOf makes its
+  // context without blocking: at once for the default profile, one already
+  // loaded, or one the desk does not have; otherwise when its load ends,
+  // whether or not it loaded. Starts the load if it has not started.
+  void WhenLoaded(Profile& shell, const std::string& id,
+                  base::OnceClosure ready);
+
   // The context profile `id`'s pages are made in, for the shell in `shell`.
-  // Loads it if Configure's load has not finished, which blocks. Null for a
+  // Call it from WhenLoaded's `ready`: loading here blocks the UI thread,
+  // which a page that did not wait does, logged as the bug it is. Null for a
   // profile the desk does not have.
   Profile* ContextOf(Profile& shell, const std::string& id);
 
@@ -175,6 +185,8 @@ class BrowserProfileRegistry final : public ProfileObserver {
   std::optional<ExtensionList> extensions_;
   // By id. Never the default profile, which is the shell's.
   std::map<std::string, Loaded> loaded_;
+  // What waits on each profile that is loading (WhenLoaded), by id.
+  std::map<std::string, std::vector<base::OnceClosure>> waiting_;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> observations_{
       this};
   base::ObserverList<Observer> observers_;

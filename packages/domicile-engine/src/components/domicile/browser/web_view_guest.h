@@ -179,6 +179,14 @@ class BrowserWindowHost {
                                               bool private_browsing,
                                               const std::string& profile) = 0;
 
+  // Runs `ready` once ContextFor's context for these can be made without
+  // blocking: at once when its browser profile is loaded, else once its load
+  // ends. Calls ContextFor in `ready`, not before.
+  virtual void WhenContextReady(content::BrowserContext& owner,
+                                bool private_browsing,
+                                const std::string& profile,
+                                base::OnceClosure ready) = 0;
+
   // A private guest's page was made in, or destroyed from, `context`, an
   // off-the-record context. Its private profile ends when every page made in
   // it has been destroyed.

@@ -460,6 +460,20 @@ class DeskWindows final : public base::SupportsUserData::Data,
   void Reopen(const std::string& id,
               const std::string& profile,
               const PageMove& move) {
+    Reopen(id, profile, move, /*loaded=*/false);
+  }
+
+  // Reopen, once its profile has loaded (BrowserProfileRegistry::WhenLoaded).
+  void ReopenLoaded(const std::string& id,
+                    const std::string& profile,
+                    const PageMove& move) {
+    Reopen(id, profile, move, /*loaded=*/true);
+  }
+
+  void Reopen(const std::string& id,
+              const std::string& profile,
+              const PageMove& move,
+              bool loaded) {
     auto found = std::ranges::find(windows_, id, &Window::id);
     if (found == windows_.end()) {
       LOG(WARNING) << "domicile: asked to move browser window " << id
@@ -478,6 +492,15 @@ class DeskWindows final : public base::SupportsUserData::Data,
       LOG(WARNING) << "domicile: asked to move browser window " << id
                    << " to browser profile " << profile
                    << ", which the desk does not have; it stays.";
+      return;
+    }
+    if (!loaded) {
+      // A profile still loading would block the UI thread on the disk, so
+      // the move waits for it, and finds the window again then.
+      registry.WhenLoaded(
+          *profile_, profile,
+          base::BindOnce(&DeskWindows::ReopenLoaded,
+                         weak_factory_.GetWeakPtr(), id, profile, move));
       return;
     }
     WebViewGuest& old = *found->guest;
@@ -969,6 +992,25 @@ class Host final : public BrowserWindowHost {
                             : shell;
   }
 
+  void WhenContextReady(content::BrowserContext& owner,
+                        bool private_browsing,
+                        const std::string& profile,
+                        base::OnceClosure ready) override {
+    // Waits on the profile ContextFor will pick, so it finds it loaded.
+    Profile& shell = *Profile::FromBrowserContext(&owner)->GetOriginalProfile();
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    const std::string& fallback =
+        private_browsing ? registry.profiles().default_private_profile
+                         : registry.profiles().default_profile;
+    const BrowserProfile* named =
+        profile.empty() ? nullptr : registry.profiles().Find(profile);
+    const std::string& id =
+        named != nullptr && (!private_browsing || named->is_private)
+            ? profile
+            : fallback;
+    registry.WhenLoaded(shell, id, std::move(ready));
+  }
+
   std::optional<std::string> ProfileToMoveTo(WebViewGuest& guest,
                                              const GURL& from,
                                              const GURL& to) override {
@@ -1054,12 +1096,31 @@ class BrowserWindowsService final
       return;
     }
     // No profile is the one its site opens in, or the default private one.
-    windows_->Open(url, private_browsing,
-                   profile.empty() && !private_browsing
-                       ? ProfileForUrl(
-                             BrowserProfileRegistry::Get().profiles(), url)
-                       : profile,
-                   *parsed);
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    const std::string id =
+        profile.empty() && !private_browsing
+            ? ProfileForUrl(registry.profiles(), url)
+            : profile;
+    // A profile still loading would block the UI thread on the disk, so the
+    // window waits for it.
+    registry.WhenLoaded(
+        *Profile::FromBrowserContext(
+             render_frame_host().GetBrowserContext())
+             ->GetOriginalProfile(),
+        id.empty() ? (private_browsing
+                          ? registry.profiles().default_private_profile
+                          : registry.profiles().default_profile)
+                   : id,
+        base::BindOnce(&BrowserWindowsService::OpenLoaded,
+                       weak_factory_.GetWeakPtr(), url, private_browsing, id,
+                       *parsed));
+  }
+
+  void OpenLoaded(const GURL& url,
+                  bool private_browsing,
+                  const std::string& profile,
+                  const std::optional<WebViewPartition>& partition) {
+    windows_->Open(url, private_browsing, profile, partition);
   }
 
   void OpenApp(const GURL& url,
@@ -1173,6 +1234,7 @@ class BrowserWindowsService final
   // Owned by the profile, which outlives every document in it.
   const raw_ptr<DeskWindows> windows_;
   mojo::Remote<mojom::BrowserWindowsClient> client_;
+  base::WeakPtrFactory<BrowserWindowsService> weak_factory_{this};
 };
 
 // Browser window `id`'s page in the shell's profile, for a capture of it

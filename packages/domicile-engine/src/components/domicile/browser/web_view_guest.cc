@@ -442,6 +442,29 @@ class WebViewGuestHost final
     }
   }
 
+  // Makes a new page behind placeholder `placeholder_frame` once its
+  // context is ready (WhenContextReady), as Give would have.
+  void CreateNew(const blink::LocalFrameToken& placeholder_frame,
+                 mojo::PendingReceiver<mojom::WebViewGuest> guest,
+                 mojo::PendingRemote<mojom::WebViewGuestClient> client,
+                 bool extension_popup,
+                 bool private_browsing,
+                 const std::string& profile,
+                 const std::optional<WebViewPartition>& partition) {
+    content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
+    // The <webview> was removed while its profile loaded: a race, so the
+    // pipes just drop.
+    if (placeholder == nullptr) {
+      LOG(WARNING) << "domicile: the frame a <webview> asked a guest for went "
+                      "while its browser profile loaded.";
+      return;
+    }
+    WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
+                                  std::move(guest), std::move(client),
+                                  extension_popup, private_browsing, profile,
+                                  partition, created_);
+  }
+
   // Puts a page behind `placeholder`: the browser window `window` names, or a
   // new page owned by this document (an extension's action popup when
   // `extension_popup` is set, in ContextFor's context for `private_browsing`
@@ -458,10 +481,15 @@ class WebViewGuestHost final
             const std::string& profile,
             const std::optional<WebViewPartition>& partition) {
     if (!window.has_value()) {
-      WebViewGuest::CreateAndAttach(render_frame_host(), placeholder,
-                                    std::move(guest), std::move(client),
-                                    extension_popup, private_browsing, profile,
-                                    partition, created_);
+      // A profile still loading would block the UI thread on the disk, so the
+      // page waits for it instead.
+      Host().WhenContextReady(
+          *render_frame_host().GetBrowserContext(), private_browsing, profile,
+          base::BindOnce(&WebViewGuestHost::CreateNew,
+                         weak_factory_.GetWeakPtr(),
+                         placeholder.GetFrameToken(), std::move(guest),
+                         std::move(client), extension_popup, private_browsing,
+                         profile, partition));
       return;
     }
     WebViewGuest* shown =
