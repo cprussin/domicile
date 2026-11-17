@@ -108,8 +108,10 @@ struct BrowserWindow {
   string parent;
   int32 x;
   int32 y;
-  // Whether the app hid the view. A shell keeps a hidden view laid out, as a
-  // page draws only while laid out, and out of sight.
+  // Whether the app hid the view or window. A shell keeps a hidden view laid
+  // out, as a page draws only while laid out, and out of sight. A hidden
+  // Electron window stays open, its page running, and the shell doesn't show
+  // it until its app shows it again.
   bool hidden;
   // An Electron app window's menu bar, for the shell to draw under its tab:
   // its entries as JSON (see ElectronMenuJson in electron_protocol.h), empty

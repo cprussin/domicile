@@ -294,6 +294,46 @@ TEST(ElectronProtocolTest, OpenWindowMayOpenAView) {
             "\"view\" must be true or false");
 }
 
+TEST(ElectronProtocolTest, OpenWindowMayGiveATitleAndOpenHidden) {
+  const auto plain = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  const auto set = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+      R"("title":"Claude","hidden":true})");
+
+  ASSERT_TRUE(plain.has_value() && set.has_value());
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*plain).title, "");
+  EXPECT_FALSE(std::get<ElectronOpenWindow>(*plain).hidden);
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*set).title, "Claude");
+  EXPECT_TRUE(std::get<ElectronOpenWindow>(*set).hidden);
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","title":1})"),
+            "\"title\" must be a string");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","hidden":"yes"})"),
+            "\"hidden\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","view":true,"hidden":true})"),
+            "a view has no title or hidden of its own: its window has them");
+}
+
+TEST(ElectronProtocolTest, SetTitleAndSetHiddenNameTheirWindow) {
+  const auto title = ParseElectronRequest(
+      R"({"type":"set_title","window":2,"title":"Slack"})");
+  const auto hidden =
+      ParseElectronRequest(R"({"type":"set_hidden","window":3,"hidden":true})");
+
+  ASSERT_TRUE(title.has_value() && hidden.has_value());
+  EXPECT_EQ(std::get<ElectronSetTitle>(*title).window, 2);
+  EXPECT_EQ(std::get<ElectronSetTitle>(*title).title, "Slack");
+  EXPECT_EQ(std::get<ElectronSetHidden>(*hidden).window, 3);
+  EXPECT_TRUE(std::get<ElectronSetHidden>(*hidden).hidden);
+  EXPECT_EQ(WhyRefused(R"({"type":"set_title","window":2})"),
+            "\"title\" must be a string");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_hidden","window":2,"hidden":1})"),
+            "\"hidden\" must be true or false");
+}
+
 TEST(ElectronProtocolTest, SetViewsPlacesEachViewBottomFirst) {
   const auto request = ParseElectronRequest(
       R"({"type":"set_views","window":1,"views":[)"
@@ -464,6 +504,7 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"title\":\"Claude\",\"type\":\"title_changed\",\"window\":4}\n");
   EXPECT_EQ(ElectronWindowClosed(5),
             "{\"type\":\"window_closed\",\"window\":5}\n");
+  EXPECT_EQ(ElectronCloseAsked(6), "{\"type\":\"close_asked\",\"window\":6}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
   EXPECT_EQ(ElectronMessageBoxAnswered(3, 9, 1, true),

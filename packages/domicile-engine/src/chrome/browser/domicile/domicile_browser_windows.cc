@@ -222,7 +222,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
       const std::string& preload,
       ElectronPageCalls calls,
       base::WeakPtr<ElectronSession> session,
-      bool view) {
+      bool view,
+      const std::string& title,
+      bool hidden) {
     WebViewGuest* made = Make(
         [&](WebViewGuest& guest) {
           // An app, not a page: Energy Saver leaves it at full rate.
@@ -238,11 +240,41 @@ class DeskWindows final : public base::SupportsUserData::Data,
         },
         /*popup_window=*/std::nullopt, 0, 0,
         /*private_browsing=*/false, /*profile=*/std::string(), /*app=*/true,
-        partition, /*app_host=*/std::string(), app_id, view);
+        partition, /*app_host=*/std::string(), app_id, view, title, hidden);
     if (made == nullptr) {
       return std::nullopt;
     }
     return made->window_id();
+  }
+
+  // Electron window `id`'s own title, shown over its page's. The app made
+  // sure `id` is one of its windows, not a view; one that closed meanwhile
+  // is skipped.
+  void SetTitle(const std::string& id, const std::string& title) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to title browser window " << id
+                   << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id << " is a view";
+    window->app_title = title;
+    Changed();
+  }
+
+  // Whether Electron window `id` is hidden, as SetTitle.
+  void SetHidden(const std::string& id, bool hidden) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to hide or show browser window " << id
+                   << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id << " is a view";
+    if (window->hidden != hidden) {
+      window->hidden = hidden;
+      Changed();
+    }
   }
 
   // Window `id` holds `views`, bottom first, and no others. The app made
@@ -559,6 +591,20 @@ class DeskWindows final : public base::SupportsUserData::Data,
     guest->AskToClose();
   }
 
+  // The user asked to close window `id`. An Electron app's window asks its
+  // app, which closes it or not, as Electron's `close` event can prevent;
+  // any other is AskToClose.
+  void UserAskedToClose(const std::string& id) {
+    WebViewGuest* guest = Find(id);
+    if (ElectronPage* page = guest == nullptr ? nullptr
+                                              : ElectronPage::FromWebContents(
+                                                    &guest->contents())) {
+      page->CloseAsked();
+    } else {
+      AskToClose(id);
+    }
+  }
+
   WebViewGuest* Find(const std::string& id) {
     auto found = std::ranges::find(windows_, id, &Window::id);
     return found == windows_.end() ? nullptr : found->guest.get();
@@ -697,7 +743,12 @@ class DeskWindows final : public base::SupportsUserData::Data,
     std::string parent;
     int x = 0;
     int y = 0;
+    // A view the app hid, or an Electron app window the app hid: listed so,
+    // for the shell to keep out of sight while its page runs.
     bool hidden = false;
+    // An Electron app window's own title, listed over its page's; empty for
+    // none.
+    std::string app_title;
     int stack = 0;
     // An Electron app window's menu bar, which the shell draws under its tab.
     ElectronDeskMenuBar menu_bar;
@@ -716,14 +767,15 @@ class DeskWindows final : public base::SupportsUserData::Data,
     const std::optional<WebViewPartition> partition = window.guest->partition();
     return mojom::BrowserWindow::New(
         window.id, navigated ? entry->GetVirtualURL() : window.opened_at,
-        base::UTF16ToUTF8(contents.GetTitle()),
+        window.app_title.empty() ? base::UTF16ToUTF8(contents.GetTitle())
+                                 : window.app_title,
         window.guest->popup_window().value_or(0), window.width, window.height,
         contents.GetBrowserContext()->IsOffTheRecord(),
         // An app module's or Electron app's page is its app's: listed in
         // no browser profile.
-        window.profiled ? BrowserProfileRegistry::Get().IdOf(
-                              *contents.GetBrowserContext())
-                        : std::string(),
+        window.profiled
+            ? BrowserProfileRegistry::Get().IdOf(*contents.GetBrowserContext())
+            : std::string(),
         partition.has_value() ? WebViewPartitionAttribute(*partition)
                               : std::string(),
         window.app, window.app_id, window.captures > 0, window.parent, window.x,
@@ -746,7 +798,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
                      const std::optional<WebViewPartition>& partition,
                      const std::string& app_host = std::string(),
                      const std::string& app_id = std::string(),
-                     bool view = false) {
+                     bool view = false,
+                     const std::string& app_title = std::string(),
+                     bool hidden = false) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -769,16 +823,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     load(*guest);
     WebViewGuest* made = guest.get();
-    windows_.push_back(Window{.id = id,
-                              .guest = std::move(guest),
-                              .watch = std::move(watch),
-                              .width = width,
-                              .height = height,
-                              .app = app,
-                              .profiled = !app || (app_host.empty() &&
-                                                   !partition.has_value()),
-                              .app_id = app_id,
-                              .view = view});
+    windows_.push_back(
+        Window{.id = id,
+               .guest = std::move(guest),
+               .watch = std::move(watch),
+               .width = width,
+               .height = height,
+               .app = app,
+               .profiled = !app || (app_host.empty() && !partition.has_value()),
+               .app_id = app_id,
+               .view = view,
+               .hidden = hidden,
+               .app_title = app_title});
     Changed();
     return made;
   }
@@ -833,11 +889,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
       listing.push_back(ListedBrowserWindow{
           .id = window.id,
           .title = base::UTF16ToUTF8(contents.GetTitle()),
+          .app_title = window.app_title,
           .app_id = window.app_id,
           .url = (committed.is_empty() ? window.opened_at : committed)
                      .possibly_invalid_spec(),
           .off_the_record = contents.GetBrowserContext()->IsOffTheRecord(),
-          .view = window.view});
+          .view = window.view,
+          .hidden = !window.view && window.hidden});
     }
     return listing;
   }
@@ -1146,7 +1204,7 @@ class BrowserWindowsService final
     guest->CountMatches(selector, std::move(callback));
   }
 
-  void Close(const std::string& id) override { windows_->AskToClose(id); }
+  void Close(const std::string& id) override { windows_->UserAskedToClose(id); }
 
   void ClickMenu(const std::string& id, int32_t command) override {
     if (command < 1) {
@@ -1392,13 +1450,28 @@ std::optional<std::string> OpenElectronWindow(
     const std::string& preload,
     ElectronPageCalls calls,
     base::WeakPtr<ElectronSession> session,
-    bool view) {
+    bool view,
+    const std::string& title,
+    bool hidden) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {
     return std::nullopt;
   }
   return windows->OpenElectron(url, app_id, partition, preload,
-                               std::move(calls), std::move(session), view);
+                               std::move(calls), std::move(session), view,
+                               title, hidden);
+}
+
+void SetElectronTitle(const std::string& id, const std::string& title) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetTitle(id, title);
+  }
+}
+
+void SetElectronHidden(const std::string& id, bool hidden) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetHidden(id, hidden);
+  }
 }
 
 void SetElectronViews(const std::string& id,

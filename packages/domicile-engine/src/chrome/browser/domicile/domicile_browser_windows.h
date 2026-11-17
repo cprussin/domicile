@@ -73,6 +73,8 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 // Opens an app window at `url` for an Electron app, with `app_id`, in its own
 // `partition`, whose pages run `preload` (none when empty) and make `calls`.
 // A `view` is a WebContentsView's page, listed only while a window holds it.
+// A window shows `title` instead of its page's when it isn't empty, and opens
+// `hidden` when asked.
 // Returns the window's id. Nothing when there is no shell to own it. See
 // docs/architecture/ELECTRON-APPS.md.
 std::optional<std::string> OpenElectronWindow(
@@ -82,7 +84,16 @@ std::optional<std::string> OpenElectronWindow(
     const std::string& preload,
     ElectronPageCalls calls,
     base::WeakPtr<ElectronSession> session,
-    bool view);
+    bool view,
+    const std::string& title,
+    bool hidden);
+
+// Electron window `id`'s own title, listed with it over its page's.
+void SetElectronTitle(const std::string& id, const std::string& title);
+
+// Whether Electron window `id` is hidden, listed with it (`isHidden`) for the
+// shell to leave out of sight while its page runs.
+void SetElectronHidden(const std::string& id, bool hidden);
 
 // Electron window `id` holds `views`, bottom first, and no others; each is
 // listed with it as its parent. A view another window held moves here.

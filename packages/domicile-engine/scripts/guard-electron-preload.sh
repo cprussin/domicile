@@ -220,7 +220,8 @@ control = hear_until(lambda e: e.get("type") == "title_changed" and
 print("measured: %d %d %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     said is not None,
-    seen == {"require": "undefined", "secret": "undefined", "kept": True},
+    seen == {"require": "undefined", "secret": "undefined", "kept": True,
+             "emitted": 7},
     answered is not None and answered.get("args") == [4],
     synced is not None and synced.get("args") == [9],
     pinged is not None,
@@ -261,7 +262,9 @@ ElectronApp::PageSent) -- the engine's log has any console error"
 "1 1 0 "*)
   FAILURE="THE PAGE SAW INTO THE PRELOAD'S WORLD, or could replace its API: \
 the preload must run in its own isolated world and ExposeAcrossWorlds define \
-a read-only, permanent copy -- the app's log has what the page saw"
+a read-only, permanent copy, or ipcRenderer.emit did not reach the preload's \
+own listener (the bootstrap in electron_preload.cc) -- the app's log has what \
+the page saw"
   ;;
 "1 1 1 0 "*)
   FAILURE="ipcRenderer.invoke never came back with the app's reply: \

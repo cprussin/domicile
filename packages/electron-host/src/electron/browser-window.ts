@@ -490,6 +490,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           ...(this.#preload === undefined ? {} : { preload: this.#preload }),
           ...(session === "" ? {} : { session }),
           ...(this.#view ? { view: true } : {}),
+          ...this.opening(),
         });
         this.wasOpened();
       }
@@ -593,6 +594,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           this.menuClicked(event.command);
           break;
         }
+        case "close_asked": {
+          this.closeAsked();
+          break;
+        }
         case "javascript_result": {
           const running = this.#running.get(event.call);
           this.#running.delete(event.call);
@@ -616,6 +621,16 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         throw new Error("Object has been destroyed");
       }
     };
+
+    /** What only a window says of itself as it opens. */
+    protected opening(): { title?: string; hidden?: true } {
+      return {};
+    }
+
+    /** The user asked to close the page's window. */
+    protected closeAsked() {
+      // Only a window can be closed by the user.
+    }
 
     /** The engine opened the page. */
     protected wasOpened() {
@@ -899,6 +914,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     readonly contentView = new ContentView(this);
     #shown = false;
+    /** Hidden by the app: open, its page running, out of the desk's sight. */
+    #hidden: boolean;
     #size: { width: number; height: number };
     /** The views the engine last placed, as it was told them. */
     #placed = "[]";
@@ -912,6 +929,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         options.title ?? app.getName(),
         false,
       );
+      this.#hidden = options.show === false;
       this.#size = {
         height: options.height ?? DEFAULT_SIZE.height,
         width: options.width ?? DEFAULT_SIZE.width,
@@ -921,8 +939,36 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       windows.set(this.id, this);
     }
 
+    /** Shows the window if the app hid it, and focuses it. */
     readonly show = () => {
+      this.assertAlive();
+      this.#setHidden(false);
       this.focus();
+    };
+
+    /** Shows the window if the app hid it, leaving focus where it is. */
+    readonly showInactive = () => {
+      this.assertAlive();
+      this.#setHidden(false);
+    };
+
+    /**
+     * Takes the window out of the desk's sight, its page still running, as
+     * an app that closes to its tray does.
+     */
+    readonly hide = () => {
+      this.assertAlive();
+      this.#setHidden(true);
+    };
+
+    readonly #setHidden = (hidden: boolean) => {
+      if (this.#hidden !== hidden) {
+        this.#hidden = hidden;
+        if (this.opened) {
+          toEngine({ hidden, type: "set_hidden", window: this.id });
+        }
+        this.emit(hidden ? "hide" : "show");
+      }
     };
 
     readonly focus = () => {
@@ -945,9 +991,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       }
     };
 
-    readonly isVisible = () => this.#shown && !this.destroyed;
+    readonly isVisible = () => this.#shown && !this.#hidden && !this.destroyed;
+    /** The title the desktop shows for the window, over its page's. */
     readonly setTitle = (title: string) => {
       this.title = title;
+      if (this.opened && !this.destroyed) {
+        toEngine({ title, type: "set_title", window: this.id });
+      }
     };
 
     /** Its page's box, at the size the shell gave it. */
@@ -1037,16 +1087,6 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly getMediaSourceId = () => "";
     readonly isFocused = () => this.isVisible();
     readonly reload = () => this.webContents.reload();
-    /**
-     * Not yet: the engine has no hidden windows, so the window stays. Apps
-     * that close to their tray keep their window open on Domicile.
-     */
-    readonly hide = () => {
-      warnOnce(
-        "hide",
-        `${app.getName()} hid a window, which Domicile's engine can't yet, so it stays open`,
-      );
-    };
 
     readonly setBrowserView = (view: BrowserView | null) => {
       for (const held of this.getBrowserViews()) {
@@ -1166,8 +1206,20 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       const titleEvent = eventObject();
       this.emit("page-title-updated", titleEvent, title, false);
       if (!titleEvent.defaultPrevented) {
-        this.title = title;
+        this.setTitle(title);
       }
+    }
+
+    protected override opening() {
+      return {
+        title: this.title,
+        ...(this.#hidden ? { hidden: true as const } : {}),
+      };
+    }
+
+    /** The user's close goes through the app's `close` listeners. */
+    protected override closeAsked() {
+      this.close();
     }
 
     protected override resized(width: number, height: number) {
