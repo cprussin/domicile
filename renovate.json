@@ -2,6 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
   "timezone": "UTC",
+  "commitBody": "Release-notes: none",
   "schedule": ["before 6am on monday"],
   "automerge": false,
   "separateMajorMinor": false,

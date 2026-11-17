@@ -31,6 +31,47 @@ Each browser window has one, with:
 Right-click a page for its menu: open a link in a new window, copy or save an
 image, search for the selection.
 
+## Profiles
+
+A profile keeps a part of your life apart, such as work and personal. Each has
+its own sign-ins, site data and extensions, and opens the sites you give it.
+Sites you haven't given a profile open in your default one.
+
+The button at the start of the address bar shows the page's profile. Click it
+to:
+
+- Move the page to another profile, or open it in a new window of one.
+- Open this site in a profile from now on.
+- Switch the profile's extensions on and off.
+
+Tabs outside your default profile carry a dot of their profile's color.
+Following a link to another profile's site moves the page there.
+
+<!-- tab: Settings app -->
+
+Open **Settings**, then **Profiles**: a card for each profile with its
+extension switches, and the sites that open outside your default profile.
+Add a profile or change its color in the config file.
+
+<!-- tab: Config file -->
+
+```json
+{
+  "browser": {
+    "profiles": {
+      "personal": { "name": "Personal", "color": "#0d9488" },
+      "work": { "name": "Work", "color": "#d97706" },
+      "private": { "name": "Private", "color": "#a78bfa", "private": true }
+    },
+    "default_profile": "personal",
+    "default_private_profile": "private",
+    "sites": { "*.acme.com": "work" }
+  }
+}
+```
+
+<!-- /tabs -->
+
 ## Private windows
 
 The launcher offers each site and search a second time, private. A private

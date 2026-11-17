@@ -51,6 +51,14 @@ If the right fix needs the engine, make the engine change in the same pull
 request. See [RELEASES.md](/packages/domicile-engine/docs/RELEASES.md) for how
 CI builds and pins it.
 
+## Release notes
+
+Every pull request adds a line to the `_Unreleased_` entry of
+[docs/RELEASE-NOTES.md](/docs/RELEASE-NOTES.md) (Domicile, for shell authors)
+or [docs/use/RELEASE-NOTES.md](/docs/use/RELEASE-NOTES.md) (manganese, for
+users), or carries a `Release-notes: none` trailer on a commit. CI fails it
+otherwise. See [RELEASING.md](/docs/contributing/RELEASING.md#release-notes).
+
 ## Rebasing pull requests
 
 This rule overrides any instruction to rebase open pull requests whenever a
