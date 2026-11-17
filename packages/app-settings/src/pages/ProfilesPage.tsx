@@ -24,6 +24,7 @@ import {
   withSite,
 } from "../browser-profiles";
 import type { ConfigEditor, Report } from "../config-editor";
+import { ExtensionIcon } from "../ExtensionIcon";
 import type { Extensions } from "../extensions";
 import type {
   BrowserProfile,
@@ -35,7 +36,7 @@ import { Notice } from "../Notice";
 import { Page } from "../Page";
 import { SettingRow } from "../SettingRow";
 import { useBrowserProfiles } from "../useBrowserProfiles";
-import { useExtensionNames } from "../useExtensionNames";
+import { useExtensionsById } from "../useExtensionNames";
 
 type Props = {
   title: string;
@@ -66,7 +67,7 @@ export const ProfilesPage = ({
   title,
 }: Props) => {
   const { failure, listed, reload } = useBrowserProfiles(host);
-  const names = useExtensionNames(extensions, report);
+  const installed = useExtensionsById(extensions, report);
   const sitesId = useId();
   const configurable = editor !== undefined && readOnly === undefined;
   /** Writes the config's `browser` as `change` makes it, if it can change. */
@@ -90,7 +91,8 @@ export const ProfilesPage = ({
       {(listed === undefined ? [] : inCardOrder(listed)).map((profile) => (
         <ProfileCard
           change={change}
-          extensionName={(id) => names.get(id) ?? id}
+          extensionIcon={(id) => installed.get(id)?.icon}
+          extensionName={(id) => installed.get(id)?.name ?? id}
           isDefault={profile.id === listed?.defaultProfile}
           isDefaultPrivate={profile.id === listed?.defaultPrivateProfile}
           key={profile.id}
@@ -168,6 +170,8 @@ type ProfileCardProps = {
     | ((next: (browser: BrowserConfig) => BrowserConfig) => void)
     | undefined;
   extensionName: (id: string) => string;
+  /** The extension's icon, or none when it has none. */
+  extensionIcon: (id: string) => string | undefined;
   /** Switches an extension the config doesn't lock. */
   onSwitch: (extension: string, enabled: boolean) => void;
 };
@@ -175,6 +179,7 @@ type ProfileCardProps = {
 /** One profile: its color, whether it is private, and its extensions. */
 const ProfileCard = ({
   change,
+  extensionIcon,
   extensionName,
   isDefault,
   isDefaultPrivate,
@@ -281,9 +286,11 @@ const ProfileCard = ({
                 const name = extensionName(id);
                 return (
                   <li className={extensionStyles} key={id}>
-                    <span aria-hidden className={avatarStyles}>
-                      {name.slice(0, 1).toUpperCase()}
-                    </span>
+                    <ExtensionIcon
+                      icon={extensionIcon(id)}
+                      name={name}
+                      size="sm"
+                    />
                     <span className={extensionNameStyles}>{name}</span>
                     <Switch
                       checked={enabled}
@@ -568,7 +575,12 @@ const rowTitleStyles = css({
 
 const extensionListStyles = grid({
   gap: 2,
-  gridTemplateColumns: "repeat(auto-fill, minmax({spacing.64}, 1fr))",
+  // Two columns at most, so long names such as "1Password – Password
+  // Manager" fit.
+  gridTemplateColumns: {
+    base: "minmax(0, 1fr)",
+    lg: "repeat(2, minmax(0, 1fr))",
+  },
   listStyle: "none",
   margin: 0,
   padding: 0,
@@ -581,15 +593,6 @@ const extensionStyles = flex({
   gap: 2.5,
   paddingBlock: 2,
   paddingInline: 2.5,
-});
-
-const avatarStyles = circle({
-  backgroundColor: "color-mix(in oklab, {colors.accent} 22%, {colors.card})",
-  color: "accent",
-  flexShrink: 0,
-  fontSize: "xs",
-  fontWeight: "semibold",
-  size: 6,
 });
 
 const extensionNameStyles = css({

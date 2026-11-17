@@ -6,9 +6,18 @@ const { contextBridge, ipcRenderer } = require("electron");
 // The preload's own world: the page must not see this.
 window.secret = "the preload's";
 
+// ipcRenderer is an EventEmitter: what the preload emits reaches its own
+// listeners, with the arguments as given, as Element's preload relies on.
+let emitted;
+ipcRenderer.once("local", (value) => {
+  emitted = value;
+});
+ipcRenderer.emit("local", 7);
+
 contextBridge.exposeInMainWorld("guard", {
   ask: (n) => ipcRenderer.invoke("double", n),
   askNow: (n) => ipcRenderer.sendSync("triple", n),
+  emitted,
   onPing: (callback) =>
     ipcRenderer.on("ping", (_event, value) => callback(value)),
   send: (channel, value) => ipcRenderer.send(channel, value),

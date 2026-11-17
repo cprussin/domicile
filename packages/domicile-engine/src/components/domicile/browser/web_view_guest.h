@@ -75,8 +75,15 @@ using GuestCreatedCallback =
 
 class WebViewGuest;
 
-// A step through a guest's history.
-enum class HistoryStep { kBack, kForward };
+// Where a copy of a guest's history goes: one step back or forward, as
+// Chrome's buttons step, or the entry at `index`, as its history menus pick.
+struct HistoryStep {
+  enum class Kind { kBack, kForward, kEntry };
+  Kind kind;
+  // The entry's index in the source's history, for kEntry. The copy keeps the
+  // source's indices.
+  int index = 0;
+};
 
 // How a window's page moved to another browser profile loads there. See
 // WebViewGuest::MoveHistoryFrom.
@@ -119,7 +126,7 @@ class BrowserWindowHost {
 
   // Opens a browser window with a copy of `source`'s history, in its context
   // and partition, and takes `step` there. See
-  // mojom::WebViewGuest.GoBackInNewWindow.
+  // mojom::WebViewGuest.GoBackInNewWindow and GoToHistoryEntryInNewWindow.
   virtual void OpenHistoryStep(WebViewGuest& source, HistoryStep step) = 0;
 
   // Makes a browser window for a page's `window.open()` or `target="_blank"`
@@ -621,6 +628,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   void GoForward() override;
   void GoBackInNewWindow() override;
   void GoForwardInNewWindow() override;
+  void ListHistory(ListHistoryCallback callback) override;
+  void GoToHistoryEntry(int32_t id) override;
+  void GoToHistoryEntryInNewWindow(int32_t id) override;
   void Stop() override;
   void Reload() override;
   void SetZoom(double factor) override;
@@ -1097,8 +1107,8 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   //
   // Uses `CanGoBack()`, not `ShouldEnableBackButton()`. The latter stays true
-  // over skippable entries for Chrome's long-press history menu, which a shell
-  // lacks; `goBack()` does nothing when `CanGoBack()` is false.
+  // over skippable entries for Chrome's long-press history menu; `goBack()`
+  // does nothing when `CanGoBack()` is false.
   void ReportHistory();
 
   // Reports the page's URL and security level to the element if either

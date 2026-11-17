@@ -13,10 +13,23 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shell {
     /// The module's directory, served over `domicile://shell/`. Absolute. The
-    /// page can reach nothing outside it.
+    /// page can reach nothing outside it. With [`ShellFiles::DevServer`], the
+    /// dev server's socket instead.
     pub root: PathBuf,
     /// The module, relative to `root` because it goes in a `<script src>`.
     pub module: PathBuf,
+    /// Where the engine reads the shell's files.
+    pub files: ShellFiles,
+}
+
+/// Where the engine reads a shell's files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellFiles {
+    /// Out of the root, a directory.
+    Directory,
+    /// From the dev server listening on the root, a unix socket: `domicile
+    /// dev` serves an entry with hot module replacement.
+    DevServer,
 }
 
 /// The shell argument could not be resolved to a module.
@@ -133,5 +146,6 @@ fn root_and_module(path: &Path) -> Option<Shell> {
     Some(Shell {
         root: path.parent()?.to_path_buf(),
         module: PathBuf::from(path.file_name()?),
+        files: ShellFiles::Directory,
     })
 }

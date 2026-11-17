@@ -273,6 +273,25 @@ ExtensionList ExtensionsFor(
   return chosen;
 }
 
+std::vector<UserExtension> UserExtensionsMissing(
+    const std::vector<std::vector<UserExtension>>& each,
+    const std::set<std::string>& installed,
+    const std::set<std::string>& config_ids) {
+  std::vector<UserExtension> missing;
+  std::set<std::string> seen;
+  for (const std::vector<UserExtension>& profile : each) {
+    for (const UserExtension& extension : profile) {
+      if (installed.contains(extension.id) ||
+          config_ids.contains(extension.id) ||
+          !seen.insert(extension.id).second) {
+        continue;
+      }
+      missing.push_back(extension);
+    }
+  }
+  return missing;
+}
+
 std::optional<bool> ConfigSwitch(const BrowserProfile& profile,
                                  std::string_view id) {
   if (!profile.extensions.has_value()) {

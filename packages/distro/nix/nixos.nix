@@ -54,6 +54,26 @@ in {
   config = lib.mkIf cfg.enable {
     services.displayManager.sessionPackages = [cfg.package];
 
+    # The compositor and the engine load the system's driver, from
+    # /run/opengl-driver, with Domicile's own glibc. A driver built against a
+    # newer glibc does not load, and the desktop would draw without the
+    # graphics card. So the system build loads it the same way first, and
+    # fails saying how to fix it.
+    system.checks = lib.mkIf config.hardware.graphics.enable [
+      (pkgs.runCommand "domicile-loads-the-graphics-driver" {} ''
+        ${cfg.package}/libexec/domicile/graphics-probe \
+          ${config.hardware.graphics.package}/lib/libEGL_mesa.so.0 \
+          ${config.hardware.graphics.package}/lib/gbm/dri_gbm.so || {
+          echo "Domicile cannot load this system's graphics driver, so it would draw" >&2
+          echo "without the graphics card. This happens when Domicile is built from an" >&2
+          echo "older nixpkgs than the system. Build it from yours: in your flake, set" >&2
+          echo '  inputs.domicile.inputs.nixpkgs.follows = "nixpkgs";' >&2
+          exit 1
+        }
+        touch "$out"
+      '')
+    ];
+
     # Installs `domicile-session.target`, which starts
     # `graphical-session.target` and so the portal.
     systemd.packages = [cfg.package];

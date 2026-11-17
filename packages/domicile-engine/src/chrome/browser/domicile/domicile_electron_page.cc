@@ -112,6 +112,10 @@ void ElectronPage::MenuClicked(int command) {
   calls_.menu_clicked.Run(command);
 }
 
+void ElectronPage::CloseAsked() {
+  calls_.close_asked.Run();
+}
+
 void ElectronPage::PrimaryMainFrameWasResized(bool width_changed) {
   ReportSize("PrimaryMainFrameWasResized");
 }

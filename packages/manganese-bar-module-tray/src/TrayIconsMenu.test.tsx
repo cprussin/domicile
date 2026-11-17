@@ -54,6 +54,7 @@ const darkAction: Extension = {
   id: DARK,
   name: "Dark Reader",
   popup: `chrome-extension://${DARK}/popup.html`,
+  profile: "default",
   title: "Dark Reader",
 };
 
@@ -187,7 +188,7 @@ describe(TrayIconsMenu, () => {
       ["tray.activate", "syncthing", "primary"],
       ["onActivate", DARK],
       ["extensions.activate", DARK],
-      ["onOpen", { id: DARK, popup: darkAction.popup }],
+      ["onOpen", { id: DARK, popup: darkAction.popup, profile: "default" }],
     ]);
   });
 

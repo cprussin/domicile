@@ -32,6 +32,7 @@ class DomicileIdentityEvent;
 class DomicilePromptEvent;
 class DomicileSignInEvent;
 class DomicileFileChooserEvent;
+class DomicileHistory;
 class DomicileMediaDevices;
 class DomicilePermissionRequestEvent;
 class ExceptionState;
@@ -73,6 +74,9 @@ class CORE_EXPORT HTMLWebViewElement final
   void goForward();
   void goBackInNewWindow();
   void goForwardInNewWindow();
+  ScriptPromise<DomicileHistory> history(ScriptState*, ExceptionState&);
+  void goToHistoryEntry(int32_t id);
+  void goToHistoryEntryInNewWindow(int32_t id);
   void stop();
   void reload();
 

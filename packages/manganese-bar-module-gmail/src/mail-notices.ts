@@ -15,6 +15,7 @@ import { inboxAddress } from "./addresses";
 import type { Mail, MailNews } from "./gmail-api";
 import type { MailBrowser } from "./open-mail";
 import { openMail } from "./open-mail";
+import { threadToken } from "./thread-token";
 
 /** The notification server's address on the session bus. */
 const SERVER = {
@@ -133,7 +134,7 @@ const notices = (mail: readonly Mail[]): Notice[] =>
     : mail.toReversed().map(({ from, id, subject, threadId }) => ({
         body: subject,
         messages: [id],
-        opens: `#inbox/${threadId}`,
+        opens: `#inbox/${threadToken(threadId)}`,
         summary: from,
       }));
 

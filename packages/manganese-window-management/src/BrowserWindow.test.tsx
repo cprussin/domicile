@@ -1652,6 +1652,63 @@ describe("BrowserWindow", () => {
 
       expect(calls).toStrictEqual(["back", "forward"]);
     });
+
+    // `AddressBar` tests the menus. This checks they read the view's history
+    // and open the History app.
+    it("opens the History app from Back's menu", async () => {
+      const launched = new Promise<readonly string[]>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            behindPanel={false}
+            clickThrough={false}
+            covered={false}
+            depth={0}
+            domicile={{
+              ...silentDomicile,
+              processes: { ...silentDomicile.processes, launch: resolve },
+            }}
+            dragging={false}
+            focused
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onDescription={noDescription}
+            onFocusRequest={() => undefined}
+            onIcon={noIcon}
+            onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            resizing={false}
+            url="https://example.com"
+            window="1"
+          />,
+        );
+        const element = view(container);
+        Object.assign(element, {
+          history: () =>
+            Promise.resolve({
+              back: [
+                {
+                  favicon: "",
+                  id: 1,
+                  title: "One",
+                  url: "https://example.com/1",
+                },
+              ],
+              forward: [],
+            }),
+        });
+        historyReaches(element, true, false);
+      });
+
+      fireEvent.contextMenu(control("Back"));
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Show full history" }),
+      );
+
+      expect(await launched).toStrictEqual(["domicile-history"]);
+    });
   });
 
   // `AddressBar` tests the button itself. This checks that it reads the view's

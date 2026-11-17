@@ -159,6 +159,33 @@ fn load_shell_is_the_verb_that_takes_a_shell() {
 }
 
 #[test]
+fn dev_is_the_verb_that_serves_a_shells_source() {
+    // Kept as typed, like load-shell's shell: it is relative to where it was
+    // typed.
+    assert_eq!(
+        run(&["dev", "./src/shell.tsx"]).unwrap(),
+        Invocation::Dev {
+            entry: "./src/shell.tsx".to_string()
+        }
+    );
+}
+
+#[test]
+fn dev_with_nothing_to_serve_is_refused() {
+    assert_eq!(run(&["dev"]), Err(CliError::NoEntryToServe));
+}
+
+#[test]
+fn dev_serves_one_entry_and_the_extra_word_is_named() {
+    assert_eq!(
+        run(&["dev", "./src/shell.tsx", "./src/other.tsx"]),
+        Err(CliError::ExtraToServe {
+            extra: "./src/other.tsx".to_string()
+        })
+    );
+}
+
+#[test]
 fn load_shell_with_nothing_to_load_is_refused() {
     // It does not mean "reload the current shell".
     assert_eq!(run(&["load-shell"]), Err(CliError::NoShellToLoad));
@@ -687,6 +714,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
     for verb in [
         "which-shell",
         "load-shell",
+        "dev",
         "open",
         "install-app",
         "uninstall-app",

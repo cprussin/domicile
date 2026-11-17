@@ -1235,11 +1235,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         thread::spawn(move || serve_outbound(hub, outbound_rx));
     }
 
-    // Without an EGL renderer (a container, no DRM device), the dmabuf global
-    // is not advertised and clients fall back to `wl_shm`.
-    //
     // The renderer imports client dmabufs and reads back shm buffers, which is
-    // how client frames reach the engine.
+    // how client frames reach the engine. Without one no window shows: EGL or
+    // the graphics driver did not load, as when the driver needs a newer glibc
+    // than Domicile's. That is a bug, so it is an error and the person is told.
+    // The dmabuf global is not advertised.
     let mut gpu = match headless_renderer() {
         Ok((renderer, importer)) => Some(Gpu {
             gbm: shm_allocator(&importer),
@@ -1247,7 +1247,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             renderer: Box::new(renderer),
         }),
         Err(err) => {
-            tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
+            tracing::error!(
+                ?err,
+                "no EGL renderer, so no app window can be shown; the graphics driver's own \
+                 error is above"
+            );
+            hub.notifications
+                .get()
+                .expect("the notification server is handed to the hub before the renderer starts")
+                .warn_that_the_renderer_failed();
             None
         }
     };

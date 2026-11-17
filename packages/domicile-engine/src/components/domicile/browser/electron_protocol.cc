@@ -408,7 +408,8 @@ bool IsWindowRequest(std::string_view type) {
          type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
          type == "port_post" || type == "port_close" || type == "set_views" ||
          type == "set_menu_bar" || type == "show_message_box" ||
-         type == "execute_javascript";
+         type == "execute_javascript" || type == "set_title" ||
+         type == "set_hidden";
 }
 
 // Entry `entry` of a menu, with only the keys the shell reads, or why it is
@@ -1023,12 +1024,23 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     } else if (*type == "open_window") {
       const base::Value* preload = request->Find("preload");
       const base::Value* view = request->Find("view");
+      const base::Value* title = request->Find("title");
+      const base::Value* hidden = request->Find("hidden");
       base::expected<std::string, std::string> session =
           SessionIn(*request, /*optional=*/true);
       if (preload != nullptr && !preload->is_string()) {
         return Refuse("\"preload\" must be a string", *window);
       } else if (view != nullptr && !view->is_bool()) {
         return Refuse("\"view\" must be true or false", *window);
+      } else if (title != nullptr && !title->is_string()) {
+        return Refuse("\"title\" must be a string", *window);
+      } else if (hidden != nullptr && !hidden->is_bool()) {
+        return Refuse("\"hidden\" must be true or false", *window);
+      } else if (view != nullptr && view->GetBool() &&
+                 (title != nullptr || hidden != nullptr)) {
+        return Refuse(
+            "a view has no title or hidden of its own: its window has them",
+            *window);
       } else if (!session.has_value()) {
         return Refuse(std::move(session.error()), *window);
       }
@@ -1037,7 +1049,9 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
           .url = std::move(*url),
           .preload = preload ? preload->GetString() : std::string(),
           .session = std::move(*session),
-          .view = view != nullptr && view->GetBool()};
+          .view = view != nullptr && view->GetBool(),
+          .title = title ? title->GetString() : std::string(),
+          .hidden = hidden != nullptr && hidden->GetBool()};
     } else {
       return ElectronLoadUrl{.window = *window, .url = std::move(*url)};
     }
@@ -1051,6 +1065,18 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ElectronFocusWindow{.window = *window};
   } else if (*type == "close_window") {
     return ElectronCloseWindow{.window = *window};
+  } else if (*type == "set_title") {
+    const std::string* title = request->FindString("title");
+    if (title == nullptr) {
+      return Refuse("\"title\" must be a string", *window);
+    }
+    return ElectronSetTitle{.window = *window, .title = *title};
+  } else if (*type == "set_hidden") {
+    const std::optional<bool> hidden = request->FindBool("hidden");
+    if (!hidden.has_value()) {
+      return Refuse("\"hidden\" must be true or false", *window);
+    }
+    return ElectronSetHidden{.window = *window, .hidden = *hidden};
   } else if (*type == "ipc_send") {
     return ParseSendToPage(*request, *window);
   } else if (*type == "execute_javascript") {
@@ -1284,6 +1310,10 @@ std::string ElectronTitleChanged(ElectronWindow window,
 
 std::string ElectronWindowClosed(ElectronWindow window) {
   return Line(Event("window_closed", window));
+}
+
+std::string ElectronCloseAsked(ElectronWindow window) {
+  return Line(Event("close_asked", window));
 }
 
 std::string ElectronWindowResized(ElectronWindow window,

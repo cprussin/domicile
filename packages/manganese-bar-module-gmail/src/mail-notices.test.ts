@@ -13,6 +13,7 @@ import type { Mail } from "./gmail-api";
 import { heldBus } from "./held-bus";
 import { EMAIL } from "./held-google";
 import { mailNotices } from "./mail-notices";
+import { threadToken } from "./thread-token";
 
 const ACCOUNT = { email: EMAIL, nickname: "Work" };
 
@@ -27,7 +28,7 @@ const mail = (n: number): Mail => ({
   id: `m${n.toString()}`,
   receivedAt: n,
   subject: `Subject ${n.toString()}`,
-  threadId: `t${n.toString()}`,
+  threadId: `a${n.toString()}`,
 });
 
 const arrived = (mail: readonly Mail[]) => ({ arrived: mail, read: [] });
@@ -139,7 +140,7 @@ describe("mailNotices", () => {
     await bus.send(pressed(6));
     await bus.send(pressed(7));
 
-    expect(await opened).toStrictEqual([EMAIL, "#inbox/t1"]);
+    expect(await opened).toStrictEqual([EMAIL, `#inbox/${threadToken("a1")}`]);
     await notify(ACCOUNT, read("m1"));
     expect(closes(bus.calls)).toStrictEqual([]);
   });
@@ -155,7 +156,7 @@ describe("mailNotices", () => {
     await bus.send(pressed(7));
     await bus.send(pressed(8));
 
-    expect(await stopped.promise).toBe("#inbox/t1");
+    expect(await stopped.promise).toBe(`#inbox/${threadToken("a1")}`);
   });
 
   it("closes a message's notification once it is read, and no other", async () => {
@@ -217,7 +218,7 @@ describe("mailNotices", () => {
     await notify(ACCOUNT, arrived([mail(2)]));
     await bus.send(pressed(8));
 
-    expect(await opened).toStrictEqual([EMAIL, "#inbox/t2"]);
+    expect(await opened).toStrictEqual([EMAIL, `#inbox/${threadToken("a2")}`]);
   });
 
   it("fails when the notification server refuses", async () => {

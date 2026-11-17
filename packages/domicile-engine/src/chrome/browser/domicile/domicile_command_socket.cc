@@ -45,6 +45,7 @@
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/browser/shell_swap.h"
 #include "components/domicile/browser/shell_window_wait.h"
+#include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
@@ -181,7 +182,11 @@ void LoadTheServedShell() {
   params.source_site_instance = page->GetSiteInstance();
   shell->GetController().LoadURLWithParams(params);
   LOG(INFO) << "domicile: now serving " << ShellSource::Get().Module()
-            << " out of " << ShellSource::Get().Root();
+            << " out of "
+            << (ShellSource::Get().Files() == ShellFiles::kDevServer
+                    ? "the dev server at "
+                    : "")
+            << ShellSource::Get().Root();
 }
 
 // The process's shell swap, which hears from the shell's page through
@@ -189,16 +194,21 @@ void LoadTheServedShell() {
 ShellSwap& TheShellSwap() {
   static base::NoDestructor<ShellSwap> swap(
       ShellSource::Get(), base::BindRepeating(&LoadTheServedShell),
+      // Drops the old shell's shortcut claims on a swap to another shell.
+      base::BindRepeating(&ShortcutRegistry::ShellChanged,
+                          base::Unretained(&ShortcutRegistry::Get())),
       kShellRunsWithin);
   return *swap;
 }
 
-// Swaps in the shell at `root`/`module`, and answers once it ran or the old
-// one is back, or refuses when there is no page to load it into.
+// Swaps in the shell at `root`/`module`, as `files` says, and answers once it
+// ran or the old one is back, or refuses when there is no page to load it
+// into.
 //
 // The source is set before the navigation because the navigation reads it.
 void LoadShellIntoAPage(const base::FilePath& root,
                         const std::string& module,
+                        ShellFiles files,
                         ShellLoaded loaded,
                         bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -207,7 +217,7 @@ void LoadShellIntoAPage(const base::FilePath& root,
     return;
   }
   TheShellSwap().Swap(
-      root, module,
+      root, module, files,
       base::BindOnce(
           [](ShellLoaded loaded, const ShellOutcome& ran) {
             if (ran.has_value()) {
@@ -224,9 +234,10 @@ void LoadShellIntoAPage(const base::FilePath& root,
 // that window shows a page. The load navigates from the committed page.
 void LoadShellIntoTheShellWindow(const base::FilePath& root,
                                  const std::string& module,
+                                 ShellFiles files,
                                  ShellLoaded loaded) {
-  WhenTheShellWindowCanTakeIt(
-      base::BindOnce(&LoadShellIntoAPage, root, module, std::move(loaded)));
+  WhenTheShellWindowCanTakeIt(base::BindOnce(&LoadShellIntoAPage, root, module,
+                                             files, std::move(loaded)));
 }
 
 // Serves the app module `module` under `root` and opens an app window pinned

@@ -24,6 +24,7 @@ use crate::control::AppReuse;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
+use crate::shell_path::Shell;
 use crate::site_data::SiteData;
 use crate::site_permissions::{SitePermission, SiteSettings};
 
@@ -69,19 +70,9 @@ pub enum CommandError {
     },
 }
 
-/// Tells the engine at `socket` to serve `module` from `root`.
-pub fn load_shell(
-    socket: &Path,
-    root: &Path,
-    module: &Path,
-    patience: Duration,
-) -> Result<(), CommandError> {
-    carry_out(
-        socket,
-        &load_shell_line(root, module),
-        Reply::Loaded,
-        patience,
-    )
+/// Tells the engine at `socket` to serve `shell`.
+pub fn load_shell(socket: &Path, shell: &Shell, patience: Duration) -> Result<(), CommandError> {
+    carry_out(socket, &load_shell_line(shell), Reply::Loaded, patience)
 }
 
 /// Tells the engine at `socket` to open `url` in the shell.

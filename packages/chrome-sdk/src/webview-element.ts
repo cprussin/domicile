@@ -1004,6 +1004,26 @@ declare global {
      */
     goBackInNewWindow(): void;
     goForwardInNewWindow(): void;
+    /**
+     * The pages either side of the current one, each side nearest first, for
+     * a back or forward menu like Chrome's. Rejects with an
+     * `InvalidStateError` before the view has a page.
+     *
+     * External data; parse it at the boundary.
+     */
+    history(): Promise<DomicileHistory>;
+    /**
+     * Go to the history entry `id` from {@link HTMLWebViewElement.history}.
+     * Does nothing when the entry is gone, since the history changes as the
+     * page navigates.
+     */
+    goToHistoryEntry(id: number): void;
+    /**
+     * As {@link HTMLWebViewElement.goToHistoryEntry}, in a new browser window
+     * with a copy of the history, as
+     * {@link HTMLWebViewElement.goBackInNewWindow} does.
+     */
+    goToHistoryEntryInNewWindow(id: number): void;
     stop(): void;
     reload(): void;
   }
@@ -1123,6 +1143,26 @@ declare global {
     readonly id: string;
     /** The name the system gives it, such as `USB Camera`. */
     readonly name: string;
+  };
+
+  /** A page in a `<webview>`'s history. */
+  type DomicileHistoryEntry = {
+    /** Names the entry to `goToHistoryEntry()`. Never reused in the view. */
+    readonly id: number;
+    readonly url: string;
+    /** The page's title, or its address when it has none. */
+    readonly title: string;
+    /** The page's favicon as a `data:image/png` URL, or `""` if none. */
+    readonly favicon: string;
+  };
+
+  /**
+   * A `<webview>`'s history either side of its current page, each side
+   * nearest first.
+   */
+  type DomicileHistory = {
+    readonly back: readonly DomicileHistoryEntry[];
+    readonly forward: readonly DomicileHistoryEntry[];
   };
 
   /** Each kind's devices, most preferred first. */

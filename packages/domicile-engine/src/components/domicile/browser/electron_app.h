@@ -55,6 +55,9 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(int width, int height)> resized;
   // The user clicked entry `command` of the window's menu bar.
   base::RepeatingCallback<void(int command)> menu_clicked;
+  // The user asked to close the window, which closes only if the app closes
+  // it, as an Electron window's `close` event can prevent it.
+  base::RepeatingClosure close_asked;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -194,8 +197,9 @@ class ElectronDesk {
   // Opens an app window at `url` for app `app_id`, in `partition`, whose
   // pages run `preload` (none when empty), make `calls` and load through
   // `session`. A `view` is a WebContentsView's page, listed only while a
-  // window holds it. Returns its id, or nothing when there is no shell to
-  // open it in.
+  // window holds it. A window shows `title` instead of its page's when it
+  // isn't empty, and opens `hidden` when asked. Returns its id, or nothing
+  // when there is no shell to open it in.
   virtual std::optional<std::string> Open(
       const GURL& url,
       const std::string& app_id,
@@ -203,7 +207,9 @@ class ElectronDesk {
       const std::string& preload,
       ElectronPageCalls calls,
       base::WeakPtr<ElectronSession> session,
-      bool view) = 0;
+      bool view,
+      const std::string& title,
+      bool hidden) = 0;
   // Window `id` holds `views`, bottom first, and no others. A view another
   // window held moves here.
   virtual void SetViews(const std::string& id,
@@ -221,6 +227,11 @@ class ElectronDesk {
           answered) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
+  // The title the desktop shows for window `id`, over its page's.
+  virtual void SetTitle(const std::string& id, const std::string& title) = 0;
+  // Whether the desktop shows window `id`. A hidden window stays open, its
+  // page running.
+  virtual void SetHidden(const std::string& id, bool hidden) = 0;
   // Closes window `id` once its page agrees.
   virtual void AskToClose(const std::string& id) = 0;
   // Closes window `id` without asking.
@@ -403,7 +414,12 @@ class ElectronApp {
   void PageResized(ElectronWindow number, int width, int height);
   void SetViews(const ElectronSetViews& set);
   void MenuClicked(ElectronWindow number, int command);
+  void CloseAsked(ElectronWindow number);
   void SetMenuBar(const ElectronSetMenuBar& bar);
+  // The desk id of window `number` when it is a window, not a view, or
+  // nothing after refusing `what` of a view.
+  std::optional<std::string> WindowIdOf(ElectronWindow number,
+                                        std::string_view what);
   void ShowMessageBox(const ElectronShowMessageBox& box);
   void MessageBoxAnswered(ElectronWindow number,
                           int box,
