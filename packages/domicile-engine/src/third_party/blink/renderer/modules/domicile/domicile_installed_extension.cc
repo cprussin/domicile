@@ -26,9 +26,6 @@ String SiteAccessName(domicile::mojom::blink::SiteAccess access) {
 // The names of the settings `settings` sets.
 Vector<String> SetNames(const domicile::mojom::blink::ExtensionSettings& set) {
   Vector<String> names;
-  if (set.in_private.has_value()) {
-    names.push_back("inPrivate");
-  }
   if (set.file_access.has_value()) {
     names.push_back("fileAccess");
   }
@@ -49,7 +46,6 @@ DomicileInstalledExtension::DomicileInstalledExtension(
       name_(extension.name),
       icon_(extension.icon),
       enabled_(extension.enabled),
-      in_private_(extension.settings->in_private),
       file_access_(extension.settings->file_access),
       user_scripts_(extension.settings->user_scripts),
       site_access_(extension.settings->site_access.has_value()

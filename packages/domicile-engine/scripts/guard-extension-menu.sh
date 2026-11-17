@@ -15,8 +15,8 @@
 #
 # WHAT IT ASSERTS. That the shell heard `installedextensionschanged` with the
 # fixture switched on, installed by the config, a PNG icon, `fileAccess` named
-# as the config's and kept out of private windows; that configureExtension()
-# lets it into private windows and the row follows; that it refuses
+# as the config's and no private-window setting, which a private browser
+# profile's switches replace; that configureExtension() refuses
 # `fileAccess`, which the config sets, and uninstallExtension(), since the
 # config installed it, each with an OperationError; and that
 # setExtensionEnabled() switches it off, dropping its action from
@@ -155,7 +155,7 @@ if [ "$NEGATIVE" = "1" ]; then
   ROW=$(saw '"GUARD row ')
   MEASURED="control $SENT $HEARD $ROW $(saw '"GUARD refused"')"
 else
-  ROW=$(saw '"GUARD row enabled=true fromConfig=true icon=true configured=fileAccess inPrivate=false"')
+  ROW=$(saw '"GUARD row enabled=true fromConfig=true icon=true configured=fileAccess"')
   MEASURED="menu $SENT $HEARD $ROW $(saw '"GUARD private"') $(saw '"GUARD locked"') $(saw '"GUARD kept"') $(saw '"GUARD off"') $(saw '"GUARD on"')"
 fi
 
@@ -171,8 +171,8 @@ FAILURE=""
 PASSED=""
 case "$MEASURED" in
 "menu 1 1 1 1 1 1 1 1")
-  PASSED="the shell heard the fixture as the config installed it, let it into \
-private windows, was refused the config's file access and the uninstall, and \
+  PASSED="the shell heard the fixture as the config installed it, with no \
+private-window setting, was refused the config's file access and the uninstall, and \
 switched it off, dropping its action, and back on"
   ;;
 "menu 0 "*)
@@ -187,13 +187,11 @@ SetClient"
 "menu 1 1 0 "*)
   FAILURE="the shell heard the installed extensions, but never the fixture as \
 the config leaves it -- on, from the config, a PNG icon, fileAccess as the \
-config's, kept out of private windows. The GUARD lines above say what did \
-arrive"
+config's. The GUARD lines above say what did arrive"
   ;;
 "menu 1 1 1 0 "*)
-  FAILURE="configureExtension() did not let the fixture into private windows, \
-or the row never said so: ExtensionTray::Configure, or a reload that sent no \
-InstalledChanged. A GUARD failed line says which"
+  FAILURE="the fixture's row still has inPrivate, which a private browser \
+profile's switches replace: DomicileInstalledExtension, or SettingsOf"
   ;;
 "menu 1 1 1 1 0 "*)
   FAILURE="configureExtension() of fileAccess, which the config sets, was not \

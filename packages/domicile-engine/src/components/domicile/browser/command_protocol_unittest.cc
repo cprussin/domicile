@@ -96,7 +96,7 @@ SitePermissionList StoredSettings() {
 }
 
 // What the recording `extensions` answers: one extension with an options page,
-// allowed in private windows and on one site, and one switched off without,
+// allowed on local files and on one site, and one switched off without,
 // which has no settings to change.
 std::vector<InstalledExtension> InstalledExtensions() {
   InstalledExtension dark;
@@ -105,7 +105,7 @@ std::vector<InstalledExtension> InstalledExtensions() {
   dark.description = "Dark mode for every site";
   dark.version = "4.9";
   dark.enabled = true;
-  dark.settings.in_private = true;
+  dark.settings.file_access = true;
   dark.settings.site_access = SiteAccess::kSpecificSites;
   dark.settings.sites = {"github.com"};
   dark.options_url =
@@ -1037,7 +1037,7 @@ TEST(CommandProtocolTest, ListsTheProfilesExtensions) {
           R"({"id":"abcdefghijklmnopabcdefghijklmnop","name":"Dark Reader",)"
           R"("description":"Dark mode for every site","version":"4.9",)"
           R"("enabled":true,)"
-          R"("settings":{"private":true,"site_access":["github.com"]},)"
+          R"("settings":{"file_access":true,"site_access":["github.com"]},)"
           R"("options_url":)"
           R"("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html"},)"
           R"({"id":"ponmlkjihgfedcbaponmlkjihgfedcba","name":"Quiet",)"
@@ -1130,20 +1130,28 @@ TEST(CommandProtocolTest, ConfiguresAnExtension) {
   Told told;
   EXPECT_EQ(TypeOf(Answer(R"({"type":"configure_extension","version":1,)"
                           R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
-                          R"("settings":{"private":true,)"
+                          R"("settings":{"file_access":true,)"
                           R"("site_access":"on_click"}})",
                           &told)),
             "set");
   EXPECT_EQ(told.configured, kExtensionId);
   ExtensionSettings wanted;
-  wanted.in_private = true;
+  wanted.file_access = true;
   wanted.site_access = SiteAccess::kOnClick;
   EXPECT_EQ(told.settings, wanted);
   EXPECT_EQ(TypeOf(Answer(R"({"type":"configure_extension","version":1,)"
                           R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
-                          R"("settings":{"private":false}})",
+                          R"("settings":{"file_access":false}})",
                           &told, /*has_window=*/false)),
             "refused");
+  // A private browser profile's switches say what runs in private windows.
+  Told in_private;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"configure_extension","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
+                          R"("settings":{"private":true}})",
+                          &in_private)),
+            "refused");
+  EXPECT_FALSE(in_private.settings.has_value());
 }
 
 TEST(CommandProtocolTest, RefusesAConfigurationItCannotRead) {

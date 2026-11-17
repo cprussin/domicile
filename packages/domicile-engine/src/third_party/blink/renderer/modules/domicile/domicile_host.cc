@@ -1301,9 +1301,6 @@ ScriptPromise<IDLUndefined> DomicileHost::configureExtension(
     return EmptyPromise();
   }
   auto wanted = domicile::mojom::blink::ExtensionSettings::New();
-  if (settings->hasInPrivate()) {
-    wanted->in_private = settings->inPrivate();
-  }
   if (settings->hasFileAccess()) {
     wanted->file_access = settings->fileAccess();
   }

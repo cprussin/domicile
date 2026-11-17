@@ -131,7 +131,6 @@ export type DomicileExtensionPopupEventInit = EventInit & {
  * DomicileInstalledExtension's.
  */
 export type DomicileExtensionSettings = {
-  inPrivate?: boolean;
   fileAccess?: boolean;
   userScripts?: boolean;
   /** "on_click", "specific_sites" or "all_sites". */
@@ -1413,11 +1412,10 @@ export type DomicileInstalledExtension = {
   readonly enabled: boolean;
   /**
    * Its chrome://extensions settings. Each is null where the extension cannot
-   * use it: private windows where its manifest keeps it out, local files and
-   * sites where it asks for none, user scripts where it does not ask for
-   * chrome.userScripts.
+   * use it: local files and sites where it asks for none, user scripts where
+   * it does not ask for chrome.userScripts. Private windows are a private
+   * browser profile's, whose switches say what runs there.
    */
-  readonly inPrivate: boolean | null;
   readonly fileAccess: boolean | null;
   readonly userScripts: boolean | null;
   /** "on_click", "specific_sites" or "all_sites". */

@@ -96,7 +96,7 @@ const INSTALLED: InstalledExtension[] = [
     id: UBLOCK,
     name: "uBlock Origin Lite",
     optionsUrl: `chrome-extension://${UBLOCK}/dashboard.html`,
-    settings: { file_access: false, private: false, site_access: "all_sites" },
+    settings: { file_access: false, site_access: "all_sites" },
     version: "2025.1",
   },
 ];
@@ -746,12 +746,12 @@ describe(App, () => {
       const { user } = await renderApp("Extensions");
       const row = await ublock();
       expect(
-        row.getByRole("switch", { name: "Allow in private windows" }),
+        row.getByRole("switch", { name: "Allow on local files" }),
       ).toBeVisible();
       await user.click(row.getByRole("switch", { name: "uBlock Origin Lite" }));
       await waitFor(() => {
         expect(
-          row.queryByRole("switch", { name: "Allow in private windows" }),
+          row.queryByRole("switch", { name: "Allow on local files" }),
         ).not.toBeInTheDocument();
       });
     });
@@ -767,16 +767,16 @@ describe(App, () => {
       ).not.toBeInTheDocument();
     });
 
-    it("allows an extension in private windows", async () => {
+    it("allows an extension on local files", async () => {
       const { host, user } = await renderApp("Extensions");
       await user.click(
         (await ublock()).getByRole("switch", {
-          name: "Allow in private windows",
+          name: "Allow on local files",
         }),
       );
       await waitFor(() => {
         expect(host.configured).toEqual([
-          { id: UBLOCK, settings: { private: true } },
+          { id: UBLOCK, settings: { file_access: true } },
         ]);
       });
       expect(host.writes).toEqual([]);
@@ -784,16 +784,18 @@ describe(App, () => {
 
     it("changes a setting the config sets in the config", async () => {
       const { host, user } = await renderApp("Extensions", {
-        config: { extensions: { settings: { [UBLOCK]: { private: true } } } },
+        config: {
+          extensions: { settings: { [UBLOCK]: { file_access: true } } },
+        },
       });
       const allowed = (await ublock()).getByRole("switch", {
-        name: "Allow in private windows",
+        name: "Allow on local files",
       });
       expect(allowed).toBeChecked();
       await user.click(allowed);
       await waitFor(() => {
         expect(written(host.writes)).toEqual({
-          extensions: { settings: { [UBLOCK]: { private: false } } },
+          extensions: { settings: { [UBLOCK]: { file_access: false } } },
         });
       });
       expect(host.configured).toEqual([]);
@@ -801,12 +803,14 @@ describe(App, () => {
 
     it("leaves a setting a read-only config sets", async () => {
       await renderApp("Extensions", {
-        config: { extensions: { settings: { [UBLOCK]: { private: true } } } },
+        config: {
+          extensions: { settings: { [UBLOCK]: { file_access: true } } },
+        },
         writable: false,
       });
       expect(
         (await ublock()).getByRole("switch", {
-          name: "Allow in private windows",
+          name: "Allow on local files",
         }),
       ).toHaveAttribute("aria-disabled", "true");
     });
@@ -864,12 +868,14 @@ describe(App, () => {
 
     it("reads a config that sets a setting to null as leaving it", async () => {
       await renderApp("Extensions", {
-        config: { extensions: { settings: { [UBLOCK]: { private: null } } } },
+        config: {
+          extensions: { settings: { [UBLOCK]: { file_access: null } } },
+        },
         writable: false,
       });
       expect(
         (await ublock()).getByRole("switch", {
-          name: "Allow in private windows",
+          name: "Allow on local files",
         }),
       ).not.toHaveAttribute("aria-disabled", "true");
     });

@@ -287,11 +287,6 @@
           "description": "Runs on local files (`file://` pages). Chrome's default is no.",
           "type": ["boolean", "null"]
         },
-        "private": {
-          "default": null,
-          "description": "Runs in private windows. Chrome's default is no.",
-          "type": ["boolean", "null"]
-        },
         "site_access": {
           "anyOf": [
             {

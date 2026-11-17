@@ -89,9 +89,6 @@ pub struct BrowserProfile {
 /// [`HostMessage::Extensions`]. Each is left as the user set it when absent.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtensionSettings {
-    /// Runs in private windows.
-    #[serde(rename = "private", default, skip_serializing_if = "Option::is_none")]
-    pub in_private: Option<bool>,
     /// Runs on `file://` pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_access: Option<bool>,

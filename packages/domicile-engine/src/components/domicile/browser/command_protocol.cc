@@ -764,10 +764,16 @@ std::string AnswerConfigureExtension(const base::DictValue& request,
       ParseOneExtensionSettings(*settings);
   if (!read) {
     return RefusedCommand(
-        "configure_extension's \"settings\" takes \"private\", "
-        "\"file_access\" and \"user_scripts\" as booleans, and "
-        "\"site_access\" as \"on_click\", \"all_sites\" or a list of "
-        "hosts");
+        "configure_extension's \"settings\" takes \"file_access\" and "
+        "\"user_scripts\" as booleans, and \"site_access\" as "
+        "\"on_click\", \"all_sites\" or a list of hosts");
+  }
+  // Private windows are a private browser profile's, whose switches say
+  // which extensions run in them.
+  if (read->in_private.has_value()) {
+    return RefusedCommand(
+        "configure_extension has no \"private\": switch the extension in "
+        "a private browser profile instead");
   }
   const base::expected<void, std::string> set =
       configure_extension(*id, *read);

@@ -316,7 +316,7 @@ describe(spawnedHost, () => {
         enabled: true,
         id: "a".repeat(32),
         name: "uBlock Origin Lite",
-        settings: { private: false, site_access: ["github.com"] },
+        settings: { file_access: false, site_access: ["github.com"] },
         version: "2025.1",
       };
       processes[0]?.answer({

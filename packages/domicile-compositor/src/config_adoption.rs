@@ -85,7 +85,6 @@ fn settings_on_the_wire(
     use domicile_protocol::SiteAccess as WireAccess;
     use domicile_protocol::SiteAccessMode as WireMode;
     domicile_protocol::ExtensionSettings {
-        in_private: settings.in_private,
         file_access: settings.file_access,
         user_scripts: settings.user_scripts,
         site_access: settings.site_access.as_ref().map(|access| match access {
@@ -468,7 +467,7 @@ mod tests {
                     (
                         DARK_READER.to_string(),
                         domicile_config::ExtensionSettings {
-                            in_private: Some(true),
+                            file_access: Some(true),
                             site_access: Some(SiteAccess::Sites(vec!["github.com".into()])),
                             ..Default::default()
                         },
@@ -495,7 +494,7 @@ mod tests {
                     (
                         DARK_READER.to_string(),
                         ExtensionSettings {
-                            in_private: Some(true),
+                            file_access: Some(true),
                             site_access: Some(domicile_protocol::SiteAccess::Sites(vec![
                                 "github.com".into()
                             ])),

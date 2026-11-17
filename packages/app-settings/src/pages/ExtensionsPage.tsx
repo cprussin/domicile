@@ -220,7 +220,6 @@ const uninstaller = ({
 
 /** Every setting an extension may have. */
 const SETTINGS = [
-  "private",
   "file_access",
   "user_scripts",
   "site_access",
@@ -350,19 +349,6 @@ const ExtensionRow = ({
               report={report}
               value={settings.site_access}
             />
-          )}
-          {enabled && settings.private !== undefined && (
-            <SettingRow title="Allow in private windows">
-              <Switch
-                checked={settings.private}
-                disabled={locked("private")}
-                hideLabel
-                label="Allow in private windows"
-                onCheckedChange={(allowed) => {
-                  onConfigure({ private: allowed });
-                }}
-              />
-            </SettingRow>
           )}
           {enabled && settings.file_access !== undefined && (
             <SettingRow title="Allow on local files">

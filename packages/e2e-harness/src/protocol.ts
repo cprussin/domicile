@@ -451,7 +451,6 @@ const extensionsSchema = z.looseObject({
     z.string(),
     z.looseObject({
       file_access: z.boolean().optional(),
-      private: z.boolean().optional(),
       site_access: z
         .union([z.enum(["on_click", "all_sites"]), z.array(z.string())])
         .optional(),

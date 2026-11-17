@@ -325,7 +325,7 @@ fn every_installed_extension_is_the_desktop_s() {
                 "version": "1.0",
                 "enabled": true,
                 "options_url": null,
-                "settings": {"private": false},
+                "settings": {"file_access": false},
             }],
         })
     );
@@ -424,7 +424,7 @@ fn an_extension_is_configured_on_the_desktop() {
             "id": 19,
             "type": "configure_extension",
             "extension": ID,
-            "settings": {"private": true, "site_access": "on_click"},
+            "settings": {"file_access": true, "site_access": "on_click"},
         })),
         json!({"id": 19, "type": "stored"})
     );
@@ -433,7 +433,7 @@ fn an_extension_is_configured_on_the_desktop() {
         Some(&Request::ConfigureExtension {
             id: ID.to_string(),
             settings: ExtensionSettings {
-                in_private: Some(true),
+                file_access: Some(true),
                 site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
                 ..ExtensionSettings::default()
             },
@@ -704,7 +704,7 @@ impl Fake {
                                 enabled: true,
                                 options_url: None,
                                 settings: ExtensionSettings {
-                                    in_private: Some(false),
+                                    file_access: Some(false),
                                     ..ExtensionSettings::default()
                                 },
                             }],

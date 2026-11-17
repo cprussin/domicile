@@ -290,10 +290,6 @@ void RegisterExtensionSettingsPrefs(PrefRegistrySimple* registry) {
 ExtensionSettings SettingsOf(Profile& profile,
                              const extensions::Extension& extension) {
   ExtensionSettings settings;
-  if (extensions::util::CanBeIncognitoEnabled(&extension)) {
-    settings.in_private =
-        extensions::util::IsIncognitoEnabled(extension.id(), &profile);
-  }
   if (CanUseFileAccess(extension)) {
     settings.file_access =
         extensions::util::AllowFileAccess(extension.id(), &profile);

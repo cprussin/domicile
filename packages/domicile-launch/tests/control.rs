@@ -1159,7 +1159,7 @@ fn an_extension() -> InstalledExtension {
             "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html".to_string(),
         ),
         settings: ExtensionSettings {
-            in_private: Some(false),
+            file_access: Some(false),
             site_access: Some(SiteAccess::Mode(SiteAccessMode::AllSites)),
             ..ExtensionSettings::default()
         },

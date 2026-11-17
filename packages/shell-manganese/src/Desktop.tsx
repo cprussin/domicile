@@ -21,6 +21,7 @@ import { KeymapOptionsContext } from "@domicile-desktop/manganese-bar-module-key
 import { PortalSignIn } from "@domicile-desktop/manganese-bar-module-network/PortalSignIn";
 import { useCaptivePortal } from "@domicile-desktop/manganese-bar-module-network/useCaptivePortal";
 import { useExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useExtensions";
+import { useFocusedProfile } from "@domicile-desktop/manganese-bar-module-tray/extensions/useFocusedProfile";
 import { useInstalledExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useInstalledExtensions";
 import { useOpenedPopup } from "@domicile-desktop/manganese-bar-module-tray/extensions/useOpenedPopup";
 import type { TrayState } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
@@ -90,6 +91,7 @@ import { usePointerLock } from "@domicile-desktop/manganese-window-management/us
 import { usePointerWarp } from "@domicile-desktop/manganese-window-management/usePointerWarp";
 import { useWindows } from "@domicile-desktop/manganese-window-management/useWindows";
 import {
+  browserIdOf,
   browserWindowId,
   WindowKind,
 } from "@domicile-desktop/manganese-window-management/window";
@@ -675,6 +677,11 @@ export const Desktop = ({
       notificationsHandle,
     ],
   );
+  // The tray shows the extensions of the last focused page's profile.
+  const trayProfile = useFocusedProfile(
+    domicile,
+    windows.activeId === undefined ? undefined : browserIdOf(windows.activeId),
+  );
   const trayState = useMemo(
     () => ({
       clicked: clickedExtension,
@@ -685,6 +692,7 @@ export const Desktop = ({
       opened,
       order: trayOrder,
       pins: trayPins,
+      profile: trayProfile,
     }),
     [
       clickedExtension,
@@ -694,6 +702,7 @@ export const Desktop = ({
       openExtension,
       tray,
       trayOrder,
+      trayProfile,
       trayPins,
     ],
   );

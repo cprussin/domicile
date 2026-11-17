@@ -106,7 +106,6 @@ config and the Settings app:
   "extensions": {
     "settings": {
       "eimadpbcbfnmbkopoojfekhnkhdbieeh": {
-        "private": true,
         "file_access": false,
         "site_access": ["github.com", "*.example.com"]
       },
@@ -121,13 +120,15 @@ config and the Settings app:
 
 | Setting | Chrome's call | Chrome's default |
 |---|---|---|
-| `private` | `util::SetIsIncognitoEnabled` | off |
 | `file_access` | `util::SetAllowFileAccess` | off |
 | `user_scripts` | `UserScriptManager::SetUserScriptPrefEnabled` | off |
 | `site_access` | `ScriptingPermissionsModifier`: `"all_sites"` grants every host it asks for, `"on_click"` withholds them, a list grants `*://host/*` for each | `"all_sites"` |
 
-- An extension that cannot use a setting is refused it: one whose manifest
-  says `"incognito": "not_allowed"`, one that asks for no `file://` access,
+- Private windows are not a setting: a private browser profile's extension
+  switches say what runs in its pages (below). The config refuses `private`,
+  and so do `configure_extension` and the engine's `extensions` message.
+- An extension that cannot use a setting is refused it: one that asks for no
+  `file://` access,
   no `userScripts` permission, or no hosts. The listing leaves those out.
 - A setting the config leaves out is the user's, changed in the Settings app
   through the command socket's `configure_extension`.
@@ -136,7 +137,7 @@ config and the Settings app:
   (`ReconcileSettings`).
 - A Web Store id is still pending when the config arrives, so its settings are
   applied once it installs (`InstallWatch`).
-- `private` and `file_access` reload the extension, as on chrome://extensions.
+- `file_access` reloads the extension, as on chrome://extensions.
 
 Code: `components/domicile/browser/extension_settings.{h,cc}` (parse, write,
 reconcile) and `chrome/browser/domicile/domicile_extension_settings.{h,cc}`
@@ -147,8 +148,7 @@ reconcile) and `chrome/browser/domicile/domicile_extension_settings.{h,cc}`
 A private page is a `<webview private>`, a guest of a private browser
 profile's off-the-record profile. Its extensions are installed into its
 hidden parent and allowed into private pages, and those switched on there
-run in them, whatever
-`extensions.settings.<id>.private` says (ExtensionsFor in
+run in them (ExtensionsFor in
 `components/domicile/browser/browser_profiles.h`). Its desk is that
 off-the-record profile's own `DomicileWindowController`, made the first time
 a private page opens. Chrome's `EventRouter` and

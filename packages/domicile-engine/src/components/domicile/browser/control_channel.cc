@@ -1282,6 +1282,13 @@ void ControlChannel::DispatchLine(const std::string& line,
         settings_value == nullptr
             ? std::nullopt
             : ParseExtensionSettings(*settings_value);
+    // `private` is a private browser profile's switch, not the config's
+    // (ExtensionsFor), so a compositor that sends it is out of date.
+    if (settings && std::ranges::any_of(*settings, [](const auto& entry) {
+          return entry.second.in_private.has_value();
+        })) {
+      settings.reset();
+    }
     if (web_store && unpacked && settings) {
       extensions_sink_.Run(ExtensionList{.web_store = std::move(*web_store),
                                          .unpacked = std::move(*unpacked),
@@ -1289,8 +1296,9 @@ void ControlChannel::DispatchLine(const std::string& line,
     } else {
       LOG(ERROR) << "domicile: the compositor sent an `extensions` message "
                     "whose `web_store` or `unpacked` is not a list of strings, "
-                    "or whose `settings` are not extensions' settings. The "
-                    "profile keeps the extensions it had.";
+                    "or whose `settings` are not extensions' settings (a "
+                    "`private` one is a private browser profile's switch "
+                    "now). The profile keeps the extensions it had.";
     }
     return;
   }

@@ -149,7 +149,6 @@ describe("useProfileExtensions", () => {
     fromConfig: true,
     icon: ICON,
     id,
-    inPrivate: null,
     name,
     optionsUrl: null,
     siteAccess: null,

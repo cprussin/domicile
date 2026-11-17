@@ -107,7 +107,6 @@ export type Monitor = z.infer<typeof monitorSchema>;
 
 const extensionSettingsSchema = z.object({
   file_access: z.boolean().optional(),
-  private: z.boolean().optional(),
   site_access: z
     .union([z.enum(["on_click", "all_sites"]), z.array(z.string())])
     .optional(),
@@ -116,8 +115,8 @@ const extensionSettingsSchema = z.object({
 
 /**
  * An extension's chrome://extensions settings, spelled as the config's
- * `extensions.settings`: whether it runs in private windows and on local
- * files, may run user scripts, and which sites it runs on. A listed extension
+ * `extensions.settings`: whether it runs on local files, may run user
+ * scripts, and which sites it runs on. A listed extension
  * has each it can use; a change names only those that change.
  */
 export type ExtensionSettings = z.infer<typeof extensionSettingsSchema>;

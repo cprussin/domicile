@@ -11,7 +11,6 @@ const darkReader = {
   fromConfig: false,
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  inPrivate: false,
   name: "Dark Reader",
   optionsUrl: null,
   siteAccess: null,
