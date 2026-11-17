@@ -179,6 +179,14 @@ class BrowserWindowHost {
                                               bool private_browsing,
                                               const std::string& profile) = 0;
 
+  // Runs `ready` once ContextFor's context for these can be made without
+  // blocking: at once when its browser profile is loaded, else once its load
+  // ends. Calls ContextFor in `ready`, not before.
+  virtual void WhenContextReady(content::BrowserContext& owner,
+                                bool private_browsing,
+                                const std::string& profile,
+                                base::OnceClosure ready) = 0;
+
   // A private guest's page was made in, or destroyed from, `context`, an
   // off-the-record context. Its private profile ends when every page made in
   // it has been destroyed.
@@ -584,6 +592,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   // active tab.
   base::CallbackListSubscription AddFocusedCallback(
       base::RepeatingClosure focused);
+
+  // Keeps this page at its full frame rate under Energy Saver, even unfocused.
+  // An Electron window's, which is an app rather than a page. See
+  // unfocused_web_views.h.
+  void KeepFullFrameRate();
 
   // The page's zoom factor, for chrome.tabs. ZoomTo expects a factor already
   // within blink's range (see DeskZoomFactor in
@@ -1290,6 +1303,9 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See AddFocusedCallback.
   base::RepeatingClosureList focused_callbacks_;
+
+  // See KeepFullFrameRate.
+  bool full_frame_rate_ = false;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;

@@ -407,7 +407,8 @@ bool IsWindowRequest(std::string_view type) {
          type == "focus_window" || type == "close_window" ||
          type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
          type == "port_post" || type == "port_close" || type == "set_views" ||
-         type == "set_menu_bar" || type == "show_message_box";
+         type == "set_menu_bar" || type == "show_message_box" ||
+         type == "execute_javascript";
 }
 
 // Entry `entry` of a menu, with only the keys the shell reads, or why it is
@@ -693,6 +694,26 @@ base::expected<ElectronRequest, ElectronRefusal> ParseReply(
   return ElectronReply{
       .invoke = *invoke,
       .answer = result.has_value() ? std::move(*result) : base::Value()};
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseExecuteJavaScript(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const std::optional<int> call = request.FindInt("call");
+  const std::string* code = request.FindString("code");
+  const base::Value* user_gesture = request.Find("user_gesture");
+  if (!call.has_value() || *call < 1) {
+    return Refuse("\"call\" must be a whole number from 1", window);
+  } else if (code == nullptr) {
+    return Refuse("\"code\" must be a string", window);
+  } else if (user_gesture != nullptr && !user_gesture->is_bool()) {
+    return Refuse("\"user_gesture\" must be true or false", window);
+  }
+  return ElectronExecuteJavaScript{
+      .window = window,
+      .call = *call,
+      .code = *code,
+      .user_gesture = user_gesture != nullptr && user_gesture->GetBool()};
 }
 
 base::expected<ElectronRequest, ElectronRefusal> ParseSendToPage(
@@ -1032,6 +1053,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ElectronCloseWindow{.window = *window};
   } else if (*type == "ipc_send") {
     return ParseSendToPage(*request, *window);
+  } else if (*type == "execute_javascript") {
+    return ParseExecuteJavaScript(*request, *window);
   } else if (*type == "ipc_post") {
     return ParsePostToPage(*request, *window);
   } else if (*type == "port_post") {
@@ -1158,6 +1181,29 @@ bool ElectronCookieMatches(const ElectronCookie& cookie,
           !cookie.expiration_date.has_value() == *filter.session) &&
          (!filter.http_only.has_value() ||
           cookie.http_only == *filter.http_only);
+}
+
+std::string ElectronJavaScriptResult(
+    ElectronWindow window,
+    int call,
+    const base::expected<base::Value, std::string>& result) {
+  base::DictValue event = Event("javascript_result", window);
+  event.Set("call", call);
+  if (result.has_value()) {
+    event.Set("result", result->Clone());
+    std::string line;
+    if (base::JSONWriter::Write(event, &line)) {
+      line.push_back('\n');
+      return line;
+    }
+    // A value of the page's that JSON can't carry is the page's to fix,
+    // as Electron's structured clone refuses what it can't carry.
+    event.Remove("result");
+    event.Set("error", "the script's result can't be carried to the app");
+    return Line(std::move(event));
+  }
+  event.Set("error", result.error());
+  return Line(std::move(event));
 }
 
 std::string ElectronSessionResult(

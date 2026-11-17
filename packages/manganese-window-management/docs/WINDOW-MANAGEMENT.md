@@ -449,6 +449,10 @@ Rules:
 
 - Open and close use transforms. Resizing the element would reconfigure the
   client every frame.
+- A browser window's page keeps its raster scale while a transform animation
+  runs on it or a box around it, and takes the resting scale when it ends
+  (engine patch 0233). Otherwise a heavy page rasters again every frame of an
+  open, close or settle.
 - Rearranging gives a window's contents their new box at once, so the client
   is configured once. The box then eases from the old one with `translate`
   and `scale` (`useSettling`). Eased boxes would hold every frame: the engine

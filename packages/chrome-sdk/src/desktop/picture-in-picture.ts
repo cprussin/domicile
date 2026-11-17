@@ -9,6 +9,14 @@ import type {
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
 
+/**
+ * Fired at an `<app picture-in-picture>` once it embeds its video's first
+ * surface, so it draws the video from the next frame. Show the element, or
+ * start its motion, from here rather than over an empty box.
+ */
+export const PICTURE_IN_PICTURE_SHOWN_EVENT =
+  "domicile-picture-in-picture-shown";
+
 export type PictureInPictureListeners = {
   /** {@link PictureInPicture.videos} changed. */
   change: () => void;

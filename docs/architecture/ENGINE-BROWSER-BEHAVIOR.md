@@ -269,6 +269,18 @@ while it has the keyboard. See
 [KEYBINDINGS.md](KEYBINDINGS.md#key-decisions). This is the other direction
 from patch `0038`, which is the engine asking a host compositor.
 
+## Energy Saver
+
+Chrome's Energy Saver turns on with the OS's power-saver profile, or unplugged
+below 20% battery. Patch `0232`:
+
+- It slows only the `<webview>`s other than the one that last took focus, to
+  30 fps. `src/components/domicile/browser/unfocused_web_views.h`.
+- The shell, native windows, Electron windows and the focused page keep their
+  full rate. Chrome slows every frame sink, which here is the whole desk.
+- Focus on the shell or a native window leaves the last focused page at full
+  rate.
+
 ## Chrome's own pages and strings
 
 The engine leaves out Chrome's own UI, which the shell replaces.

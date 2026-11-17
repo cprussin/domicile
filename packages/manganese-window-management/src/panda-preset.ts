@@ -79,6 +79,20 @@ export const windowManagementPreset = definePreset({
           },
           "100%": { transform: "none" },
         },
+        // Once its video left: it fades where it is, in its page's place
+        // when it shrank back there.
+        pictureInPictureLeaving: {
+          "0%": {
+            opacity: "1",
+            transform:
+              "translate(var(--pip-x, 0px), var(--pip-y, 0px)) scale(var(--pip-scale, 1))",
+          },
+          "100%": {
+            opacity: "0",
+            transform:
+              "translate(var(--pip-x, 0px), var(--pip-y, 0px)) scale(var(--pip-scale, 1))",
+          },
+        },
         pictureInPictureReturning: {
           "0%": { transform: "none" },
           "100%": {

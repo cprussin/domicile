@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { PICTURE_IN_PICTURE_SHOWN_EVENT } from "@domicile-desktop/sdk/desktop/picture-in-picture";
 import type { DomicilePictureInPictureVideo } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -51,6 +52,22 @@ const floating = (
     fake.set({ pictureInPictureVideos: [video] });
   });
   return { asked, fake, ...view };
+};
+
+/** Says `container`'s video was drawn, as the engine does. */
+const drawn = (container: HTMLElement): void => {
+  fireEvent(shown(container), new Event(PICTURE_IN_PICTURE_SHOWN_EVENT));
+};
+
+/** The float around `container`'s video. */
+const floatOf = (container: HTMLElement): HTMLElement => {
+  const float = shown(container).closest<HTMLElement>(
+    "[data-picture-in-picture]",
+  );
+  if (float === null) {
+    throw new Error("test: the video has no float");
+  }
+  return float;
 };
 
 const shown = (container: HTMLElement): Element => {
@@ -168,16 +185,19 @@ describe("PictureInPictureFloats", () => {
     expect(container.querySelector("app")).toBeNull();
   });
 
-  it("goes when the video leaves picture-in-picture", () => {
+  it("fades where it is when the video leaves picture-in-picture, then goes", () => {
     const { container, fake } = floating();
     act(() => {
       fake.set({ pictureInPictureVideos: [] });
     });
+    const float = floatOf(container);
+    expect(float.getAttribute("data-motion")).toBe("leaving");
 
+    fireEvent.animationEnd(float);
     expect(container.querySelector("app")).toBeNull();
   });
 
-  it("sends the page back to its tab, or closes it", () => {
+  it("sends the page back to its tab, or closes it, at once without a page", () => {
     const { fake } = floating();
     fireEvent.click(screen.getByRole("button", { name: "Back to tab" }));
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -288,11 +308,16 @@ describe("PictureInPictureFloats", () => {
     expect(screen.queryByText(/\//u)).toBeNull();
   });
 
-  it("grows out of where the video was in its page", () => {
+  it("shows nothing until its video is drawn", () => {
     const { container } = floating({ ...VIDEO, source: SOURCE });
-    const float = shown(container).closest<HTMLElement>(
-      "[data-picture-in-picture]",
-    );
+
+    expect(floatOf(container).getAttribute("data-motion")).toBe("waiting");
+  });
+
+  it("grows out of where the video was in its page once it is drawn", () => {
+    const { container } = floating({ ...VIDEO, source: SOURCE });
+    drawn(container);
+    const float = floatOf(container);
 
     // From (300, 150), 640 wide, to its corner box at (1416, 786), 480 wide.
     expect(float?.style.getPropertyValue("--pip-x")).toBe("-1116px");
@@ -308,9 +333,8 @@ describe("PictureInPictureFloats", () => {
       { ...VIDEO, source: SOURCE },
       () => undefined,
     );
-    const float = shown(container).closest<HTMLElement>(
-      "[data-picture-in-picture]",
-    );
+    drawn(container);
+    const float = floatOf(container);
 
     expect(float?.style.getPropertyValue("--pip-x")).toBe("");
     expect(float?.getAttribute("data-motion")).toBeNull();
@@ -328,37 +352,53 @@ describe("PictureInPictureFloats", () => {
     act(() => {
       fake.set({ pictureInPictureVideos: [{ ...VIDEO, source: SOURCE }] });
     });
+    drawn(container);
 
-    expect(
-      shown(container)
-        .closest<HTMLElement>("[data-picture-in-picture]")
-        ?.getAttribute("data-motion"),
-    ).toBe("growing");
+    expect(floatOf(container).getAttribute("data-motion")).toBe("growing");
   });
 
-  it("shrinks back into its page before going back to its tab", () => {
+  for (const [button, action] of [
+    ["Back to tab", "back-to-page"],
+    ["Close", "close"],
+  ] as const) {
+    it(`shrinks back into its page before ${action}`, () => {
+      const { container, fake } = floating({ ...VIDEO, source: SOURCE });
+      drawn(container);
+      const float = floatOf(container);
+      fireEvent.animationEnd(float);
+
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      expect(float.getAttribute("data-motion")).toBe("returning");
+      expect(fake.calls).not.toContainEqual([
+        "actOnPictureInPictureVideo",
+        "1",
+        action,
+      ]);
+
+      fireEvent.animationEnd(float);
+      expect(fake.calls).toContainEqual([
+        "actOnPictureInPictureVideo",
+        "1",
+        action,
+      ]);
+    });
+  }
+
+  it("fades in its page's place once the page takes the video back", () => {
     const { container, fake } = floating({ ...VIDEO, source: SOURCE });
-    const float = shown(container).closest<HTMLElement>(
-      "[data-picture-in-picture]",
-    );
-    if (float === null) {
-      throw new Error("test: the video has no float");
-    }
-
-    fireEvent.click(screen.getByRole("button", { name: "Back to tab" }));
-    expect(float.getAttribute("data-motion")).toBe("returning");
-    expect(fake.calls).not.toContainEqual([
-      "actOnPictureInPictureVideo",
-      "1",
-      "back-to-page",
-    ]);
-
+    drawn(container);
+    const float = floatOf(container);
     fireEvent.animationEnd(float);
-    expect(fake.calls).toContainEqual([
-      "actOnPictureInPictureVideo",
-      "1",
-      "back-to-page",
-    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Back to tab" }));
+    fireEvent.animationEnd(float);
+
+    act(() => {
+      fake.set({ pictureInPictureVideos: [] });
+    });
+
+    expect(floatOf(container)).toBe(float);
+    expect(float.getAttribute("data-motion")).toBe("leaving-page");
+    expect(float.style.getPropertyValue("--pip-x")).toBe("-1116px");
   });
 
   it("goes back to its tab at once when its page is drawn nowhere", () => {

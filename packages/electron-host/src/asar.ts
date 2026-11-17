@@ -138,7 +138,18 @@ const writeFileEntry = async (
   const target = join(destination, path);
   const mode = entry.executable === true ? 0o755 : 0o644;
   if (entry.unpacked === true) {
-    await copyFile(join(`${archive}.unpacked`, path), target);
+    try {
+      await copyFile(join(`${archive}.unpacked`, path), target);
+    } catch (error) {
+      // A package may prune what it doesn't need from the unpacked files
+      // (nixpkgs drops other platforms' prebuilt modules from ChatGPT's),
+      // leaving the header naming them. Electron fails only a read of one,
+      // so the mirror leaves it out and the read fails the same way.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
   } else if (entry.offset === undefined) {
     throw new Error(`${archive}: ${path} has no offset and is not unpacked`);
   } else {

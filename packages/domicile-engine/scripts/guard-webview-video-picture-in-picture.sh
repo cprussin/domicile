@@ -176,7 +176,8 @@ SAW_PLAYING=$(saw "event=playing" "$HTTP_LOG")
 SAW_MENU=$(saw "GUARD menu-picture-in-picture" "$ENGINE_LOG")
 SAW_ENTERED=$(saw "event=entered" "$HTTP_LOG")
 SAW_LISTED=$(saw "ours=true" "$ENGINE_LOG")
-SAW_SOURCE=$(saw "source=$VIDEO_SOURCE" "$ENGINE_LOG")
+SAW_SOURCE=$(grep -q "GUARD pip-sized id=[0-9]* source=$VIDEO_SOURCE" "$ENGINE_LOG" && echo 1 || echo 0)
+SAW_SHOWN=$(saw "GUARD pip-shown id=" "$ENGINE_LOG")
 if [ "$(saw "event=left" "$HTTP_LOG")" = 1 ] &&
   [ "$(saw "event=paused" "$HTTP_LOG")" = 1 ]; then
   SAW_LEFT_PAUSED=1
@@ -191,7 +192,7 @@ grep -F "$REPORT_LINE" "$HTTP_LOG" || true
 grep -F "GUARD pip" "$ENGINE_LOG" || true
 grep -F "GUARD menu" "$ENGINE_LOG" || true
 echo "shell=$SAW_SHELL window=$SAW_WINDOW playing=$SAW_PLAYING menu=$SAW_MENU"
-echo "entered=$SAW_ENTERED listed=$SAW_LISTED source=$SAW_SOURCE left paused=$SAW_LEFT_PAUSED unlisted=$SAW_UNLISTED"
+echo "entered=$SAW_ENTERED listed=$SAW_LISTED source=$SAW_SOURCE shown=$SAW_SHOWN left paused=$SAW_LEFT_PAUSED unlisted=$SAW_UNLISTED"
 echo
 
 # The verdict: names the component to blame. Checks run in dependency order.
@@ -224,10 +225,14 @@ for the window it drew. ShellVideoOverlayWindow::ShowInactive did not list \
 it, PictureInPictureVideos did not tell DomicileHost, or WindowOf named \
 another window"
 elif [ "$SAW_SOURCE" != "1" ]; then
-  FAILURE="the shell heard the video but not where it was in its page \
-($VIDEO_SOURCE, see the pip lines above). ShellVideoOverlayWindow did not \
-list GetSourceBounds() in DIPs, or PictureInPictureServiceImpl's InMainFrame \
-moved it"
+  FAILURE="the shell heard the video's size without where it was in its \
+page ($VIDEO_SOURCE, see the pip lines above), so it would place it with no \
+grow. ShellVideoOverlayWindow did not List() it with GetSourceBounds() in \
+DIPs, or PictureInPictureServiceImpl's InMainFrame moved it"
+elif [ "$SAW_SHOWN" != "1" ]; then
+  FAILURE="the shell's <app picture-in-picture> never said it drew the \
+video. HTMLAppElement::SurfaceChanged did not fire \
+domicile-picture-in-picture-shown, or no surface reached it"
 elif [ "$SAW_LEFT_PAUSED" != "1" ]; then
   FAILURE="the shell's close never left the page paused. \
 actOnPictureInPictureVideo did not reach PictureInPictureVideos::Act, or \
@@ -237,7 +242,7 @@ elif [ "$SAW_UNLISTED" != "1" ]; then
 ShellVideoOverlayWindow::Hide did not drop its listing"
 else
   PASSED="a video in picture-in-picture is listed for its window with its \
-place in its page, and the \
+place in its page, its element says when it draws it, and the \
 shell's close pauses it and takes it off the list"
 fi
 

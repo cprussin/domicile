@@ -22,7 +22,6 @@
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
-#include "components/crx_file/id_util.h"
 #include "components/domicile/browser/control_channel.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -192,10 +191,14 @@ void BrowserProfileRegistry::Update() {
   }
 }
 
-void BrowserProfileRegistry::SetExtensions(Profile& shell, ExtensionList all) {
+void BrowserProfileRegistry::SetExtensions(
+    Profile& shell,
+    ExtensionList all,
+    std::map<std::string, std::string> unpacked_ids) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   UseShell(shell);
   extensions_ = std::move(all);
+  unpacked_ids_ = std::move(unpacked_ids);
   InstallExtensions();
 }
 
@@ -221,6 +224,25 @@ Profile* BrowserProfileRegistry::ContextOf(Profile& shell,
     ProfileDestroyer::DestroyOTRProfileImmediately(loaded.ending.get());
   }
   return home->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+}
+
+void BrowserProfileRegistry::WhenLoaded(Profile& shell,
+                                        const std::string& id,
+                                        base::OnceClosure ready) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  UseShell(shell);
+  if (id == profiles_.default_profile || profiles_.Find(id) == nullptr ||
+      loaded_.contains(id)) {
+    std::move(ready).Run();
+    return;
+  }
+  std::vector<base::OnceClosure>& waiting = waiting_[id];
+  waiting.push_back(std::move(ready));
+  if (waiting.size() == 1) {
+    // ProfileManager answers every load of one directory, so a second start
+    // while Configure's is under way only adds an answer.
+    StartLoading(id);
+  }
 }
 
 std::string BrowserProfileRegistry::IdOf(
@@ -316,7 +338,10 @@ Profile* BrowserProfileRegistry::Load(const std::string& id) {
   if (auto loaded = loaded_.find(id); loaded != loaded_.end()) {
     return loaded->second.profile;
   }
-  // Configure started loading it, and a page wants it before that finished.
+  // A page that did not wait for WhenLoaded. This blocks the UI thread on
+  // the disk, which DCHECK builds refuse.
+  LOG(ERROR) << "domicile: browser profile " << id
+             << " was wanted before it loaded; loading it now blocks.";
   Profile* profile =
       g_browser_process->profile_manager()->GetProfile(DirectoryOf(id));
   if (profile == nullptr) {
@@ -335,17 +360,26 @@ void BrowserProfileRegistry::StartLoading(const std::string& id) {
 }
 
 void BrowserProfileRegistry::OnLoaded(const std::string& id, Profile* profile) {
+  // Runs what waited, after the profile is adopted or not: each then makes
+  // its page, or falls back as ContextOf does for a profile that would not
+  // load.
+  std::vector<base::OnceClosure> waiting;
+  if (auto found = waiting_.find(id); found != waiting_.end()) {
+    waiting = std::move(found->second);
+    waiting_.erase(found);
+  }
   if (profile == nullptr) {
     LOG(ERROR) << "domicile: browser profile " << id << " would not load from "
                << DirectoryOf(id) << ".";
-    return;
+  } else if (!loaded_.contains(id) && profiles_.Find(id) != nullptr &&
+             id != profiles_.default_profile) {
+    // Not when loaded already by a page that could not wait, or no longer
+    // configured.
+    Adopt(id, *profile);
   }
-  // Loaded already by a page that could not wait, or no longer configured.
-  if (loaded_.contains(id) || profiles_.Find(id) == nullptr ||
-      id == profiles_.default_profile) {
-    return;
+  for (base::OnceClosure& ready : waiting) {
+    std::move(ready).Run();
   }
-  Adopt(id, *profile);
 }
 
 void BrowserProfileRegistry::Adopt(const std::string& id, Profile& profile) {
@@ -381,10 +415,13 @@ void BrowserProfileRegistry::InstallExtensionsOf(Profile& profile,
   }
   ReconcileConfigExtensions(
       profile.GetWeakPtr(),
-      ExtensionsFor(as, *extensions_, [](const std::string& directory) {
-        // As the unpacked installer names it: by its resolved path, which
-        // InstallExtensionsInto already made it.
-        return crx_file::id_util::GenerateIdForPath(base::FilePath(directory));
+      ExtensionsFor(as, *extensions_, [this](const std::string& directory) {
+        // As the unpacked installer names it: by its manifest's key, else its
+        // resolved path (InstallExtensionsInto found both).
+        auto found = unpacked_ids_.find(directory);
+        CHECK(found != unpacked_ids_.end())
+            << "no id for unpacked extension " << directory;
+        return found->second;
       }));
   // The ones installed already. Each still installing is switched as it
   // installs (OnExtensionInstalled).
@@ -401,8 +438,10 @@ std::vector<std::string> BrowserProfileRegistry::ConfigExtensionIds() const {
   }
   ids = extensions_->web_store;
   for (const std::string& directory : extensions_->unpacked) {
-    ids.push_back(
-        crx_file::id_util::GenerateIdForPath(base::FilePath(directory)));
+    auto found = unpacked_ids_.find(directory);
+    CHECK(found != unpacked_ids_.end())
+        << "no id for unpacked extension " << directory;
+    ids.push_back(found->second);
   }
   return ids;
 }

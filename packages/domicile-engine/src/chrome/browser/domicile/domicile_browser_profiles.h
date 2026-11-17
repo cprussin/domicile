@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
@@ -82,9 +83,12 @@ class BrowserProfileRegistry final
   // each one, and closes the pages of any it no longer lists.
   void Configure(Profile& shell, BrowserProfiles profiles);
 
-  // Every extension the desk's config names, their directories resolved. Each
-  // profile gets the ones it turns on (ExtensionsFor).
-  void SetExtensions(Profile& shell, ExtensionList all);
+  // Every extension the desk's config names, their directories resolved, and
+  // each unpacked directory's id. Each profile gets the ones it turns on
+  // (ExtensionsFor).
+  void SetExtensions(Profile& shell,
+                     ExtensionList all,
+                     std::map<std::string, std::string> unpacked_ids);
 
   // The desk's profiles, with the sites the user pinned under the config's
   // (WithPinnedSites): DefaultBrowserProfiles until the compositor sends
@@ -103,6 +107,13 @@ class BrowserProfileRegistry final
   base::expected<void, std::string> PinSite(Profile& shell,
                                             const std::string& site,
                                             const std::string& profile);
+
+  // Runs `ready` once profile `id` has loaded, so ContextOf makes its
+  // context without blocking: at once for the default profile, one already
+  // loaded, or one the desk does not have; otherwise when its load ends,
+  // whether or not it loaded. Starts the load if it has not started.
+  void WhenLoaded(Profile& shell, const std::string& id,
+                  base::OnceClosure ready);
 
   // One extension in a profile, for a shell's switches.
   struct ExtensionSwitch {
@@ -131,7 +142,8 @@ class BrowserProfileRegistry final
   bool IsSwitchLocked(Profile& profile, const std::string& extension) const;
 
   // The context profile `id`'s pages are made in, for the shell in `shell`.
-  // Loads it if Configure's load has not finished, which blocks. Null for a
+  // Call it from WhenLoaded's `ready`: loading here blocks the UI thread,
+  // which a page that did not wait does, logged as the bug it is. Null for a
   // profile the desk does not have.
   Profile* ContextOf(Profile& shell, const std::string& id);
 
@@ -245,8 +257,12 @@ class BrowserProfileRegistry final
   BrowserProfiles profiles_;
   // The config's extensions, once SetExtensions has them.
   std::optional<ExtensionList> extensions_;
+  // The id of each of extensions_'s unpacked directories.
+  std::map<std::string, std::string> unpacked_ids_;
   // By id. Never the default profile, which is the shell's.
   std::map<std::string, Loaded> loaded_;
+  // What waits on each profile that is loading (WhenLoaded), by id.
+  std::map<std::string, std::vector<base::OnceClosure>> waiting_;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> observations_{
       this};
   // Every profile's that InstallExtensionsOf installed into.

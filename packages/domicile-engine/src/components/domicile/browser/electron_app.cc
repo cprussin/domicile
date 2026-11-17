@@ -206,6 +206,20 @@ void ElectronApp::Take(std::string_view line) {
       desk_->SendToPage(*id, send->channel,
                         Json(base::Value(send->args.Clone())));
     }
+  } else if (auto* run = std::get_if<ElectronExecuteJavaScript>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(run->window)) {
+      desk_->ExecuteJavaScript(
+          *id, run->code, run->user_gesture,
+          base::BindOnce(
+              [](base::WeakPtr<ElectronApp> app, ElectronWindow window,
+                 int call, base::expected<base::Value, std::string> result) {
+                if (app) {
+                  app->send_.Run(
+                      ElectronJavaScriptResult(window, call, result));
+                }
+              },
+              weak_factory_.GetWeakPtr(), run->window, run->call));
+    }
   } else if (auto* post = std::get_if<ElectronPostToPage>(&*request)) {
     if (const std::optional<std::string> id = IdOf(post->window)) {
       desk_->PostToPage(*id, post->channel, Json(post->message), post->ports);

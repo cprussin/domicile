@@ -415,7 +415,26 @@ const localeOf = (env: Readonly<Record<string, string | undefined>>) => {
 const asBcp47 = (locale: string) =>
   (locale.split(".")[0] ?? locale).split("@")[0]?.replace("_", "-") ?? locale;
 
-/** `app.commandLine`: switches the app appends for Chromium. */
+/**
+ * The switches the app was started with (`--name` or `--name=value`, up to
+ * a bare `--`), which Chromium's command line holds from the start: an app
+ * reads `--password-store` or its own flags through `app.commandLine`.
+ */
+const startedWith = () => {
+  const switches = new Map<string, string>();
+  for (const arg of process.argv.slice(1)) {
+    if (arg === "--") {
+      break;
+    }
+    const matched = /^--([^=]+)(?:=(.*))?$/su.exec(arg);
+    if (matched?.[1] !== undefined) {
+      switches.set(matched[1], matched[2] ?? "");
+    }
+  }
+  return switches;
+};
+
+/** `app.commandLine`: switches the app appends for Chromium, and its own. */
 const commandLine = () => {
   const switches = new Map<string, string>();
   const args: string[] = [];
@@ -426,8 +445,9 @@ const commandLine = () => {
     appendSwitch: (name: string, value = "") => {
       switches.set(name, value);
     },
-    getSwitchValue: (name: string) => switches.get(name) ?? "",
-    hasSwitch: (name: string) => switches.has(name),
+    getSwitchValue: (name: string) =>
+      switches.get(name) ?? startedWith().get(name) ?? "",
+    hasSwitch: (name: string) => switches.has(name) || startedWith().has(name),
     removeSwitch: (name: string) => {
       switches.delete(name);
     },

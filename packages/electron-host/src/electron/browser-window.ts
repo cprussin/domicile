@@ -165,6 +165,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   };
   const ports = createPagePorts(toEngine);
   let nextId = 1;
+  /** Numbers the app's executeJavaScript calls, across its pages. */
+  let nextCall = 1;
 
   /** The event object Electron passes first to a window listener. */
   const eventObject = () => {
@@ -177,14 +179,99 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     return event;
   };
 
+  /**
+   * Electron's `WebFrameMain` for a page's main frame. The engine runs the
+   * app's scripts and IPC only in the main frame, so it has no others.
+   */
+  class WebFrameMain extends EventEmitter {
+    constructor(readonly page: Page) {
+      super();
+    }
+
+    get ipc() {
+      return this.page.webContents.ipc;
+    }
+    get url() {
+      return this.page.url;
+    }
+    get origin() {
+      return URL.canParse(this.page.url) ? new URL(this.page.url).origin : "";
+    }
+    get top() {
+      return this;
+    }
+    get parent() {
+      return null;
+    }
+    get frames() {
+      return [];
+    }
+    get framesInSubtree() {
+      return [this];
+    }
+    get detached() {
+      return false;
+    }
+    get name() {
+      return "";
+    }
+    get visibilityState() {
+      return "visible";
+    }
+    get routingId() {
+      return this.page.id;
+    }
+    get frameTreeNodeId() {
+      return this.page.id;
+    }
+    get processId() {
+      return 0;
+    }
+    get osProcessId() {
+      return 0;
+    }
+    readonly isDestroyed = () => this.page.isDestroyed();
+    readonly executeJavaScript = (code: string, userGesture = false) =>
+      this.page.runJavaScript(code, userGesture);
+    readonly send = (channel: string, ...args: unknown[]) => {
+      this.page.webContents.send(channel, ...args);
+    };
+    readonly postMessage = (
+      channel: string,
+      message: unknown,
+      transfer: readonly MessagePortMain[] = [],
+    ) => {
+      this.page.webContents.postMessage(channel, message, transfer);
+    };
+    readonly reload = () => {
+      // Electron's answers only whether the reload started.
+      void this.page.webContents.reload().catch(() => undefined);
+      return true;
+    };
+  }
+
   /** A page's `webContents`, as far as the host has it. */
   class WebContents extends EventEmitter {
     /** What this page alone sends, heard before `ipcMain`. */
     readonly ipc = new IpcMain();
+    #mainFrame: WebFrameMain | undefined;
 
     constructor(readonly owner: Page) {
       super();
     }
+
+    /** Its page's main frame, the one frame the app reaches. */
+    get mainFrame() {
+      this.#mainFrame ??= new WebFrameMain(this.owner);
+      return this.#mainFrame;
+    }
+
+    /**
+     * Runs `code` in the page's own world once its page has loaded, and
+     * resolves with what it gives, a promise settled, as JSON carries it.
+     */
+    readonly executeJavaScript = (code: string, userGesture = false) =>
+      this.owner.runJavaScript(code, userGesture);
 
     get id() {
       return this.owner.id;
@@ -326,6 +413,15 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isOpen = () => this.opened;
     protected destroyed = false;
     #loads: { resolve: () => void; reject: (why: Error) => void }[] = [];
+    /** Whether a load has started that hasn't finished. */
+    #loading = false;
+    /** The app's scripts that wait for the page to load. */
+    #toRun: (() => void)[] = [];
+    /** The app's scripts the engine runs, by call. */
+    #running = new Map<
+      number,
+      { resolve: (result: unknown) => void; reject: (why: Error) => void }
+    >();
     readonly #preload: string | undefined;
     readonly #view: boolean;
 
@@ -351,10 +447,34 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       pages.set(this.id, this);
     }
 
+    /**
+     * Runs `code` in the page's main world, after any load under way, as
+     * Electron's executeJavaScript waits for one.
+     */
+    readonly runJavaScript = async (code: string, userGesture: boolean) => {
+      this.assertAlive();
+      if (!this.opened || this.#loading) {
+        await new Promise<void>((resolve) => this.#toRun.push(resolve));
+      }
+      this.assertAlive();
+      const call = nextCall++;
+      return new Promise<unknown>((resolve, reject) => {
+        this.#running.set(call, { reject, resolve });
+        toEngine({
+          call,
+          code,
+          type: "execute_javascript",
+          window: this.id,
+          ...(userGesture ? { user_gesture: true } : {}),
+        });
+      });
+    };
+
     /** Shows `url`. Resolves once the page loads, as Electron's does. */
     readonly loadURL = (url: string) => {
       this.assertAlive();
       this.url = url;
+      this.#loading = true;
       const loaded = new Promise<void>((resolve, reject) => {
         this.#loads.push({ reject, resolve });
       });
@@ -403,6 +523,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           break;
         }
         case "window_loaded": {
+          this.#loading = false;
+          for (const run of this.#toRun.splice(0)) {
+            run();
+          }
           this.webContents.emit("did-finish-load");
           this.wasLoaded();
           for (const load of this.#loads.splice(0)) {
@@ -467,6 +591,20 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         }
         case "menu_clicked": {
           this.menuClicked(event.command);
+          break;
+        }
+        case "javascript_result": {
+          const running = this.#running.get(event.call);
+          this.#running.delete(event.call);
+          if (running === undefined) {
+            throw new Error(
+              `the engine answered script ${event.call} of window ${this.id}, which nothing waits on`,
+            );
+          } else if (event.error === undefined) {
+            running.resolve(event.result);
+          } else {
+            running.reject(new Error(event.error));
+          }
           break;
         }
       }
@@ -566,6 +704,14 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         for (const load of this.#loads.splice(0)) {
           load.reject(new Error("the window closed before its page loaded"));
         }
+        // A script waiting to run hears the page is gone, as one running does.
+        for (const run of this.#toRun.splice(0)) {
+          run();
+        }
+        for (const running of this.#running.values()) {
+          running.reject(new Error("the window closed before its script ran"));
+        }
+        this.#running.clear();
         this.wasClosed();
         this.webContents.emit("destroyed");
       }
@@ -1075,6 +1221,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     BrowserWindow,
     WebContents,
     WebContentsView,
+    WebFrameMain,
     webContents,
     /** The page the engine numbers `window`, a window's or a view's. */
     webContentsOf: (window: number) => pages.get(window)?.webContents,

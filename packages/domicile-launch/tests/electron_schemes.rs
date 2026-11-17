@@ -63,6 +63,14 @@ fn known_apps_schemes_register_before_their_first_run() {
         switch.contains("sentry-ipc:secure,bypassCSP,corsEnabled,supportFetchAPI"),
         "{switch}"
     );
+    assert!(
+        switch.contains("slack-webapp-dev:standard,secure,bypassCSP,corsEnabled,supportFetchAPI"),
+        "{switch}"
+    );
+    assert!(
+        switch.contains("codex-sandbox:standard,secure,corsEnabled,supportFetchAPI"),
+        "{switch}"
+    );
 
     // What an app kept adds to what is known of it.
     let kept = r#"{ "element-desktop": [{ "scheme": "vector", "privileges": ["corsEnabled"] }] }"#;

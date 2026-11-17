@@ -2,6 +2,7 @@
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Slider } from "@domicile-desktop/component-library/Slider";
 import type { PictureInPicture } from "@domicile-desktop/sdk/desktop/picture-in-picture";
+import { PICTURE_IN_PICTURE_SHOWN_EVENT } from "@domicile-desktop/sdk/desktop/picture-in-picture";
 import type {
   DomicilePictureInPictureAction,
   DomicilePictureInPictureVideo,
@@ -94,6 +95,37 @@ export const PictureInPictureFloats = ({
   if (listed !== placed) {
     setPlaced(listed);
   }
+  // A video that left picture-in-picture keeps its float while it fades, in
+  // case the page's own video takes a frame or two to draw again.
+  const [seen, setSeen] = useState(videos);
+  const [leaving, setLeaving] = useState<ReadonlyMap<string, Left>>(
+    () => new Map(),
+  );
+  if (seen !== videos) {
+    setSeen(videos);
+    const gone = seen.filter(
+      ({ id }) => placed.has(id) && !videos.some((video) => video.id === id),
+    );
+    if (gone.length > 0) {
+      setLeaving((before) => {
+        const after = new Map(before);
+        for (const video of gone) {
+          const at = placed.get(video.id);
+          if (at !== undefined) {
+            after.set(video.id, { at, video });
+          }
+        }
+        return after;
+      });
+    }
+  }
+  const forget = useCallback((id: string) => {
+    setLeaving((before) => {
+      const after = new Map(before);
+      after.delete(id);
+      return after;
+    });
+  }, []);
   const place = useCallback((id: string, box: Rect) => {
     setPlaced((before) => {
       const was = before.get(id);
@@ -103,22 +135,43 @@ export const PictureInPictureFloats = ({
     });
   }, []);
 
+  // One list, so a float keeps its element, and its <app> its last frame,
+  // as it moves from listed to leaving.
   return shown
-    ? videos.map((video) => {
-        const at = listed.get(video.id);
-        return at === undefined ? undefined : (
+    ? [
+        ...videos.map((video) => {
+          const at = listed.get(video.id);
+          return at === undefined ? undefined : (
+            <Float
+              at={at}
+              key={video.id}
+              leaving={false}
+              onBox={place}
+              onGone={forget}
+              pageFor={pageFor}
+              pictureInPicture={pictureInPicture}
+              video={video}
+            />
+          );
+        }),
+        ...[...leaving.values()].map(({ at, video }) => (
           <Float
             at={at}
             key={video.id}
+            leaving
             onBox={place}
+            onGone={forget}
             pageFor={pageFor}
             pictureInPicture={pictureInPicture}
             video={video}
           />
-        );
-      })
+        )),
+      ]
     : undefined;
 };
+
+/** A video that left picture-in-picture, where its float was. */
+type Left = { at: Placed; video: DomicilePictureInPictureVideo };
 
 /**
  * `placed` for the `videos` with a size, or `placed` itself when no video
@@ -190,23 +243,58 @@ const sourceOnDesktop = (
 };
 
 /** How a float moves on its own: out of its page, or back into it. */
+/** An action that ends picture-in-picture, which a float shrinks before. */
+type Ending = Extract<DomicilePictureInPictureAction, "back-to-page" | "close">;
+
+/**
+ * How a float moves on its own: hidden until its video is drawn, out of its
+ * page, back into it before `ending`, and fading once the video left, from its
+ * page's place when it went back there.
+ */
 type Motion =
+  | { name: "waiting" }
   | { name: "growing"; offset: Offset }
-  | { name: "returning"; offset: Offset };
+  | { name: "returning"; offset: Offset; ending: Ending }
+  | { name: "leaving"; offset: Offset | undefined };
+
+/** The float's `data-motion`, for its styles. */
+const motionName = (motion: Motion | undefined): string | undefined =>
+  motion?.name === "leaving" && motion.offset !== undefined
+    ? "leaving-page"
+    : motion?.name;
+
+/** The offset `motion` moves by, if any. */
+const offsetOf = (motion: Motion | undefined): Offset | undefined => {
+  switch (motion?.name) {
+    case "growing":
+    case "returning":
+    case "leaving": {
+      return motion.offset;
+    }
+    case "waiting":
+    case undefined: {
+      return undefined;
+    }
+  }
+};
 
 /** Custom properties for the `pictureInPicture*` keyframes. */
-const motionStyle = (motion: Motion | undefined): Record<string, string> =>
-  motion === undefined
+const motionStyle = (offset: Offset | undefined): Record<string, string> =>
+  offset === undefined
     ? {}
     : {
-        "--pip-scale": motion.offset.scale.toString(),
-        "--pip-x": `${motion.offset.x.toString()}px`,
-        "--pip-y": `${motion.offset.y.toString()}px`,
+        "--pip-scale": offset.scale.toString(),
+        "--pip-x": `${offset.x.toString()}px`,
+        "--pip-y": `${offset.y.toString()}px`,
       };
 
 type FloatProps = {
   at: Placed;
+  /** True once the video left picture-in-picture: the float fades, then goes. */
+  leaving: boolean;
   onBox: (id: string, box: Rect) => void;
+  /** The float faded after its video left. */
+  onGone: (id: string) => void;
   pageFor: (window: string) => Rect | undefined;
   pictureInPicture: PictureInPicture;
   video: DomicilePictureInPictureVideo;
@@ -261,24 +349,69 @@ const GRIPS: readonly { grip: Grip; name: Edge }[] = [
 /** One video: the page's own surface, with the shell's controls over it. */
 const Float = ({
   at: { box, grownFrom, workspace },
+  leaving,
   onBox,
+  onGone,
   pageFor,
   pictureInPicture,
   video,
 }: FloatProps) => {
   const { id } = video;
   const [hovered, setHovered] = useState(false);
-  const [motion, setMotion] = useState<Motion | undefined>(() =>
-    grownFrom === undefined
-      ? undefined
-      : { name: "growing", offset: grownFrom },
-  );
+  const [motion, setMotion] = useState<Motion | undefined>({
+    name: "waiting",
+  });
+  // A float whose video left fades where it is: in its page's place when it
+  // shrank back there, so the page's own video shows through as it fades.
+  if (leaving && motion?.name !== "leaving") {
+    setMotion({
+      name: "leaving",
+      offset: motion?.name === "returning" ? motion.offset : undefined,
+    });
+  }
+  // Hidden until its <app> draws the video, so it never grows as an empty
+  // box over the page.
+  const [app, setApp] = useState<Element | null>(null);
+  useEffect(() => {
+    if (app === null) {
+      return undefined;
+    } else {
+      const drawnMotion: Motion | undefined =
+        grownFrom === undefined
+          ? undefined
+          : { name: "growing", offset: grownFrom };
+      const drawn = () => {
+        setMotion((was) => (was?.name === "waiting" ? drawnMotion : was));
+      };
+      app.addEventListener(PICTURE_IN_PICTURE_SHOWN_EVENT, drawn);
+      return () => {
+        app.removeEventListener(PICTURE_IN_PICTURE_SHOWN_EVENT, drawn);
+      };
+    }
+  }, [app, grownFrom]);
   const act = useCallback(
     (action: DomicilePictureInPictureAction) => {
       pictureInPicture.act(id, action);
     },
     [id, pictureInPicture],
   );
+
+  /**
+   * Shrinks back into where its page shows the video now, which may have
+   * moved, then does `action`; at once while the page is drawn nowhere.
+   */
+  const end = (action: Ending) => {
+    const into = sourceOnDesktop(video, pageFor);
+    if (into === undefined) {
+      act(action);
+    } else {
+      setMotion({
+        ending: action,
+        name: "returning",
+        offset: offsetTo(box, into),
+      });
+    }
+  };
 
   // The page hears its PictureInPictureWindow's size from here.
   useEffect(() => {
@@ -310,15 +443,28 @@ const Float = ({
   return (
     <div
       className={floatStyles}
-      data-motion={motion?.name}
+      data-motion={motionName(motion)}
       data-picture-in-picture={id}
       onAnimationEnd={(event) => {
         // The shadow's and the controls' fades end here too.
         if (event.target === event.currentTarget) {
-          if (motion?.name === "returning") {
-            act("back-to-page");
-          } else {
-            setMotion(undefined);
+          switch (motion?.name) {
+            case "growing": {
+              setMotion(undefined);
+              break;
+            }
+            case "returning": {
+              act(motion.ending);
+              break;
+            }
+            case "leaving": {
+              onGone(id);
+              break;
+            }
+            case "waiting":
+            case undefined: {
+              break;
+            }
           }
         }
       }}
@@ -330,7 +476,7 @@ const Float = ({
       }}
       // Inline because the box is a runtime value Panda cannot extract.
       style={{
-        ...motionStyle(motion),
+        ...motionStyle(offsetOf(motion)),
         blockSize: `${box.height.toString()}px`,
         inlineSize: `${box.width.toString()}px`,
         insetBlockStart: `${box.y.toString()}px`,
@@ -339,10 +485,10 @@ const Float = ({
     >
       <div aria-hidden className={shadowStyles} />
       <div className={clipStyles}>
-        <app className={videoStyles} picture-in-picture={id} />
+        <app className={videoStyles} picture-in-picture={id} ref={setApp} />
         <div
           className={controlsStyles({
-            shown: hovered && motion?.name !== "returning",
+            shown: hovered && motion === undefined,
           })}
           onPointerDown={(event) => {
             follow(event, (dx, dy) => movedBox(box, workspace, dx, dy));
@@ -354,13 +500,7 @@ const Float = ({
             <IconButton
               label="Back to tab"
               onClick={() => {
-                // Into where its page shows it now, which may have moved.
-                const into = sourceOnDesktop(video, pageFor);
-                if (into === undefined) {
-                  act("back-to-page");
-                } else {
-                  setMotion({ name: "returning", offset: offsetTo(box, into) });
-                }
+                end("back-to-page");
               }}
             >
               <ArrowSquareInIcon size={16} />
@@ -370,7 +510,7 @@ const Float = ({
             <IconButton
               label="Close"
               onClick={() => {
-                act("close");
+                end("close");
               }}
             >
               <XIcon size={16} />
@@ -523,14 +663,23 @@ const Progress = ({
 // panels with the toasts, which come later in the document. The shell's float
 // border and shadow, with no title bar: the video is the window.
 //
-// It grows out of its place in its page and shrinks back into it, about its
-// top left, by the offset `motionStyle` sets. Long moves, so `emphasized`.
-// Returning holds its last frame until the page takes the video back.
+// Hidden until its video is drawn. It grows out of its place in its page and
+// shrinks back into it, about its top left, by the offset `motionStyle` sets.
+// Long moves, so `emphasized`. Returning holds its last frame until the page
+// takes the video back; then it fades there over the page's own video, which
+// can take a frame or two to draw again.
 const floatStyles = css({
   "&[data-motion=growing]": {
     animationDuration: "token(durations.slow)",
     animationName: "pictureInPictureGrowing",
     animationTimingFunction: "token(easings.emphasized)",
+  },
+  "&[data-motion=leaving], &[data-motion=leaving-page]": {
+    animationDuration: "token(durations.fast)",
+    animationFillMode: "forwards",
+    animationName: "pictureInPictureLeaving",
+    animationTimingFunction: "token(easings.out)",
+    pointerEvents: "none",
   },
   "&[data-motion=returning]": {
     animationDuration: "token(durations.slow)",
@@ -538,6 +687,7 @@ const floatStyles = css({
     animationName: "pictureInPictureReturning",
     animationTimingFunction: "token(easings.emphasized)",
   },
+  "&[data-motion=waiting]": { opacity: 0 },
   position: "fixed",
   transformOrigin: "top left",
   zIndex: "toast",
@@ -551,6 +701,8 @@ const shadowStyles = css({
     animationName: "pictureInPictureShadowIn",
     animationTimingFunction: "token(easings.emphasized)",
   },
+  // Faded out as it shrank back into its page.
+  "[data-motion=leaving-page] > &": { opacity: 0 },
   "[data-motion=returning] > &": {
     animationDuration: "token(durations.slow)",
     animationFillMode: "forwards",

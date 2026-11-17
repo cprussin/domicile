@@ -5,25 +5,33 @@
 
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
+#include "base/values.h"
 #include "components/domicile/renderer/context_bridge.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/converter.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#include "third_party/blink/public/mojom/script/script_evaluation_params.mojom-shared.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
+#include "third_party/blink/public/platform/web_isolated_world_info.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_console_message.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "url/gurl.h"
 #include "v8/include/v8-context.h"
@@ -346,6 +354,30 @@ void ElectronPreload::ClosePort(const std::string& port) {
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Value> argv[] = {gin::StringToV8(isolate, port)};
   Call("closePort", argv);
+}
+
+void ElectronPreload::ExecuteJavaScript(const std::string& code,
+                                        bool user_gesture,
+                                        ExecuteJavaScriptCallback callback) {
+  // In the page's own world, as Electron runs it, with a promise awaited.
+  // Blink drops the callback when the document goes first; the app hears
+  // no result then, rather than waiting forever.
+  const blink::WebScriptSource source(blink::WebString::FromUtf8(code));
+  render_frame()->GetWebFrame()->RequestExecuteScript(
+      blink::kMainDOMWorldId, base::span_from_ref(source),
+      user_gesture ? blink::mojom::UserActivationOption::kActivate
+                   : blink::mojom::UserActivationOption::kDoNotActivate,
+      blink::mojom::EvaluationTiming::kAsynchronous,
+      blink::mojom::LoadEventBlockingOption::kDoNotBlock,
+      base::BindOnce(
+          [](ExecuteJavaScriptCallback callback,
+             std::optional<base::Value> result,
+             base::TimeTicks) { std::move(callback).Run(std::move(result)); },
+          mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+              std::move(callback), std::optional<base::Value>())),
+      blink::BackForwardCacheAware::kAllow,
+      blink::mojom::WantResultOption::kWantResult,
+      blink::mojom::PromiseResultOption::kAwait, blink::WebString());
 }
 
 bool ElectronPreload::Run(const std::string& source) {

@@ -319,6 +319,66 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("runs the app's script in its page once loaded, and resolves with what it gave", async () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    sent.length = 0;
+
+    const title = window.webContents.executeJavaScript("document.title", true);
+    const thrown = window.webContents.mainFrame.executeJavaScript("throw 1");
+    // Electron waits for the page's load under way.
+    await Bun.sleep(0);
+    expect(sent).toEqual([]);
+    say({ type: "window_loaded", window: 1 });
+    await Bun.sleep(0);
+
+    expect(sent).toEqual([
+      {
+        call: 1,
+        code: "document.title",
+        type: "execute_javascript",
+        user_gesture: true,
+        window: 1,
+      },
+      { call: 2, code: "throw 1", type: "execute_javascript", window: 1 },
+    ]);
+    say({ call: 2, error: "it threw", type: "javascript_result", window: 1 });
+    say({ call: 1, result: "A", type: "javascript_result", window: 1 });
+    expect(await title).toBe("A");
+    await expect(thrown).rejects.toThrow("it threw");
+  });
+
+  it("rejects the app's script when its window closes first", async () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/").catch(() => undefined);
+
+    const waiting = window.webContents.executeJavaScript("1");
+    say({ type: "window_closed", window: 1 });
+
+    await expect(waiting).rejects.toThrow("Object has been destroyed");
+  });
+
+  it("gives its main frame, the page's one frame, as a WebFrameMain", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/path");
+    sent.length = 0;
+    const frame = window.webContents.mainFrame;
+
+    expect(window.webContents.mainFrame).toBe(frame);
+    expect(frame.url).toBe("https://a.test/path");
+    expect(frame.origin).toBe("https://a.test");
+    expect(frame.top).toBe(frame);
+    expect(frame.parent).toBeNull();
+    expect(frame.framesInSubtree).toEqual([frame]);
+    frame.send("ping", 1);
+    expect(sent).toEqual([
+      { args: [1], channel: "ping", type: "ipc_send", window: 1 },
+    ]);
+  });
+
   it("drops what it sends before its page opens, as Electron has no page to give it", () => {
     const { BrowserWindow, sent } = setUp();
     const window = new BrowserWindow({ show: false });
