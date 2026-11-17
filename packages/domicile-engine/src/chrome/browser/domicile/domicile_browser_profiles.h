@@ -72,9 +72,12 @@ class BrowserProfileRegistry final : public ProfileObserver {
   // each one, and closes the pages of any it no longer lists.
   void Configure(Profile& shell, BrowserProfiles profiles);
 
-  // Every extension the desk's config names, their directories resolved. Each
-  // profile gets the ones it turns on (ExtensionsFor).
-  void SetExtensions(Profile& shell, ExtensionList all);
+  // Every extension the desk's config names, their directories resolved, and
+  // each unpacked directory's id. Each profile gets the ones it turns on
+  // (ExtensionsFor).
+  void SetExtensions(Profile& shell,
+                     ExtensionList all,
+                     std::map<std::string, std::string> unpacked_ids);
 
   // The desk's profiles, with the sites the user pinned under the config's
   // (WithPinnedSites): DefaultBrowserProfiles until the compositor sends
@@ -183,6 +186,8 @@ class BrowserProfileRegistry final : public ProfileObserver {
   BrowserProfiles profiles_;
   // The config's extensions, once SetExtensions has them.
   std::optional<ExtensionList> extensions_;
+  // The id of each of extensions_'s unpacked directories.
+  std::map<std::string, std::string> unpacked_ids_;
   // By id. Never the default profile, which is the shell's.
   std::map<std::string, Loaded> loaded_;
   // What waits on each profile that is loading (WhenLoaded), by id.

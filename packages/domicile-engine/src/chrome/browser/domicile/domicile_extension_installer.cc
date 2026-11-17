@@ -4,6 +4,7 @@
 #include "chrome/browser/domicile/domicile_extension_installer.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -12,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/one_shot_event.h"
@@ -24,6 +26,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/crx_file/id_util.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -94,6 +97,46 @@ ExtensionList Resolved(ExtensionList wanted) {
     }
   }
   return wanted;
+}
+
+// An unpacked extension's id, as Extension::InitExtensionID makes it: from
+// its manifest's `key` when it has one, which fixes the id wherever the
+// directory is, else from its path. Does file IO, so runs off the UI thread.
+std::string UnpackedIdOf(const base::FilePath& directory) {
+  std::string manifest;
+  if (!base::ReadFileToString(
+          directory.Append(FILE_PATH_LITERAL("manifest.json")), &manifest)) {
+    // The installer reports it when it fails to load.
+    return crx_file::id_util::GenerateIdForPath(directory);
+  }
+  // As Chrome reads a manifest: comments and trailing commas allowed.
+  std::optional<base::DictValue> parsed = base::JSONReader::ReadDict(
+      manifest, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+  const std::string* key =
+      parsed.has_value() ? parsed->FindString("key") : nullptr;
+  if (key == nullptr) {
+    return crx_file::id_util::GenerateIdForPath(directory);
+  }
+  std::string bytes;
+  if (!extensions::Extension::ParsePEMKeyBytes(*key, &bytes)) {
+    // Chrome refuses to load it, and says so.
+    LOG(ERROR) << "domicile: the unpacked extension in " << directory
+               << " has a manifest key that is no public key.";
+    return crx_file::id_util::GenerateIdForPath(directory);
+  }
+  return crx_file::id_util::GenerateId(bytes);
+}
+
+// Resolved, with each unpacked directory's id, for the browser profiles to
+// match the ids their config names.
+std::pair<ExtensionList, std::map<std::string, std::string>> ResolvedWithIds(
+    ExtensionList wanted) {
+  ExtensionList resolved = Resolved(std::move(wanted));
+  std::map<std::string, std::string> ids;
+  for (const std::string& directory : resolved.unpacked) {
+    ids.emplace(directory, UnpackedIdOf(base::FilePath(directory)));
+  }
+  return {std::move(resolved), std::move(ids)};
 }
 
 void OnUnpackedLoaded(base::WeakPtr<Profile> profile,
@@ -199,9 +242,12 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
 
 // Hands the whole list, resolved, to the desk's browser profiles, which
 // install into each profile the extensions it turns on.
-void HandToBrowserProfiles(base::WeakPtr<Profile> shell, ExtensionList all) {
+void HandToBrowserProfiles(
+    base::WeakPtr<Profile> shell,
+    std::pair<ExtensionList, std::map<std::string, std::string>> all) {
   if (shell) {
-    BrowserProfileRegistry::Get().SetExtensions(*shell, std::move(all));
+    BrowserProfileRegistry::Get().SetExtensions(*shell, std::move(all.first),
+                                                std::move(all.second));
   }
 }
 
@@ -325,7 +371,7 @@ void InstallExtensionsInto(base::WeakPtr<Profile> profile,
                            const ExtensionList& wanted) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()}, base::BindOnce(&Resolved, wanted),
+      FROM_HERE, {base::MayBlock()}, base::BindOnce(&ResolvedWithIds, wanted),
       base::BindOnce(&HandToBrowserProfiles, std::move(profile)));
 }
 

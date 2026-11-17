@@ -21,7 +21,6 @@
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
-#include "components/crx_file/id_util.h"
 #include "components/domicile/browser/control_channel.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -182,10 +181,14 @@ void BrowserProfileRegistry::Update() {
   }
 }
 
-void BrowserProfileRegistry::SetExtensions(Profile& shell, ExtensionList all) {
+void BrowserProfileRegistry::SetExtensions(
+    Profile& shell,
+    ExtensionList all,
+    std::map<std::string, std::string> unpacked_ids) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   UseShell(shell);
   extensions_ = std::move(all);
+  unpacked_ids_ = std::move(unpacked_ids);
   InstallExtensions();
 }
 
@@ -397,10 +400,13 @@ void BrowserProfileRegistry::InstallExtensionsOf(Profile& profile,
                                                  const BrowserProfile& as) {
   ReconcileConfigExtensions(
       profile.GetWeakPtr(),
-      ExtensionsFor(as, *extensions_, [](const std::string& directory) {
-        // As the unpacked installer names it: by its resolved path, which
-        // InstallExtensionsInto already made it.
-        return crx_file::id_util::GenerateIdForPath(base::FilePath(directory));
+      ExtensionsFor(as, *extensions_, [this](const std::string& directory) {
+        // As the unpacked installer names it: by its manifest's key, else its
+        // resolved path (InstallExtensionsInto found both).
+        auto found = unpacked_ids_.find(directory);
+        CHECK(found != unpacked_ids_.end())
+            << "no id for unpacked extension " << directory;
+        return found->second;
       }));
 }
 
