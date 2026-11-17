@@ -424,6 +424,10 @@ void ElectronNodeEnvironment::RunOnce() {
   if (!environment_ || closing_) {
     return;
   }
+  if (turns_ < 12) {
+    LOG(INFO) << "domicile: an Electron page's Node.js turns (" << turns_ + 1
+              << ")";
+  }
   v8::HandleScope handle_scope(isolate_);
   v8::Local<v8::Context> context = context_.Get(isolate_);
   v8::Context::Scope context_scope(context);
@@ -448,7 +452,7 @@ void ElectronNodeEnvironment::RunOnce() {
 // static
 void ElectronNodeEnvironment::Poll(void* arg) {
   auto* self = static_cast<ElectronNodeEnvironment*>(arg);
-  while (true) {
+  for (int waits = 1;; ++waits) {
     uv_sem_wait(&self->turn_);
     if (self->closing_) {
       return;
@@ -464,6 +468,11 @@ void ElectronNodeEnvironment::Poll(void* arg) {
                           "waiting on its loop";
     if (self->closing_) {
       return;
+    }
+    if (waits <= 12) {
+      LOG(INFO) << "domicile: an Electron page's Node.js waited (" << waits
+                << ") up to " << timeout << " ms, " << ready
+                << " ready; asking for a turn";
     }
     self->task_runner_->PostTask(
         FROM_HERE,

@@ -160,15 +160,25 @@ def hear_until(wanted, within=None):
     for event in heard:
         if wanted(event):
             return event
+    global pending
     deadline = time.monotonic() + (within or seconds)
     while time.monotonic() < deadline:
-        connection.settimeout(max(0.1, deadline - time.monotonic()))
-        try:
-            line = reader.readline()
-        except (OSError, ValueError):
-            return None
-        if not line:
-            return None
+        # Lines by hand: a file over the socket breaks for good once a read
+        # of it times out, and a wait here is allowed to.
+        if b"\n" not in pending:
+            connection.settimeout(max(0.1, deadline - time.monotonic()))
+            try:
+                chunk = connection.recv(65536)
+            except socket.timeout:
+                continue
+            except OSError:
+                return None
+            if not chunk:
+                return None
+            pending += chunk
+            continue
+        line, pending = pending.split(b"\n", 1)
+        line = line.decode("utf-8")
         event = json.loads(line)
         print("heard: %s" % line.strip(), flush=True)
         heard.append(event)
@@ -200,7 +210,7 @@ except OSError as failure:
     print("no socket: %s" % failure, flush=True)
     print("measured: 0 0 0 0 0 0 0", flush=True)
     sys.exit(0)
-reader = connection.makefile("r", encoding="utf-8")
+pending = b""
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron",
       "partition": "persist:electron-guard"})
@@ -339,7 +349,7 @@ annotate_from "guard-electron-node: $FAILURE" "$ENGINE_LOG"
 echo "what the engine died of, if it did:" >&2
 grep -n -A45 -E "FATAL|Check failed|Received signal" "$ENGINE_LOG" | head -150 >&2
 echo "how Node's loop turned, if it did:" >&2
-grep "Node.js turned" "$ENGINE_LOG" | head -40 >&2
+grep -E "Node.js (turn|wait)" "$ENGINE_LOG" | head -40 >&2
 echo "the app heard:" >&2
 tail -30 "$APP_LOG" >&2
 echo "the engine's last words:" >&2
