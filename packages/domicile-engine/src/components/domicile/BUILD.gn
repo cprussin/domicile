@@ -634,8 +634,11 @@ source_set("web_view_guest") {
     ":context_menu",
     ":desk_downloads",
     ":desk_faults",
+    # Favicons as data: URLs, for the history menus.
+    ":extension_tray_entry",
     ":file_choice",
     ":guest_dialogs",
+    ":history_menu",
     ":page_matches",
     ":placeholder_stage",
     ":render_process",
@@ -676,6 +679,8 @@ source_set("web_view_guest") {
     "//net",
     "//ui/base/clipboard",
     "//ui/events:dom_keycode_converter",
+    # A history entry's favicon, which the history menus show.
+    "//ui/gfx",
     "//ui/gfx/geometry",
     "//url",
   ]
@@ -822,6 +827,20 @@ source_set("profile_route_throttle") {
     ":web_view_guest",
     "//base",
     "//ui/base",
+  ]
+}
+
+# The back and forward lists of a guest's history. Its own target beside
+# :web_view_guest for the reason :file_choice is one: it needs no browser.
+source_set("history_menu") {
+  sources = [
+    "browser/history_menu.cc",
+    "browser/history_menu.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
   ]
 }
 
@@ -1426,6 +1445,7 @@ source_set("unit_tests") {
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/guest_dialogs_unittest.cc",
+    "browser/history_menu_unittest.cc",
     "browser/identity_dialog_unittest.cc",
     "browser/input_method_lines_unittest.cc",
     "browser/line_framer_unittest.cc",
@@ -1524,6 +1544,7 @@ source_set("unit_tests") {
     ":forwarded_keys",
     ":guest_dialogs",
     ":held_chords",
+    ":history_menu",
     ":identity_dialog",
     ":input_method_lines",
     ":keyboard_layout",

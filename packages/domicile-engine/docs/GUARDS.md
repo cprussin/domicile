@@ -126,6 +126,7 @@ Headless.
 | `guard-webview-notifications.sh` | a page must ask before it notifies, even in a profile that stores an allow-all default (patch 0105) |
 | `guard-webview-history.sh` | back, forward, reload and stop; the element's navigation state, load progress, address and connection security |
 | `guard-webview-history-new-window.sh` | `goBackInNewWindow()` opens a window one step back through a copy of the view's history, and the view stays put |
+| `guard-webview-history-menu.sh` | `history()` lists the pages behind and ahead with their titles; `goToHistoryEntry()` goes to one, and does nothing for a missing id; `goToHistoryEntryInNewWindow()` opens one in a new window and the view stays put |
 | `guard-webview-untrusted-cert.sh` | an https page with a self-signed certificate reads `security` `dangerous`; the same certificate trusted reads `secure` |
 | `guard-webview-find.sh` | find in page, including a cross-site frame; find next starts from the active match (patch 0073) |
 | `guard-webview-keyboard.sh` | a desktop shortcut pressed in a guest is caught; an unclaimed Ctrl+R goes to the shell as `domicile-guest-keydown`; a lone Alt let go goes as `domicile-guest-keyup`, and a plain key's release does not |

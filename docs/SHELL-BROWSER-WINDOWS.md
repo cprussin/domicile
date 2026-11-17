@@ -215,6 +215,13 @@ user's and every other partition, like a separate browser profile:
   with a copy of the view's history and take the step there, as a middle
   click on Chrome's back button does. The view stays on its page. A private
   view's window is private.
+- **`history()`** lists the pages behind and ahead of the current one, each
+  side nearest first, with each page's `id`, `url`, `title` and `favicon` (a
+  `data:` URL, or `""`), for a back or forward menu like Chrome's.
+  `goToHistoryEntry(id)` goes to one; `goToHistoryEntryInNewWindow(id)` goes
+  there in a new window, as `goBackInNewWindow` does. An `id` gone from the
+  history does nothing. Manganese lists them on a long press or right click
+  on Back or Forward.
 - `src` is reflected: setting the property or the attribute navigates. A view
   drawing a browser window does not send `src` on connect, since the page is
   already loaded.

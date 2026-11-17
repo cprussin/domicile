@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -20,6 +21,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/memory/self_deleting.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -35,7 +37,9 @@
 #include "components/domicile/browser/context_menu.h"
 #include "components/domicile/browser/desk_downloads.h"
 #include "components/domicile/browser/desk_faults.h"
+#include "components/domicile/browser/extension_tray_entry.h"
 #include "components/domicile/browser/file_choice.h"
+#include "components/domicile/browser/history_menu.h"
 #include "components/domicile/browser/page_matches.h"
 #include "components/domicile/browser/placeholder_stage.h"
 #include "components/domicile/browser/portal_picker.h"
@@ -56,6 +60,7 @@
 #include "content/public/browser/document_service.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_item_utils.h"
+#include "content/public/browser/favicon_status.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -105,6 +110,7 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -1394,23 +1400,92 @@ void WebViewGuest::GoBack() {
 }
 
 void WebViewGuest::GoBackInNewWindow() {
-  OpenHistoryStep(HistoryStep::kBack);
+  CHECK(guest_contents_);
+
+  // Nowhere to go is a normal case, as for GoBack, not a bad message.
+  if (guest_contents_->GetController().CanGoBack()) {
+    OpenHistoryStep({.kind = HistoryStep::Kind::kBack});
+  }
 }
 
 void WebViewGuest::GoForwardInNewWindow() {
-  OpenHistoryStep(HistoryStep::kForward);
+  CHECK(guest_contents_);
+
+  if (guest_contents_->GetController().CanGoForward()) {
+    OpenHistoryStep({.kind = HistoryStep::Kind::kForward});
+  }
+}
+
+namespace {
+
+// `entry` as a history menu lists it.
+mojom::WebViewHistoryEntryPtr MenuEntry(content::NavigationEntry& entry) {
+  const content::FaviconStatus& favicon = entry.GetFavicon();
+  std::string icon;
+  if (favicon.valid && !favicon.image.IsEmpty()) {
+    scoped_refptr<base::RefCountedMemory> png = favicon.image.As1xPNGBytes();
+    icon = PngAsDataUrl(base::span<const uint8_t>(*png));
+  }
+  return mojom::WebViewHistoryEntry::New(
+      entry.GetUniqueID(), entry.GetVirtualURL(),
+      base::UTF16ToUTF8(entry.GetTitleForDisplay()), std::move(icon));
+}
+
+// The index of the entry with unique id `id` in `history`, or nothing when no
+// entry has it or it is the page shown, where going to it would reload.
+// NavigationController has no public lookup by id.
+std::optional<int> IndexOfEntry(content::NavigationController& history,
+                                int32_t id) {
+  for (int i = 0; i < history.GetEntryCount(); ++i) {
+    if (history.GetEntryAtIndex(i)->GetUniqueID() == id) {
+      return i == history.GetLastCommittedEntryIndex() ? std::nullopt
+                                                       : std::optional(i);
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+void WebViewGuest::ListHistory(ListHistoryCallback callback) {
+  CHECK(guest_contents_);
+
+  content::NavigationController& history = guest_contents_->GetController();
+  std::vector<mojom::WebViewHistoryEntryPtr> entries;
+  for (int i = 0; i < history.GetEntryCount(); ++i) {
+    entries.push_back(MenuEntry(*history.GetEntryAtIndex(i)));
+  }
+  // The last committed entry, not a pending one: the menus list the pages
+  // either side of the one the page shows.
+  std::move(callback).Run(
+      HistoryMenu(std::move(entries), history.GetLastCommittedEntryIndex()));
+}
+
+void WebViewGuest::GoToHistoryEntry(int32_t id) {
+  CHECK(guest_contents_);
+
+  content::NavigationController& history = guest_contents_->GetController();
+  // A missing id, or the current page's, is a normal case: the history changed
+  // after the shell listed it, as when the page navigated with the menu open.
+  const std::optional<int> index = IndexOfEntry(history, id);
+  if (index.has_value()) {
+    history.GoToIndex(*index);
+  }
+}
+
+void WebViewGuest::GoToHistoryEntryInNewWindow(int32_t id) {
+  CHECK(guest_contents_);
+
+  // As GoToHistoryEntry, a missing id is a normal case.
+  const std::optional<int> index =
+      IndexOfEntry(guest_contents_->GetController(), id);
+  if (index.has_value()) {
+    OpenHistoryStep({.kind = HistoryStep::Kind::kEntry, .index = *index});
+  }
 }
 
 void WebViewGuest::OpenHistoryStep(HistoryStep step) {
   CHECK(guest_contents_);
-
-  // Nowhere to go is a normal case, as for GoBack, not a bad message.
-  content::NavigationController& history = guest_contents_->GetController();
-  const bool can_step =
-      step == HistoryStep::kBack ? history.CanGoBack() : history.CanGoForward();
-  if (!can_step) {
-    return;
-  }
   // An app module's history holds its own domicile:// pages, which only a
   // window pinned to it may show, and a copy would not be.
   if (!app_host_.empty()) {
@@ -1429,12 +1504,15 @@ void WebViewGuest::TakeHistoryStep(WebViewGuest& source, HistoryStep step) {
   // Reloads on the step, as WebContents::Clone's copy does.
   history.CopyStateFrom(&source.guest_contents_->GetController(),
                         /*needs_reload=*/true);
-  switch (step) {
-    case HistoryStep::kBack:
+  switch (step.kind) {
+    case HistoryStep::Kind::kBack:
       history.GoBack();
       break;
-    case HistoryStep::kForward:
+    case HistoryStep::Kind::kForward:
       history.GoForward();
+      break;
+    case HistoryStep::Kind::kEntry:
+      history.GoToIndex(step.index);
       break;
   }
   // The history-in-a-new-window guard greps for this.

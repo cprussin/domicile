@@ -22,13 +22,15 @@ import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockC
 import { DetectiveIcon } from "@phosphor-icons/react/dist/ssr/Detective";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
-import type { CSSProperties, FormEvent, MouseEvent } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { ConnectionIndicator } from "./ConnectionIndicator";
+import { HistoryButton } from "./HistoryButton";
 import type { MediaDeviceChoice } from "./media-devices";
 import { ProfileMenu } from "./ProfileMenu";
+import type { PageHistoryChoice } from "./page-history";
 import { SitePermissions } from "./SitePermissions";
 import {
   isFullyZoomedIn,
@@ -51,6 +53,11 @@ type Props = {
   address: string;
   canGoBack: boolean;
   canGoForward: boolean;
+  /**
+   * The page's history, for Back's and Forward's menus, or nothing from an
+   * engine without history entries.
+   */
+  history: PageHistoryChoice | undefined;
   /** Keeps the zoom controls at 100%, while the zoom popup hangs from them. */
   holdZoom: boolean;
   /**
@@ -79,6 +86,8 @@ type Props = {
   /** Loads `url`, already resolved from what was typed. */
   onNavigate: (url: string) => void;
   onReload: () => void;
+  /** Opens the History app, from Back's and Forward's menus. */
+  onShowAllHistory: () => void;
   /** Stores a site permission for the page's site. */
   onSetSitePermission: (
     permission: WebViewPermission,
@@ -111,6 +120,7 @@ export const AddressBar = ({
   address,
   canGoBack,
   canGoForward,
+  history,
   holdZoom,
   isPrivate,
   loadProgress,
@@ -123,6 +133,7 @@ export const AddressBar = ({
   onNavigate,
   onReload,
   onSetSitePermission,
+  onShowAllHistory,
   onStop,
   onZoomIn,
   onZoomOut,
@@ -162,28 +173,26 @@ export const AddressBar = ({
       onSubmit={submit}
     >
       <div className={historyStyles}>
-        <Button
+        <HistoryButton
           disabled={!canGoBack}
+          history={history}
           label="Back"
-          onAuxClick={onMiddleClick(onBackInNewWindow)}
-          onClick={onBack}
-          rounded
-          size="sm"
-          variant="ghost"
+          onShowAllHistory={onShowAllHistory}
+          onStep={onBack}
+          onStepInNewWindow={onBackInNewWindow}
         >
           <AnimatedCaretIcon pointing="left" size={16} />
-        </Button>
-        <Button
+        </HistoryButton>
+        <HistoryButton
           disabled={!canGoForward}
+          history={history}
           label="Forward"
-          onAuxClick={onMiddleClick(onForwardInNewWindow)}
-          onClick={onForward}
-          rounded
-          size="sm"
-          variant="ghost"
+          onShowAllHistory={onShowAllHistory}
+          onStep={onForward}
+          onStepInNewWindow={onForwardInNewWindow}
         >
           <AnimatedCaretIcon pointing="right" size={16} />
-        </Button>
+        </HistoryButton>
         {/* One button for Reload and Stop, since only one applies at a time. */}
         <Button
           label={loading ? "Stop" : "Reload"}
@@ -289,21 +298,6 @@ export const AddressBar = ({
     </form>
   );
 };
-
-/** `MouseEvent.button` for the middle button. */
-const MIDDLE_BUTTON = 1;
-
-/**
- * An `onAuxClick` that calls `open` for a middle click, as Chrome opens a
- * middle-clicked Back or Forward in a new tab. A right click is left alone.
- */
-const onMiddleClick =
-  (open: () => void) =>
-  (event: MouseEvent): void => {
-    if (event.button === MIDDLE_BUTTON) {
-      open();
-    }
-  };
 
 /**
  * Inline style handing `progress` to `loadingStyles` as `--load-progress`.
