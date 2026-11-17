@@ -1,6 +1,6 @@
 import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 /**
  * The browser profile whose extensions the tray shows: the profile of the
@@ -9,9 +9,12 @@ import { useCallback, useState, useSyncExternalStore } from "react";
  *
  * Focusing an app window keeps the last page's profile, so the tray does not
  * change under a click on it.
+ *
+ * Has the engine list that profile's actions in `domicile.extensions.list`,
+ * and click them there.
  */
 export const useFocusedProfile = (
-  domicile: Pick<Domicile, "browser">,
+  domicile: Pick<Domicile, "browser" | "extensions">,
   engineId: string | undefined,
 ): BrowserProfile | undefined => {
   const [last, setLast] = useState<string | undefined>(undefined);
@@ -29,7 +32,7 @@ export const useFocusedProfile = (
     },
     [domicile],
   );
-  return useSyncExternalStore(subscribe, () => {
+  const profile = useSyncExternalStore(subscribe, () => {
     const profiles = domicile.browser.profiles;
     const id =
       last === undefined
@@ -41,4 +44,11 @@ export const useFocusedProfile = (
       profiles?.find(({ isDefault }) => isDefault)
     );
   });
+  const id = profile?.id;
+  useEffect(() => {
+    if (id !== undefined) {
+      domicile.extensions.setProfile(id);
+    }
+  }, [domicile, id]);
+  return profile;
 };

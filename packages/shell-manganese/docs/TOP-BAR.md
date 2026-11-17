@@ -549,6 +549,9 @@ extension with an action. See
   - **Rows** click as their icon does. An unpinned extension's popup opens
     from the row's icon, shown while the popup is open. Right-clicking an
     app's name opens its own menu.
+  - **The tray's actions** are the same profile's, so an extension on only in
+    another profile, such as a password manager kept to a work profile, shows
+    once a page of that profile is focused, and its popup opens there.
   - **Extensions in <profile>** are the last focused browser page's
     profile's ([BROWSER-PROFILES.md](/docs/architecture/BROWSER-PROFILES.md)):
     the tray shows the actions of those switched on there, and each **Switch**

@@ -173,12 +173,14 @@ one more window:
 `components/domicile/mojom/extension_tray.mojom` carries action state from the
 browser process to the shell. It binds on the shell's origin only, like the
 control channel, and appears on the `DomicileHost`. The SDK layer gives a
-shell it as `domicile.extensions` (`list`, `activate`, `on("change")`):
+shell it as `domicile.extensions` (`list`, `activate`, `setProfile`,
+`on("change")`):
 
 ```ts
 // DomicileHost
 readonly extensions: readonly DomicileExtension[] | null; // with extensionschanged
 activateExtension(id: string): void;
+setExtensionsProfile(profile: string): void;
 
 interface DomicileExtension {
   id: string;
@@ -189,8 +191,18 @@ interface DomicileExtension {
   badgeColor: string;         // CSS color, #rrggbbaa
   popup: string | null;       // chrome-extension://<id>/popup.html, or null (undefined in the SDK)
   enabled: boolean;
+  profile: string;            // the browser profile it is in, which its popup opens in
 }
 ```
+
+- **One profile's actions.** Each browser profile is a Chrome profile with
+  its own extensions, so the tray shows one profile's, as Chrome's toolbar
+  shows its window's: `setExtensionsProfile(profile)` names it, and a shell
+  names the profile of the page it last focused. The default profile's until
+  then, and while that profile loads. Clicks go to the active tab of that
+  profile's pages, and each entry's `profile` says which it is. The popup
+  opens as `<webview extensionpopup profile={profile}>`, in the extension's
+  own profile, where its storage and sign-ins are.
 
 - **`extensions`** holds every extension whose manifest names an action, and
   `extensionschanged` fires on every change, so a reloaded page reads it
@@ -233,8 +245,9 @@ interface DomicileExtension {
   no toolbar. The desk's function replaces Chrome's
   (`domicile_desk_functions.cc`) and checks as Chrome does: the desk's
   window, not a popup window, and a popup on the active tab. It sends
-  `ExtensionTrayClient.PopupRequested(id, popup)` to every tray, which the
-  shell gets as `extensionpopuprequested`. It answers once the shell is
+  `ExtensionTrayClient.PopupRequested(id, popup, profile)` to every tray, which
+  the shell gets as `extensionpopuprequested`, with the extension's profile
+  for the popup's `<webview>`. It answers once the shell is
   asked, not once the popup loads. The popup's URL is carried because
   Phantom clears its popup as soon as the call answers.
 - **`sidePanel.open()`** opens the side panel's page as a popup window of its

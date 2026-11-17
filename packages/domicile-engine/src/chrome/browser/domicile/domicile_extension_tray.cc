@@ -27,6 +27,7 @@
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/types/expected.h"
+#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
 #include "chrome/browser/domicile/domicile_extension_settings.h"
@@ -116,14 +117,15 @@ int TabIdOf(content::WebContents* tab) {
 mojom::TrayExtensionPtr EntryFor(const Extension& extension,
                                  ExtensionAction& action,
                                  int tab,
-                                 float scale) {
+                                 float scale,
+                                 const std::string& profile) {
   const GURL popup = action.GetPopupUrl(tab);
   return mojom::TrayExtension::New(
       extension.id(), extension.name(), action.GetTitle(tab),
       IconOf(action, tab, scale), action.GetDisplayBadgeText(tab),
       BadgeColorAsCss(action.GetBadgeBackgroundColor(tab)),
       popup.is_empty() ? std::string() : popup.spec(),
-      action.GetIsVisible(tab));
+      action.GetIsVisible(tab), profile);
 }
 
 mojom::SiteAccess SiteAccessAsMojom(SiteAccess access) {
@@ -205,6 +207,12 @@ std::set<ExtensionTray*>& Trays() {
 //                               else reports it
 //   DeskObserver                the active tab changed, and action state is
 //                               per tab
+//   BrowserProfileRegistry      the profile SetProfile named loaded, or left
+//                               the config
+//
+// The actions are those of one browser profile's extensions, the one the
+// shell names with SetProfile, as Chrome's toolbar shows those of its
+// window's profile. The installed list is always the shell's profile's.
 //
 // Resends the installed extensions, once per burst, when any of these fire:
 //
@@ -221,15 +229,16 @@ class ExtensionTray final
       public extensions::ExtensionPrefsObserver,
       public extensions::ExtensionActionDispatcher::Observer,
       public extensions::IconImage::Observer,
-      public DeskObserver {
+      public DeskObserver,
+      public BrowserProfileRegistry::Observer {
  public:
   ExtensionTray(content::RenderFrameHost& frame,
                 mojo::PendingReceiver<mojom::ExtensionTray> receiver,
                 base::SelfDeletingPassKey key)
       : DocumentService(frame, std::move(receiver), key),
-        context_(frame.GetBrowserContext()) {
-    registry_observation_.Observe(
-        extensions::ExtensionRegistry::Get(context_));
+        context_(frame.GetBrowserContext()),
+        actions_(context_) {
+    registries_.AddObservation(extensions::ExtensionRegistry::Get(context_));
     dispatcher_observation_.Observe(
         extensions::ExtensionActionDispatcher::Get(context_));
     prefs_observation_.Observe(extensions::ExtensionPrefs::Get(context_));
@@ -238,19 +247,30 @@ class ExtensionTray final
                           base::BindRepeating(&ExtensionTray::SendInstalledSoon,
                                               base::Unretained(this)));
     observing_desk_ = AddDeskObserver(context_, this);
+    BrowserProfileRegistry::Get().AddObserver(this);
     Trays().insert(this);
   }
 
   // Sends `popup` to this tray's client if it is `context`'s and has one.
   // Returns whether it was sent.
+  //
+  // `context` is the extension's, in any of the desk's browser profiles: the
+  // popup opens in that profile, whichever the tray shows.
   bool RequestPopup(content::BrowserContext* context,
                     const std::string& id,
                     const GURL& popup) {
-    if (context != context_ || !client_.is_bound()) {
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    if (&registry.HomeOf(*context) != &profile() || !client_.is_bound()) {
       return false;
     }
-    LOG(INFO) << "domicile: " << id << " asked the tray for its popup.";
-    client_->PopupRequested(id, popup.spec());
+    std::string in = registry.IdOf(*context);
+    if (in.empty()) {
+      // The shell's own off-the-record profile, which is the default's.
+      in = registry.profiles().default_profile;
+    }
+    LOG(INFO) << "domicile: " << id << " in browser profile " << in
+              << " asked the tray for its popup.";
+    client_->PopupRequested(id, popup.spec(), in);
     return true;
   }
 
@@ -258,15 +278,19 @@ class ExtensionTray final
   // Sends `action.onClicked` for extension `id` on `tab`. Called after the
   // grant, so either may be gone by then, as in
   // ExtensionActionRunner::DispatchExtensionActionClicked.
-  void DispatchClicked(const std::string& id,
+  // `in` is the profile the click was in, which the tray may have left since.
+  void DispatchClicked(base::WeakPtr<Profile> in,
+                       const std::string& id,
                        base::WeakPtr<content::WebContents> tab) {
-    const Extension* extension = extensions::ExtensionRegistry::Get(context_)
-                                     ->enabled_extensions()
-                                     .GetByID(id);
+    const Extension* extension =
+        !in ? nullptr
+            : extensions::ExtensionRegistry::Get(in.get())
+                  ->enabled_extensions()
+                  .GetByID(id);
     ExtensionAction* action =
         extension == nullptr
             ? nullptr
-            : extensions::ExtensionActionManager::Get(context_)
+            : extensions::ExtensionActionManager::Get(in.get())
                   ->GetExtensionAction(*extension);
     if (action == nullptr || !tab) {
       LOG(WARNING) << "domicile: the tray's click on " << id
@@ -274,14 +298,15 @@ class ExtensionTray final
       return;
     }
     LOG(INFO) << "domicile: the tray activated " << id << ".";
-    extensions::ExtensionActionDispatcher::Get(context_)
+    extensions::ExtensionActionDispatcher::Get(in.get())
         ->DispatchExtensionActionClicked(*action, tab.get(), extension);
   }
 
   ~ExtensionTray() override {
     Trays().erase(this);
+    BrowserProfileRegistry::Get().RemoveObserver(this);
     if (observing_desk_) {
-      RemoveDeskObserver(context_, this);
+      RemoveDeskObserver(actions_, this);
     }
   }
 
@@ -298,14 +323,21 @@ class ExtensionTray final
     SendInstalled();
   }
 
+  void SetProfile(const std::string& profile) override {
+    LOG(INFO) << "domicile: the tray shows browser profile " << profile
+              << "'s extensions.";
+    profile_ = profile;
+    Resolve(/*wait=*/true);
+  }
+
   void Activate(const std::string& id) override {
-    const Extension* extension = extensions::ExtensionRegistry::Get(context_)
+    const Extension* extension = extensions::ExtensionRegistry::Get(actions_)
                                      ->enabled_extensions()
                                      .GetByID(id);
     ExtensionAction* action =
         extension == nullptr
             ? nullptr
-            : extensions::ExtensionActionManager::Get(context_)
+            : extensions::ExtensionActionManager::Get(actions_)
                   ->GetExtensionAction(*extension);
     // The click raced an uninstall.
     if (action == nullptr) {
@@ -317,7 +349,7 @@ class ExtensionTray final
     // The click applies to the active tab: the <webview> last focused, unless
     // that is a private page the extension is not allowed in.
     content::WebContents* tab = ActiveDeskTab(
-        context_, extensions::util::IsIncognitoEnabled(extension, context_));
+        actions_, extensions::util::IsIncognitoEnabled(extension, actions_));
 
     // Chrome sends no onClicked for an action with a popup; the shell opens
     // the popup.
@@ -331,9 +363,10 @@ class ExtensionTray final
     // shell's page.
     if (tab == nullptr) {
       if (!has_popup) {
-        DispatchClicked(id, content::WebContents::FromRenderFrameHost(
-                                &render_frame_host())
-                                ->GetWeakPtr());
+        DispatchClicked(ActionsProfile().GetWeakPtr(), id,
+                        content::WebContents::FromRenderFrameHost(
+                            &render_frame_host())
+                            ->GetWeakPtr());
       }
       return;
     }
@@ -349,7 +382,8 @@ class ExtensionTray final
     granter->GrantIfRequested(
         extension, has_popup ? base::DoNothing()
                              : base::BindOnce(&ExtensionTray::DispatchClicked,
-                                              weak_factory_.GetWeakPtr(), id,
+                                              weak_factory_.GetWeakPtr(),
+                                              ActionsProfile().GetWeakPtr(), id,
                                               tab->GetWeakPtr()));
     // guard-webview-active-tab.sh reads this line.
     if (granter->IsGranted(extension)) {
@@ -445,9 +479,9 @@ class ExtensionTray final
       ExtensionAction* extension_action,
       content::WebContents* web_contents,
       content::BrowserContext* browser_context) override {
-    if (browser_context == context_ ||
+    if (browser_context == actions_ ||
         Profile::FromBrowserContext(browser_context)->GetOriginalProfile() ==
-            context_) {
+            actions_) {
       Send();
     }
   }
@@ -455,6 +489,22 @@ class ExtensionTray final
 
   // DeskObserver:
   void OnActiveTabChanged() override { Send(); }
+
+  // BrowserProfileRegistry::Observer: the profile SetProfile named may have
+  // loaded, or left the config.
+  void OnBrowserProfilesChanged() override { Resolve(/*wait=*/true); }
+
+  // extensions::ExtensionRegistryObserver: a profile is going. The shell's
+  // goes with this document; another's shows the shell's again.
+  void OnShutdown(extensions::ExtensionRegistry* registry) override {
+    if (actions_ != context_ &&
+        registry == extensions::ExtensionRegistry::Get(actions_)) {
+      ShowActionsOf(*context_);
+    }
+    if (registries_.IsObservingSource(registry)) {
+      registries_.RemoveObservation(registry);
+    }
+  }
 
   // extensions::IconImage::Observer:
   void OnExtensionIconImageChanged(extensions::IconImage* image) override {
@@ -466,6 +516,63 @@ class ExtensionTray final
   }
 
   Profile& profile() { return *Profile::FromBrowserContext(context_); }
+
+  Profile& ActionsProfile() { return *Profile::FromBrowserContext(actions_); }
+
+  // Shows the actions of the profile SetProfile named: once it has loaded,
+  // waiting for it when `wait`; the shell's profile's for the default, for
+  // one the desk does not have, and until then.
+  void Resolve(bool wait) {
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    if (profile_.empty() || profile_ == registry.profiles().default_profile) {
+      ShowActionsOf(*context_);
+      return;
+    }
+    if (Profile* found = registry.ExtensionsProfileOf(profile_)) {
+      ShowActionsOf(*found);
+      return;
+    }
+    ShowActionsOf(*context_);
+    if (registry.profiles().Find(profile_) == nullptr) {
+      LOG(WARNING) << "domicile: the tray was asked for browser profile "
+                   << profile_
+                   << ", which the desk does not have; it shows the "
+                      "default's.";
+    } else if (wait) {
+      // Once, so a profile that will not load is not asked for again and
+      // again.
+      registry.WhenLoaded(profile(), profile_,
+                          base::BindOnce(&ExtensionTray::Resolve,
+                                         weak_factory_.GetWeakPtr(),
+                                         /*wait=*/false));
+    }
+  }
+
+  // Shows `context`'s actions from now on, and sends them.
+  void ShowActionsOf(content::BrowserContext& context) {
+    if (&context == actions_) {
+      return;
+    }
+    if (actions_ != context_) {
+      extensions::ExtensionRegistry* old =
+          extensions::ExtensionRegistry::Get(actions_);
+      if (registries_.IsObservingSource(old)) {
+        registries_.RemoveObservation(old);
+      }
+    }
+    if (observing_desk_) {
+      RemoveDeskObserver(actions_, this);
+    }
+    dispatcher_observation_.Reset();
+    actions_ = &context;
+    if (actions_ != context_) {
+      registries_.AddObservation(extensions::ExtensionRegistry::Get(actions_));
+    }
+    dispatcher_observation_.Observe(
+        extensions::ExtensionActionDispatcher::Get(actions_));
+    observing_desk_ = AddDeskObserver(actions_, this);
+    Send();
+  }
 
   // The page's device scale factor, read on each send so icons follow the
   // window across screens.
@@ -544,10 +651,15 @@ class ExtensionTray final
     const float scale = Scale();
 
     extensions::ExtensionActionManager* actions =
-        extensions::ExtensionActionManager::Get(context_);
+        extensions::ExtensionActionManager::Get(actions_);
+    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+    std::string in = registry.IdOf(*actions_);
+    if (in.empty()) {
+      in = registry.profiles().default_profile;
+    }
     std::vector<mojom::TrayExtensionPtr> tray;
     for (const scoped_refptr<const Extension>& extension :
-         extensions::ExtensionRegistry::Get(context_)->enabled_extensions()) {
+         extensions::ExtensionRegistry::Get(actions_)->enabled_extensions()) {
       // Skip component extensions (such as the PDF viewer), as Chrome's
       // toolbar does.
       if (!extensions::ui_util::ShouldDisplayInExtensionSettings(*extension)) {
@@ -565,9 +677,9 @@ class ExtensionTray final
       Watch(*action);
       // Show the active tab's state, as Chrome's toolbar does.
       const int tab = TabIdOf(ActiveDeskTab(
-          context_,
-          extensions::util::IsIncognitoEnabled(extension.get(), context_)));
-      tray.push_back(EntryFor(*extension, *action, tab, scale));
+          actions_,
+          extensions::util::IsIncognitoEnabled(extension.get(), actions_)));
+      tray.push_back(EntryFor(*extension, *action, tab, scale, in));
     }
     client_->ExtensionsChanged(std::move(tray));
   }
@@ -582,15 +694,21 @@ class ExtensionTray final
 
   // The shell's profile, shared by its <webview>s and the installer.
   const raw_ptr<content::BrowserContext> context_;
+  // The Chrome profile whose actions the tray shows (Resolve): `context_`
+  // for the default profile.
+  raw_ptr<content::BrowserContext> actions_;
+  // The browser profile SetProfile named; empty before it is called.
+  std::string profile_;
 
   mojo::Remote<mojom::ExtensionTrayClient> client_;
 
-  // False if the profile has no desk; the tray then uses the default tab.
+  // False if `actions_` has no desk; the tray then uses the default tab.
   bool observing_desk_ = false;
 
-  base::ScopedObservation<extensions::ExtensionRegistry,
-                          extensions::ExtensionRegistryObserver>
-      registry_observation_{this};
+  // The shell's profile's, for the installed list, and `actions_`'s.
+  base::ScopedMultiSourceObservation<extensions::ExtensionRegistry,
+                                     extensions::ExtensionRegistryObserver>
+      registries_{this};
   base::ScopedObservation<extensions::ExtensionActionDispatcher,
                           extensions::ExtensionActionDispatcher::Observer>
       dispatcher_observation_{this};

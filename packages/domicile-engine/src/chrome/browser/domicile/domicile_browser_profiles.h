@@ -146,6 +146,11 @@ class BrowserProfileRegistry final
   // browser profile's Chrome profile, so the user cannot.
   bool IsSwitchLocked(Profile& profile, const std::string& extension) const;
 
+  // The Chrome profile browser profile `id`'s extensions are in: the shell's
+  // for the default, the hidden regular one for a private profile. Null for
+  // one not loaded, or that the desk does not have.
+  Profile* ExtensionsProfileOf(const std::string& id);
+
   // The context profile `id`'s pages are made in, for the shell in `shell`.
   // Call it from WhenLoaded's `ready`: loading here blocks the UI thread,
   // which a page that did not wait does, logged as the bug it is. Null for a
@@ -233,10 +238,6 @@ class BrowserProfileRegistry final
   std::vector<std::string> ConfigExtensionIds() const;
   // The browser profile `profile`, a Chrome profile, is: null for none.
   const BrowserProfile* AsBrowserProfile(Profile& profile) const;
-  // The Chrome profile browser profile `id`'s extensions are in: the shell's
-  // for the default, the hidden regular one for a private profile. Null for
-  // one not loaded.
-  Profile* ExtensionsProfileOf(const std::string& id);
   // Switches each of the config's extensions in `profile` as the config
   // says (SwitchExtension), once its extension system is ready.
   void SwitchExtensions(base::WeakPtr<Profile> profile);

@@ -34,6 +34,11 @@ export const extensionSchema = z.object({
     .string()
     .nullable()
     .transform((popup) => popup ?? undefined),
+  /**
+   * The id of the browser profile it is in, as `Extensions.setProfile` named
+   * it once that loaded. Its popup opens in a `<webview>` in this profile.
+   */
+  profile: z.string(),
   /** The action's tooltip. */
   title: z.string(),
 });
@@ -44,6 +49,8 @@ export type Extension = z.infer<typeof extensionSchema>;
 export const extensionPopupSchema = z.object({
   id: z.string().regex(EXTENSION_ID),
   popup: z.string().startsWith("chrome-extension://"),
+  /** The browser profile the extension is in, which the popup opens in. */
+  profile: z.string(),
 });
 
 export type ExtensionPopup = z.infer<typeof extensionPopupSchema>;
