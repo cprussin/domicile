@@ -72,8 +72,11 @@ shell menu ─ domicile.dbus.call / match ──────▶ compositor ─�
     more read after it.
   - Calls on the tray's connection time out after 3 seconds
     (`ANSWER_WITHIN`). A timed-out read is a failed read: the item is hidden
-    and its next signal reads it again. The first timeout per item logs a
-    warning; later ones log at debug.
+    until a read answers. Its next signal reads it again, and so does a wait
+    after each timeout, 3 seconds doubling up to a minute
+    (`RETRY_AT_MOST`), since an application busy starting up, as many are at
+    login, may answer late and never signal. The first timeout per item logs
+    a warning; later ones log at debug.
   - Clicks use `call_noreply`, so they never wait.
 - **Icon lookups are cached** for the 32 names used last. An icon named by a
   path is read each time, since applications rewrite one file in place.
