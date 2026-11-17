@@ -46,7 +46,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest.h"
-#include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
 
 namespace domicile {
@@ -107,8 +106,7 @@ std::optional<UserExtension> AsUserExtension(
     return UserExtension{.id = extension.id(),
                          .unpacked = extension.path().AsUTF8Unsafe()};
   }
-  if (extension.from_webstore() ||
-      extensions::ManifestURL::UpdatesFromGallery(&extension)) {
+  if (extension.from_webstore()) {
     return UserExtension{.id = extension.id()};
   }
   return std::nullopt;
