@@ -478,7 +478,6 @@ mod tests {
                             file_access: Some(false),
                             user_scripts: Some(true),
                             site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
-                            ..Default::default()
                         },
                     ),
                 ]
@@ -509,7 +508,6 @@ mod tests {
                             site_access: Some(domicile_protocol::SiteAccess::Mode(
                                 domicile_protocol::SiteAccessMode::OnClick
                             )),
-                            ..Default::default()
                         },
                     ),
                 ]
