@@ -31,7 +31,9 @@ This change has no release notes. Either:
   for shell and app authors) or docs/use/RELEASE-NOTES.md (manganese, for its
   users), or
 - add the trailer `Release-notes: none` to one of its commits, when nobody
-  would miss it in the notes.
+  would miss it in the notes. Git reads trailers only from the message's
+  last paragraph, so put it beside `Co-Authored-By` and the like, with no
+  blank line between.
 
 See docs/contributing/RELEASING.md#release-notes.
 MSG
