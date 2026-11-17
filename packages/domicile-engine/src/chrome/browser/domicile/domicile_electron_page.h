@@ -24,6 +24,8 @@ namespace base {
 class CommandLine;
 }
 
+class GURL;
+
 namespace content {
 class RenderFrameHost;
 class RenderProcessHost;
@@ -56,11 +58,22 @@ class ElectronPage final : public content::WebContentsObserver,
                      base::WeakPtr<ElectronSession> session);
 
   // `frame`, a main frame, navigates into `site_instance`. When `frame` is a
-  // Node page's, the renderer the navigation goes to is to start for Node.
-  // Before that renderer starts, from
+  // Node page's, the renderer the navigation goes to is to start for Node:
+  // marked now, or, when `site_instance` has none yet, as it gets one. Before
+  // that renderer starts, from
   // ChromeContentBrowserClient::MainFrameNavigatesInto.
   static void MainFrameNavigatesInto(content::RenderFrameHost& frame,
                                      content::SiteInstance& site_instance);
+
+  // `site_instance` got its renderer, which is to start for Node when a Node
+  // page's navigation goes into it. From
+  // ChromeContentBrowserClient::SiteInstanceGotProcessAndSite.
+  static void SiteInstanceGotProcess(content::SiteInstance& site_instance);
+
+  // Whether a Node page's navigation to `site_url` waits for its renderer:
+  // it takes no spare, which started sandboxed. From
+  // ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost.
+  static bool RefusesSpareRenderer(const GURL& site_url);
 
   // Starts `host` for Node.js when it is to run a Node page: unsandboxed and
   // without the zygote, as Electron starts such a renderer, marked for the

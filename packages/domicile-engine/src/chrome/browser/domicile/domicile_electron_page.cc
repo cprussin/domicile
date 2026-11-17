@@ -34,6 +34,7 @@
 #include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/switches.h"
+#include "url/gurl.h"
 
 namespace domicile {
 namespace {
@@ -56,6 +57,24 @@ ElectronAnswer Answering(
       },
       std::move(callback));
 }
+
+// A SiteInstance a Node page's navigation goes into that has no renderer
+// yet. By id, so one the navigation dropped leaves nothing dangling.
+struct PendingNodeSite {
+  content::SiteInstanceId id;
+  GURL site_url;
+};
+
+// The pending sites, at most a few: a navigation gets its renderer at once.
+std::vector<PendingNodeSite>& PendingNodeSites() {
+  static base::NoDestructor<std::vector<PendingNodeSite>> pending;
+  return *pending;
+}
+constexpr size_t kMostPendingNodeSites = 16;
+
+// Marks `host`, a renderer a Node page's navigation goes to, to start for
+// Node. One that started already, sandboxed, the page's commit then ends.
+void MarkForNode(content::RenderProcessHost& host);
 
 // Marks a renderer a Node page's navigation goes to, before it starts.
 const char kForNodeKey[] = "domicile-electron-node-pending";
@@ -110,21 +129,60 @@ void ElectronPage::MainFrameNavigatesInto(
   if (page == nullptr || !page->node_.has_value()) {
     return;
   }
-  content::RenderProcessHost* host = site_instance.GetProcess();
-  if (host->IsInitializedAndNotDead() && !IsNodeRenderer(*host)) {
+  if (site_instance.HasProcess()) {
+    MarkForNode(*site_instance.GetProcess());
+    return;
+  }
+  std::vector<PendingNodeSite>& pending = PendingNodeSites();
+  std::erase_if(pending, [&](const PendingNodeSite& site) {
+    return site.id == site_instance.GetId();
+  });
+  if (pending.size() >= kMostPendingNodeSites) {
+    // Navigations that never got a renderer.
+    pending.erase(pending.begin());
+  }
+  pending.push_back(
+      {.id = site_instance.GetId(),
+       .site_url =
+           site_instance.GetSecurityPrincipal().GetDeprecatedSiteURL()});
+}
+
+// static
+void ElectronPage::SiteInstanceGotProcess(
+    content::SiteInstance& site_instance) {
+  if (std::erase_if(PendingNodeSites(), [&](const PendingNodeSite& site) {
+        return site.id == site_instance.GetId();
+      }) > 0) {
+    MarkForNode(*site_instance.GetProcess());
+  }
+}
+
+// static
+bool ElectronPage::RefusesSpareRenderer(const GURL& site_url) {
+  return std::ranges::any_of(
+      PendingNodeSites(),
+      [&](const PendingNodeSite& site) { return site.site_url == site_url; });
+}
+
+namespace {
+
+void MarkForNode(content::RenderProcessHost& host) {
+  if (host.IsInitializedAndNotDead() && !ElectronPage::IsNodeRenderer(host)) {
     // Its page commits into a sandboxed renderer, which
     // ReadyToCommitNavigation then ends.
     LOG(ERROR) << "domicile: an Electron page with Node.js navigates into "
                   "renderer "
-               << host->GetDeprecatedID()
+               << host.GetDeprecatedID()
                << ", which started sandboxed, without Node.js.";
     return;
   }
-  if (!host->GetUserData(kForNodeKey)) {
-    host->SetUserData(kForNodeKey,
-                      std::make_unique<base::SupportsUserData::Data>());
+  if (!host.GetUserData(kForNodeKey)) {
+    host.SetUserData(kForNodeKey,
+                     std::make_unique<base::SupportsUserData::Data>());
   }
 }
+
+}  // namespace
 
 // static
 void ElectronPage::AppendRendererSwitches(content::RenderProcessHost& host,
