@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::shell_path::Shell;
+use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::spawn::{
     composite_on_the_cpu, compositor, engine, let_the_engine_take_input, send_frames_in_memory,
     the_engine_takes_input, Runtime,
@@ -15,6 +15,7 @@ use domicile_launch::spawn::{
 /// convention.
 fn shell() -> Shell {
     Shell {
+        files: ShellFiles::Directory,
         root: PathBuf::from("/d/dist"),
         module: PathBuf::from("main.js"),
     }
@@ -103,6 +104,39 @@ fn the_engine_takes_commands_on_a_socket_of_this_runs_own() {
     ));
     assert!(
         args.contains(&"--domicile-command-socket=/run/d/command.sock".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
+fn an_engine_restarted_under_domicile_dev_reads_the_shell_from_the_dev_server() {
+    // The supervisor restarts a crashed engine with the shell it was serving;
+    // without the switch it would read the socket's path as a directory.
+    let dev = Shell {
+        files: ShellFiles::DevServer,
+        ..shell()
+    };
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &dev,
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--domicile-shell-dev-server".to_string()),
+        "{args:?}"
+    );
+
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        !args.contains(&"--domicile-shell-dev-server".to_string()),
         "{args:?}"
     );
 }

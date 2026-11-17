@@ -80,11 +80,13 @@ class ShellSwap {
   ShellSwap& operator=(const ShellSwap&) = delete;
   ~ShellSwap();
 
-  // Serves `module` out of `root`, loads it, and answers `swapped` once the
-  // page says whether it ran. A swap still waiting is answered first, as
-  // replaced; the shell to go back to stays the one that last ran.
+  // Serves `module` out of `root`, as `files` says, loads it, and answers
+  // `swapped` once the page says whether it ran. A swap still waiting is
+  // answered first, as replaced; the shell to go back to stays the one that
+  // last ran.
   void Swap(const base::FilePath& root,
             const std::string& module,
+            ShellFiles files,
             Swapped swapped);
 
   // The shell's page served for ShellSource serial `serial` said whether its
@@ -98,6 +100,7 @@ class ShellSwap {
   struct Served {
     base::FilePath root;
     std::string module;
+    ShellFiles files = ShellFiles::kDirectory;
   };
 
   // Answers the waiting swap with `ran` and stops waiting.

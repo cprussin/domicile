@@ -1,7 +1,7 @@
 //! Tests for the engine command socket protocol.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use domicile_launch::command::{
     browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
@@ -17,6 +17,7 @@ use domicile_launch::extensions::{
 };
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -26,8 +27,26 @@ fn a_load_shell_names_the_version_it_is_written_in() {
     // expected line is written out because the engine's `command_protocol.cc`
     // does not share this crate's serializer.
     assert_eq!(
-        load_shell_line(Path::new("/x/dist"), Path::new("shell.js")),
+        load_shell_line(&Shell {
+            files: ShellFiles::Directory,
+            module: PathBuf::from("shell.js"),
+            root: PathBuf::from("/x/dist"),
+        }),
         "{\"type\":\"load_shell\",\"version\":1,\"root\":\"/x/dist\",\"module\":\"shell.js\"}\n"
+    );
+}
+
+#[test]
+fn a_load_shell_from_a_dev_server_says_so() {
+    // The engine reads `root` as the dev server's socket only when told.
+    assert_eq!(
+        load_shell_line(&Shell {
+            files: ShellFiles::DevServer,
+            module: PathBuf::from("domicile-dev-shell.js"),
+            root: PathBuf::from("/run/dev.sock"),
+        }),
+        "{\"type\":\"load_shell\",\"version\":1,\"root\":\"/run/dev.sock\",\
+         \"module\":\"domicile-dev-shell.js\",\"dev_server\":true}\n"
     );
 }
 

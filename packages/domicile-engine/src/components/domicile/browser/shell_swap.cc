@@ -48,15 +48,18 @@ ShellSwap::~ShellSwap() = default;
 
 void ShellSwap::Swap(const base::FilePath& root,
                      const std::string& module,
+                     ShellFiles files,
                      Swapped swapped) {
   if (swapped_.is_null()) {
-    previous_ = {.root = source_->Root(), .module = source_->Module()};
+    previous_ = {.root = source_->Root(),
+                 .module = source_->Module(),
+                 .files = source_->Files()};
   } else {
     std::move(swapped_).Run(
         "domicile load-shell loaded another shell before this one ran");
   }
   swapped_ = std::move(swapped);
-  source_->Set(root, module);
+  source_->Set(root, module, files);
   load_.Run();
   patience_timer_.Start(FROM_HERE, patience_,
                         base::BindOnce(&ShellSwap::Answer,
@@ -69,11 +72,12 @@ void ShellSwap::Heard(const std::string& serial, const ShellOutcome& ran) {
     return;
   }
   if (!ran.has_value() || (previous_.root == source_->Root() &&
-                            previous_.module == source_->Module())) {
+                            previous_.module == source_->Module() &&
+                            previous_.files == source_->Files())) {
     Answer(ran);
     return;
   }
-  source_->Set(previous_.root, previous_.module);
+  source_->Set(previous_.root, previous_.module, previous_.files);
   load_.Run();
   Answer(base::StrCat({*ran, "\nThe desktop is back on the shell it had, ",
                        previous_.root.Append(previous_.module).value(), "."}));

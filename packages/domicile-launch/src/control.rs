@@ -21,6 +21,7 @@ use crate::browser_profiles::BrowserProfileList;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
+use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
 use crate::site_permissions::{SitePermission, SiteSettings};
 
@@ -39,8 +40,14 @@ pub enum Request {
     /// Serve this shell instead.
     ///
     /// The client resolves the paths (see [`crate::shell_path::Shell`])
-    /// because the desktop does not share its working directory.
-    LoadShell { root: PathBuf, module: PathBuf },
+    /// because the desktop does not share its working directory. With
+    /// `dev_server`, `root` is `domicile dev`'s socket.
+    LoadShell {
+        root: PathBuf,
+        module: PathBuf,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        dev_server: bool,
+    },
     /// Open this URL in a browser window: in browser profile `profile`, or
     /// with none in the one its site opens in. The client converts paths
     /// with [`crate::address`].
@@ -265,10 +272,17 @@ pub struct SettingsFiles {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
-    /// The absolute path of the module the desktop is serving.
+    /// The absolute path of the module the desktop is serving, the directory
+    /// it is served from, and whether that is `domicile dev`'s socket instead.
     ///
-    /// Answers both `which-shell` and a successful `load-shell`.
-    Shell { module: PathBuf },
+    /// Answers both `which-shell` and a successful `load-shell`. `domicile
+    /// dev` loads the shell it replaced again from `root` and `dev_server`.
+    Shell {
+        module: PathBuf,
+        root: PathBuf,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        dev_server: bool,
+    },
 
     /// The engine passed the address to the shell.
     ///
@@ -405,7 +419,7 @@ pub fn parse_response(line: &str) -> Result<Response, serde_json::Error> {
 /// Tells the engine to serve a shell.
 ///
 /// [`crate::command_socket::load_shell`] in a desktop; a closure in tests.
-pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
+pub type LoadShell<'a> = &'a dyn Fn(&Shell) -> Result<(), String>;
 
 /// Tells the engine to open an address in the shell, in a browser profile or
 /// with none in the one its site opens in.
@@ -622,8 +636,8 @@ pub type ListInputs<'a> = &'a dyn Fn() -> Result<Vec<ListedInput>, String>;
 /// The dials reach the engine and the compositor; they are injected so
 /// [`answer`] can be tested without sockets.
 pub struct Desktop<'a> {
-    /// The shell module being served.
-    pub module: &'a Path,
+    /// The shell being served.
+    pub shell: &'a Shell,
     pub files: &'a SettingsFiles,
     pub load: LoadShell<'a>,
     pub open: OpenUrl<'a>,
@@ -697,20 +711,40 @@ pub enum Shot {
     Canceled,
 }
 
+/// The answer naming `shell` as the one served.
+fn serving(shell: &Shell) -> Response {
+    Response::Shell {
+        module: shell.root.join(&shell.module),
+        root: shell.root.clone(),
+        dev_server: shell.files == ShellFiles::DevServer,
+    }
+}
+
 /// Answers one request line to `desktop`.
 pub fn answer(line: &str, desktop: &Desktop) -> String {
     match parse_request(line.trim()) {
-        Ok(Request::WhichShell) => to_line(&Response::Shell {
-            module: desktop.module.to_path_buf(),
-        }),
+        Ok(Request::WhichShell) => to_line(&serving(desktop.shell)),
         // Reply with the resolved path so the user can see which file was
         // loaded.
-        Ok(Request::LoadShell { root, module }) => to_line(&match (desktop.load)(&root, &module) {
-            Ok(()) => Response::Shell {
-                module: root.join(module),
-            },
-            Err(why) => Response::Refused { why },
-        }),
+        Ok(Request::LoadShell {
+            root,
+            module,
+            dev_server,
+        }) => {
+            let shell = Shell {
+                files: if dev_server {
+                    ShellFiles::DevServer
+                } else {
+                    ShellFiles::Directory
+                },
+                module,
+                root,
+            };
+            to_line(&match (desktop.load)(&shell) {
+                Ok(()) => serving(&shell),
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::OpenUrl { url, profile }) => {
             to_line(&match (desktop.open)(&url, profile.as_deref()) {
                 Ok(()) => Response::Opened,
@@ -749,7 +783,13 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::SettingsFiles) => to_line(&Response::SettingsFiles {
             files: SettingsFiles {
-                options: Some(desktop.module.with_file_name(OPTIONS)),
+                options: Some(
+                    desktop
+                        .shell
+                        .root
+                        .join(&desktop.shell.module)
+                        .with_file_name(OPTIONS),
+                ),
                 ..desktop.files.clone()
             },
         }),
@@ -871,7 +911,7 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Status) => to_line(&match (desktop.status)() {
             Ok(status) => Response::Status {
-                shell: desktop.module.to_path_buf(),
+                shell: desktop.shell.root.join(&desktop.shell.module),
                 status,
             },
             Err(why) => Response::Refused { why },
