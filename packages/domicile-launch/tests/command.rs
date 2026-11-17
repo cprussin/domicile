@@ -211,11 +211,12 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
         extensions_line(),
         "{\"type\":\"extensions\",\"version\":1}\n"
     );
-    // An extension without an options page has no `options_url`.
+    // An extension without an options page has no `options_url`, and one without
+    // an icon no `icon_path`.
     assert_eq!(
         reply(
             "{\"type\":\"extensions\",\"extensions\":[\
-             {\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Dark Reader\",\"description\":\"Dark mode\",\"version\":\"4.9\",\"enabled\":true,\"options_url\":\"chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html\",\"settings\":{\"file_access\":true,\"site_access\":[\"github.com\"]}},\
+             {\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Dark Reader\",\"description\":\"Dark mode\",\"version\":\"4.9\",\"enabled\":true,\"options_url\":\"chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html\",\"settings\":{\"file_access\":true,\"site_access\":[\"github.com\"]},\"icon_path\":\"/ext/dark/128.png\"},\
              {\"id\":\"bcdefghijklmnopabcdefghijklmnopa\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":false,\"settings\":{}}]}"
         )
         .unwrap(),
@@ -236,6 +237,7 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
                         site_access: Some(SiteAccess::Sites(vec!["github.com".to_string()])),
                         ..ExtensionSettings::default()
                     },
+                    icon_path: Some("/ext/dark/128.png".to_string()),
                 },
                 InstalledExtension {
                     id: "bcdefghijklmnopabcdefghijklmnopa".to_string(),
@@ -245,6 +247,7 @@ fn an_engine_lists_every_installed_extension_and_its_options_page() {
                     enabled: false,
                     options_url: None,
                     settings: ExtensionSettings::default(),
+                    icon_path: None,
                 },
             ]
         }

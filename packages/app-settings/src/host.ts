@@ -125,14 +125,16 @@ const extensionSchema = z
   .object({
     description: z.string(),
     enabled: z.boolean(),
+    icon: z.string().nullish(),
     id: z.string(),
     name: z.string(),
     options_url: z.string().nullish(),
     settings: extensionSettingsSchema,
     version: z.string(),
   })
-  .transform(({ options_url, ...extension }) => ({
+  .transform(({ icon, options_url, ...extension }) => ({
     ...extension,
+    icon: icon ?? undefined,
     optionsUrl: options_url ?? undefined,
   }));
 

@@ -44,7 +44,9 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_handlers/description_info.h"
+#include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
 
@@ -317,6 +319,28 @@ void WatchConfigExtensions(PrefChangeRegistrar& registrar,
   WatchConfiguredSettings(registrar, changed);
 }
 
+namespace {
+
+// The absolute path of `extension`'s manifest icon closest to 128px, the
+// size chrome://extensions draws from: the smallest at least that big, else
+// the biggest. Empty when the manifest names none.
+std::string IconPathOf(const extensions::Extension& extension) {
+  constexpr int kSize = 128;
+  const ExtensionIconSet& icons = extensions::IconsInfo::GetIcons(&extension);
+  std::string relative = icons.Get(kSize, ExtensionIconSet::Match::kBigger);
+  if (relative.empty()) {
+    relative = icons.Get(kSize, ExtensionIconSet::Match::kSmaller);
+  }
+  if (relative.empty()) {
+    return std::string();
+  }
+  return extension.path()
+      .Append(base::FilePath::FromUTF8Unsafe(relative))
+      .AsUTF8Unsafe();
+}
+
+}  // namespace
+
 std::vector<InstalledExtension> ExtensionsOf(Profile& profile) {
   const extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(&profile);
@@ -337,6 +361,7 @@ std::vector<InstalledExtension> ExtensionsOf(Profile& profile) {
     entry.settings = SettingsOf(profile, *extension);
     entry.options_url =
         extensions::OptionsPageInfo::GetOptionsPage(extension.get());
+    entry.icon_path = IconPathOf(*extension);
     listed.push_back(std::move(entry));
   }
   return listed;
