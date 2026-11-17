@@ -12,9 +12,9 @@ _Unreleased_
 
 ![Element on the engine, its menu bar drawn by the shell](media/release-electron.png)
 
-Listed Electron apps run on the desktop's engine. Their windows, views, menu bars and message boxes reach your shell to lay out and draw.
+Listed Electron apps run on the desktop's engine. Their windows, views, menu bars and message boxes reach your shell to lay out and draw. A page that asks for Node.js (`nodeIntegration`, or a preload that isn't sandboxed) gets it, in a renderer of its own.
 
-[Design](architecture/ELECTRON-APPS.md) · [`electron.apps`](SHELL-CONFIG.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2151](https://github.com/cprussin/domicile/pull/2151) · [#2161](https://github.com/cprussin/domicile/pull/2161) · [#2172](https://github.com/cprussin/domicile/pull/2172) · [#2201](https://github.com/cprussin/domicile/pull/2201)
+[Design](architecture/ELECTRON-APPS.md) · [`electron.apps`](SHELL-CONFIG.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2151](https://github.com/cprussin/domicile/pull/2151) · [#2161](https://github.com/cprussin/domicile/pull/2161) · [#2172](https://github.com/cprussin/domicile/pull/2172) · [#2201](https://github.com/cprussin/domicile/pull/2201) · [#2256](https://github.com/cprussin/domicile/pull/2256)
 
 ### Browser profiles
 

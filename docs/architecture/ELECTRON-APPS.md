@@ -188,6 +188,26 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   it to the window's main frame before each navigation commits, and the
   renderer runs it at document start, ahead of extensions' content scripts
   ([`electron_preload.h`](../../packages/domicile-engine/src/components/domicile/renderer/electron_preload.h)).
+- **Node in the page:** a window that isn't sandboxed (`sandbox: false`, or
+  `nodeIntegration` without `sandbox: true`, as Electron decides) has Node.js
+  in its page instead. The host sends `node` with `open_window` in place of
+  the preload's source: the preload's file, `nodeIntegration`,
+  `contextIsolation`, the app's paths and environment. The browser learns
+  which renderer the page's navigation goes to before it starts
+  (`ContentBrowserClient::MainFrameNavigatesInto`, patch 0236) and starts it
+  unsandboxed and outside the zygote, for that page alone, as Electron does
+  ([`domicile_electron_page.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_page.h)).
+  There the renderer starts Electron's Node on its own V8, a Node environment
+  in the preload's world (the page's own without context isolation), with
+  libuv's loop run in turns off the renderer's, and loads the preload with
+  Node's `require`, `require("electron")` giving the same `contextBridge` and
+  `ipcRenderer`
+  ([`electron_node.h`](../../packages/domicile-engine/src/components/domicile/renderer/electron_node.h)).
+  With `nodeIntegration` and no context isolation the page gets `require`,
+  `module`, `__filename` and `__dirname`; without either, Node's globals
+  leave the page's world once the preload ran. A preload's `require` of a
+  native module needs the engine to export Node's symbols, which it doesn't
+  yet.
 - **`contextBridge.exposeInMainWorld`** copies the API into the page:
   objects, arrays, dates, errors and bytes are copied, functions and promises
   are wrapped so they run and settle in their own world
@@ -330,9 +350,11 @@ waits on every one. Only a window shows a message box; a view's is refused.
 
 ### Unsupported apps
 
-An app whose pages need Node fails phase 1. When a window asks for
-`nodeIntegration: true` or `contextIsolation: false`, `electron-host` exits
-with status 3, whatever the app catches. `domicile open --electron` then
+An app the engine can't run yet falls back to its own Electron. When a
+sandboxed window asks for `contextIsolation: false`, whose preload would run
+in the page's own world without Node, `electron-host` exits with status 3,
+whatever the app catches; a window with Node in its page runs on the engine
+(see [Preload and IPC](#preload-and-ipc)). `domicile open --electron` then
 shows a notification naming the app and runs its own command: the one given
 after `--`, else the entry's `Exec`. An app named by its path alone has no
 command to fall back to, and the status is passed on. An app the quirks
@@ -489,7 +511,8 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
-- [ ] phase 2, engine: Node in the pages of windows that ask for it
+- [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)
+- [ ] phase 2, engine: native modules in pages (Node's symbols exported from the engine)
 - [ ] phase 2, `electron-host`: the main process on the engine's Node
 - [ ] phase 2, engine: `<webview>` in Electron pages
 - [ ] phase 2: Joplin, Teams for Linux, Zulip and Signal on the engine, out of the quirks table

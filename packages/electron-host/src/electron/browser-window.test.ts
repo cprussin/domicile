@@ -344,18 +344,67 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
-  it("refuses a window whose page needs Node.js", () => {
-    const { BrowserWindow } = setUp();
+  it("opens a window with nodeIntegration with Node.js in its page", () => {
+    const { BrowserWindow, sent } = setUp();
 
-    expect(
-      () => new BrowserWindow({ webPreferences: { nodeIntegration: true } }),
-    ).toThrow("needs Node.js");
-    expect(
-      () => new BrowserWindow({ webPreferences: { contextIsolation: false } }),
-    ).toThrow("needs Node.js");
+    void new BrowserWindow({
+      webPreferences: {
+        contextIsolation: false,
+        nodeIntegration: true,
+        preload: "/app/preload.js",
+      },
+    }).loadURL("https://notes.test/");
+
+    expect(sent).toEqual([
+      {
+        node: {
+          app_path: "/cache/x/resources/app.asar",
+          context_isolation: false,
+          electron_version: "45.2.1",
+          env: { HOME: "/home/me" },
+          integration: true,
+          preload: "/app/preload.js",
+          resources_path: "/cache/x/resources",
+        },
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
+    ]);
   });
 
-  it("hands a page that needs Node.js to its refuse", () => {
+  it("gives an unsandboxed window's preload Node.js, isolated", () => {
+    const { BrowserWindow, sent } = setUp();
+
+    void new BrowserWindow({
+      webPreferences: { preload: "/app/preload.js", sandbox: false },
+    }).loadURL("https://notes.test/");
+
+    expect(sent).toMatchObject([
+      {
+        node: {
+          context_isolation: true,
+          integration: false,
+          preload: "/app/preload.js",
+        },
+        type: "open_window",
+      },
+    ]);
+    expect(sent[0]).not.toHaveProperty("preload");
+  });
+
+  it("keeps a sandboxed window sandboxed, nodeIntegration or not", () => {
+    const { BrowserWindow, sent } = setUp();
+
+    void new BrowserWindow({
+      webPreferences: { nodeIntegration: true, sandbox: true },
+    }).loadURL("https://notes.test/");
+
+    expect(sent[0]).not.toHaveProperty("node");
+  });
+
+  it("hands a sandboxed preload in the page's own world to its refuse", () => {
     const refused: string[] = [];
     const { BrowserWindow } = setUp({
       refuse: (why) => {
@@ -365,10 +414,10 @@ describe(createBrowserWindow, () => {
     });
 
     expect(
-      () => new BrowserWindow({ webPreferences: { nodeIntegration: true } }),
+      () => new BrowserWindow({ webPreferences: { contextIsolation: false } }),
     ).toThrow("refused");
     expect(refused).toEqual([
-      "this window's page needs Node.js or the preload's world, which Domicile's engine doesn't give a page",
+      "this window's sandboxed preload runs in its page's own world, which Domicile's engine doesn't give a preload",
     ]);
   });
 

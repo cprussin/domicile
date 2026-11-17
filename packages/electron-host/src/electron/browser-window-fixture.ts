@@ -82,6 +82,11 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
     },
     (path) => `source of ${path}`,
     refuse,
+    () => ({
+      electron_version: "45.2.1",
+      env: { HOME: "/home/me" },
+      resources_path: "/cache/x/resources",
+    }),
   );
   const say = (event: WindowEvent) => events.emit("window", event);
   return { ...windows, app, exits, ipcMain, menus, say, sent, sessions };

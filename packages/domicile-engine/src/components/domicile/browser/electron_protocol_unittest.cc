@@ -317,6 +317,49 @@ TEST(ElectronProtocolTest, OpenWindowMayGiveATitleAndOpenHidden) {
             "a view has no title or hidden of its own: its window has them");
 }
 
+TEST(ElectronProtocolTest, OpenWindowMayGiveItsPageNode) {
+  const auto plain = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"file:///app/index.html"})");
+  const auto node = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"file:///app/index.html",)"
+      R"("node":{"preload":"/app/preload.js","integration":true,)"
+      R"("context_isolation":false,"resources_path":"/res",)"
+      R"("app_path":"/res/app","electron_version":"45.2.1",)"
+      R"("env":{"HOME":"/home/a"}}})");
+  const auto bare = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"file:///app/index.html",)"
+      R"("node":{}})");
+
+  ASSERT_TRUE(plain.has_value() && node.has_value() && bare.has_value());
+  EXPECT_FALSE(std::get<ElectronOpenWindow>(*plain).node.has_value());
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*node).node,
+            (ElectronNode{.preload = "/app/preload.js",
+                          .integration = true,
+                          .context_isolation = false,
+                          .resources_path = "/res",
+                          .app_path = "/res/app",
+                          .electron_version = "45.2.1",
+                          .env = {{"HOME", "/home/a"}}}));
+  // Electron's defaults: no nodeIntegration, and context isolation.
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*bare).node, ElectronNode{});
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":true})"),
+            "\"node\" must be an object: what the page's Node.js needs");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":{"integration":1}})"),
+            "\"node\"'s \"integration\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":{"preload":"p.js"}})"),
+            "\"node\"'s \"preload\" must be an absolute path");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":{"env":{"A":1}}})"),
+            "\"node\"'s \"env\" must be an object of strings");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","preload":"x","node":{}})"),
+            "a page with Node.js loads its preload from a file, "
+            "\"node\"'s \"preload\", not from \"preload\"");
+}
+
 TEST(ElectronProtocolTest, SetTitleAndSetHiddenNameTheirWindow) {
   const auto title = ParseElectronRequest(
       R"({"type":"set_title","window":2,"title":"Slack"})");
