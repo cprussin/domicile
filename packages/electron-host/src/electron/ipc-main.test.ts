@@ -27,6 +27,29 @@ const outcome = (
   });
 
 describe(createIpcMain, () => {
+  it("names the page's main frame as the sender's frame, as Slack checks", async () => {
+    const { invoke, ipcMain, receive } = createIpcMain();
+    const frame = { routingId: 7 };
+    const sender: IpcSender = {
+      id: 3,
+      mainFrame: frame,
+      send: () => undefined,
+    };
+    const heard: unknown[] = [];
+    ipcMain.on("state", (event: { frameId: number; senderFrame: unknown }) =>
+      heard.push(event.senderFrame, event.frameId),
+    );
+    ipcMain.handle(
+      "get",
+      (event) => (event as { senderFrame: unknown }).senderFrame === frame,
+    );
+
+    receive(sender, "state", []);
+
+    expect(heard).toEqual([frame, 7]);
+    expect(outcome(await invoke(sender, "get", []))).toEqual({ value: true });
+  });
+
   it("gives a page's send to the channel's listeners, with its page", () => {
     const { ipcMain, receive } = createIpcMain();
     const { sender } = page();

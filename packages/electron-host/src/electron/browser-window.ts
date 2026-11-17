@@ -5,12 +5,13 @@
 
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type {
   Engine,
   EngineRequest,
+  PageNode,
   ViewPlacement,
   WindowEvent,
 } from "../engine";
@@ -22,6 +23,7 @@ import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
 import type { createSessions, Session } from "./session";
 import { sessionPartition } from "./session";
+import { ELECTRON_VERSION } from "./version";
 
 export type WebPreferences = {
   readonly preload?: string | undefined;
@@ -30,7 +32,28 @@ export type WebPreferences = {
   readonly session?: Session | undefined;
   readonly nodeIntegration?: boolean | undefined;
   readonly contextIsolation?: boolean | undefined;
+  /** Left out, a page is sandboxed unless it asks for nodeIntegration. */
+  readonly sandbox?: boolean | undefined;
 };
+
+/** What every page with Node.js gets alike: the app's, not the window's. */
+export type PageNodeBase = Pick<
+  PageNode,
+  "resources_path" | "electron_version" | "env"
+>;
+
+/** The host's own, which its app's pages get, as Electron's renderers do. */
+const hostNodeBase = (): PageNodeBase => ({
+  electron_version: ELECTRON_VERSION,
+  env: Object.fromEntries(
+    // biome-ignore lint/style/noProcessEnv: the app's environment, which Electron's renderers inherit
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  ),
+  // Set on the host's process before the app's code runs; see main.ts.
+  resources_path: String(Reflect.get(process, "resourcesPath") ?? ""),
+});
 
 export type BrowserWindowOptions = {
   readonly show?: boolean | undefined;
@@ -135,6 +158,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   refuse: (why: string) => never = (why) => {
     throw new Error(why);
   },
+  /** What its pages with Node.js get alike. */
+  nodeBase: () => PageNodeBase = hostNodeBase,
 ) => {
   /** Every page by the engine's number: windows' and views'. */
   const pages = new Map<number, Page>();
@@ -441,22 +466,37 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       { resolve: (result: unknown) => void; reject: (why: Error) => void }
     >();
     readonly #preload: string | undefined;
+    /** Node.js in its page, for a window that isn't sandboxed. */
+    readonly #node: PageNode | undefined;
     readonly #view: boolean;
 
     constructor(preferences: WebPreferences, title: string, view: boolean) {
       super();
-      if (
-        preferences.nodeIntegration === true ||
-        preferences.contextIsolation === false
-      ) {
+      // As Electron decides: nodeIntegration turns the default sandbox off.
+      const sandboxed =
+        preferences.sandbox ?? preferences.nodeIntegration !== true;
+      const isolated = preferences.contextIsolation !== false;
+      if (sandboxed && !isolated) {
         refuse(
-          "this window's page needs Node.js or the preload's world, which Domicile's engine doesn't give a page",
+          "this window's sandboxed preload runs in its page's own world, which Domicile's engine doesn't give a preload",
         );
       }
       this.#preload =
-        preferences.preload === undefined
-          ? undefined
-          : readPreload(preferences.preload);
+        sandboxed && preferences.preload !== undefined
+          ? readPreload(preferences.preload)
+          : undefined;
+      // Node in the page loads the preload from its file.
+      this.#node = sandboxed
+        ? undefined
+        : {
+            ...nodeBase(),
+            app_path: app.getAppPath(),
+            context_isolation: isolated,
+            integration: preferences.nodeIntegration === true,
+            ...(preferences.preload === undefined
+              ? {}
+              : { preload: resolve(preferences.preload) }),
+          };
       this.session =
         preferences.session ??
         sessions.fromPartition(preferences.partition ?? "");
@@ -506,6 +546,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           url,
           window: this.id,
           ...(this.#preload === undefined ? {} : { preload: this.#preload }),
+          ...(this.#node === undefined ? {} : { node: this.#node }),
           ...(session === "" ? {} : { session }),
           ...(this.#view ? { view: true } : {}),
           ...this.opening(),

@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/domicile/renderer/context_bridge.h"
+#include "components/domicile/renderer/electron_node.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/converter.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -52,11 +53,12 @@ namespace {
 constexpr int32_t kElectronPreloadWorld = 1 << 20;
 
 // Run in the preload's world with the natives and the preload, as a function
-// of Node's module arguments. Gives back the two functions the browser's
-// messages call. Everything Electron-shaped lives here; the natives only move
+// of Node's module arguments, or null when Node loads the preload. Gives back
+// the functions the browser's messages call, and `electron` for Node's
+// require. Everything Electron-shaped lives here; the natives only move
 // strings and values.
 constexpr char kBootstrap[] = R"JS(
-(function (native, preload) {
+(function (native, preload, contextIsolated) {
   'use strict';
   const listeners = new Map();
   const answers = new Map();
@@ -200,6 +202,10 @@ constexpr char kBootstrap[] = R"JS(
   ipcRenderer.off = ipcRenderer.removeListener;
   const contextBridge = {
     exposeInMainWorld(key, api) {
+      if (!contextIsolated) {
+        throw new Error('contextBridge API can only be used when ' +
+                        'contextIsolation is enabled');
+      }
       native.expose(String(key), api);
     },
     exposeInIsolatedWorld: unsupported('contextBridge.exposeInIsolatedWorld'),
@@ -221,16 +227,19 @@ constexpr char kBootstrap[] = R"JS(
     versions: {},
   };
   const module = { exports: {} };
-  try {
-    preload.call(globalThis, require, process, module, module.exports,
-                 globalThis);
-  } catch (error) {
-    report(error);
+  if (preload !== null) {
+    try {
+      preload.call(globalThis, require, process, module, module.exports,
+                   globalThis);
+    } catch (error) {
+      report(error);
+    }
   }
   const emit = (channel, event, args) => {
     run(channel, [event, ...args]);
   };
   return {
+    electron,
     deliver(channel, json) {
       emit(channel, { sender: ipcRenderer, senderId: 0, ports: [] },
            JSON.parse(json));
@@ -315,7 +324,7 @@ void ElectronPreload::ReadyToCommitNavigation(
   to_run_.reset();
   if (next_.has_value()) {
     host_.Bind(std::move(next_->host));
-    to_run_ = std::move(next_->source);
+    to_run_ = std::move(next_->preload);
     next_.reset();
   }
 }
@@ -326,9 +335,17 @@ bool ElectronPreload::RunAtDocumentStart(content::RenderFrame* frame) {
   if (!self || !self->to_run_.has_value()) {
     return true;
   }
-  const std::string source = std::move(*self->to_run_);
+  ToRun preload = std::move(*self->to_run_);
   self->to_run_.reset();
-  return self->Run(source);
+  return self->Run(std::move(preload));
+}
+
+void ElectronPreload::WillReleaseScriptContext(v8::Local<v8::Context> context,
+                                               int32_t world_id) {
+  // Node ends with its document, while its context is still whole.
+  if (node_ && node_->RunsIn(context)) {
+    node_.reset();
+  }
 }
 
 void ElectronPreload::OnDestruct() {
@@ -337,8 +354,10 @@ void ElectronPreload::OnDestruct() {
 
 void ElectronPreload::Preload(
     const std::string& source,
+    mojom::ElectronNodePtr node,
     mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host) {
-  next_ = Next{.source = source, .host = std::move(host)};
+  next_ = Next{.preload = {.source = source, .node = std::move(node)},
+               .host = std::move(host)};
 }
 
 void ElectronPreload::Deliver(const std::string& channel,
@@ -416,26 +435,40 @@ void ElectronPreload::ExecuteJavaScript(const std::string& code,
       blink::mojom::PromiseResultOption::kAwait, blink::WebString());
 }
 
-bool ElectronPreload::Run(const std::string& source) {
+v8::Local<v8::Context> ElectronPreload::WorldContext(v8::Isolate* isolate) {
+  blink::WebLocalFrame& frame = *render_frame()->GetWebFrame();
+  return world_ == blink::kMainDOMWorldId
+             ? frame.MainWorldScriptContext()
+             : frame.GetScriptContextFromWorldId(isolate, world_);
+}
+
+bool ElectronPreload::Run(ToRun to_run) {
   blink::WebLocalFrame& frame = *render_frame()->GetWebFrame();
   v8::Isolate* isolate = IsolateOf(frame);
   v8::HandleScope handle_scope(isolate);
+  const bool isolated = !to_run.node || to_run.node->context_isolation;
+  world_ = isolated ? kElectronPreloadWorld : blink::kMainDOMWorldId;
+  // Runs `source` in the preload's world.
+  const auto execute = [&](const std::string& source, const char* url) {
+    const blink::WebScriptSource script(blink::WebString::FromUtf8(source),
+                                        GURL(url));
+    return isolated ? frame.ExecuteScriptInIsolatedWorldAndReturnValue(
+                          kElectronPreloadWorld, script,
+                          blink::BackForwardCacheAware::kAllow)
+                    : frame.ExecuteScriptAndReturnValue(script);
+  };
   v8::Local<v8::Value> bootstrap =
-      frame.ExecuteScriptInIsolatedWorldAndReturnValue(
-          kElectronPreloadWorld,
-          blink::WebScriptSource(blink::WebString::FromUtf8(kBootstrap),
-                                 GURL("domicile-electron:///bootstrap.js")),
-          blink::BackForwardCacheAware::kAllow);
+      execute(kBootstrap, "domicile-electron:///bootstrap.js");
   // The bootstrap is ours, so its failing is the engine's bug.
   CHECK(!bootstrap.IsEmpty() && bootstrap->IsFunction())
       << "domicile: the Electron preload's bootstrap did not compile";
-  v8::Local<v8::Value> preload =
-      frame.ExecuteScriptInIsolatedWorldAndReturnValue(
-          kElectronPreloadWorld,
-          blink::WebScriptSource(blink::WebString::FromUtf8(Wrapped(source)),
-                                 GURL("domicile-electron:///preload.js")),
-          blink::BackForwardCacheAware::kAllow);
-  if (preload.IsEmpty() || !preload->IsFunction()) {
+  // With Node, Node's require loads the preload from its file.
+  v8::Local<v8::Value> preload = v8::Null(isolate);
+  if (!to_run.node) {
+    preload =
+        execute(Wrapped(to_run.source), "domicile-electron:///preload.js");
+  }
+  if (!to_run.node && (preload.IsEmpty() || !preload->IsFunction())) {
     // The app's bug. Blink already put the syntax error on the console.
     LOG(ERROR) << "domicile: an Electron window's preload did not compile; "
                   "the page runs without it.";
@@ -445,8 +478,7 @@ bool ElectronPreload::Run(const std::string& source) {
             "Unable to load preload script: it did not compile.")));
     return true;
   }
-  v8::Local<v8::Context> world =
-      frame.GetScriptContextFromWorldId(isolate, kElectronPreloadWorld);
+  v8::Local<v8::Context> world = WorldContext(isolate);
   v8::Context::Scope scope(world);
   v8::Local<v8::Object> natives = v8::Object::New(isolate);
   const auto add = [&](const char* name, v8::FunctionCallback callback) {
@@ -463,7 +495,8 @@ bool ElectronPreload::Run(const std::string& source) {
   add("post", &ElectronPreload::Post);
   add("portPost", &ElectronPreload::PortPost);
   add("portClose", &ElectronPreload::PortClose);
-  v8::Local<v8::Value> argv[] = {natives, preload};
+  v8::Local<v8::Value> argv[] = {natives, preload,
+                                 v8::Boolean::New(isolate, isolated)};
   v8::Local<v8::Value> made;
   // The preload is the app's script, and may end the frame, this with it.
   base::WeakPtr<ElectronPreload> alive = weak_factory_.GetWeakPtr();
@@ -492,6 +525,21 @@ bool ElectronPreload::Run(const std::string& source) {
         << "domicile: the Electron preload's bootstrap has no " << name;
   }
   bootstrap_.Reset(isolate, calls);
+  if (to_run.node) {
+    v8::Local<v8::Value> electron;
+    CHECK(calls->Get(world, gin::StringToSymbol(isolate, "electron"))
+              .ToLocal(&electron) &&
+          electron->IsObject())
+        << "domicile: the Electron preload's bootstrap has no electron";
+    // Node runs the app's preload, which may end the frame, this with it.
+    std::unique_ptr<ElectronNodeEnvironment> node =
+        ElectronNodeEnvironment::Start(isolate, world, *to_run.node,
+                                       electron.As<v8::Object>());
+    if (!alive) {
+      return false;
+    }
+    node_ = std::move(node);
+  }
   return true;
 }
 
@@ -499,8 +547,7 @@ void ElectronPreload::Call(const char* name,
                            base::span<v8::Local<v8::Value>> argv) {
   blink::WebLocalFrame& frame = *render_frame()->GetWebFrame();
   v8::Isolate* isolate = IsolateOf(frame);
-  v8::Local<v8::Context> world =
-      frame.GetScriptContextFromWorldId(isolate, kElectronPreloadWorld);
+  v8::Local<v8::Context> world = WorldContext(isolate);
   v8::Context::Scope scope(world);
   v8::Local<v8::Value> function =
       bootstrap_.Get(isolate)

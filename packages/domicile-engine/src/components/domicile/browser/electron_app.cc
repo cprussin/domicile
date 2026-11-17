@@ -349,7 +349,7 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
           &ElectronApp::CloseAsked, weak_factory_.GetWeakPtr(), open.window),
   };
   const std::optional<std::string> id =
-      desk_->Open(open.url, hello_->app_id, *partition, open.preload,
+      desk_->Open(open.url, hello_->app_id, *partition, open.preload, open.node,
                   std::move(calls), SessionNamed(open.session).GetWeakPtr(),
                   open.view, open.title, open.hidden);
   if (!id.has_value()) {

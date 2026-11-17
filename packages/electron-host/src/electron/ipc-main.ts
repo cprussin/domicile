@@ -16,6 +16,12 @@ export type IpcSender = {
    * `ipcMain`.
    */
   readonly ipc?: IpcMain;
+  /**
+   * The page's main frame, the one frame that sends: an event's
+   * `senderFrame`, which apps check before they answer (Slack drops a message
+   * without one).
+   */
+  readonly mainFrame?: { readonly routingId: number };
 };
 
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
@@ -136,9 +142,10 @@ export class IpcMain extends EventEmitter {
 }
 
 const invokeEvent = (sender: IpcSender) => ({
-  frameId: 0,
+  frameId: sender.mainFrame?.routingId ?? 0,
   processId: 0,
   sender,
+  senderFrame: sender.mainFrame ?? null,
 });
 
 const messageEvent = (sender: IpcSender) => ({
