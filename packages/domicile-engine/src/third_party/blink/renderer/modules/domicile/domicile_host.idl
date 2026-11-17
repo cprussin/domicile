@@ -255,6 +255,16 @@
   [CallWith=ScriptState, RaisesException] undefined activateExtension(
       DOMString id);
 
+  // Show the actions of browser profile `profile`'s extensions in
+  // `extensions`, and have activateExtension() click them there, on the
+  // active tab of its pages: as Chrome's toolbar shows its window's
+  // profile's. A shell names the profile of the page it last focused. The
+  // default profile's until called, and while `profile` loads; one the desk
+  // does not have shows the default's. Each entry's `profile` says which it
+  // is. Over the tray's pipe, as activateExtension(). An empty id throws.
+  [CallWith=ScriptState, RaisesException] undefined setExtensionsProfile(
+      DOMString profile);
+
   // Switch installed extension `id` on or off, as chrome://extensions does.
   // Resolves once switched; `installedExtensions` and `extensions` follow.
   // Rejects with an OperationError saying why, in words to show, when it is

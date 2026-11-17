@@ -123,6 +123,7 @@ export type DomicileAppEventInit = EventInit & {
 export type DomicileExtensionPopupEventInit = EventInit & {
   extensionId?: string;
   popup?: string;
+  profile?: string;
 };
 
 /**
@@ -602,6 +603,11 @@ export type DomicileExtension = {
   readonly popup: string | null;
   /** False after the extension's action.disable(). */
   readonly enabled: boolean;
+  /**
+   * The id of the browser profile it is in: the one setExtensionsProfile()
+   * named, once that has loaded. Its popup opens in a <webview> in it.
+   */
+  readonly profile: string;
 };
 
 /**
@@ -617,6 +623,11 @@ export type DomicileExtensionPopupEvent = Event & {
    * soon as the call answers.
    */
   readonly popup: string;
+  /**
+   * The id of the browser profile the extension is in, which the popup opens
+   * in, as a <webview>'s `profile`.
+   */
+  readonly profile: string;
 };
 
 /**
@@ -1030,6 +1041,16 @@ export type DomicileHost = {
    * uninstall, and does nothing; an empty one throws.
    */
   activateExtension(id: string): void;
+  /**
+   * Show the actions of browser profile `profile`'s extensions in
+   * `extensions`, and have activateExtension() click them there, on the
+   * active tab of its pages: as Chrome's toolbar shows its window's
+   * profile's. A shell names the profile of the page it last focused. The
+   * default profile's until called, and while `profile` loads; one the desk
+   * does not have shows the default's. Each entry's `profile` says which it
+   * is. Over the tray's pipe, as activateExtension(). An empty id throws.
+   */
+  setExtensionsProfile(profile: string): void;
   /**
    * Switch installed extension `id` on or off, as chrome://extensions does.
    * Resolves once switched; `installedExtensions` and `extensions` follow.

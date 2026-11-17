@@ -35,6 +35,9 @@ struct TrayExtension {
   string popup;
   // False after action.disable().
   bool enabled;
+  // The id of the browser profile it is in, which its popup opens in: the
+  // one SetProfile names, or the default profile's until that loads.
+  string profile;
 };
 
 // Where an extension runs on the sites it asks for, as chrome://extensions'
@@ -87,6 +90,14 @@ interface ExtensionTray {
   // message.
   SetClient(pending_remote<ExtensionTrayClient> client);
 
+  // Shows the actions of browser profile `profile`'s extensions, as Chrome's
+  // toolbar shows those of its window's profile, and has Activate click them
+  // there: on the active tab of `profile`'s pages. The default profile's until
+  // it is called. An id the desk has no profile for shows the default
+  // profile's, and says so in the log; a shell asks for the profile of the
+  // page it last focused, which may have gone with the config.
+  SetProfile(string profile);
+
   // Clicks the action, as ExtensionActionRunner::RunAction does for a toolbar
   // click. Grants activeTab on the active tab, then dispatches
   // `action.onClicked` unless the action has a popup, which the shell opens
@@ -121,5 +132,7 @@ interface ExtensionTrayClient {
   // Extension `id` called `action.openPopup()`. The shell opens `popup` as it
   // opens a clicked action's. `popup` is carried because the extension may
   // set its action's popup back to none as soon as the call answers.
-  PopupRequested(string id, string popup);
+  // `profile` is the id of the browser profile it is in, which the popup
+  // opens in.
+  PopupRequested(string id, string popup, string profile);
 };

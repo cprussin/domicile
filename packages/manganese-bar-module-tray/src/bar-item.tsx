@@ -22,18 +22,13 @@ export const Tray = () => {
     pins,
     profile,
   } = useTrayState();
-  // The page's profile's: an extension switched off there has no action.
-  const shown =
-    profile === undefined
-      ? extensions
-      : extensions.filter(({ id }) => profile.enabledExtensions.includes(id));
   return (
     <TrayRow
       domicile={domicile}
       end={
         <TrayIconsMenu
           domicile={domicile}
-          extensions={shown}
+          extensions={extensions}
           installed={installed}
           items={items}
           onActivate={(id) => {
@@ -52,7 +47,7 @@ export const Tray = () => {
           unpinned={pins.unpinned}
         />
       }
-      extensions={shown}
+      extensions={extensions}
       items={items}
       onActivate={(id) => {
         clicked(screen, id);
