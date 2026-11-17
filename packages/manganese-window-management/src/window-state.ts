@@ -355,16 +355,20 @@ export const killedIdsOf = (state: WindowState): readonly string[] =>
   commandedWindowsOn(workspaceHere(state));
 
 /**
- * The background windows shown as closed: off every workspace and the
- * scratchpad, though their pages keep running. See
- * {@link WindowState.background}.
+ * The windows shown as closed, though their pages keep running: background
+ * windows off every workspace and the scratchpad (see
+ * {@link WindowState.background}), and the windows their apps hid.
  */
-export const shutIdsOf = (state: WindowState): readonly string[] =>
-  state.background.filter(
+export const shutIdsOf = (state: WindowState): readonly string[] => [
+  ...state.background.filter(
     (id) =>
       workspaceHolding(state, id) === undefined &&
       !state.scratchpad.includes(id),
-  );
+  ),
+  ...state.windows.flatMap((window) =>
+    window.kind === WindowKind.Browser && window.isHidden ? [window.id] : [],
+  ),
+];
 
 /** The engine's ids of the windows {@link shutIdsOf} names. */
 export const closedBrowsersOf = (state: WindowState): readonly string[] =>
@@ -1946,31 +1950,82 @@ const listBrowsers = (
       (opening, { entry, window }) => {
         if (entry.isApp && backgroundApps.includes(entry.appId)) {
           return openHidden(opening, window);
+        } else if (entry.isHidden) {
+          // Its app hid it: listed, on no workspace until the app shows it.
+          return { ...opening, windows: [...opening.windows, window] };
         }
         return entry.width === 0 && entry.height === 0
           ? openWindow(opening, window)
           : openPopupWindow(opening, window, entry.width, entry.height);
       },
-      pagesShown(
+      appsHidOrShowed(
+        pagesShown(
+          kept,
+          new Map(browsers.map(({ window }) => [window.id, window])),
+        ),
         kept,
-        new Map(browsers.map(({ window }) => [window.id, window])),
       ),
     );
 };
+
+// Takes each browser window its app has just hidden off its workspace, and
+// puts each it has just shown on the current one, from `before`, the windows
+// as they were listed last.
+const appsHidOrShowed = (
+  state: WindowState,
+  before: WindowState,
+): WindowState =>
+  state.windows.reduce((changing, window) => {
+    const was = windowOf(before, window.id);
+    if (
+      window.kind !== WindowKind.Browser ||
+      was?.kind !== WindowKind.Browser ||
+      was.isHidden === window.isHidden
+    ) {
+      return changing;
+    } else if (window.isHidden) {
+      return {
+        ...changing,
+        draggingId:
+          changing.draggingId === window.id ? undefined : changing.draggingId,
+        scratchpad: changing.scratchpad.filter((held) => held !== window.id),
+        workspaces: changing.workspaces.map((workspace) =>
+          holds(workspace, window.id)
+            ? closed(workspace, window.id)
+            : workspace,
+        ),
+      };
+    } else {
+      return workspaceHolding(changing, window.id) === undefined
+        ? onCurrent(changing, (workspace) => opened(workspace, window.id))
+        : changing;
+    }
+  }, state);
 
 /** A browser window as the shell holds it. */
 type BrowserRecord = ReturnType<typeof Window.Browser>;
 
 /** A listed browser window as the shell holds it, before its view's icon. */
 const browserOf = ({
+  appId,
   id,
   isApp,
+  isHidden,
   isPrivate,
   popupWindow,
   title,
   url,
 }: ListedBrowserWindow): BrowserRecord =>
-  Window.Browser(id, url, title, popupWindow, isPrivate, isApp);
+  Window.Browser(
+    id,
+    url,
+    title,
+    popupWindow,
+    isPrivate,
+    isApp,
+    appId,
+    isHidden,
+  );
 
 // Updates each browser window the shell has to its listed address and title,
 // keeping the icon and description its view reported.
