@@ -433,8 +433,14 @@ void ElectronNodeEnvironment::RunOnce() {
     // timeout again before it waits, so a watcher started now needn't
     // interrupt it.
     uv_loop_interrupt_suspend(&loop_);
-    uv_run(&loop_, UV_RUN_NOWAIT);
+    const int alive = uv_run(&loop_, UV_RUN_NOWAIT);
     uv_loop_interrupt_resume(&loop_);
+    // What guard-electron-node.sh reads when Node's loop stalls.
+    if (++turns_ <= 12) {
+      LOG(INFO) << "domicile: an Electron page's Node.js turned (" << turns_
+                << "), " << (alive ? "alive" : "idle") << ", waiting "
+                << uv_backend_timeout(&loop_) << " ms for its next";
+    }
   }
   uv_sem_post(&turn_);
 }
@@ -453,6 +459,9 @@ void ElectronNodeEnvironment::Poll(void* arg) {
     do {
       ready = epoll_wait(self->epoll_, &event, 1, timeout);
     } while (ready == -1 && errno == EINTR);
+    // Only our own epoll and the loop's are in this, so a failure is ours.
+    PCHECK(ready >= 0) << "domicile: an Electron page's Node.js stopped "
+                          "waiting on its loop";
     if (self->closing_) {
       return;
     }

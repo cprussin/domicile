@@ -87,6 +87,8 @@ class ElectronNodeEnvironment final {
   uv_sem_t turn_;
   uv_thread_t thread_;
   bool polling_ = false;
+  // Turns so far, for the log of the first few.
+  int turns_ = 0;
   std::atomic<bool> closing_{false};
   // Waits on the loop's backend, which is itself an epoll.
   int epoll_ = -1;

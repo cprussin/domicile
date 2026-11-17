@@ -19,8 +19,18 @@ ipcRenderer.send("preload", {
   type: process.type,
 });
 
-// Node's own loop turns: a timer and a file read each call back.
+// What Node's loop throws, the app hears, since the page's console is out of
+// the guard's sight.
+process.on("uncaughtException", (error) => {
+  ipcRenderer.send("error", String(error?.stack ?? error));
+});
+
+// Node's own loop turns: a timer and a file read each call back. The others
+// say which of Node's queues ran when the timer didn't.
 timers.setTimeout(() => ipcRenderer.send("ticked", true), 20);
+timers.setTimeout(() => ipcRenderer.send("timer-0", true), 0);
+timers.setImmediate(() => ipcRenderer.send("immediate", true));
+process.nextTick(() => ipcRenderer.send("next-tick", true));
 fs.readFile(__filename, "utf8", (error, text) => {
   ipcRenderer.send("read", error === null && text.includes("ticked"));
 });

@@ -155,12 +155,12 @@ heard = []
 def send(request):
     connection.sendall((json.dumps(request) + "\n").encode())
 
-def hear_until(wanted):
+def hear_until(wanted, within=None):
     """Reads events until one matches `wanted` or time runs out."""
     for event in heard:
         if wanted(event):
             return event
-    deadline = time.monotonic() + seconds
+    deadline = time.monotonic() + (within or seconds)
     while time.monotonic() < deadline:
         connection.settimeout(max(0.1, deadline - time.monotonic()))
         try:
@@ -181,8 +181,8 @@ def message(window, channel):
                       e.get("window") == window and
                       e.get("channel") == channel)
 
-def said(window, channel):
-    event = hear_until(message(window, channel))
+def said(window, channel, within=None):
+    event = hear_until(message(window, channel), within)
     return event["args"][0] if event and event.get("args") else None
 
 def node(integration, context_isolation):
@@ -209,8 +209,12 @@ send({"type": "open_window", "window": 1, "url": page,
       "node": node(True, False)})
 preload_1 = said(1, "preload")
 page_1 = said(1, "page")
-ticked = said(1, "ticked")
-read = said(1, "read")
+# The loop's callbacks come within a moment, or not at all: a short wait, so
+# the windows after still get theirs.
+ticked = said(1, "ticked", 15)
+read = said(1, "read", 15)
+for probe in ("timer-0", "immediate", "next-tick", "error"):
+    print("%s 1: %s" % (probe, json.dumps(said(1, probe, 1))), flush=True)
 send({"type": "open_window", "window": 2, "url": page,
       "node": node(False, True)})
 preload_2 = said(2, "preload")
@@ -334,8 +338,10 @@ fi
 annotate_from "guard-electron-node: $FAILURE" "$ENGINE_LOG"
 echo "what the engine died of, if it did:" >&2
 grep -n -A45 -E "FATAL|Check failed|Received signal" "$ENGINE_LOG" | head -150 >&2
+echo "how Node's loop turned, if it did:" >&2
+grep "Node.js turned" "$ENGINE_LOG" | head -40 >&2
 echo "the app heard:" >&2
-tail -20 "$APP_LOG" >&2
+tail -30 "$APP_LOG" >&2
 echo "the engine's last words:" >&2
 last_words "$ENGINE_LOG" >&2
 exit 1
