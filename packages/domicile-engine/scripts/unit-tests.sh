@@ -21,7 +21,7 @@ require_engine_out
 FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:ShellWindowsToFitTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionSettingsTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:ForwardedKeysTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:SurfaceHoldsTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:SurfaceBacklogTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*:BrowserWindowCaptureTargetTest.*:BrowserWindowListingTest.*:ShellWindowWaitTest.*:ShellSwapTest.*:DeskCursorThemeSourceTest.*:XCursorThemeTest.*:XCursorThemeDirectoryTest.*:SyncedFrameTest.*:RenderProcessTest.*:ShellDeathTest.*:ProbeWaitTest.*:ScreenCaptureTest.*:ScreenChoiceTest.*:WebViewPartitionTest.*:WillNavigateTest.*:DeskActivityTest.*:DeskPointerTest.*:PointerWarpTest.*:PageMatchesTest.*:ForceDarkTest.*:HiddenFromCapturesTest.*:LocaleFallbackTest.*:DomicileLcdTextActivationTest.*:RtkitTest.*:DeskGesturesTest.*:NativeGestureSequenceTest.*:EdgeSwipeTest.*:DeskPointerHidingTest.*:PointerHidingTest.*:InputMethodLinesTest.*:DeskModifierTapsTest.*:TapModifierOfTest.*:IdentityDialogTest.*:PictureInPictureVideosTest.*:BufferColorTest.*:ElectronProtocolTest.*:ElectronAppTest.*:ElectronPermissionForTest.*:ElectronSchemesTest.*:ContextBridgeTest.*:ContextMenuTest.*:UnacceleratedMotionTest.*:WarpLandingTest.*:PointerConfinementBoxesTest.*:BrowserProfilesTest.*:UnfocusedWebViewsTest.*'
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 56,
-# WindowDiff 7, EngineEventQueue 9, ShortcutRegistry 14, ShellURLLoaderFactory
+# WindowDiff 7, EngineEventQueue 9, ShortcutRegistry 17, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 4, CursorShape 3, CommandProtocol 64,
 # DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 10,
 # ShellWindowPlaces 8, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
@@ -34,7 +34,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ControlChannel 28, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 4, AppRoots 4, AppChannel 3, AppDocument 3,
-# WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 8,
+# WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 11,
 # DeskCursorThemeSource 3, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 7,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
@@ -47,6 +47,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4,
 # BrowserProfiles 12, UnfocusedWebViews 7.
 #
+# 865, and it was 859 — dropping another shell's shortcut claims on a swap is
+# three more ShortcutRegistry cases and three more ShellSwap ones. Before that
 # 859, and it was 858 — the extensions the user installs in one profile
 # going into every other are one more BrowserProfiles case. Before that
 # 858, and it was 855 — the Settings app's Profiles page is three more
@@ -308,7 +310,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=859
+FLOOR=865
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

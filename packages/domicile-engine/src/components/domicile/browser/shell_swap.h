@@ -72,9 +72,11 @@ class ShellSwap {
   // nullopt once the new shell ran, or why it did not.
   using Swapped = base::OnceCallback<void(const ShellOutcome& ran)>;
 
-  // `load` loads whatever `source` serves into the shell's window.
+  // `load` loads whatever `source` serves into the shell's window. `changed`
+  // runs before the swap loads a shell other than the one it serves now.
   ShellSwap(ShellSource& source,
             base::RepeatingClosure load,
+            base::RepeatingClosure changed,
             base::TimeDelta patience);
   ShellSwap(const ShellSwap&) = delete;
   ShellSwap& operator=(const ShellSwap&) = delete;
@@ -103,8 +105,12 @@ class ShellSwap {
   // Answers the waiting swap with `ran` and stops waiting.
   void Answer(const ShellOutcome& ran);
 
+  // Serves `shell` and loads it, telling `changed_` first if it is another.
+  void Serve(const Served& shell);
+
   const raw_ref<ShellSource> source_;
   const base::RepeatingClosure load_;
+  const base::RepeatingClosure changed_;
   const base::TimeDelta patience_;
 
   // How to answer the waiting swap, null while none waits, and the shell

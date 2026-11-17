@@ -45,6 +45,7 @@
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/browser/shell_swap.h"
 #include "components/domicile/browser/shell_window_wait.h"
+#include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
@@ -189,6 +190,9 @@ void LoadTheServedShell() {
 ShellSwap& TheShellSwap() {
   static base::NoDestructor<ShellSwap> swap(
       ShellSource::Get(), base::BindRepeating(&LoadTheServedShell),
+      // Drops the old shell's shortcut claims on a swap to another shell.
+      base::BindRepeating(&ShortcutRegistry::ShellChanged,
+                          base::Unretained(&ShortcutRegistry::Get())),
       kShellRunsWithin);
   return *swap;
 }
