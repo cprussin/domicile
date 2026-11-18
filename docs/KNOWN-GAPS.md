@@ -66,6 +66,10 @@ the detail, when there is one. Remove a gap when it's fixed.
 
 ## Session and portals
 
+- **An agent on the web, such as claude.ai, can't reach the desk yet.**
+  `domicile mcp --http` serves agents on this computer; reaching it from
+  outside needs a relay and a certificate the desk holds.
+  [AGENTS.md](/docs/AGENTS.md#agents-that-sign-in).
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.

@@ -118,6 +118,9 @@ Ask the running desktop:
   domicile log-out                      Ask, then end the login session
   domicile mcp                          Serve the Model Context Protocol on
                                         stdio, for agents to drive the desktop
+  domicile mcp --http <address> [--url <url>]
+                                        Serve it over HTTP, for agents that
+                                        sign in, reached at url
   domicile agent <name>                 Ask to let an agent in; print what the
                                         user allowed and each change, then
                                         list each line read as what it did,
@@ -272,6 +275,11 @@ pub enum CliError {
          accessibility, and click, focus or set-text <text>."
     )]
     NotAnAct,
+    #[error(
+        "mcp --http takes the address to listen on, such as 127.0.0.1:7465, \
+         and was given {said}."
+    )]
+    NotAListenAddress { said: String },
     #[error("{verb} takes one {what}, and was given {said}.")]
     NotOne {
         verb: String,
@@ -452,9 +460,9 @@ pub enum Invocation {
     /// Ask the running desktop for a listing and print it as a table, or
     /// with `json` as the JSON array it answered with.
     List { listing: Listing, json: bool },
-    /// Serve the Model Context Protocol on stdio until it ends; see
-    /// [`crate::mcp`].
-    Mcp,
+    /// Serve the Model Context Protocol on stdio until it ends, or with
+    /// `http` over HTTP; see [`crate::mcp`].
+    Mcp { http: Option<McpHttp> },
     /// Ask the user to let agent `name` in, print what they allowed, then
     /// list each line of stdin as what it did, until either side ends it;
     /// see [`crate::agent_lending`].
@@ -854,9 +862,37 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(_), None) | (None, _) => Err(one(&first, "agent name", None)),
                 (said, Some(_)) => Err(one(&first, "agent name", said)),
             },
-            Verb::Serving => match args.next() {
-                None => Ok(Invocation::Mcp),
-                Some(extra) => Err(CliError::Extra { extra, verb: first }),
+            Verb::Serving => match args.next().as_deref() {
+                None => Ok(Invocation::Mcp { http: None }),
+                Some("--http") => {
+                    let said = args.next();
+                    let listen = said
+                        .as_deref()
+                        .and_then(|address| address.parse().ok())
+                        .ok_or_else(|| CliError::NotAListenAddress {
+                            said: said.unwrap_or_else(|| "nothing".to_string()),
+                        })?;
+                    let url = match (args.next().as_deref(), args.next()) {
+                        (None, _) => None,
+                        (Some("--url"), Some(url)) => Some(url.trim_end_matches('/').to_string()),
+                        (Some(extra), _) => {
+                            return Err(CliError::Extra {
+                                extra: extra.to_string(),
+                                verb: first,
+                            })
+                        }
+                    };
+                    match args.next() {
+                        None => Ok(Invocation::Mcp {
+                            http: Some(McpHttp { listen, url }),
+                        }),
+                        Some(extra) => Err(CliError::Extra { extra, verb: first }),
+                    }
+                }
+                Some(extra) => Err(CliError::Extra {
+                    extra: extra.to_string(),
+                    verb: first,
+                }),
             },
             Verb::Inhibiting => {
                 let mut command: Vec<String> = args.collect();
@@ -974,6 +1010,15 @@ fn app_flags(
         return Err(CliError::ReuseWithoutId);
     }
     Ok((id, reuse, profile))
+}
+
+/// Where `domicile mcp --http` serves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpHttp {
+    pub listen: std::net::SocketAddr,
+    /// The address clients reach it at, when not `http://` and `listen`,
+    /// with no trailing slash.
+    pub url: Option<String>,
 }
 
 /// A listing's flag for printing JSON rather than a table.
