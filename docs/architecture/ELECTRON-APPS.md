@@ -263,6 +263,10 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   `stream`, `codeCache` and `allowServiceWorkers` are not yet, and don't
   hold an app back. A scheme the engine keeps for itself is refused without
   being kept ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
+  Local Network Access classes a page in one as loopback, as it does the
+  shell: the app is installed on this machine, not a site. Left public, every
+  request into the LAN or a VPN (Element's homeserver) asked a permission no
+  one answers (patch 0238).
   An app's first run with a new scheme falls back. Known apps' schemes, as
   their own runs recorded them, register from the first start (`KNOWN` in
   `packages/domicile-launch/src/electron_schemes.rs`) to spare them that.
