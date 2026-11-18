@@ -50,6 +50,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 
 ### Fixes
 
+- The desktop takes about 35 MB less memory at rest: the browser keeps one process ready for a new page instead of two.
 - Ctrl+C and Escape work when you select an area on screen for a screenshot or a share.
 - Screenshot, share and other dialogs fade out when you answer them, instead of vanishing.
 - A site's notifications show the site's icon instead of the browser's.

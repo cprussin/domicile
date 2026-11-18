@@ -112,6 +112,7 @@ TOGETHER=(
   guard-profile-routing
   guard-webview-paused
   guard-animation-main-frames
+  guard-one-spare-renderer
   guard-webview-scale-animation
   guard-webview-crash
   guard-desktop-geometry
