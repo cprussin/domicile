@@ -214,6 +214,8 @@ except Exception:
     for command in [
         "dmesg | grep -iE 'virgl|drm|gpu' | tail -10",
         "ls -la /tmp/*.log",
+        # Whether Slack got as far as writing its profile.
+        "ls -la /home/alice/.config/Slack",
         "for log in /tmp/*.log; do echo \"== $log\"; tail -20 \"$log\" | sed 's,magic-login/[^ ]*,magic-login/…,' | cut -c1-200; done",
         PROCESSES,
     ]:

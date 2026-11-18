@@ -25,6 +25,12 @@ on:
 permissions:
   contents: read
 
+# One run at a time per host: two on crux would share its CPU and GPU and
+# measure each other. A run started while one is going waits for it.
+concurrency:
+  group: benchmarks-${{ inputs.host }}
+  cancel-in-progress: false
+
 jobs:
   desktop:
     # `crux` is a label set in cprussin/dotfiles:
