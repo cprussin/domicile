@@ -181,25 +181,24 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 - **`loadFile`** loads from the mirror, so the engine reads plain files.
 - **Storage:** each app gets its own partition, named by its `package.json`
   name. Apps share no cookies with each other or with the browser.
-- **Browser profile:** an app runs in one, with its extensions (a password
-  manager fills the app's sign-in window): `electron.profiles` in the config,
-  which the entries `electron.apps` writes pass as
-  `domicile open --electron --profile <id>`. `electron-host` reads it from
-  `DOMICILE_ELECTRON_PROFILE` and names it in `hello`'s `profile`; none is
-  the default profile.
-  - The engine answers `ready` once the profile can hold windows: after the
-    compositor's profiles reach it (an app started with the desktop can beat
-    them) and the profile loads
-    (`BrowserProfileRegistry::WhenAppProfileReady`). A profile the desk has
-    not got, or a private one, is `refused`.
-  - The app's partition, windows and session storage calls are in that
-    profile.
-- **Links:** a page's noopener window at an http(s) address (a
-  `target="_blank"` link, `window.open(url, "", "noopener")`, a middle click)
-  opens as a browser window, in the profile its site opens in, with the
-  user's sign-ins (patch 0239, `WebViewGuest::OpenLinksInTheBrowser`). A
-  window the page keeps a handle on, such as a sign-in popup, stays the
-  app's. `setWindowOpenHandler` is still not asked.
+- **New windows:** a page's `window.open`, `target="_blank"` link or
+  middle click asks the app's `setWindowOpenHandler` before any window opens
+  (`window_open`, answered by `window_open_answer`). Slack and Claude
+  Desktop deny theirs and pass the link to `shell.openExternal`, which opens
+  it in the desktop's browser, in the profile its site opens in, with the
+  user's sign-ins. An allowed window, or any with no handler, as in
+  Electron, is a new `BrowserWindow` of the app, from the opener's
+  `webPreferences`, the size `window.open` asked for and the handler's
+  `overrideBrowserWindowOptions`; `did-create-window` fires, and
+  `createWindow` may make it instead.
+  - A noopener window (and a middle click) is taken before content makes
+    one (patch 0239, `BrowserPluginGuestDelegate::TakeNoopenerWindow`), and
+    an allowed one opens where the page asked.
+  - A window its opener keeps a handle on, such as a sign-in popup, is
+    held while the app decides: destroyed if denied, adopted as the app's
+    window if allowed (`ElectronDesk::Adopt`), in the opener's session.
+    Content has started its first navigation by then, so its preload and
+    its session's user agent apply from its next document.
 
 ### Preload and IPC
 

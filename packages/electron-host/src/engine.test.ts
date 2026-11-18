@@ -44,22 +44,6 @@ describe(connectEngine, () => {
     ]);
   });
 
-  it("names the browser profile its windows open in, when it has one", async () => {
-    fake = await startFakeEngine();
-
-    await connectEngine(fake.path, "a", "persist:a", "work");
-
-    expect(fake.heard).toEqual([
-      {
-        app_id: "a",
-        partition: "persist:a",
-        profile: "work",
-        type: "hello",
-        version: 1,
-      },
-    ]);
-  });
-
   it("knows the engine's user agent and Chrome version from its ready", async () => {
     fake = await startFakeEngine();
 

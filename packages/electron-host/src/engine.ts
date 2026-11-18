@@ -50,37 +50,51 @@ export type ViewPlacement = {
   readonly hidden?: true;
 };
 
+/** What `open_window` and an allowing `window_open_answer` say of a page. */
+export type OpenKeys = {
+  readonly window: number;
+  /** The preload's source, run before each page's own scripts. */
+  readonly preload?: string;
+  /** webPreferences.additionalArguments, in the page's process.argv. */
+  readonly arguments?: readonly string[];
+  /** Its session's Electron partition; the app's own when left out. */
+  readonly session?: string;
+  /** A view (`WebContentsView`), shown only as part of a window. */
+  readonly view?: true;
+  /** A window's own title, which the desktop shows over its page's. */
+  readonly title?: string;
+  /** A window that opens hidden, as `show: false`. */
+  readonly hidden?: true;
+  /**
+   * Node.js in the page of a window that isn't sandboxed. Its preload is
+   * a file Node loads, so `preload` is left out.
+   */
+  readonly node?: PageNode;
+};
+
 export type EngineRequest =
   | {
       readonly type: "hello";
       readonly version: number;
       readonly app_id: string;
       readonly partition: string;
-      /** The browser profile its windows open in; the default when left out. */
-      readonly profile?: string;
     }
-  | {
+  | ({
       readonly type: "open_window";
-      readonly window: number;
       readonly url: string;
-      /** The preload's source, run before each page's own scripts. */
-      readonly preload?: string;
-      /** webPreferences.additionalArguments, in the page's process.argv. */
-      readonly arguments?: readonly string[];
-      /** Its session's Electron partition; the app's own when left out. */
-      readonly session?: string;
-      /** A view (`WebContentsView`), shown only as part of a window. */
-      readonly view?: true;
-      /** A window's own title, which the desktop shows over its page's. */
-      readonly title?: string;
-      /** A window that opens hidden, as `show: false`. */
-      readonly hidden?: true;
-      /**
-       * Node.js in the page of a window that isn't sandboxed. Its preload is
-       * a file Node loads, so `preload` is left out.
-       */
-      readonly node?: PageNode;
+    } & OpenKeys)
+  /** The app's answer to a page's `window_open`: its handler denied it. */
+  | {
+      readonly type: "window_open_answer";
+      readonly ask: number;
+      readonly action: "deny";
     }
+  /** Or allowed it: the window opens where the page asked. */
+  | ({
+      readonly type: "window_open_answer";
+      readonly ask: number;
+      readonly action: "allow";
+    } & OpenKeys)
   | {
       readonly type: "set_views";
       readonly window: number;
@@ -164,6 +178,17 @@ const engineEvent = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("window_opened"), window: z.number() }),
+  /** The page asked for a window: setWindowOpenHandler decides. */
+  z.object({
+    ask: z.number(),
+    disposition: z.string(),
+    features: z.string(),
+    frame_name: z.string(),
+    referrer: z.string(),
+    type: z.literal("window_open"),
+    url: z.string(),
+    window: z.number(),
+  }),
   z.object({
     type: z.literal("window_refused"),
     why: z.string(),
@@ -341,15 +366,12 @@ export type Engine = {
 
 /**
  * Connects to the engine at `path` and says hello for `appId`, whose pages
- * keep their data in `partition` of browser profile `profile`, the default
- * one when there is none. Ready once the engine answers, which waits for the
- * profile.
+ * keep their data in `partition`. Ready once the engine answers.
  */
 export const connectEngine = (
   path: string,
   appId: string,
   partition: string,
-  profile?: string,
 ): Promise<Result<Engine, string>> =>
   new Promise((resolve) => {
     const socket = createConnection(path);
@@ -434,7 +456,6 @@ export const connectEngine = (
     engine.send({
       app_id: appId,
       partition,
-      ...(profile === undefined ? {} : { profile }),
       type: "hello",
       version: PROTOCOL_VERSION,
     });

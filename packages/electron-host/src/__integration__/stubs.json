@@ -108,7 +108,6 @@
     "WebContents.setIgnoreMenuShortcuts": "ignored, so the menu bar's shortcuts still fire",
     "WebContents.setUserAgent": "does nothing: the engine sets agents per session",
     "WebContents.setWebRTCIPHandlingPolicy": "ignored, so the page's WebRTC may use addresses the app asked it not to",
-    "WebContents.setWindowOpenHandler": "ignored: the engine opens the page's new windows itself, so the app never sees them",
     "webContents.getFocusedWebContents": "always null, as getFocusedWindow"
   }
 }

@@ -268,12 +268,6 @@ export type ElectronConfig = {
    * its own Electron, with a notification saying so.
    */
   apps?: string[];
-  /**
-   * The browser profile each app's windows open in, by its id as `apps`
-   * gives it, with that profile's extensions and its own sign-ins. Not
-   * private. An app left out opens in `browser.default_profile`.
-   */
-  profiles?: Record<string, string>;
 };
 
 /** One extension's settings. See [`ExtensionsConfig::settings`]. */

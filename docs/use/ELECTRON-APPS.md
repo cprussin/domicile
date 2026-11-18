@@ -28,31 +28,6 @@ browser. An app already running stays as it is until you quit it.
 To try an app once without listing it, run
 `domicile open --electron slack.desktop`.
 
-## Put an app in a profile
-
-An app runs in your default [browser profile](BROWSER.md#profiles), with its
-extensions. To use another profile's, such as its password manager in Slack's
-sign-in window, name it:
-
-```json
-{
-  "browser": {
-    "profiles": {
-      "default": { "name": "Personal", "color": "#0d9488" },
-      "private": { "name": "Private", "color": "#a78bfa", "private": true },
-      "work": { "name": "Work", "color": "#d97706" }
-    }
-  },
-  "electron": {
-    "apps": ["slack.desktop"],
-    "profiles": { "slack.desktop": "work" }
-  }
-}
-```
-
-The app signs in again there. Links you click in an app open in your browser,
-in the profile their site opens in.
-
 ## Good to know
 
 - **Sign in again.** An app starts with nothing saved the first time it runs

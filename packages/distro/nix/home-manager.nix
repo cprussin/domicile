@@ -309,6 +309,11 @@
       private windows: `browser.profiles.<id>.extensions`. See
       docs/architecture/BROWSER-PROFILES.md.
     '';
+    "electron.profiles" = ''
+      An Electron app's own `setWindowOpenHandler` decides on its pages' new
+      windows, and the links it hands to `shell.openExternal` open in the
+      browser. See docs/architecture/ELECTRON-APPS.md.
+    '';
   };
 
   removed = import ./removed-settings.nix {inherit lib;} removedSettings;
