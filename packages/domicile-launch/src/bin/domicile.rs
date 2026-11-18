@@ -223,7 +223,8 @@ fn run() -> Result<ExitCode, String> {
             let status = inhibit_idle(&command)?;
             Ok(ExitCode::from(exit_code(status)))
         }
-        Invocation::Mcp => agents_served(),
+        Invocation::Mcp { http: None } => agents_served(),
+        Invocation::Mcp { http: Some(http) } => agents_served_over_http(http),
         Invocation::Agent { name } => admitted(name),
         Invocation::Accessibility { window } => {
             let (pid, title) = native_window(&window)?;
@@ -1019,6 +1020,66 @@ fn agents_served() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// Serves the Model Context Protocol over HTTP at `http`, each session's
+/// tools running this binary, signed in as [`mcp::Web`] describes.
+fn agents_served_over_http(http: domicile_launch::cli::McpHttp) -> Result<ExitCode, String> {
+    let binary = myself()?;
+    let listener = std::net::TcpListener::bind(http.listen)
+        .map_err(|why| format!("mcp: could not listen on {}: {why}", http.listen))?;
+    let base = http
+        .url
+        .unwrap_or_else(|| format!("http://{}", http.listen));
+    eprintln!("domicile: serving agents at {base}/mcp");
+    let web = mcp::Web {
+        listener,
+        base,
+        state: state_directory(&|name| std::env::var(name).ok())
+            .map(|directory| directory.join("signed-in-agents.json")),
+        show: Box::new(|client: &str, code: &str| {
+            let summary = format!("Connecting {client} to your desktop");
+            let body =
+                format!("Enter {code} to let it sign in. If you didn't start this, ignore it.");
+            let shown = notification::session_bus()
+                .and_then(|bus| notification::notify(&bus, &summary, &body));
+            if let Err(why) = shown {
+                eprintln!("domicile: could not show the code ({why}); it is {code}");
+            }
+        }),
+        clock: Arc::new(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| {
+                    u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+                })
+        }),
+        random: Box::new(|| {
+            let mut bytes = [0; 32];
+            std::fs::File::open("/dev/urandom")
+                .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut bytes))
+                .expect("/dev/urandom gives secrets");
+            bytes
+        }),
+        sweep_every: std::time::Duration::from_secs(60),
+    };
+    mcp::serve_http(web, move || {
+        let binary = binary.clone();
+        let admitting = binary.clone();
+        mcp::Agent::new(
+            move |args: &[String]| {
+                let output = Command::new(&binary).args(args).output()?;
+                Ok(mcp::Ran {
+                    success: output.status.success(),
+                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                })
+            },
+            move |name| let_in(&admitting, name),
+        )
+    })
+    .map_err(|why| format!("mcp: {why}"))?;
+    Ok(ExitCode::SUCCESS)
+}
+
 /// Runs `domicile agent name`, which asks the user to let it in, and holds
 /// the agent in for as long as this process runs.
 fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
@@ -1047,6 +1108,9 @@ fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
     // user stopping it.
     let stopped = Arc::new(AtomicBool::new(false));
     let reach = Arc::new(Mutex::new(reach));
+    // It runs until the grant is dropped, as this process or its session
+    // ends, which closes its stdin and lets the agent go.
+    let mut actions = agent.stdin.take().expect("stdin is piped");
     std::thread::spawn({
         let (stopped, reach) = (Arc::clone(&stopped), Arc::clone(&reach));
         move || {
@@ -1060,11 +1124,10 @@ fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
                 *reach.lock().unwrap() = changed;
             }
             stopped.store(true, Ordering::SeqCst);
+            // `--http` outlives many agents; none is left a zombie.
+            let _ = agent.wait();
         }
     });
-    // It runs until this process ends, which closes its stdin and lets the
-    // agent go.
-    let mut actions = agent.stdin.take().expect("stdin is piped");
     Ok(mcp::Grant {
         reach: Box::new(move || reach.lock().unwrap().clone()),
         stopped: Box::new(move || stopped.load(Ordering::SeqCst)),

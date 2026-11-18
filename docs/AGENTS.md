@@ -28,6 +28,16 @@ sees it in the bar the whole time it's in, and can stop it.
 
 Agents are refused while the desktop is locked.
 
+### Agents that sign in
+
+An agent that connects to a URL, rather than running `domicile mcp` itself,
+uses `domicile mcp --http 127.0.0.1:7465`
+([CLI.md](CLI.md#over-http)). The first time it connects, it opens a page
+asking for a code, and the desktop shows the code in a notification: entering
+it signs the agent in. It still asks, as above, before it uses anything.
+Reaching it from the web, as claude.ai does, waits for a relay (see
+[KNOWN-GAPS.md](KNOWN-GAPS.md)).
+
 ## Design
 
 ```
@@ -89,6 +99,15 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   socket. All three are refused while the desk is locked, and to apps.
 - **Private windows are never offered.** The dialog lists every window but
   private browser windows, and the engine refuses DevTools on them anyway.
+- **Signing in proves the user sees the desk; the dialog still decides.**
+  `domicile mcp --http` is its own OAuth 2.1 authorization server
+  (`mcp::oauth`): dynamic registration, PKCE S256 only, and an authorization
+  page that asks for a code the desk shows in a notification, so someone who
+  merely has the URL can't sign in. A token only reaches `/mcp`; each session
+  is an `Agent`, as on stdio, on a thread of its own, and asks at its first
+  tool call. Codes are one use and change after five misses; access tokens
+  last an hour and refresh tokens rotate. The `Host` and `Origin` checks keep
+  a web page on another site from reaching a server on `localhost`.
 
 ## Shells
 
