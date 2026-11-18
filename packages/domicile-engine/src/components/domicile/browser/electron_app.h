@@ -205,6 +205,7 @@ class ElectronDesk {
       const std::string& app_id,
       const WebViewPartition& partition,
       const std::string& preload,
+      const std::optional<ElectronNode>& node,
       ElectronPageCalls calls,
       base::WeakPtr<ElectronSession> session,
       bool view,

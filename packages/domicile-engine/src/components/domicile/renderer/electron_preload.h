@@ -5,6 +5,7 @@
 #define COMPONENTS_DOMICILE_RENDERER_ELECTRON_PRELOAD_H_
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -22,11 +23,17 @@
 
 namespace domicile {
 
+class ElectronNodeEnvironment;
+
 // An Electron app window's preload, in the renderer. The browser sends the
 // preload before each navigation commits; this runs it in an isolated world
 // once the new document has its element, before any of the page's scripts,
 // with `require("electron")` giving it contextBridge and ipcRenderer. See
 // docs/architecture/ELECTRON-APPS.md.
+//
+// A window that isn't sandboxed has Node.js in its page instead: Node loads
+// the preload from its file, in the isolated world or, without context
+// isolation, in the page's own. See electron_node.h.
 //
 // Every main frame has one; only those the browser sends a preload to do
 // anything.
@@ -51,11 +58,14 @@ class ElectronPreload final
   // content::RenderFrameObserver:
   void ReadyToCommitNavigation(
       blink::WebDocumentLoader* document_loader) override;
+  void WillReleaseScriptContext(v8::Local<v8::Context> context,
+                                int32_t world_id) override;
   void OnDestruct() override;
 
   // mojom::ElectronFrame:
   void Preload(
       const std::string& source,
+      mojom::ElectronNodePtr node,
       mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host) override;
   void Deliver(const std::string& channel,
                const std::string& args_json) override;
@@ -70,8 +80,14 @@ class ElectronPreload final
                          ExecuteJavaScriptCallback callback) override;
 
  private:
-  struct Next {
+  // A preload for a document.
+  struct ToRun {
     std::string source;
+    // Node in the page, which then loads the preload from its file.
+    mojom::ElectronNodePtr node;
+  };
+  struct Next {
+    ToRun preload;
     mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host;
   };
 
@@ -79,7 +95,9 @@ class ElectronPreload final
 
   void Bind(mojo::PendingAssociatedReceiver<mojom::ElectronFrame> receiver);
   // False when the preload ended the frame, and this with it.
-  [[nodiscard]] bool Run(const std::string& source);
+  [[nodiscard]] bool Run(ToRun preload);
+  // The context of the preload's world in the current document.
+  v8::Local<v8::Context> WorldContext(v8::Isolate* isolate);
   // Calls the bootstrap's `name`, in the preload's world.
   void Call(const char* name, base::span<v8::Local<v8::Value>> argv);
   void Answered(uint64_t document,
@@ -101,7 +119,12 @@ class ElectronPreload final
   // The preload for the navigation about to commit.
   std::optional<Next> next_;
   // The committed document's preload, until it runs.
-  std::optional<std::string> to_run_;
+  std::optional<ToRun> to_run_;
+  // The world the preload runs in: its own, or the page's without context
+  // isolation.
+  int32_t world_ = 0;
+  // Node in the current document, for a window that isn't sandboxed.
+  std::unique_ptr<ElectronNodeEnvironment> node_;
   // Counts documents, so an answer for one that went is dropped.
   uint64_t document_ = 0;
   mojo::AssociatedRemote<mojom::ElectronFrameHost> host_;

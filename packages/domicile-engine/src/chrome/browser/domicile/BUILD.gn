@@ -113,6 +113,8 @@ source_set("domicile") {
     # Lists each browser window for capture tools.
     "//components/domicile:browser_window_listing",
     "//components/domicile:command_protocol",
+    # Marks the renderer an Electron page with Node.js starts.
+    "//components/domicile:electron_node_switches",
     "//components/domicile:common",
     # Somebody at the desk, from ui::UserActivityDetector in //ui/base.
     "//components/domicile:desk_activity",
@@ -218,6 +220,7 @@ source_set("domicile") {
     # sheet are off (patch 0183).
     "//components/web_modal",
     "//content/public/common",
+    "//sandbox/policy",
     # The Settings app's site permissions, listed and set through the command
     # socket.
     "//components/content_settings/core/browser",

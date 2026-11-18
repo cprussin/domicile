@@ -20,6 +20,18 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/gfx/geometry/size.h"
 
+namespace base {
+class CommandLine;
+}
+
+class GURL;
+
+namespace content {
+class RenderFrameHost;
+class RenderProcessHost;
+class SiteInstance;
+}  // namespace content
+
 namespace domicile {
 
 // An Electron app window's page, in the browser: sends its preload to the
@@ -35,11 +47,54 @@ class ElectronPage final : public content::WebContentsObserver,
   ~ElectronPage() override;
 
   // Makes `contents` an Electron window's page whose documents run `preload`,
-  // make `calls` and load through `session`. Before its first navigation.
+  // make `calls` and load through `session`. Before its first navigation, so
+  // a `node` page's first renderer starts as one. A `node` page has Node.js,
+  // as a window that isn't sandboxed has in Electron, and its preload is a
+  // file, `node->preload`, rather than `preload`.
   static void Attach(content::WebContents& contents,
                      std::string preload,
+                     std::optional<ElectronNode> node,
                      ElectronPageCalls calls,
                      base::WeakPtr<ElectronSession> session);
+
+  // `frame`, a main frame, navigates into `site_instance`. When `frame` is a
+  // Node page's, the renderer the navigation goes to is to start for Node:
+  // marked now, or, when `site_instance` has none yet, as it gets one. Before
+  // that renderer starts, from
+  // ChromeContentBrowserClient::MainFrameNavigatesInto.
+  static void MainFrameNavigatesInto(content::RenderFrameHost& frame,
+                                     content::SiteInstance& site_instance);
+
+  // `site_instance` got its renderer, which is to start for Node when a Node
+  // page's navigation goes into it. From
+  // ChromeContentBrowserClient::SiteInstanceGotProcessAndSite.
+  static void SiteInstanceGotProcess(content::SiteInstance& site_instance);
+
+  // Whether a Node page's navigation to `site_url` waits for its renderer:
+  // it takes no spare, which started sandboxed. From
+  // ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost.
+  static bool RefusesSpareRenderer(const GURL& site_url);
+
+  // Whether `host` may take a navigation to `site_url`: a Node page's takes
+  // only a renderer marked for Node, never one that started sandboxed. From
+  // ChromeContentBrowserClient::IsSuitableHost.
+  static bool IsSuitableHost(content::RenderProcessHost& host,
+                             const GURL& site_url);
+
+  // Starts `host` for Node.js when it is to run a Node page: unsandboxed and
+  // without the zygote, as Electron starts such a renderer, marked for the
+  // renderer to start Node. As it is about to launch, from
+  // ChromeContentBrowserClient::AppendExtraCommandLineSwitches.
+  static void AppendRendererSwitches(content::RenderProcessHost& host,
+                                     base::CommandLine& command_line);
+
+  // Whether `host` was started for a Node page.
+  static bool IsNodeRenderer(content::RenderProcessHost& host);
+
+  // Whether `host` is for a Node page, started or about to be: such a
+  // renderer is its page's alone, from
+  // ChromeContentBrowserClient::MayReuseHost.
+  static bool IsForNode(content::RenderProcessHost& host);
 
   // The session `contents` loads through when it is an Electron window's
   // page and its app still runs; otherwise null.
@@ -79,8 +134,7 @@ class ElectronPage final : public content::WebContentsObserver,
   void FrameSizeChanged(content::RenderFrameHost* frame,
                         const gfx::Size& frame_size) override;
   void PrimaryPageChanged(content::Page& page) override;
-  void DidFinishLoad(content::RenderFrameHost* frame,
-                     const GURL& url) override;
+  void DidFinishLoad(content::RenderFrameHost* frame, const GURL& url) override;
 
   // mojom::ElectronFrameHost:
   void Send(const std::string& channel, const std::string& args_json) override;
@@ -102,6 +156,7 @@ class ElectronPage final : public content::WebContentsObserver,
 
   ElectronPage(content::WebContents* contents,
                std::string preload,
+               std::optional<ElectronNode> node,
                ElectronPageCalls calls,
                base::WeakPtr<ElectronSession> session);
 
@@ -116,7 +171,11 @@ class ElectronPage final : public content::WebContentsObserver,
   // does not.
   bool IsPort(const std::string& port);
 
+  // Whether a document has a preload, or Node, and so hears IPC.
+  bool HasPreload() const;
+
   const std::string preload_;
+  const std::optional<ElectronNode> node_;
   const ElectronPageCalls calls_;
   const base::WeakPtr<ElectronSession> session_;
   // The document that last committed, or is about to: its preload, IPC and
