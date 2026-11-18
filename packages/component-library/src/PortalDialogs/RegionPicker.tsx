@@ -1,6 +1,6 @@
 import type { FrozenDesk } from "@domicile-desktop/sdk/portal";
 import type { PointerEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
@@ -59,6 +59,34 @@ type Grab = ReturnType<(typeof Grab)[keyof typeof Grab]>;
 export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
   const [selected, setSelected] = useState<Region | undefined>(undefined);
   const [grab, setGrab] = useState<Grab | undefined>(undefined);
+  const desk = useRef<HTMLDivElement>(null);
+
+  // Takes the keyboard, and takes it back from a browser window's page. Keys
+  // sent to a focused page never reach this document, so Ctrl+C and Escape
+  // would go to the page. Closing the picker's dialog returns focus to the
+  // window under the desk, and the engine refocuses the last page when the
+  // shell regains the keyboard. Focus elsewhere in the shell, such as the lock
+  // screen's field, stays where it is.
+  useEffect(() => {
+    const root = desk.current;
+    if (root === null) {
+      throw new Error("region picker: no desk to focus");
+    } else {
+      const keep = (event: FocusEvent) => {
+        if (
+          event.target instanceof Element &&
+          event.target.localName === "webview"
+        ) {
+          root.focus({ preventScroll: true });
+        }
+      };
+      root.focus({ preventScroll: true });
+      document.addEventListener("focusin", keep);
+      return () => {
+        document.removeEventListener("focusin", keep);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     const press = (event: KeyboardEvent) => {
@@ -100,10 +128,9 @@ export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
           );
         }
       }}
+      ref={desk}
       role="application"
-      // Focusable, so a press keeps the keyboard here. On nothing, focus
-      // would go back to the browser window under the desk, and Ctrl+C and
-      // Escape with it.
+      // Focusable, so it can hold the keyboard.
       tabIndex={-1}
     >
       {frozen !== undefined && (

@@ -476,6 +476,18 @@ const dragOnScreen = (
   fireEvent.pointerUp(page, { clientX: to[0], clientY: to[1] });
 };
 
+/**
+ * A browser window's `<webview>`, focused as when its page has the keyboard.
+ * Keys sent to a focused page never reach the document.
+ */
+const focusedPage = (): HTMLElement => {
+  const page = document.createElement("webview");
+  page.tabIndex = -1;
+  document.body.append(page);
+  page.focus();
+  return page;
+};
+
 /** The selected area's handle at `corner`, which has no role to find it by. */
 const cornerOf = (corner: string): HTMLElement => {
   const handle = document.querySelector<HTMLElement>(
@@ -2399,23 +2411,52 @@ describe("PortalDialogs", () => {
 
       it("takes the keyboard from the window focused before", async () => {
         const host = new FakeHost();
-        render(
-          <>
-            <button type="button">Window</button>
-            <PortalDialogs domicile={host.domicile} />
-          </>,
-        );
-        screen.getByRole("button", { name: "Window" }).focus();
+        const page = focusedPage();
+        render(<PortalDialogs domicile={host.domicile} />);
         host.push([frozen(1, "screenshot")]);
         await userEvent.click(
           screen.getByRole("button", { name: "Select on screen" }),
         );
-        const page = screen.getByRole("application", {
-          name: "Drag to select an area",
-        });
-        await userEvent.pointer({ keys: "[MouseLeft]", target: page });
 
-        expect(page).toHaveFocus();
+        expect(
+          screen.getByRole("application", { name: "Drag to select an area" }),
+        ).toHaveFocus();
+        page.remove();
+      });
+
+      it("takes the keyboard back from a window's page", async () => {
+        const host = new FakeHost();
+        const page = focusedPage();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        page.focus();
+
+        expect(
+          screen.getByRole("application", { name: "Drag to select an area" }),
+        ).toHaveFocus();
+        page.remove();
+      });
+
+      it("leaves focus that moves to the shell", async () => {
+        const host = new FakeHost();
+        render(
+          <>
+            <input aria-label="Passphrase" />
+            <PortalDialogs domicile={host.domicile} />
+          </>,
+        );
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        screen.getByRole("textbox", { name: "Passphrase" }).focus();
+
+        expect(
+          screen.getByRole("textbox", { name: "Passphrase" }),
+        ).toHaveFocus();
       });
     });
 

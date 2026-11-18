@@ -49,6 +49,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 
 ### Fixes
 
+- Ctrl+C and Escape work when you select an area on screen for a screenshot or a share.
 - A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [#2284](https://github.com/cprussin/domicile/pull/2284)
 - PDFs stay sharp and no longer go blank. [#2038](https://github.com/cprussin/domicile/pull/2038) · [#2080](https://github.com/cprussin/domicile/pull/2080) · [#2100](https://github.com/cprussin/domicile/pull/2100)
 - Smoother windows on heavy pages, adaptive sync monitors and the overview. [#2227](https://github.com/cprussin/domicile/pull/2227) · [#2094](https://github.com/cprussin/domicile/pull/2094) · [#2041](https://github.com/cprussin/domicile/pull/2041)
