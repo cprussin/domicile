@@ -109,6 +109,39 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   last an hour and refresh tokens rotate. The `Host` and `Origin` checks keep
   a web page on another site from reaching a server on `localhost`.
 
+## The relay
+
+Agents on the web, such as claude.ai, connect from the internet, and most
+desks are behind a router. `domicile-relay` (`packages/domicile-relay`, `nix
+run .#relay`) runs on a server and passes their connections to the desk
+without being able to read them:
+
+```
+claude.ai ── TLS for <label>.<zone> ──▶ relay :443 ──── spliced ────▶ desk
+                                          │  reads only the            ▲
+                                          │  ClientHello's name        │ dials out; opens one
+                                          └── "open <token>" ──────────┘ connection per client
+```
+
+- **A desk's address is named for its key.** The desk dials the relay's desk
+  port (7444), sends its Ed25519 public key and signs a challenge; its
+  address is `<label>.<zone>`, the label 16 base32 letters of the key's
+  SHA-256. Nobody can take an address without its key. A desk dialing in
+  again replaces its old connection.
+- **TLS ends on the desk.** The relay reads the server name from the
+  ClientHello, which is sent in the clear, asks the desk on its connection to
+  open one back with a one-time token, and splices the two, the ClientHello
+  first. A client for no desk, or for a name outside the zone, is hung up on.
+  So the relay holds no key that decrypts what the agent and desk say; the
+  desk holds the certificate for its address.
+- **Its operator could still get a certificate for an address,** since they
+  run the zone's DNS. Certificate Transparency logs would show it, and
+  signing in still needs the code the desk shows, so they could not sign an
+  agent in unseen.
+- **Each address needs its own certificate.** Let's Encrypt allows 50 a week
+  per registered domain, so a zone shared by many desks needs to be on the
+  Public Suffix List.
+
 ## Shells
 
 `<PortalDialogs />` draws the dialog (`AgentDialog`) and lists a running agent
