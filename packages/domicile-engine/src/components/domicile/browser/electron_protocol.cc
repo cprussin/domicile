@@ -471,7 +471,8 @@ base::expected<ElectronRequest, std::string> ParseHello(
 
 bool IsWindowRequest(std::string_view type) {
   return type == "open_window" || type == "load_url" ||
-         type == "focus_window" || type == "close_window" ||
+         type == "focus_window" || type == "go_to_index" ||
+         type == "clear_history" || type == "close_window" ||
          type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
          type == "port_post" || type == "port_close" || type == "set_views" ||
          type == "set_menu_bar" || type == "show_message_box" ||
@@ -1214,6 +1215,14 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseShowMessageBox(*request, *window);
   } else if (*type == "focus_window") {
     return ElectronFocusWindow{.window = *window};
+  } else if (*type == "go_to_index") {
+    const std::optional<int> index = request->FindInt("index");
+    if (!index.has_value() || *index < 0) {
+      return Refuse("\"index\" must be a whole number from 0", *window);
+    }
+    return ElectronGoToIndex{.window = *window, .index = *index};
+  } else if (*type == "clear_history") {
+    return ElectronClearHistory{.window = *window};
   } else if (*type == "close_window") {
     return ElectronCloseWindow{.window = *window};
   } else if (*type == "set_title") {
@@ -1487,6 +1496,23 @@ std::string ElectronWindowClosed(ElectronWindow window) {
 
 std::string ElectronCloseAsked(ElectronWindow window) {
   return Line(Event("close_asked", window));
+}
+
+std::string ElectronPageStateChanged(ElectronWindow window,
+                                     const ElectronPageState& state) {
+  base::DictValue event = Event("page_state", window);
+  base::ListValue entries;
+  for (const ElectronPageState::Entry& entry : state.entries) {
+    entries.Append(
+        base::DictValue().Set("url", entry.url).Set("title", entry.title));
+  }
+  event.Set("entries", std::move(entries));
+  event.Set("index", state.index);
+  event.Set("loading", state.loading);
+  event.Set("focused", state.focused);
+  event.Set("pid", state.pid);
+  event.Set("crashed", state.crashed);
+  return Line(std::move(event));
 }
 
 std::string ElectronWindowResized(ElectronWindow window,

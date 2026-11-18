@@ -62,6 +62,12 @@ namespace domicile {
 //
 //   {"type":"load_url","window":1,"url":"https://claude.ai/new"}
 //   {"type":"focus_window","window":1}
+//   {"type":"go_to_index","window":1,"index":0}
+//                                          (navigationHistory.goToIndex,
+//                                           and goBack and goForward: an
+//                                           index page_state listed)
+//   {"type":"clear_history","window":1}    (navigationHistory.clear: all
+//                                           but the page shown)
 //   {"type":"set_title","window":1,"title":"Claude"}
 //                                          (win.setTitle, and a page title
 //                                           the app let through)
@@ -118,6 +124,15 @@ namespace domicile {
 //   {"type":"close_asked","window":1}      (the user asked to close the
 //                                           window: the app decides, as a
 //                                           BrowserWindow's `close` event)
+//   {"type":"page_state","window":1,
+//    "entries":[{"url":"https://a/","title":"A"}],
+//    "index":0,"loading":false,"focused":true,"pid":1234,"crashed":false}
+//                                          (the page's history and which
+//                                           entry it shows, whether it is
+//                                           loading, has the keyboard
+//                                           focus, its renderer's pid and
+//                                           whether that renderer is gone:
+//                                           each time one changes)
 //   {"type":"ipc_message","window":1,"channel":"c","args":[...]}
 //                                          (ipcRenderer.send)
 //   {"type":"ipc_invoke","window":1,"invoke":3,"channel":"c","args":[...]}
@@ -327,6 +342,42 @@ struct ElectronLoadUrl {
 
 struct ElectronFocusWindow {
   ElectronWindow window;
+};
+
+// navigationHistory.goToIndex: shows entry `index` of the history the last
+// page_state listed.
+struct ElectronGoToIndex {
+  ElectronWindow window;
+  int index = 0;
+};
+
+// navigationHistory.clear: forgets every entry but the one shown.
+struct ElectronClearHistory {
+  ElectronWindow window;
+};
+
+// What an app's webContents knows of its page, sent whenever it changes.
+struct ElectronPageState {
+  struct Entry {
+    std::string url;
+    std::string title;
+
+    friend bool operator==(const Entry&, const Entry&) = default;
+  };
+  // The page's history, oldest first, and the entry it shows.
+  std::vector<Entry> entries;
+  int index = 0;
+  // A navigation is under way.
+  bool loading = false;
+  // The page has the keyboard focus.
+  bool focused = false;
+  // Its renderer's process id; 0 before it has one.
+  int pid = 0;
+  // Its renderer is gone, and the page with it, until it loads again.
+  bool crashed = false;
+
+  friend bool operator==(const ElectronPageState&,
+                         const ElectronPageState&) = default;
 };
 
 struct ElectronCloseWindow {
@@ -709,6 +760,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronOpenWindow,
                                      ElectronLoadUrl,
                                      ElectronFocusWindow,
+                                     ElectronGoToIndex,
+                                     ElectronClearHistory,
                                      ElectronCloseWindow,
                                      ElectronDestroyWindow,
                                      ElectronSendToPage,
@@ -786,6 +839,9 @@ std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
 // The user asked to close `window`, which closes only if the app closes it.
 std::string ElectronCloseAsked(ElectronWindow window);
+// What `window`'s page is now.
+std::string ElectronPageStateChanged(ElectronWindow window,
+                                     const ElectronPageState& state);
 // The size, in CSS pixels, the shell gave window or view `window`'s page.
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.

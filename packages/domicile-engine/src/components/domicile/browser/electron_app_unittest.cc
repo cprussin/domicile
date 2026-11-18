@@ -101,6 +101,12 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("load " + id + " " + url.spec());
   }
   void Focus(const std::string& id) override { calls.push_back("focus " + id); }
+  void GoToIndex(const std::string& id, int index) override {
+    calls.push_back("go " + id + " " + base::NumberToString(index));
+  }
+  void ClearHistory(const std::string& id) override {
+    calls.push_back("clear history " + id);
+  }
   void SetTitle(const std::string& id, const std::string& title) override {
     calls.push_back("title " + id + " " + title);
   }
@@ -589,6 +595,34 @@ TEST_F(ElectronAppTest, TheUserClosingAWindowAsksTheApp) {
   app_->Listed({});
   sent_.clear();
   page.close_asked.Run();
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, APagesStateReachesTheAppAndItsHistoryMoves) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  desk_.calls.clear();
+
+  page.state.Run(
+      ElectronPageState{.entries = {{.url = "https://a.test/", .title = "A"}},
+                        .index = 0,
+                        .focused = true,
+                        .pid = 5});
+  EXPECT_EQ(sent_, Lines{"{\"crashed\":false,\"entries\":[{\"title\":"
+                         "\"A\",\"url\":\"https://a.test/\"}],\"focused\":"
+                         "true,\"index\":0,\"loading\":false,\"pid\":5,"
+                         "\"type\":\"page_state\",\"window\":3}\n"});
+
+  app_->Take(R"({"type":"go_to_index","window":3,"index":0})");
+  app_->Take(R"({"type":"clear_history","window":3})");
+  EXPECT_EQ(desk_.calls, (Lines{"go 10 0", "clear history 10"}));
+
+  // A change that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.state.Run(ElectronPageState{});
   EXPECT_TRUE(sent_.empty());
 }
 

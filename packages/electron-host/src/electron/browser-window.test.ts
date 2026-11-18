@@ -91,6 +91,100 @@ describe(createBrowserWindow, () => {
     expect(webContents.clearHistory).toBe(webContents.navigationHistory.clear);
   });
 
+  it("walks the page's history as the engine lists it", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    const history = window.webContents.navigationHistory;
+    sent.length = 0;
+
+    say({
+      crashed: false,
+      entries: [
+        { title: "A", url: "https://a.test/" },
+        { title: "B", url: "https://b.test/" },
+        { title: "C", url: "https://c.test/" },
+      ],
+      focused: false,
+      index: 1,
+      loading: false,
+      pid: 42,
+      type: "page_state",
+      window: 1,
+    });
+
+    expect([history.length(), history.getActiveIndex()]).toEqual([3, 1]);
+    expect([history.canGoBack(), history.canGoForward()]).toEqual([true, true]);
+    expect(history.canGoToOffset(2)).toBe(false);
+    expect(history.getEntryAtIndex(2)).toEqual({
+      title: "C",
+      url: "https://c.test/",
+    });
+    expect(history.getEntryAtIndex(3)).toBeNull();
+    expect(window.webContents.getOSProcessId()).toBe(42);
+    history.goBack();
+    history.goToOffset(1);
+    // Indexes the history doesn't have, and the one shown, do nothing.
+    history.goToIndex(3);
+    history.goToIndex(1);
+    history.clear();
+    expect(sent).toEqual([
+      { index: 0, type: "go_to_index", window: 1 },
+      { index: 2, type: "go_to_index", window: 1 },
+      { type: "clear_history", window: 1 },
+    ]);
+  });
+
+  it("tells the app when its page loads, takes focus or crashes", () => {
+    const { BrowserWindow, say, webContents } = setUp();
+    const first = new BrowserWindow();
+    const second = new BrowserWindow();
+    void first.loadURL("https://a.test/");
+    void second.loadURL("https://b.test/");
+    const heard: string[] = [];
+    for (const name of [
+      "did-start-loading",
+      "did-stop-loading",
+      "focus",
+      "blur",
+      "render-process-gone",
+    ]) {
+      first.webContents.on(name, () => heard.push(`page ${name}`));
+    }
+    first.on("focus", () => heard.push("window focus"));
+    first.on("blur", () => heard.push("window blur"));
+    const state = {
+      crashed: false,
+      entries: [{ title: "", url: "https://a.test/" }],
+      focused: false,
+      index: 0,
+      loading: false,
+      pid: 7,
+      type: "page_state" as const,
+      window: 1,
+    };
+
+    expect(BrowserWindow.getFocusedWindow()).toBeNull();
+    say({ ...state, loading: true });
+    expect(first.webContents.isLoading()).toBe(true);
+    say({ ...state, focused: true });
+    expect(BrowserWindow.getFocusedWindow()).toBe(first);
+    expect(webContents.getFocusedWebContents()).toBe(first.webContents);
+    expect(first.isFocused()).toBe(true);
+    say({ ...state, crashed: true });
+    expect(first.webContents.isCrashed()).toBe(true);
+    expect(BrowserWindow.getFocusedWindow()).toBeNull();
+    expect(heard).toEqual([
+      "page did-start-loading",
+      "page did-stop-loading",
+      "page focus",
+      "window focus",
+      "page blur",
+      "window blur",
+      "page render-process-gone",
+    ]);
+  });
+
   it("numbers windows from 1 and finds them by number", () => {
     const { BrowserWindow } = setUp();
     const first = new BrowserWindow();

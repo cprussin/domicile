@@ -18,11 +18,14 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_protocol.h"
 #include "components/domicile/common/electron_node_switches.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -278,6 +281,20 @@ void ElectronPage::CloseAsked() {
   calls_.close_asked.Run();
 }
 
+void ElectronPage::GoToIndex(int index) {
+  content::NavigationController& controller = web_contents()->GetController();
+  if (index < controller.GetEntryCount()) {
+    controller.GoToIndex(index);
+  }
+}
+
+void ElectronPage::ClearHistory() {
+  content::NavigationController& controller = web_contents()->GetController();
+  if (controller.CanPruneAllButLastCommitted()) {
+    controller.PruneAllButLastCommitted();
+  }
+}
+
 void ElectronPage::PrimaryMainFrameWasResized(bool width_changed) {
   ReportSize("PrimaryMainFrameWasResized");
 }
@@ -291,12 +308,80 @@ void ElectronPage::FrameSizeChanged(content::RenderFrameHost* frame,
 
 void ElectronPage::PrimaryPageChanged(content::Page& page) {
   ReportSize("PrimaryPageChanged");
+  ReportState();
 }
 
 void ElectronPage::DidFinishLoad(content::RenderFrameHost* frame,
                                  const GURL& url) {
   if (frame->IsInPrimaryMainFrame()) {
     ReportSize("DidFinishLoad");
+  }
+}
+
+void ElectronPage::NavigationEntryCommitted(
+    const content::LoadCommittedDetails& details) {
+  ReportState();
+}
+
+void ElectronPage::NavigationListPruned(
+    const content::PrunedDetails& pruned_details) {
+  ReportState();
+}
+
+void ElectronPage::NavigationEntriesDeleted() {
+  ReportState();
+}
+
+void ElectronPage::NavigationEntryChanged(
+    const content::EntryChangedDetails& change_details) {
+  ReportState();
+}
+
+void ElectronPage::DidStartLoading() {
+  ReportState();
+}
+
+void ElectronPage::DidStopLoading() {
+  ReportState();
+}
+
+void ElectronPage::OnWebContentsFocused(
+    content::RenderWidgetHost* render_widget_host) {
+  focused_ = true;
+  ReportState();
+}
+
+void ElectronPage::OnWebContentsLostFocus(
+    content::RenderWidgetHost* render_widget_host) {
+  focused_ = false;
+  ReportState();
+}
+
+void ElectronPage::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
+  ReportState();
+}
+
+void ElectronPage::ReportState() {
+  content::WebContents& contents = *web_contents();
+  content::NavigationController& controller = contents.GetController();
+  ElectronPageState state;
+  for (int i = 0; i < controller.GetEntryCount(); ++i) {
+    const content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
+    state.entries.push_back({.url = entry->GetURL().spec(),
+                             .title = base::UTF16ToUTF8(entry->GetTitle())});
+  }
+  // -1 before the first commit, when the history has no entries.
+  state.index = std::max(controller.GetCurrentEntryIndex(), 0);
+  state.loading = contents.IsLoading();
+  state.focused = focused_;
+  content::RenderProcessHost* process =
+      contents.GetPrimaryMainFrame()->GetProcess();
+  state.pid = process->GetProcess().IsValid() ? process->GetProcess().Pid() : 0;
+  state.crashed = contents.IsCrashed();
+  if (state != state_) {
+    state_ = state;
+    calls_.state.Run(std::move(state));
   }
 }
 

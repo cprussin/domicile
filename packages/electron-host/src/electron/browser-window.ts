@@ -13,6 +13,7 @@ import type {
   EngineRequest,
   OpenKeys,
   PageNode,
+  PageState,
   ViewPlacement,
   WindowEvent,
 } from "../engine";
@@ -393,21 +394,77 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.owner.focus();
       }
     };
-    /** The engine keeps each page's history, which the app can't walk yet. */
+    /** What the engine last said of the page; nothing before it has. */
+    #state: PageState | undefined;
+
+    /** The page's history, as the engine last said, oldest first. */
+    readonly #entries = () =>
+      this.#state?.entries ?? [{ title: this.getTitle(), url: this.owner.url }];
+    readonly #index = () => this.#state?.index ?? 0;
+
+    /**
+     * The engine keeps each page's history; the app walks it by index, as
+     * the engine last listed it. An index it doesn't have does nothing, as
+     * in Electron.
+     */
     readonly navigationHistory = {
-      canGoBack: () => false,
-      canGoForward: () => false,
-      canGoToOffset: (_offset: number) => false,
-      clear: () => undefined,
-      getActiveIndex: () => 0,
-      getAllEntries: () => [{ title: this.getTitle(), url: this.owner.url }],
-      getEntryAtIndex: (index: number) =>
-        index === 0 ? { title: this.getTitle(), url: this.owner.url } : null,
-      goBack: () => undefined,
-      goForward: () => undefined,
-      goToIndex: (_index: number) => undefined,
-      goToOffset: (_offset: number) => undefined,
-      length: () => 1,
+      canGoBack: () => this.navigationHistory.canGoToOffset(-1),
+      canGoForward: () => this.navigationHistory.canGoToOffset(1),
+      canGoToOffset: (offset: number) => {
+        const index = this.#index() + offset;
+        return index >= 0 && index < this.#entries().length;
+      },
+      clear: () => {
+        if (this.owner.isOpen()) {
+          toEngine({ type: "clear_history", window: this.owner.id });
+        }
+      },
+      getActiveIndex: () => this.#index(),
+      getAllEntries: () => this.#entries().map((entry) => ({ ...entry })),
+      getEntryAtIndex: (index: number) => {
+        const entry = this.#entries()[index];
+        return entry === undefined ? null : { ...entry };
+      },
+      goBack: () => this.navigationHistory.goToOffset(-1),
+      goForward: () => this.navigationHistory.goToOffset(1),
+      goToIndex: (index: number) => {
+        if (
+          this.owner.isOpen() &&
+          Number.isInteger(index) &&
+          index >= 0 &&
+          index < this.#entries().length &&
+          index !== this.#index()
+        ) {
+          toEngine({ index, type: "go_to_index", window: this.owner.id });
+        }
+      },
+      goToOffset: (offset: number) =>
+        this.navigationHistory.goToIndex(this.#index() + offset),
+      length: () => this.#entries().length,
+    };
+
+    /**
+     * Takes what the engine says the page is now, with Electron's events
+     * for what changed.
+     */
+    readonly takeState = (state: PageState) => {
+      const was = this.#state;
+      this.#state = state;
+      if (state.loading && was?.loading !== true) {
+        this.emit("did-start-loading");
+      } else if (!state.loading && was?.loading === true) {
+        this.emit("did-stop-loading");
+      }
+      if (state.focused !== (was?.focused ?? false)) {
+        this.emit(state.focused ? "focus" : "blur");
+        this.owner.focusChanged(state.focused);
+      }
+      if (state.crashed && was?.crashed !== true) {
+        this.emit("render-process-gone", eventObject(), {
+          exitCode: 0,
+          reason: "crashed",
+        });
+      }
     };
     // Electron's older names for the same, which apps such as Element call.
     readonly canGoBack = this.navigationHistory.canGoBack;
@@ -420,13 +477,14 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly goToOffset = this.navigationHistory.goToOffset;
     zoomFactor = 1;
     zoomLevel = 0;
-    readonly isFocused = () => false;
-    readonly isLoading = () => false;
-    readonly isLoadingMainFrame = () => false;
+    readonly isFocused = () => this.#state?.focused ?? false;
+    readonly isLoading = () => this.#state?.loading ?? false;
+    /** The engine says only whether the page loads, frames and all. */
+    readonly isLoadingMainFrame = () => this.isLoading();
     readonly isWaitingForResponse = () => false;
-    readonly isCrashed = () => false;
+    readonly isCrashed = () => this.#state?.crashed ?? false;
     readonly reload = () => this.owner.loadURL(this.owner.url);
-    readonly getOSProcessId = () => 0;
+    readonly getOSProcessId = () => this.#state?.pid ?? 0;
     readonly getProcessId = () => 0;
     // The engine's DevTools aren't the app's to open yet.
     readonly openDevTools = (_options?: unknown) => undefined;
@@ -857,6 +915,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           this.closeAsked();
           break;
         }
+        case "page_state": {
+          const { type: _type, window: _window, ...state } = event;
+          this.webContents.takeState(state);
+          break;
+        }
         case "javascript_result": {
           const running = this.#running.get(event.call);
           this.#running.delete(event.call);
@@ -884,6 +947,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** What only a window says of itself as it opens. */
     protected opening(): { title?: string; hidden?: true } {
       return {};
+    }
+
+    /** Its page took or lost the keyboard focus. */
+    focusChanged(_focused: boolean) {
+      // Only a window has focus events of its own.
     }
 
     /** The user asked to close the page's window. */
@@ -1156,8 +1224,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   class BrowserWindow extends Page {
     static readonly fromId = (id: number) => windows.get(id) ?? null;
     static readonly getAllWindows = () => [...windows.values()];
-    /** Null: which window has focus is the shell's, and not told yet. */
-    static readonly getFocusedWindow = () => null;
+    /** The window whose page has the keyboard focus, if one of the app's does. */
+    static readonly getFocusedWindow = () =>
+      [...windows.values()].find((window) => window.isFocused()) ?? null;
     /** The window of `webContents`' page, or of the view it is. */
     static readonly fromWebContents = (webContents: WebContents) => {
       const { owner } = webContents;
@@ -1346,7 +1415,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly setParentWindow = (_parent: unknown) => undefined;
     readonly getNativeWindowHandle = () => Buffer.alloc(8);
     readonly getMediaSourceId = () => "";
-    readonly isFocused = () => this.isVisible();
+    readonly isFocused = () => this.webContents.isFocused();
+
+    override focusChanged(focused: boolean) {
+      this.emit(focused ? "focus" : "blur", eventObject());
+    }
     readonly reload = () => this.webContents.reload();
 
     readonly setBrowserView = (view: BrowserView | null) => {
@@ -1582,7 +1655,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       [...pages.values()]
         .filter((page) => !page.isDestroyed())
         .map((page) => page.webContents),
-    getFocusedWebContents: () => null,
+    getFocusedWebContents: () =>
+      [...pages.values()]
+        .map((page) => page.webContents)
+        .find((contents) => contents.isFocused()) ?? null,
   };
 
   return {

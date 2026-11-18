@@ -72,6 +72,8 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(ElectronWindowOpenDetails details,
                                std::unique_ptr<ElectronHeldPage> held)>
       window_opening;
+  // What the page is now: its history, loading, focus and renderer.
+  base::RepeatingCallback<void(ElectronPageState state)> state;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -262,6 +264,10 @@ class ElectronDesk {
           answered) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
+  // Shows entry `index` of window `id`'s page's history, if it has one.
+  virtual void GoToIndex(const std::string& id, int index) = 0;
+  // Forgets every entry of window `id`'s page's history but the one shown.
+  virtual void ClearHistory(const std::string& id) = 0;
   // The title the desktop shows for window `id`, over its page's.
   virtual void SetTitle(const std::string& id, const std::string& title) = 0;
   // Whether the desktop shows window `id`. A hidden window stays open, its
@@ -461,6 +467,7 @@ class ElectronApp {
   void SetViews(const ElectronSetViews& set);
   void MenuClicked(ElectronWindow number, int command);
   void CloseAsked(ElectronWindow number);
+  void PageStateChanged(ElectronWindow number, ElectronPageState state);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or
   // nothing after refusing `what` of a view.

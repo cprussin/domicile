@@ -214,6 +214,14 @@ void ElectronApp::Take(std::string_view line) {
     if (const std::optional<std::string> id = IdOf(focus->window)) {
       desk_->Focus(*id);
     }
+  } else if (const auto* go = std::get_if<ElectronGoToIndex>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(go->window)) {
+      desk_->GoToIndex(*id, go->index);
+    }
+  } else if (const auto* clear = std::get_if<ElectronClearHistory>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(clear->window)) {
+      desk_->ClearHistory(*id);
+    }
   } else if (const auto* title = std::get_if<ElectronSetTitle>(&*request)) {
     if (const std::optional<std::string> id =
             WindowIdOf(title->window, "a title")) {
@@ -396,6 +404,8 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
                                          weak_factory_.GetWeakPtr(), number),
       .window_opening = base::BindRepeating(&ElectronApp::PageWindowOpening,
                                             weak_factory_.GetWeakPtr(), number),
+      .state = base::BindRepeating(&ElectronApp::PageStateChanged,
+                                   weak_factory_.GetWeakPtr(), number),
   };
 }
 
@@ -646,6 +656,13 @@ void ElectronApp::MenuClicked(ElectronWindow number, int command) {
 void ElectronApp::CloseAsked(ElectronWindow number) {
   if (windows_.contains(number)) {
     send_.Run(ElectronCloseAsked(number));
+  }
+}
+
+void ElectronApp::PageStateChanged(ElectronWindow number,
+                                   ElectronPageState state) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronPageStateChanged(number, state));
   }
 }
 
