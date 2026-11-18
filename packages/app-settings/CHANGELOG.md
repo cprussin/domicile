@@ -1,5 +1,93 @@
 # @domicile-desktop/app-settings
 
+## 0.2.0
+
+### Minor Changes
+
+- 60e7c7e: Settings shows "Not supported" in place of the HDR switch for a plugged-in monitor that can't show HDR. It learns which monitors those are from the new `which_monitors` question, which the compositor answers with each lit monitor's names and HDR state.
+- 52e71af: Private windows are a private browser profile's: its extension switches say what runs there. The config's `extensions.settings.<id>.private` is gone, and a config that sets it is refused; so are the SDK's `inPrivate` on installed extensions and in `configureExtension()`, and the Settings app's and tray's "Allow in private windows". The tray now shows the extensions of the last focused page's browser profile ("Extensions in Work"): its icons are those switched on there, and its switches switch them in that profile, locked where the config sets them.
+- 133ce8a: Browser profiles have an order. The config's `browser.order` lists profile ids, and the profiles it leaves out follow by id. The compositor sends the profiles in that order, so the profile menu and Settings list them that way.
+  
+  Settings' Profiles page moves a profile up or down. After its swatches, a color well takes any color, and the swatches now include the theme's cyan.
+  
+  In the profile menu, middle-clicking a profile opens the page in a new window of that profile, using `ListRow`'s new `onMiddlePress`. The profile button writes its name in black on light colors, where white would be hard to read.
+- 6f3ec06: Settings has a Profiles page: a card per browser profile with its color, whether it is private and its extension switches, and one list of the sites that open outside the default profile. Profiles, colors, Private and the default change in the config; extension switches and sites added here are saved by the desktop, under the config's. Adding a site that is already listed points at its row. The engine's command socket answers `browser_profiles` and `pin_browser_site`, and `set_extension_enabled` takes a `profile`.
+- 8ff882e: Extensions can run in private windows. Each extension's chrome://extensions settings are now yours to set: whether it runs in private windows and on local files, whether it may run user scripts, and which sites it runs on (when you click it, on specific sites, or on all sites). Set them in the config's `extensions.settings`, by extension id, or in the Settings app, which shows the ones an extension can use while it is on and moves Options and Uninstall to the bottom of its row. A setting the config drops goes back to Chrome's default.
+
+### Patch Changes
+
+- 04baee9: Settings' Displays page can turn on HDR for each monitor in a profile and set
+  how bright everyday content looks while it's on. On a narrow window, each
+  monitor's settings stack into labeled lines.
+- c454256: A display profile can drive a monitor in HDR (HDR10) with `hdr: true`, and set how bright ordinary content's white is there with `sdr_white` (203 cd/m² by default). It is off by default and used only where the monitor's EDID takes PQ and its connector scans out in 10 bits. The SDK's config types gain both fields, and Settings reads profiles that set them instead of refusing them.
+- 4b89923: Settings' Profiles page pads each profile's card the way the other pages' cards are padded, lists the default profile first and the default private one last, and gives extension names more room.
+- d57e6f6: Settings shows each extension's own icon, on the Extensions page and on each profile's card, instead of its initial, which stays for an extension without one. A profile card lists its extensions in two columns at most, so their names fit. The engine's extension list names each extension's icon file, which `domicile-app-host` hands to Settings as an image.
+- 94e5909: Settings reads every key the compositor reads, such as `input.mouse`, `input.touchpad` and `terminal`, instead of refusing the config. Its schema is now `@domicile-desktop/sdk/config-schema`, a Zod schema generated from the compositor's config with its defaults filled in.
+- 996cc29: A shell can hear when nobody has been at the desk for a time it chooses (`session.idleAfter`), or a time before the screens blank (`session.idleBeforeBlanking`). These replace `session.idleWarnings` and the `idle.warn_before_seconds` setting, which are gone.
+- e821d1f: A display profile can turn on adaptive sync (variable refresh rate, FreeSync, G-Sync Compatible) per monitor with `adaptive_sync: true`. It is off by default, asked for only where the monitor and driver report support, and retried without it when the driver refuses the modeset. The SDK's `Display` gains `adaptiveSync` (`unsupported`, `off` or `on`), which says what the hardware is doing. Settings now reads profiles that set `refresh` or `adaptive_sync` instead of refusing them.
+- Updated dependencies [9478a19]
+- Updated dependencies [8a2777f]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [9478a19]
+- Updated dependencies [c454256]
+- Updated dependencies [7680c50]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [d566f68]
+- Updated dependencies [4acd3cd]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [87ac040]
+- Updated dependencies [d3978bb]
+- Updated dependencies [3600d3b]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [e4f3394]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [3977a25]
+- Updated dependencies [057faa5]
+- Updated dependencies [3e37020]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [4799f21]
+- Updated dependencies [2a1913f]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [94e5909]
+- Updated dependencies [52e71af]
+- Updated dependencies [14704ae]
+- Updated dependencies [133ce8a]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [da632d6]
+- Updated dependencies [a5ade39]
+- Updated dependencies [756c1bd]
+- Updated dependencies [0a4d218]
+- Updated dependencies [befeb71]
+- Updated dependencies [382819f]
+- Updated dependencies [03dcccf]
+- Updated dependencies [e7b707c]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [9c805c4]
+- Updated dependencies [8c477cc]
+- Updated dependencies [8f74f44]
+- Updated dependencies [996cc29]
+- Updated dependencies [5ef4689]
+- Updated dependencies [85ad296]
+- Updated dependencies [b95da52]
+- Updated dependencies [69247ca]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [8ff882e]
+- Updated dependencies [5315b06]
+- Updated dependencies [25522ef]
+- Updated dependencies [e821d1f]
+- Updated dependencies [a85afe8]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [4a4f057]
+- Updated dependencies [5a70826]
+- Updated dependencies [d2a68f5]
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/react@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes

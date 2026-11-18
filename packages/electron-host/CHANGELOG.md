@@ -1,0 +1,57 @@
+# @domicile-desktop/electron-host
+
+## 0.1.0
+
+### Minor Changes
+
+- 7bef546: `electron-host` connects to the engine's Electron socket (`DOMICILE_ELECTRON_SOCK`) as the app, named by its `desktopName`, and its `BrowserWindow` opens, loads, focuses and closes app windows there. A window takes its page's title, is ready to show once its page loads, and the app quits with its last window unless it listens for `window-all-closed`.
+- 08d5c17: `dialog.showMessageBox` shows an Electron app's message box over its window, drawn by the shell, and resolves with the user's answer and checkbox. With no window named it goes over the app's most recent one; with none open it rejects. `showMessageBoxSync` still throws, as it can't wait for the shell.
+- babc6f1: Electron apps get `dialog`'s file dialogs: open and save dialogs, and their `Sync` versions, go through Domicile's file chooser. Message boxes throw for now, saying they need a dialog the shell draws.
+- e496597: Electron apps get `shell` and `nativeTheme`. `shell.openExternal` and `shell.openPath` open links and files with `domicile open`, and `shell.showItemInFolder` opens the item's folder. `nativeTheme` follows the desktop's color scheme and contrast from the settings portal, and an app's `themeSource` overrides `shouldUseDarkColors`. The host now needs the desktop's session bus, and says so when `DBUS_SESSION_BUS_ADDRESS` is not set.
+- 04a318b: Electron apps get `Tray`. A tray icon shows in Domicile's tray with its image and tooltip, its context menu opens from the icon and clicks go back to the app, and `destroy` takes the icon down.
+- a77b1e0: Electron apps whose windows ask for Node.js in their pages (`nodeIntegration`, or `sandbox: false`) now run on Domicile's engine instead of falling back to their own Electron. Such a page gets its own unsandboxed renderer with Electron's Node in it, as Electron gives it; every other page stays sandboxed.
+- 689c56a: `domicile open --electron <entry|path> [-- <command>...]` runs an installed Electron app on the desktop's engine instead of the Electron it ships. It follows the app's desktop entry, through the wrapper scripts packages put around Electron, to the app's `app.asar`, and runs it with `electron-host`, which now ships with Domicile. An app whose page needs Node runs on its own Electron instead, with a notification saying so.
+- eeb828a: Electron apps can share the screen. `desktopCapturer.getSources` gives one source the desktop's share picker stands for, as Electron does under Wayland, and a page's `getUserMedia()` with `chromeMediaSource: "desktop"` opens that picker, with the source's sound when asked. `session.setDisplayMediaRequestHandler` is accepted, and `getDisplayMedia()` opens the same picker, as Electron's `useSystemPicker` does.
+- d01b59f: Electron apps' menus reach the engine as each window's menu bar: `Menu.setApplicationMenu`, `win.setMenu`, `removeMenu`, `autoHideMenuBar`, `setAutoHideMenuBar` and `setMenuBarVisibility`. A click on the bar runs the entry for the window it was clicked in.
+- 518ca8c: An Electron app's `session.webRequest` listeners work on Domicile's engine. `onBeforeRequest` may cancel or redirect a page's request, `onBeforeSendHeaders` may replace its headers, `onHeadersReceived` may cancel it or replace the response's headers and status line, and the other events hear how each request went. Filters take Chromium's URL patterns and resource types, and a listener's answer keeps only what its event may change, as in Electron.
+- 875d553: Electron apps' `Notification`s show on the desktop as the app's, on its notification server. Clicks, buttons, inline replies and closing reach the app as `click`, `action`, `reply` and `close`, and a notification shown again updates in place. The host now also needs the desktop's notification server on the session bus.
+- f60deb1: A `Session` has `setPermissionRequestHandler`: while it has a handler, the engine asks it about the session's pages' permission requests, and the page gets its answer. `setPermissionCheckHandler` is taken but not consulted yet, and says so once on stderr.
+- c5712b3: Electron apps on the engine get `webContents.executeJavaScript` and `webContents.mainFrame`, a `WebFrameMain` for the page's one frame. Claude Desktop calls both as it starts, and ran on its own Electron for want of them.
+- fbefc2e: Electron apps get `clipboard`: text, HTML, RTF, images and raw formats, from the clipboard or the primary selection, through `wl-paste` and `wl-copy`. Writing several formats at once throws for now, naming them.
+- 18bc609: An Electron app's windows run their preloads and talk to its main process. `webPreferences.preload` is sent to the engine with the window, `ipcMain.on`, `handle` and `handleOnce` answer the pages' `ipcRenderer`, and `webContents.send` reaches them. A window that asks for Node.js in its page (`nodeIntegration`, or `contextIsolation: false`) fails loudly, since the engine doesn't give a page Node.js.
+- cda79ce: An Electron app's own schemes (`app://` and the like) now reach the engine. When an app registers a scheme the engine doesn't have yet, `electron-host` keeps it in `$XDG_STATE_HOME/domicile/electron-schemes.json` and the app runs on its own Electron this time; from the next engine start, `domicile` registers every kept scheme and the app runs on the engine.
+- d5f34b4: Electron apps get `nativeImage`. It reads PNGs and JPEGs from files, buffers, bitmaps and `data:` URLs, and turns PNGs into PNG bytes, `data:` URLs and BGRA bitmaps, resized or cropped. A JPEG is kept as it came: it can't be resized, cropped or turned into a bitmap, and saying so is an error.
+- 46b1eed: Electron apps get `Menu` and `MenuItem`. `Menu.buildFromTemplate` builds menus with Electron's role labels and accelerators, role menus such as `editMenu`, checkboxes, radios, icons and submenus, and changes to a menu are heard by what draws it. `setApplicationMenu` and `getApplicationMenu` keep the app's menu; the menu bar and the tray that draw these come next.
+- 631f98c: Electron apps can use views. `WebContentsView` and `BrowserView` open as views, and a window's `contentView.addChildView`, `removeChildView` and each view's `setBounds` and `setVisible` place them in the window for the shell to draw. `BrowserView`'s `setBrowserView`, `addBrowserView`, `setTopBrowserView` and `setAutoResize` work as in Electron. A window's `getContentBounds`, `getBounds` and `getSize` read the size the shell gave it, `resize` fires as it changes, and `BrowserWindow.fromWebContents` finds the window holding a view's page.
+- c029ccf: An Electron app's `protocol.handle`, `session.fromPartition` and `loadFile` work on Domicile's engine. Each session serves `file:` from the app's mirror until the app handles `file:` itself, a window opens in the session its `webPreferences.partition` or `session` names, and a handler's `Response` streams back to the page. `protocol.registerSchemesAsPrivileged` keeps the app's schemes for the engine's next start.
+- 5624646: A `Session` has `cookies` (`get`, `set`, `remove`, `flushStore`), `clearStorageData`, `clearCache`, `setUserAgent` and `getUserAgent`, each on the engine's `session_call`s for that session's partition.
+- 6fb921e: Add `electron-host`: runs an installed Electron app's main process with a stand-in `electron` module (`app` identity, paths and lifecycle), from a mirror of its resources with every asar extracted.
+- 37ee4c2: Electron apps get `safeStorage`, compatible with Electron's on Linux: the key comes from the same Secret Service entry, so data an app saved while running on its own Electron still decrypts.
+- 6731303: An Electron app's pages can `sendSync` and share message ports with it. A page's `sendSync` gets the first `returnValue` an `ipcMain.on` listener sets, and fails when nothing listens. `MessageChannelMain` and `MessagePortMain` work in the main process, `webContents.postMessage` sends ports to a page, and a page's `postMessage` reaches `ipcMain` listeners with its ports in `event.ports`. A port shared with a page closes when its page goes.
+- 4f7905e: Give Electron apps `utilityProcess.fork`: the module runs in a child process of the same runtime, with `process.parentPort`, and `MessageChannelMain` ports sent to it carry messages both ways.
+- 4a4f057: Electron apps on the engine behave more like their own Electron:
+  
+  - Closing a window asks the app first, so an app that closes to its tray, as Slack and Element do, keeps running there instead of quitting.
+  - `win.hide()`, `win.show()` and `show: false` hide and show a window, its page still running. The engine lists a hidden window with `isHidden`, and Manganese keeps it off every workspace until its app shows it.
+  - A window's own title (`setTitle`, or `page-title-updated` prevented) is the one the desktop shows, so Claude Desktop reads "Claude", not "index.html".
+  - `ipcRenderer` is an EventEmitter, so `ipcRenderer.emit` reaches the preload's own listeners. Element's preload calls it as it starts, and showed "Unable to load config file" without it.
+  - Manganese draws an app window with its app's icon, in its title bar and in the screenshot and screen cast pickers, instead of its page's.
+  - A window has the properties Electron gives for what its methods set: `autoHideMenuBar`, `menuBarVisible`, `fullScreen`, `resizable` and the rest, and its page `audioMuted`, `backgroundThrottling` and `userAgent`. Element reads `autoHideMenuBar` once its page loads.
+
+### Patch Changes
+
+- 5a5570a: Apps known to need Node in their pages (Signal, Teams for Linux, Zulip, Joplin) go straight to their own Electron instead of failing on the engine first.
+- 7dc15f7: Electron apps start again on Domicile's engine. Slack died at start because the engine's Electron had no `app.requestSingleInstanceLock`; it has that now, and every other Electron API an app can call is there too. One the engine can't do yet hands the app to its own Electron with a notification saying so, instead of crashing it.
+  
+  An app whose wrapper script was just written no longer fails to open with "Text file busy" on Domicile's engine.
+  
+  Element and Claude run on the engine from their first start, since the engine now registers their own schemes before they ask.
+- 70792da: Electron apps start on the engine more reliably:
+  
+  - Apps started at login wait up to a minute for the engine instead of failing at once.
+  - An app whose package removed some of its unpacked files (nixpkgs' ChatGPT) starts.
+  - safeStorage picks its backend the way Chromium does, from `--password-store` and the desktop, so Element no longer migrates its store and relaunches forever. `app.commandLine` now answers the switches the app was started with.
+  - `session.allowNTLMCredentialsForDomains` is accepted, and Slack's `slack-webapp-dev` and ChatGPT's `codex-sandbox` schemes register from the engine's first start, so neither falls back on its first run.
+- cd538e4: An Electron app hears `web-contents-created` for each page it makes, and each page's `dom-ready`, so Slack shows its window.
+- a77b1e0: An Electron app's IPC events name the page's main frame as `senderFrame`, so Slack answers its window's page and opens.
+- e03459a: ChatGPT opens again. It refuses to start on anything but OpenAI's own Electron fork, so `electron-host` hands it back to its own Electron before its main runs, with a notification saying so.

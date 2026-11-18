@@ -1,5 +1,12 @@
 # @domicile-desktop/ci
 
+## 0.0.3
+
+### Patch Changes
+
+- 501a4b1: The flake serves Domicile from a binary cache at `https://packages.domicile-desktop.com/nix`, filled for each commit `stable` moves to, so `nix run` and configs pinned to `stable` download Domicile instead of building it.
+- a83a6ec: The docs have release notes: Domicile's for shell and app authors at `/docs/release-notes`, and manganese's for its users at `/docs/manganese/release-notes`, back to 1.0.0. The user guide gains an Electron apps page and a Profiles section, and the home and manganese pages point to the new features. A release refuses to run until both pages have a dated entry for its versions.
+
 ## 0.0.2
 
 ### Patch Changes

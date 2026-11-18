@@ -1,5 +1,67 @@
 # @domicile-desktop/manganese-bar-module-workspace-switcher
 
+## 1.2.1
+
+### Patch Changes
+
+- bc4e5bf: Switching workspaces no longer restyles and lays out the whole desk in the middle of the switch. The switcher's highlight measures its chip after the frame's layout, so the slide's first frame starts sooner.
+- Updated dependencies [537a8d8]
+- Updated dependencies [d566f68]
+- Updated dependencies [60e5932]
+- Updated dependencies [d3978bb]
+- Updated dependencies [3600d3b]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [e4f3394]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [d1b3ab9]
+- Updated dependencies [24b88fb]
+- Updated dependencies [a77b1e0]
+- Updated dependencies [3977a25]
+- Updated dependencies [3e37020]
+- Updated dependencies [876c824]
+- Updated dependencies [4799f21]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [eaa92c7]
+- Updated dependencies [14704ae]
+- Updated dependencies [133ce8a]
+- Updated dependencies [1209f22]
+- Updated dependencies [3aaca85]
+- Updated dependencies [da632d6]
+- Updated dependencies [a5ade39]
+- Updated dependencies [756c1bd]
+- Updated dependencies [befeb71]
+- Updated dependencies [382819f]
+- Updated dependencies [6a0772b]
+- Updated dependencies [b5edfcd]
+- Updated dependencies [e7b707c]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [94f365b]
+- Updated dependencies [9c805c4]
+- Updated dependencies [8f74f44]
+- Updated dependencies [0ee4ce8]
+- Updated dependencies [637cc16]
+- Updated dependencies [b0fad3c]
+- Updated dependencies [18c887f]
+- Updated dependencies [5ef4689]
+- Updated dependencies [b95da52]
+- Updated dependencies [69247ca]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [5315b06]
+- Updated dependencies [52a2a9c]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [64bda78]
+- Updated dependencies [4a4f057]
+- Updated dependencies [4b7a878]
+- Updated dependencies [9ea68bf]
+- Updated dependencies [e458dd7]
+- Updated dependencies [5090cbd]
+- Updated dependencies [5a70826]
+  - @domicile-desktop/manganese-window-management@1.4.0
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/manganese-bar@1.1.3
+
 ## 1.2.0
 
 ### Minor Changes
