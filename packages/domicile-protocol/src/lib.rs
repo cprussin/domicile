@@ -1346,9 +1346,11 @@ impl PortalKind {
             (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
                 *x < desk.width && *y < desk.height
             }
-            (PortalKind::Agent(_), PortalAnswer::Agent { reach }) => match reach {
+            // Only the whole desk is remembered: window ids last as long as
+            // their windows.
+            (PortalKind::Agent(_), PortalAnswer::Agent { reach, remember }) => match reach {
                 AgentReach::Desk => true,
-                AgentReach::Windows { windows } => !windows.is_empty(),
+                AgentReach::Windows { windows } => !windows.is_empty() && !remember,
             },
             // A stop, pause, resume or discard answers a running session and
             // a press or release a bound shortcut, never a request.
@@ -1370,6 +1372,7 @@ impl PortalKind {
                 | PortalAnswer::PickColor { .. }
                 | PortalAnswer::Agent { .. }
                 | PortalAnswer::Stop
+                | PortalAnswer::Change
                 | PortalAnswer::Pause
                 | PortalAnswer::Resume
                 | PortalAnswer::Discard
@@ -1539,6 +1542,42 @@ pub struct AgentDialog {
     /// The windows the user may pick from: every one open but private
     /// browser windows, which no agent reaches.
     pub windows: Vec<AgentWindow>,
+    /// What it reaches now, when the user asked to change it with
+    /// [`PortalAnswer::Change`]. Canceling keeps it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<AgentReach>,
+    /// Whether it is let in without asking now, so a change starts with
+    /// Remember on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub remembered: bool,
+}
+
+/// The agents the desk knows: those let in now, and those let in for good.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnownAgents {
+    /// Let in now, oldest first.
+    pub connected: Vec<ConnectedAgent>,
+    /// Let in without asking, by name, most recently used first.
+    pub remembered: Vec<RememberedAgent>,
+}
+
+/// An agent let in now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectedAgent {
+    /// Its [`CapturingKind::Agent`] session's id, which
+    /// [`SystemRequest::StopAgent`] takes.
+    pub session: u32,
+    pub agent: String,
+    pub reach: AgentReach,
+}
+
+/// An agent the user let reach the whole desk without asking again, until
+/// [`SystemRequest::ForgetAgent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RememberedAgent {
+    pub agent: String,
+    /// When it was last let in, in milliseconds since the Unix epoch.
+    pub last_used_ms: u64,
 }
 
 /// A window an agent may be let reach.
@@ -2184,8 +2223,17 @@ pub enum PortalAnswer {
     /// The pixel of a [`PortalKind::PickColor`] the user picked.
     PickColor { x: u32, y: u32 },
     /// What the user lets a [`PortalKind::Agent`] reach. Windows must be
-    /// ones its dialog offered; the compositor drops any other.
-    Agent { reach: AgentReach },
+    /// ones its dialog offered; the compositor drops any other. `remember`
+    /// lets the agent reach the whole desk later without asking; it takes
+    /// [`AgentReach::Desk`].
+    Agent {
+        reach: AgentReach,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        remember: bool,
+    },
+    /// Ask the user again what the [`CapturingKind::Agent`] with this id may
+    /// reach. Answers no request.
+    Change,
     /// Pause the [`CapturingKind::Recording`] with this id. Answers no
     /// request.
     Pause,
@@ -2228,6 +2276,7 @@ impl PortalAnswer {
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused
+            | PortalAnswer::Change
             | PortalAnswer::Pause
             | PortalAnswer::Resume
             | PortalAnswer::Discard
@@ -2512,6 +2561,15 @@ pub enum SystemRequest {
     /// Note that the agent this id let in did `said`, for the shell to list.
     /// No reply.
     AgentDid { said: String },
+    /// Report the agents let in now and those remembered. Answered with
+    /// [`SystemReply::Agents`].
+    Agents,
+    /// End the [`CapturingKind::Agent`] session `session`, as the shell's
+    /// [`PortalAnswer::Stop`] does. Answered with [`SystemReply::Set`].
+    StopAgent { session: u32 },
+    /// Make the remembered agent `agent` ask again next time. Answered with
+    /// [`SystemReply::Set`], whether or not it was remembered.
+    ForgetAgent { agent: String },
     /// Report the keymaps the desktop switches between and which it types
     /// on. Answered with [`SystemReply::Started`], then a
     /// [`SystemEvent::Keymaps`] at once and on each change.
@@ -2722,8 +2780,11 @@ pub enum SystemReply {
     Set,
     /// The virtual monitor was added, as the `wl_output` named `output`.
     VirtualMonitor { output: String },
-    /// The user let the agent reach this.
+    /// The user let the agent reach this. A
+    /// [`SystemEvent::AgentReach`] follows each time they change it.
     Agent { reach: AgentReach },
+    /// The agents the desk knows.
+    Agents(KnownAgents),
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
 }
@@ -2783,6 +2844,8 @@ pub enum SystemEvent {
     /// A client rang the bell, from window `app_id`, or from none when it
     /// named no surface or one that is not a window.
     Bell { app_id: Option<String> },
+    /// The user changed what the agent this id let in may reach.
+    AgentReach { reach: AgentReach },
     /// The keymaps the desktop switches between, in the config's order, and
     /// the name of the one it types on.
     Keymaps {

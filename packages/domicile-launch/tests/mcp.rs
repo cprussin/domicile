@@ -610,7 +610,7 @@ fn reaching(reach: AgentReach) -> (Grant, Rc<RefCell<Vec<String>>>) {
     let told = Rc::clone(&did);
     (
         Grant {
-            reach,
+            reach: Box::new(move || reach.clone()),
             stopped: Box::new(|| false),
             did: Box::new(move |said| told.borrow_mut().push(said.to_string())),
         },
@@ -689,7 +689,7 @@ fn an_agent_the_user_did_not_let_in_is_refused_every_call_without_asking_again()
 fn an_agent_the_user_stopped_is_refused() {
     let replies = served_letting(&[call("status", json!({}))], never_run, |_| {
         Ok(Grant {
-            reach: AgentReach::Desk,
+            reach: Box::new(|| AgentReach::Desk),
             stopped: Box::new(|| true),
             did: Box::new(|_| ()),
         })
@@ -771,4 +771,28 @@ fn with_only_some_windows_list_windows_lists_only_those() {
         listed,
         json!([{"id": "n1", "title": "Notes"}, {"id": "w1", "title": "Pull requests"}])
     );
+}
+
+#[test]
+fn a_change_the_user_makes_applies_from_the_next_call() {
+    let reach = Rc::new(RefCell::new(AgentReach::Desk));
+    let changing = Rc::clone(&reach);
+    let mut grant = Some(Grant {
+        reach: Box::new(move || changing.borrow().clone()),
+        stopped: Box::new(|| false),
+        did: Box::new(|_| ()),
+    });
+    let narrowed = Rc::clone(&reach);
+    let replies = served_letting(
+        &[call("status", json!({})), call("status", json!({}))],
+        move |_| {
+            // After the first call runs, the user narrows it to two windows,
+            // which takes the desk-wide `status` away.
+            *narrowed.borrow_mut() = two_windows();
+            printed("{}")
+        },
+        move |_| Ok(grant.take().expect("asked once")),
+    );
+    assert_eq!(replies[0]["result"]["isError"], false);
+    assert_eq!(replies[1]["result"]["isError"], true);
 }

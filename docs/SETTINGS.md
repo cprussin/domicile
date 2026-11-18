@@ -29,6 +29,9 @@ not in the Extensions page or any extension list.
   address bar's profile menu saves them; one the config sets changes in the
   config, and is locked when the config is read-only. Adding a site that is
   already listed is refused, pointing at its row.
+- **Agents:** each agent connected now or remembered, with what it reaches
+  and when it was last used. **Stop** ends its sessions; **Forget** makes a
+  remembered agent ask again ([AGENTS.md](AGENTS.md)).
 - **Site permissions:** each permission with the sites that have a setting of
   their own for it, or each site with all its permissions. **Remove site**
   clears all of a site's own settings. Changes take effect at once in open
@@ -101,6 +104,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 | Shell options | `settings_files` names the shell's `options.json`, beside its module. The host reads it with the config and checks `shell_options` writes against it. |
 | Extensions | The engine's `extensions`, `set_extension_enabled`, `configure_extension`, `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
 | Profiles | The engine's `browser_profiles`, `pin_browser_site` and `set_extension_enabled` with a `profile`, on the desk's `BrowserProfileRegistry` ([BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md)). The profiles themselves are the config's `browser`. |
+| Agents | The control socket's `agents`, `stop_agent` and `forget_agent`, which the compositor answers from its agent registry and `agents.json` ([AGENTS.md](AGENTS.md#design)). |
 | Picking a folder | The host calls the `FileChooser` portal's `OpenFile` with `directory`, which the shell draws ([PORTALS.md](PORTALS.md)). A page cannot learn the path of a folder from `<input type="file">`. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
 | Site data | The engine's `site_data` and `clear_site_data` commands. They read and remove the shell profile's data through Chrome's `BrowsingDataModel`, as `chrome://settings/content/all` does. |

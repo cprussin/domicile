@@ -38,9 +38,9 @@ use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
 };
 use domicile_launch::compositor_socket::{
-    act_on_window, configure_display, displays, emulate, inputs, lock, monitors, power_displays,
-    screen_record, screenshot, send_shell, shell_bindings, shell_commands, shoot_desk, status,
-    theme, windows,
+    act_on_window, agents, configure_display, displays, emulate, forget_agent, inputs, lock,
+    monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
+    shell_commands, shoot_desk, status, stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -62,7 +62,8 @@ use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::listing::{
-    bindings_table, displays_table, inputs_table, shell_commands_table, status_table, windows_table,
+    agents_table, bindings_table, displays_table, inputs_table, shell_commands_table, status_table,
+    windows_table,
 };
 use domicile_launch::mcp;
 use domicile_launch::milestones::{reach, Milestone, Stalled};
@@ -222,7 +223,8 @@ fn run() -> Result<ExitCode, String> {
             let status = inhibit_idle(&command)?;
             Ok(ExitCode::from(exit_code(status)))
         }
-        Invocation::Mcp => agents_served(),
+        Invocation::Mcp { http: None } => agents_served(),
+        Invocation::Mcp { http: Some(http) } => agents_served_over_http(http),
         Invocation::Agent { name } => admitted(name),
         Invocation::Accessibility { window } => {
             let (pid, title) = native_window(&window)?;
@@ -948,7 +950,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Status { .. }
         | Response::ShellCommands { .. }
         | Response::ShellBindings { .. }
-        | Response::Inputs { .. } => Err(format!(
+        | Response::Inputs { .. }
+        | Response::Agents { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -1017,6 +1020,66 @@ fn agents_served() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// Serves the Model Context Protocol over HTTP at `http`, each session's
+/// tools running this binary, signed in as [`mcp::Web`] describes.
+fn agents_served_over_http(http: domicile_launch::cli::McpHttp) -> Result<ExitCode, String> {
+    let binary = myself()?;
+    let listener = std::net::TcpListener::bind(http.listen)
+        .map_err(|why| format!("mcp: could not listen on {}: {why}", http.listen))?;
+    let base = http
+        .url
+        .unwrap_or_else(|| format!("http://{}", http.listen));
+    eprintln!("domicile: serving agents at {base}/mcp");
+    let web = mcp::Web {
+        listener,
+        base,
+        state: state_directory(&|name| std::env::var(name).ok())
+            .map(|directory| directory.join("signed-in-agents.json")),
+        show: Box::new(|client: &str, code: &str| {
+            let summary = format!("Connecting {client} to your desktop");
+            let body =
+                format!("Enter {code} to let it sign in. If you didn't start this, ignore it.");
+            let shown = notification::session_bus()
+                .and_then(|bus| notification::notify(&bus, &summary, &body));
+            if let Err(why) = shown {
+                eprintln!("domicile: could not show the code ({why}); it is {code}");
+            }
+        }),
+        clock: Arc::new(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| {
+                    u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+                })
+        }),
+        random: Box::new(|| {
+            let mut bytes = [0; 32];
+            std::fs::File::open("/dev/urandom")
+                .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut bytes))
+                .expect("/dev/urandom gives secrets");
+            bytes
+        }),
+        sweep_every: std::time::Duration::from_secs(60),
+    };
+    mcp::serve_http(web, move || {
+        let binary = binary.clone();
+        let admitting = binary.clone();
+        mcp::Agent::new(
+            move |args: &[String]| {
+                let output = Command::new(&binary).args(args).output()?;
+                Ok(mcp::Ran {
+                    success: output.status.success(),
+                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                })
+            },
+            move |name| let_in(&admitting, name),
+        )
+    })
+    .map_err(|why| format!("mcp: {why}"))?;
+    Ok(ExitCode::SUCCESS)
+}
+
 /// Runs `domicile agent name`, which asks the user to let it in, and holds
 /// the agent in for as long as this process runs.
 fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
@@ -1041,20 +1104,32 @@ fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
             return Err(why.trim().trim_start_matches("domicile: ").to_string());
         }
     };
-    // It says nothing more: its output ending is the user stopping it.
+    // Each later line is a change the user made; its output ending is the
+    // user stopping it.
     let stopped = Arc::new(AtomicBool::new(false));
+    let reach = Arc::new(Mutex::new(reach));
+    // It runs until the grant is dropped, as this process or its session
+    // ends, which closes its stdin and lets the agent go.
+    let mut actions = agent.stdin.take().expect("stdin is piped");
     std::thread::spawn({
-        let stopped = Arc::clone(&stopped);
+        let (stopped, reach) = (Arc::clone(&stopped), Arc::clone(&reach));
         move || {
-            let _ = std::io::copy(&mut said, &mut std::io::sink());
+            for line in said.lines() {
+                let Ok(changed) = line.map_err(|_| ()).and_then(|line| {
+                    serde_json::from_str::<domicile_protocol::AgentReach>(line.trim())
+                        .map_err(|_| ())
+                }) else {
+                    break;
+                };
+                *reach.lock().unwrap() = changed;
+            }
             stopped.store(true, Ordering::SeqCst);
+            // `--http` outlives many agents; none is left a zombie.
+            let _ = agent.wait();
         }
     });
-    // It runs until this process ends, which closes its stdin and lets the
-    // agent go.
-    let mut actions = agent.stdin.take().expect("stdin is piped");
     Ok(mcp::Grant {
-        reach,
+        reach: Box::new(move || reach.lock().unwrap().clone()),
         stopped: Box::new(move || stopped.load(Ordering::SeqCst)),
         did: Box::new(move |said| {
             // Gone once the user stopped it, which the next call says.
@@ -1083,6 +1158,8 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
         (Response::ShellBindings { bindings }, true) => as_json(&bindings),
         (Response::Inputs { inputs }, false) => inputs_table(&inputs),
         (Response::Inputs { inputs }, true) => as_json(&inputs),
+        (Response::Agents { agents }, false) => agents_table(&agents),
+        (Response::Agents { agents }, true) => as_json(&agents),
         (Response::Refused { why }, _) => {
             eprintln!("domicile: {why}");
             return Ok(ExitCode::FAILURE);
@@ -1175,12 +1252,27 @@ fn admitted(name: String) -> Result<ExitCode, String> {
     }
     held.set_read_timeout(None)
         .map_err(|why| format!("cannot keep the agent in: {why}"))?;
-    let gone = held
+    let told = held
         .try_clone()
         .map_err(|why| format!("cannot keep the agent in: {why}"))?;
-    // The desktop says nothing more: anything it does is a hang-up.
+    // Each change the user makes comes as another reach, printed as the
+    // first was; anything else, or a hang-up, is the user stopping it.
     std::thread::spawn(move || {
-        let _ = std::io::Read::read(&mut &gone, &mut [0]);
+        for line in BufReader::new(told).lines() {
+            let Ok(Response::Agent { reach }) = line
+                .map_err(|_| ())
+                .and_then(|line| serde_json::from_str(&line).map_err(|_| ()))
+            else {
+                break;
+            };
+            let mut stdout = std::io::stdout().lock();
+            let _ = writeln!(
+                stdout,
+                "{}",
+                serde_json::to_string(&reach).expect("a reach serializes")
+            )
+            .and_then(|()| stdout.flush());
+        }
         eprintln!("domicile: the agent was stopped from the desktop");
         std::process::exit(1);
     });
@@ -1955,6 +2047,15 @@ fn answer_a_command(
                         shell_bindings(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                     inputs: &|| inputs(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
+                    agents: &|| agents(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
+                    stop_agent: &|session| {
+                        stop_agent(chrome, session, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
+                    },
+                    forget_agent: &|agent| {
+                        forget_agent(chrome, agent, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
+                    },
                 },
             )
         },

@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use domicile_launch::cli::{
-    invocation, monitor_mode, monitor_size, CliError, Invocation, Listing, MonitorMode, USAGE,
+    invocation, monitor_mode, monitor_size, CliError, Invocation, Listing, McpHttp, MonitorMode,
+    USAGE,
 };
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
@@ -734,6 +735,9 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "list-shell-commands",
         "list-bindings",
         "list-inputs",
+        "list-agents",
+        "stop-agent",
+        "forget-agent",
         "subscribe",
         "lock",
         "focus-window",
@@ -1162,13 +1166,56 @@ fn configure_display_names_what_it_could_not_read() {
 }
 
 #[test]
-fn mcp_is_the_verb_that_serves_agents_and_takes_nothing() {
-    assert_eq!(run(&["mcp"]), Ok(Invocation::Mcp));
+fn mcp_serves_agents_on_stdio_or_over_http() {
+    assert_eq!(run(&["mcp"]), Ok(Invocation::Mcp { http: None }));
+    assert_eq!(
+        run(&["mcp", "--http", "127.0.0.1:7465"]),
+        Ok(Invocation::Mcp {
+            http: Some(McpHttp {
+                listen: "127.0.0.1:7465".parse().unwrap(),
+                url: None,
+            })
+        })
+    );
+    assert_eq!(
+        run(&[
+            "mcp",
+            "--http",
+            "[::1]:7465",
+            "--url",
+            "https://desk.example/"
+        ]),
+        Ok(Invocation::Mcp {
+            http: Some(McpHttp {
+                listen: "[::1]:7465".parse().unwrap(),
+                url: Some("https://desk.example".to_string()),
+            })
+        })
+    );
+    assert_eq!(
+        run(&["mcp", "--http", "everywhere"]),
+        Err(CliError::NotAListenAddress {
+            said: "everywhere".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["mcp", "--http"]),
+        Err(CliError::NotAListenAddress {
+            said: "nothing".to_string()
+        })
+    );
     assert_eq!(
         run(&["mcp", "extra"]),
         Err(CliError::Extra {
             verb: "mcp".to_string(),
             extra: "extra".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["mcp", "--url", "https://desk.example"]),
+        Err(CliError::Extra {
+            verb: "mcp".to_string(),
+            extra: "--url".to_string()
         })
     );
 }
@@ -1372,6 +1419,46 @@ fn agent_takes_one_name() {
         })
     );
     for refused in [&["agent"][..], &["agent", " "], &["agent", "a", "b"]] {
+        assert!(
+            matches!(run(refused), Err(CliError::NotOne { .. })),
+            "{refused:?}"
+        );
+    }
+}
+
+#[test]
+fn agents_are_listed_stopped_by_session_and_forgotten_by_name() {
+    use domicile_launch::control::Request;
+    assert_eq!(
+        run(&["list-agents", "--json"]),
+        Ok(Invocation::List {
+            listing: Listing::Agents,
+            json: true
+        })
+    );
+    assert_eq!(
+        run(&["stop-agent", "12"]),
+        Ok(Invocation::Ask {
+            request: Request::StopAgent { session: 12 }
+        })
+    );
+    assert!(matches!(
+        run(&["stop-agent", "Claude"]),
+        Err(CliError::NotASession { .. })
+    ));
+    assert_eq!(
+        run(&["forget-agent", "Claude Code"]),
+        Ok(Invocation::Ask {
+            request: Request::ForgetAgent {
+                agent: "Claude Code".into()
+            }
+        })
+    );
+    for refused in [
+        &["stop-agent"][..],
+        &["forget-agent"],
+        &["forget-agent", "a", "b"],
+    ] {
         assert!(
             matches!(run(refused), Err(CliError::NotOne { .. })),
             "{refused:?}"

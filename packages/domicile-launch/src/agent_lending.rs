@@ -3,7 +3,8 @@
 //!
 //! The command sends [`Request::Agent`] to the control socket, which lends
 //! the connection to [`admit`]. That asks the compositor, which asks the
-//! user, and forwards each [`Request::AgentDid`] the command sends. Either
+//! user, and forwards each [`Request::AgentDid`] the command sends and each
+//! change the user makes to what it reaches. Either
 //! side hanging up ends it: the command's takes the agent off the shell's
 //! list, the compositor's (the shell stopped it) hangs up on the command.
 
@@ -45,13 +46,20 @@ pub fn admit(admission: Admission, chrome: &Path, patience: Duration) {
         })
         .as_bytes(),
     );
-    // The shell stopping it hangs up on the client, which ends the loop below.
+    // Each change the user makes is told to the client as another
+    // `Response::Agent`. The shell stopping it hangs up on the client, which
+    // ends the loop below.
     let watching = match (answered, client.try_clone()) {
-        (Ok(()), Ok(hanging_up)) => {
+        (Ok(()), Ok(mut telling)) => {
             let held = Arc::clone(&held);
             Some(std::thread::spawn(move || {
-                held.until_it_ends();
-                let _ = hanging_up.shutdown(std::net::Shutdown::Both);
+                while let Some(reach) = held.changed() {
+                    let told = to_line(&Response::Agent { reach });
+                    if telling.write_all(told.as_bytes()).is_err() {
+                        break;
+                    }
+                }
+                let _ = telling.shutdown(std::net::Shutdown::Both);
             }))
         }
         _ => None,

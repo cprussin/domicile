@@ -166,10 +166,10 @@ recorded output.
   call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `screen_record`, `preview_window`, `shell_commands`, `answer_shell_command`, `send_shell`,
   `idle_after`, `idle_before_blanking`, `idle_holds`, `unlock_refusals`, `set_window_states`, `window_requests`,
-  `virtual_monitor`, `agent`, `keymaps`, `select_keymap`, `set_color_temperature`)
+  `virtual_monitor`, `agent`, `agents`, `stop_agent`, `forget_agent`, `keymaps`, `select_keymap`, `set_color_temperature`)
   or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
-  `kill`, `agent_did`). `agent` is `domicile agent`'s; see [AGENTS.md](AGENTS.md). `read_file` takes an
+  `kill`, `agent_did`). `agent` is `domicile agent`'s, and its session gets an `agent_reach` event when the user changes it; see [AGENTS.md](AGENTS.md). `read_file` takes an
   optional byte range, `offset` and `length`.
 - Compositor to page: one `system_reply` per call that starts something
   (`failed` included), then for a watch or process any number of

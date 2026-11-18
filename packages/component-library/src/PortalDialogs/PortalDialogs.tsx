@@ -64,6 +64,7 @@ export type PortalDialogsDesktop = DialogDesktop &
       Portals,
       | "answer"
       | "capturing"
+      | "changeAgent"
       | "discardRecording"
       | "on"
       | "pauseRecording"
@@ -190,6 +191,9 @@ export const PortalDialogs = memo(
       <>
         <CapturingIndicator
           apps={apps}
+          change={(id) => {
+            portals.changeAgent(id);
+          }}
           screen={screen}
           sessions={sessions.filter(
             (session) =>

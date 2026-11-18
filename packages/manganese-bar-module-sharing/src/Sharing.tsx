@@ -22,7 +22,10 @@ import { Agents } from "./Agents";
 
 /** What the indicator reads: captures, and applications' desktop entries. */
 export type SharingDesktop = AppsDesktop & {
-  readonly portals: Pick<Portals, "capturing" | "on" | "stopCapturing">;
+  readonly portals: Pick<
+    Portals,
+    "capturing" | "changeAgent" | "on" | "stopCapturing"
+  >;
 };
 
 type Props = {
@@ -70,7 +73,13 @@ export const Sharing = ({ domicile }: Props) => {
       {capturing.length > 0 && (
         <Casts apps={apps} capturing={capturing} stop={stop} />
       )}
-      <Agents agents={agents} stop={stop} />
+      <Agents
+        agents={agents}
+        change={(id) => {
+          domicile.portals.changeAgent(id);
+        }}
+        stop={stop}
+      />
     </>
   );
 };

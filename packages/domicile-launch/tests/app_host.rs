@@ -249,6 +249,36 @@ fn the_monitors_are_the_desktops() {
 }
 
 #[test]
+fn agents_are_listed_stopped_and_forgotten_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 20, "type": "agents"})),
+        json!({
+            "id": 20,
+            "type": "agents",
+            "agents": {"connected": [], "remembered": [{"agent": "Codex", "last_used_ms": 9}]},
+        })
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 21, "type": "stop_agent", "session": 4})),
+        json!({"id": 21, "type": "done"})
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 22, "type": "forget_agent", "agent": "Codex"})),
+        json!({"id": 22, "type": "done"})
+    );
+    assert_eq!(
+        host.asked.take()[1..],
+        [
+            Request::StopAgent { session: 4 },
+            Request::ForgetAgent {
+                agent: "Codex".to_string()
+            }
+        ]
+    );
+}
+
+#[test]
 fn a_media_device_is_preferred_on_the_desktop() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -765,6 +795,16 @@ impl Fake {
                                 hdr: DisplayHdr::Unsupported,
                             }],
                         },
+                        Request::Agents => Response::Agents {
+                            agents: domicile_protocol::KnownAgents {
+                                connected: vec![],
+                                remembered: vec![domicile_protocol::RememberedAgent {
+                                    agent: "Codex".to_string(),
+                                    last_used_ms: 9,
+                                }],
+                            },
+                        },
+                        Request::StopAgent { .. } | Request::ForgetAgent { .. } => Response::Done,
                         other => panic!("the host never asks {other:?}"),
                     })
                 },

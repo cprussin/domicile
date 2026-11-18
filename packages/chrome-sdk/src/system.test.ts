@@ -1150,3 +1150,38 @@ describe("keymaps", () => {
     expect(await named).toStrictEqual(Ok("set"));
   });
 });
+
+describe("agents", () => {
+  it("lists the agents in now and those remembered", async () => {
+    const host = new FakeHost();
+    const listing = system(host).agents();
+    host.reply(1, {
+      connected: [
+        { agent: "Claude Code", reach: { type: "desk" }, session: 4 },
+      ],
+      kind: "agents",
+      remembered: [{ agent: "Codex", last_used_ms: 9 }],
+    });
+
+    expect(host.calls).toStrictEqual([[1, { call: "agents" }]]);
+    expect(await listing).toStrictEqual(
+      Ok({
+        connected: [
+          { agent: "Claude Code", reach: { kind: "desk" }, session: 4 },
+        ],
+        remembered: [{ agent: "Codex", lastUsedMs: 9 }],
+      }),
+    );
+  });
+
+  it("forgets a remembered agent", async () => {
+    const host = new FakeHost();
+    const forgetting = system(host).forgetAgent("Codex");
+    host.reply(1, { kind: "set" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { agent: "Codex", call: "forget_agent" }],
+    ]);
+    expect(await forgetting).toStrictEqual(Ok("set"));
+  });
+});

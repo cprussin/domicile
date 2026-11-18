@@ -7,16 +7,18 @@
 //! has one path for each. The connection never says `hello`, so it is not a
 //! chrome: it hears only the reply.
 
-use std::io::{BufRead as _, BufReader, Write as _};
+use std::io::{BufRead, BufReader, Write as _};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     AgentReach, ChromeMessage, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
-    ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp,
-    SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme, WatchTopic, WindowAct,
+    KnownAgents, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding,
+    ShellCommandHelp, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, Theme,
+    WatchTopic, WindowAct,
 };
 
 use crate::cli::MonitorMode;
@@ -393,6 +395,58 @@ pub fn shell_bindings(
     }
 }
 
+/// Asks the compositor at `socket` for the agents let in now and those
+/// remembered.
+pub fn agents(socket: &Path, patience: Option<Duration>) -> Result<KnownAgents, CompositorError> {
+    match called(socket, SystemRequest::Agents, patience)? {
+        Answer {
+            reply: SystemReply::Agents(agents),
+            ..
+        } => Ok(agents),
+        Answer { reply, said } => Err(not_done(socket, reply, said)),
+    }
+}
+
+/// Asks the compositor at `socket` to end agent session `session`.
+pub fn stop_agent(
+    socket: &Path,
+    session: u32,
+    patience: Option<Duration>,
+) -> Result<(), CompositorError> {
+    set(socket, SystemRequest::StopAgent { session }, patience)
+}
+
+/// Asks the compositor at `socket` to make agent `agent` ask again.
+pub fn forget_agent(
+    socket: &Path,
+    agent: &str,
+    patience: Option<Duration>,
+) -> Result<(), CompositorError> {
+    set(
+        socket,
+        SystemRequest::ForgetAgent {
+            agent: agent.to_owned(),
+        },
+        patience,
+    )
+}
+
+/// Makes the one call `request`, which the compositor answers with
+/// [`SystemReply::Set`].
+fn set(
+    socket: &Path,
+    request: SystemRequest,
+    patience: Option<Duration>,
+) -> Result<(), CompositorError> {
+    match called(socket, request, patience)? {
+        Answer {
+            reply: SystemReply::Set,
+            ..
+        } => Ok(()),
+        Answer { reply, said } => Err(not_done(socket, reply, said)),
+    }
+}
+
 /// A virtual monitor the compositor keeps while this connection is open.
 pub struct HeldMonitor {
     output: String,
@@ -493,6 +547,8 @@ pub fn virtual_monitor(
 pub struct HeldAgent {
     reach: AgentReach,
     stream: UnixStream,
+    /// What the compositor says after letting it in.
+    told: Mutex<BufReader<UnixStream>>,
     path: PathBuf,
 }
 
@@ -518,15 +574,31 @@ impl HeldAgent {
             })
     }
 
-    /// Blocks until the compositor ends it: the shell stopped it, or the
+    /// Blocks until the user changes what it may reach, and returns that;
+    /// `None` once the compositor ends it: the shell stopped it, or the
     /// compositor exited.
+    pub fn changed(&self) -> Option<AgentReach> {
+        let mut line = String::new();
+        // Whatever else comes, an end or a hang-up, ends it.
+        if self.told.lock().unwrap().read_line(&mut line).unwrap_or(0) == 0 {
+            return None;
+        }
+        match serde_json::from_str::<HostMessage>(&line) {
+            Ok(HostMessage::SystemEvent {
+                id: CALL,
+                event: SystemEvent::AgentReach { reach },
+            }) => Some(reach),
+            _ => None,
+        }
+    }
+
+    /// Blocks until the compositor ends it, past any change.
     pub fn until_it_ends(&self) {
-        // Whatever comes, an end or a hang-up, ends it.
-        let _ = BufReader::new(&self.stream).read_line(&mut String::new());
+        while self.changed().is_some() {}
     }
 
     /// Hangs up, which takes it off the shell's list, and wakes
-    /// [`HeldAgent::until_it_ends`].
+    /// [`HeldAgent::changed`].
     pub fn give_back(&self) {
         // Already gone if the compositor hung up first.
         let _ = self.stream.shutdown(std::net::Shutdown::Both);
@@ -545,11 +617,17 @@ pub fn agent(
         agent: agent.to_owned(),
     };
     let stream = connected(socket, patience)?;
-    let said = said_over(
+    sent(
         socket,
         &stream,
         &[ChromeMessage::SystemRequest { id: CALL, request }],
     )?;
+    // Kept past the reply: a change can follow it at once.
+    let mut told = BufReader::new(stream.try_clone().map_err(|why| CompositorError::Failed {
+        path: socket.display().to_string(),
+        kind: why.kind(),
+    })?);
+    let said = said(socket, &mut told)?;
     let reply = match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::SystemReply { id: CALL, reply }) => reply,
         _ => {
@@ -571,6 +649,7 @@ pub fn agent(
             Ok(HeldAgent {
                 reach,
                 stream,
+                told: Mutex::new(told),
                 path: socket.to_path_buf(),
             })
         }
@@ -653,9 +732,19 @@ fn connected(socket: &Path, patience: Option<Duration>) -> Result<UnixStream, Co
 /// call, its end, so the reader buffers nothing the caller misses.
 fn said_over(
     socket: &Path,
-    mut stream: &UnixStream,
+    stream: &UnixStream,
     messages: &[ChromeMessage],
 ) -> Result<String, CompositorError> {
+    sent(socket, stream, messages)?;
+    said(socket, &mut BufReader::new(stream))
+}
+
+/// Sends `messages` over `stream`.
+fn sent(
+    socket: &Path,
+    mut stream: &UnixStream,
+    messages: &[ChromeMessage],
+) -> Result<(), CompositorError> {
     let lines: String = messages
         .iter()
         .map(|message| {
@@ -667,9 +756,14 @@ fn said_over(
         .collect();
     stream
         .write_all(lines.as_bytes())
-        .map_err(|why| unreachable(socket, &why))?;
+        .map_err(|why| unreachable(socket, &why))
+}
+
+/// Reads the one line the compositor answers with from `reader`, which
+/// keeps any line after it.
+fn said(socket: &Path, reader: &mut impl BufRead) -> Result<String, CompositorError> {
     let mut said = String::new();
-    BufReader::new(stream)
+    reader
         .read_line(&mut said)
         .map_err(|why| unreachable(socket, &why))?;
     let said = said.trim();

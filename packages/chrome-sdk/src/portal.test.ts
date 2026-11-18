@@ -356,6 +356,8 @@ describe("watchPortalRequests", () => {
         appId: "",
         body: {
           agent: "Claude Code",
+          current: undefined,
+          remembered: false,
           windows: [
             {
               app: "org.gnome.TextEditor",
@@ -365,6 +367,39 @@ describe("watchPortalRequests", () => {
             },
             { app: undefined, browser: true, id: "t2", title: "Pull requests" },
           ],
+        },
+        id: 3,
+        kind: PortalKind.Agent,
+        parentAppId: undefined,
+      },
+    ]);
+  });
+
+  it("parses a change to an agent with what it reaches now", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "",
+        body: {
+          agent: "Claude Code",
+          current: { type: "desk" },
+          remembered: true,
+          windows: [],
+        },
+        id: 3,
+        kind: "agent",
+      },
+    ]);
+
+    expect(await requests).toEqual([
+      {
+        appId: "",
+        body: {
+          agent: "Claude Code",
+          current: { kind: "desk" },
+          remembered: true,
+          windows: [],
         },
         id: 3,
         kind: PortalKind.Agent,
@@ -1233,7 +1268,8 @@ describe("answerPortalRequest", () => {
       13,
       PortalAnswer.ScreenshotBrowserWindow("1", false),
     );
-    answerPortalRequest(host, 15, PortalAnswer.Agent({ kind: "desk" }));
+    answerPortalRequest(host, 15, PortalAnswer.Agent({ kind: "desk" }, true));
+    answerPortalRequest(host, 17, PortalAnswer.Change());
     answerPortalRequest(
       host,
       16,
@@ -1298,7 +1334,8 @@ describe("answerPortalRequest", () => {
       [11, { kind: "pick_color", x: 5, y: 6 }],
       [12, { copy: true, id: "app-3", kind: "screenshot_window" }],
       [13, { copy: false, id: "1", kind: "screenshot_browser_window" }],
-      [15, { kind: "agent", reach: { type: "desk" } }],
+      [15, { kind: "agent", reach: { type: "desk" }, remember: true }],
+      [17, { kind: "change" }],
       [
         16,
         {

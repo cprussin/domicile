@@ -59,7 +59,14 @@ class FakeHost {
 /** The desktop the indicator reads: `host`'s captures, `DOMICILE`'s entries. */
 const sharing = (host: FakeHost) => ({
   ...DOMICILE,
-  portals: portals(host as unknown as PortalsHost),
+  portals: portals(host as unknown as PortalsHost, {
+    agents: () => {
+      throw new Error("the bar lists no remembered agents");
+    },
+    forgetAgent: () => {
+      throw new Error("the bar forgets no agents");
+    },
+  }),
 });
 
 const ZOOM = {
@@ -284,7 +291,7 @@ describe("Sharing", () => {
       );
     });
 
-    it("lists what it reaches and did last, and stops it", async () => {
+    it("lists what it reaches and did last, changes it and stops it", async () => {
       const host = new FakeHost();
       render(<Sharing domicile={sharing(host)} />);
       host.capture([CLAUDE]);
@@ -300,8 +307,12 @@ describe("Sharing", () => {
           .getAllByRole("listitem")
           .map((item) => item.textContent),
       ).toEqual(["Clicked in Notesjust now", "Read Pull requests2 min ago"]);
+      await userEvent.click(screen.getByRole("button", { name: "Change" }));
       await userEvent.click(screen.getByRole("button", { name: "Stop" }));
-      expect(host.answers).toEqual([[8, { kind: "stop" }]]);
+      expect(host.answers).toEqual([
+        [8, { kind: "change" }],
+        [8, { kind: "stop" }],
+      ]);
     });
 
     it("says when it reaches the whole desktop", async () => {

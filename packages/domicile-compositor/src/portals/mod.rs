@@ -44,7 +44,7 @@ use crate::notifications::NotificationServer;
 
 mod access;
 mod account;
-mod agent;
+pub mod agent;
 mod app_chooser;
 mod background;
 mod clipboard;
@@ -133,6 +133,7 @@ pub struct Portals {
     shots: Shots,
     /// `None` in unit tests that cast nothing.
     recordings: Option<Recordings>,
+    agents: Arc<agent::Door>,
 }
 
 /// What the portal thread is told to do on the bus.
@@ -175,13 +176,20 @@ impl Portals {
     #[cfg(test)]
     pub fn to_nobody() -> Self {
         // Same state as a service thread that has stopped.
+        let backends = Backends::new(
+            NotificationServer::unserved(Vec::new()),
+            Tokens::load(None),
+            Shortcuts::new(None),
+        )
+        .0;
         Portals {
-            backends: Backends::new(
-                NotificationServer::unserved(Vec::new()),
-                Tokens::load(None),
-                Shortcuts::new(None),
-            )
-            .0,
+            agents: agent::Door::new(
+                backends.queue.clone(),
+                None,
+                recording::system_clock(),
+                agent::PATIENCE,
+            ),
+            backends,
             shots: Shots::none(),
             recordings: None,
         }
@@ -321,22 +329,9 @@ impl Portals {
         recording::for_the_shell(&self.backends.queue, recordings)
     }
 
-    /// Asks the user whether `agent` may see and use the desk, offering the
-    /// `open` windows. Blocks until the user answers. See [`agent::let_in`].
-    pub fn let_agent(
-        &self,
-        agent: String,
-        open: Vec<domicile_protocol::ListedWindow>,
-        stop: domicile_host::system::AgentStopped,
-    ) -> Result<domicile_host::system::LetIn, SystemError> {
-        agent::let_in(
-            &self.backends.queue,
-            agent,
-            open,
-            recording::system_clock(),
-            agent::PATIENCE,
-            stop,
-        )
+    /// The agents the desk lets in. See [`agent::Door`].
+    pub fn agents(&self) -> &Arc<agent::Door> {
+        &self.agents
     }
 
     /// Draws a window for the shell's picker to preview. Blocks until it is
@@ -548,6 +543,15 @@ pub fn serve(
         },
     };
     let portals = Portals {
+        agents: agent::Door::new(
+            backends.queue.clone(),
+            agent::path(
+                std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
+                std::env::var_os("HOME").map(PathBuf::from),
+            ),
+            recording::system_clock(),
+            agent::PATIENCE,
+        ),
         backends: backends.clone(),
         shots: shots.clone(),
         recordings: Some(Recordings {
