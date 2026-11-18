@@ -232,6 +232,8 @@ let
         # With autologin there's no password to open the wallet, so KWallet
         # asks for one, and Slack waits on that dialog forever to store its
         # sign-in. Someone typing their password at login never sees it.
+        # (The wait is our best reading of the logs: Slack sat on
+        # auth.loginMagicBulk with the wallet daemon up.)
         environment.etc."xdg/kwalletrc".text = lib.generators.toINI { } {
           Wallet = { Enabled = false; };
         };
