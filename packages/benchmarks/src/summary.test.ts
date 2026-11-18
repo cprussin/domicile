@@ -27,6 +27,12 @@ describe("parseRun", () => {
     );
   });
 
+  test("throws on a sample that read no process's memory", () => {
+    const bad = run("sway", "rest", 4096);
+    bad.samples[0] = { ...sample(0, 1000, 4096), pssKib: 0 };
+    expect(() => parseRun(JSON.stringify(bad))).toThrow();
+  });
+
   test("throws on a run with no samples", () => {
     expect(() =>
       parseRun(JSON.stringify({ ...run("sway", "rest", 4096), samples: [] })),

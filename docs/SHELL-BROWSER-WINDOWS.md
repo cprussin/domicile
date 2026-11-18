@@ -85,6 +85,9 @@ plus.addEventListener("click", () => {
 - **`browser.countMatches(id, selector)`** counts the elements matching a CSS
   selector in window `id`'s page, as a `<webview>`'s `countMatches` does. A
   hidden window answers.
+- **`browser.clickMatch(id, selector)`** clicks the first shown element matching
+  a CSS selector in window `id`'s page, as a `<webview>`'s `clickMatch` does,
+  and resolves whether one matched.
 - **Set `window` before the view enters the document.** The engine reads it
   once, when the view connects. A window shows in one view at a time: a second
   view naming it stays empty, so never remount the view drawing it.
@@ -253,6 +256,12 @@ user's and every other partition, like a separate browser profile:
   cannot change the answer. A hidden page answers. It throws `SyntaxError` for
   a bad selector, and rejects with `InvalidStateError` before the view has a
   page or when the page gave no number, as when it navigated first.
+- **`view.clickMatch(selector)`** clicks the first shown element in the page's
+  main document that matches a CSS selector, as a press of the mouse's main
+  button on it does: scrolled into view, it gets `pointerdown`, `mousedown`,
+  `pointerup`, `mouseup` and `click`, which the page hears as untrusted events.
+  A hidden page is clicked too. It resolves whether an element matched, throws
+  and rejects as `countMatches` does.
 
 ## State: history, loading, address
 

@@ -118,6 +118,15 @@ Ask the running desktop:
   domicile log-out                      Ask, then end the login session
   domicile mcp                          Serve the Model Context Protocol on
                                         stdio, for agents to drive the desktop
+  domicile agent <name>                 Ask to let an agent in; print what the
+                                        user allowed and each change, then
+                                        list each line read as what it did,
+                                        until stopped
+  domicile list-agents [--json]         Print the agents let in now and those
+                                        remembered
+  domicile stop-agent <session>         Stop an agent, by its list-agents
+                                        session
+  domicile forget-agent <name>          Make a remembered agent ask again
 
 Without a desktop:
 
@@ -245,6 +254,12 @@ pub enum CliError {
     NotAPointerAction { said: String },
     #[error("{said} is not a distance like 0,120 to scroll across and down.")]
     NotADistance { said: String },
+    #[error(
+        "{said} is not an agent's session. stop-agent takes the number \
+         list-agents prints:\n\n    \
+         domicile stop-agent 12\n"
+    )]
+    NotASession { said: String },
     #[error("{said} is not a JSON object of a DevTools method's params.")]
     NotParams { said: String },
     #[error(
@@ -440,6 +455,10 @@ pub enum Invocation {
     /// Serve the Model Context Protocol on stdio until it ends; see
     /// [`crate::mcp`].
     Mcp,
+    /// Ask the user to let agent `name` in, print what they allowed, then
+    /// list each line of stdin as what it did, until either side ends it;
+    /// see [`crate::agent_lending`].
+    Agent { name: String },
     /// Print native window `window`'s accessibility tree; see
     /// [`crate::accessibility`].
     Accessibility { window: String },
@@ -464,6 +483,7 @@ pub enum Listing {
     ShellCommands,
     Bindings,
     Inputs,
+    Agents,
 }
 
 impl Listing {
@@ -476,6 +496,7 @@ impl Listing {
             Self::ShellCommands => Request::ShellCommands,
             Self::Bindings => Request::ShellBindings,
             Self::Inputs => Request::Inputs,
+            Self::Agents => Request::Agents,
         }
     }
 }
@@ -811,6 +832,28 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     Some(extra) => Err(CliError::Extra { extra, verb: first }),
                 }
             }
+            Verb::Admitting => match (args.next(), args.next()) {
+                (Some(name), None) if !name.trim().is_empty() => Ok(Invocation::Agent { name }),
+                (Some(_), None) | (None, _) => Err(one(&first, "agent name", None)),
+                (said, Some(_)) => Err(one(&first, "agent name", said)),
+            },
+            Verb::StoppingAgent => match (args.next(), args.next()) {
+                (Some(session), None) => match session.parse() {
+                    Ok(session) => Ok(Invocation::Ask {
+                        request: Request::StopAgent { session },
+                    }),
+                    Err(_) => Err(CliError::NotASession { said: session }),
+                },
+                (None, _) => Err(one(&first, "agent session", None)),
+                (said, Some(_)) => Err(one(&first, "agent session", said)),
+            },
+            Verb::Forgetting => match (args.next(), args.next()) {
+                (Some(agent), None) if !agent.trim().is_empty() => Ok(Invocation::Ask {
+                    request: Request::ForgetAgent { agent },
+                }),
+                (Some(_), None) | (None, _) => Err(one(&first, "agent name", None)),
+                (said, Some(_)) => Err(one(&first, "agent name", said)),
+            },
             Verb::Serving => match args.next() {
                 None => Ok(Invocation::Mcp),
                 Some(extra) => Err(CliError::Extra { extra, verb: first }),
@@ -984,6 +1027,12 @@ enum Verb {
     Typing,
     /// `devtools`, which takes a window, a method and maybe its params.
     DevTooling,
+    /// `agent`, which takes a name.
+    Admitting,
+    /// `stop-agent`, which takes a session.
+    StoppingAgent,
+    /// `forget-agent`, which takes a name.
+    Forgetting,
     /// `accessibility`, which takes a window.
     Reading,
     /// `accessibility-act`, which takes a window, an element and an act.
@@ -1102,7 +1151,11 @@ fn verb(word: &str) -> Option<Verb> {
         "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
+        "list-agents" => Some(Verb::Listing(Listing::Agents)),
+        "stop-agent" => Some(Verb::StoppingAgent),
+        "forget-agent" => Some(Verb::Forgetting),
         "mcp" => Some(Verb::Serving),
+        "agent" => Some(Verb::Admitting),
         "pointer" => Some(Verb::Pointing),
         "scroll" => Some(Verb::Scrolling),
         "key" => Some(Verb::Keying),

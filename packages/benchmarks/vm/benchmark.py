@@ -22,8 +22,12 @@ WORKLOADS = {
 
 
 def in_the_session(argv, log):
-    """Starts `argv` as alice, in the environment the desktop's apps get."""
-    quoted = " ".join(f"'{arg}'" for arg in argv)
+    """Starts `argv` as alice, in the environment the desktop's apps get.
+
+    `@LINK@` stands for the Slack link in /tmp/slack-link, read in the VM so
+    the one-time link stays out of the log, which prints every command.
+    """
+    quoted = " ".join('"$(cat /tmp/slack-link)"' if arg == "@LINK@" else f"'{arg}'" for arg in argv)
     machine.succeed(f"runuser -u alice -- in-session {quoted} >{log} 2>&1 &")
 
 
@@ -40,8 +44,9 @@ def the_desktop_is_up():
 
 
 def start_slack():
-    link = os.environ["BENCH_SLACK_LINK"]
-    in_the_session([arg.replace("@LINK@", link) for arg in DESKTOP["slack"]], "/tmp/slack.log")
+    machine.copy_from_host(os.environ["BENCH_SLACK_LINK_FILE"], "/tmp/slack-link")
+    machine.succeed("chmod 644 /tmp/slack-link")
+    in_the_session(DESKTOP["slack"], "/tmp/slack.log")
     port = DESKTOP["slackDevtoolsPort"]
     # Signed in: the workspace's client page loaded, not the sign-in screen.
     retry(lambda _: "app.slack.com/client" in cdp_targets(port), timeout=WAIT)
@@ -96,6 +101,8 @@ try:
     }
     with open(RESULT, "w") as file:
         json.dump(result, file, indent=2)
+    # The run in the job's log too, readable without the artifact.
+    print(f"result: {json.dumps({**result, 'processes': None})}")
 except Exception:
     machine.screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}-failed")
     for command in [
@@ -106,4 +113,6 @@ except Exception:
         print(machine.execute(f"{command} 2>&1")[1])
     raise
 finally:
-    machine.shutdown()
+    # Not shutdown(): some desktops take half an hour to power off, and
+    # nothing on the disk is kept.
+    machine.crash()

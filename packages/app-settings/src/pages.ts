@@ -11,6 +11,7 @@ export enum PageId {
   Shell,
   Extensions,
   Profiles,
+  Agents,
   Permissions,
   SiteData,
   Code,
@@ -70,6 +71,12 @@ export const PAGES = [
       "Each profile keeps its own sign-ins, saved data and extensions. Pages from every profile share your windows.",
     id: PageId.Profiles,
     title: "Profiles",
+  },
+  {
+    description:
+      "Apps like Claude Code that can see and use your desktop. Each asks before it starts.",
+    id: PageId.Agents,
+    title: "Agents",
   },
   {
     description: "What each site may use: the camera, your location and more.",

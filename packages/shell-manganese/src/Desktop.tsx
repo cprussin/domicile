@@ -961,6 +961,7 @@ export const Desktop = ({
         closedBrowsers={closedBrowsers}
         domicile={domicile}
         holdKeyboard={holdKeyboard}
+        omitAgents={showsSharing(bar)}
         omitScreenCasts={showsSharing(bar)}
         screen={windows.focused}
         screenOf={screenOf}

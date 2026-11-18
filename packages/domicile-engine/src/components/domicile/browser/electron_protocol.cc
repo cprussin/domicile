@@ -1068,6 +1068,12 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParsePermissionHandler(*request);
   } else if (*type == "permission_answer") {
     return ParsePermissionAnswer(*request);
+  } else if (*type == "set_user_agent_fallback") {
+    const std::string* user_agent = request->FindString("user_agent");
+    if (user_agent == nullptr) {
+      return Refuse("\"user_agent\" must be a string");
+    }
+    return ElectronSetUserAgentFallback{.user_agent = *user_agent};
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }
@@ -1335,7 +1341,8 @@ base::DictValue ElectronCookieValue(const ElectronCookie& cookie) {
   return value;
 }
 
-std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
+std::string ElectronReady(const std::vector<ElectronScheme>& schemes,
+                          const ElectronEngineInfo& engine) {
   base::ListValue registered;
   for (const ElectronScheme& scheme : schemes) {
     base::ListValue privileges;
@@ -1349,6 +1356,8 @@ std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
   base::DictValue event;
   event.Set("type", "ready");
   event.Set("schemes", std::move(registered));
+  event.Set("user_agent", engine.user_agent);
+  event.Set("chrome_version", engine.chrome_version);
   return Line(std::move(event));
 }
 
@@ -1371,6 +1380,10 @@ std::string ElectronWindowRefused(ElectronWindow window, std::string_view why) {
 
 std::string ElectronWindowLoaded(ElectronWindow window) {
   return Line(Event("window_loaded", window));
+}
+
+std::string ElectronWindowDomReady(ElectronWindow window) {
+  return Line(Event("window_dom_ready", window));
 }
 
 std::string ElectronTitleChanged(ElectronWindow window,

@@ -45,6 +45,10 @@ import { createShell } from "./electron/shell";
 import { createSystemPreferences } from "./electron/system-preferences";
 import { createContentTracing, createNetLog } from "./electron/tracing";
 import { createTray } from "./electron/tray";
+import {
+  createUserAgentFallback,
+  electronUserAgent,
+} from "./electron/user-agent";
 import { UtilityProcess, utilityProcess } from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
@@ -148,7 +152,11 @@ const main = async ([resources, ...args]: string[]) => {
       webContentsOf(window),
     );
     engine.events.on("webRequest", webRequests.hear);
-    const sessionCalls = createSessionCalls(engine.send);
+    const userAgentFallback = createUserAgentFallback(engine, () =>
+      electronUserAgent(engine.browser, app.getName(), app.getVersion()),
+    );
+    hooks.userAgentFallback = userAgentFallback;
+    const sessionCalls = createSessionCalls(engine.send, userAgentFallback.get);
     engine.events.on("sessionResult", sessionCalls.hear);
     const permissions = createPermissions(
       engine.send,
@@ -353,6 +361,8 @@ const main = async ([resources, ...args]: string[]) => {
     Object.assign(process.versions, { electron: ELECTRON_VERSION });
     process.argv = [process.execPath, ...args];
     await import(pkg.main);
+    // Before the app's windows, under the name its main gave it.
+    userAgentFallback.announce();
     markReady();
   }
 };

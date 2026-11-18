@@ -1129,6 +1129,15 @@ export type DomicileHost = {
    */
   countBrowserWindowMatches(id: string, selector: string): Promise<number>;
   /**
+   * Clicks the first shown element in browser window `id`'s main document that
+   * matches the CSS `selector`, as a <webview>'s clickMatch() clicks it. A
+   * hidden window is clicked too. Resolves whether an element matched. Throws
+   * SyntaxError for a selector that does not parse. Rejects with
+   * InvalidStateError for an unknown window, and when the page gave no answer,
+   * as when it navigated first.
+   */
+  clickBrowserWindowMatch(id: string, selector: string): Promise<boolean>;
+  /**
    * Closes window `id`; it leaves the next `browserwindowschanged`. A page
    * with a `beforeunload` handler may first ask to stay, as a `domicile-dialog`
    * on its <webview>; Cancel keeps the window. An unknown id does nothing.

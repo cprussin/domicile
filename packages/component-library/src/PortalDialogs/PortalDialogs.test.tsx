@@ -1446,6 +1446,203 @@ describe("PortalDialogs", () => {
     });
   });
 
+  describe("agent", () => {
+    const agent = (id: number) => ({
+      app_id: "",
+      body: {
+        agent: "Claude Code",
+        windows: [
+          { id: "n1", kind: "native", title: "Notes" },
+          { id: "w1", kind: "browser", title: "Pull requests" },
+          { id: "n2", kind: "native", title: "" },
+        ],
+      },
+      id,
+      kind: "agent",
+    });
+
+    it("asks in the agent's own name, offering the entire desktop first", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Let Claude Code use your desktop?",
+      );
+      expect(
+        screen.getByRole("radio", { name: /Entire desktop/u }),
+      ).toBeChecked();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    });
+
+    it("lets the entire desktop in", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([
+        [1, { kind: "agent", reach: { type: "desk" } }],
+      ]);
+    });
+
+    it("lists the windows, none checked, under only these windows", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: /Only these windows/u }),
+      );
+
+      const windows = screen.getAllByRole("checkbox");
+      expect(windows.map((window) => window.textContent)).toEqual([
+        "NotesWindow",
+        "Pull requestsBrowser",
+        "Untitled windowWindow",
+      ]);
+      for (const window of windows) {
+        expect(window).not.toBeChecked();
+      }
+      expect(screen.getByRole("button", { name: "Allow" })).toBeDisabled();
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Private windows are never shared.",
+      );
+    });
+
+    it("lets only the checked windows in", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: /Only these windows/u }),
+      );
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: /Pull requests/u }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            kind: "agent",
+            reach: {
+              type: "windows",
+              windows: [{ id: "w1", kind: "browser", title: "Pull requests" }],
+            },
+          },
+        ],
+      ]);
+    });
+
+    it("cancels", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+
+    it("remembers an agent let into the entire desktop, when asked to", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      const remember = screen.getByRole("switch", {
+        name: "Remember for Claude Code",
+      });
+      expect(remember).not.toBeChecked();
+      await userEvent.click(remember);
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([
+        [1, { kind: "agent", reach: { type: "desk" }, remember: true }],
+      ]);
+    });
+
+    it("offers no remembering for only some windows", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: /Only these windows/u }),
+      );
+
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    });
+
+    it("changes an agent from what it reaches now, and saves", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      const asked = agent(1);
+      host.push([
+        {
+          ...asked,
+          body: {
+            ...asked.body,
+            current: {
+              type: "windows",
+              windows: [{ id: "n1", kind: "native", title: "Notes" }],
+            },
+          },
+        },
+      ]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Change what Claude Code can use",
+      );
+      expect(
+        screen.getByRole("radio", { name: /Only these windows/u }),
+      ).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Notes/u })).toBeChecked();
+      await userEvent.click(screen.getByRole("radio", { name: /Entire/u }));
+      expect(
+        screen.getByRole("switch", { name: "Remember for Claude Code" }),
+      ).not.toBeChecked();
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(host.answers).toEqual([
+        [1, { kind: "agent", reach: { type: "desk" } }],
+      ]);
+    });
+
+    it("starts a remembered agent's change with Remember on", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      const asked = agent(1);
+      host.push([
+        {
+          ...asked,
+          body: { ...asked.body, current: { type: "desk" }, remembered: true },
+        },
+      ]);
+
+      expect(
+        screen.getByRole("switch", { name: "Remember for Claude Code" }),
+      ).toBeChecked();
+    });
+
+    it("is listed while in control, unless the shell shows agents itself", async () => {
+      const session = {
+        app_id: "",
+        body: { actions: [], agent: "Claude Code", reach: { type: "desk" } },
+        id: 9,
+        kind: "agent",
+      };
+      const host = new FakeHost();
+      const { rerender } = render(<PortalDialogs domicile={host.domicile} />);
+      host.push([], [session]);
+      expect(screen.getByRole("listitem")).toHaveTextContent(
+        "In control: Claude Code — your desktop",
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Change" }));
+      expect(host.answers).toEqual([[9, { kind: "change" }]]);
+
+      rerender(<PortalDialogs domicile={host.domicile} omitAgents />);
+      expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+    });
+  });
+
   describe("input capture", () => {
     it("names the application and the devices it would take", () => {
       const host = new FakeHost();

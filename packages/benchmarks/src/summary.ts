@@ -4,7 +4,8 @@ import { z } from "zod";
 const sampleSchema = z.object({
   busyTicks: z.number(),
   load1: z.number(),
-  pssKib: z.number(),
+  // Every process's memory: never none.
+  pssKib: z.number().positive(),
   sessionPssKib: z.number(),
   totalTicks: z.number(),
   usedKib: z.number(),

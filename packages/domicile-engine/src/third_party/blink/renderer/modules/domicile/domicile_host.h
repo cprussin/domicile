@@ -306,6 +306,10 @@ class MODULES_EXPORT DomicileHost final
                                                    const String& id,
                                                    const String& selector,
                                                    ExceptionState&);
+  ScriptPromise<IDLBoolean> clickBrowserWindowMatch(ScriptState*,
+                                                    const String& id,
+                                                    const String& selector,
+                                                    ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
   void reopenBrowserWindow(ScriptState*,
                            const String& id,

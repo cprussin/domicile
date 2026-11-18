@@ -263,6 +263,10 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   `stream`, `codeCache` and `allowServiceWorkers` are not yet, and don't
   hold an app back. A scheme the engine keeps for itself is refused without
   being kept ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
+  Local Network Access classes a page in one as loopback, as it does the
+  shell: the app is installed on this machine, not a site. Left public, every
+  request into the LAN or a VPN (Element's homeserver) asked a permission no
+  one answers (patch 0238).
   An app's first run with a new scheme falls back. Known apps' schemes, as
   their own runs recorded them, register from the first start (`KNOWN` in
   `packages/domicile-launch/src/electron_schemes.rs`) to spare them that.
@@ -294,6 +298,11 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   windows from their next navigation and its new windows before their first
   ([`domicile_electron_storage.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_storage.h)).
   Not yet: `cookies.on('changed')`.
+- **User agent**: `ready` names the engine's user agent and Chrome's full
+  version. The host makes Electron's from them (`Name/1.2.3 Chrome/<full>
+  Electron/<version>` in Chrome's place) and sends it as
+  `set_user_agent_fallback`, `app.userAgentFallback`, before the app's
+  windows open. A session without its own user agent has it.
 - **Permission handlers** (`permission_handler`): while one of the app's
   sessions has a `setPermissionRequestHandler`, its pages' permission
   requests ask the app (`permission_request`, answered by

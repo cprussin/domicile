@@ -204,6 +204,9 @@ class CORE_EXPORT HTMLWebViewElement final
   ScriptPromise<IDLLong> countMatches(ScriptState*,
                                       const String& selector,
                                       ExceptionState&);
+  ScriptPromise<IDLBoolean> clickMatch(ScriptState*,
+                                       const String& selector,
+                                       ExceptionState&);
 
   // Releases the permission request once answered. See
   // `permission_request_`.

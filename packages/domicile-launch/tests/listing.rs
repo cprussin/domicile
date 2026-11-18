@@ -3,7 +3,8 @@
 use std::path::Path;
 
 use domicile_launch::listing::{
-    bindings_table, displays_table, inputs_table, shell_commands_table, status_table, windows_table,
+    agents_table, bindings_table, displays_table, inputs_table, shell_commands_table, status_table,
+    windows_table,
 };
 use domicile_protocol::{
     AdaptiveSync, Capturing, CapturingKind, DesktopStatus, Devices, DisplayHdr, DisplayInfo,
@@ -267,5 +268,36 @@ ID  KIND            CONNECTION  VENDOR:PRODUCT  NAME
     assert_eq!(
         inputs_table(&[]),
         "ID  KIND  CONNECTION  VENDOR:PRODUCT  NAME\n"
+    );
+}
+
+#[test]
+fn agents_print_those_in_then_those_remembered() {
+    use domicile_protocol::{
+        AgentReach, AgentWindow, ConnectedAgent, KnownAgents, RememberedAgent,
+    };
+    let printed = agents_table(&KnownAgents {
+        connected: vec![ConnectedAgent {
+            session: 12,
+            agent: "Claude Code".into(),
+            reach: AgentReach::Windows {
+                windows: vec![AgentWindow {
+                    id: "kD3m".into(),
+                    kind: WindowKind::Native,
+                    title: "Notes".into(),
+                    app: None,
+                }],
+            },
+        }],
+        remembered: vec![RememberedAgent {
+            agent: "Codex".into(),
+            last_used_ms: 0,
+        }],
+    });
+    assert_eq!(
+        printed,
+        "SESSION  STATE       REACH  AGENT\n\
+         12       in          kD3m   Claude Code\n\
+         -        remembered  desk   Codex\n"
     );
 }

@@ -194,4 +194,14 @@
   // gave no number, as when it navigated first.
   [CallWith=ScriptState, RaisesException]
   Promise<long> countMatches(DOMString selector);
+
+  // Clicks the first shown element in the page's main document that matches the
+  // CSS `selector`, as a press of the mouse's main button on its middle does:
+  // scrolled into view, it gets pointerdown, mousedown, pointerup, mouseup and
+  // click, which the page hears as untrusted events. A hidden page is clicked
+  // too. Resolves whether an element matched. Throws SyntaxError for a selector
+  // that does not parse. Rejects with InvalidStateError before the element has
+  // a page, and when the page gave no answer, as when it navigated first.
+  [CallWith=ScriptState, RaisesException]
+  Promise<boolean> clickMatch(DOMString selector);
 };

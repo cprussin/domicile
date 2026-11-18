@@ -340,6 +340,8 @@ impl Shortcuts {
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
+            | PortalAnswer::Agent { .. }
+            | PortalAnswer::Change
             | PortalAnswer::Stop
             | PortalAnswer::Pause
             | PortalAnswer::Resume
@@ -505,6 +507,12 @@ mod tests {
             client,
             queue: Arc::clone(&backends.queue),
             portals: Portals {
+                agents: crate::portals::agent::Door::new(
+                    Arc::clone(&backends.queue),
+                    None,
+                    Arc::new(|| 0),
+                    crate::portals::agent::PATIENCE,
+                ),
                 backends,
                 shots: crate::portals::Shots::none(),
                 recordings: None,

@@ -56,8 +56,8 @@ describe("unreadMail", () => {
       [UNREAD]: [
         json(200, {
           messages: [
-            { id: "m2", threadId: "t1" },
-            { id: "m1", threadId: "t1" },
+            { id: "m2", threadId: "1a" },
+            { id: "m1", threadId: "1a" },
           ],
           resultSizeEstimate: 2,
         }),
@@ -66,8 +66,8 @@ describe("unreadMail", () => {
 
     expect(await unreadMail(domicile, "acc3ss")).toStrictEqual(
       Ok([
-        { id: "m2", threadId: "t1" },
-        { id: "m1", threadId: "t1" },
+        { id: "m2", threadId: "1a" },
+        { id: "m1", threadId: "1a" },
       ]),
     );
   });
@@ -94,7 +94,7 @@ describe("mailHeaders", () => {
               { name: "From", value: '"Alex Chen" <alex@example.com>' },
             ],
           },
-          threadId: "t1",
+          threadId: "1a",
         }),
       ],
     });
@@ -105,7 +105,7 @@ describe("mailHeaders", () => {
         id: "m1",
         receivedAt: 1_761_955_200_000,
         subject: "Dinner Friday?",
-        threadId: "t1",
+        threadId: "1a",
       }),
     );
     expect(fetched[0]?.headers).toStrictEqual([
@@ -125,7 +125,7 @@ describe("mailHeaders", () => {
             id: "m1",
             internalDate: "1",
             payload: { headers: [{ name: "From", value: from }] },
-            threadId: "t1",
+            threadId: "1a",
           }),
         ],
       });
@@ -136,11 +136,26 @@ describe("mailHeaders", () => {
           id: "m1",
           receivedAt: 1,
           subject: "(no subject)",
-          threadId: "t1",
+          threadId: "1a",
         }),
       );
     },
   );
+
+  it("fails on a thread id that is not Gmail's hex", async () => {
+    const { domicile } = answering({
+      [HEADERS("m1")]: [
+        json(200, {
+          id: "m1",
+          internalDate: "1",
+          payload: { headers: [] },
+          threadId: '"] *',
+        }),
+      ],
+    });
+
+    expect((await mailHeaders(domicile, "acc3ss", "m1")).isErr()).toBe(true);
+  });
 
   it("names a message with no sender as unknown", async () => {
     const { domicile } = answering({
@@ -149,7 +164,7 @@ describe("mailHeaders", () => {
           id: "m1",
           internalDate: "1",
           payload: { headers: [{ name: "Subject", value: "Hi" }] },
-          threadId: "t1",
+          threadId: "1a",
         }),
       ],
     });
@@ -160,7 +175,7 @@ describe("mailHeaders", () => {
         id: "m1",
         receivedAt: 1,
         subject: "Hi",
-        threadId: "t1",
+        threadId: "1a",
       }),
     );
   });

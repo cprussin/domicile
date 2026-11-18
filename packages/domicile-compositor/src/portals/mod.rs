@@ -44,6 +44,7 @@ use crate::notifications::NotificationServer;
 
 mod access;
 mod account;
+pub mod agent;
 mod app_chooser;
 mod background;
 mod clipboard;
@@ -132,6 +133,7 @@ pub struct Portals {
     shots: Shots,
     /// `None` in unit tests that cast nothing.
     recordings: Option<Recordings>,
+    agents: Arc<agent::Door>,
 }
 
 /// What the portal thread is told to do on the bus.
@@ -174,13 +176,20 @@ impl Portals {
     #[cfg(test)]
     pub fn to_nobody() -> Self {
         // Same state as a service thread that has stopped.
+        let backends = Backends::new(
+            NotificationServer::unserved(Vec::new()),
+            Tokens::load(None),
+            Shortcuts::new(None),
+        )
+        .0;
         Portals {
-            backends: Backends::new(
-                NotificationServer::unserved(Vec::new()),
-                Tokens::load(None),
-                Shortcuts::new(None),
-            )
-            .0,
+            agents: agent::Door::new(
+                backends.queue.clone(),
+                None,
+                recording::system_clock(),
+                agent::PATIENCE,
+            ),
+            backends,
             shots: Shots::none(),
             recordings: None,
         }
@@ -318,6 +327,11 @@ impl Portals {
             message: "this desktop casts nothing to record".into(),
         })?;
         recording::for_the_shell(&self.backends.queue, recordings)
+    }
+
+    /// The agents the desk lets in. See [`agent::Door`].
+    pub fn agents(&self) -> &Arc<agent::Door> {
+        &self.agents
     }
 
     /// Draws a window for the shell's picker to preview. Blocks until it is
@@ -529,6 +543,15 @@ pub fn serve(
         },
     };
     let portals = Portals {
+        agents: agent::Door::new(
+            backends.queue.clone(),
+            agent::path(
+                std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
+                std::env::var_os("HOME").map(PathBuf::from),
+            ),
+            recording::system_clock(),
+            agent::PATIENCE,
+        ),
         backends: backends.clone(),
         shots: shots.clone(),
         recordings: Some(Recordings {

@@ -89,6 +89,8 @@ impl Account {
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
+            | PortalAnswer::Agent { .. }
+            | PortalAnswer::Change
             | PortalAnswer::Stop
             | PortalAnswer::Pause
             | PortalAnswer::Resume

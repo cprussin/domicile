@@ -172,6 +172,14 @@ export type Browser = {
    * gave no number.
    */
   countMatches: (id: string, selector: string) => Promise<number>;
+  /**
+   * Click the first shown element in window `id`'s page that matches the CSS
+   * `selector`, as a press of the mouse's main button on it does. The page
+   * hears untrusted events. A hidden window is clicked too. Resolves whether an
+   * element matched. Rejects for an unknown window, and when the page gave no
+   * answer.
+   */
+  clickMatch: (id: string, selector: string) => Promise<boolean>;
   /** Close window `id`. Its page may ask to stay. */
   close: (id: string) => void;
   /**
@@ -206,6 +214,7 @@ export type BrowserHost = Pick<
   | "browserProfiles"
   | "browserSiteFor"
   | "browserWindows"
+  | "clickBrowserWindowMatch"
   | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
   | "countBrowserWindowMatches"
@@ -231,6 +240,7 @@ export const browser = (host: BrowserHost): Browser => {
     answerMessageBox: (id, response, checkboxChecked) => {
       host.answerBrowserWindowMessageBox(id, response, checkboxChecked);
     },
+    clickMatch: (id, selector) => host.clickBrowserWindowMatch(id, selector),
     clickMenu: (id, command) => {
       host.clickBrowserWindowMenu(id, command);
     },

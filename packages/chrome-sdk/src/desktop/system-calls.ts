@@ -15,6 +15,7 @@ import type { InhibitorAction } from "../inhibitor-action";
 import { wireInhibitorAction } from "../inhibitor-action";
 import type { KeymapChoice, Keymaps } from "../keymap-choice";
 import { wireKeymapChoice } from "../keymap-choice";
+import type { KnownAgents } from "../portal";
 import type { PreviewedWindow } from "../previewed-window";
 import { PreviewedWindowKind } from "../previewed-window";
 import type {
@@ -59,6 +60,7 @@ import type {
 import { parseSystemMessage } from "../system-message";
 import type { Bell, WindowState } from "../window-state";
 import { ResizeEdge, WindowRequest, wireWindowState } from "../window-state";
+import { readAgentReach } from "./portal-wire";
 
 /**
  * The calls. A relative path starts at the home. The compositor runs each in
@@ -203,6 +205,13 @@ export type System = {
    * docs/IDLE.md#sleeping-on-demand.
    */
   sleepDisplays: (display?: string) => Promise<Result<"set", SystemError>>;
+  /** The agents let in now, and those let in without asking. */
+  agents: () => Promise<Result<KnownAgents, SystemError>>;
+  /**
+   * Make remembered agent `agent` ask again next time. Succeeds whether or
+   * not it was remembered.
+   */
+  forgetAgent: (agent: string) => Promise<Result<"set", SystemError>>;
   /**
    * Light the monitors again, after {@link System.sleepDisplays} or idle
    * blanking, or only `display`. Allowed while the desktop is locked.
@@ -264,6 +273,22 @@ export const system = (host: SystemHost): System => {
   const calls = callsOn(host);
   return {
     addVirtualMonitor: (mode) => addVirtualMonitor(calls, mode),
+    agents: () =>
+      oneShot(calls, { call: "agents" }, (reply) =>
+        reply.kind === "agents"
+          ? {
+              connected: reply.connected.map(({ agent, reach, session }) => ({
+                agent,
+                reach: readAgentReach(reach),
+                session,
+              })),
+              remembered: reply.remembered.map(({ agent, last_used_ms }) => ({
+                agent,
+                lastUsedMs: last_used_ms,
+              })),
+            }
+          : unexpected(reply),
+      ),
     answerShellCommand: (sent, ran) =>
       oneShot(
         calls,
@@ -330,6 +355,10 @@ export const system = (host: SystemHost): System => {
               })
             : unexpected(event),
         Listened.Missed(),
+      ),
+    forgetAgent: (agent) =>
+      oneShot(calls, { agent, call: "forget_agent" }, (reply) =>
+        reply.kind === "set" ? "set" : unexpected(reply),
       ),
     idleAfter: (seconds) =>
       listening(

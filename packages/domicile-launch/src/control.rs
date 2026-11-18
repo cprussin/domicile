@@ -2,8 +2,10 @@
 //!
 //! One JSON request line in, one response line out, per connection. This uses
 //! the same newline-delimited JSON framing as the host protocol. The one
-//! exception is [`Request::VirtualMonitor`], whose connection is held: see
-//! [`crate::monitor_lending`].
+//! exceptions are [`Request::VirtualMonitor`], [`Request::Subscribe`] and
+//! [`Request::Agent`], whose connections are held: see
+//! [`crate::monitor_lending`], [`crate::subscription`] and
+//! [`crate::agent_lending`].
 //!
 //! Lines come from a socket, so [`answer`] parses them strictly and refuses
 //! anything else.
@@ -12,9 +14,9 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, ListedDisplay, ListedInput,
-    ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
-    WindowKind,
+    AgentReach, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, KnownAgents,
+    ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp,
+    Theme, WatchTopic, WindowAct, WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -172,6 +174,13 @@ pub enum Request {
     ShellBindings,
     /// Report the keyboards, pointers and touch devices the engine reads.
     Inputs,
+    /// Report the agents let in now and those remembered. Asked by
+    /// `domicile-app-host` for Settings › Agents.
+    Agents,
+    /// End agent session `session`, as the bar's Stop does.
+    StopAgent { session: u32 },
+    /// Make the remembered agent `agent` ask again next time.
+    ForgetAgent { agent: String },
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by any name a profile matches it by, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -227,6 +236,14 @@ pub enum Request {
     /// topic's answer at once, then again whenever it changes, each as a
     /// [`Response::Heard`]. See `domicile subscribe`.
     Subscribe { topics: Vec<WatchTopic> },
+    /// Let agent `agent` see and use the desk for as long as the connection
+    /// is open, as the user allows in the shell's dialog. Answered with
+    /// [`Response::Agent`]; each later line is a [`Request::AgentDid`]. The
+    /// desktop hangs up when the shell stops it. See `domicile agent`.
+    Agent { agent: String },
+    /// Note what the agent this connection holds did, for the shell to list.
+    /// Not answered.
+    AgentDid { said: String },
     /// Resize the monitor this connection holds. Not answered.
     ResizeVirtualMonitor {
         width: u32,
@@ -404,11 +421,14 @@ pub enum Response {
     /// Answers `inputs`.
     Inputs { inputs: Vec<ListedInput> },
 
+    /// Answers `agents`.
+    Agents { agents: KnownAgents },
+
     /// The compositor turned the monitors off or on.
     Powered,
 
-    /// The compositor did what was asked: locked the desktop, or acted on a
-    /// window.
+    /// The compositor did what was asked: locked the desktop, acted on a
+    /// window, or stopped or forgot an agent.
     Done,
 
     /// What a [`Request::Subscribe`] heard: the compositor's answer for one
@@ -417,6 +437,9 @@ pub enum Response {
 
     /// The compositor added the virtual monitor, on this output.
     VirtualMonitor { output: String },
+
+    /// The user let the agent reach this.
+    Agent { reach: AgentReach },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -670,6 +693,22 @@ pub type ListShellBindings<'a> = &'a dyn Fn() -> Result<Vec<ShellBinding>, Strin
 /// [`crate::compositor_socket::inputs`] in a desktop; a closure in tests.
 pub type ListInputs<'a> = &'a dyn Fn() -> Result<Vec<ListedInput>, String>;
 
+/// Asks the compositor for the agents it knows.
+///
+/// [`crate::compositor_socket::agents`] in a desktop; a closure in tests.
+pub type ListAgents<'a> = &'a dyn Fn() -> Result<KnownAgents, String>;
+
+/// Asks the compositor to end an agent's session.
+///
+/// [`crate::compositor_socket::stop_agent`] in a desktop; a closure in tests.
+pub type StoppingAgents<'a> = &'a dyn Fn(u32) -> Result<(), String>;
+
+/// Asks the compositor to forget a remembered agent.
+///
+/// [`crate::compositor_socket::forget_agent`] in a desktop; a closure in
+/// tests.
+pub type ForgettingAgents<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -719,6 +758,9 @@ pub struct Desktop<'a> {
     pub shell_commands: ListShellCommands<'a>,
     pub shell_bindings: ListShellBindings<'a>,
     pub inputs: ListInputs<'a>,
+    pub agents: ListAgents<'a>,
+    pub stop_agent: StoppingAgents<'a>,
+    pub forget_agent: ForgettingAgents<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -727,6 +769,17 @@ pub struct Desktop<'a> {
 pub struct Lent {
     pub name: String,
     pub mode: crate::cli::MonitorMode,
+    /// The client's lines after the request.
+    pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
+    /// Where the client hears back.
+    pub client: std::os::unix::net::UnixStream,
+}
+
+/// A [`Request::Agent`] and the connection it came on, which
+/// [`crate::control_socket::serve_one`] lends to
+/// [`crate::agent_lending::admit`].
+pub struct Admission {
+    pub agent: String,
     /// The client's lines after the request.
     pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
     /// Where the client hears back.
@@ -970,6 +1023,18 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(inputs) => Response::Inputs { inputs },
             Err(why) => Response::Refused { why },
         }),
+        Ok(Request::Agents) => to_line(&match (desktop.agents)() {
+            Ok(agents) => Response::Agents { agents },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::StopAgent { session }) => to_line(&match (desktop.stop_agent)(session) {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ForgetAgent { agent }) => to_line(&match (desktop.forget_agent)(&agent) {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
         Ok(Request::Lock) => to_line(&match (desktop.lock)() {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
@@ -1018,6 +1083,15 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             why: "a subscription lasts as long as its connection, which this desktop \
                   was not lent"
                 .to_string(),
+        }),
+        // Lent the connection by `serve_one` too.
+        Ok(Request::Agent { .. }) => to_line(&Response::Refused {
+            why: "an agent is let in for as long as its connection lasts, which this \
+                  desktop was not lent"
+                .to_string(),
+        }),
+        Ok(Request::AgentDid { .. }) => to_line(&Response::Refused {
+            why: "this connection holds no agent".to_string(),
         }),
         Ok(Request::ResizeVirtualMonitor { .. }) => to_line(&Response::Refused {
             why: "this connection holds no virtual monitor to resize".to_string(),

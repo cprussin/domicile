@@ -37,6 +37,8 @@
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/domicile/common/electron_schemes.h"
+#include "components/embedder_support/user_agent_utils.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
@@ -185,12 +187,18 @@ class AppOnUIThread {
   explicit AppOnUIThread(ElectronApp::Send send)
       : app_(desk_,
              std::move(send),
+             ElectronEngineInfo{
+                 .user_agent = embedder_support::GetUserAgent(),
+                 .chrome_version = std::string(version_info::GetVersionNumber())},
              ElectronSchemesIn(*base::CommandLine::ForCurrentProcess())),
         listing_(WatchBrowserWindowListing(
             base::BindRepeating(&AppOnUIThread::Listed,
                                 base::Unretained(this)))),
         loads_(WatchBrowserWindowLoads(
             base::BindRepeating(&ElectronApp::Loaded,
+                                base::Unretained(&app_)))),
+        dom_readies_(WatchBrowserWindowDomReadies(
+            base::BindRepeating(&ElectronApp::DomReady,
                                 base::Unretained(&app_)))) {
     CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   }
@@ -204,6 +212,7 @@ class AppOnUIThread {
   ElectronApp app_;
   base::CallbackListSubscription listing_;
   base::CallbackListSubscription loads_;
+  base::CallbackListSubscription dom_readies_;
 };
 
 // One connection on the IO thread: reads its lines, writes its events, and

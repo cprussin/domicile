@@ -17,7 +17,10 @@ const setUp = () => {
     | SessionCallMessage
     | PermissionMessage
   )[] = [];
-  const calls = createSessionCalls((m) => sent.push(m));
+  const calls = createSessionCalls(
+    (m) => sent.push(m),
+    () => "Notes/1 Electron/45",
+  );
   const sessions = createSessions(
     createProtocols((r) => sent.push(r)),
     createWebRequests(
