@@ -1362,3 +1362,19 @@ fn accessibility_reads_a_windows_tree_and_acts_on_its_elements() {
     assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "set-text"]).is_err());
     assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "click", "more"]).is_err());
 }
+
+#[test]
+fn agent_takes_one_name() {
+    assert_eq!(
+        run(&["agent", "Claude Code"]),
+        Ok(Invocation::Agent {
+            name: "Claude Code".to_string()
+        })
+    );
+    for refused in [&["agent"][..], &["agent", " "], &["agent", "a", "b"]] {
+        assert!(
+            matches!(run(refused), Err(CliError::NotOne { .. })),
+            "{refused:?}"
+        );
+    }
+}

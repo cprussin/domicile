@@ -449,6 +449,13 @@ screen-record`, the Screen Record launcher entry and the SDK's
   (`components/viz/service/display/domicile`, patch `0143`). It shows on screen
   and in no recording, screen cast or screenshot.
 
+## Agents
+
+An agent connected through `domicile mcp` asks to see and use the desk with an
+`agent` dialog, and is listed as an `agent` capturing session while it's in.
+No portal asks: the `agent` system call puts it in the same queue. See
+[AGENTS.md](AGENTS.md).
+
 ## Interfaces
 
 | Interface | Compositor | Shell UI |

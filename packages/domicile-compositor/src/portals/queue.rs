@@ -265,9 +265,22 @@ pub async fn ask_unbidden(
     parent_window: &str,
     kind: PortalKind,
 ) -> PortalAnswer {
+    ask_noting(queue, app_id, parent_window, kind, |_| ()).await
+}
+
+/// [`ask_unbidden`], handing `noted` the dialog's id once it is queued, so
+/// the caller can [`Queue::withdraw`] it.
+pub async fn ask_noting(
+    queue: &Queue,
+    app_id: String,
+    parent_window: &str,
+    kind: PortalKind,
+    noted: impl FnOnce(u32),
+) -> PortalAnswer {
     let (replier, answered) = reply();
     match queue.submit(app_id, parent_window, kind, replier) {
-        Ok(_) => {
+        Ok(id) => {
+            noted(id);
             queue.publish();
             answered.await.unwrap_or(PortalAnswer::Refused)
         }

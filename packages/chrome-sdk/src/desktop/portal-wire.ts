@@ -8,6 +8,9 @@ import type { DomicileHost } from "../domicile-host";
 import type {
   AccessBody,
   AccountBody,
+  AgentReach,
+  AgentSessionBody,
+  AgentWindow,
   AppChooserBody,
   BoundShortcut,
   CapturingBase,
@@ -407,6 +410,59 @@ const recordingSchema = z
     }),
   );
 
+const agentWindowSchema = z
+  .object({
+    app: z.string().optional(),
+    id: z.string(),
+    kind: z.enum(["native", "browser"]),
+    title: z.string(),
+  })
+  .transform(
+    (window): AgentWindow => ({
+      app: window.app,
+      browser: window.kind === "browser",
+      id: window.id,
+      title: window.title,
+    }),
+  );
+
+const agentSchema = z.object({
+  agent: z.string(),
+  windows: z.array(agentWindowSchema),
+});
+
+const agentReachSchema = z
+  .discriminatedUnion("type", [
+    z.object({ type: z.literal("desk") }),
+    z.object({
+      type: z.literal("windows"),
+      windows: z.array(agentWindowSchema),
+    }),
+  ])
+  .transform(
+    (reach): AgentReach =>
+      reach.type === "desk"
+        ? { kind: "desk" }
+        : { kind: "windows", windows: reach.windows },
+  );
+
+const agentSessionSchema = z
+  .object({
+    actions: z.array(z.object({ at_ms: z.number(), said: z.string() })),
+    agent: z.string(),
+    reach: agentReachSchema,
+  })
+  .transform(
+    (session): AgentSessionBody => ({
+      actions: session.actions.map(({ at_ms, said }) => ({
+        atMs: at_ms,
+        said,
+      })),
+      agent: session.agent,
+      reach: session.reach,
+    }),
+  );
+
 const shortcutsSchema = z
   .object({
     shortcuts: z.array(
@@ -727,6 +783,7 @@ const KINDS: ReadonlyMap<string, ReadKind> = new Map<string, ReadKind>([
     "pick_color",
     (base, body) => PortalRequest.PickColor(base, frozenDeskSchema.parse(body)),
   ],
+  ["agent", (base, body) => PortalRequest.Agent(base, agentSchema.parse(body))],
 ]);
 
 type ReadCapturing = (base: CapturingBase, body: unknown) => Capturing;
@@ -753,6 +810,10 @@ const CAPTURING_KINDS: ReadonlyMap<string, ReadCapturing> = new Map<
   [
     "recording",
     (base, body) => Capturing.Recording(base, recordingSchema.parse(body)),
+  ],
+  [
+    "agent",
+    (base, body) => Capturing.Agent(base, agentSessionSchema.parse(body)),
   ],
 ]);
 
@@ -902,10 +963,25 @@ const wireAnswer = (answer: PortalAnswer): object => {
       };
     case PortalAnswerKind.PickColor:
       return { kind: "pick_color", x: answer.at.x, y: answer.at.y };
+    case PortalAnswerKind.Agent:
+      return { kind: "agent", reach: wireReach(answer.reach) };
     case PortalAnswerKind.Refused:
       return { kind: "refused" };
   }
 };
+
+const wireReach = (reach: AgentReach): object =>
+  reach.kind === "desk"
+    ? { type: "desk" }
+    : {
+        type: "windows",
+        windows: reach.windows.map((window) => ({
+          ...(window.app === undefined ? {} : { app: window.app }),
+          id: window.id,
+          kind: window.browser ? "browser" : "native",
+          title: window.title,
+        })),
+      };
 
 const wireOptions = (options: PrintOptions): object => ({
   color_mode: wireOf(COLOR_MODES, options.colorMode),

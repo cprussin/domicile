@@ -44,6 +44,7 @@ use crate::notifications::NotificationServer;
 
 mod access;
 mod account;
+mod agent;
 mod app_chooser;
 mod background;
 mod clipboard;
@@ -318,6 +319,24 @@ impl Portals {
             message: "this desktop casts nothing to record".into(),
         })?;
         recording::for_the_shell(&self.backends.queue, recordings)
+    }
+
+    /// Asks the user whether `agent` may see and use the desk, offering the
+    /// `open` windows. Blocks until the user answers. See [`agent::let_in`].
+    pub fn let_agent(
+        &self,
+        agent: String,
+        open: Vec<domicile_protocol::ListedWindow>,
+        stop: domicile_host::system::AgentStopped,
+    ) -> Result<domicile_host::system::LetIn, SystemError> {
+        agent::let_in(
+            &self.backends.queue,
+            agent,
+            open,
+            recording::system_clock(),
+            agent::PATIENCE,
+            stop,
+        )
     }
 
     /// Draws a window for the shell's picker to preview. Blocks until it is

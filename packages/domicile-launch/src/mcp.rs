@@ -4,14 +4,20 @@
 //! Each tool runs one `domicile` verb and answers what it printed. Reading the
 //! desktop goes through the CLI, so a tool and its verb cannot disagree. See
 //! `docs/CLI.md#domicile-mcp`.
+//!
+//! The first tool call asks the user to let the agent in, through `domicile
+//! agent`: the whole desk, or only some windows. Every call after is checked
+//! against what they allowed, and listed in the shell as what the agent did.
+//! See `docs/AGENTS.md`.
 
 mod browser;
 
+use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 
 use browser::Browser;
 
-use domicile_protocol::DeskShot;
+use domicile_protocol::{AgentReach, DeskShot};
 use serde_json::{json, Map, Value};
 
 /// The protocol versions this server speaks, newest first.
@@ -30,23 +36,54 @@ pub struct Ran {
     pub stderr: String,
 }
 
+/// What the user let an agent do, from `domicile agent`.
+pub struct Grant {
+    pub reach: AgentReach,
+    /// Whether the user has stopped it since.
+    pub stopped: Box<dyn Fn() -> bool>,
+    /// Lists what it did, in the shell.
+    pub did: Box<dyn FnMut(&str)>,
+}
+
+/// What an agent calls itself when its client gives no name.
+const UNNAMED: &str = "An agent";
+
+/// The agent this server serves, and what the user let it do.
+struct Session {
+    /// As its client names itself in `initialize`.
+    name: String,
+    /// `None` until its first tool call asks the user; then the grant, or
+    /// why there is none.
+    grant: Option<Result<Grant, String>>,
+    /// Each window's title, as last listed, to say where the agent acted.
+    titles: HashMap<String, String>,
+    /// The last screenshot, whose pixels the pointer tools take.
+    view: Option<View>,
+}
+
 /// Answers each JSON-RPC message on `input`, one per line, on `output`, until
 /// `input` ends. `domicile` runs the `domicile` binary with the arguments it
-/// is given.
+/// is given. `admit` asks the user to let the agent it names in, and holds
+/// it in until this returns.
 pub fn serve(
     input: impl BufRead,
     mut output: impl Write,
     mut domicile: impl FnMut(&[String]) -> io::Result<Ran>,
+    mut admit: impl FnMut(&str) -> Result<Grant, String>,
 ) -> io::Result<()> {
-    // The last screenshot, whose pixels the pointer tools take.
-    let mut view = None;
+    let mut session = Session {
+        name: UNNAMED.to_string(),
+        grant: None,
+        titles: HashMap::new(),
+        view: None,
+    };
     for line in input.lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
         }
         let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(message) => answer(&message, &mut domicile, &mut view)?,
+            Ok(message) => answer(&message, &mut domicile, &mut admit, &mut session)?,
             Err(why) => Some(error(&Value::Null, PARSE_ERROR, &why.to_string())),
         };
         if let Some(reply) = reply {
@@ -61,18 +98,25 @@ pub fn serve(
 fn answer(
     message: &Value,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
-    view: &mut Option<View>,
+    admit: &mut impl FnMut(&str) -> Result<Grant, String>,
+    session: &mut Session,
 ) -> io::Result<Option<Value>> {
     let Some(id) = message.get("id") else {
         return Ok(None);
     };
     let params = &message["params"];
     let reply = match message["method"].as_str() {
-        Some("initialize") => result(id, initialized(params)),
+        Some("initialize") => {
+            session.name = named(params);
+            result(id, initialized(params))
+        }
         Some("ping") => result(id, json!({})),
         Some("tools/list") => result(id, json!({"tools": listed_tools()})),
         Some("tools/call") => match params["name"].as_str().and_then(tool) {
-            Some(tool) => result(id, called(tool, &params["arguments"], domicile, view)?),
+            Some(tool) => result(
+                id,
+                guarded(tool, &params["arguments"], domicile, admit, session)?,
+            ),
             None => error(id, INVALID_PARAMS, &format!("no tool {}", params["name"])),
         },
         _ => error(
@@ -97,6 +141,17 @@ fn initialized(params: &Value) -> Value {
         "capabilities": {"tools": {}},
         "serverInfo": {"name": "domicile", "version": env!("CARGO_PKG_VERSION")},
     })
+}
+
+/// What the client calls itself in `initialize`: its title, else its name.
+fn named(params: &Value) -> String {
+    let client = &params["clientInfo"];
+    [&client["title"], &client["name"]]
+        .into_iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .find(|name| !name.is_empty())
+        .map_or_else(|| UNNAMED.to_string(), str::to_string)
 }
 
 fn result(id: &Value, result: Value) -> Value {
@@ -331,12 +386,14 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
     }
 }
 
-/// `tools/call`'s result for `tool` with `arguments`.
-fn called(
+/// `tools/call`'s result for `tool` with `arguments`, once the user lets the
+/// agent in and only within what they allowed.
+fn guarded(
     tool: Tool,
     arguments: &Value,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
-    view: &mut Option<View>,
+    admit: &mut impl FnMut(&str) -> Result<Grant, String>,
+    session: &mut Session,
 ) -> io::Result<Value> {
     // A call with no arguments may leave them out.
     let none = Map::new();
@@ -345,6 +402,168 @@ fn called(
         Value::Object(arguments) => arguments,
         other => return Ok(said(false, format!("arguments are an object, not {other}"))),
     };
+    let name = session.name.clone();
+    let grant = match session.grant.get_or_insert_with(|| {
+        admit(&name).map_err(|why| {
+            format!(
+                "The user did not let {name} use this desktop ({}). Start a new session to ask again.",
+                why.trim()
+            )
+        })
+    }) {
+        Ok(grant) => grant,
+        Err(why) => return Ok(said(false, why.clone())),
+    };
+    if (grant.stopped)() {
+        return Ok(said(
+            false,
+            format!("The user stopped {name} from the desktop. Start a new session to ask again."),
+        ));
+    }
+    if let AgentReach::Windows { windows } = &grant.reach {
+        if let Err(why) = within(tool, arguments, windows, &name) {
+            return Ok(said(false, why));
+        }
+        for window in windows {
+            session
+                .titles
+                .entry(window.id.clone())
+                .or_insert_with(|| window.title.clone());
+        }
+    }
+    let mut answered = called(tool, arguments, domicile, &mut session.view)?;
+    if answered["isError"] == json!(false) {
+        if tool_is_listing_windows(tool) {
+            answered = listed_windows(answered, &grant.reach, &mut session.titles);
+        }
+        (grant.did)(&what_it_did(tool, arguments, &session.titles));
+    }
+    Ok(answered)
+}
+
+fn tool_is_listing_windows(tool: Tool) -> bool {
+    matches!(tool, Tool::Listing("list-windows"))
+}
+
+/// Whether `tool` with `arguments` acts only on `windows`, the ones the user
+/// shared with agent `name`, or why not.
+fn within(
+    tool: Tool,
+    arguments: &Map<String, Value>,
+    windows: &[domicile_protocol::AgentWindow],
+    name: &str,
+) -> Result<(), String> {
+    let window = match tool {
+        Tool::Listing("list-windows") => return Ok(()),
+        Tool::WindowAct("close-window") => arguments.get("id"),
+        Tool::Browser(_) | Tool::AppSnapshot | Tool::AppAct(_) => arguments.get("window"),
+        _ => {
+            return Err(format!(
+                "The user shared only some windows with {name}, and this tool reaches the \
+                 whole desktop. Use list_windows, then the browser_ and app_ tools on the \
+                 windows it lists."
+            ))
+        }
+    };
+    match window.and_then(Value::as_str) {
+        Some(id) if windows.iter().any(|shared| shared.id == id) => Ok(()),
+        Some(id) => Err(format!(
+            "The user did not share window {id} with {name}. list_windows lists the ones they did."
+        )),
+        // The tool says what it lacks.
+        None => Ok(()),
+    }
+}
+
+/// `list_windows`'s answer with only the windows `reach` reaches, noting
+/// each one's title in `titles`.
+fn listed_windows(
+    answered: Value,
+    reach: &AgentReach,
+    titles: &mut HashMap<String, String>,
+) -> Value {
+    let Some(Ok(mut windows)) = answered["content"][0]["text"]
+        .as_str()
+        .map(serde_json::from_str::<Vec<Value>>)
+    else {
+        return answered;
+    };
+    for window in &windows {
+        if let (Some(id), Some(title)) = (window["id"].as_str(), window["title"].as_str()) {
+            titles.insert(id.to_string(), title.to_string());
+        }
+    }
+    let AgentReach::Windows { windows: shared } = reach else {
+        return answered;
+    };
+    windows.retain(|window| {
+        shared
+            .iter()
+            .any(|shared| window["id"] == shared.id.as_str())
+    });
+    let mut printed = serde_json::to_string_pretty(&windows).expect("windows serialize");
+    printed.push('\n');
+    said(true, printed)
+}
+
+/// What the shell lists the agent as having done with `tool`. Never what
+/// it typed, which may be a password.
+fn what_it_did(
+    tool: Tool,
+    arguments: &Map<String, Value>,
+    titles: &HashMap<String, String>,
+) -> String {
+    let window = |key: &str| {
+        arguments
+            .get(key)
+            .and_then(Value::as_str)
+            .map(|id| match titles.get(id) {
+                Some(title) if !title.is_empty() => title.clone(),
+                _ => "a window".to_string(),
+            })
+            .unwrap_or_else(|| "a window".to_string())
+    };
+    match tool {
+        Tool::Listing("list-windows") => "Listed the windows".to_string(),
+        Tool::Listing("list-displays") => "Listed the displays".to_string(),
+        Tool::Listing("list-inputs") => "Listed the keyboards and pointers".to_string(),
+        Tool::Listing("status") => "Read the desktop's status".to_string(),
+        Tool::Listing(_) => "Read the shell's commands".to_string(),
+        Tool::SendShell => "Ran a shell command".to_string(),
+        Tool::Open => "Opened something".to_string(),
+        Tool::WindowAct("focus-window") => format!("Focused {}", window("id")),
+        Tool::WindowAct(_) => format!("Closed {}", window("id")),
+        Tool::Theme => "Changed the theme".to_string(),
+        Tool::Screenshot => "Took a screenshot".to_string(),
+        Tool::Click => "Clicked".to_string(),
+        Tool::MovePointer => "Moved the pointer".to_string(),
+        Tool::Drag => "Dragged".to_string(),
+        Tool::Scroll => "Scrolled".to_string(),
+        Tool::Key => "Pressed a key".to_string(),
+        Tool::TypeText => "Typed".to_string(),
+        Tool::Browser(Browser::Snapshot) | Tool::AppSnapshot => {
+            format!("Read {}", window("window"))
+        }
+        Tool::Browser(Browser::Click) | Tool::AppAct("click") => {
+            format!("Clicked in {}", window("window"))
+        }
+        Tool::Browser(Browser::Type) | Tool::AppAct("set-text") => {
+            format!("Typed in {}", window("window"))
+        }
+        Tool::Browser(Browser::Key) => format!("Pressed a key in {}", window("window")),
+        Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
+        Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),
+        Tool::AppAct(_) => format!("Moved the focus in {}", window("window")),
+    }
+}
+
+/// `tools/call`'s result for `tool` with `arguments`.
+fn called(
+    tool: Tool,
+    arguments: &Map<String, Value>,
+    domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    view: &mut Option<View>,
+) -> io::Result<Value> {
     match tool {
         Tool::Screenshot => return screenshot(domicile, view),
         Tool::Browser(browser) => return browser::called(browser, arguments, domicile),

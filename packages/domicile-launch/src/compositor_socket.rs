@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    ChromeMessage, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
+    AgentReach, ChromeMessage, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
     ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp,
     SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme, WatchTopic, WindowAct,
 };
@@ -481,6 +481,95 @@ pub fn virtual_monitor(
                 })?;
             Ok(HeldMonitor {
                 output,
+                stream,
+                path: socket.to_path_buf(),
+            })
+        }
+        reply => Err(not_done(socket, reply, said)),
+    }
+}
+
+/// An agent the compositor lets in while this connection is open.
+pub struct HeldAgent {
+    reach: AgentReach,
+    stream: UnixStream,
+    path: PathBuf,
+}
+
+impl HeldAgent {
+    /// What the user let it reach.
+    pub fn reach(&self) -> &AgentReach {
+        &self.reach
+    }
+
+    /// Lists `said` as what it did last.
+    pub fn did(&self, said: String) -> Result<(), CompositorError> {
+        let message = ChromeMessage::SystemRequest {
+            id: CALL,
+            request: SystemRequest::AgentDid { said },
+        };
+        let mut line = serde_json::to_string(&message).expect("a chrome message always serializes");
+        line.push('\n');
+        (&self.stream)
+            .write_all(line.as_bytes())
+            .map_err(|why| CompositorError::Failed {
+                path: self.path.display().to_string(),
+                kind: why.kind(),
+            })
+    }
+
+    /// Blocks until the compositor ends it: the shell stopped it, or the
+    /// compositor exited.
+    pub fn until_it_ends(&self) {
+        // Whatever comes, an end or a hang-up, ends it.
+        let _ = BufReader::new(&self.stream).read_line(&mut String::new());
+    }
+
+    /// Hangs up, which takes it off the shell's list, and wakes
+    /// [`HeldAgent::until_it_ends`].
+    pub fn give_back(&self) {
+        // Already gone if the compositor hung up first.
+        let _ = self.stream.shutdown(std::net::Shutdown::Both);
+    }
+}
+
+/// Asks the compositor at `socket` to let agent `agent` in, which asks the
+/// user, and holds it until [`HeldAgent::give_back`] or the drop. `patience`
+/// covers the user deciding.
+pub fn agent(
+    socket: &Path,
+    agent: &str,
+    patience: Option<Duration>,
+) -> Result<HeldAgent, CompositorError> {
+    let request = SystemRequest::Agent {
+        agent: agent.to_owned(),
+    };
+    let stream = connected(socket, patience)?;
+    let said = said_over(
+        socket,
+        &stream,
+        &[ChromeMessage::SystemRequest { id: CALL, request }],
+    )?;
+    let reply = match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::SystemReply { id: CALL, reply }) => reply,
+        _ => {
+            return Err(CompositorError::Unreadable {
+                path: socket.display().to_string(),
+                said,
+            })
+        }
+    };
+    match reply {
+        SystemReply::Agent { reach } => {
+            // It lasts until the shell stops it, however long that is.
+            stream
+                .set_read_timeout(None)
+                .map_err(|why| CompositorError::Failed {
+                    path: socket.display().to_string(),
+                    kind: why.kind(),
+                })?;
+            Ok(HeldAgent {
+                reach,
                 stream,
                 path: socket.to_path_buf(),
             })

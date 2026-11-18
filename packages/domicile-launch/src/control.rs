@@ -2,8 +2,10 @@
 //!
 //! One JSON request line in, one response line out, per connection. This uses
 //! the same newline-delimited JSON framing as the host protocol. The one
-//! exception is [`Request::VirtualMonitor`], whose connection is held: see
-//! [`crate::monitor_lending`].
+//! exceptions are [`Request::VirtualMonitor`], [`Request::Subscribe`] and
+//! [`Request::Agent`], whose connections are held: see
+//! [`crate::monitor_lending`], [`crate::subscription`] and
+//! [`crate::agent_lending`].
 //!
 //! Lines come from a socket, so [`answer`] parses them strictly and refuses
 //! anything else.
@@ -12,9 +14,9 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, ListedDisplay, ListedInput,
-    ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
-    WindowKind,
+    AgentReach, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, ListedDisplay,
+    ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme,
+    WatchTopic, WindowAct, WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -227,6 +229,14 @@ pub enum Request {
     /// topic's answer at once, then again whenever it changes, each as a
     /// [`Response::Heard`]. See `domicile subscribe`.
     Subscribe { topics: Vec<WatchTopic> },
+    /// Let agent `agent` see and use the desk for as long as the connection
+    /// is open, as the user allows in the shell's dialog. Answered with
+    /// [`Response::Agent`]; each later line is a [`Request::AgentDid`]. The
+    /// desktop hangs up when the shell stops it. See `domicile agent`.
+    Agent { agent: String },
+    /// Note what the agent this connection holds did, for the shell to list.
+    /// Not answered.
+    AgentDid { said: String },
     /// Resize the monitor this connection holds. Not answered.
     ResizeVirtualMonitor {
         width: u32,
@@ -417,6 +427,9 @@ pub enum Response {
 
     /// The compositor added the virtual monitor, on this output.
     VirtualMonitor { output: String },
+
+    /// The user let the agent reach this.
+    Agent { reach: AgentReach },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -733,6 +746,17 @@ pub struct Lent {
     pub client: std::os::unix::net::UnixStream,
 }
 
+/// A [`Request::Agent`] and the connection it came on, which
+/// [`crate::control_socket::serve_one`] lends to
+/// [`crate::agent_lending::admit`].
+pub struct Admission {
+    pub agent: String,
+    /// The client's lines after the request.
+    pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
+    /// Where the client hears back.
+    pub client: std::os::unix::net::UnixStream,
+}
+
 /// A [`Request::Subscribe`] and the connection it came on, which
 /// [`crate::control_socket::serve_one`] lends to
 /// [`crate::subscription::follow`].
@@ -1018,6 +1042,15 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             why: "a subscription lasts as long as its connection, which this desktop \
                   was not lent"
                 .to_string(),
+        }),
+        // Lent the connection by `serve_one` too.
+        Ok(Request::Agent { .. }) => to_line(&Response::Refused {
+            why: "an agent is let in for as long as its connection lasts, which this \
+                  desktop was not lent"
+                .to_string(),
+        }),
+        Ok(Request::AgentDid { .. }) => to_line(&Response::Refused {
+            why: "this connection holds no agent".to_string(),
         }),
         Ok(Request::ResizeVirtualMonitor { .. }) => to_line(&Response::Refused {
             why: "this connection holds no virtual monitor to resize".to_string(),

@@ -1,19 +1,32 @@
 //! Tests for `domicile mcp`: the Model Context Protocol server over stdio.
 
+use std::cell::{Cell, RefCell};
 use std::io;
+use std::rc::Rc;
 
-use domicile_launch::mcp::{serve, Ran};
+use domicile_launch::mcp::{serve, Grant, Ran};
+use domicile_protocol::{AgentReach, AgentWindow, WindowKind};
 use serde_json::{json, Value};
 
 /// Serves `requests`, one JSON-RPC message per line, with `domicile` standing
-/// in for the `domicile` binary, and returns each reply.
+/// in for the `domicile` binary, and returns each reply. The user lets the
+/// agent reach the whole desk.
 fn served(requests: &[Value], domicile: impl FnMut(&[String]) -> io::Result<Ran>) -> Vec<Value> {
+    served_letting(requests, domicile, |_| Ok(reaching(AgentReach::Desk).0))
+}
+
+/// [`served`], letting the agent in as `admit` says.
+fn served_letting(
+    requests: &[Value],
+    domicile: impl FnMut(&[String]) -> io::Result<Ran>,
+    admit: impl FnMut(&str) -> Result<Grant, String>,
+) -> Vec<Value> {
     let input: String = requests
         .iter()
         .map(|request| format!("{request}\n"))
         .collect();
     let mut output = Vec::new();
-    serve(input.as_bytes(), &mut output, domicile).unwrap();
+    serve(input.as_bytes(), &mut output, domicile, admit).unwrap();
     String::from_utf8(output)
         .unwrap()
         .lines()
@@ -340,7 +353,10 @@ fn an_unknown_method_is_method_not_found() {
 #[test]
 fn a_line_that_is_not_json_is_a_parse_error() {
     let mut output = Vec::new();
-    serve("{not json\n".as_bytes(), &mut output, never_run).unwrap();
+    serve("{not json\n".as_bytes(), &mut output, never_run, |_| {
+        panic!("nothing was called")
+    })
+    .unwrap();
     let reply: Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(reply["id"], Value::Null);
     assert_eq!(reply["error"]["code"], -32700);
@@ -586,4 +602,173 @@ fn app_tools_read_and_act_on_a_native_windows_accessibility_tree() {
     );
     let replies = served(&[call("app_click", json!({"window": "kD3m"}))], never_run);
     assert_eq!(replies[0]["result"]["isError"], true);
+}
+
+/// A grant of `reach`, and what it was told the agent did. Never stopped.
+fn reaching(reach: AgentReach) -> (Grant, Rc<RefCell<Vec<String>>>) {
+    let did = Rc::new(RefCell::new(Vec::new()));
+    let told = Rc::clone(&did);
+    (
+        Grant {
+            reach,
+            stopped: Box::new(|| false),
+            did: Box::new(move |said| told.borrow_mut().push(said.to_string())),
+        },
+        did,
+    )
+}
+
+fn shared(id: &str, kind: WindowKind, title: &str) -> AgentWindow {
+    AgentWindow {
+        id: id.into(),
+        kind,
+        title: title.into(),
+        app: None,
+    }
+}
+
+/// Only the browser window `w1` ("Pull requests") and the native window
+/// `n1` ("Notes").
+fn two_windows() -> AgentReach {
+    AgentReach::Windows {
+        windows: vec![
+            shared("w1", WindowKind::Browser, "Pull requests"),
+            shared("n1", WindowKind::Native, "Notes"),
+        ],
+    }
+}
+
+#[test]
+fn the_first_tool_call_asks_the_user_once_in_the_clients_name() {
+    let asked = Rc::new(RefCell::new(Vec::new()));
+    let asking = Rc::clone(&asked);
+    served_letting(
+        &[
+            json!({
+                "jsonrpc": "2.0",
+                "id": 0,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "claude-code", "title": "Claude Code"}}
+            }),
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+            call("status", json!({})),
+            call("status", json!({})),
+        ],
+        |_| printed("{}"),
+        move |name| {
+            asking.borrow_mut().push(name.to_string());
+            Ok(reaching(AgentReach::Desk).0)
+        },
+    );
+    assert_eq!(*asked.borrow(), ["Claude Code"]);
+}
+
+#[test]
+fn an_agent_the_user_did_not_let_in_is_refused_every_call_without_asking_again() {
+    let asked = Cell::new(0);
+    let replies = served_letting(
+        &[call("status", json!({})), call("status", json!({}))],
+        never_run,
+        |_| {
+            asked.set(asked.get() + 1);
+            Err("the user did not let it in".to_string())
+        },
+    );
+    assert_eq!(asked.get(), 1);
+    for reply in &replies {
+        assert_eq!(reply["result"]["isError"], true);
+        let text = reply["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.contains("did not let An agent use this desktop"),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn an_agent_the_user_stopped_is_refused() {
+    let replies = served_letting(&[call("status", json!({}))], never_run, |_| {
+        Ok(Grant {
+            reach: AgentReach::Desk,
+            stopped: Box::new(|| true),
+            did: Box::new(|_| ()),
+        })
+    });
+    let text = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("stopped"), "{text}");
+}
+
+#[test]
+fn what_an_agent_did_is_listed_with_the_windows_title_and_never_what_it_typed() {
+    let (grant, did) = reaching(two_windows());
+    let mut grant = Some(grant);
+    served_letting(
+        &[
+            call(
+                "app_set_text",
+                json!({"window": "n1", "ref": ":1.7/w/1/text", "text": "hunter2"}),
+            ),
+            call("browser_snapshot", json!({"window": "w1"})),
+        ],
+        |args| match args[0].as_str() {
+            "devtools" => printed("{\"nodes\": []}"),
+            _ => printed(""),
+        },
+        move |_| Ok(grant.take().expect("asked once")),
+    );
+    assert_eq!(*did.borrow(), ["Typed in Notes", "Read Pull requests"]);
+}
+
+#[test]
+fn with_only_some_windows_the_desk_wide_tools_are_refused() {
+    for (name, arguments) in [
+        ("screenshot", json!({})),
+        ("click", json!({"x": 1, "y": 1})),
+        ("type_text", json!({"text": "hi"})),
+        ("key", json!({"chord": "ctrl+l"})),
+        ("send_shell", json!({"words": ["focus", "left"]})),
+        ("open", json!({"target": "https://example.com"})),
+        ("focus_window", json!({"id": "n1"})),
+        ("status", json!({})),
+    ] {
+        let replies = served_letting(&[call(name, arguments)], never_run, |_| {
+            Ok(reaching(two_windows()).0)
+        });
+        let text = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("only some windows"), "{name}: {text}");
+    }
+}
+
+#[test]
+fn with_only_some_windows_a_window_not_shared_is_refused() {
+    for (name, arguments) in [
+        ("browser_snapshot", json!({"window": "w2"})),
+        ("app_snapshot", json!({"window": "n2"})),
+        ("close_window", json!({"id": "n2"})),
+    ] {
+        let replies = served_letting(&[call(name, arguments)], never_run, |_| {
+            Ok(reaching(two_windows()).0)
+        });
+        let text = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("did not share window"), "{name}: {text}");
+    }
+}
+
+#[test]
+fn with_only_some_windows_list_windows_lists_only_those() {
+    let replies = served_letting(
+        &[call("list_windows", json!({}))],
+        |_| {
+            printed(
+                r#"[{"id": "n1", "title": "Notes"}, {"id": "n2", "title": "Secrets"}, {"id": "w1", "title": "Pull requests"}]"#,
+            )
+        },
+        |_| Ok(reaching(two_windows()).0),
+    );
+    let listed: Value =
+        serde_json::from_str(replies[0]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        listed,
+        json!([{"id": "n1", "title": "Notes"}, {"id": "w1", "title": "Pull requests"}])
+    );
 }

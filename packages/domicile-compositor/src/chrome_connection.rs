@@ -234,6 +234,16 @@ fn read_chrome_messages(
         let portals = hub.portals.clone();
         move || portals.screen_record()
     })
+    .letting_agents_in_with({
+        let hub = hub.clone();
+        move |agent, stop| {
+            let open = match hub.host.lock().unwrap().list_windows() {
+                HostMessage::WindowList { windows } => windows,
+                listed => unreachable!("the host lists windows as a window list, not {listed:?}"),
+            };
+            hub.portals.let_agent(agent, open, stop)
+        }
+    })
     .previewing_with({
         let portals = hub.portals.clone();
         move |window| portals.preview(window)

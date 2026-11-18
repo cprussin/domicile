@@ -480,6 +480,22 @@ with:
 claude mcp add domicile -- domicile mcp
 ```
 
+The first tool call asks you, in Domicile's dialog, to let the agent in,
+named as its client names itself: your entire desktop, or only the windows you
+check. Until you answer, the call waits; a minute without an answer counts as
+Cancel. While it's in, the bar shows it and what it did last, and Stop there
+ends it. Every call after is checked against what you allowed:
+
+- **Entire desktop**: every tool.
+- **Only these windows**: `list_windows` lists only those windows, and
+  `close_window` and the browser and app tools work on them alone. The tools
+  that reach the whole desk (screenshots, the pointer and keyboard, `open`,
+  `send_shell`, `focus_window`, `theme` and the other listings) are refused.
+  Private browser windows are never offered.
+
+An agent you cancel or stop is refused from then on; its next session asks
+again. See [AGENTS.md](AGENTS.md).
+
 Each tool runs a verb and answers what it printed, or its error:
 
 | Tool | Runs |
@@ -503,6 +519,16 @@ Each tool runs a verb and answers what it printed, or its error:
 | `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
 
 The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. Tools the lock refuses are refused while the desktop is locked.
+
+## `domicile agent <name>`
+
+Ask, in Domicile's dialog, to let the agent `name` see and use the desktop,
+and print what you allowed as a JSON line: `{"type":"desk"}`, or
+`{"type":"windows","windows":[...]}` with each window's `id`, `kind`, `title`
+and `app`. Each line read from stdin after is listed in the bar as what the
+agent did last. The agent stays in until stdin ends. Exits 1 if you cancel,
+don't answer within a minute, or stop it from the bar. `domicile mcp` runs this
+on its first tool call.
 
 ## `domicile check-config <file>`
 
@@ -535,8 +561,8 @@ shell.
 ## While locked
 
 `screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`,
-`kill-window`, `pointer`, `scroll`, `key`, `type`, `devtools`, `accessibility`
-and `accessibility-act` are refused while the
+`kill-window`, `pointer`, `scroll`, `key`, `type`, `devtools`, `accessibility`,
+`accessibility-act` and `agent` are refused while the
 desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
 `list-inputs`, `status`, `subscribe`, `configure-display`,

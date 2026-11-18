@@ -26,6 +26,7 @@ import type { App } from "../useApps/useApps";
 import { useApps } from "../useApps/useApps";
 import { AccessDialog } from "./AccessDialog";
 import { AccountDialog } from "./AccountDialog";
+import { AgentDialog } from "./AgentDialog";
 import { AppChooserDialog } from "./AppChooserDialog";
 import { CapturingIndicator } from "./CapturingIndicator";
 import { FileChooserDialog } from "./FileChooserDialog";
@@ -89,6 +90,11 @@ type Props = {
    */
   omitScreenCasts?: boolean | undefined;
   /**
+   * Leave agents out of the capturing indicator, for a shell that shows them
+   * itself.
+   */
+  omitAgents?: boolean | undefined;
+  /**
    * The browser windows the shell shows as closed, by the engine's id, such
    * as an inbox's kept running for its notifications. Pickers leave them out.
    */
@@ -131,6 +137,7 @@ export const PortalDialogs = memo(
     domicile,
     holdKeyboard,
     omitScreenCasts = false,
+    omitAgents = false,
     screen,
     screenOf,
     shellChords = NONE,
@@ -187,7 +194,8 @@ export const PortalDialogs = memo(
           sessions={sessions.filter(
             (session) =>
               !isRecording(session) &&
-              !(omitScreenCasts && session.kind === CapturingKind.ScreenCast),
+              !(omitScreenCasts && session.kind === CapturingKind.ScreenCast) &&
+              !(omitAgents && session.kind === CapturingKind.Agent),
           )}
           stop={(id) => {
             portals.stopCapturing(id);
@@ -418,6 +426,15 @@ const Dialog = ({
           screen={screen}
         />
       );
+    case PortalKind.Agent:
+      return (
+        <AgentDialog
+          answer={answer}
+          apps={apps}
+          body={request.body}
+          screen={screen}
+        />
+      );
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return undefined;
@@ -474,6 +491,10 @@ const otherAppIds = (request: PortalRequest): string[] => {
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return [];
+    case PortalKind.Agent:
+      return request.body.windows.flatMap((window) =>
+        !window.browser && window.app !== undefined ? [window.app] : [],
+      );
   }
 };
 
@@ -508,6 +529,7 @@ const isCapture = (request: PortalRequest): boolean => {
     case PortalKind.GlobalShortcuts:
     case PortalKind.Wallpaper:
     case PortalKind.Print:
+    case PortalKind.Agent:
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return false;
@@ -531,6 +553,7 @@ const isAsked = (request: PortalRequest): boolean => {
     case PortalKind.Print:
     case PortalKind.Screenshot:
     case PortalKind.PickColor:
+    case PortalKind.Agent:
       return true;
     case PortalKind.Inhibit:
     case PortalKind.Unknown:

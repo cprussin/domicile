@@ -15,9 +15,10 @@ import { SelectionIcon } from "@phosphor-icons/react/dist/ssr/Selection";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { StopIcon } from "@phosphor-icons/react/dist/ssr/Stop";
 import { useEffect, useState } from "react";
-
 import { css } from "../styled-system/css";
 import { center, flex, hstack } from "../styled-system/patterns";
+import type { Agent } from "./Agents";
+import { Agents } from "./Agents";
 
 /** What the indicator reads: captures, and applications' desktop entries. */
 export type SharingDesktop = AppsDesktop & {
@@ -35,11 +36,13 @@ type ScreenCast = Extract<Capturing, { kind: CapturingKind.ScreenCast }>;
 /**
  * Top bar sharing indicator: a red pill naming what is shared, shown while an
  * application records the desktop through the ScreenCast portal. Its panel
- * lists each application, what it records and a button that stops it. Input
+ * lists each application, what it records and a button that stops it. Beside
+ * it, a violet pill for each agent in control, such as Claude Code. Input
  * sessions are left to `<PortalDialogs />`.
  */
 export const Sharing = ({ domicile }: Props) => {
   const [capturing, setCapturing] = useState<readonly ScreenCast[]>([]);
+  const [agents, setAgents] = useState<readonly Agent[]>([]);
   const apps = useApps(domicile, [
     ...capturing.map((capture) => capture.appId),
     ...capturing.flatMap((capture) => windowAppIds(capture.sources)),
@@ -51,40 +54,64 @@ export const Sharing = ({ domicile }: Props) => {
       setCapturing(
         (portals.capturing ?? []).filter((session) => isScreenCast(session)),
       );
+      setAgents(
+        (portals.capturing ?? []).filter((session) => isAgent(session)),
+      );
     };
     heard();
     return portals.on("change", heard);
   }, [domicile]);
 
-  return capturing.length === 0 ? undefined : (
-    <Popover
-      align="center"
-      side="bottom"
-      tone="overPhoto"
-      tooltip={who(apps, capturing)}
-      trigger={
-        <button className={triggerStyles} type="button">
-          <ScreencastIcon aria-hidden size={15} weight="bold" />
-          {`Sharing ${what(capturing.flatMap(({ sources }) => sources))}`}
-        </button>
-      }
-    >
-      <div className={panelStyles}>
-        {capturing.map((capture) => (
-          <Session
-            app={apps(capture.appId)}
-            apps={apps}
-            capture={capture}
-            key={capture.id}
-            stop={() => {
-              domicile.portals.stopCapturing(capture.id);
-            }}
-          />
-        ))}
-      </div>
-    </Popover>
+  const stop = (id: number) => {
+    domicile.portals.stopCapturing(id);
+  };
+  return (
+    <>
+      {capturing.length > 0 && (
+        <Casts apps={apps} capturing={capturing} stop={stop} />
+      )}
+      <Agents agents={agents} stop={stop} />
+    </>
   );
 };
+
+/** The red pill, and its panel of each application's cast. */
+const Casts = ({
+  apps,
+  capturing,
+  stop,
+}: {
+  apps: (appId: string) => App;
+  capturing: readonly ScreenCast[];
+  stop: (id: number) => void;
+}) => (
+  <Popover
+    align="center"
+    side="bottom"
+    tone="overPhoto"
+    tooltip={who(apps, capturing)}
+    trigger={
+      <button className={triggerStyles} type="button">
+        <ScreencastIcon aria-hidden size={15} weight="bold" />
+        {`Sharing ${what(capturing.flatMap(({ sources }) => sources))}`}
+      </button>
+    }
+  >
+    <div className={panelStyles}>
+      {capturing.map((capture) => (
+        <Session
+          app={apps(capture.appId)}
+          apps={apps}
+          capture={capture}
+          key={capture.id}
+          stop={() => {
+            stop(capture.id);
+          }}
+        />
+      ))}
+    </div>
+  </Popover>
+);
 
 /** One application's cast: who, each source it records, and a stop button. */
 const Session = ({
@@ -250,6 +277,9 @@ const windowAppIds = (sources: readonly Captured[]): string[] =>
 
 const isScreenCast = (session: Capturing): session is ScreenCast =>
   session.kind === CapturingKind.ScreenCast;
+
+const isAgent = (session: Capturing): session is Agent =>
+  session.kind === CapturingKind.Agent;
 
 const sourceKey = (source: Captured): string => {
   switch (source.kind) {

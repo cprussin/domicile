@@ -250,6 +250,7 @@ impl Asked {
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
+            | PortalAnswer::Agent { .. }
             | PortalAnswer::Pressed
             | PortalAnswer::Released
             | PortalAnswer::Refused => (2, HashMap::new()),

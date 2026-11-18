@@ -118,6 +118,9 @@ Ask the running desktop:
   domicile log-out                      Ask, then end the login session
   domicile mcp                          Serve the Model Context Protocol on
                                         stdio, for agents to drive the desktop
+  domicile agent <name>                 Ask to let an agent in; print what the
+                                        user allowed, then list each line read
+                                        as what it did, until stopped
 
 Without a desktop:
 
@@ -440,6 +443,10 @@ pub enum Invocation {
     /// Serve the Model Context Protocol on stdio until it ends; see
     /// [`crate::mcp`].
     Mcp,
+    /// Ask the user to let agent `name` in, print what they allowed, then
+    /// list each line of stdin as what it did, until either side ends it;
+    /// see [`crate::agent_lending`].
+    Agent { name: String },
     /// Print native window `window`'s accessibility tree; see
     /// [`crate::accessibility`].
     Accessibility { window: String },
@@ -811,6 +818,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     Some(extra) => Err(CliError::Extra { extra, verb: first }),
                 }
             }
+            Verb::Admitting => match (args.next(), args.next()) {
+                (Some(name), None) if !name.trim().is_empty() => Ok(Invocation::Agent { name }),
+                (Some(_), None) | (None, _) => Err(one(&first, "agent name", None)),
+                (said, Some(_)) => Err(one(&first, "agent name", said)),
+            },
             Verb::Serving => match args.next() {
                 None => Ok(Invocation::Mcp),
                 Some(extra) => Err(CliError::Extra { extra, verb: first }),
@@ -984,6 +996,8 @@ enum Verb {
     Typing,
     /// `devtools`, which takes a window, a method and maybe its params.
     DevTooling,
+    /// `agent`, which takes a name.
+    Admitting,
     /// `accessibility`, which takes a window.
     Reading,
     /// `accessibility-act`, which takes a window, an element and an act.
@@ -1103,6 +1117,7 @@ fn verb(word: &str) -> Option<Verb> {
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
         "mcp" => Some(Verb::Serving),
+        "agent" => Some(Verb::Admitting),
         "pointer" => Some(Verb::Pointing),
         "scroll" => Some(Verb::Scrolling),
         "key" => Some(Verb::Keying),

@@ -26,9 +26,9 @@ Profiles with their own sign-ins, site data and extensions; each site opens in i
 
 ### Let agents drive the desktop
 
-`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands, see the desk and click and type on it, and read and drive browser windows and accessible native apps by their accessibility trees, even while they are hidden: `claude mcp add domicile -- domicile mcp`. `domicile pointer`, `scroll`, `key`, `type`, `screenshot --fit`, `devtools`, `accessibility` and `accessibility-act` do the same from scripts. Private windows are never driven.
+`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands, see the desk and click and type on it, and read and drive browser windows and accessible native apps by their accessibility trees, even while they are hidden: `claude mcp add domicile -- domicile mcp`. `domicile pointer`, `scroll`, `key`, `type`, `screenshot --fit`, `devtools`, `accessibility` and `accessibility-act` do the same from scripts. Private windows are never driven. The first tool call asks the user to let the agent in, with the entire desktop or only the windows they check, and a running agent is listed as a capturing session they can stop: `PortalKind.Agent`, `PortalAnswer.Agent` and `CapturingKind.Agent` in the SDK, drawn by `<PortalDialogs />`.
 
-[`domicile mcp`](CLI.md#domicile-mcp)
+[`domicile mcp`](CLI.md#domicile-mcp) · [Agents](AGENTS.md)
 
 ### Script the desktop
 

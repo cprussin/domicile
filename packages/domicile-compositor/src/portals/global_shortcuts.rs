@@ -340,6 +340,7 @@ impl Shortcuts {
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
+            | PortalAnswer::Agent { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Pause
             | PortalAnswer::Resume

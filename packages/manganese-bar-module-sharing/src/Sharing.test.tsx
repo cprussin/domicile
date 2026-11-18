@@ -246,6 +246,83 @@ describe("Sharing", () => {
     });
   });
 
+  describe("an agent", () => {
+    const CLAUDE = {
+      app_id: "",
+      body: {
+        actions: [
+          { at_ms: Date.now(), said: "Clicked in Notes" },
+          { at_ms: Date.now() - 2 * 60 * 1000, said: "Read Pull requests" },
+        ],
+        agent: "Claude Code",
+        reach: {
+          type: "windows",
+          windows: [
+            { id: "n1", kind: "native", title: "Notes" },
+            { id: "w1", kind: "browser", title: "Pull requests" },
+          ],
+        },
+      },
+      id: 8,
+      kind: "agent",
+    };
+
+    it("gets a pill of its own, named as it names itself", async () => {
+      const host = new FakeHost();
+      render(<Sharing domicile={sharing(host)} />);
+      host.capture([zoomSharing(DELL), CLAUDE]);
+
+      expect(
+        await screen.findByRole("button", { name: "Sharing screen" }),
+      ).toBeInTheDocument();
+      const pill = await screen.findByRole("button", { name: "Claude Code" });
+      await userEvent.hover(pill);
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent(
+        "Claude Code can see and use Notes and Pull requests",
+      );
+    });
+
+    it("lists what it reaches and did last, and stops it", async () => {
+      const host = new FakeHost();
+      render(<Sharing domicile={sharing(host)} />);
+      host.capture([CLAUDE]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Claude Code" }),
+      );
+
+      expect(
+        await screen.findByText("It can see and use Notes and Pull requests."),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("list", { name: "What Claude Code did" }))
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual(["Clicked in Notesjust now", "Read Pull requests2 min ago"]);
+      await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+      expect(host.answers).toEqual([[8, { kind: "stop" }]]);
+    });
+
+    it("says when it reaches the whole desktop", async () => {
+      const host = new FakeHost();
+      render(<Sharing domicile={sharing(host)} />);
+      host.capture([
+        {
+          ...CLAUDE,
+          body: { ...CLAUDE.body, actions: [], reach: { type: "desk" } },
+        },
+      ]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Claude Code" }),
+      );
+
+      expect(
+        await screen.findByText("It can see and use your whole desktop."),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("goes away when the capture ends", () => {
     const host = new FakeHost();
     render(<Sharing domicile={sharing(host)} />);

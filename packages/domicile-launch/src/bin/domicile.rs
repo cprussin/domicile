@@ -14,6 +14,7 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -22,6 +23,7 @@ use domicile_host::data_dirs::data_dirs;
 use domicile_host::desk_terminal;
 use domicile_host::mime_apps::lists;
 use domicile_launch::accessibility::{self, AtSpi, Element};
+use domicile_launch::agent_lending::{admit, forward_actions, DECIDING_WITHIN};
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, USAGE};
@@ -47,8 +49,8 @@ use domicile_launch::control::{
     answer, Desktop as ControlDesktop, Request, Response, SettingsFiles,
 };
 use domicile_launch::control_socket::{
-    address, advertised, ask, hold, listen, serve_one, take, Control, PATIENCE as ANSWER_WITHIN,
-    VARIABLE,
+    address, advertised, ask, hold, listen, serve_one, take, Control, Lenders,
+    PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::dev::{dev_socket, going_back, loading};
 use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
@@ -221,6 +223,7 @@ fn run() -> Result<ExitCode, String> {
             Ok(ExitCode::from(exit_code(status)))
         }
         Invocation::Mcp => agents_served(),
+        Invocation::Agent { name } => admitted(name),
         Invocation::Accessibility { window } => {
             let (pid, title) = native_window(&window)?;
             let mut bus = AtSpi::connected()?;
@@ -919,6 +922,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         }
         // Only `domicile monitor` asks for this, and holds the connection.
         Response::VirtualMonitor { .. }
+        // Only `domicile agent` asks for this, and holds the connection.
+        | Response::Agent { .. }
         // `subscribed` asks for these.
         | Response::Heard { .. }
         // Only `domicile-app-host` asks for these.
@@ -995,16 +1000,67 @@ fn native_window(id: &str) -> Result<(u32, String), String> {
 
 fn agents_served() -> Result<ExitCode, String> {
     let binary = myself()?;
-    mcp::serve(std::io::stdin().lock(), std::io::stdout().lock(), |args| {
-        let output = Command::new(&binary).args(args).output()?;
-        Ok(mcp::Ran {
-            success: output.status.success(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
-    })
+    mcp::serve(
+        std::io::stdin().lock(),
+        std::io::stdout().lock(),
+        |args| {
+            let output = Command::new(&binary).args(args).output()?;
+            Ok(mcp::Ran {
+                success: output.status.success(),
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            })
+        },
+        |name| let_in(&binary, name),
+    )
     .map_err(|why| format!("mcp: {why}"))?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// Runs `domicile agent name`, which asks the user to let it in, and holds
+/// the agent in for as long as this process runs.
+fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
+    let mut agent = Command::new(binary)
+        .args(["agent", name])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|why| format!("domicile agent did not start: {why}"))?;
+    let mut said = BufReader::new(agent.stdout.take().expect("stdout is piped"));
+    let mut allowed = String::new();
+    let _ = said.read_line(&mut allowed);
+    let reach = match serde_json::from_str(allowed.trim()) {
+        Ok(reach) => reach,
+        Err(_) => {
+            let mut why = String::new();
+            if let Some(mut stderr) = agent.stderr.take() {
+                let _ = std::io::Read::read_to_string(&mut stderr, &mut why);
+            }
+            let _ = agent.wait();
+            return Err(why.trim().trim_start_matches("domicile: ").to_string());
+        }
+    };
+    // It says nothing more: its output ending is the user stopping it.
+    let stopped = Arc::new(AtomicBool::new(false));
+    std::thread::spawn({
+        let stopped = Arc::clone(&stopped);
+        move || {
+            let _ = std::io::copy(&mut said, &mut std::io::sink());
+            stopped.store(true, Ordering::SeqCst);
+        }
+    });
+    // It runs until this process ends, which closes its stdin and lets the
+    // agent go.
+    let mut actions = agent.stdin.take().expect("stdin is piped");
+    Ok(mcp::Grant {
+        reach,
+        stopped: Box::new(move || stopped.load(Ordering::SeqCst)),
+        did: Box::new(move |said| {
+            // Gone once the user stopped it, which the next call says.
+            let _ = writeln!(actions, "{}", said.replace('\n', " "));
+        }),
+    })
 }
 
 fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
@@ -1085,6 +1141,51 @@ fn monitored(name: String, mode: MonitorMode) -> Result<ExitCode, String> {
     });
     forward_sizes(std::io::stdin().lock(), &held, std::io::stderr())
         .map_err(|why| format!("the monitor's sizes did not reach the desktop: {why}"))?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Asks the user to let agent `name` in and prints what they allowed as a
+/// JSON line, then lists each line of stdin as what it did. Ends when stdin
+/// does, which lets it go; fails when the user refuses, or stops it first.
+fn admitted(name: String) -> Result<ExitCode, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    // As long as the user may take to decide.
+    let (answer, held) = hold(
+        &socket,
+        &Request::Agent { agent: name },
+        Some(DECIDING_WITHIN + ANSWER_WITHIN),
+    )
+    .map_err(|why| why.to_string())?;
+    match answer {
+        Response::Agent { reach } => {
+            let mut stdout = std::io::stdout().lock();
+            let _ = writeln!(
+                stdout,
+                "{}",
+                serde_json::to_string(&reach).expect("a reach serializes")
+            )
+            .and_then(|()| stdout.flush());
+        }
+        Response::Refused { why } => {
+            eprintln!("domicile: {why}");
+            return Ok(ExitCode::FAILURE);
+        }
+        answer => return Err(format!("the desktop answered {answer:?} to an agent")),
+    }
+    held.set_read_timeout(None)
+        .map_err(|why| format!("cannot keep the agent in: {why}"))?;
+    let gone = held
+        .try_clone()
+        .map_err(|why| format!("cannot keep the agent in: {why}"))?;
+    // The desktop says nothing more: anything it does is a hang-up.
+    std::thread::spawn(move || {
+        let _ = std::io::Read::read(&mut &gone, &mut [0]);
+        eprintln!("domicile: the agent was stopped from the desktop");
+        std::process::exit(1);
+    });
+    forward_actions(std::io::stdin().lock(), &held)
+        .map_err(|why| format!("the agent's actions did not reach the desktop: {why}"))?;
     Ok(ExitCode::SUCCESS)
 }
 
@@ -1705,6 +1806,7 @@ fn answer_a_command(
 ) {
     let lending = |lent| lend(lent, chrome, ANSWER_WITHIN);
     let following = |subscription| follow(subscription, chrome);
+    let admitting = |admission| admit(admission, chrome, DECIDING_WITHIN);
     if let Err(why) = serve_one(
         stream,
         ANSWER_WITHIN,
@@ -1856,8 +1958,11 @@ fn answer_a_command(
                 },
             )
         },
-        &lending,
-        &following,
+        Lenders {
+            monitor: &lending,
+            subscribe: &following,
+            agent: &admitting,
+        },
     ) {
         eprintln!("domicile: a command went unanswered: {why}");
     }

@@ -105,6 +105,13 @@ const summary = (session: Capturing, name: string): string => {
     // `<PortalDialogs />` gives the shell's recording its own toolbar.
     case CapturingKind.Recording:
       return `Recording: ${session.sources.map((source) => sourceName(source)).join(", ")}`;
+    // An agent names itself; it is not an application the desk knows.
+    case CapturingKind.Agent:
+      return `In control: ${session.agent} — ${
+        session.reach.kind === "desk"
+          ? "your desktop"
+          : session.reach.windows.map((window) => window.title).join(", ")
+      }`;
     case CapturingKind.Unknown:
       return `${session.wireKind}: ${name}`;
   }

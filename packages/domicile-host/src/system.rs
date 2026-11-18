@@ -26,15 +26,16 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 
 use domicile_protocol::{
-    Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice, PreviewedWindow, Scale,
-    Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply,
-    SystemRequest, WindowState,
+    AgentReach, Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
+    PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
+    SystemReply, SystemRequest, WindowState,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::blocking::{Connection, MessageIterator};
@@ -113,6 +114,8 @@ pub struct System {
     shortcuts_inhibitor: Option<ShortcutsInhibitor>,
     /// Adds virtual monitors; `None` on a system that adds none.
     add_virtual_monitor: Option<AddVirtualMonitor>,
+    /// Lets agents in; `None` on a system that lets none in.
+    let_agent: Option<LetAgent>,
     /// Sets every monitor's white point; `None` on a system that sets none.
     set_white_point: Option<SetWhitePoint>,
     /// Turns the monitors off and on; `None` on a system that powers none.
@@ -146,6 +149,28 @@ pub trait MonitorLease: Send {
     /// Gives the monitor a new mode. See
     /// [`SystemRequest::ResizeVirtualMonitor`].
     fn resize(&self, size: (u32, u32), refresh_mhz: u32, scale: Scale);
+}
+
+/// Asks the user whether agent `agent` may see and use the desk, and lists
+/// it while it may. Blocks while the user decides. The [`AgentStopped`] runs
+/// if the shell stops it. See [`SystemRequest::Agent`].
+pub type LetAgent = Arc<dyn Fn(String, AgentStopped) -> Result<LetIn, SystemError> + Send + Sync>;
+
+/// Runs once when the shell stops an agent it let in.
+pub type AgentStopped = Box<dyn FnOnce() + Send>;
+
+/// An agent the user let in.
+pub struct LetIn {
+    pub reach: AgentReach,
+    pub lease: Box<dyn AgentLease>,
+}
+
+/// A page's hold on the agent it let in, which takes it off the shell's list
+/// when dropped.
+pub trait AgentLease: Send {
+    /// Lists `said` as what the agent did last. See
+    /// [`SystemRequest::AgentDid`].
+    fn did(&self, said: String);
 }
 
 /// Switches every keyboard to the keymap a page chose.
@@ -215,6 +240,8 @@ enum Running {
     Listening(Listener),
     /// The page's virtual monitor, removed when this drops.
     VirtualMonitor(Box<dyn MonitorLease>),
+    /// The agent the page let in, taken off the shell's list when this drops.
+    Agent(Box<dyn AgentLease>),
 }
 
 /// What [`System::handle`] did with a request.
@@ -315,7 +342,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::SendShell { .. }
-        | SystemRequest::VirtualMonitor { .. } => Reach::Acts,
+        | SystemRequest::VirtualMonitor { .. }
+        | SystemRequest::Agent { .. }
+        | SystemRequest::AgentDid { .. } => Reach::Acts,
     }
 }
 
@@ -353,6 +382,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::WindowRequests
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
+        | SystemRequest::Agent { .. }
         | SystemRequest::Keymaps
         | SystemRequest::SelectKeymap { .. }
         | SystemRequest::ShortcutsInhibitor { .. } => Some(HostMessage::SystemReply {
@@ -368,7 +398,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::Stdin { .. }
         | SystemRequest::CloseStdin
         | SystemRequest::Kill { .. }
-        | SystemRequest::ResizeVirtualMonitor { .. } => None,
+        | SystemRequest::ResizeVirtualMonitor { .. }
+        | SystemRequest::AgentDid { .. } => None,
     }
 }
 
@@ -410,6 +441,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::ResizeVirtualMonitor { .. }
+        | SystemRequest::Agent { .. }
+        | SystemRequest::AgentDid { .. }
         | SystemRequest::Keymaps
         | SystemRequest::SelectKeymap { .. }
         | SystemRequest::ShortcutsInhibitor { .. } => Some(HostMessage::SystemReply {
@@ -458,6 +491,7 @@ impl System {
             window_requests: WindowRequests::default(),
             bells: Bells::default(),
             add_virtual_monitor: None,
+            let_agent: None,
             keymaps: Keymaps::default(),
             select_keymap: None,
             shortcuts_inhibitor: None,
@@ -563,6 +597,15 @@ impl System {
         add: impl Fn(VirtualMonitor) -> Result<AddedMonitor, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.add_virtual_monitor = Some(Arc::new(add));
+        self
+    }
+
+    /// This system, letting agents in through `let_agent`.
+    pub fn letting_agents_in_with(
+        mut self,
+        let_agent: impl Fn(String, AgentStopped) -> Result<LetIn, SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.let_agent = Some(Arc::new(let_agent));
         self
     }
 
@@ -812,6 +855,15 @@ impl System {
                         drop(lease);
                         Handled::Done
                     }
+                    Some(Running::Agent(lease)) => {
+                        (self.tell)(HostMessage::SystemEnd {
+                            id,
+                            end: SystemEnd::Stopped,
+                        });
+                        drop(running);
+                        drop(lease);
+                        Handled::Done
+                    }
                     Some(process) => {
                         running.insert(id, process);
                         Handled::Malformed
@@ -857,7 +909,8 @@ impl System {
                     Running::Watch(_)
                     | Running::Match(_)
                     | Running::Listening(_)
-                    | Running::VirtualMonitor(_),
+                    | Running::VirtualMonitor(_)
+                    | Running::Agent(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
@@ -873,7 +926,8 @@ impl System {
                     Running::Watch(_)
                     | Running::Match(_)
                     | Running::Listening(_)
-                    | Running::VirtualMonitor(_),
+                    | Running::VirtualMonitor(_)
+                    | Running::Agent(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
@@ -1059,6 +1113,15 @@ impl System {
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
+            SystemRequest::Agent { agent } => self.letting_in(id, agent),
+            SystemRequest::AgentDid { said } => match self.running.lock().unwrap().get(&id) {
+                Some(Running::Agent(lease)) => {
+                    lease.did(said);
+                    Handled::Done
+                }
+                Some(_) => Handled::Malformed,
+                None => Handled::NothingRunning,
+            },
             SystemRequest::SetColorTemperature { kelvin, display } => {
                 let reply = match (&self.set_white_point, (WARMEST..=NEUTRAL).contains(&kelvin)) {
                     (_, false) => failed(SystemError {
@@ -1291,6 +1354,87 @@ impl System {
         })
     }
 
+    /// Ask the user to let agent `agent` in, on a thread, and hold it under
+    /// `id` while it is in.
+    fn letting_in(&self, id: u32, agent: String) -> Handled {
+        let fail = |message: String, kind| {
+            (self.tell)(HostMessage::SystemReply {
+                id,
+                reply: failed(SystemError { kind, message }),
+            });
+            Handled::Done
+        };
+        let Some(let_agent) = self.let_agent.clone() else {
+            return fail(
+                "this desktop lets in no agents".into(),
+                SystemErrorKind::Other,
+            );
+        };
+        if self.running.lock().unwrap().contains_key(&id) {
+            return fail(
+                format!("{id} is already running"),
+                SystemErrorKind::InvalidInput,
+            );
+        }
+        let (tell, running) = (self.tell.clone(), Arc::downgrade(&self.running));
+        thread::spawn(move || {
+            // Set before the stop looks for the lease, so a stop that comes
+            // before the lease is held still ends it.
+            let stopped = Arc::new(AtomicBool::new(false));
+            let stop: AgentStopped = {
+                let (tell, running, stopped) = (tell.clone(), running.clone(), stopped.clone());
+                Box::new(move || {
+                    stopped.store(true, Ordering::SeqCst);
+                    let Some(running) = running.upgrade() else {
+                        return;
+                    };
+                    let mut running = running.lock().unwrap();
+                    if let Some(Running::Agent(lease)) = running.remove(&id) {
+                        tell(HostMessage::SystemEnd {
+                            id,
+                            end: SystemEnd::Stopped,
+                        });
+                        drop(running);
+                        drop(lease);
+                    }
+                })
+            };
+            let let_in = match let_agent(agent, stop) {
+                Ok(let_in) => let_in,
+                Err(error) => {
+                    tell(HostMessage::SystemReply {
+                        id,
+                        reply: failed(error),
+                    });
+                    return;
+                }
+            };
+            // The page went away while the user decided; dropping the lease
+            // takes the agent off the list.
+            let Some(running) = running.upgrade() else {
+                return;
+            };
+            let mut running = running.lock().unwrap();
+            tell(HostMessage::SystemReply {
+                id,
+                reply: SystemReply::Agent {
+                    reach: let_in.reach,
+                },
+            });
+            if stopped.load(Ordering::SeqCst) {
+                tell(HostMessage::SystemEnd {
+                    id,
+                    end: SystemEnd::Stopped,
+                });
+                drop(running);
+                drop(let_in.lease);
+            } else {
+                running.insert(id, Running::Agent(let_in.lease));
+            }
+        });
+        Handled::Done
+    }
+
     fn starting(
         &self,
         id: u32,
@@ -1452,6 +1596,7 @@ impl Drop for System {
                 }
                 Running::Listening(listener) => drop(listener),
                 Running::VirtualMonitor(lease) => drop(lease),
+                Running::Agent(lease) => drop(lease),
             }
         }
     }

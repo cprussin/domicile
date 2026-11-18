@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::cli::MonitorMode;
-use crate::control::{parse_response, to_line, Lent, Request, Response, Subscription};
+use crate::control::{parse_response, to_line, Admission, Lent, Request, Response, Subscription};
 
 /// How long either end waits for the other.
 ///
@@ -133,27 +133,31 @@ pub fn answer_one(
     serve(stream, patience, answer, None)
 }
 
-/// [`answer_one`], lending the connection of a [`Request::VirtualMonitor`]
-/// to `lend`, and of a [`Request::Subscribe`] to `subscribe`, which hold it
-/// as long as the client keeps it open.
-///
-/// `lend` is [`crate::monitor_lending::lend`] and `subscribe`
-/// [`crate::subscription::follow`] in a desktop.
+/// [`answer_one`], lending the connection of a [`Request::VirtualMonitor`],
+/// a [`Request::Subscribe`] or a [`Request::Agent`] to `lenders`, which hold
+/// it as long as the client keeps it open.
 pub fn serve_one(
     stream: UnixStream,
     patience: Duration,
     answer: &dyn Fn(&str) -> String,
-    lend: &dyn Fn(Lent),
-    subscribe: &dyn Fn(Subscription),
+    lenders: Lenders,
 ) -> std::io::Result<()> {
-    serve(stream, patience, answer, Some((lend, subscribe)))
+    serve(stream, patience, answer, Some(lenders))
 }
 
-/// The lenders [`serve_one`] takes.
-type Lenders<'a> = (&'a dyn Fn(Lent), &'a dyn Fn(Subscription));
+/// What [`serve_one`] lends held connections to. In a desktop, `monitor` is
+/// [`crate::monitor_lending::lend`], `subscribe`
+/// [`crate::subscription::follow`] and `agent`
+/// [`crate::agent_lending::admit`].
+#[derive(Clone, Copy)]
+pub struct Lenders<'a> {
+    pub monitor: &'a dyn Fn(Lent),
+    pub subscribe: &'a dyn Fn(Subscription),
+    pub agent: &'a dyn Fn(Admission),
+}
 
-/// [`serve_one`]; with no lenders, `answer` refuses a monitor and a
-/// subscription.
+/// [`serve_one`]; with no lenders, `answer` refuses a monitor, a
+/// subscription and an agent.
 fn serve(
     stream: UnixStream,
     patience: Duration,
@@ -165,45 +169,57 @@ fn serve(
     let mut asking = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
     asking.read_line(&mut line)?;
-    if let (Some((_, subscribe)), Ok(Request::Subscribe { topics })) =
-        (lenders, serde_json::from_str(line.trim()))
-    {
-        // The client listens for as long as it likes.
-        stream.set_read_timeout(None)?;
-        stream.set_write_timeout(None)?;
-        subscribe(Subscription {
-            topics,
-            client: stream,
-        });
-        return Ok(());
-    }
-    if let (
-        Some((lend, _)),
+    let Some(lenders) = lenders else {
+        let mut answering = stream;
+        return answering.write_all(answer(&line).as_bytes());
+    };
+    match serde_json::from_str(line.trim()) {
+        Ok(Request::Subscribe { topics }) => {
+            // The client listens for as long as it likes.
+            stream.set_read_timeout(None)?;
+            stream.set_write_timeout(None)?;
+            (lenders.subscribe)(Subscription {
+                topics,
+                client: stream,
+            });
+            Ok(())
+        }
         Ok(Request::VirtualMonitor {
             name,
             width,
             height,
             refresh_mhz,
             scale,
-        }),
-    ) = (lenders, serde_json::from_str(line.trim()))
-    {
-        // The client resizes it whenever it likes.
-        stream.set_read_timeout(None)?;
-        lend(Lent {
-            name,
-            mode: MonitorMode {
-                size: (width, height),
-                refresh_mhz,
-                scale,
-            },
-            lines: asking,
-            client: stream,
-        });
-        return Ok(());
+        }) => {
+            // The client resizes it whenever it likes.
+            stream.set_read_timeout(None)?;
+            (lenders.monitor)(Lent {
+                name,
+                mode: MonitorMode {
+                    size: (width, height),
+                    refresh_mhz,
+                    scale,
+                },
+                lines: asking,
+                client: stream,
+            });
+            Ok(())
+        }
+        Ok(Request::Agent { agent }) => {
+            // The client says what the agent did whenever it likes.
+            stream.set_read_timeout(None)?;
+            (lenders.agent)(Admission {
+                agent,
+                lines: asking,
+                client: stream,
+            });
+            Ok(())
+        }
+        _ => {
+            let mut answering = stream;
+            answering.write_all(answer(&line).as_bytes())
+        }
     }
-    let mut answering = stream;
-    answering.write_all(answer(&line).as_bytes())
 }
 
 /// Why a request to a desktop failed.

@@ -1446,6 +1446,123 @@ describe("PortalDialogs", () => {
     });
   });
 
+  describe("agent", () => {
+    const agent = (id: number) => ({
+      app_id: "",
+      body: {
+        agent: "Claude Code",
+        windows: [
+          { id: "n1", kind: "native", title: "Notes" },
+          { id: "w1", kind: "browser", title: "Pull requests" },
+          { id: "n2", kind: "native", title: "" },
+        ],
+      },
+      id,
+      kind: "agent",
+    });
+
+    it("asks in the agent's own name, offering the entire desktop first", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Let Claude Code use your desktop?",
+      );
+      expect(
+        screen.getByRole("radio", { name: /Entire desktop/u }),
+      ).toBeChecked();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    });
+
+    it("lets the entire desktop in", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([
+        [1, { kind: "agent", reach: { type: "desk" } }],
+      ]);
+    });
+
+    it("lists the windows, none checked, under only these windows", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: /Only these windows/u }),
+      );
+
+      const windows = screen.getAllByRole("checkbox");
+      expect(windows.map((window) => window.textContent)).toEqual([
+        "NotesWindow",
+        "Pull requestsBrowser",
+        "Untitled windowWindow",
+      ]);
+      for (const window of windows) {
+        expect(window).not.toBeChecked();
+      }
+      expect(screen.getByRole("button", { name: "Allow" })).toBeDisabled();
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Private windows are never shared.",
+      );
+    });
+
+    it("lets only the checked windows in", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: /Only these windows/u }),
+      );
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: /Pull requests/u }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            kind: "agent",
+            reach: {
+              type: "windows",
+              windows: [{ id: "w1", kind: "browser", title: "Pull requests" }],
+            },
+          },
+        ],
+      ]);
+    });
+
+    it("cancels", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([agent(1)]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+    });
+
+    it("is listed while in control, unless the shell shows agents itself", () => {
+      const session = {
+        app_id: "",
+        body: { actions: [], agent: "Claude Code", reach: { type: "desk" } },
+        id: 9,
+        kind: "agent",
+      };
+      const host = new FakeHost();
+      const { rerender } = render(<PortalDialogs domicile={host.domicile} />);
+      host.push([], [session]);
+      expect(screen.getByRole("listitem")).toHaveTextContent(
+        "In control: Claude Code — your desktop",
+      );
+
+      rerender(<PortalDialogs domicile={host.domicile} omitAgents />);
+      expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+    });
+  });
+
   describe("input capture", () => {
     it("names the application and the devices it would take", () => {
       const host = new FakeHost();

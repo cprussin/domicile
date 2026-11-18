@@ -9,8 +9,8 @@ use std::time::Duration;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::control::{Request, Response};
 use domicile_launch::control_socket::{
-    address, advertised, answer_one, ask, hold, listen, serve_one, take, AskError, NotInADesktop,
-    TakeError,
+    address, advertised, answer_one, ask, hold, listen, serve_one, take, AskError, Lenders,
+    NotInADesktop, TakeError,
 };
 use domicile_protocol::{HostMessage, Scale, Theme, WatchTopic};
 
@@ -400,22 +400,70 @@ fn a_virtual_monitor_is_lent_the_connection_it_came_on() {
         stream,
         BRIEFLY,
         &|_| unreachable!("a monitor is lent, not answered"),
-        &|mut lent| {
-            assert_eq!(lent.name, "Pane");
-            assert_eq!(
-                lent.mode,
-                MonitorMode {
-                    size: (1280, 720),
-                    refresh_mhz: 60_000,
-                    scale: Scale::try_from(2.0).expect("a scale"),
-                }
-            );
-            let mut next = String::new();
-            lent.lines.read_line(&mut next).expect("the client went on");
-            assert!(next.contains("resize_virtual_monitor"), "{next}");
-            lent.client.write_all(b"lent\n").expect("the client hears");
+        Lenders {
+            monitor: &|mut lent| {
+                assert_eq!(lent.name, "Pane");
+                assert_eq!(
+                    lent.mode,
+                    MonitorMode {
+                        size: (1280, 720),
+                        refresh_mhz: 60_000,
+                        scale: Scale::try_from(2.0).expect("a scale"),
+                    }
+                );
+                let mut next = String::new();
+                lent.lines.read_line(&mut next).expect("the client went on");
+                assert!(next.contains("resize_virtual_monitor"), "{next}");
+                lent.client.write_all(b"lent\n").expect("the client hears");
+            },
+            subscribe: &|_| unreachable!("a monitor is not a subscription"),
+            agent: &|_| unreachable!("a monitor is not an agent"),
         },
-        &|_| unreachable!("a monitor is not a subscription"),
+    )
+    .expect("the desktop lent it");
+
+    let mut heard = String::new();
+    BufReader::new(client)
+        .read_line(&mut heard)
+        .expect("the client heard back");
+    assert_eq!(heard, "lent\n");
+}
+
+#[test]
+fn an_agent_is_lent_the_connection_it_came_on() {
+    let (_scratch, path) = scratch();
+    let control = take(&path).expect("nothing was there");
+    let listener = control.listener().expect("the run's own listener");
+    let mut client = UnixStream::connect(&path).expect("a client");
+    client
+        .write_all(
+            b"{\"type\":\"agent\",\"agent\":\"Claude Code\"}\n\
+              {\"type\":\"agent_did\",\"said\":\"Clicked\"}\n",
+        )
+        .expect("it asked, then said what it did");
+    let (stream, _) = listener.accept().expect("the desktop took the connection");
+
+    serve_one(
+        stream,
+        BRIEFLY,
+        &|_| unreachable!("an agent is lent, not answered"),
+        Lenders {
+            monitor: &|_| unreachable!("an agent is not a monitor"),
+            subscribe: &|_| unreachable!("an agent is not a subscription"),
+            agent: &|mut admission| {
+                assert_eq!(admission.agent, "Claude Code");
+                let mut next = String::new();
+                admission
+                    .lines
+                    .read_line(&mut next)
+                    .expect("the client went on");
+                assert!(next.contains("agent_did"), "{next}");
+                admission
+                    .client
+                    .write_all(b"lent\n")
+                    .expect("the client hears");
+            },
+        },
     )
     .expect("the desktop lent it");
 
@@ -480,16 +528,19 @@ fn a_subscription_is_lent_the_connection_it_came_on() {
         stream,
         BRIEFLY,
         &|_| unreachable!("a subscription is lent, not answered"),
-        &|_| unreachable!("a subscription is not a monitor"),
-        &|mut subscription| {
-            assert_eq!(
-                subscription.topics,
-                vec![WatchTopic::Windows, WatchTopic::Status]
-            );
-            subscription
-                .client
-                .write_all(b"lent\n")
-                .expect("the client hears");
+        Lenders {
+            monitor: &|_| unreachable!("a subscription is not a monitor"),
+            subscribe: &|mut subscription| {
+                assert_eq!(
+                    subscription.topics,
+                    vec![WatchTopic::Windows, WatchTopic::Status]
+                );
+                subscription
+                    .client
+                    .write_all(b"lent\n")
+                    .expect("the client hears");
+            },
+            agent: &|_| unreachable!("a subscription is not an agent"),
         },
     )
     .expect("the desktop lent it");

@@ -2468,3 +2468,179 @@ mod virtual_monitors {
         assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
     }
 }
+
+/// Agents a caller asks the user to let in, such as `domicile agent`'s.
+mod agents {
+    use std::sync::mpsc::Sender;
+    use std::sync::{Arc, Mutex};
+
+    use domicile_host::system::{AgentLease, AgentStopped, LetIn};
+    use domicile_protocol::{AgentReach, SystemError};
+
+    use super::*;
+
+    fn claude() -> SystemRequest {
+        SystemRequest::Agent {
+            agent: "Claude Code".into(),
+        }
+    }
+
+    /// Says on `did` what the agent did, and on `gone` when it drops, as the
+    /// compositor takes it off the shell's list.
+    struct Lease {
+        did: Sender<String>,
+        gone: Sender<()>,
+    }
+
+    impl AgentLease for Lease {
+        fn did(&self, said: String) {
+            self.did.send(said).unwrap();
+        }
+    }
+
+    impl Drop for Lease {
+        fn drop(&mut self) {
+            let _ = self.gone.send(());
+        }
+    }
+
+    /// What a system that lets agents in heard, and the shell's stop.
+    struct Asked {
+        named: Receiver<String>,
+        did: Receiver<String>,
+        gone: Receiver<()>,
+        stop: Arc<Mutex<Option<AgentStopped>>>,
+    }
+
+    /// A system whose user answers each agent with `answer`.
+    fn letting(
+        system: System,
+        answer: impl Fn() -> Result<AgentReach, SystemError> + Send + Sync + 'static,
+    ) -> (System, Asked) {
+        let (named_one, named) = channel();
+        let (did_one, did) = channel();
+        let (gone_one, gone) = channel();
+        let stop = Arc::new(Mutex::new(None));
+        let held = stop.clone();
+        let system = system.letting_agents_in_with(move |agent, stop| {
+            named_one.send(agent).unwrap();
+            *held.lock().unwrap() = Some(stop);
+            Ok(LetIn {
+                reach: answer()?,
+                lease: Box::new(Lease {
+                    did: did_one.clone(),
+                    gone: gone_one.clone(),
+                }),
+            })
+        });
+        (
+            system,
+            Asked {
+                named,
+                did,
+                gone,
+                stop,
+            },
+        )
+    }
+
+    #[test]
+    fn an_agent_let_in_lists_what_it_did_until_its_caller_lets_go() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, asked) = letting(system, || Ok(AgentReach::Desk));
+
+        system.handle(1, claude());
+
+        assert_eq!(
+            reply(&heard, 1),
+            SystemReply::Agent {
+                reach: AgentReach::Desk
+            }
+        );
+        assert_eq!(asked.named.recv().unwrap(), "Claude Code");
+        assert_eq!(
+            system.handle(
+                1,
+                SystemRequest::AgentDid {
+                    said: "Clicked".into()
+                }
+            ),
+            Handled::Done
+        );
+        assert_eq!(asked.did.recv().unwrap(), "Clicked");
+
+        system.handle(1, SystemRequest::Unwatch);
+
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 1,
+                end: SystemEnd::Stopped,
+            }
+        );
+        asked.gone.recv().unwrap();
+    }
+
+    #[test]
+    fn the_shell_stopping_an_agent_ends_its_call() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, asked) = letting(system, || Ok(AgentReach::Desk));
+        system.handle(1, claude());
+        reply(&heard, 1);
+
+        let stop = asked.stop.lock().unwrap().take().unwrap();
+        stop();
+
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 1,
+                end: SystemEnd::Stopped,
+            }
+        );
+        asked.gone.recv().unwrap();
+        assert_eq!(
+            system.handle(
+                1,
+                SystemRequest::AgentDid {
+                    said: "late".into()
+                }
+            ),
+            Handled::NothingRunning
+        );
+    }
+
+    #[test]
+    fn an_agent_the_user_cancels_fails_its_call() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, _asked) = letting(system, || {
+            Err(SystemError {
+                kind: SystemErrorKind::Canceled,
+                message: "canceled".into(),
+            })
+        });
+
+        system.handle(1, claude());
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Canceled);
+    }
+
+    #[test]
+    fn a_system_that_lets_no_agents_in_says_so() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+
+        system.handle(1, claude());
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+
+    #[test]
+    fn an_agent_acts_and_is_refused_to_apps_and_while_locked() {
+        assert_eq!(reach(&claude()), Reach::Acts);
+        assert!(locked_out(1, &claude()).is_some());
+        assert!(refused_to_an_app(1, &claude()).is_some());
+        let did = SystemRequest::AgentDid { said: "x".into() };
+        assert_eq!(locked_out(1, &did), None);
+        assert!(refused_to_an_app(1, &did).is_some());
+    }
+}
