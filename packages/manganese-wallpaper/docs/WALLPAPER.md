@@ -28,7 +28,10 @@ A photograph behind the whole desktop, changing every minute. Source:
 - **Paths** are read through `domicile.files` only while mounted, so at most
   three photos are held at once.
 - **Built-in photos**: `photos.ts` lists Wikimedia Commons files by title,
-  fetched via `Special:FilePath?width=3840`. Each is public domain or CC0, so
+  fetched via `Special:FilePath?width=3840`. Their `srcset` also offers
+  `width=1920`, and `sizes` is what covering each screen takes, so a 1080p
+  screen fetches and decodes a quarter of the pixels. Commons serves only
+  set widths and rounds others up. Each is public domain or CC0, so
   no credit line is needed. Each was checked for:
   - at least 3840px wide, landscape;
   - brightness that suits its theme: mostly dark with few bright areas for

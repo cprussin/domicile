@@ -51,6 +51,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 ### Fixes
 
 - Ctrl+C and Escape work when you select an area on screen for a screenshot or a share.
+- The wallpaper takes less memory on screens smaller than 4K: it downloads each photo only as large as your screens show it.
 - Screenshot, share and other dialogs fade out when you answer them, instead of vanishing.
 - A site's notifications show the site's icon instead of the browser's.
 - A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [#2284](https://github.com/cprussin/domicile/pull/2284)

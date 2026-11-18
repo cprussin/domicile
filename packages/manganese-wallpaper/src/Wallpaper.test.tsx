@@ -305,6 +305,23 @@ describe("Wallpaper", () => {
     }
   });
 
+  it("fetches each photograph only as wide as its screen needs", () => {
+    // A 4K photograph decoded for a 1080p screen holds four times the memory
+    // it shows.
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} theme="dark" />,
+      { wrapper: OnOneScreen },
+    );
+
+    const photographs = [
+      ...rotation(container, "dark").querySelectorAll("img[srcset]"),
+    ];
+    expect(photographs.length).toBe(2);
+    for (const photograph of photographs) {
+      expect(photograph.getAttribute("sizes")).toBe("1920px");
+    }
+  });
+
   // Windows hidden behind a tab sit at this depth. A wallpaper above them
   // would show through a window opening or closing in front of one.
   it("sits at the depth a window a tab hides is drawn at", () => {
