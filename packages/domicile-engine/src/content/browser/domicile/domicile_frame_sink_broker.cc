@@ -580,22 +580,11 @@ class DomicileBrowserService : public content::GpuDataManagerObserver,
     }
   }
 
-  // Forwards the browser windows a capture tool lists to the producer.
+  // Forwards the browser windows a capture tool lists to the producer, each
+  // with the views it holds and shows.
   void BrowserWindowsChanged() {
-    std::vector<domicile::mojom::ListedBrowserWindowPtr> windows;
-    for (domicile::ListedBrowserWindow& window :
-         domicile::ListedBrowserWindows()) {
-      if (window.view || window.hidden) {
-        continue;
-      }
-      windows.push_back(domicile::mojom::ListedBrowserWindow::New(
-          std::move(window.id),
-          window.app_title.empty() ? std::move(window.title)
-                                   : std::move(window.app_title),
-          std::move(window.app_id), std::move(window.url),
-          window.off_the_record));
-    }
-    broker_.OnBrowserWindowsChanged(std::move(windows));
+    broker_.OnBrowserWindowsChanged(
+        domicile::ForCaptureTools(domicile::ListedBrowserWindows()));
   }
 
   // Forwards the input devices the browser reads to the producer.

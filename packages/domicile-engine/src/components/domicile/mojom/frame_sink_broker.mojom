@@ -259,6 +259,17 @@ interface DisplayListObserver {
   OnDisplaysChanged(array<Display> displays);
 };
 
+// An Electron app's view a listed browser window holds: its page, placed by
+// the app in the window's page, in that page's CSS pixels.
+struct ListedBrowserView {
+  // As `CaptureBrowserWindow` takes it.
+  string id;
+  int32 x;
+  int32 y;
+  int32 width;
+  int32 height;
+};
+
 // A browser window, as a capture tool lists it. See
 // components/domicile/browser/browser_window_listing.h.
 struct ListedBrowserWindow {
@@ -273,6 +284,9 @@ struct ListedBrowserWindow {
   string url;
   // Whether it is a private window.
   bool off_the_record;
+  // The views it holds and shows, bottom first: an Electron app's
+  // `WebContentsView`s, which a shot of the window draws over its page.
+  array<ListedBrowserView> views;
 };
 
 // Tells a producer which browser windows are open, so it can list them for

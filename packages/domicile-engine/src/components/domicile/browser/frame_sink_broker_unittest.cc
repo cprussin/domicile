@@ -364,6 +364,58 @@ std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
   return displays;
 }
 
+TEST(ForCaptureToolsTest, ListsShownWindowsWithTheViewsTheyHoldBottomFirst) {
+  std::vector<mojom::ListedBrowserWindowPtr> listed = ForCaptureTools({
+      ListedBrowserWindow{.id = "1",
+                          .title = "Claude",
+                          .app_title = "Claude",
+                          .app_id = "claude-desktop"},
+      ListedBrowserWindow{.id = "2",
+                          .title = "Chat",
+                          .view = true,
+                          .parent = "1",
+                          .x = 0,
+                          .y = 40,
+                          .width = 800,
+                          .height = 560,
+                          .stack = 1},
+      ListedBrowserWindow{.id = "3",
+                          .title = "Sidebar",
+                          .view = true,
+                          .parent = "1",
+                          .width = 200,
+                          .height = 600},
+      // Neither a view no window shows, a view with no area nor a hidden
+      // window is listed.
+      ListedBrowserWindow{.id = "4", .view = true},
+      ListedBrowserWindow{
+          .id = "7", .view = true, .parent = "1", .width = 800, .height = 0},
+      ListedBrowserWindow{.id = "5", .title = "Tray", .hidden = true},
+      ListedBrowserWindow{.id = "6", .title = "Mail", .off_the_record = true},
+  });
+
+  ASSERT_EQ(listed.size(), 2u);
+  EXPECT_EQ(listed[0]->id, "1");
+  EXPECT_EQ(listed[0]->title, "Claude");
+  ASSERT_EQ(listed[0]->views.size(), 2u);
+  EXPECT_EQ(listed[0]->views[0],
+            mojom::ListedBrowserView::New("3", 0, 0, 200, 600));
+  EXPECT_EQ(listed[0]->views[1],
+            mojom::ListedBrowserView::New("2", 0, 40, 800, 560));
+  EXPECT_EQ(listed[1]->id, "6");
+  EXPECT_TRUE(listed[1]->off_the_record);
+  EXPECT_TRUE(listed[1]->views.empty());
+}
+
+TEST(ForCaptureToolsTest, AWindowIsTitledByItsAppOverItsPage) {
+  std::vector<mojom::ListedBrowserWindowPtr> listed =
+      ForCaptureTools({ListedBrowserWindow{
+          .id = "1", .title = "claude.ai", .app_title = "Claude"}});
+
+  ASSERT_EQ(listed.size(), 1u);
+  EXPECT_EQ(listed[0]->title, "Claude");
+}
+
 }  // namespace
 
 class FrameSinkBrokerTest : public testing::Test {
@@ -1749,9 +1801,9 @@ TEST_F(FrameSinkBrokerTest, AnUnchangedCompositingModeIsNotSentAgain) {
 
 TEST_F(FrameSinkBrokerTest, AnObserverHearsTheBrowserWindowsThenEachChange) {
   std::vector<mojom::ListedBrowserWindowPtr> windows;
-  windows.push_back(mojom::ListedBrowserWindow::New("1", "Mail", "",
-                                                    "https://mail.example/",
-                                                    true));
+  windows.push_back(mojom::ListedBrowserWindow::New(
+      "1", "Mail", "", "https://mail.example/", true,
+      std::vector<mojom::ListedBrowserViewPtr>()));
   broker()->OnBrowserWindowsChanged(std::move(windows));
 
   mojo::Remote<mojom::FrameSinkBroker> remote;

@@ -251,6 +251,8 @@ impl DomicileCompositor {
                             })
                             .collect(),
                     );
+                    let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
+                    self.casting.browser_windows(&windows, capturer);
                     let listed = self.foreign_toplevels.browser_windows(&windows);
                     self.browser_toplevels_listed(listed);
                 }
@@ -266,6 +268,7 @@ impl DomicileCompositor {
                     self.engine_disconnected = true;
                     // Its windows went with it.
                     self.hub.host.lock().unwrap().browser_windows(Vec::new());
+                    self.casting.browser_windows(&[], None);
                     let listed = self.foreign_toplevels.browser_windows(&[]);
                     self.browser_toplevels_listed(listed);
                 }

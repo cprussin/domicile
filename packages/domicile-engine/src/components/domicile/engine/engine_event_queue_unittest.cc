@@ -142,7 +142,10 @@ TEST(EngineEventQueueTest, TheBrowserWindowsArriveWholeAcrossTheQueue) {
                           .app_id = "mail",
                           .url = "https://mail.example/",
                           .off_the_record = true});
-  pushed.browser_windows.push_back(EngineBrowserWindow{.id = "5"});
+  pushed.browser_windows.push_back(EngineBrowserWindow{
+      .id = "5",
+      .views = {EngineBrowserView{
+          .id = "6", .x = 0, .y = 40, .width = 800, .height = 560}}});
   queue.Push(pushed);
 
   const std::vector<EngineEvent> drained = queue.Drain();
@@ -158,6 +161,10 @@ TEST(EngineEventQueueTest, TheBrowserWindowsArriveWholeAcrossTheQueue) {
   EXPECT_FALSE(drained[0].browser_windows[1].off_the_record);
   EXPECT_EQ(drained[0].browser_windows[1].id, "5");
   EXPECT_EQ(drained[0].browser_windows[1].title, "");
+  EXPECT_TRUE(drained[0].browser_windows[0].views.empty());
+  EXPECT_EQ(drained[0].browser_windows[1].views,
+            (std::vector<EngineBrowserView>{EngineBrowserView{
+                .id = "6", .x = 0, .y = 40, .width = 800, .height = 560}}));
 }
 
 TEST(EngineEventQueueTest, TheInputDevicesArriveWholeAcrossTheQueue) {

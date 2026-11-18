@@ -299,6 +299,14 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     shot is the page alone: no address bar, title bar or anything over it.
     One not on screen, such as a tab behind another, is offered too: the
     capture keeps its page drawing.
+  - An Electron app's window is shot with the views it holds and shows
+    (`WebContentsView`, such as Claude's whole chat), each captured on its
+    own and drawn over the page where the app placed it, bottom first. The
+    engine lists each window's views with their places to the compositor
+    (`viewed_browser_windows`). A failed view capture fails the shot. A
+    screen cast of the window draws them the same way, and follows the app
+    as it adds, moves and drops views; a view that closes leaves the cast,
+    and one whose capture fails ends it.
   - The frontend checks the `PermissionStore` for a non-interactive
     screenshot (`permission_store_checked`). Without that, the backend asks
     through an `Access` dialog once per app and keeps the answer in the same
