@@ -441,6 +441,18 @@ on a wrong answer, such as `getFocusedWindow()` always `null`) or `honest`
 (right on Domicile, such as `setPosition`, since the desktop places
 windows), with why. A new stub, or one that went, fails until it is filed.
 
+A preload's side is held the same way. The surface also lists what
+`electron.d.ts` gives a renderer, its `electron` modules without what only
+the main process has, and what Electron adds to `process`.
+`preload-coverage.test.ts` runs the engine's own preload bootstrap
+(`kBootstrap` in `electron_preload.cc`) with stand-ins for its natives and
+holds what a sandboxed preload gets against
+`src/__integration__/preload-coverage.json`: each name it finds `undefined`
+for ("absent") or that throws that it doesn't work on Domicile yet
+("unsupported"). Its stubs are filed in `stubs.json` too, named
+`preload <module>.<member>`. The weekly pull request carries this list as
+well.
+
 What the host has is real where the engine can do it and a stated answer
 where the shell owns it: window state reads as shown and normal, because
 the shell lays windows out, and `globalShortcut` refuses with a warning,

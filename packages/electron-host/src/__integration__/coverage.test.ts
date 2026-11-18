@@ -10,37 +10,15 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env } from "node:process";
-import { z } from "zod";
 import { writeAsar } from "../asar-fixture";
 import { startFakeDesktopBus } from "../desktop-bus-fixture";
 import { ELECTRON_INSTANCES, ELECTRON_SURFACE } from "../electron/surface";
 import type { FakeEngine } from "../engine-fixture";
 import { startFakeEngine } from "../engine-fixture";
+import { CONSTANT, decidedStubs } from "./stubs";
 
 const MAIN = join(import.meta.dir, "../main.ts");
 const COVERAGE = join(import.meta.dir, "coverage.json");
-const STUBS = join(import.meta.dir, "stubs.json");
-
-/**
- * stubs.json: each member that answers a constant, under `lies` when an app
- * acts on a wrong answer, or `honest` when the answer is right on Domicile,
- * each with why.
- */
-const StubDecisions = z.object({
-  honest: z.record(z.string(), z.string()),
-  lies: z.record(z.string(), z.string()),
-});
-
-/**
- * A function whose whole body is one constant, as `() => false`, in Bun's
- * transpiled source: an answer that doesn't depend on anything.
- */
-const VALUE =
-  /(false|true|!0|!1|null|undefined|void 0|-?\d+(?:\.\d+)?|""|''|\[\]|\{\}|\(\{\}\))/
-    .source;
-const CONSTANT = new RegExp(
-  String.raw`^(?:\([^)]*\)|[\w$]+)\s*=>\s*(?:${VALUE}|\{\s*(?:return\b\s*(?:${VALUE})?\s*;?)?\s*\})$`,
-);
 
 /**
  * An app that walks the surface and prints, per module and per object it
@@ -176,14 +154,12 @@ describe("Electron coverage", () => {
     expect(gaps).toEqual(JSON.parse(await readFile(COVERAGE, "utf8")));
     // Every stub is a decision someone wrote down, a lie or honest, with
     // why: a new one or one that went fails until stubs.json says so.
-    const decided = StubDecisions.parse(
-      JSON.parse(await readFile(STUBS, "utf8")),
-    );
+    const decided = await decidedStubs(false);
     expect(
-      Object.keys(decided.lies).filter((name) => name in decided.honest),
+      decided.lies.filter((name) => decided.honest.includes(name)),
     ).toEqual([]);
     expect(measured.stubs.map(([name]) => name).sort()).toEqual(
-      [...Object.keys(decided.lies), ...Object.keys(decided.honest)].sort(),
+      [...decided.lies, ...decided.honest].sort(),
     );
   }, 30_000);
 });

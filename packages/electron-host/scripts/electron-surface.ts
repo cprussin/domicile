@@ -119,16 +119,25 @@ const block = (types: string, header: string) => {
  */
 type Members = { methods: string[]; properties: string[]; elsewhere: string[] };
 
+/** What electron.d.ts says of a member only the main process has. */
+const MAIN_ONLY = /only available in the main process/;
+
 /**
- * The members a block declares for Linux, `static` ones or the rest. A
- * member's platforms are in the `@platform` of the comment right before its
- * first declaration.
+ * The members a block declares for Linux, `static` ones or the rest, and in
+ * a `renderer` without those only the main process has. A member's
+ * platforms are in the `@platform` of the comment right before its first
+ * declaration.
  */
-const membersOf = (text: string, statics: boolean): Members => {
+const membersOf = (
+  text: string,
+  statics: boolean,
+  renderer = false,
+): Members => {
   const methods = new Set<string>();
   const properties = new Set<string>();
   const notLinux = new Set<string>();
   const elsewhere = new Set<string>();
+  const mainOnly = new Set<string>();
   const seen = new Set<string>();
   const pattern = statics
     ? /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/\s*)?\n {4}static (?:readonly )?(\w+)(\(|\??:)/g
@@ -143,6 +152,12 @@ const membersOf = (text: string, statics: boolean): Members => {
       if (platforms !== undefined && !platforms.split(",").includes("linux")) {
         notLinux.add(name);
       }
+      if (renderer && MAIN_ONLY.test(doc)) {
+        mainOnly.add(name);
+      }
+    }
+    if (mainOnly.has(name)) {
+      continue;
     }
     if (notLinux.has(name)) {
       if (kind === "(") {
@@ -197,8 +212,23 @@ const merge = (known: Members | undefined, found: Members): Members =>
         ].sort(),
       };
 
+type Surface = Record<string, Members & { kind: "object" | "class" }>;
+
+/** `found` folded into `into`, a module at a time. */
+const mergeSurface = (into: Surface, found: Surface) => {
+  for (const [name, members] of Object.entries(found)) {
+    const known = into[name];
+    into[name] =
+      known === undefined
+        ? members
+        : { kind: known.kind, ...merge(known, members) };
+  }
+};
+
 const instances: Record<string, Members> = {};
-const surface: Record<string, Members & { kind: "object" | "class" }> = {};
+const surface: Surface = {};
+const preload: Surface = {};
+let preloadProcess: Members | undefined;
 const covered = await versions();
 for (const version of covered) {
   const types = await fetchTypes(version);
@@ -209,40 +239,26 @@ for (const version of covered) {
     }
     instances[name] = merge(instances[name], found);
   }
-  for (const [name, found] of Object.entries(surfaceOf(types))) {
-    const known = surface[name];
-    surface[name] =
-      known === undefined
-        ? found
-        : {
-            elsewhere: [
-              ...new Set([...known.elsewhere, ...found.elsewhere]),
-            ].sort(),
-            kind: known.kind,
-            methods: [...new Set([...known.methods, ...found.methods])].sort(),
-            properties: [
-              ...new Set([...known.properties, ...found.properties]),
-            ].sort(),
-          };
-  }
+  mergeSurface(surface, surfaceOf(types, ["Main", "Common"]));
+  mergeSurface(preload, surfaceOf(types, ["Renderer", "Common"], true));
+  // What Electron adds to Node's process, which a preload gets too.
+  preloadProcess = merge(
+    preloadProcess,
+    membersOf(block(types, "interface Process "), false, true),
+  );
 }
 
-function surfaceOf(types: string) {
-  const exports = [
-    ...block(types, "namespace Main {").matchAll(
+/** The modules that `namespaces` of electron.d.ts export. */
+function surfaceOf(types: string, namespaces: string[], renderer = false) {
+  const exports = namespaces.flatMap((namespace) => [
+    ...block(types, `namespace ${namespace} {`).matchAll(
       /\n {4}(const|class) (\w+): ?(typeof )?(\w+)?/g,
     ),
-    ...block(types, "namespace Main {").matchAll(
+    ...block(types, `namespace ${namespace} {`).matchAll(
       /\n {4}(class) (\w+) extends Electron\.(\w+)/g,
     ),
-    ...block(types, "namespace Common {").matchAll(
-      /\n {4}(const|class) (\w+): ?(typeof )?(\w+)?/g,
-    ),
-    ...block(types, "namespace Common {").matchAll(
-      /\n {4}(class) (\w+) extends Electron\.(\w+)/g,
-    ),
-  ];
-  const surface: Record<string, Members & { kind: "object" | "class" }> = {};
+  ]);
+  const surface: Surface = {};
   for (const match of exports) {
     const [, keyword, name = ""] = match;
     if (NOT_ON_LINUX.has(name) || name in surface) {
@@ -254,26 +270,27 @@ function surfaceOf(types: string) {
       const text = types.includes(`\n  interface ${iface} `)
         ? block(types, `interface ${iface} `)
         : block(types, `class ${iface} `);
-      surface[name] = { kind: "object", ...membersOf(text, false) };
+      surface[name] = { kind: "object", ...membersOf(text, false, renderer) };
     } else if (keyword === "const") {
       // `const session: typeof Session`: the class's statics.
       surface[name] = {
         kind: "object",
-        ...membersOf(block(types, `class ${match[4]} `), true),
+        ...membersOf(block(types, `class ${match[4]} `), true, renderer),
       };
     } else {
       surface[name] = {
         kind: "class",
-        ...membersOf(block(types, `class ${name} `), true),
+        ...membersOf(block(types, `class ${name} `), true, renderer),
       };
     }
   }
   return surface;
 }
 
-const sorted = Object.fromEntries(
-  Object.entries(surface).sort(([a], [b]) => a.localeCompare(b)),
-);
+const sortedOf = (modules: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(modules).sort(([a], [b]) => a.localeCompare(b)),
+  );
 await writeFile(
   join(import.meta.dir, "../src/electron/surface.ts"),
   `// GENERATED by scripts/electron-surface.ts from the electron.d.ts of Electron
@@ -285,16 +302,21 @@ await writeFile(
 // each its methods and properties on Linux, an object's own or a class's
 // statics, and the methods it has only on macOS or Windows (\`elsewhere\`).
 
-export const ELECTRON_SURFACE = ${JSON.stringify(sorted, null, 2)} as const;
+export const ELECTRON_SURFACE = ${JSON.stringify(sortedOf(surface), null, 2)} as const;
 
 // The members of the objects an app gets: its windows, pages, sessions and
 // the rest, with what each class extends.
 export const ELECTRON_INSTANCES = ${JSON.stringify(
-    Object.fromEntries(
-      Object.entries(instances).sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    sortedOf(instances),
     null,
     2,
   )} as const;
+
+// Every module a preload can require, sandboxed or with Node, and what
+// Electron adds to its \`process\`: what the engine's preload bootstrap
+// answers (\`preload-coverage.test.ts\`).
+export const ELECTRON_PRELOAD = ${JSON.stringify(sortedOf(preload), null, 2)} as const;
+
+export const ELECTRON_PRELOAD_PROCESS = ${JSON.stringify(preloadProcess, null, 2)} as const;
 `,
 );

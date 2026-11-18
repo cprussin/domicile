@@ -43,6 +43,7 @@ contains() {
 
 SURFACE=packages/electron-host/src/electron/surface.ts
 COVERAGE=packages/electron-host/src/__integration__/coverage.json
+PRELOAD_COVERAGE=packages/electron-host/src/__integration__/preload-coverage.json
 
 # A repository whose main covers Electron 45.2.1 with one gap, pushed to a
 # bare remote, with a detached checkout as `actions/checkout` leaves it.
@@ -59,6 +60,7 @@ setup() {
   cp "$REFRESH" "$WORK/repo/.github/scripts/"
   printf '// GENERATED\n// 45.2.1.\n' >"$WORK/repo/$SURFACE"
   printf '[\n  "app.old missing"\n]\n' >"$WORK/repo/$COVERAGE"
+  printf '[\n  "webFrame.old absent"\n]\n' >"$WORK/repo/$PRELOAD_COVERAGE"
   git -C "$WORK/repo" add -A
   git -C "$WORK/repo" commit -qm main
   git -C "$WORK/repo" remote add origin "$WORK/remote"
@@ -69,12 +71,17 @@ setup() {
   mkdir -p "$WORK/bin"
   : >"$WORK/calls"
   # The generator writes the versions it covered; the coverage test writes
-  # the gaps it measured. FAKE_VERSIONS and FAKE_GAPS say what they find.
+  # the gaps it measured, the host's and the preload's. FAKE_VERSIONS,
+  # FAKE_GAPS and FAKE_PRELOAD_GAPS say what they find.
   cat >"$WORK/bin/bun" <<'BUN'
 #!/usr/bin/env bash
 case "$*" in
   ("scripts/electron-surface.ts") printf '// GENERATED\n// %s.\n' "$FAKE_VERSIONS" >src/electron/surface.ts ;;
-  ("test coverage") printf '%s\n' "$FAKE_GAPS" >src/__integration__/coverage.json ;;
+  ("test coverage")
+    printf '%s\n' "$FAKE_GAPS" >src/__integration__/coverage.json
+    printf '%s\n' "${FAKE_PRELOAD_GAPS:-[
+  \"webFrame.old absent\"
+]}" >src/__integration__/preload-coverage.json ;;
   (*) echo "unexpected bun $*" >&2; exit 1 ;;
 esac
 BUN
@@ -144,6 +151,22 @@ calls="$(cat "$WORK/calls")"
 contains "a pull request is opened into main" '"base":"main"' "$calls"
 contains "listing the gap it adds" 'app.new missing' "$calls"
 expect "and never set to merge itself" "" "$(grep graphql "$WORK/calls")"
+
+echo "== a new preload gap is a pull request naming it a preload's =="
+
+setup
+out="$(refresh FAKE_VERSIONS="46.0.0, 45.2.1" FAKE_GAPS='[
+  "app.old missing"
+]' FAKE_PRELOAD_GAPS='[
+  "webFrame.new absent",
+  "webFrame.old absent"
+]')"
+expect "the refresh succeeds" ok "$(status "$out")"
+tip="$(pushed electron-surface-refresh)"
+expect "with the surface, the preload's list and a changeset" \
+  ".changeset/electron-surface-refresh.md $PRELOAD_COVERAGE $SURFACE" \
+  "$(git -C "$WORK/remote" diff --name-only "$tip^" "$tip" | sort | tr '\n' ' ' | sed 's/ $//')"
+contains "listing the gap as the preload's" 'preload `webFrame.new absent`' "$(cat "$WORK/calls")"
 
 echo "== a pull request a previous run left open is brought up to date =="
 
