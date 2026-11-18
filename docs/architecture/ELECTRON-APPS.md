@@ -205,10 +205,12 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 - **Preload:** the engine runs the window's preload in an isolated world
   before the page's own scripts, with a sandboxed Electron page's `electron`
   module bound in: `contextBridge`, `ipcRenderer`, `webFrame` (the main
-  frame, its own `top`, with `frameToken`, `insertCSS` and the zoom),
-  `crashReporter`, and `webUtils` and `nativeImage`, whose calls say they
-  don't work yet. Its `process` has `isMainFrame`, and its `process.argv`
-  ends with the window's
+  frame, its own `top`, with `frameToken`, `insertCSS`, `insertText`, the
+  zoom and pinch zoom's limits), `crashReporter`, and `webUtils` and `nativeImage`, whose calls
+  say they don't work yet. Its `process` has `isMainFrame`, `contextId`, and
+  `versions.electron` and `resourcesPath` from the app's `hello`; Electron's
+  own calls on it, such as `getCPUUsage`, say they don't work yet. Its
+  `process.argv` ends with the window's
   `additionalArguments`, which the host sends as `open_window`'s
   `arguments`; Claude's preloads read their features there. The preload has
   no `require` beyond `electron`.
@@ -579,6 +581,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] Manganese: hidden Electron windows off every workspace; app windows drawn with their app's icon
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
 - [x] engine: the rest of a sandboxed preload's `electron` module (`webFrame`, `webUtils`, `crashReporter`, `nativeImage`), `process.isMainFrame`, and `additionalArguments` in its `process.argv`, without which Claude's preloads expose nothing and claude.ai shows its web layout (`guard-electron-preload.sh`)
+- [x] engine: a sandboxed preload's `process.versions.electron` and `process.resourcesPath`, from `hello`, and the rest of Electron's renderer `process`, `webFrame.insertText` and `setVisualZoomLevelLimits`, each there or saying it doesn't work yet (`guard-electron-preload.sh`, `preload-coverage.test.ts`)
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)

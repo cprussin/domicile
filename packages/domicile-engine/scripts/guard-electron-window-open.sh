@@ -179,7 +179,8 @@ except OSError as failure:
     sys.exit(0)
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron",
-      "partition": "persist:electron-guard"})
+      "partition": "persist:electron-guard", "electron_version": "45.2.1",
+      "resources_path": "/opt/guard/resources"})
 hear(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "open_window", "window": 1, "url": page})
 loaded = hear(lambda e: e.get("window") == 1 and

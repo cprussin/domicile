@@ -33,7 +33,12 @@ const NOT_IN_A_RENDERER: Record<string, string> = {
   defaultApp: "only the main process has it",
   electron: "it is process.versions.electron, checked below",
   mas: "undefined outside Mac App Store builds",
+  noAsar: "Node's switch; a sandboxed preload has no Node, as in Electron",
+  noDeprecation: "Node's switch; a sandboxed preload has no Node",
   parentPort: "only a utility process has it",
+  throwDeprecation: "Node's switch; a sandboxed preload has no Node",
+  traceDeprecation: "Node's switch; a sandboxed preload has no Node",
+  traceProcessWarnings: "Node's switch; a sandboxed preload has no Node",
   windowsStore: "undefined outside Windows Store builds",
 };
 
@@ -81,7 +86,9 @@ const preloadGets = async () => {
       arch: "x64",
       argv: ["/engine/chrome", "--a-switch"],
       chromeVersion: "160.0.0.0",
+      electronVersion: "45.2.1",
       frameToken: "token",
+      resourcesPath: "/opt/app/resources",
       routingId: 1,
     },
   );

@@ -192,7 +192,8 @@ except OSError as failure:
 reader = connection.makefile("r", encoding="utf-8")
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron.session",
-      "partition": "persist:electron-guard-session"})
+      "partition": "persist:electron-guard-session",
+      "electron_version": "45.2.1", "resources_path": "/opt/guard/resources"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 agent_set = call(1, "set_user_agent", user_agent="GuardAgent/1")
 cookie_set = call(2, "cookies_set",

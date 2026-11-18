@@ -198,8 +198,7 @@ def said(window, channel, within=None):
 def node(integration, context_isolation):
     return {"preload": app_dir + "/preload.js", "integration": integration,
             "context_isolation": context_isolation,
-            "resources_path": app_dir, "app_path": app_dir,
-            "electron_version": "45.2.1",
+            "app_path": app_dir,
             "env": {"DOMICILE_GUARD_NODE": "yes"}}
 
 try:
@@ -213,7 +212,8 @@ except OSError as failure:
 pending = b""
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron",
-      "partition": "persist:electron-guard"})
+      "partition": "persist:electron-guard",
+      "electron_version": "45.2.1", "resources_path": app_dir})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "open_window", "window": 1, "url": page,
       "node": node(True, False)})

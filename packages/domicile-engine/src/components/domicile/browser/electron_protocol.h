@@ -26,7 +26,9 @@ namespace domicile {
 // line is one JSON object, in both directions.
 //
 //   {"type":"hello","version":1,"app_id":"com.anthropic.Claude",
-//    "partition":"persist:electron-claude"}
+//    "partition":"persist:electron-claude",
+//    "electron_version":"45.2.1",          (process.versions.electron in its
+//    "resources_path":"/abs"}               pages, and process.resourcesPath)
 //   -> {"type":"ready","schemes":[{"scheme":"app",
 //                                  "privileges":["standard","secure"]}],
 //       "user_agent":"Mozilla/5.0 ... Chrome/160.0.0.0 Safari/537.36",
@@ -51,10 +53,10 @@ namespace domicile {
 //    "node":{"preload":"/abs/preload.js",  (a window that isn't sandboxed:
 //            "integration":false,           Node.js in its page; see
 //            "context_isolation":true,      ElectronNode. Left out, the
-//            "resources_path":"/abs",       page is sandboxed. With it the
-//            "app_path":"/abs/app",         preload is a file, so the
-//            "electron_version":"45.2.1",   top-level "preload" is left
-//            "env":{"HOME":"/home/a"}}}     out)
+//            "app_path":"/abs/app",         page is sandboxed. With it the
+//            "env":{"HOME":"/home/a"}}}     preload is a file, so the
+//                                           top-level "preload" is left
+//                                           out)
 //   -> {"type":"window_opened","window":1}
 //   -> {"type":"window_refused","window":1,"why":"..."}
 //
@@ -216,6 +218,11 @@ struct ElectronHello {
   std::string app_id;
   // Where the app's pages keep their data. Never the profile's own.
   WebViewPartition partition;
+  // process.versions.electron in its pages: the Electron the app is told it
+  // runs on. Never empty.
+  std::string electron_version;
+  // process.resourcesPath in its pages, absolute.
+  std::string resources_path;
 };
 
 // Node.js in a window's page, as Electron gives a window that isn't
@@ -232,12 +239,9 @@ struct ElectronNode {
   // contextIsolation: the preload runs in a world of its own, not the
   // page's.
   bool context_isolation = true;
-  // process.resourcesPath, and the app's directory, which a page that isn't
-  // a file searches for modules from.
-  std::string resources_path;
+  // The app's directory, which a page that isn't a file searches for
+  // modules from.
   std::string app_path;
-  // process.versions.electron: the Electron the app is told it runs on.
-  std::string electron_version;
   // The main process's environment, which an Electron page's process.env
   // is.
   std::vector<std::pair<std::string, std::string>> env;

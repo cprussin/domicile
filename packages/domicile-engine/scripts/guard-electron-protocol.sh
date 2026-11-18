@@ -203,7 +203,8 @@ except OSError as failure:
 reader = connection.makefile("r", encoding="utf-8")
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron.protocol",
-      "partition": "persist:electron-guard-protocol"})
+      "partition": "persist:electron-guard-protocol",
+      "electron_version": "45.2.1", "resources_path": "/opt/guard/resources"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "handle_protocol", "session": "", "scheme": "file"})
 send({"type": "handle_protocol", "session": "", "scheme": "https"})

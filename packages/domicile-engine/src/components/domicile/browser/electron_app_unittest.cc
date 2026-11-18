@@ -28,7 +28,8 @@ namespace {
 
 constexpr char kHello[] =
     R"({"type":"hello","version":1,"app_id":"com.anthropic.Claude",)"
-    R"("partition":"persist:electron-claude"})";
+    R"("partition":"persist:electron-claude","electron_version":"45.2.1",)"
+    R"("resources_path":"/opt/Claude/resources"})";
 
 // A held page that says when it is destroyed, as a denied window closes.
 class FakeHeldPage final : public ElectronHeldPage {

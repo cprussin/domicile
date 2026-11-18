@@ -135,7 +135,13 @@ const main = async ([resources, ...args]: string[]) => {
       );
     const engine = (
       await connectEngineWhenUp(
-        () => connectEngine(socket, pkg.appId, `persist:electron-${pkg.name}`),
+        () =>
+          connectEngine(socket, {
+            app_id: pkg.appId,
+            electron_version: ELECTRON_VERSION,
+            partition: `persist:electron-${pkg.name}`,
+            resources_path: mirror,
+          }),
         ENGINE_WAIT,
       )
     ).match({ Err: fail, Ok: (value) => value });

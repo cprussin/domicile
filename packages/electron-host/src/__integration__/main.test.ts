@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { writeAsar } from "../asar-fixture";
 import { startFakeDesktopBus } from "../desktop-bus-fixture";
+import { ELECTRON_VERSION } from "../electron/version";
 import type { FakeEngine } from "../engine-fixture";
 import { READY, startFakeEngine } from "../engine-fixture";
 
@@ -224,7 +225,15 @@ describe("electron-host", () => {
     expect(JSON.parse(stdout)).toEqual({ title: "Notes" });
     expect(engine.heard[0]).toEqual({
       app_id: "com.example.Notes",
+      electron_version: ELECTRON_VERSION,
       partition: "persist:electron-notes",
+      // The app's resources as the host mirrored them, which its main sees
+      // as process.resourcesPath too.
+      resources_path: expect.stringMatching(
+        new RegExp(
+          `^${join(home, ".cache/domicile/electron/")}[^/]+/resources$`,
+        ),
+      ),
       type: "hello",
       version: 1,
     });

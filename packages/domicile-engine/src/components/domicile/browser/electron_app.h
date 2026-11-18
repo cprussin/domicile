@@ -187,6 +187,9 @@ class ElectronSession {
   // app's fallback; empty for the engine's.
   const std::string& user_agent() const;
   const std::string& name() const { return name_; }
+  // What the app said of itself, which its pages are told. A session is made
+  // only after the hello.
+  const ElectronHello& hello() const;
   base::WeakPtr<ElectronSession> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }

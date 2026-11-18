@@ -20,13 +20,15 @@ ipcRenderer.emit("local", 7);
 // The rest of Electron's sandboxed electron module, as apps use it: Claude's
 // preloads expose nothing unless process.isMainFrame and the frame is its own
 // top, by frameToken, and read the window's additionalArguments from
-// process.argv.
+// process.argv. Apps read their Electron and resources from process too.
 crashReporter.addExtraParameter("guard", "kept");
 const styled = webFrame.insertCSS("p { color: rgb(1, 2, 3); }");
 const shaped = {
   argv: process.argv.includes("--guard-argument=1"),
   crash: crashReporter.getParameters().guard,
+  electron: process.versions.electron,
   mainFrame: process.isMainFrame,
+  resources: process.resourcesPath,
   routingId: Number.isInteger(webFrame.routingId),
   token: typeof webFrame.frameToken === "string" && webFrame.frameToken !== "",
   top:

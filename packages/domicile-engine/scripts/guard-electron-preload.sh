@@ -25,7 +25,8 @@
 #   unpreloaded  the control: window 2, opened without a preload, has no API
 #   shaped       the preload's electron module has Electron's webFrame (its own
 #                top, by frameToken; insertCSS and removeInsertedCSS),
-#                webUtils and crashReporter, process.isMainFrame, and
+#                webUtils and crashReporter, process.isMainFrame, the
+#                hello's Electron and resources in process, and
 #                process.argv has the window's additionalArguments
 set -u
 
@@ -191,7 +192,8 @@ except OSError as failure:
 reader = connection.makefile("r", encoding="utf-8")
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron",
-      "partition": "persist:electron-guard"})
+      "partition": "persist:electron-guard",
+      "electron_version": "45.2.1", "resources_path": "/opt/guard/resources"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "open_window", "window": 1, "url": page, "preload": preload,
       "arguments": ["--guard-argument=1"]})
@@ -236,7 +238,8 @@ print("measured: %d %d %d %d %d %d %d %d %d" % (
     from_theirs is not None and from_theirs.get("data") == 50,
     control is not None,
     shaped is not None and shaped.get("args") == [{
-        "argv": True, "crash": "kept", "mainFrame": True,
+        "argv": True, "crash": "kept", "electron": "45.2.1",
+        "mainFrame": True, "resources": "/opt/guard/resources",
         "routingId": True, "token": True,
         "top": True, "webUtils": "function", "zoom": 1,
         "styled": True, "unstyled": True}]), flush=True)
@@ -307,7 +310,9 @@ when the app gave one"
   FAILURE="the preload's electron module is not shaped as Electron's: \
 webFrame (its frameToken, top, insertCSS and removeInsertedCSS, \
 getZoomFactor), webUtils, crashReporter or process.isMainFrame in the \
-bootstrap in electron_preload.cc, or process.argv without the window's \
+bootstrap in electron_preload.cc, process.versions.electron or \
+process.resourcesPath without the hello's (ElectronHello, ElectronPage, \
+Preload's app), or process.argv without the window's \
 \"arguments\" (ElectronOpenWindow, ElectronPage, Preload's arguments) -- \
 the app's log has what the preload saw"
   ;;

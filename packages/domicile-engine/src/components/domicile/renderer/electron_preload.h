@@ -66,6 +66,7 @@ class ElectronPreload final
   void Preload(
       const std::string& source,
       const std::vector<std::string>& arguments,
+      mojom::ElectronAppFactsPtr app,
       mojom::ElectronNodePtr node,
       mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host) override;
   void Deliver(const std::string& channel,
@@ -86,6 +87,8 @@ class ElectronPreload final
     std::string source;
     // webPreferences.additionalArguments, for process.argv.
     std::vector<std::string> arguments;
+    // What the app said of itself, for process.
+    mojom::ElectronAppFactsPtr app;
     // Node in the page, which then loads the preload from its file.
     mojom::ElectronNodePtr node;
   };
@@ -121,6 +124,8 @@ class ElectronPreload final
   static void RemoveInsertedCss(
       const v8::FunctionCallbackInfo<v8::Value>& info);
   static void DeviceScale(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void SetPageScaleLimits(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
 
   // webFrame.routingId: this frame's number in its renderer.
   const int routing_id_;

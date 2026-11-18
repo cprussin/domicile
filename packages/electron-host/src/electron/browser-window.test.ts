@@ -438,11 +438,9 @@ describe(createBrowserWindow, () => {
         node: {
           app_path: "/cache/x/resources/app.asar",
           context_isolation: false,
-          electron_version: "45.2.1",
           env: { HOME: "/home/me" },
           integration: true,
           preload: "/app/preload.js",
-          resources_path: "/cache/x/resources",
         },
         title: "Notes",
         type: "open_window",

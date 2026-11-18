@@ -186,7 +186,8 @@ except OSError as failure:
 reader = connection.makefile("r", encoding="utf-8")
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron.permissions",
-      "partition": "persist:electron-guard-permissions"})
+      "partition": "persist:electron-guard-permissions",
+      "electron_version": "45.2.1", "resources_path": "/opt/guard/resources"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "permission_handler", "session": "", "handle": True})
 other = "http://localhost:%d" % server.server_address[1]

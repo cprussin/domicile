@@ -39,6 +39,7 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "third_party/blink/public/web/web_script_source.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "url/gurl.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
@@ -278,9 +279,23 @@ constexpr char kBootstrap[] = R"JS(
     findFrameByToken(token) {
       return token === webFrame.frameToken ? webFrame : null;
     },
+    // Types `text` where the page's focus is, as the user would.
+    insertText(text) {
+      globalThis.document.execCommand('insertText', false, String(text));
+    },
+    getIsolatedWorlds: unsupported('webFrame.getIsolatedWorlds'),
     setZoomFactor: unsupported('webFrame.setZoomFactor'),
     setZoomLevel: unsupported('webFrame.setZoomLevel'),
-    setVisualZoomLevelLimits: unsupported('webFrame.setVisualZoomLevelLimits'),
+    // Pinch zoom's limits, as scales of the page, as Electron's are.
+    setVisualZoomLevelLimits(minimumLevel, maximumLevel) {
+      const least = Number(minimumLevel);
+      const most = Number(maximumLevel);
+      if (!Number.isFinite(least) || !Number.isFinite(most)) {
+        throw new TypeError(
+            'webFrame.setVisualZoomLevelLimits takes two numbers');
+      }
+      native.setPageScaleLimits(least, most);
+    },
     setSpellCheckProvider: unsupported('webFrame.setSpellCheckProvider'),
     isWordMisspelled: unsupported('webFrame.isWordMisspelled'),
     getWordSuggestions: unsupported('webFrame.getWordSuggestions'),
@@ -349,7 +364,21 @@ constexpr char kBootstrap[] = R"JS(
     argv: [...facts.argv],
     execPath: facts.argv[0],
     arch: facts.arch,
-    versions: { chrome: facts.chromeVersion },
+    versions: { chrome: facts.chromeVersion, electron: facts.electronVersion },
+    resourcesPath: facts.resourcesPath,
+    // Electron's id for this world's context, unique to it.
+    contextId: globalThis.crypto.randomUUID(),
+    crash: unsupported('process.crash'),
+    hang: unsupported('process.hang'),
+    getBlinkMemoryInfo: unsupported('process.getBlinkMemoryInfo'),
+    getCPUUsage: unsupported('process.getCPUUsage'),
+    getCreationTime: unsupported('process.getCreationTime'),
+    getHeapStatistics: unsupported('process.getHeapStatistics'),
+    getProcessMemoryInfo: unsupported('process.getProcessMemoryInfo'),
+    getSystemMemoryInfo: unsupported('process.getSystemMemoryInfo'),
+    getSystemVersion: unsupported('process.getSystemVersion'),
+    setFdLimit: unsupported('process.setFdLimit'),
+    takeHeapSnapshot: unsupported('process.takeHeapSnapshot'),
   };
   const module = { exports: {} };
   if (preload !== null) {
@@ -481,10 +510,12 @@ void ElectronPreload::OnDestruct() {
 void ElectronPreload::Preload(
     const std::string& source,
     const std::vector<std::string>& arguments,
+    mojom::ElectronAppFactsPtr app,
     mojom::ElectronNodePtr node,
     mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host) {
   next_ = Next{.preload = {.source = source,
                            .arguments = arguments,
+                           .app = std::move(app),
                            .node = std::move(node)},
                .host = std::move(host)};
 }
@@ -627,6 +658,7 @@ bool ElectronPreload::Run(ToRun to_run) {
   add("insertCSS", &ElectronPreload::InsertCss);
   add("removeInsertedCSS", &ElectronPreload::RemoveInsertedCss);
   add("deviceScale", &ElectronPreload::DeviceScale);
+  add("setPageScaleLimits", &ElectronPreload::SetPageScaleLimits);
   // What the renderer knows of itself and this frame, for process and
   // webFrame.
   v8::Local<v8::Object> facts = v8::Object::New(isolate);
@@ -647,6 +679,9 @@ bool ElectronPreload::Run(ToRun to_run) {
   fact("frameToken",
        gin::StringToV8(isolate, frame.GetLocalFrameToken().ToString()));
   fact("routingId", v8::Integer::New(isolate, routing_id_));
+  fact("electronVersion",
+       gin::StringToV8(isolate, to_run.app->electron_version));
+  fact("resourcesPath", gin::StringToV8(isolate, to_run.app->resources_path));
   v8::Local<v8::Value> argv[] = {natives, preload,
                                  v8::Boolean::New(isolate, isolated), facts};
   v8::Local<v8::Value> made;
@@ -685,8 +720,8 @@ bool ElectronPreload::Run(ToRun to_run) {
         << "domicile: the Electron preload's bootstrap has no electron";
     // Node runs the app's preload, which may end the frame, this with it.
     std::unique_ptr<ElectronNodeEnvironment> node =
-        ElectronNodeEnvironment::Start(isolate, world, *to_run.node,
-                                       to_run.arguments,
+        ElectronNodeEnvironment::Start(isolate, world, *to_run.app,
+                                       *to_run.node, to_run.arguments,
                                        electron.As<v8::Object>());
     if (!alive) {
       return false;
@@ -897,6 +932,25 @@ void ElectronPreload::DeviceScale(
   }
   info.GetReturnValue().Set(
       v8::Number::New(isolate, widget->GetOriginalDeviceScaleFactor()));
+}
+
+// static
+void ElectronPreload::SetPageScaleLimits(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  double least = 0;
+  double most = 0;
+  // The bootstrap passes two numbers.
+  CHECK(gin::ConvertFromV8(isolate, info[0], &least) &&
+        gin::ConvertFromV8(isolate, info[1], &most));
+  if (self == nullptr) {
+    isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
+        isolate, "this window's page is gone, so it has no zoom")));
+    return;
+  }
+  self->render_frame()->GetWebFrame()->View()->SetDefaultPageScaleLimits(
+      least, most);
 }
 
 // static
