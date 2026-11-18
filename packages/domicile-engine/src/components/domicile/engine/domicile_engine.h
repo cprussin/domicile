@@ -349,6 +349,21 @@ typedef struct DomicileListedBrowserWindow {
   uint8_t off_the_record;
 } DomicileListedBrowserWindow;
 
+// An Electron app's view a listed browser window holds and shows, for
+// `viewed_browser_windows`: its page, which a shot of the window draws over
+// the window's page.
+typedef struct DomicileBrowserWindowView {
+  // As domicile_browser_window_capture_start takes it.
+  const char* id;
+  // The index, in the call's `windows`, of the window holding it.
+  uint32_t window;
+  // Where the app placed it in the window's page, in that page's CSS pixels.
+  int32_t x;
+  int32_t y;
+  int32_t width;
+  int32_t height;
+} DomicileBrowserWindowView;
+
 // What a `DomicileInputDevice` is. A device that is more than one is listed
 // once for each, under one id.
 typedef enum DomicileInputDeviceKind {
@@ -719,6 +734,17 @@ typedef struct DomicileEngineCallbacks {
   void (*capture_failed)(void* user_data,
                          DomicileCaptureId capture,
                          const char* why);
+  // Like `listed_browser_windows`, plus the views each window holds and
+  // shows. `views` points at `view_count` records, each window's bottom
+  // first, their strings borrowed for the call.
+  //
+  // Called instead of `listed_browser_windows` when set. An older engine
+  // ignores it.
+  void (*viewed_browser_windows)(void* user_data,
+                                 const DomicileListedBrowserWindow* windows,
+                                 uint32_t count,
+                                 const DomicileBrowserWindowView* views,
+                                 uint32_t view_count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls

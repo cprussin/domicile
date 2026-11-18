@@ -58,6 +58,20 @@ struct EngineDisplay {
   float sdr_white_nits = 0.f;
 };
 
+// An Electron app's view a browser window holds. Mirrors
+// DomicileBrowserWindowView in domicile_engine.h, except the string and the
+// window, which holds it.
+struct EngineBrowserView {
+  std::string id;
+  int32_t x = 0;
+  int32_t y = 0;
+  int32_t width = 0;
+  int32_t height = 0;
+
+  friend bool operator==(const EngineBrowserView&,
+                         const EngineBrowserView&) = default;
+};
+
 // One of the browser's windows.
 //
 // Mirrors DomicileBrowserWindow in domicile_engine.h, except the strings, as
@@ -68,6 +82,8 @@ struct EngineBrowserWindow {
   std::string app_id;
   std::string url;
   bool off_the_record = false;
+  // The views it holds and shows, bottom first.
+  std::vector<EngineBrowserView> views;
 };
 
 // An input device the browser reads.

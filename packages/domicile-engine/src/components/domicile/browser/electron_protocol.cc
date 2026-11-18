@@ -439,6 +439,7 @@ base::expected<ElectronRequest, std::string> ParseHello(
   const std::optional<int> version = request.FindInt("version");
   const std::string* app_id = request.FindString("app_id");
   const std::string* partition = request.FindString("partition");
+  const base::Value* profile = request.Find("profile");
   if (version != kElectronProtocolVersion) {
     return base::unexpected(
         base::StrCat({"this engine speaks version ",
@@ -447,6 +448,9 @@ base::expected<ElectronRequest, std::string> ParseHello(
     return base::unexpected("\"app_id\" must be a string that is not empty");
   } else if (partition == nullptr) {
     return base::unexpected("\"partition\" must be a string");
+  } else if (profile != nullptr &&
+             (!profile->is_string() || profile->GetString().empty())) {
+    return base::unexpected("\"profile\" must be a string that is not empty");
   }
   base::expected<std::optional<WebViewPartition>, std::string> parsed =
       ParseWebViewPartition(*partition);
@@ -455,7 +459,10 @@ base::expected<ElectronRequest, std::string> ParseHello(
   } else if (!parsed->has_value()) {
     return base::unexpected("an app cannot use the profile's own partition");
   } else {
-    return ElectronHello{.app_id = *app_id, .partition = std::move(**parsed)};
+    return ElectronHello{
+        .app_id = *app_id,
+        .partition = std::move(**parsed),
+        .profile = profile == nullptr ? std::string() : profile->GetString()};
   }
 }
 
@@ -1090,14 +1097,26 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
       const base::Value* title = request->Find("title");
       const base::Value* hidden = request->Find("hidden");
       const base::Value* node = request->Find("node");
+      const base::Value* arguments = request->Find("arguments");
       base::expected<std::string, std::string> session =
           SessionIn(*request, /*optional=*/true);
       std::optional<base::expected<ElectronNode, std::string>> node_in;
       if (node != nullptr) {
         node_in = NodeIn(*node);
       }
+      std::vector<std::string> arguments_in;
+      if (arguments != nullptr && arguments->is_list()) {
+        for (const base::Value& argument : arguments->GetList()) {
+          if (!argument.is_string()) {
+            return Refuse("\"arguments\" must be a list of strings", *window);
+          }
+          arguments_in.push_back(argument.GetString());
+        }
+      }
       if (preload != nullptr && !preload->is_string()) {
         return Refuse("\"preload\" must be a string", *window);
+      } else if (arguments != nullptr && !arguments->is_list()) {
+        return Refuse("\"arguments\" must be a list of strings", *window);
       } else if (node_in.has_value() && !node_in->has_value()) {
         return Refuse(std::move(node_in->error()), *window);
       } else if (node != nullptr && preload != nullptr) {
@@ -1126,6 +1145,7 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
           .node = node_in.has_value()
                       ? std::optional<ElectronNode>(std::move(**node_in))
                       : std::nullopt,
+          .arguments = std::move(arguments_in),
           .session = std::move(*session),
           .view = view != nullptr && view->GetBool(),
           .title = title ? title->GetString() : std::string(),

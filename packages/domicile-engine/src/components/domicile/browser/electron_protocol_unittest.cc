@@ -38,6 +38,29 @@ TEST(ElectronProtocolTest, HelloNamesTheAppAndItsPartition) {
             (WebViewPartition{.name = "electron-claude", .persist = true}));
 }
 
+TEST(ElectronProtocolTest, HelloWithoutAProfileRunsInTheDefaultOne) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"hello","version":1,"app_id":"a","partition":"persist:a"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronHello>(*request).profile, "");
+}
+
+TEST(ElectronProtocolTest, HelloNamesTheAppsBrowserProfile) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"hello","version":1,"app_id":"a","partition":"persist:a",)"
+      R"("profile":"work"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronHello>(*request).profile, "work");
+}
+
+TEST(ElectronProtocolTest, HelloNeedsAProfileWithAName) {
+  EXPECT_EQ(WhyRefused(R"({"type":"hello","version":1,"app_id":"a",)"
+                       R"("partition":"persist:a","profile":""})"),
+            "\"profile\" must be a string that is not empty");
+}
+
 TEST(ElectronProtocolTest, HelloFromAnotherVersionIsRefusedWithOurs) {
   EXPECT_EQ(WhyRefused(R"({"type":"hello","version":2,"app_id":"a",)"
                        R"("partition":"persist:a"})"),
@@ -379,6 +402,25 @@ TEST(ElectronProtocolTest, OpenWindowMayGiveItsPageNode) {
                        R"("url":"file:///a/","preload":"x","node":{}})"),
             "a page with Node.js loads its preload from a file, "
             "\"node\"'s \"preload\", not from \"preload\"");
+}
+
+TEST(ElectronProtocolTest, OpenWindowMayGiveItsRendererArguments) {
+  const auto plain = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  const auto given = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+      R"("arguments":["--desktop-features={}","--x"]})");
+
+  ASSERT_TRUE(plain.has_value() && given.has_value());
+  EXPECT_TRUE(std::get<ElectronOpenWindow>(*plain).arguments.empty());
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*given).arguments,
+            (std::vector<std::string>{"--desktop-features={}", "--x"}));
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","arguments":"--x"})"),
+            "\"arguments\" must be a list of strings");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","arguments":[1]})"),
+            "\"arguments\" must be a list of strings");
 }
 
 TEST(ElectronProtocolTest, SetTitleAndSetHiddenNameTheirWindow) {

@@ -605,6 +605,13 @@ class WebViewGuest : public mojom::WebViewGuest,
   // unfocused_web_views.h.
   void KeepFullFrameRate();
 
+  // Opens the page's links to web addresses (a noopener or second-window
+  // one) as the desk's browser windows, in the profile each site opens in,
+  // rather than in this page's partition. An Electron window's: its links
+  // are the user's to browse, with their sign-ins. A window the page keeps a
+  // handle on, such as a sign-in popup, stays in the partition.
+  void OpenLinksInTheBrowser();
+
   // The page's zoom factor, for chrome.tabs. ZoomTo expects a factor already
   // within blink's range (see DeskZoomFactor in
   // //components/domicile:desk_tabs) and reports the change like SetZoom.
@@ -687,6 +694,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Makes the page's new window as a browser window. See MakeOpenedWindow.
   std::unique_ptr<content::WebContents> CreateNewGuestWindow(
       const content::WebContents::CreateParams& create_params) override;
+  // A noopener window at a web address, for OpenLinksInTheBrowser.
+  bool OpenedNoopenerWindowOutside(const GURL& target_url) override;
 
   // content::WebContentsDelegate:
   //
@@ -1103,6 +1112,13 @@ class WebViewGuest : public mojom::WebViewGuest,
   // or an extension. Never opens an empty window.
   void ReportNewWindow(const GURL& target_url);
 
+  // Whether a new window at `url` opens in the desk's browser: an http(s)
+  // address from a page told to OpenLinksInTheBrowser.
+  bool OpensInTheBrowser(const GURL& url) const;
+  // Opens a browser window at `url` in the profile its site opens in, outside
+  // this page's partition.
+  void OpenInTheBrowser(const GURL& url);
+
   // Reports back/forward availability to the element if it changed.
   // Opens a browser window that takes `step` through a copy of this guest's
   // history; see mojom::WebViewGuest.GoBackInNewWindow.
@@ -1319,6 +1335,9 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See KeepFullFrameRate.
   bool full_frame_rate_ = false;
+
+  // See OpenLinksInTheBrowser.
+  bool links_in_the_browser_ = false;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The compositor's end of the control socket, for guard-app-module.sh.
 
-It answers `hello` and `app_hello` with a `welcome`, and every
+It answers `hello` and `app_hello` with a `welcome`, the browser's `hello`
+with the `browser_profiles` it was given as JSON too, if any, and every
 `system_request` with a `system_reply`, and prints what it is told:
 
     said: <line>        every line a page's channel wrote
@@ -25,7 +26,7 @@ def say(what):
     print(what, flush=True)
 
 
-def serve(connection):
+def serve(connection, profiles):
     reader = connection.makefile("r", encoding="utf-8")
     for line in reader:
         line = line.strip()
@@ -38,6 +39,9 @@ def serve(connection):
             if kind == "app_hello":
                 say("app-hello")
             answer = {"type": "welcome", "protocol_version": 1}
+            if kind == "hello" and profiles is not None:
+                connection.sendall((json.dumps(answer) + "\n").encode())
+                answer = dict({"type": "browser_profiles"}, **profiles)
         elif kind == "system_request":
             answer = {
                 "type": "system_reply",
@@ -52,7 +56,14 @@ def serve(connection):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--socket", required=True)
-    path = parser.parse_args().socket
+    parser.add_argument("--browser-profiles")
+    arguments = parser.parse_args()
+    path = arguments.socket
+    profiles = (
+        None
+        if arguments.browser_profiles is None
+        else json.loads(arguments.browser_profiles)
+    )
     if os.path.exists(path):
         os.unlink(path)
     listener = socket.socket(socket.AF_UNIX)
@@ -61,7 +72,9 @@ def main():
     say(f"listening on {path}")
     while True:
         connection, _ = listener.accept()
-        threading.Thread(target=serve, args=(connection,), daemon=True).start()
+        threading.Thread(
+            target=serve, args=(connection, profiles), daemon=True
+        ).start()
 
 
 if __name__ == "__main__":

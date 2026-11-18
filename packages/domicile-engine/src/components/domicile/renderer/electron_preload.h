@@ -65,6 +65,7 @@ class ElectronPreload final
   // mojom::ElectronFrame:
   void Preload(
       const std::string& source,
+      const std::vector<std::string>& arguments,
       mojom::ElectronNodePtr node,
       mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host) override;
   void Deliver(const std::string& channel,
@@ -83,6 +84,8 @@ class ElectronPreload final
   // A preload for a document.
   struct ToRun {
     std::string source;
+    // webPreferences.additionalArguments, for process.argv.
+    std::vector<std::string> arguments;
     // Node in the page, which then loads the preload from its file.
     mojom::ElectronNodePtr node;
   };
@@ -114,6 +117,13 @@ class ElectronPreload final
   static void Post(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void PortPost(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void PortClose(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void InsertCss(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void RemoveInsertedCss(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void DeviceScale(const v8::FunctionCallbackInfo<v8::Value>& info);
+
+  // webFrame.routingId: this frame's number in its renderer.
+  const int routing_id_;
 
   mojo::AssociatedReceiver<mojom::ElectronFrame> receiver_{this};
   // The preload for the navigation about to commit.

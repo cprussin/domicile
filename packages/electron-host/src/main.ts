@@ -135,7 +135,13 @@ const main = async ([resources, ...args]: string[]) => {
       );
     const engine = (
       await connectEngineWhenUp(
-        () => connectEngine(socket, pkg.appId, `persist:electron-${pkg.name}`),
+        () =>
+          connectEngine(
+            socket,
+            pkg.appId,
+            `persist:electron-${pkg.name}`,
+            env.DOMICILE_ELECTRON_PROFILE,
+          ),
         ENGINE_WAIT,
       )
     ).match({ Err: fail, Ok: (value) => value });

@@ -18,6 +18,7 @@
 #include "base/unguessable_token.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
 #include "components/domicile/browser/browser_window_capture_target.h"
+#include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/display_capture.h"
 #include "components/domicile/mojom/external_surface.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
@@ -37,6 +38,13 @@ class HostFrameSinkManager;
 }
 
 namespace domicile {
+
+// The windows of `listing` a capture tool lists, as a producer hears them:
+// every window not hidden, titled by its app when the app gave a title, with
+// the views it holds and shows with an area, bottom first. A view is never
+// listed as a window of its own.
+std::vector<mojom::ListedBrowserWindowPtr> ForCaptureTools(
+    const std::vector<ListedBrowserWindow>& listing);
 
 // Brokers viz frame sinks to a non-renderer producer (the compositor) and
 // connects each one to the page that embeds it.

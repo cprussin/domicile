@@ -28,6 +28,10 @@ const SCRIPT_MAX: u64 = 4 << 20;
 /// Electron. Matches `UNSUPPORTED_EXIT` in `packages/electron-host`.
 pub const UNSUPPORTED_EXIT: i32 = 3;
 
+/// The variable that names the browser profile `electron-host` opens the
+/// app's windows in. Matches `PROFILE_VARIABLE` in `packages/electron-host`.
+pub const PROFILE_VARIABLE: &str = "DOMICILE_ELECTRON_PROFILE";
+
 /// An installed Electron app, ready for `electron-host`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ElectronApp {

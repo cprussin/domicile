@@ -23,7 +23,7 @@
 //! | `theme.cursor_hide_after_ms`, `cursor_hide_when_typing` | sent to every chrome's browser, which hides the pointer (`Host::set_appearance`) |
 //! | `theme.force_dark` | sent to every chrome, whose browser draws those sites dark from their next load (`Host::set_force_dark`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
-//! | `electron.apps` | the entries that run them on the engine written again (`write_the_electron_entries`) |
+//! | `electron.apps`, `electron.profiles` | the entries that run them on the engine written again (`write_the_electron_entries`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
 //! | `browser.*` | sent to every chrome, whose browser takes up the profiles (`hand_over_the_browser_profiles`) |
 //! | `lock.*` | the verifier replaced; the desktop stays as locked as it was (`rekey_the_lock`, `Lock::rekeyed`) |
@@ -52,8 +52,8 @@
 //! restated and an unchanged one is not.
 
 use domicile_config::{
-    AgentsConfig, BrowserConfig, Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig,
-    LockConfig, LockdownConfig, Omit, ThemeConfig, ThemeMode,
+    AgentsConfig, BrowserConfig, Config, ElectronConfig, ExtensionsConfig, IdleConfig, KeyRepeat,
+    KeyboardConfig, LockConfig, LockdownConfig, Omit, ThemeConfig, ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
@@ -84,8 +84,9 @@ pub struct Restatement {
     pub force_dark: Option<Vec<String>>,
     /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
-    /// The Electron apps that run on the engine, or `None` if unchanged.
-    pub electron_apps: Option<Vec<String>>,
+    /// The Electron apps that run on the engine and their profiles, or
+    /// `None` if unchanged.
+    pub electron: Option<ElectronConfig>,
     /// The extensions the browser process installs, or `None` if unchanged.
     pub extensions: Option<ExtensionsConfig>,
     /// The browser profiles, or `None` if unchanged.
@@ -130,7 +131,7 @@ impl Restatement {
             force_dark: (was.theme.force_dark != now.theme.force_dark)
                 .then(|| now.theme.force_dark.clone()),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
-            electron_apps: (was.electron != now.electron).then(|| now.electron.apps.clone()),
+            electron: (was.electron != now.electron).then(|| now.electron.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             browser: (was.browser != now.browser).then(|| now.browser.clone()),
             agents: (was.agents != now.agents).then(|| now.agents.clone()),
@@ -263,10 +264,10 @@ mod tests {
         let now = parsed(r#"{ "electron": { "apps": ["slack.desktop"] } }"#);
 
         assert_eq!(
-            Restatement::between(&was, &now).electron_apps,
-            Some(vec!["slack.desktop".to_string()])
+            Restatement::between(&was, &now).electron,
+            Some(now.electron.clone())
         );
-        assert_eq!(Restatement::between(&now, &now).electron_apps, None);
+        assert_eq!(Restatement::between(&now, &now).electron, None);
     }
 
     #[test]

@@ -44,10 +44,11 @@ Ask the running desktop:
                                         Open a site as an app in browser
                                         profile <id>
   domicile open --which <file|url>      Print the app open would use
-  domicile open --electron <entry|path> [-- <command>...]
+  domicile open --electron [--profile <id>] <entry|path> [-- <command>...]
                                         Run an installed Electron app on the
-                                        desktop's engine; <command> is its own,
-                                        which runs it if the engine can't
+                                        desktop's engine, in browser profile
+                                        <id>; <command> is its own, which runs
+                                        it if the engine can't
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
   domicile screenshot --fit <px> <file> Write a PNG of the desk no wider or
                                         taller than <px>, and print what it
@@ -425,9 +426,12 @@ pub enum Invocation {
     Opener { target: String },
     /// Run the installed Electron app `target`, a desktop entry id or a
     /// path, on the engine ([`crate::electron_app`]). `command`, when given,
-    /// is the app's own command line, as its entry's `Exec` gave it.
+    /// is the app's own command line, as its entry's `Exec` gave it. Its
+    /// windows open in browser `profile`, with its extensions, or the
+    /// default profile without one.
     OpenElectron {
         target: String,
+        profile: Option<String>,
         command: Vec<String>,
     },
     /// Write a desktop entry that opens the site at `url` as an app. Needs no
@@ -579,14 +583,22 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             },
             Verb::Opening if args.peek().is_some_and(|word| word == ELECTRON) => {
                 args.next();
+                let profile = match args.next_if(|word| word == PROFILE) {
+                    Some(_) => Some(args.next().ok_or_else(|| CliError::FlagWithoutValue {
+                        flag: PROFILE.to_string(),
+                    })?),
+                    None => None,
+                };
                 let target = args.next().ok_or(CliError::NothingToOpen)?;
                 match args.next() {
                     None => Ok(Invocation::OpenElectron {
                         target,
+                        profile,
                         command: Vec::new(),
                     }),
                     Some(dashes) if dashes == "--" => Ok(Invocation::OpenElectron {
                         target,
+                        profile,
                         command: args.collect(),
                     }),
                     Some(extra) => Err(CliError::ExtraToOpen { extra }),

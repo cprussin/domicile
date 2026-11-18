@@ -1259,21 +1259,48 @@ pub struct ElectronConfig {
     /// `domicile open --electron`. An app the engine can't run yet runs on
     /// its own Electron, with a notification saying so.
     pub apps: Vec<String>,
+    /// The browser profile each app's windows open in, by its id as `apps`
+    /// gives it, with that profile's extensions and its own sign-ins. Not
+    /// private. An app left out opens in `browser.default_profile`.
+    pub profiles: BTreeMap<String, String>,
 }
 
 impl ElectronConfig {
-    fn validate(&self) -> Result<(), ConfigError> {
-        match self
+    fn validate(&self, browser: &BrowserConfig) -> Result<(), ConfigError> {
+        if let Some(app) = self
             .apps
             .iter()
             .find(|app| app.is_empty() || app.contains('/'))
         {
-            Some(app) => Err(ConfigError::Validation(format!(
+            return Err(ConfigError::Validation(format!(
                 "electron.apps holds {app:?}, which is no desktop file id; name the entry \
                  as `slack.desktop`"
-            ))),
-            None => Ok(()),
+            )));
         }
+        for (app, profile) in &self.profiles {
+            if !self.apps.contains(app) {
+                return Err(ConfigError::Validation(format!(
+                    "electron.profiles names {app:?}, which electron.apps does not list, \
+                     so it never runs on the engine"
+                )));
+            }
+            match browser.profiles.get(profile) {
+                None => {
+                    return Err(ConfigError::Validation(format!(
+                        "electron.profiles puts {app:?} in browser profile {profile}, but \
+                         there is no browser profile {profile} in browser.profiles"
+                    )))
+                }
+                Some(found) if found.private => {
+                    return Err(ConfigError::Validation(format!(
+                        "electron.profiles puts {app:?} in browser profile {profile}, which \
+                         is private, so the app would keep nothing it signs in to"
+                    )))
+                }
+                Some(_) => {}
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1354,7 +1381,7 @@ impl Config {
     /// Validation the deserializer cannot express.
     fn validate(&self) -> Result<(), ConfigError> {
         self.browser.validate()?;
-        self.electron.validate()?;
+        self.electron.validate(&self.browser)?;
         self.extensions.validate()?;
         self.idle.validate()?;
         self.input.validate()?;

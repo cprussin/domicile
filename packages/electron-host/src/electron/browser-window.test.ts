@@ -402,6 +402,26 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("gives a window's page its additionalArguments", () => {
+    const { BrowserWindow, sent } = setUp();
+
+    void new BrowserWindow({
+      webPreferences: {
+        additionalArguments: ["--desktop-features={}", "--x"],
+        preload: "/app/preload.js",
+      },
+    }).loadURL("https://notes.test/");
+    void new BrowserWindow({
+      webPreferences: { additionalArguments: [] },
+    }).loadURL("https://notes.test/");
+
+    expect(sent[0]).toMatchObject({
+      arguments: ["--desktop-features={}", "--x"],
+      type: "open_window",
+    });
+    expect(sent[1]).not.toHaveProperty("arguments");
+  });
+
   it("opens a window with nodeIntegration with Node.js in its page", () => {
     const { BrowserWindow, sent } = setUp();
 

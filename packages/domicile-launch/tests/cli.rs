@@ -273,6 +273,7 @@ fn open_with_electron_takes_an_app_and_its_command() {
         run(&["open", "--electron", "slack.desktop"]).unwrap(),
         Invocation::OpenElectron {
             target: "slack.desktop".to_string(),
+            profile: None,
             command: vec![],
         }
     );
@@ -289,6 +290,7 @@ fn open_with_electron_takes_an_app_and_its_command() {
         .unwrap(),
         Invocation::OpenElectron {
             target: "slack.desktop".to_string(),
+            profile: None,
             command: vec!["slack".into(), "-u".into(), "slack://a".into()],
         }
     );
@@ -298,6 +300,37 @@ fn open_with_electron_takes_an_app_and_its_command() {
         Err(CliError::ExtraToOpen {
             extra: "-u".to_string()
         })
+    );
+}
+
+#[test]
+fn open_with_electron_takes_a_browser_profile() {
+    assert_eq!(
+        run(&[
+            "open",
+            "--electron",
+            "--profile",
+            "work",
+            "slack.desktop",
+            "--",
+            "slack"
+        ])
+        .unwrap(),
+        Invocation::OpenElectron {
+            target: "slack.desktop".to_string(),
+            profile: Some("work".to_string()),
+            command: vec!["slack".into()],
+        }
+    );
+    assert_eq!(
+        run(&["open", "--electron", "--profile"]),
+        Err(CliError::FlagWithoutValue {
+            flag: "--profile".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["open", "--electron", "--profile", "work"]),
+        Err(CliError::NothingToOpen)
     );
 }
 

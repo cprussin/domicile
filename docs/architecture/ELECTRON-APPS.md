@@ -133,7 +133,9 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   - The engine lists a view to the shell only while a window holds it, right
     after that window, with `parent` and the app's bounds
     (`DomicileBrowserWindow.parent`, `x`, `y`, `width`, `height`,
-    `isHidden`). It is never a capture source of its own.
+    `isHidden`). It is never a capture source of its own: a screenshot or
+    screen cast of its window draws it over the window's page where the app
+    placed it ([PORTALS.md](../PORTALS.md)).
   - **The shell lays views out.** The app's bounds are what it asks for:
     Manganese draws each view there, over its window, and another shell may
     put views in tabs or a split instead (user's decision, 2026-11-14).
@@ -179,13 +181,38 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 - **`loadFile`** loads from the mirror, so the engine reads plain files.
 - **Storage:** each app gets its own partition, named by its `package.json`
   name. Apps share no cookies with each other or with the browser.
+- **Browser profile:** an app runs in one, with its extensions (a password
+  manager fills the app's sign-in window): `electron.profiles` in the config,
+  which the entries `electron.apps` writes pass as
+  `domicile open --electron --profile <id>`. `electron-host` reads it from
+  `DOMICILE_ELECTRON_PROFILE` and names it in `hello`'s `profile`; none is
+  the default profile.
+  - The engine answers `ready` once the profile can hold windows: after the
+    compositor's profiles reach it (an app started with the desktop can beat
+    them) and the profile loads
+    (`BrowserProfileRegistry::WhenAppProfileReady`). A profile the desk has
+    not got, or a private one, is `refused`.
+  - The app's partition, windows and session storage calls are in that
+    profile.
+- **Links:** a page's noopener window at an http(s) address (a
+  `target="_blank"` link, `window.open(url, "", "noopener")`, a middle click)
+  opens as a browser window, in the profile its site opens in, with the
+  user's sign-ins (patch 0239, `WebViewGuest::OpenLinksInTheBrowser`). A
+  window the page keeps a handle on, such as a sign-in popup, stays the
+  app's. `setWindowOpenHandler` is still not asked.
 
 ### Preload and IPC
 
 - **Preload:** the engine runs the window's preload in an isolated world
-  before the page's own scripts, with `contextBridge` and `ipcRenderer` bound
-  in, as in a sandboxed Electron page. The preload has no `require` beyond
-  `electron`.
+  before the page's own scripts, with a sandboxed Electron page's `electron`
+  module bound in: `contextBridge`, `ipcRenderer`, `webFrame` (the main
+  frame, its own `top`, with `frameToken`, `insertCSS` and the zoom),
+  `crashReporter`, and `webUtils` and `nativeImage`, whose calls say they
+  don't work yet. Its `process` has `isMainFrame`, and its `process.argv`
+  ends with the window's
+  `additionalArguments`, which the host sends as `open_window`'s
+  `arguments`; Claude's preloads read their features there. The preload has
+  no `require` beyond `electron`.
   The host sends the preload's source with `open_window`; the browser hands
   it to the window's main frame before each navigation commits, and the
   renderer runs it at document start, ahead of extensions' content scripts
@@ -529,6 +556,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `setTitle`, `hide`, `show`, `showInactive`, `show: false`, and the `close` event for the user's close
 - [x] Manganese: hidden Electron windows off every workspace; app windows drawn with their app's icon
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
+- [x] engine: the rest of a sandboxed preload's `electron` module (`webFrame`, `webUtils`, `crashReporter`, `nativeImage`), `process.isMainFrame`, and `additionalArguments` in its `process.argv`, without which Claude's preloads expose nothing and claude.ai shows its web layout (`guard-electron-preload.sh`)
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)

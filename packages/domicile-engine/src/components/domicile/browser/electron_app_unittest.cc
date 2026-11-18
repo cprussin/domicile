@@ -17,6 +17,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -32,10 +33,19 @@ constexpr char kHello[] =
 // A desk that numbers its windows from 10 and writes down each call.
 class FakeDesk final : public ElectronDesk {
  public:
+  void WhenProfileReady(
+      const std::string& profile,
+      base::OnceCallback<void(base::expected<void, std::string>)> ready)
+      override {
+    calls.push_back("wait for profile " + profile);
+    profile_waits.push_back(std::move(ready));
+  }
   std::optional<std::string> Open(const GURL& url,
                                   const std::string& app_id,
+                                  const std::string& profile,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
+                                  const std::vector<std::string>& arguments,
                                   const std::optional<ElectronNode>& node,
                                   ElectronPageCalls page_calls,
                                   base::WeakPtr<ElectronSession> session,
@@ -47,7 +57,11 @@ class FakeDesk final : public ElectronDesk {
     }
     calls.push_back(
         std::string(view ? "open view " : "open ") + url.spec() + " as " +
-        app_id + (preload.empty() ? "" : " with " + preload) +
+        app_id + (profile.empty() ? "" : " in " + profile) +
+        (preload.empty() ? "" : " with " + preload) +
+        (arguments.empty()
+             ? ""
+             : " with arguments " + base::JoinString(arguments, " ")) +
         (node.has_value() ? " with node" : "") +
         (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
     const std::string id = base::NumberToString(next_id++);
@@ -126,45 +140,55 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("user agent " + id + " " + user_agent);
   }
   void GetCookies(
+      const std::string& profile,
       const WebViewPartition& partition,
       const std::optional<GURL>& url,
       base::OnceCallback<void(std::vector<ElectronCookie>)> done) override {
     calls.push_back("get cookies in " + partition.name +
+                    (profile.empty() ? "" : " of " + profile) +
                     (url.has_value() ? " for " + url->spec() : ""));
     std::move(done).Run(cookies);
   }
   void SetCookie(
+      const std::string& profile,
       const WebViewPartition& partition,
       const ElectronCookieDetails& details,
       base::OnceCallback<void(std::optional<std::string>)> done) override {
     calls.push_back("set cookie " + details.name + " in " + partition.name);
     std::move(done).Run(cookie_refusal);
   }
-  void RemoveCookie(const WebViewPartition& partition,
+  void RemoveCookie(const std::string& profile,
+                    const WebViewPartition& partition,
                     const GURL& url,
                     const std::string& name,
                     base::OnceClosure done) override {
     calls.push_back("remove cookie " + name + " for " + url.spec());
     std::move(done).Run();
   }
-  void FlushCookies(const WebViewPartition& partition,
+  void FlushCookies(const std::string& profile,
+                    const WebViewPartition& partition,
                     base::OnceClosure done) override {
     calls.push_back("flush cookies in " + partition.name);
     std::move(done).Run();
   }
-  void ClearStorage(const WebViewPartition& partition,
+  void ClearStorage(const std::string& profile,
+                    const WebViewPartition& partition,
                     const ElectronClearStorage& clear,
                     base::OnceClosure done) override {
     calls.push_back("clear storage in " + partition.name);
     waiting = std::move(done);
   }
-  void ClearCache(const WebViewPartition& partition,
+  void ClearCache(const std::string& profile,
+                  const WebViewPartition& partition,
                   base::OnceClosure done) override {
     calls.push_back("clear cache in " + partition.name);
     std::move(done).Run();
   }
 
   bool has_shell = true;
+  // Each WhenProfileReady's answer, oldest first.
+  std::vector<base::OnceCallback<void(base::expected<void, std::string>)>>
+      profile_waits;
   // What each window's page may call, by id.
   std::map<std::string, ElectronPageCalls> pages;
   // Each window's partition and session, by id.
@@ -225,6 +249,49 @@ TEST_F(ElectronAppTest, HelloIsAnsweredReady) {
   EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"160.0.8155.0\","
                          "\"schemes\":[],\"type\":\"ready\",\"user_agent\":"
                          "\"Mozilla/5.0 Chrome/160.0.0.0\"}\n"});
+}
+
+constexpr char kHelloInWork[] =
+    R"({"type":"hello","version":1,"app_id":"com.anthropic.Claude",)"
+    R"("partition":"persist:electron-claude","profile":"work"})";
+
+TEST_F(ElectronAppTest, HelloInAProfileIsAnsweredOnceTheProfileIsReady) {
+  app_->Take(kHelloInWork);
+  EXPECT_EQ(desk_.calls, Lines{"wait for profile work"});
+  EXPECT_TRUE(sent_.empty());
+
+  std::move(desk_.profile_waits.at(0)).Run(base::ok());
+
+  EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"160.0.8155.0\","
+                         "\"schemes\":[],\"type\":\"ready\",\"user_agent\":"
+                         "\"Mozilla/5.0 Chrome/160.0.0.0\"}\n"});
+}
+
+TEST_F(ElectronAppTest, HelloInAProfileTheDeskCannotGiveIsRefused) {
+  app_->Take(kHelloInWork);
+
+  std::move(desk_.profile_waits.at(0))
+      .Run(base::unexpected("the desk has no browser profile work"));
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+
+  EXPECT_EQ(sent_, (Lines{"{\"type\":\"refused\",\"why\":\"the desk has no "
+                          "browser profile work\"}\n",
+                          "{\"type\":\"refused\","
+                          "\"why\":\"an app says hello first\"}\n"}));
+}
+
+TEST_F(ElectronAppTest, AnAppInAProfileKeepsItsWindowsAndStorageThere) {
+  app_->Take(kHelloInWork);
+  std::move(desk_.profile_waits.at(0)).Run(base::ok());
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"session_call","call":1,"session":"",)"
+             R"("method":"cookies_get","filter":{}})");
+
+  EXPECT_EQ(desk_.calls,
+            (Lines{"open https://a.test/ as com.anthropic.Claude in work",
+                   "get cookies in electron-claude of work"}));
 }
 
 TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
@@ -405,6 +472,16 @@ TEST_F(ElectronAppTest, AWindowsPreloadReachesTheDesk) {
 
   EXPECT_EQ(desk_.calls, Lines{"open https://a.test/ as com.anthropic.Claude "
                                "with window.x = 1"});
+}
+
+TEST_F(ElectronAppTest, AWindowsArgumentsReachTheDesk) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("arguments":["--a=1","--b"]})");
+
+  EXPECT_EQ(desk_.calls, Lines{"open https://a.test/ as com.anthropic.Claude "
+                               "with arguments --a=1 --b"});
 }
 
 TEST_F(ElectronAppTest, AWindowsNodeReachesTheDesk) {
