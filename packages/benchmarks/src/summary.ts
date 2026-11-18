@@ -1,8 +1,20 @@
 import { z } from "zod";
 
+/**
+ * What the host reads beside each sample when the VM draws on its GPU:
+ * QEMU's CPU ticks and its share of the card.
+ */
+const hostSampleSchema = z.object({
+  gpuMib: z.number(),
+  gpuPercent: z.number(),
+  qemuTicks: z.number(),
+  seconds: z.number(),
+});
+
 /** One reading the VM takes every few seconds of the measured window. */
 const sampleSchema = z.object({
   busyTicks: z.number(),
+  host: hostSampleSchema.optional(),
   load1: z.number(),
   // Every process's memory: never none.
   pssKib: z.number().positive(),
@@ -15,6 +27,7 @@ const sampleSchema = z.object({
 const runSchema = z.object({
   cores: z.number().int().positive(),
   desktop: z.string(),
+  hostTicksPerSecond: z.number().positive().optional(),
   run: z.number().int(),
   samples: z.array(sampleSchema).min(2),
   top: z.array(z.object({ name: z.string(), pssKib: z.number() })),
@@ -30,6 +43,8 @@ type Spread = { max: number; median: number; min: number };
 export type Row = {
   cpuPercent: Spread;
   desktop: string;
+  /** Read on the host, for runs on its GPU. */
+  host?: { gpuMib: Spread; gpuPercent: Spread; qemuCpuPercent: Spread };
   load1: Spread;
   runs: number;
   sessionPssMib: Spread;
@@ -81,9 +96,82 @@ const cpuPercent = (run: Run): number => {
   return Math.round(busy * run.cores * 100);
 };
 
+/** The host's readings, which a run has on every sample or on none. */
+const hostSamples = (run: Run) => {
+  const host = run.samples.flatMap((sample) =>
+    sample.host === undefined ? [] : [sample.host],
+  );
+  if (host.length === 0) {
+    return undefined;
+  }
+  if (host.length !== run.samples.length) {
+    throw new Error(
+      `${run.desktop}/${run.workload} has host readings on some samples only`,
+    );
+  }
+  return host;
+};
+
+/** QEMU's CPU, its GPU share and its GPU memory over the window. */
+const hostMeasures = (run: Run) => {
+  const host = hostSamples(run);
+  if (host === undefined) {
+    return undefined;
+  }
+  if (run.hostTicksPerSecond === undefined) {
+    throw new Error(
+      `${run.desktop}/${run.workload} has host readings but no tick rate`,
+    );
+  }
+  const first = at(
+    host.map((h) => h.qemuTicks),
+    0,
+  );
+  const last = at(
+    host.map((h) => h.qemuTicks),
+    host.length - 1,
+  );
+  const seconds =
+    at(
+      host.map((h) => h.seconds),
+      host.length - 1,
+    ) -
+    at(
+      host.map((h) => h.seconds),
+      0,
+    );
+  return {
+    gpuMib: median(host.map((h) => h.gpuMib)),
+    gpuPercent: median(host.map((h) => h.gpuPercent)),
+    qemuCpuPercent: Math.round(
+      ((last - first) / run.hostTicksPerSecond / seconds) * 100,
+    ),
+  };
+};
+
+/** The host's measures across a group's runs: on every run, or on none. */
+const hostSpread = (
+  measured: readonly ReturnType<typeof hostMeasures>[],
+  name: string,
+): Row["host"] => {
+  const present = measured.flatMap((m) => (m === undefined ? [] : [m]));
+  if (present.length === 0) {
+    return undefined;
+  }
+  if (present.length !== measured.length) {
+    throw new Error(`${name} mixes runs with and without host readings`);
+  }
+  return {
+    gpuMib: spread(present.map((m) => m.gpuMib)),
+    gpuPercent: spread(present.map((m) => m.gpuPercent)),
+    qemuCpuPercent: spread(present.map((m) => m.qemuCpuPercent)),
+  };
+};
+
 /** One run's measures: medians over its window, and its CPU. */
 const perRun = (run: Run) => ({
   cpuPercent: cpuPercent(run),
+  host: hostMeasures(run),
   load1: median(run.samples.map((sample) => sample.load1)),
   sessionPssMib: mib(median(run.samples.map((s) => s.sessionPssKib))),
   usedMib: mib(median(run.samples.map((sample) => sample.usedKib))),
@@ -99,9 +187,14 @@ export const summarize = (runs: readonly Run[]): Row[] =>
       if (first === undefined) {
         throw new Error("a group with no runs");
       }
+      const host = hostSpread(
+        measured.map((m) => m.host),
+        `${first.desktop}/${first.workload}`,
+      );
       return {
         cpuPercent: spread(measured.map((m) => m.cpuPercent)),
         desktop: first.desktop,
+        ...(host === undefined ? {} : { host }),
         load1: spread(measured.map((m) => m.load1)),
         runs: measured.length,
         sessionPssMib: spread(measured.map((m) => m.sessionPssMib)),
@@ -143,6 +236,12 @@ const table = (
 const ranged = (value: Spread, unit: string): string =>
   `${String(value.median)}${unit} (${String(value.min)}–${String(value.max)})`;
 
+/** A row's host measure, for a table of them. */
+const hostCell =
+  (measure: keyof NonNullable<Row["host"]>, unit: string) =>
+  (row: Row): string =>
+    row.host === undefined ? "–" : ranged(row.host[measure], unit);
+
 /** The summary as markdown tables: the median run, then its range. */
 export const markdown = (rows: readonly Row[]): string =>
   [
@@ -154,4 +253,23 @@ export const markdown = (rows: readonly Row[]): string =>
     ),
     table(rows, "CPU (% of one core)", (row) => ranged(row.cpuPercent, "%")),
     table(rows, "Load average (1 min)", (row) => ranged(row.load1, "")),
+    ...(rows.some((row) => row.host !== undefined)
+      ? [
+          table(
+            rows,
+            "GPU (% busy, read on the host)",
+            hostCell("gpuPercent", "%"),
+          ),
+          table(
+            rows,
+            "GPU memory (read on the host)",
+            hostCell("gpuMib", " MiB"),
+          ),
+          table(
+            rows,
+            "QEMU's CPU on the host (% of one core)",
+            hostCell("qemuCpuPercent", "%"),
+          ),
+        ]
+      : []),
   ].join("\n\n");

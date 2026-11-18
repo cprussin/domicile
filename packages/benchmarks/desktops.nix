@@ -88,6 +88,9 @@ let
         esac
       done <"/proc/$pid/environ"
       export XDG_RUNTIME_DIR=/run/user/1000
+      # A tty login says `tty`, and Chromium's ozone hint then picks X11:
+      # the apps would run in Xwayland rather than on the desktop.
+      export XDG_SESSION_TYPE=wayland
       export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/1000/bus}"
       sockets=(/run/user/1000/wayland-[0-9])
       WAYLAND_DISPLAY=$(basename "''${sockets[0]}")
@@ -120,7 +123,8 @@ let
     '';
   };
 
-  desktops = {
+  # `gpu`: drawn on the host's card through virgl, rather than in software.
+  desktops = gpu: {
     # No desktop: what the VM itself costs.
     console = {
       compositor = null;
@@ -165,8 +169,8 @@ let
       apps = ownApps;
       module.imports = [
         { programs.sway.enable = true; }
-        # pixman: the CPU renderer, as the card has no 3D.
-        (ttyLogin "WLR_RENDERER=pixman exec sway >/tmp/desktop.log 2>&1")
+        # pixman: the CPU renderer, for a card with no 3D.
+        (ttyLogin "${lib.optionalString (!gpu) "WLR_RENDERER=pixman "}exec sway >/tmp/desktop.log 2>&1")
       ];
     };
 
@@ -207,15 +211,21 @@ let
   };
 
   # Identical for every desktop: the machine, the network, the apps.
-  machine = name: desktop: { lib, ... }: {
+  machine = gpu: name: desktop: { lib, ... }: {
     imports = [ desktop.module ];
+    hardware.graphics.enable = lib.mkIf gpu true;
     virtualisation = {
       memorySize = 8192;
       cores = 4;
       diskSize = 8192;
       # See `tty-on-a-card-with-no-3d` in flake.nix.
       useNixStoreImage = true;
-      qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1920,yres=1080" ];
+      # With `gpu`, a 3D card that virgl draws on the host's GPU. The host
+      # picks that GPU's render node at run time (bin/run.sh).
+      qemu.options = [
+        "-vga none"
+        "-device ${if gpu then "virtio-vga-gl" else "virtio-gpu-pci"},xres=1920,yres=1080"
+      ];
     };
     # QEMU's user network, eth0, out to the internet: the apps load live pages.
     networking.interfaces.eth0.ipv4.addresses = [ { address = "10.0.2.15"; prefixLength = 24; } ];
@@ -233,16 +243,21 @@ let
       pkgs.chromium
       unfree.slack
       pkgs.vscodium
-    ] ++ lib.optional (desktop.compositor != null) (inSession desktop.compositor);
+    ]
+    # For proof of what draws: `eglinfo` names the GL renderer.
+    ++ lib.optional gpu pkgs.mesa-demos
+    ++ lib.optional (desktop.compositor != null) (inSession desktop.compositor);
     fonts.enableDefaultPackages = true;
     system.name = "benchmark-${name}";
   };
 
-  driver = name: desktop: (pkgs.testers.runNixOSTest {
-    name = "benchmark-${name}";
-    nodes.machine = machine name desktop;
+  driver = gpu: name: desktop: (pkgs.testers.runNixOSTest {
+    name = "benchmark-${name}${lib.optionalString gpu "-gpu"}";
+    # The VM tests' QEMU has no OpenGL, so no virgl.
+    qemu.package = lib.mkIf gpu pkgs.qemu_kvm;
+    nodes.machine = machine gpu name desktop;
     testScript = builtins.replaceStrings [ "@DESKTOP@" ] [
-      (builtins.toJSON ({ inherit name pages; inherit (desktop) compositor; } // desktop.apps))
+      (builtins.toJSON ({ inherit gpu name pages; inherit (desktop) compositor; } // desktop.apps))
     ] (builtins.readFile ./vm/benchmark.py);
   }).driver;
 
@@ -263,6 +278,8 @@ let
   };
 in
 {
-  drivers = builtins.mapAttrs driver desktops;
+  drivers = builtins.mapAttrs (driver false) (desktops false);
+  # For a host with a GPU, such as crux.
+  gpuDrivers = builtins.mapAttrs (driver true) (desktops true);
   inherit run slackMagicLink;
 }
