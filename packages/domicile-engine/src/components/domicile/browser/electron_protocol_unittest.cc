@@ -38,29 +38,6 @@ TEST(ElectronProtocolTest, HelloNamesTheAppAndItsPartition) {
             (WebViewPartition{.name = "electron-claude", .persist = true}));
 }
 
-TEST(ElectronProtocolTest, HelloWithoutAProfileRunsInTheDefaultOne) {
-  const auto request = ParseElectronRequest(
-      R"({"type":"hello","version":1,"app_id":"a","partition":"persist:a"})");
-
-  ASSERT_TRUE(request.has_value()) << request.error().why;
-  EXPECT_EQ(std::get<ElectronHello>(*request).profile, "");
-}
-
-TEST(ElectronProtocolTest, HelloNamesTheAppsBrowserProfile) {
-  const auto request = ParseElectronRequest(
-      R"({"type":"hello","version":1,"app_id":"a","partition":"persist:a",)"
-      R"("profile":"work"})");
-
-  ASSERT_TRUE(request.has_value()) << request.error().why;
-  EXPECT_EQ(std::get<ElectronHello>(*request).profile, "work");
-}
-
-TEST(ElectronProtocolTest, HelloNeedsAProfileWithAName) {
-  EXPECT_EQ(WhyRefused(R"({"type":"hello","version":1,"app_id":"a",)"
-                       R"("partition":"persist:a","profile":""})"),
-            "\"profile\" must be a string that is not empty");
-}
-
 TEST(ElectronProtocolTest, HelloFromAnotherVersionIsRefusedWithOurs) {
   EXPECT_EQ(WhyRefused(R"({"type":"hello","version":2,"app_id":"a",)"
                        R"("partition":"persist:a"})"),
@@ -958,6 +935,60 @@ TEST(ElectronProtocolTest, APermissionAnswerGrantsOrDenies) {
   // No answer is not a denial: the app's bug is refused.
   EXPECT_EQ(WhyRefused(R"({"type":"permission_answer","ask":2})"),
             "\"granted\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, AWindowOpenIsOneLine) {
+  EXPECT_EQ(ElectronWindowOpen(
+                7, 1,
+                ElectronWindowOpenDetails{.url = GURL("https://b.test/"),
+                                          .frame_name = "",
+                                          .features = "width=500,height=600",
+                                          .disposition = "foreground-tab",
+                                          .referrer = GURL()}),
+            R"({"ask":7,"disposition":"foreground-tab",)"
+            R"("features":"width=500,height=600","frame_name":"",)"
+            R"("referrer":"","type":"window_open","url":"https://b.test/",)"
+            R"("window":1})"
+            "\n");
+}
+
+TEST(ElectronProtocolTest, AWindowOpenAnswerDeniesOrAllowsAWindow) {
+  const auto denied = ParseElectronRequest(
+      R"({"type":"window_open_answer","ask":7,"action":"deny"})");
+  ASSERT_TRUE(denied.has_value()) << denied.error().why;
+  EXPECT_EQ(std::get<ElectronWindowOpenAnswer>(*denied).ask, 7);
+  EXPECT_FALSE(std::get<ElectronWindowOpenAnswer>(*denied).open.has_value());
+
+  const auto allowed = ParseElectronRequest(
+      R"({"type":"window_open_answer","ask":7,"action":"allow","window":2,)"
+      R"("title":"B","arguments":["--a"]})");
+  ASSERT_TRUE(allowed.has_value()) << allowed.error().why;
+  const ElectronWindowOpenAnswer& answer =
+      std::get<ElectronWindowOpenAnswer>(*allowed);
+  ASSERT_TRUE(answer.open.has_value());
+  EXPECT_EQ(answer.open->window, 2);
+  EXPECT_EQ(answer.open->title, "B");
+  EXPECT_EQ(answer.open->arguments, std::vector<std::string>{"--a"});
+  EXPECT_TRUE(answer.open->url.is_empty());
+}
+
+TEST(ElectronProtocolTest, AWindowOpenAnswerNamesNoAddressAndNoView) {
+  EXPECT_EQ(WhyRefused(R"({"type":"window_open_answer","ask":7})"),
+            "\"action\" must be \"allow\" or \"deny\"");
+  EXPECT_EQ(WhyRefused(R"({"type":"window_open_answer","action":"deny"})"),
+            "\"ask\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"window_open_answer","ask":7,)"
+                       R"("action":"allow"})"),
+            "\"window\" must be a whole number from 1");
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"window_open_answer","ask":7,"action":"allow",)"
+                 R"("window":2,"url":"https://c.test/"})"),
+      "a window_open_answer names no \"url\": the window opens where its "
+      "page asked");
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"window_open_answer","ask":7,"action":"allow",)"
+                 R"("window":2,"view":true})"),
+      "a page's new window is a window, not a view");
 }
 
 TEST(ElectronProtocolTest, APermissionRequestIsOneLine) {

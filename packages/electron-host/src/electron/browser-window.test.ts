@@ -713,6 +713,143 @@ describe(createBrowserWindow, () => {
   });
 });
 
+describe("a page's new windows", () => {
+  const asked = {
+    ask: 3,
+    disposition: "foreground-tab",
+    features: "width=500,height=600",
+    frame_name: "",
+    referrer: "https://notes.test/",
+    type: "window_open",
+    url: "https://sign-in.test/",
+    window: 1,
+  } as const;
+
+  it("asks the handler, and a denial opens nothing", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://notes.test/");
+    const heard: unknown[] = [];
+    window.webContents.setWindowOpenHandler((details) => {
+      heard.push(details);
+      return { action: "deny" };
+    });
+    sent.length = 0;
+
+    say(asked);
+
+    expect(heard).toEqual([
+      {
+        disposition: "foreground-tab",
+        features: "width=500,height=600",
+        frameName: "",
+        postBody: undefined,
+        referrer: {
+          policy: "strict-origin-when-cross-origin",
+          url: "https://notes.test/",
+        },
+        url: "https://sign-in.test/",
+      },
+    ]);
+    expect(sent).toEqual([
+      { action: "deny", ask: 3, type: "window_open_answer" },
+    ]);
+    expect(BrowserWindow.getAllWindows()).toEqual([window]);
+  });
+
+  it("opens an allowed window as a new BrowserWindow, as the opener's", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow({
+      webPreferences: { partition: "persist:cowork" },
+    });
+    void window.loadURL("https://notes.test/");
+    const created: unknown[] = [];
+    window.webContents.on("did-create-window", (child: unknown) =>
+      created.push(child),
+    );
+    window.webContents.setWindowOpenHandler(() => ({
+      action: "allow",
+      overrideBrowserWindowOptions: { title: "Sign in" },
+    }));
+    sent.length = 0;
+
+    say(asked);
+
+    const child = BrowserWindow.fromId(2);
+    expect(created).toEqual([child]);
+    expect(sent).toEqual([
+      {
+        action: "allow",
+        ask: 3,
+        session: "persist:cowork",
+        title: "Sign in",
+        type: "window_open_answer",
+        window: 2,
+      },
+    ]);
+    expect(child?.getSize()).toEqual([500, 600]);
+  });
+
+  it("opens the window with no handler, as Electron does", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://notes.test/");
+    sent.length = 0;
+
+    say(asked);
+
+    expect(sent).toEqual([
+      {
+        action: "allow",
+        ask: 3,
+        title: "Notes",
+        type: "window_open_answer",
+        window: 2,
+      },
+    ]);
+  });
+
+  it("denies the window when the handler throws, and the app hears why", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://notes.test/");
+    window.webContents.setWindowOpenHandler(() => {
+      throw new Error("no");
+    });
+    sent.length = 0;
+
+    expect(() => say(asked)).toThrow("no");
+    expect(sent).toEqual([
+      { action: "deny", ask: 3, type: "window_open_answer" },
+    ]);
+  });
+
+  it("opens the window createWindow makes", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://notes.test/");
+    window.webContents.setWindowOpenHandler(() => ({
+      action: "allow",
+      createWindow: (options) =>
+        new BrowserWindow({ ...options, show: false }).webContents,
+    }));
+    sent.length = 0;
+
+    say(asked);
+
+    expect(sent).toEqual([
+      {
+        action: "allow",
+        ask: 3,
+        hidden: true,
+        title: "Notes",
+        type: "window_open_answer",
+        window: 2,
+      },
+    ]);
+  });
+});
+
 describe("a window's menu bar", () => {
   /** The set_menu_bar requests sent, without the rest. */
   const menuBars = (sent: readonly EngineRequest[]) =>

@@ -54,9 +54,10 @@
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
+#include "ui/base/page_transition_types.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -605,12 +606,30 @@ class WebViewGuest : public mojom::WebViewGuest,
   // unfocused_web_views.h.
   void KeepFullFrameRate();
 
-  // Opens the page's links to web addresses (a noopener or second-window
-  // one) as the desk's browser windows, in the profile each site opens in,
-  // rather than in this page's partition. An Electron window's: its links
-  // are the user's to browse, with their sign-ins. A window the page keeps a
-  // handle on, such as a sign-in popup, stays in the partition.
-  void OpenLinksInTheBrowser();
+  // A new window the page asked for, as an embedder that decides on its
+  // page's new windows hears of it: window.open's target and features, how
+  // it asked, and the page that asked.
+  struct WindowRequest {
+    GURL url;
+    std::string frame_name;
+    WindowOpenDisposition disposition =
+        WindowOpenDisposition::kNewForegroundTab;
+    std::optional<int> x;
+    std::optional<int> y;
+    std::optional<int> width;
+    std::optional<int> height;
+    bool popup = false;
+    GURL referrer;
+  };
+  // Runs with each window the page asks for and the window itself, `held`,
+  // when its opener keeps a handle on it, or null when it doesn't (noopener,
+  // a middle click). `opening` opens it, or destroys `held`, as it decides;
+  // nothing else opens it. An Electron window's, whose app decides with
+  // setWindowOpenHandler.
+  using WindowOpening =
+      base::RepeatingCallback<void(WindowRequest request,
+                                   std::unique_ptr<content::WebContents> held)>;
+  void DecideWindowsWith(WindowOpening opening);
 
   // The page's zoom factor, for chrome.tabs. ZoomTo expects a factor already
   // within blink's range (see DeskZoomFactor in
@@ -694,8 +713,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Makes the page's new window as a browser window. See MakeOpenedWindow.
   std::unique_ptr<content::WebContents> CreateNewGuestWindow(
       const content::WebContents::CreateParams& create_params) override;
-  // A noopener window at a web address, for OpenLinksInTheBrowser.
-  bool OpenedNoopenerWindowOutside(const GURL& target_url) override;
+  // Takes the page's noopener window when DecideWindowsWith says who decides.
+  bool TakeNoopenerWindow(const GURL& target_url,
+                          const std::string& frame_name,
+                          WindowOpenDisposition disposition,
+                          const blink::mojom::WindowFeatures& features,
+                          const GURL& referrer) override;
 
   // content::WebContentsDelegate:
   //
@@ -1112,13 +1135,6 @@ class WebViewGuest : public mojom::WebViewGuest,
   // or an extension. Never opens an empty window.
   void ReportNewWindow(const GURL& target_url);
 
-  // Whether a new window at `url` opens in the desk's browser: an http(s)
-  // address from a page told to OpenLinksInTheBrowser.
-  bool OpensInTheBrowser(const GURL& url) const;
-  // Opens a browser window at `url` in the profile its site opens in, outside
-  // this page's partition.
-  void OpenInTheBrowser(const GURL& url);
-
   // Reports back/forward availability to the element if it changed.
   // Opens a browser window that takes `step` through a copy of this guest's
   // history; see mojom::WebViewGuest.GoBackInNewWindow.
@@ -1336,8 +1352,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   // See KeepFullFrameRate.
   bool full_frame_rate_ = false;
 
-  // See OpenLinksInTheBrowser.
-  bool links_in_the_browser_ = false;
+  // See DecideWindowsWith; null when windows open as a browser's do.
+  WindowOpening window_opening_;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;

@@ -877,52 +877,6 @@ fn an_electron_app_given_as_a_path_is_refused() {
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
-#[test]
-fn an_electron_app_opens_in_the_browser_profile_it_is_given() {
-    let electron = Config::parse(
-        r##"{ "browser": { "profiles": {
-               "default": { "name": "Default", "color": "#0d9488" },
-               "private": { "name": "Private", "color": "#a78bfa", "private": true },
-               "work": { "name": "Work", "color": "#d97706" } } },
-             "electron": { "apps": ["slack.desktop"],
-                           "profiles": { "slack.desktop": "work" } } }"##,
-    )
-    .unwrap()
-    .electron;
-    assert_eq!(electron.profiles["slack.desktop"], "work");
-}
-
-/// The refusal for `electron`, beside the built-in profiles.
-fn electron_refused(electron: &str) -> String {
-    match Config::parse(&format!(r#"{{ "electron": {electron} }}"#)).unwrap_err() {
-        ConfigError::Validation(why) => why,
-        err => panic!("got {err:?}"),
-    }
-}
-
-#[test]
-fn an_electron_app_in_a_profile_the_desk_has_not_got_is_refused() {
-    let why = electron_refused(
-        r#"{ "apps": ["slack.desktop"], "profiles": { "slack.desktop": "work" } }"#,
-    );
-    assert!(why.contains("no browser profile work"), "got {why}");
-}
-
-#[test]
-fn an_electron_app_in_a_private_profile_is_refused() {
-    // It would keep nothing it signs in to.
-    let why = electron_refused(
-        r#"{ "apps": ["slack.desktop"], "profiles": { "slack.desktop": "private" } }"#,
-    );
-    assert!(why.contains("private"), "got {why}");
-}
-
-#[test]
-fn a_profile_for_an_app_not_in_electron_apps_is_refused() {
-    let why = electron_refused(r#"{ "apps": [], "profiles": { "slack.desktop": "default" } }"#);
-    assert!(why.contains("electron.apps"), "got {why}");
-}
-
 // ---- terminal -------------------------------------------------------------
 
 #[test]

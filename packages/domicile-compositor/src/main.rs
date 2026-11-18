@@ -854,7 +854,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     domicile_host::desk_terminal::set(config.terminal.clone());
     // Before any client starts, so the launcher's first listing has them.
     if let Some(out) = &arguments.electron_entries {
-        electron_apps::write_the_electron_entries(out, &config.electron);
+        electron_apps::write_the_electron_entries(out, &config.electron.apps);
     }
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;

@@ -2,14 +2,12 @@
 //! engine. See "Running an app" in `docs/architecture/ELECTRON-APPS.md`.
 //!
 //! Each is a copy of the app's own entry whose `Exec` lines run
-//! `domicile open --electron [--profile <profile>] <id> -- <the original
-//! Exec>`. They go in a
+//! `domicile open --electron <id> -- <the original Exec>`. They go in a
 //! directory first on the desk's `XDG_DATA_DIRS`, so whatever starts the
 //! entry by its id (a shell's launcher, a link through `domicile open` or GIO,
 //! a press on a notification) starts it on the engine, with no shell
 //! knowing. The original `Exec` stays as the fallback.
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -24,12 +22,9 @@ const MARK: &str = "X-Domicile-Electron=true";
 const DROPPED: [&str; 2] = ["DBusActivatable", "TryExec"];
 
 /// The entry `entry`, desktop file id `id`, with each `Exec` line in any
-/// group running it through `domicile open --electron`, in browser profile
-/// `profile` when there is one, marked as written here.
-pub fn on_the_engine(entry: &str, id: &str, profile: Option<&str>) -> String {
-    let profile = profile
-        .map(|profile| format!("--profile {profile} "))
-        .unwrap_or_default();
+/// group running it through `domicile open --electron`, marked as written
+/// here.
+pub fn on_the_engine(entry: &str, id: &str) -> String {
     let mut out = String::with_capacity(entry.len() + 64);
     for line in entry.lines() {
         let trimmed = line.trim_start();
@@ -40,7 +35,7 @@ pub fn on_the_engine(entry: &str, id: &str, profile: Option<&str>) -> String {
         match (key, trimmed.split_once('=')) {
             ("Exec", Some((_, exec))) => {
                 out.push_str(&format!(
-                    "Exec=domicile open --electron {profile}{id} -- {}\n",
+                    "Exec=domicile open --electron {id} -- {}\n",
                     exec.trim_start()
                 ));
             }
@@ -70,8 +65,7 @@ pub struct Written {
     pub shadowed: Vec<(String, PathBuf)>,
 }
 
-/// Writes [`on_the_engine`] copies of `apps`, desktop file ids, each in the
-/// browser profile `profiles` gives it by the same spelling, into
+/// Writes [`on_the_engine`] copies of `apps`, desktop file ids, into
 /// `out/applications`, and removes the copies it wrote before for any other
 /// id.
 ///
@@ -81,21 +75,17 @@ pub struct Written {
 /// An id without `.desktop` has it added.
 pub fn write_electron_entries(
     apps: &[String],
-    profiles: &BTreeMap<String, String>,
     application_dirs: &[PathBuf],
     data_home: Option<&Path>,
     out: &Path,
 ) -> io::Result<Written> {
     let applications = out.join("applications");
     fs::create_dir_all(&applications)?;
-    let ids: Vec<(String, Option<&str>)> = apps
+    let ids: Vec<String> = apps
         .iter()
-        .map(|app| {
-            let id = match app.ends_with(".desktop") {
-                true => app.clone(),
-                false => format!("{app}.desktop"),
-            };
-            (id, profiles.get(app).map(String::as_str))
+        .map(|app| match app.ends_with(".desktop") {
+            true => app.clone(),
+            false => format!("{app}.desktop"),
         })
         .collect();
     for listed in fs::read_dir(&applications)? {
@@ -105,13 +95,13 @@ pub fn write_electron_entries(
             .unwrap_or(false);
         let kept = path
             .file_name()
-            .is_some_and(|name| ids.iter().any(|(id, _)| name == id.as_str()));
+            .is_some_and(|name| ids.iter().any(|id| name == id.as_str()));
         if ours && !kept {
             fs::remove_file(&path)?;
         }
     }
     let mut written = Written::default();
-    for (id, profile) in ids {
+    for id in ids {
         let found = application_dirs
             .iter()
             .map(|dir| dir.join(&id))
@@ -123,7 +113,7 @@ pub fn write_electron_entries(
                     written.shadowed.push((id.clone(), path.clone()));
                 }
                 let entry = fs::read_to_string(&path)?;
-                fs::write(applications.join(&id), on_the_engine(&entry, &id, profile))?;
+                fs::write(applications.join(&id), on_the_engine(&entry, &id))?;
                 written.written.push(id);
             }
         }

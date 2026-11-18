@@ -176,7 +176,6 @@ export const displayPlacementSchema = z.strictObject({
  */
 export const electronConfigSchema = z.strictObject({
   apps: z.array(z.string()).prefault([]),
-  profiles: z.record(z.string(), z.string()).prefault({}),
 });
 
 /** [`SiteAccess`] other than a list of hosts. */
@@ -532,7 +531,7 @@ export const configSchema = z.strictObject({
     },
     sites: {},
   }),
-  electron: electronConfigSchema.prefault({ apps: [], profiles: {} }),
+  electron: electronConfigSchema.prefault({ apps: [] }),
   extensions: extensionsConfigSchema.prefault({
     settings: {},
     unpacked: [],

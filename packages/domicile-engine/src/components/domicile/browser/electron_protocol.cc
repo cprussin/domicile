@@ -439,7 +439,6 @@ base::expected<ElectronRequest, std::string> ParseHello(
   const std::optional<int> version = request.FindInt("version");
   const std::string* app_id = request.FindString("app_id");
   const std::string* partition = request.FindString("partition");
-  const base::Value* profile = request.Find("profile");
   if (version != kElectronProtocolVersion) {
     return base::unexpected(
         base::StrCat({"this engine speaks version ",
@@ -448,9 +447,6 @@ base::expected<ElectronRequest, std::string> ParseHello(
     return base::unexpected("\"app_id\" must be a string that is not empty");
   } else if (partition == nullptr) {
     return base::unexpected("\"partition\" must be a string");
-  } else if (profile != nullptr &&
-             (!profile->is_string() || profile->GetString().empty())) {
-    return base::unexpected("\"profile\" must be a string that is not empty");
   }
   base::expected<std::optional<WebViewPartition>, std::string> parsed =
       ParseWebViewPartition(*partition);
@@ -459,10 +455,7 @@ base::expected<ElectronRequest, std::string> ParseHello(
   } else if (!parsed->has_value()) {
     return base::unexpected("an app cannot use the profile's own partition");
   } else {
-    return ElectronHello{
-        .app_id = *app_id,
-        .partition = std::move(**parsed),
-        .profile = profile == nullptr ? std::string() : profile->GetString()};
+    return ElectronHello{.app_id = *app_id, .partition = std::move(**parsed)};
   }
 }
 
@@ -1045,6 +1038,111 @@ bool IsElectronPortName(std::string_view name) {
          std::ranges::all_of(name.substr(1), base::IsAsciiDigit<char>);
 }
 
+namespace {
+
+// The keys of `open_window`, for window `window` at `url`, in `request`: an
+// open_window's own, or a window_open_answer that allows the window.
+base::expected<ElectronRequest, ElectronRefusal> ParseOpenWindow(
+    const base::DictValue& request,
+    ElectronWindow window,
+    GURL url) {
+  const base::Value* preload = request.Find("preload");
+  const base::Value* view = request.Find("view");
+  const base::Value* title = request.Find("title");
+  const base::Value* hidden = request.Find("hidden");
+  const base::Value* node = request.Find("node");
+  const base::Value* arguments = request.Find("arguments");
+  base::expected<std::string, std::string> session =
+      SessionIn(request, /*optional=*/true);
+  std::optional<base::expected<ElectronNode, std::string>> node_in;
+  if (node != nullptr) {
+    node_in = NodeIn(*node);
+  }
+  std::vector<std::string> arguments_in;
+  if (arguments != nullptr && arguments->is_list()) {
+    for (const base::Value& argument : arguments->GetList()) {
+      if (!argument.is_string()) {
+        return Refuse("\"arguments\" must be a list of strings", window);
+      }
+      arguments_in.push_back(argument.GetString());
+    }
+  }
+  if (preload != nullptr && !preload->is_string()) {
+    return Refuse("\"preload\" must be a string", window);
+  } else if (arguments != nullptr && !arguments->is_list()) {
+    return Refuse("\"arguments\" must be a list of strings", window);
+  } else if (node_in.has_value() && !node_in->has_value()) {
+    return Refuse(std::move(node_in->error()), window);
+  } else if (node != nullptr && preload != nullptr) {
+    return Refuse(
+        "a page with Node.js loads its preload from a file, "
+        "\"node\"'s \"preload\", not from \"preload\"",
+        window);
+  } else if (view != nullptr && !view->is_bool()) {
+    return Refuse("\"view\" must be true or false", window);
+  } else if (title != nullptr && !title->is_string()) {
+    return Refuse("\"title\" must be a string", window);
+  } else if (hidden != nullptr && !hidden->is_bool()) {
+    return Refuse("\"hidden\" must be true or false", window);
+  } else if (view != nullptr && view->GetBool() &&
+             (title != nullptr || hidden != nullptr)) {
+    return Refuse(
+        "a view has no title or hidden of its own: its window has them",
+        window);
+  } else if (!session.has_value()) {
+    return Refuse(std::move(session.error()), window);
+  }
+  return ElectronOpenWindow{
+      .window = window,
+      .url = std::move(url),
+      .preload = preload ? preload->GetString() : std::string(),
+      .node = node_in.has_value()
+                  ? std::optional<ElectronNode>(std::move(**node_in))
+                  : std::nullopt,
+      .arguments = std::move(arguments_in),
+      .session = std::move(*session),
+      .view = view != nullptr && view->GetBool(),
+      .title = title ? title->GetString() : std::string(),
+      .hidden = hidden != nullptr && hidden->GetBool()};
+}
+
+// The app's answer to window_open `ask`: "deny", or "allow" with the window's
+// number and open_window's other keys. The window opens at the address the
+// page asked for, so the answer names none.
+base::expected<ElectronRequest, ElectronRefusal> ParseWindowOpenAnswer(
+    const base::DictValue& request) {
+  const std::optional<int> ask = request.FindInt("ask");
+  const std::string* action = request.FindString("action");
+  if (!ask.has_value() || *ask < 1) {
+    return Refuse("\"ask\" must be a whole number from 1");
+  } else if (action == nullptr || (*action != "allow" && *action != "deny")) {
+    return Refuse("\"action\" must be \"allow\" or \"deny\"");
+  } else if (*action == "deny") {
+    return ElectronWindowOpenAnswer{.ask = *ask};
+  } else if (request.Find("url") != nullptr) {
+    return Refuse(
+        "a window_open_answer names no \"url\": the window opens where its "
+        "page asked");
+  }
+  const base::expected<ElectronWindow, std::string> window = WindowIn(request);
+  if (!window.has_value()) {
+    return Refuse(window.error());
+  }
+  const base::Value* view = request.Find("view");
+  if (view != nullptr && view->is_bool() && view->GetBool()) {
+    return Refuse("a page's new window is a window, not a view", *window);
+  }
+  base::expected<ElectronRequest, ElectronRefusal> open =
+      ParseOpenWindow(request, *window, GURL());
+  if (!open.has_value()) {
+    return open;
+  }
+  return ElectronWindowOpenAnswer{
+      .ask = *ask, .open = std::get<ElectronOpenWindow>(std::move(*open))};
+}
+
+}  // namespace
+
 base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     std::string_view line) {
   std::optional<base::DictValue> request =
@@ -1075,6 +1173,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParsePermissionHandler(*request);
   } else if (*type == "permission_answer") {
     return ParsePermissionAnswer(*request);
+  } else if (*type == "window_open_answer") {
+    return ParseWindowOpenAnswer(*request);
   } else if (*type == "set_user_agent_fallback") {
     const std::string* user_agent = request->FindString("user_agent");
     if (user_agent == nullptr) {
@@ -1092,64 +1192,7 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     if (!url.has_value()) {
       return Refuse(std::move(url.error()), *window);
     } else if (*type == "open_window") {
-      const base::Value* preload = request->Find("preload");
-      const base::Value* view = request->Find("view");
-      const base::Value* title = request->Find("title");
-      const base::Value* hidden = request->Find("hidden");
-      const base::Value* node = request->Find("node");
-      const base::Value* arguments = request->Find("arguments");
-      base::expected<std::string, std::string> session =
-          SessionIn(*request, /*optional=*/true);
-      std::optional<base::expected<ElectronNode, std::string>> node_in;
-      if (node != nullptr) {
-        node_in = NodeIn(*node);
-      }
-      std::vector<std::string> arguments_in;
-      if (arguments != nullptr && arguments->is_list()) {
-        for (const base::Value& argument : arguments->GetList()) {
-          if (!argument.is_string()) {
-            return Refuse("\"arguments\" must be a list of strings", *window);
-          }
-          arguments_in.push_back(argument.GetString());
-        }
-      }
-      if (preload != nullptr && !preload->is_string()) {
-        return Refuse("\"preload\" must be a string", *window);
-      } else if (arguments != nullptr && !arguments->is_list()) {
-        return Refuse("\"arguments\" must be a list of strings", *window);
-      } else if (node_in.has_value() && !node_in->has_value()) {
-        return Refuse(std::move(node_in->error()), *window);
-      } else if (node != nullptr && preload != nullptr) {
-        return Refuse(
-            "a page with Node.js loads its preload from a file, "
-            "\"node\"'s \"preload\", not from \"preload\"",
-            *window);
-      } else if (view != nullptr && !view->is_bool()) {
-        return Refuse("\"view\" must be true or false", *window);
-      } else if (title != nullptr && !title->is_string()) {
-        return Refuse("\"title\" must be a string", *window);
-      } else if (hidden != nullptr && !hidden->is_bool()) {
-        return Refuse("\"hidden\" must be true or false", *window);
-      } else if (view != nullptr && view->GetBool() &&
-                 (title != nullptr || hidden != nullptr)) {
-        return Refuse(
-            "a view has no title or hidden of its own: its window has them",
-            *window);
-      } else if (!session.has_value()) {
-        return Refuse(std::move(session.error()), *window);
-      }
-      return ElectronOpenWindow{
-          .window = *window,
-          .url = std::move(*url),
-          .preload = preload ? preload->GetString() : std::string(),
-          .node = node_in.has_value()
-                      ? std::optional<ElectronNode>(std::move(**node_in))
-                      : std::nullopt,
-          .arguments = std::move(arguments_in),
-          .session = std::move(*session),
-          .view = view != nullptr && view->GetBool(),
-          .title = title ? title->GetString() : std::string(),
-          .hidden = hidden != nullptr && hidden->GetBool()};
+      return ParseOpenWindow(*request, *window, std::move(*url));
     } else {
       return ElectronLoadUrl{.window = *window, .url = std::move(*url)};
     }
@@ -1254,6 +1297,21 @@ std::string ElectronWebRequest(ElectronWebRequestEvent event,
     line.Set("ip", *details.ip);
   }
   // The loader made every string UTF-8.
+  return Line(std::move(line));
+}
+
+std::string ElectronWindowOpen(int ask,
+                               ElectronWindow window,
+                               const ElectronWindowOpenDetails& details) {
+  base::DictValue line;
+  line.Set("type", "window_open");
+  line.Set("ask", ask);
+  line.Set("window", window);
+  line.Set("url", details.url.possibly_invalid_spec());
+  line.Set("frame_name", details.frame_name);
+  line.Set("features", details.features);
+  line.Set("disposition", details.disposition);
+  line.Set("referrer", details.referrer.possibly_invalid_spec());
   return Line(std::move(line));
 }
 
