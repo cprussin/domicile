@@ -396,6 +396,13 @@ At start the host fills what it lacks from the surface
 - A name Electron itself doesn't have logs once ("doesn't have on Linux"):
   the surface is stale or the app is probing.
 
+`src/__integration__/coverage.json` lists every gap left: each name an app
+would be handed back for ("missing"), find `undefined` for ("absent"), or
+that the test can't make an object to measure ("unmeasured").
+`coverage.test.ts` measures them on the running host and fails when the
+list is off either way, so a gap a new Electron opens, or one a change
+closes, is seen. Update it with `UPDATE_COVERAGE=1 bun test coverage`.
+
 What the host has is real where the engine can do it and a stated answer
 where the shell owns it: window state reads as shown and normal, because
 the shell lays windows out, and `globalShortcut` refuses with a warning,
