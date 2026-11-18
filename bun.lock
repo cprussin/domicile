@@ -81,6 +81,18 @@
         "vite": "catalog:",
       },
     },
+    "packages/benchmarks": {
+      "name": "@domicile-desktop/benchmarks",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/check-runner": {
       "name": "@domicile-desktop/check-runner",
       "version": "0.0.2",
@@ -1530,6 +1542,8 @@
     "@domicile-desktop/app-history": ["@domicile-desktop/app-history@workspace:packages/app-history"],
 
     "@domicile-desktop/app-settings": ["@domicile-desktop/app-settings@workspace:packages/app-settings"],
+
+    "@domicile-desktop/benchmarks": ["@domicile-desktop/benchmarks@workspace:packages/benchmarks"],
 
     "@domicile-desktop/builder": ["@domicile-desktop/builder@workspace:packages/domicile-builder"],
 

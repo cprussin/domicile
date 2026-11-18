@@ -788,7 +788,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-zGTetsFFnzMle+Ts2uvm9L1wtm3OTJnc90UoUF22xGg=";
+        outputHash = "sha256-ow4armjOjlyJNstRVU6yeg37I2rAPXwPGAOLl6gWk7Y=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -814,7 +814,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-YIcDvtoKQyhmEuc8OoXCqatbqTXqix5nYcmpYVVy3K4=";
+        outputHash = "sha256-qhGY30ICbOqI5IlIbpogj9MFTI3ku0Kel00aO5PoSWE=";
       };
 
 
@@ -948,7 +948,11 @@
 
       # The nixpkgs this flake builds with, so scripts take tools such as
       # `.#bun` from the same set.
-      legacyPackages.${system} = pkgs;
+      # `benchmarks`: Domicile against other desktops in identical VMs, run by
+      # hand from benchmarks.yml. See packages/benchmarks/README.md.
+      legacyPackages.${system} = pkgs // {
+        benchmarks = import ./packages/benchmarks/desktops.nix { inherit pkgs nixpkgs system self; };
+      };
 
       # `nix run` offers running a desktop and claiming a new npm package.
       # Checks, e2e scripts and measurements need a checkout; run them with
