@@ -27,6 +27,7 @@ package's default export path:
 | `Battery` | `@domicile-desktop/manganese-bar-module-battery` |
 | `Notifications` | `@domicile-desktop/manganese-bar-module-notifications` |
 | `Sharing` | `@domicile-desktop/manganese-bar-module-sharing` |
+| `Agents` | `@domicile-desktop/manganese-bar-module-sharing/agents` |
 | `KeptAwake` | `@domicile-desktop/manganese-bar-module-idle-inhibitor/kept-awake` |
 | `Cast` | `@domicile-desktop/manganese-bar-module-cast` |
 | `Downloads` | `@domicile-desktop/manganese-bar-module-downloads` |
@@ -85,7 +86,8 @@ Every bar and the lock screen share one watch per system readout. See
 
 - **left**: launcher button, tray, workspaces
 - **center**: clock
-- **right**: sharing indicator (while recorded), Cast (while a TV is near or
+- **right**: sharing indicator (while recorded), agents (while one is in
+  control), Cast (while a TV is near or
   cast to), downloads (while there are any), keymap (with several keymaps), quick settings, notification bell
 
 The theme selector, idle inhibitor, brightness, volume, Bluetooth, network and
@@ -426,6 +428,14 @@ export const Shell = runManganese({
 - While the bar has this item, the portal dialogs' indicator leaves screen
   casts out, so each shows once. Without it, the indicator lists them.
 - See [PORTALS.md](../../../docs/PORTALS.md).
+
+## Agents
+
+- Shown while an agent, such as Claude Code, is in control: a violet pill per
+  agent, named as it names itself. Hovering it says what it can reach.
+- Click says what it can see and use and what it did last, with **Change**
+  and **Stop** buttons.
+- See [AGENTS.md](../../../docs/AGENTS.md).
 
 ## Keep awake
 

@@ -1,6 +1,8 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import type { Capturing, CapturingKind } from "@domicile-desktop/sdk/portal";
+import type { Portals } from "@domicile-desktop/sdk/desktop/portals";
+import type { Capturing } from "@domicile-desktop/sdk/portal";
+import { CapturingKind } from "@domicile-desktop/sdk/portal";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { StopIcon } from "@phosphor-icons/react/dist/ssr/Stop";
@@ -20,45 +22,77 @@ const HOUR_MS = 60 * MINUTE_MS;
 /** How often "1 min ago" moves on while the panel is open. */
 const TICK_MS = 15 * 1000;
 
+/** What the agents item reads: the agents in control. */
+export type AgentsDesktop = {
+  readonly portals: Pick<
+    Portals,
+    "capturing" | "changeAgent" | "on" | "stopCapturing"
+  >;
+};
+
 /**
- * A violet pill per agent in control, named as it names itself. Its panel
- * says what it can reach and what it did last, with buttons that change what
- * it reaches and stop it.
+ * Top bar agents item: a violet pill per agent in control, such as Claude
+ * Code, named as it names itself. Its panel says what it can reach and what
+ * it did last, with buttons that change what it reaches and stop it.
  */
-export const Agents = ({
-  agents,
+export const Agents = ({ domicile }: { domicile: AgentsDesktop }) => {
+  const [agents, setAgents] = useState<readonly Agent[]>([]);
+
+  useEffect(() => {
+    const { portals } = domicile;
+    const heard = () => {
+      setAgents(
+        (portals.capturing ?? []).filter((session) => isAgent(session)),
+      );
+    };
+    heard();
+    return portals.on("change", heard);
+  }, [domicile]);
+
+  // Nothing at all when none is in, so the bar closes the item.
+  return agents.length > 0 ? (
+    <span className={pillsStyles}>
+      {agents.map((agent) => (
+        <Pill
+          agent={agent}
+          change={() => {
+            domicile.portals.changeAgent(agent.id);
+          }}
+          key={agent.id}
+          stop={() => {
+            domicile.portals.stopCapturing(agent.id);
+          }}
+        />
+      ))}
+    </span>
+  ) : undefined;
+};
+
+/** One agent's pill, and its panel. */
+const Pill = ({
+  agent,
   change,
   stop,
 }: {
-  agents: readonly Agent[];
-  change: (id: number) => void;
-  stop: (id: number) => void;
-}) =>
-  agents.map((agent) => (
-    <Popover
-      align="center"
-      key={agent.id}
-      side="bottom"
-      tone="overPhoto"
-      tooltip={`${agent.agent} can see and use ${reach(agent)}`}
-      trigger={
-        <button className={triggerStyles} type="button">
-          <RobotIcon aria-hidden size={15} weight="bold" />
-          {agent.agent}
-        </button>
-      }
-    >
-      <Panel
-        agent={agent}
-        change={() => {
-          change(agent.id);
-        }}
-        stop={() => {
-          stop(agent.id);
-        }}
-      />
-    </Popover>
-  ));
+  agent: Agent;
+  change: () => void;
+  stop: () => void;
+}) => (
+  <Popover
+    align="center"
+    side="bottom"
+    tone="overPhoto"
+    tooltip={`${agent.agent} can see and use ${reach(agent)}`}
+    trigger={
+      <button className={triggerStyles} type="button">
+        <RobotIcon aria-hidden size={15} weight="bold" />
+        {agent.agent}
+      </button>
+    }
+  >
+    <Panel agent={agent} change={change} stop={stop} />
+  </Popover>
+);
 
 const Panel = ({
   agent,
@@ -118,6 +152,9 @@ const Panel = ({
   );
 };
 
+const isAgent = (session: Capturing): session is Agent =>
+  session.kind === CapturingKind.Agent;
+
 /** What an agent reaches, after "can see and use". */
 const reach = (agent: Agent): string =>
   agent.reach.kind === "desk"
@@ -154,7 +191,10 @@ const useNow = (): number => {
   return now;
 };
 
-// Violet, beside the red sharing pill, so the two read apart.
+// Apart by the bar's own gap between items, so each pill reads as its own.
+const pillsStyles = hstack({ gap: 4 });
+
+// Violet, so it reads apart from the red sharing pill.
 const triggerStyles = hstack({
   _hover: {
     backgroundColor: "color-mix(in oklab, {colors.violet.600} 85%, black)",

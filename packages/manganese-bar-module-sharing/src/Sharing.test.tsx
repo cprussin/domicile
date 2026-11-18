@@ -5,6 +5,7 @@ import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { Agents } from "./Agents";
 import { Sharing } from "./Sharing";
 
 // Created outside render, since a new domicile reads again.
@@ -276,13 +277,13 @@ describe("Sharing", () => {
 
     it("gets a pill of its own, named as it names itself", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={sharing(host)} />);
+      render(<Agents domicile={sharing(host)} />);
       host.capture([zoomSharing(DELL), CLAUDE]);
 
-      expect(
-        await screen.findByRole("button", { name: "Sharing screen" }),
-      ).toBeInTheDocument();
       const pill = await screen.findByRole("button", { name: "Claude Code" });
+      expect(
+        screen.queryByRole("button", { name: "Sharing screen" }),
+      ).not.toBeInTheDocument();
       await userEvent.hover(pill);
       expect(
         await screen.findByRole("tooltip", {}, { timeout: 2000 }),
@@ -291,9 +292,22 @@ describe("Sharing", () => {
       );
     });
 
-    it("lists what it reaches and did last, changes it and stops it", async () => {
+    it("is left out of the sharing pill's item", async () => {
       const host = new FakeHost();
       render(<Sharing domicile={sharing(host)} />);
+      host.capture([zoomSharing(DELL), CLAUDE]);
+
+      expect(
+        await screen.findByRole("button", { name: "Sharing screen" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Claude Code" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("lists what it reaches and did last, changes it and stops it", async () => {
+      const host = new FakeHost();
+      render(<Agents domicile={sharing(host)} />);
       host.capture([CLAUDE]);
       await userEvent.click(
         await screen.findByRole("button", { name: "Claude Code" }),
@@ -317,7 +331,7 @@ describe("Sharing", () => {
 
     it("says when it reaches the whole desktop", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={sharing(host)} />);
+      render(<Agents domicile={sharing(host)} />);
       host.capture([
         {
           ...CLAUDE,
