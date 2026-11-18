@@ -14,11 +14,17 @@ sees it in the bar the whole time it's in, and can stop it.
      them through their accessibility trees and their own screenshots, and
      never moves your pointer or types elsewhere. Private browser windows are
      never offered.
+   - **Remember for Claude Code**, shown with the entire desktop, lets it in
+     from then on without asking.
    - Cancel, or a minute without an answer, refuses it.
 3. While it's in, a violet pill with its name sits in the bar. Click it to see
-   what it can reach and what it did last, and **Stop** to end it.
+   what it can reach and what it did last, **Change** to give it more or less,
+   and **Stop** to end it. Canceling a change keeps what it has.
 4. An agent you cancel or stop is refused from then on. Its next session asks
-   again.
+   again, unless it is remembered.
+5. **Settings › Agents** lists each agent connected now or remembered, with
+   what it reaches and when it was last used. **Stop** ends its sessions;
+   **Forget** makes it ask again.
 
 Agents are refused while the desktop is locked.
 
@@ -62,6 +68,25 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   action as one line, such as `Clicked in Notes`, never what it typed.
 - **The name is the agent's own word.** It comes from the client's
   `initialize` (`clientInfo.title`, else `name`) and is not checked.
+- **Only the whole desk is remembered.** A list of windows means nothing in
+  the next session, so `PortalAnswer::Agent { remember }` is refused with
+  windows. The compositor keeps remembered agents, by name, with when each was
+  last let in, in `$XDG_STATE_HOME/domicile/agents.json` (`portals::agent`).
+  A file it can't read remembers nobody, so each agent asks again. Since the
+  name is the agent's own word, any agent that calls itself a remembered name
+  is let in; remembering trusts the agents the user connects, as the rest of
+  this does.
+- **A change asks again, from the session.** `PortalAnswer::Change` on an
+  agent session puts the dialog up again, with its reach picked and
+  `current` set. Its answer replaces the reach, and the holder of the grant
+  gets `SystemEvent::AgentReach`, which `domicile agent` prints as another
+  line and `domicile mcp` applies from the next tool call. The whole desk
+  with Remember on remembers it; anything else forgets it.
+- **Settings lists and forgets through system calls.** `agents` lists
+  sessions and remembered agents, `stop_agent` ends a session and
+  `forget_agent` forgets a name. `domicile list-agents`, `stop-agent` and
+  `forget-agent` are the same, and Settings' host calls them on the control
+  socket. All three are refused while the desk is locked, and to apps.
 - **Private windows are never offered.** The dialog lists every window but
   private browser windows, and the engine refuses DevTools on them anyway.
 
@@ -70,5 +95,8 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
 `<PortalDialogs />` draws the dialog (`AgentDialog`) and lists a running agent
 in its capturing indicator. A shell that shows agents itself, as Manganese's
 bar does, passes `omitAgents`. The SDK parses the dialog as `PortalKind.Agent`,
-answers it with `PortalAnswer.Agent(reach)`, and lists a session as
-`CapturingKind.Agent`.
+answers it with `PortalAnswer.Agent(reach, remember)`, and lists a session as
+`CapturingKind.Agent`. `body.current` is set when the dialog changes a running
+agent, and `body.remembered` when the agent is remembered.
+`domicile.portals.changeAgent(id)` asks again for a running agent;
+`agents()` and `forgetAgent(agent)` back a settings page.

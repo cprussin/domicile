@@ -2366,6 +2366,17 @@ void SettleBrowserWindowCount(ScriptPromiseResolver<IDLLong>* resolver,
   resolver->Resolve(*count);
 }
 
+void SettleBrowserWindowClick(ScriptPromiseResolver<IDLBoolean>* resolver,
+                              std::optional<bool> clicked) {
+  if (!clicked.has_value()) {
+    resolver->RejectWithDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The browser window is gone, or its page gave no answer.");
+    return;
+  }
+  resolver->Resolve(*clicked);
+}
+
 }  // namespace
 
 void DomicileHost::openAppWindow(ScriptState*,
@@ -2418,6 +2429,28 @@ ScriptPromise<IDLLong> DomicileHost::countBrowserWindowMatches(
   windows_->CountMatches(
       id, selector,
       BindOnce(&SettleBrowserWindowCount, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLBoolean> DomicileHost::clickBrowserWindowMatch(
+    ScriptState* script_state,
+    const String& id,
+    const String& selector,
+    ExceptionState& exception_state) {
+  // Parsed here, as countBrowserWindowMatches parses it.
+  window_->document()->QuerySelector(AtomicString(selector), exception_state);
+  if (exception_state.HadException()) {
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->ClickMatch(
+      id, selector,
+      BindOnce(&SettleBrowserWindowClick, WrapPersistent(resolver)));
   return promise;
 }
 

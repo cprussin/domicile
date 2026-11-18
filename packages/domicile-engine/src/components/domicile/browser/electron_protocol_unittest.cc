@@ -273,10 +273,31 @@ TEST(ElectronProtocolTest, ALineThatIsNotAnObjectIsRefused) {
 
 TEST(ElectronProtocolTest, ReadySaysWhichSchemesTheEngineRegistered) {
   EXPECT_EQ(ElectronReady({{.scheme = "app", .standard = true, .secure = true},
-                           {.scheme = "claude-media"}}),
-            "{\"schemes\":[{\"privileges\":[\"standard\",\"secure\"],"
-            "\"scheme\":\"app\"},{\"privileges\":[],\"scheme\":"
-            "\"claude-media\"}],\"type\":\"ready\"}\n");
+                           {.scheme = "claude-media"}},
+                          {}),
+            "{\"chrome_version\":\"\",\"schemes\":[{\"privileges\":"
+            "[\"standard\",\"secure\"],\"scheme\":\"app\"},"
+            "{\"privileges\":[],\"scheme\":\"claude-media\"}],"
+            "\"type\":\"ready\",\"user_agent\":\"\"}\n");
+}
+
+TEST(ElectronProtocolTest, ReadySaysTheEnginesUserAgentAndChromeVersion) {
+  EXPECT_EQ(ElectronReady({}, {.user_agent = "Mozilla/5.0 Chrome/160.0.0.0",
+                               .chrome_version = "160.0.8155.0"}),
+            "{\"chrome_version\":\"160.0.8155.0\",\"schemes\":[],"
+            "\"type\":\"ready\",\"user_agent\":\"Mozilla/5.0 "
+            "Chrome/160.0.0.0\"}\n");
+}
+
+TEST(ElectronProtocolTest, SetUserAgentFallbackCarriesTheAgent) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"set_user_agent_fallback","user_agent":"Slack/4 Electron/45"})");
+
+  ASSERT_TRUE(request.has_value());
+  EXPECT_EQ(std::get<ElectronSetUserAgentFallback>(*request).user_agent,
+            "Slack/4 Electron/45");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_user_agent_fallback"})"),
+            "\"user_agent\" must be a string");
 }
 
 TEST(ElectronProtocolTest, OpenWindowMayOpenAView) {
@@ -535,7 +556,9 @@ TEST(ElectronProtocolTest, ABadShowMessageBoxIsRefusedAsTheWindows) {
 }
 
 TEST(ElectronProtocolTest, EventsAreOneLineEach) {
-  EXPECT_EQ(ElectronReady({}), "{\"schemes\":[],\"type\":\"ready\"}\n");
+  EXPECT_EQ(ElectronReady({}, {}),
+            "{\"chrome_version\":\"\",\"schemes\":[],\"type\":\"ready\","
+            "\"user_agent\":\"\"}\n");
   EXPECT_EQ(ElectronRefused("no"), "{\"type\":\"refused\",\"why\":\"no\"}\n");
   EXPECT_EQ(ElectronWindowOpened(1),
             "{\"type\":\"window_opened\",\"window\":1}\n");
@@ -543,6 +566,8 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"type\":\"window_refused\",\"why\":\"gone\",\"window\":2}\n");
   EXPECT_EQ(ElectronWindowLoaded(3),
             "{\"type\":\"window_loaded\",\"window\":3}\n");
+  EXPECT_EQ(ElectronWindowDomReady(3),
+            "{\"type\":\"window_dom_ready\",\"window\":3}\n");
   EXPECT_EQ(ElectronTitleChanged(4, "Claude"),
             "{\"title\":\"Claude\",\"type\":\"title_changed\",\"window\":4}\n");
   EXPECT_EQ(ElectronWindowClosed(5),

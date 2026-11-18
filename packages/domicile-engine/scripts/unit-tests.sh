@@ -38,7 +38,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # DeskCursorThemeSource 3, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 7,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
-# DeskPointer 5, PointerWarp 10, PointerConfinementBoxes 4, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
+# DeskPointer 5, PointerWarp 10, PointerConfinementBoxes 4, PageMatches 8, ForceDark 2, HiddenFromCaptures 7,
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 13, TapModifierOf 1, IdentityDialog 11,
@@ -48,8 +48,9 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # BrowserProfiles 12, UnfocusedWebViews 7, HistoryMenu 2, ShellDevServer 7,
 # ShellDevServerLoad 4, ShellDevServerGone 1.
 #
-# 891, and it was 885 — an agent's DevTools methods to a browser window are
-# six CommandProtocol cases. Before that
+# 895, and it was 891 — a shell clicking a selector's first shown match in a
+# page is four PageMatches cases. Before that 891, and it was 885 — an agent's
+# DevTools methods to a browser window are six CommandProtocol cases. Before that
 # 884, and it was 867 — serving a shell from `domicile dev`'s dev server is
 # twelve ShellDevServer cases, two ShellSource, one ShellSwap and two
 # CommandProtocol. Before that
@@ -318,7 +319,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=891
+FLOOR=895
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

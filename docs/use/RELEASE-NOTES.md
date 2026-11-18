@@ -11,9 +11,9 @@ _Unreleased_
 
 ![Element on the desktop's browser, with its menu bar under its tab](../media/release-electron.png)
 
-Slack, Element and Claude run on the desktop's browser instead of their own Chromium, with menus and dialogs in the desktop's style. Apps whose windows use Node.js can run there too. ChatGPT only starts on OpenAI's own Chromium, so it stays there.
+Slack, Element and Claude run on the desktop's browser instead of their own Chromium, with menus and dialogs in the desktop's style. Apps whose windows use Node.js can run there too. They reach servers on your network and VPN, such as a Matrix homeserver behind WireGuard. ChatGPT only starts on OpenAI's own Chromium, so it stays there.
 
-[How to turn it on](ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2162](https://github.com/cprussin/domicile/pull/2162) · [#2173](https://github.com/cprussin/domicile/pull/2173) · [#2243](https://github.com/cprussin/domicile/pull/2243) · [#2256](https://github.com/cprussin/domicile/pull/2256)
+[How to turn it on](ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2162](https://github.com/cprussin/domicile/pull/2162) · [#2173](https://github.com/cprussin/domicile/pull/2173) · [#2243](https://github.com/cprussin/domicile/pull/2243) · [#2256](https://github.com/cprussin/domicile/pull/2256) · [#2283](https://github.com/cprussin/domicile/pull/2283)
 
 ### Browser profiles
 
@@ -26,7 +26,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 
 ### Also new
 
-- Let Claude Code and other agents use your desktop, all of it or only the windows you pick. A violet pill in the bar shows the agent while it's in, with what it did last and a Stop button. [Agents](../AGENTS.md)
+- Let Claude Code and other agents use your desktop, all of it or only the windows you pick. A violet pill in the bar shows the agent while it's in, with what it did last, a Change button and a Stop button. Remember one you trust, and forget it again in Settings. [Agents](../AGENTS.md)
 - Pop a video out of its page to float it over everything. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2116](https://github.com/cprussin/domicile/pull/2116) · [#2177](https://github.com/cprussin/domicile/pull/2177)
 - HDR per monitor in Settings, and 10-bit color without banding. [Monitors](MONITORS.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
 - Press and hold Back or Forward to jump to any page before or after. [#2251](https://github.com/cprussin/domicile/pull/2251)
@@ -48,6 +48,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 
 ### Fixes
 
+- A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [#2284](https://github.com/cprussin/domicile/pull/2284)
 - PDFs stay sharp and no longer go blank. [#2038](https://github.com/cprussin/domicile/pull/2038) · [#2080](https://github.com/cprussin/domicile/pull/2080) · [#2100](https://github.com/cprussin/domicile/pull/2100)
 - Smoother windows on heavy pages, adaptive sync monitors and the overview. [#2227](https://github.com/cprussin/domicile/pull/2227) · [#2094](https://github.com/cprussin/domicile/pull/2094) · [#2041](https://github.com/cprussin/domicile/pull/2041)
 - Less battery use while idle. [#2143](https://github.com/cprussin/domicile/pull/2143) · [#2138](https://github.com/cprussin/domicile/pull/2138)

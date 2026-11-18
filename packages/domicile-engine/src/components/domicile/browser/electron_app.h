@@ -169,8 +169,9 @@ class ElectronSession {
                      ElectronPermissionDetails details,
                      base::OnceCallback<void(bool granted)> answered);
 
-  // session.setUserAgent's, for the session's pages; empty for the engine's.
-  const std::string& user_agent() const { return user_agent_; }
+  // The user agent of the session's pages: session.setUserAgent's, else the
+  // app's fallback; empty for the engine's.
+  const std::string& user_agent() const;
   const std::string& name() const { return name_; }
   base::WeakPtr<ElectronSession> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -304,10 +305,11 @@ class ElectronApp {
  public:
   using Send = base::RepeatingCallback<void(std::string line)>;
 
-  // `schemes` are the apps' own schemes the engine registered as it
-  // started, which hello's answer names.
+  // `engine` and `schemes`, the apps' own schemes the engine registered as it
+  // started, are what hello's answer names.
   ElectronApp(ElectronDesk& desk,
               Send send,
+              ElectronEngineInfo engine,
               std::vector<ElectronScheme> schemes = {});
   ElectronApp(const ElectronApp&) = delete;
   ElectronApp& operator=(const ElectronApp&) = delete;
@@ -325,6 +327,9 @@ class ElectronApp {
   // Reports that window `id`'s page finished loading. Any other id is not
   // this app's.
   void Loaded(const std::string& id);
+  // Reports that window `id`'s main frame's DOM is ready. Any other id is not
+  // this app's.
+  void DomReady(const std::string& id);
 
  private:
   friend class ElectronSession;
@@ -429,9 +434,15 @@ class ElectronApp {
   // The desk id of window `number`, or nothing after refusing the request.
   std::optional<std::string> IdOf(ElectronWindow number);
 
+  // Applies app.userAgentFallback to the sessions without their own.
+  void SetUserAgentFallback(const ElectronSetUserAgentFallback& fallback);
+
   const raw_ref<ElectronDesk> desk_;
   const Send send_;
+  const ElectronEngineInfo engine_;
   const std::vector<ElectronScheme> schemes_;
+  // app.userAgentFallback; empty leaves pages the engine's.
+  std::string user_agent_fallback_;
   // Set by the app's hello.
   std::optional<ElectronHello> hello_;
   // The app's open windows, by the numbers it gave them.

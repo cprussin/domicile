@@ -14,6 +14,7 @@ import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import { CheckboxRow, ChoiceList, RadioRow } from "../ChoiceRow/ChoiceRow";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
+import { Switch } from "../Switch/Switch";
 import type { App } from "../useApps/useApps";
 import { WindowIcon } from "./WindowIcon";
 
@@ -30,17 +31,38 @@ type Reach = "desk" | "windows";
 /**
  * Whether an agent, such as Claude Code, may see and use the desk: all of
  * it, or only the windows the user checks, which none are at first. Allow
- * stays off until one is. Dismissing it denies.
+ * stays off until one is. With the whole desk, Remember lets it in without
+ * asking next time. Dismissing it denies.
+ *
+ * Asked to change what an agent reaches, it starts from what it reaches
+ * now, and dismissing it keeps that.
  */
 export const AgentDialog = ({ answer, apps, body, screen }: Props) => {
-  const [reach, setReach] = useState<Reach>("desk");
-  const [checked, setChecked] = useState<readonly string[]>([]);
+  const changing = body.current !== undefined;
+  const [reach, setReach] = useState<Reach>(
+    body.current?.kind === "windows" ? "windows" : "desk",
+  );
+  const [checked, setChecked] = useState<readonly string[]>(() =>
+    body.current?.kind === "windows"
+      ? body.current.windows.map((window) => window.id)
+      : [],
+  );
+  const [remember, setRemember] = useState(body.remembered);
   const picked = body.windows.filter((window) => checked.includes(window.id));
   return (
     <ModalDialog
       closeButton={false}
       footer={
         <>
+          {reach === "desk" && (
+            <span className={rememberStyles}>
+              <Switch
+                checked={remember}
+                label={`Remember for ${body.agent}`}
+                onCheckedChange={setRemember}
+              />
+            </span>
+          )}
           <Button
             onClick={() => {
               answer(Answer.Canceled());
@@ -53,15 +75,13 @@ export const AgentDialog = ({ answer, apps, body, screen }: Props) => {
             disabled={reach === "windows" && picked.length === 0}
             onClick={() => {
               answer(
-                Answer.Agent(
-                  reach === "desk"
-                    ? { kind: "desk" }
-                    : { kind: "windows", windows: picked },
-                ),
+                reach === "desk"
+                  ? Answer.Agent({ kind: "desk" }, remember)
+                  : Answer.Agent({ kind: "windows", windows: picked }),
               );
             }}
           >
-            Allow
+            {changing ? "Save" : "Allow"}
           </Button>
         </>
       }
@@ -72,11 +92,16 @@ export const AgentDialog = ({ answer, apps, body, screen }: Props) => {
       }}
       open
       screen={screen}
-      title={`Let ${body.agent} use your desktop?`}
+      title={
+        changing
+          ? `Change what ${body.agent} can use`
+          : `Let ${body.agent} use your desktop?`
+      }
     >
       <p className={textStyles}>
-        It will see what you pick and click and type there. Stop it any time
-        from the bar.
+        {changing
+          ? "It keeps what it has if you cancel."
+          : "It will see what you pick and click and type there. Stop it any time from the bar."}
       </p>
       <div className={choicesStyles}>
         <ChoiceList<Reach>
@@ -153,6 +178,9 @@ const kindOf = (apps: (appId: string) => App, window: AgentWindow): string => {
 };
 
 const textStyles = css({ color: "foreground", margin: 0 });
+
+// At the footer's start, away from its buttons.
+const rememberStyles = css({ fontSize: "sm", marginInlineEnd: "auto" });
 
 const choicesStyles = css({ marginBlockStart: 3 });
 

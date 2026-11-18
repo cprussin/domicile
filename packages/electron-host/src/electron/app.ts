@@ -33,6 +33,12 @@ export type AppHooks = {
   focus?: () => void;
   /** `app.applicationMenu`, which `Menu` owns. */
   applicationMenu?: { get: () => unknown; set: (menu: unknown) => void };
+  /** `app.userAgentFallback`, which needs the engine's user agent. */
+  userAgentFallback?: {
+    get: () => string;
+    renamed: () => void;
+    set: (agent: string) => void;
+  };
 };
 
 /**
@@ -80,7 +86,6 @@ export class ElectronApp extends EventEmitter {
   #aboutPanel: Record<string, unknown> = {};
   #desktopName: string | undefined;
   #lock;
-  userAgentFallback = "";
 
   constructor(
     private readonly appPath: string,
@@ -107,6 +112,14 @@ export class ElectronApp extends EventEmitter {
         );
       },
     );
+  }
+
+  get userAgentFallback() {
+    return userAgentFallbackOf(this.hooks).get();
+  }
+
+  set userAgentFallback(agent: string) {
+    userAgentFallbackOf(this.hooks).set(agent);
   }
 
   get applicationMenu() {
@@ -397,6 +410,8 @@ export class ElectronApp extends EventEmitter {
 
   readonly setName = (name: string) => {
     this.#name = name;
+    // Before the engine, it reads the name when it reaches it.
+    this.hooks.userAgentFallback?.renamed();
   };
 
   readonly setPath = (name: string, path: string) => {
@@ -463,4 +478,15 @@ const eventObject = () => {
     },
   };
   return event;
+};
+
+/** The host's `app.userAgentFallback`, which it sets once it reaches the engine. */
+const userAgentFallbackOf = (hooks: AppHooks) => {
+  if (hooks.userAgentFallback === undefined) {
+    throw new Error(
+      "app.userAgentFallback was used before the host reached the engine",
+    );
+  } else {
+    return hooks.userAgentFallback;
+  }
 };

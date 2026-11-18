@@ -95,6 +95,11 @@ export type EngineRequest =
       readonly window: number;
       readonly hidden: boolean;
     }
+  | {
+      /** app.userAgentFallback: each session's pages' unless it has its own. */
+      readonly type: "set_user_agent_fallback";
+      readonly user_agent: string;
+    }
   | { readonly type: "close_window"; readonly window: number }
   | { readonly type: "destroy_window"; readonly window: number }
   | {
@@ -146,10 +151,12 @@ export type EngineRequest =
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({
+    chrome_version: z.string(),
     schemes: z.array(
       z.object({ privileges: z.array(z.string()), scheme: z.string() }),
     ),
     type: z.literal("ready"),
+    user_agent: z.string(),
   }),
   z.object({ type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("window_opened"), window: z.number() }),
@@ -158,6 +165,8 @@ const engineEvent = z.discriminatedUnion("type", [
     why: z.string(),
     window: z.number(),
   }),
+  // The page's DOM is ready: Electron's dom-ready.
+  z.object({ type: z.literal("window_dom_ready"), window: z.number() }),
   z.object({ type: z.literal("window_loaded"), window: z.number() }),
   z.object({
     title: z.string(),
@@ -293,8 +302,15 @@ export type EngineEvent = z.infer<typeof engineEvent>;
 /** What the engine says about one window. */
 export type WindowEvent = Extract<EngineEvent, { window: number }>;
 
+/** The engine's own user agent and Chrome's full version, from its `ready`. */
+export type EngineBrowser = {
+  readonly userAgent: string;
+  readonly chromeVersion: string;
+};
+
 export type Engine = {
   readonly send: (request: EngineRequest) => void;
+  readonly browser: EngineBrowser;
   /**
    * The apps' own schemes the engine registered as it started, with the
    * privileges it granted each, by Electron's names.
@@ -334,7 +350,7 @@ export const connectEngine = (
     let ready = false;
     let pending = "";
 
-    const engine: Omit<Engine, "schemes"> = {
+    const engine: Omit<Engine, "schemes" | "browser"> = {
       events,
       send: (request) => {
         socket.write(`${JSON.stringify(request)}\n`);
@@ -349,7 +365,14 @@ export const connectEngine = (
         ready = true;
         resolve(
           parsed.data.type === "ready"
-            ? Ok({ ...engine, schemes: parsed.data.schemes })
+            ? Ok({
+                ...engine,
+                browser: {
+                  chromeVersion: parsed.data.chrome_version,
+                  userAgent: parsed.data.user_agent,
+                },
+                schemes: parsed.data.schemes,
+              })
             : Err(
                 `the engine refused this app: ${"why" in parsed.data ? parsed.data.why : parsed.data.type}`,
               ),

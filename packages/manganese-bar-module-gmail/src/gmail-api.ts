@@ -129,6 +129,12 @@ const unreadSchema = jsonText.pipe(
     ),
 );
 
+/**
+ * A thread's id: Gmail's hex number, which a press names the thread's row and
+ * link by.
+ */
+const threadIdSchema = z.string().regex(/^[0-9a-f]+$/);
+
 const headersSchema = jsonText.pipe(
   z
     .object({
@@ -138,7 +144,7 @@ const headersSchema = jsonText.pipe(
       payload: z.object({
         headers: z.array(z.object({ name: z.string(), value: z.string() })),
       }),
-      threadId: z.string(),
+      threadId: threadIdSchema,
     })
     .transform(({ id, internalDate, payload, threadId }) => {
       const header = (name: string) =>

@@ -1030,6 +1030,16 @@ interface WebViewGuest {
   // gave no number: it navigated before the read ran, or the selector is not
   // valid there. The element rejects a selector it cannot parse first.
   CountMatches(string selector) => (int32? count);
+
+  // Clicks the first shown element in the page's main document that matches the
+  // CSS `selector`, as a press of the mouse's main button on its middle does:
+  // scrolled into view, it gets pointerdown, mousedown, pointerup, mouseup and
+  // click. Run in Chrome's internal isolated world, as CountMatches is; the
+  // events are the page's to hear, but not trusted ones. Works while the page
+  // is hidden. Whether an element matched; null when the page gave no answer:
+  // it navigated before the click ran, or the selector is not valid there. The
+  // element rejects a selector it cannot parse first.
+  ClickMatch(string selector) => (bool? clicked);
 };
 
 // A page's channel to its <webview>'s shell for the pickers Chrome draws for

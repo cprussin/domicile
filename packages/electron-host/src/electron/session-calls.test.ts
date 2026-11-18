@@ -5,7 +5,10 @@ import { createSessionCalls } from "./session-calls";
 
 const setUp = () => {
   const sent: SessionCallMessage[] = [];
-  const calls = createSessionCalls((message) => sent.push(message));
+  const calls = createSessionCalls(
+    (message) => sent.push(message),
+    () => "Notes/1 Electron/45",
+  );
   return { calls, sent };
 };
 
@@ -112,11 +115,11 @@ describe(createSessionCalls, () => {
     ]);
   });
 
-  it("gives a session the user agent it was set, and tells the engine", () => {
+  it("gives a session the app's fallback user agent until it is set its own, and tells the engine", () => {
     const { calls, sent } = setUp();
     const session = calls.forSession("");
 
-    expect(session.getUserAgent()).toBe("");
+    expect(session.getUserAgent()).toBe("Notes/1 Electron/45");
     session.setUserAgent("Claude/1");
 
     expect(session.getUserAgent()).toBe("Claude/1");

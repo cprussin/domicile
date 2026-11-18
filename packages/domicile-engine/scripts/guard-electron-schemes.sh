@@ -3,8 +3,9 @@
 # --domicile-electron-schemes naming guard: as standard, secure and
 # supporting fetch(), the engine says so in its answer to hello, and a page
 # the app serves at guard://app/ has the origin guard://app, is a secure
-# context, and fetch()es its own files. A scheme nobody registered has no
-# origin. See "Requests" in docs/architecture/ELECTRON-APPS.md.
+# context, fetch()es its own files, and loads a picture from this machine with
+# no Local Network Access prompt. A scheme nobody registered has no origin.
+# See "Requests" in docs/architecture/ELECTRON-APPS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-electron-schemes.sh /build/chromium/src
@@ -18,6 +19,11 @@
 #   secure    the page is a secure context (secure)
 #   fetched   the page's fetch("data.txt") read what the app served
 #             (supportFetchAPI, and the subresource reached the app)
+#   local     the page's <img> from http://127.0.0.1 loaded: an app's own
+#             scheme is classed loopback (patch 0238), not public, so Local
+#             Network Access holds nothing. Headless Chrome denies every
+#             prompt, so a held request is a broken picture.
+#             guard-shell-local-network.sh's control shows LNA is live.
 #   control   a URL in plain:, which nobody registered, has no origin
 set -u
 
@@ -115,10 +121,30 @@ sleep 1
 # it hears, then what it measured.
 python3 - "$ELECTRON" "$FOR_SECONDS" "$SCRIPTS/guard-electron-schemes-app" \
   >"$APP_LOG" 2>&1 <<'PY'
-import base64, json, socket, sys, time
+import base64, json, socket, sys, threading, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 path, seconds, root = sys.argv[1], float(sys.argv[2]), sys.argv[3]
 heard = []
+
+class Picture(BaseHTTPRequestHandler):
+    """A picture on this machine, for the page's Local Network Access check."""
+
+    def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
+        body = (b'<svg xmlns="http://www.w3.org/2000/svg" width="1" '
+                b'height="1"/>')
+        self.send_response(200)
+        self.send_header("content-type", "image/svg+xml")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):  # noqa: A002 - the base's name
+        print("picture server: " + format % args, flush=True)
+
+pictures = ThreadingHTTPServer(("127.0.0.1", 0), Picture)
+threading.Thread(target=pictures.serve_forever, daemon=True).start()
+picture = "http://127.0.0.1:%d/picture" % pictures.server_address[1]
 
 def send(request):
     connection.sendall((json.dumps(request) + "\n").encode())
@@ -130,7 +156,7 @@ def respond(number, body, content_type):
 
 def answer(event):
     """Serves a page's request as the app's protocol handler would."""
-    number, url = event["request"], event["url"]
+    number, url = event["request"], event["url"].split("?")[0]
     if url == "guard://app/index.html":
         with open(root + "/index.html", "rb") as page_file:
             respond(number, page_file.read(), "text/html")
@@ -170,7 +196,7 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0 0 0 0", flush=True)
+    print("measured: 0 0 0 0 0 0", flush=True)
     sys.exit(0)
 reader = connection.makefile("r", encoding="utf-8")
 
@@ -178,40 +204,43 @@ send({"type": "hello", "version": 1, "app_id": "guard.electron.schemes",
       "partition": "persist:electron-guard-schemes"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "handle_protocol", "session": "", "scheme": "guard"})
-send({"type": "open_window", "window": 1, "url": "guard://app/index.html"})
+send({"type": "open_window", "window": 1,
+      "url": "guard://app/index.html?picture=" + picture})
 done = hear_until(lambda e: e.get("type") == "title_changed" and
                   e.get("window") == 1 and
                   e.get("title", "").startswith("done|"))
 
-# "done|<origin>|<secure context>|<what fetch read>|<plain:'s origin>"
-words = (done or {}).get("title", "").split("|") + ["", "", "", ""]
+# "done|<origin>|<secure context>|<what fetch read>|<the picture>|
+#  <plain:'s origin>"
+words = (done or {}).get("title", "").split("|") + ["", "", "", "", ""]
 listed = (ready or {}).get("schemes") == [
     {"scheme": "guard",
      "privileges": ["standard", "secure", "supportFetchAPI"]}]
-print("measured: %d %d %d %d %d" % (
+print("measured: %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready" and listed,
     words[1] == "guard://app",
     words[2] == "true",
     words[3] == "fetched",
-    done is not None and words[4] == "null"),
+    words[4] == "loaded",
+    done is not None and words[5] == "null"),
     flush=True)
 PY
 
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready origin secure fetched control)"
+echo "  (ready origin secure fetched local control)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-schemes-guard.sh`
 # runs this block directly. MEASURED is "<ready> <origin> <secure> <fetched>
-# <control>".
+# <local> <control>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1 1")
+"1 1 1 1 1 1")
   PASSED="the engine registered guard: as it started, said so to the app, \
-and the app's page at guard://app/ had that origin, was a secure context and \
-fetch()ed its own files, while plain:, which nobody registered, had no origin"
+and the app's page at guard://app/ had that origin, was a secure context, \
+fetch()ed its own files and loaded a picture from this machine, while plain:, which nobody registered, had no origin"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello, or its ready \
@@ -238,7 +267,14 @@ in a scheme ChromeContentRendererClient::RenderThreadStarted did not register \
 as supporting it (patch 0222), or the request never reached the app \
 (AddElectronSubresourceLoaderFactories) -- the app's log has what it heard"
   ;;
-"1 1 1 1 0")
+"1 1 1 1 0 "*)
+  FAILURE="THE PAGE AT guard://app/ COULD NOT LOAD A PICTURE FROM THIS \
+MACHINE: Local Network Access read the app's page as public and held the \
+request. ChromeContentBrowserClient::DetermineAddressSpaceFromURL must class \
+an app's own scheme loopback (patch 0238), as it does the shell's -- or the \
+picture server was never asked; the app's log says which"
+  ;;
+"1 1 1 1 1 0")
   FAILURE="PLAIN:, WHICH NOBODY REGISTERED, HAD AN ORIGIN: the engine \
 registers schemes nobody named, so this guard measures nothing"
   ;;

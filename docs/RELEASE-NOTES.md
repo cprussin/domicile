@@ -26,7 +26,7 @@ Profiles with their own sign-ins, site data and extensions; each site opens in i
 
 ### Let agents drive the desktop
 
-`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands, see the desk and click and type on it, and read and drive browser windows and accessible native apps by their accessibility trees, even while they are hidden: `claude mcp add domicile -- domicile mcp`. `domicile pointer`, `scroll`, `key`, `type`, `screenshot --fit`, `devtools`, `accessibility` and `accessibility-act` do the same from scripts. Private windows are never driven. The first tool call asks the user to let the agent in, with the entire desktop or only the windows they check, and a running agent is listed as a capturing session they can stop: `PortalKind.Agent`, `PortalAnswer.Agent` and `CapturingKind.Agent` in the SDK, drawn by `<PortalDialogs />`.
+`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands, see the desk and click and type on it, and read and drive browser windows and accessible native apps by their accessibility trees, even while they are hidden: `claude mcp add domicile -- domicile mcp`. `domicile pointer`, `scroll`, `key`, `type`, `screenshot --fit`, `devtools`, `accessibility` and `accessibility-act` do the same from scripts. Private windows are never driven. The first tool call asks the user to let the agent in, with the entire desktop or only the windows they check, and a running agent is listed as a capturing session they can change or stop: `PortalKind.Agent`, `PortalAnswer.Agent` and `CapturingKind.Agent` in the SDK, drawn by `<PortalDialogs />`. An agent let reach the whole desktop can be remembered, and Settings › Agents lists them to stop or forget: `domicile list-agents`, `stop-agent` and `forget-agent`.
 
 [`domicile mcp`](CLI.md#domicile-mcp) · [Agents](AGENTS.md)
 
@@ -40,6 +40,7 @@ Profiles with their own sign-ins, site data and extensions; each site opens in i
 
 - HDR and 10-bit color: `wp_color_management_v1`, 10-bit and half-float buffers, HDR10 per display, and `Display.hdr`, `peakLuminance`, `sdrWhite`. [Design](architecture/COLOR.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
 - `<app picture-in-picture>` floats a page's video as a shell window, growing from its `source`. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2177](https://github.com/cprussin/domicile/pull/2177)
+- `browser.clickMatch()` and `<webview>.clickMatch()` click a selector's first match in a page. [#2284](https://github.com/cprussin/domicile/pull/2284)
 - `<webview>.history()` for a Back and Forward history menu. [#2251](https://github.com/cprussin/domicile/pull/2251)
 - Pointer lock, confinement and relative motion. [#2054](https://github.com/cprussin/domicile/pull/2054) · [#2057](https://github.com/cprussin/domicile/pull/2057) · [#2123](https://github.com/cprussin/domicile/pull/2123)
 - Input methods in pages, the shell and native windows. [#2059](https://github.com/cprussin/domicile/pull/2059) · [#2062](https://github.com/cprussin/domicile/pull/2062)

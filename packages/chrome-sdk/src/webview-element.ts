@@ -994,6 +994,17 @@ declare global {
      * page, and when the page gave no number, as when it navigated first.
      */
     countMatches(selector: string): Promise<number>;
+    /**
+     * Clicks the first shown element in the page's main document that matches
+     * the CSS `selector`, as a press of the mouse's main button on its middle
+     * does: scrolled into view, it gets pointerdown, mousedown, pointerup,
+     * mouseup and click, which the page hears as untrusted events. A hidden
+     * page is clicked too. Resolves whether an element matched. Throws a
+     * `SyntaxError` for a selector that does not parse. Rejects with an
+     * `InvalidStateError` before the view has a page, and when the page gave no
+     * answer, as when it navigated first.
+     */
+    clickMatch(selector: string): Promise<boolean>;
     goBack(): void;
     goForward(): void;
     /**

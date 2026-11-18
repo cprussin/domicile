@@ -33,7 +33,7 @@ use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 
 use domicile_protocol::{
-    AgentReach, Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
+    AgentReach, Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice, KnownAgents,
     PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
     SystemReply, SystemRequest, WindowState,
 };
@@ -115,7 +115,7 @@ pub struct System {
     /// Adds virtual monitors; `None` on a system that adds none.
     add_virtual_monitor: Option<AddVirtualMonitor>,
     /// Lets agents in; `None` on a system that lets none in.
-    let_agent: Option<LetAgent>,
+    agents: Option<Arc<dyn Agents>>,
     /// Sets every monitor's white point; `None` on a system that sets none.
     set_white_point: Option<SetWhitePoint>,
     /// Turns the monitors off and on; `None` on a system that powers none.
@@ -151,13 +151,42 @@ pub trait MonitorLease: Send {
     fn resize(&self, size: (u32, u32), refresh_mhz: u32, scale: Scale);
 }
 
-/// Asks the user whether agent `agent` may see and use the desk, and lists
-/// it while it may. Blocks while the user decides. The [`AgentStopped`] runs
-/// if the shell stops it. See [`SystemRequest::Agent`].
-pub type LetAgent = Arc<dyn Fn(String, AgentStopped) -> Result<LetIn, SystemError> + Send + Sync>;
+/// Why a system with no [`Agents`] refuses one.
+fn no_agents() -> SystemError {
+    SystemError {
+        kind: SystemErrorKind::Other,
+        message: "this desktop lets in no agents".into(),
+    }
+}
 
-/// Runs once when the shell stops an agent it let in.
+/// The agents the desk lets in. See `docs/AGENTS.md`.
+pub trait Agents: Send + Sync {
+    /// Asks the user whether agent `agent` may see and use the desk, unless
+    /// it is remembered, and lists it while it may. Blocks while the user
+    /// decides. See [`SystemRequest::Agent`].
+    fn let_in(&self, agent: String, told: AgentTold) -> Result<LetIn, SystemError>;
+    /// The agents let in now and those remembered. See
+    /// [`SystemRequest::Agents`].
+    fn known(&self) -> KnownAgents;
+    /// Ends agent session `session`, as the shell's stop does.
+    fn stop(&self, session: u32) -> Result<(), SystemError>;
+    /// Makes the remembered agent `agent` ask again next time.
+    fn forget(&self, agent: &str) -> Result<(), SystemError>;
+}
+
+/// How an agent let in hears what the user does to it.
+pub struct AgentTold {
+    /// Runs once when the user stops it.
+    pub stopped: AgentStopped,
+    /// Runs each time the user changes what it may reach.
+    pub changed: AgentChanged,
+}
+
+/// Runs once when the user stops an agent.
 pub type AgentStopped = Box<dyn FnOnce() + Send>;
+
+/// Runs each time the user changes what an agent may reach.
+pub type AgentChanged = Box<dyn Fn(AgentReach) + Send + Sync>;
 
 /// An agent the user let in.
 pub struct LetIn {
@@ -294,9 +323,10 @@ pub enum Reach {
 /// calls `crate::lock_screen_readouts` lists.
 pub fn reach(request: &SystemRequest) -> Reach {
     match request {
-        SystemRequest::Unwatch | SystemRequest::CloseStdin | SystemRequest::Kill { .. } => {
-            Reach::Stops
-        }
+        SystemRequest::Unwatch
+        | SystemRequest::CloseStdin
+        | SystemRequest::Kill { .. }
+        | SystemRequest::StopAgent { .. } => Reach::Stops,
         SystemRequest::ReadFile { path, .. }
         | SystemRequest::ReadDir { path }
         | SystemRequest::Stat { path }
@@ -344,7 +374,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::SendShell { .. }
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Agent { .. }
-        | SystemRequest::AgentDid { .. } => Reach::Acts,
+        | SystemRequest::AgentDid { .. }
+        | SystemRequest::Agents
+        | SystemRequest::ForgetAgent { .. } => Reach::Acts,
     }
 }
 
@@ -383,6 +415,9 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::Bells
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Agent { .. }
+        | SystemRequest::Agents
+        | SystemRequest::StopAgent { .. }
+        | SystemRequest::ForgetAgent { .. }
         | SystemRequest::Keymaps
         | SystemRequest::SelectKeymap { .. }
         | SystemRequest::ShortcutsInhibitor { .. } => Some(HostMessage::SystemReply {
@@ -443,6 +478,9 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::ResizeVirtualMonitor { .. }
         | SystemRequest::Agent { .. }
         | SystemRequest::AgentDid { .. }
+        | SystemRequest::Agents
+        | SystemRequest::StopAgent { .. }
+        | SystemRequest::ForgetAgent { .. }
         | SystemRequest::Keymaps
         | SystemRequest::SelectKeymap { .. }
         | SystemRequest::ShortcutsInhibitor { .. } => Some(HostMessage::SystemReply {
@@ -491,7 +529,7 @@ impl System {
             window_requests: WindowRequests::default(),
             bells: Bells::default(),
             add_virtual_monitor: None,
-            let_agent: None,
+            agents: None,
             keymaps: Keymaps::default(),
             select_keymap: None,
             shortcuts_inhibitor: None,
@@ -600,12 +638,9 @@ impl System {
         self
     }
 
-    /// This system, letting agents in through `let_agent`.
-    pub fn letting_agents_in_with(
-        mut self,
-        let_agent: impl Fn(String, AgentStopped) -> Result<LetIn, SystemError> + Send + Sync + 'static,
-    ) -> System {
-        self.let_agent = Some(Arc::new(let_agent));
+    /// This system, letting agents in through `agents`.
+    pub fn letting_agents_in(mut self, agents: impl Agents + 'static) -> System {
+        self.agents = Some(Arc::new(agents));
         self
     }
 
@@ -1114,6 +1149,35 @@ impl System {
                 Handled::Done
             }
             SystemRequest::Agent { agent } => self.letting_in(id, agent),
+            SystemRequest::Agents => {
+                let reply = match &self.agents {
+                    Some(agents) => SystemReply::Agents(agents.known()),
+                    None => SystemReply::Agents(KnownAgents::default()),
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
+            SystemRequest::StopAgent { session } => {
+                let reply = match &self.agents {
+                    Some(agents) => agents
+                        .stop(session)
+                        .map_or_else(failed, |()| SystemReply::Set),
+                    None => failed(no_agents()),
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
+            SystemRequest::ForgetAgent { agent } => {
+                let reply = match &self.agents {
+                    Some(agents) => agents
+                        .forget(&agent)
+                        .map_or_else(failed, |()| SystemReply::Set),
+                    // Nothing is remembered where nothing is let in.
+                    None => SystemReply::Set,
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
             SystemRequest::AgentDid { said } => match self.running.lock().unwrap().get(&id) {
                 Some(Running::Agent(lease)) => {
                     lease.did(said);
@@ -1364,11 +1428,9 @@ impl System {
             });
             Handled::Done
         };
-        let Some(let_agent) = self.let_agent.clone() else {
-            return fail(
-                "this desktop lets in no agents".into(),
-                SystemErrorKind::Other,
-            );
+        let Some(agents) = self.agents.clone() else {
+            let error = no_agents();
+            return fail(error.message, error.kind);
         };
         if self.running.lock().unwrap().contains_key(&id) {
             return fail(
@@ -1399,7 +1461,29 @@ impl System {
                     }
                 })
             };
-            let let_in = match let_agent(agent, stop) {
+            let changed: AgentChanged = {
+                let (tell, running) = (tell.clone(), running.clone());
+                Box::new(move |reach| {
+                    let Some(running) = running.upgrade() else {
+                        return;
+                    };
+                    // Held under the lock, so it comes after the reply.
+                    let running = running.lock().unwrap();
+                    if matches!(running.get(&id), Some(Running::Agent(_))) {
+                        tell(HostMessage::SystemEvent {
+                            id,
+                            event: SystemEvent::AgentReach { reach },
+                        });
+                    }
+                })
+            };
+            let let_in = match agents.let_in(
+                agent,
+                AgentTold {
+                    stopped: stop,
+                    changed,
+                },
+            ) {
                 Ok(let_in) => let_in,
                 Err(error) => {
                     tell(HostMessage::SystemReply {
