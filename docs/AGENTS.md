@@ -141,6 +141,10 @@ claude.ai ── TLS for <label>.<zone> ──▶ relay :443 ──── splice
 - **Each address needs its own certificate.** Let's Encrypt allows 50 a week
   per registered domain, so a zone shared by many desks needs to be on the
   Public Suffix List.
+- **Domicile's own relay is `mcp.domicile-desktop.com`,** on fly.io
+  (`packages/domicile-relay/fly.toml`). Anyone can run another: it needs
+  two plain TCP ports, a wildcard DNS name for the zone, and one process,
+  since a desk and the agents reaching it must meet on the same relay.
 
 ## Shells
 
