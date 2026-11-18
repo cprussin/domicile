@@ -745,6 +745,16 @@ void SettleCount(ScriptPromiseResolver<IDLLong>* resolver,
   }
 }
 
+void SettleClick(ScriptPromiseResolver<IDLBoolean>* resolver,
+                 std::optional<bool> clicked) {
+  if (clicked.has_value()) {
+    resolver->Resolve(*clicked);
+  } else {
+    resolver->RejectWithDOMException(DOMExceptionCode::kInvalidStateError,
+                                     "The page gave no answer.");
+  }
+}
+
 std::optional<domicile::mojom::blink::WebViewMediaDeviceKind>
 MediaDeviceKindNamed(const String& kind) {
   if (kind == "camera") {
@@ -822,6 +832,28 @@ ScriptPromise<IDLLong> HTMLWebViewElement::countMatches(
   auto promise = resolver->Promise();
   guest_->CountMatches(selector,
                        BindOnce(&SettleCount, WrapPersistent(resolver)));
+  return promise;
+}
+
+// The selector is parsed here first, as countMatches() parses it.
+ScriptPromise<IDLBoolean> HTMLWebViewElement::clickMatch(
+    ScriptState* script_state,
+    const String& selector,
+    ExceptionState& exception_state) {
+  GetDocument().QuerySelector(AtomicString(selector), exception_state);
+  if (exception_state.HadException()) {
+    return EmptyPromise();
+  }
+  if (!guest_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "This <webview> has no page yet.");
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  guest_->ClickMatch(selector,
+                     BindOnce(&SettleClick, WrapPersistent(resolver)));
   return promise;
 }
 

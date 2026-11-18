@@ -40,6 +40,7 @@ Profiles with their own sign-ins, site data and extensions; each site opens in i
 
 - HDR and 10-bit color: `wp_color_management_v1`, 10-bit and half-float buffers, HDR10 per display, and `Display.hdr`, `peakLuminance`, `sdrWhite`. [Design](architecture/COLOR.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
 - `<app picture-in-picture>` floats a page's video as a shell window, growing from its `source`. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2177](https://github.com/cprussin/domicile/pull/2177)
+- `browser.clickMatch()` and `<webview>.clickMatch()` click a selector's first match in a page. [#2284](https://github.com/cprussin/domicile/pull/2284)
 - `<webview>.history()` for a Back and Forward history menu. [#2251](https://github.com/cprussin/domicile/pull/2251)
 - Pointer lock, confinement and relative motion. [#2054](https://github.com/cprussin/domicile/pull/2054) · [#2057](https://github.com/cprussin/domicile/pull/2057) · [#2123](https://github.com/cprussin/domicile/pull/2123)
 - Input methods in pages, the shell and native windows. [#2059](https://github.com/cprussin/domicile/pull/2059) · [#2062](https://github.com/cprussin/domicile/pull/2062)

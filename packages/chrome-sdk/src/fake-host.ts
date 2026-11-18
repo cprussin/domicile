@@ -150,6 +150,7 @@ const moreSpecific = (a: readonly number[], b: readonly number[]): boolean => {
 /** The methods that return a promise. The fake's never settle. */
 const ASKS = new Set([
   "browserProfileFor",
+  "clickBrowserWindowMatch",
   "configureExtension",
   "confinePointer",
   "countBrowserWindowMatches",

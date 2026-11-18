@@ -2579,6 +2579,21 @@ void WebViewGuest::CountMatches(const std::string& selector,
       kChromeInternalWorld);
 }
 
+void WebViewGuest::ClickMatch(const std::string& selector,
+                              ClickMatchCallback callback) {
+  CHECK(guest_contents_);
+  guest_contents_->GetPrimaryMainFrame()->ExecuteJavaScriptInIsolatedWorld(
+      ClickMatchScript(selector),
+      // A frame that goes before the click runs drops the callback unrun.
+      base::BindOnce(
+          [](ClickMatchCallback callback, base::Value result) {
+            std::move(callback).Run(ClickedFrom(result));
+          },
+          mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback),
+                                                      std::nullopt)),
+      kChromeInternalWorld);
+}
+
 void WebViewGuest::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,

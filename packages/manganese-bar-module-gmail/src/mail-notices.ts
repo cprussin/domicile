@@ -15,7 +15,6 @@ import { inboxAddress } from "./addresses";
 import type { Mail, MailNews } from "./gmail-api";
 import type { MailBrowser } from "./open-mail";
 import { openMail } from "./open-mail";
-import { threadToken } from "./thread-token";
 
 /** The notification server's address on the session bus. */
 const SERVER = {
@@ -83,8 +82,8 @@ export const mailNotices = (
       const id = await notify(desk, account.nickname, picture, notice);
       shown.set(id, {
         email: account.email,
-        opens: notice.opens,
         profile: account.profile,
+        thread: notice.thread,
         unread: notice.messages,
       });
     }
@@ -101,21 +100,22 @@ export const mailNotices = (
 };
 
 /**
- * One notification still up: its account, the Gmail place a press opens, and
- * its unread messages.
+ * One notification still up: its account, the thread a press opens, and its
+ * unread messages.
  */
 type Shown = {
   email: string;
-  opens: string;
   profile: string | undefined;
+  /** The thread a press opens; the inbox for `undefined`. */
+  thread: string | undefined;
   unread: readonly string[];
 };
 
 type Notice = {
   summary: string;
   body: string;
-  /** The Gmail place a press opens, such as `#inbox/<thread>`. */
-  opens: string;
+  /** The thread a press opens, by its hex id; the inbox for `undefined`. */
+  thread: string | undefined;
   /** The ids of the messages it tells of. */
   messages: readonly string[];
 };
@@ -127,15 +127,15 @@ const notices = (mail: readonly Mail[]): Notice[] =>
         {
           body: senders(mail),
           messages: mail.map(({ id }) => id),
-          opens: "#inbox",
           summary: `${mail.length.toString()} new emails`,
+          thread: undefined,
         },
       ]
     : mail.toReversed().map(({ from, id, subject, threadId }) => ({
         body: subject,
         messages: [id],
-        opens: `#inbox/${threadToken(threadId)}`,
         summary: from,
+        thread: threadId,
       }));
 
 /** Who sent `mail`, each once, newest first. */
@@ -248,7 +248,7 @@ const follow = async (
           waiting.get(pressed.email)?.();
           waiting.set(
             pressed.email,
-            open(desk.browser, pressed.email, pressed.opens, pressed.profile),
+            open(desk.browser, pressed.email, pressed.thread, pressed.profile),
           );
         }
         break;

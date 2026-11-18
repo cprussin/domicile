@@ -84,6 +84,7 @@ TOGETHER=(
   guard-webview-device-request
   guard-webview-media-devices
   guard-webview-count-matches
+  guard-webview-click-match
   guard-webview-dialog
   guard-webview-beforeunload
   guard-webview-external-app
