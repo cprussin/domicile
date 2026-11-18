@@ -17,6 +17,7 @@
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/types/expected.h"
@@ -169,6 +170,8 @@ ElectronApp::~ElectronApp() {
   for (auto& [number, answered] : std::exchange(permission_asks_, {})) {
     std::move(answered).Run(false);
   }
+  // Nor does a window the app never allowed open: a held one closes.
+  window_open_asks_.clear();
 }
 
 void ElectronApp::Take(std::string_view line) {
@@ -185,17 +188,11 @@ void ElectronApp::Take(std::string_view line) {
   } else if (!request.has_value()) {
     send_.Run(ElectronRefused(request.error().why));
   } else if (const auto* hello = std::get_if<ElectronHello>(&*request)) {
-    if (greeted_) {
+    if (hello_.has_value()) {
       send_.Run(ElectronRefused("this app already said hello"));
     } else {
-      greeted_ = true;
-      if (hello->profile.empty()) {
-        Greeted(*hello, base::ok());
-      } else {
-        desk_->WhenProfileReady(
-            hello->profile, base::BindOnce(&ElectronApp::Greeted,
-                                           weak_factory_.GetWeakPtr(), *hello));
-      }
+      hello_ = *hello;
+      send_.Run(ElectronReady(schemes_, engine_));
     }
   } else if (!hello_.has_value()) {
     send_.Run(ElectronRefused("an app says hello first"));
@@ -282,6 +279,9 @@ void ElectronApp::Take(std::string_view line) {
   } else if (auto* permission =
                  std::get_if<ElectronPermissionAnswer>(&*request)) {
     AnswerPermission(*permission);
+  } else if (auto* window_open =
+                 std::get_if<ElectronWindowOpenAnswer>(&*request)) {
+    AnswerWindowOpen(std::move(*window_open));
   } else if (auto* set = std::get_if<ElectronSetViews>(&*request)) {
     SetViews(*set);
   } else if (auto* bar = std::get_if<ElectronSetMenuBar>(&*request)) {
@@ -331,16 +331,6 @@ void ElectronApp::DomReady(const std::string& id) {
   }
 }
 
-void ElectronApp::Greeted(ElectronHello hello,
-                          base::expected<void, std::string> ready) {
-  if (!ready.has_value()) {
-    send_.Run(ElectronRefused(ready.error()));
-    return;
-  }
-  hello_ = std::move(hello);
-  send_.Run(ElectronReady(schemes_, engine_));
-}
-
 void ElectronApp::Open(const ElectronOpenWindow& open) {
   CHECK(hello_.has_value());
   if (windows_.contains(open.window)) {
@@ -357,35 +347,9 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
   } else if (!Opens(open.window, open.session, open.url)) {
     return;
   }
-  ElectronPageCalls calls{
-      .sent = base::BindRepeating(&ElectronApp::PageSent,
-                                  weak_factory_.GetWeakPtr(), open.window),
-      .invoked =
-          base::BindRepeating(&ElectronApp::PageInvoked,
-                              weak_factory_.GetWeakPtr(), open.window, false),
-      .sent_sync =
-          base::BindRepeating(&ElectronApp::PageInvoked,
-                              weak_factory_.GetWeakPtr(), open.window, true),
-      .posted = base::BindRepeating(&ElectronApp::PagePosted,
-                                    weak_factory_.GetWeakPtr(), open.window),
-      .port_posted =
-          base::BindRepeating(&ElectronApp::PagePortPosted,
-                              weak_factory_.GetWeakPtr(), open.window),
-      .port_closed =
-          base::BindRepeating(&ElectronApp::PagePortClosed,
-                              weak_factory_.GetWeakPtr(), open.window),
-      .gone = base::BindRepeating(&ElectronApp::PageGone,
-                                  weak_factory_.GetWeakPtr(), open.window),
-      .resized = base::BindRepeating(&ElectronApp::PageResized,
-                                     weak_factory_.GetWeakPtr(), open.window),
-      .menu_clicked = base::BindRepeating(
-          &ElectronApp::MenuClicked, weak_factory_.GetWeakPtr(), open.window),
-      .close_asked = base::BindRepeating(
-          &ElectronApp::CloseAsked, weak_factory_.GetWeakPtr(), open.window),
-  };
+  ElectronPageCalls calls = CallsFor(open.window);
   const std::optional<std::string> id = desk_->Open(
-      open.url, hello_->app_id, hello_->profile, *partition, open.preload,
-      open.arguments,
+      open.url, hello_->app_id, *partition, open.preload, open.arguments,
       open.node, std::move(calls), SessionNamed(open.session).GetWeakPtr(),
       open.view, open.title, open.hidden);
   if (!id.has_value()) {
@@ -400,6 +364,108 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
                                          .view = open.view});
     send_.Run(ElectronWindowOpened(open.window));
   }
+}
+
+ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
+  return ElectronPageCalls{
+      .sent = base::BindRepeating(&ElectronApp::PageSent,
+                                  weak_factory_.GetWeakPtr(), number),
+      .invoked = base::BindRepeating(&ElectronApp::PageInvoked,
+                                     weak_factory_.GetWeakPtr(), number, false),
+      .sent_sync = base::BindRepeating(
+          &ElectronApp::PageInvoked, weak_factory_.GetWeakPtr(), number, true),
+      .posted = base::BindRepeating(&ElectronApp::PagePosted,
+                                    weak_factory_.GetWeakPtr(), number),
+      .port_posted = base::BindRepeating(&ElectronApp::PagePortPosted,
+                                         weak_factory_.GetWeakPtr(), number),
+      .port_closed = base::BindRepeating(&ElectronApp::PagePortClosed,
+                                         weak_factory_.GetWeakPtr(), number),
+      .gone = base::BindRepeating(&ElectronApp::PageGone,
+                                  weak_factory_.GetWeakPtr(), number),
+      .resized = base::BindRepeating(&ElectronApp::PageResized,
+                                     weak_factory_.GetWeakPtr(), number),
+      .menu_clicked = base::BindRepeating(&ElectronApp::MenuClicked,
+                                          weak_factory_.GetWeakPtr(), number),
+      .close_asked = base::BindRepeating(&ElectronApp::CloseAsked,
+                                         weak_factory_.GetWeakPtr(), number),
+      .window_opening = base::BindRepeating(&ElectronApp::PageWindowOpening,
+                                            weak_factory_.GetWeakPtr(), number),
+  };
+}
+
+void ElectronApp::PageWindowOpening(ElectronWindow number,
+                                    ElectronWindowOpenDetails details,
+                                    std::unique_ptr<ElectronHeldPage> held) {
+  if (!windows_.contains(number)) {
+    // Its page outlived the window: Electron asks no handler for a window
+    // that's gone, and opens nothing.
+    LOG(WARNING) << "domicile: Electron window " << number
+                 << "'s page asked for a window at "
+                 << details.url.possibly_invalid_spec()
+                 << " after the window closed; none opens.";
+    return;
+  }
+  const int ask = next_window_open_ask_++;
+  window_open_asks_.emplace(
+      ask, WindowOpenAsk{
+               .opener = number, .url = details.url, .held = std::move(held)});
+  send_.Run(ElectronWindowOpen(ask, number, details));
+}
+
+void ElectronApp::AnswerWindowOpen(ElectronWindowOpenAnswer answer) {
+  auto found = window_open_asks_.find(answer.ask);
+  if (found == window_open_asks_.end()) {
+    send_.Run(
+        ElectronRefused(base::StrCat({"no new window is waiting for answer ",
+                                      base::NumberToString(answer.ask)})));
+    return;
+  }
+  WindowOpenAsk asked = std::move(found->second);
+  window_open_asks_.erase(found);
+  if (!answer.open.has_value()) {
+    // Destroying a held page closes it, as a denied window.open() answers
+    // null.
+    return;
+  }
+  ElectronOpenWindow& open = *answer.open;
+  open.url = asked.url;
+  if (!asked.held) {
+    Open(open);
+    return;
+  }
+  auto opener = windows_.find(asked.opener);
+  if (opener == windows_.end()) {
+    send_.Run(ElectronWindowRefused(open.window,
+                                    "the page that asked for it closed first"));
+    return;
+  } else if (open.session != opener->second.session) {
+    send_.Run(ElectronWindowRefused(
+        open.window,
+        base::StrCat({"a window its opener keeps a handle on is in the "
+                      "opener's session, \"",
+                      opener->second.session, "\", not \"", open.session,
+                      "\""})));
+    return;
+  } else if (windows_.contains(open.window)) {
+    send_.Run(ElectronWindowRefused(
+        open.window, base::StrCat({"window ", base::NumberToString(open.window),
+                                   " is already open"})));
+    return;
+  }
+  const std::optional<std::string> id = desk_->Adopt(
+      std::move(asked.held), hello_->app_id, open.preload, open.arguments,
+      open.node, CallsFor(open.window), SessionNamed(open.session).GetWeakPtr(),
+      open.title, open.hidden);
+  if (!id.has_value()) {
+    send_.Run(
+        ElectronWindowRefused(open.window, "there is no shell to show it in"));
+    return;
+  }
+  windows_.emplace(open.window, Window{.id = *id,
+                                       .title = std::string(),
+                                       .session = open.session,
+                                       .view = false});
+  send_.Run(ElectronWindowOpened(open.window));
 }
 
 void ElectronApp::SetUserAgentFallback(
@@ -435,7 +501,7 @@ void ElectronApp::RunSessionCall(ElectronSessionCall call) {
       };
   if (auto* get = std::get_if<ElectronGetCookies>(&call.method)) {
     desk_->GetCookies(
-        hello_->profile, *partition, get->filter.url,
+        *partition, get->filter.url,
         base::BindOnce(
             [](ElectronCookieFilter filter,
                base::OnceCallback<void(
@@ -452,7 +518,7 @@ void ElectronApp::RunSessionCall(ElectronSessionCall call) {
             get->filter, std::move(done)));
   } else if (auto* set = std::get_if<ElectronSetCookie>(&call.method)) {
     desk_->SetCookie(
-        hello_->profile, *partition, set->details,
+        *partition, set->details,
         base::BindOnce(
             [](base::OnceCallback<void(
                    base::expected<base::Value, std::string>)> done,
@@ -465,17 +531,14 @@ void ElectronApp::RunSessionCall(ElectronSessionCall call) {
             },
             std::move(done)));
   } else if (auto* remove = std::get_if<ElectronRemoveCookie>(&call.method)) {
-    desk_->RemoveCookie(hello_->profile, *partition, remove->url, remove->name,
+    desk_->RemoveCookie(*partition, remove->url, remove->name,
                         done_with_nothing(std::move(done)));
   } else if (std::holds_alternative<ElectronFlushCookies>(call.method)) {
-    desk_->FlushCookies(hello_->profile, *partition,
-                        done_with_nothing(std::move(done)));
+    desk_->FlushCookies(*partition, done_with_nothing(std::move(done)));
   } else if (auto* clear = std::get_if<ElectronClearStorage>(&call.method)) {
-    desk_->ClearStorage(hello_->profile, *partition, *clear,
-                        done_with_nothing(std::move(done)));
+    desk_->ClearStorage(*partition, *clear, done_with_nothing(std::move(done)));
   } else if (std::holds_alternative<ElectronClearCache>(call.method)) {
-    desk_->ClearCache(hello_->profile, *partition,
-                      done_with_nothing(std::move(done)));
+    desk_->ClearCache(*partition, done_with_nothing(std::move(done)));
   } else {
     const std::string& user_agent =
         std::get<ElectronSetUserAgent>(call.method).user_agent;

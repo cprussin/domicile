@@ -294,14 +294,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "profiles": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "default": {},
-          "description": "The browser profile each app's windows open in, by its id as `apps`\ngives it, with that profile's extensions and its own sign-ins. Not\nprivate. An app left out opens in `browser.default_profile`.",
-          "type": "object"
         }
       },
       "type": "object"
@@ -1043,8 +1035,7 @@
     "electron": {
       "$ref": "#/$defs/ElectronConfig",
       "default": {
-        "apps": [],
-        "profiles": {}
+        "apps": []
       }
     },
     "extensions": {

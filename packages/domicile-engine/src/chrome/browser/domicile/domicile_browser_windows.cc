@@ -28,6 +28,7 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
@@ -72,6 +73,77 @@
 
 namespace domicile {
 namespace {
+
+// A page's new window held while its Electron app decides on it.
+class HeldPage : public ElectronHeldPage {
+ public:
+  explicit HeldPage(std::unique_ptr<content::WebContents> contents)
+      : contents_(std::move(contents)) {}
+  std::unique_ptr<content::WebContents> Take() { return std::move(contents_); }
+
+ private:
+  std::unique_ptr<content::WebContents> contents_;
+};
+
+// Electron's name for how a page asked for a window.
+std::string ElectronDisposition(WindowOpenDisposition disposition) {
+  switch (disposition) {
+    case WindowOpenDisposition::kCurrentTab:
+      return "default";
+    case WindowOpenDisposition::kNewForegroundTab:
+      return "foreground-tab";
+    case WindowOpenDisposition::kNewBackgroundTab:
+      return "background-tab";
+    case WindowOpenDisposition::kNewPopup:
+    case WindowOpenDisposition::kNewWindow:
+      return "new-window";
+    default:
+      return "other";
+  }
+}
+
+// window.open's features, from what Blink kept of them: its size and place.
+std::string ElectronFeatures(const WebViewGuest::WindowRequest& request) {
+  std::vector<std::string> features;
+  if (request.width.has_value()) {
+    features.push_back("width=" + base::NumberToString(*request.width));
+  }
+  if (request.height.has_value()) {
+    features.push_back("height=" + base::NumberToString(*request.height));
+  }
+  if (request.x.has_value()) {
+    features.push_back("left=" + base::NumberToString(*request.x));
+  }
+  if (request.y.has_value()) {
+    features.push_back("top=" + base::NumberToString(*request.y));
+  }
+  return base::JoinString(features, ",");
+}
+
+// An Electron page's new windows go to its app, which decides on each as
+// setWindowOpenHandler does.
+WebViewGuest::WindowOpening AskTheApp(
+    base::RepeatingCallback<void(ElectronWindowOpenDetails,
+                                 std::unique_ptr<ElectronHeldPage>)> opening) {
+  return base::BindRepeating(
+      [](const base::RepeatingCallback<void(ElectronWindowOpenDetails,
+                                            std::unique_ptr<ElectronHeldPage>)>&
+             opening,
+         WebViewGuest::WindowRequest request,
+         std::unique_ptr<content::WebContents> held) {
+        ElectronWindowOpenDetails details{
+            .url = request.url,
+            .frame_name = request.frame_name,
+            .features = ElectronFeatures(request),
+            .disposition = ElectronDisposition(request.disposition),
+            .referrer = request.referrer,
+        };
+        opening.Run(
+            std::move(details),
+            held ? std::make_unique<HeldPage>(std::move(held)) : nullptr);
+      },
+      std::move(opening));
+}
 
 // Has `contents` load as `user_agent`: its next browser navigation, as
 // WebViewGuest::Navigate asks for the override, and the navigations its
@@ -235,7 +307,6 @@ class DeskWindows final : public base::SupportsUserData::Data,
   std::optional<std::string> OpenElectron(
       const GURL& url,
       const std::string& app_id,
-      const std::string& profile,
       const WebViewPartition& partition,
       const std::string& preload,
       const std::vector<std::string>& arguments,
@@ -249,8 +320,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
         [&](WebViewGuest& guest) {
           // An app, not a page: Energy Saver leaves it at full rate.
           guest.KeepFullFrameRate();
-          // Its links are the user's, with their sign-ins.
-          guest.OpenLinksInTheBrowser();
+          // Its new windows are the app's to decide on.
+          guest.DecideWindowsWith(AskTheApp(calls.window_opening));
           // Before the first navigation, which runs the preload and loads
           // through the session too.
           if (session && !session->user_agent().empty()) {
@@ -261,18 +332,54 @@ class DeskWindows final : public base::SupportsUserData::Data,
           guest.Navigate(url);
         },
         /*popup_window=*/std::nullopt, 0, 0,
-        /*private_browsing=*/false, profile, /*app=*/true, partition,
-        /*app_host=*/std::string(), app_id, view, title, hidden);
+        /*private_browsing=*/false, /*profile=*/std::string(), /*app=*/true,
+        partition, /*app_host=*/std::string(), app_id, view, title, hidden);
     if (made == nullptr) {
       return std::nullopt;
     }
-    // guard-electron-profile.sh greps for this.
-    LOG(INFO) << "domicile: opened Electron app " << app_id << "'s window "
-              << made->window_id() << " in browser profile "
-              << BrowserProfileRegistry::Get().IdOf(
-                     *made->contents().GetBrowserContext())
-              << ".";
     return made->window_id();
+  }
+
+  // Makes `contents`, a page's new window its Electron app allowed, a window
+  // of app `app_id`; see ElectronDesk::Adopt. Returns its id.
+  std::string AdoptElectron(std::unique_ptr<content::WebContents> contents,
+                            const std::string& app_id,
+                            const std::string& preload,
+                            const std::vector<std::string>& arguments,
+                            const std::optional<ElectronNode>& node,
+                            ElectronPageCalls calls,
+                            base::WeakPtr<ElectronSession> session,
+                            const std::string& title,
+                            bool hidden) {
+    std::unique_ptr<WebViewGuest> guest =
+        WebViewGuest::AdoptOpenedWindow(std::move(contents));
+    guest->KeepFullFrameRate();
+    guest->DecideWindowsWith(AskTheApp(calls.window_opening));
+    // Content started its first navigation before the app answered, so the
+    // preload runs from the page's next document, and the session's user agent
+    // from its next request.
+    if (session && !session->user_agent().empty()) {
+      UseUserAgent(guest->contents(), session->user_agent());
+    }
+    ElectronPage::Attach(guest->contents(), preload, arguments, node,
+                         std::move(calls), std::move(session));
+    const std::string id = guest->window_id();
+    auto watch = std::make_unique<Watch>(
+        guest->contents(), id,
+        base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
+    windows_.push_back(Window{.id = id,
+                              .guest = std::move(guest),
+                              .watch = std::move(watch),
+                              .app = true,
+                              .profiled = false,
+                              .app_id = app_id,
+                              .hidden = hidden,
+                              .app_title = title});
+    // guard-electron-window-open.sh greps for this.
+    LOG(INFO) << "domicile: Electron app " << app_id
+              << " allowed its page's window " << id << ".";
+    Changed();
+    return id;
   }
 
   // Electron window `id`'s own title, shown over its page's. The app made
@@ -1500,10 +1607,29 @@ DeskWindows* ShellDeskWindows() {
 
 }  // namespace
 
+std::optional<std::string> AdoptElectronWindow(
+    std::unique_ptr<ElectronHeldPage> page,
+    const std::string& app_id,
+    const std::string& preload,
+    const std::vector<std::string>& arguments,
+    const std::optional<ElectronNode>& node,
+    ElectronPageCalls calls,
+    base::WeakPtr<ElectronSession> session,
+    const std::string& title,
+    bool hidden) {
+  DeskWindows* windows = ShellDeskWindows();
+  if (windows == nullptr) {
+    return std::nullopt;
+  }
+  // Every held page is one AskTheApp made.
+  return windows->AdoptElectron(static_cast<HeldPage&>(*page).Take(), app_id,
+                                preload, arguments, node, std::move(calls),
+                                std::move(session), title, hidden);
+}
+
 std::optional<std::string> OpenElectronWindow(
     const GURL& url,
     const std::string& app_id,
-    const std::string& profile,
     const WebViewPartition& partition,
     const std::string& preload,
     const std::vector<std::string>& arguments,
@@ -1517,8 +1643,7 @@ std::optional<std::string> OpenElectronWindow(
   if (windows == nullptr) {
     return std::nullopt;
   }
-  return windows->OpenElectron(url, app_id, profile, partition, preload,
-                               arguments, node,
+  return windows->OpenElectron(url, app_id, partition, preload, arguments, node,
                                std::move(calls), std::move(session), view,
                                title, hidden);
 }
