@@ -24,6 +24,12 @@ Profiles with their own sign-ins, site data and extensions; each site opens in i
 
 [Design](architecture/BROWSER-PROFILES.md) · [#2212](https://github.com/cprussin/domicile/pull/2212) · [#2213](https://github.com/cprussin/domicile/pull/2213) · [#2216](https://github.com/cprussin/domicile/pull/2216) · [#2230](https://github.com/cprussin/domicile/pull/2230)
 
+### Let agents drive the desktop
+
+`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands and take screenshots: `claude mcp add domicile -- domicile mcp`.
+
+[`domicile mcp`](CLI.md#domicile-mcp)
+
 ### Script the desktop
 
 `domicile status`, `subscribe`, `list-windows`, `list-displays`, `list-inputs`, `list-bindings`, `configure-display`, `sleep-displays`, `lock`, `focus-window` and more, like `swaymsg`.

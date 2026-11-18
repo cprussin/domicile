@@ -24,6 +24,8 @@
 //!   [`install_app`]).
 //! - `domicile uninstall-app`: removes that entry and its icon
 //!   ([`uninstall_app`]).
+//! - `domicile mcp`: a Model Context Protocol server that runs the other
+//!   verbs for an agent ([`mcp`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
 //!   document it publishes ([`session`]), and whether a page connected
@@ -62,6 +64,7 @@ pub mod history;
 pub mod idle_inhibit;
 pub mod install_app;
 pub mod listing;
+pub mod mcp;
 pub mod media_devices;
 pub mod milestones;
 pub mod monitor_lending;

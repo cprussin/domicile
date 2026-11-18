@@ -91,6 +91,8 @@ Ask the running desktop:
   domicile power-off                    Ask, then turn the computer off
   domicile reboot                       Ask, then restart the computer
   domicile log-out                      Ask, then end the login session
+  domicile mcp                          Serve the Model Context Protocol on
+                                        stdio, for agents to drive the desktop
 
 Without a desktop:
 
@@ -368,6 +370,9 @@ pub enum Invocation {
     /// Ask the running desktop for a listing and print it as a table, or
     /// with `json` as the JSON array it answered with.
     List { listing: Listing, json: bool },
+    /// Serve the Model Context Protocol on stdio until it ends; see
+    /// [`crate::mcp`].
+    Mcp,
     /// Print [`USAGE`].
     Help,
     /// Print the version, the commit it was built from, and the engine's.
@@ -640,6 +645,10 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     request: Request::ConfigureDisplay { display, change },
                 })
             }
+            Verb::Serving => match args.next() {
+                None => Ok(Invocation::Mcp),
+                Some(extra) => Err(CliError::Extra { extra, verb: first }),
+            },
             Verb::Inhibiting => {
                 let mut command: Vec<String> = args.collect();
                 // `--` ends the options, which this takes none of.
@@ -797,6 +806,8 @@ enum Verb {
     Theming,
     /// `power-off`, `reboot` or `log-out`, which take no arguments.
     Powering(Power),
+    /// `mcp`, which takes no arguments.
+    Serving,
     /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
     /// `subscribe`, which takes topics or nothing.
@@ -851,6 +862,7 @@ fn verb(word: &str) -> Option<Verb> {
         "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
+        "mcp" => Some(Verb::Serving),
         _ => None,
     }
 }

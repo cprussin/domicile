@@ -1158,3 +1158,15 @@ fn configure_display_names_what_it_could_not_read() {
         })
     );
 }
+
+#[test]
+fn mcp_is_the_verb_that_serves_agents_and_takes_nothing() {
+    assert_eq!(run(&["mcp"]), Ok(Invocation::Mcp));
+    assert_eq!(
+        run(&["mcp", "extra"]),
+        Err(CliError::Extra {
+            verb: "mcp".to_string(),
+            extra: "extra".to_string()
+        })
+    );
+}

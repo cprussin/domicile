@@ -381,6 +381,29 @@ Ask, then restart the computer.
 
 Ask, then end the login session.
 
+## `domicile mcp`
+
+Serve the [Model Context Protocol](https://modelcontextprotocol.io) on stdin
+and stdout, so an agent can drive the running desktop. Add it to Claude Code
+with:
+
+```
+claude mcp add domicile -- domicile mcp
+```
+
+Each tool runs a verb and answers what it printed, or its error:
+
+| Tool | Runs |
+|---|---|
+| `list_windows`, `list_displays`, `list_inputs`, `status`, `list_shell_commands`, `list_bindings` | that verb with `--json` |
+| `send_shell` | `send-shell <words>...` |
+| `open` | `open [--app] [--profile <id>] <target>` |
+| `focus_window`, `close_window` | that verb with the window's id |
+| `theme` | `theme [light\|dark\|toggle]` |
+| `screenshot` | `screenshot <file>`, answered as a PNG of every monitor |
+
+Tools the lock refuses are refused while the desktop is locked.
+
 ## `domicile check-config <file>`
 
 Check a config file without a desktop. Exits non-zero with the reason the

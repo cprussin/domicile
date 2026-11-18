@@ -60,6 +60,7 @@ use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::listing::{
     bindings_table, displays_table, inputs_table, shell_commands_table, status_table, windows_table,
 };
+use domicile_launch::mcp;
 use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
@@ -207,6 +208,7 @@ fn run() -> Result<ExitCode, String> {
             let status = inhibit_idle(&command)?;
             Ok(ExitCode::from(exit_code(status)))
         }
+        Invocation::Mcp => agents_served(),
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -910,6 +912,22 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
 
 /// Asks the running desktop for `listing` and prints it as a table, or with
 /// `json` as the JSON array it answered with.
+/// Serves the Model Context Protocol on stdio, each tool running this
+/// binary.
+fn agents_served() -> Result<ExitCode, String> {
+    let binary = myself()?;
+    mcp::serve(std::io::stdin().lock(), std::io::stdout().lock(), |args| {
+        let output = Command::new(&binary).args(args).output()?;
+        Ok(mcp::Ran {
+            success: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    })
+    .map_err(|why| format!("mcp: {why}"))?;
+    Ok(ExitCode::SUCCESS)
+}
+
 fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
