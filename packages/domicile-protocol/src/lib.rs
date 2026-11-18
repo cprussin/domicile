@@ -444,11 +444,16 @@ pub enum ChromeMessage {
     /// `kill-window`.
     ActOnWindow { id: String, act: WindowAct },
 
-    /// Write a PNG of the whole desk to the absolute path `file`, shrunk so
-    /// its longer side is at most `fit` pixels. Answered with
-    /// [`HostMessage::DeskShot`] on this connection only. Sent by `domicile
-    /// screenshot --fit`.
-    ShootDesk { file: String, fit: u32 },
+    /// Write a PNG of the whole desk, or of its `area`, to the absolute path
+    /// `file`, shrunk so its longer side is at most `fit` pixels. Answered
+    /// with [`HostMessage::DeskShot`] on this connection only. Sent by
+    /// `domicile screenshot --fit`.
+    ShootDesk {
+        file: String,
+        fit: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        area: Option<DeskRect>,
+    },
 
     /// Send `input` to the desk, in order, as one emulated device would; it
     /// lets go of what it held once done. Answered with
@@ -3134,6 +3139,22 @@ pub struct ListedWindow {
     /// A browser window's id in the engine, which `domicile devtools` sends
     /// to.
     pub engine_id: Option<String>,
+    /// The views a browser window holds and shows, bottom first: an Electron
+    /// app's `WebContentsView`s, each a page of its own.
+    #[serde(default)]
+    pub views: Vec<ListedView>,
+}
+
+/// A view a [`ListedWindow`] holds: a page the app placed in the window's
+/// page, which `domicile devtools --view` drives.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListedView {
+    /// Its id in the engine.
+    pub id: String,
+    /// Its top-left corner in the window's page, in that page's CSS pixels.
+    pub position: [i32; 2],
+    /// In CSS pixels.
+    pub size: [i32; 2],
 }
 
 /// What a [`ChromeMessage::ActOnWindow`] does to a window.

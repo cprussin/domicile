@@ -239,10 +239,12 @@ enum Tool {
     AskToUse,
 }
 
-/// How many pixels of the desk each pixel of the last screenshot is, across
-/// and down. Its top-left corner is the desk's.
+/// Where the last screenshot's top-left corner is on the desk, and how many
+/// pixels of the desk each of its pixels is, across and down.
 #[derive(Debug, Clone, Copy)]
 struct View {
+    left: f64,
+    top: f64,
     across: f64,
     down: f64,
 }
@@ -321,7 +323,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
         json!({"type": "string", "description": "An element's ref, from app_snapshot."});
     match tool {
         Tool::Listing("list-windows") => (
-            "List the windows, native and browser, as JSON: id, kind, title, app, pid, size, focused, url, private.",
+            "List the windows, native and browser, as JSON: id, kind, title, app, pid, size, focused, url, private, and the views a browser window holds.",
             json!({}),
             vec![],
         ),
@@ -376,8 +378,8 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::Screenshot => (
-            "Take a PNG of every monitor, at most 1280 pixels across. The pointer tools take points in its pixels.",
-            json!({}),
+            "Take a PNG of every monitor, or of an area of the last screenshot, at most 1280 pixels across. The pointer tools take points in its pixels. To read small text, take an area rather than changing windows or the layout.",
+            json!({"area": {"type": "array", "items": coordinate, "minItems": 4, "maxItems": 4, "description": "[x, y, width, height] of the last screenshot, to zoom into."}}),
             vec![],
         ),
         Tool::Click => (
@@ -665,7 +667,7 @@ fn called(
     view: &mut Option<View>,
 ) -> io::Result<Value> {
     match tool {
-        Tool::Screenshot => return screenshot(domicile, view),
+        Tool::Screenshot => return screenshot(arguments, domicile, view),
         Tool::Browser(browser) => return browser::called(browser, arguments, domicile),
         _ => {}
     }
@@ -761,7 +763,7 @@ fn commands(
         }
         Tool::Scroll => {
             let at = on_the_desk(view, number(arguments, "x")?, number(arguments, "y")?)?;
-            let by = on_the_desk(view, number(arguments, "dx")?, number(arguments, "dy")?)?;
+            let by = across_the_desk(view, number(arguments, "dx")?, number(arguments, "dy")?)?;
             Ok(vec![words(&["pointer", &at]), words(&["scroll", &by])])
         }
         Tool::Key => {
@@ -797,8 +799,54 @@ fn commands(
 /// `x`, `y` in the last screenshot's pixels as `x,y` in the desk's, as
 /// `domicile pointer` and `scroll` take them.
 fn on_the_desk(view: Option<View>, x: f64, y: f64) -> Result<String, String> {
-    let view = view.ok_or("take a screenshot first: points are in its pixels")?;
-    Ok(format!("{},{}", x * view.across, y * view.down))
+    let view = taken(view)?;
+    Ok(format!(
+        "{},{}",
+        view.left + x * view.across,
+        view.top + y * view.down
+    ))
+}
+
+/// A distance `dx`, `dy` in the last screenshot's pixels as one in the
+/// desk's, as `domicile scroll` takes it.
+fn across_the_desk(view: Option<View>, dx: f64, dy: f64) -> Result<String, String> {
+    let view = taken(view)?;
+    Ok(format!("{},{}", dx * view.across, dy * view.down))
+}
+
+/// The last screenshot's view, or why there is none.
+fn taken(view: Option<View>) -> Result<View, String> {
+    view.ok_or_else(|| "take a screenshot first: points are in its pixels".to_string())
+}
+
+/// Argument `area`, `[x, y, width, height]` of the last screenshot, as the
+/// area of the desk `domicile screenshot --area` takes, rounded out to whole
+/// pixels.
+fn desk_area(view: Option<View>, arguments: &Map<String, Value>) -> Result<Option<String>, String> {
+    let Some(area) = arguments.get("area") else {
+        return Ok(None);
+    };
+    let not_an_area = || format!("area is [x, y, width, height], not {area}");
+    let numbers: Vec<f64> = area
+        .as_array()
+        .ok_or_else(not_an_area)?
+        .iter()
+        .map(Value::as_f64)
+        .collect::<Option<_>>()
+        .ok_or_else(not_an_area)?;
+    let [x, y, width, height] = numbers.as_slice() else {
+        return Err(not_an_area());
+    };
+    let view = taken(view)?;
+    let left = (view.left + x * view.across).floor();
+    let top = (view.top + y * view.down).floor();
+    let right = (view.left + (x + width) * view.across).ceil();
+    let bottom = (view.top + (y + height) * view.down).ceil();
+    Ok(Some(format!(
+        "{left},{top},{}x{}",
+        right - left,
+        bottom - top
+    )))
 }
 
 /// Argument `name`, a number.
@@ -833,20 +881,34 @@ fn string(arguments: &Map<String, Value>, name: &str) -> Result<Option<String>, 
     }
 }
 
-/// Runs `domicile screenshot --fit` into a temporary file, answers the PNG,
-/// and keeps how its pixels map to the desk's in `view`.
+/// Runs `domicile screenshot --fit` into a temporary file, of argument
+/// `area` of the last screenshot if given, answers the PNG, and keeps how its
+/// pixels map to the desk's in `view`.
 fn screenshot(
+    arguments: &Map<String, Value>,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     view: &mut Option<View>,
 ) -> io::Result<Value> {
+    let area = match desk_area(*view, arguments) {
+        Ok(area) => area,
+        Err(why) => return Ok(said(false, why)),
+    };
     let directory = tempfile::tempdir()?;
     let file = directory.path().join("screenshot.png");
-    let ran = domicile(&[
-        "screenshot".to_string(),
-        "--fit".to_string(),
-        FIT.to_string(),
-        file.to_string_lossy().into_owned(),
-    ])?;
+    let ran = domicile(
+        &[
+            "screenshot".to_string(),
+            "--fit".to_string(),
+            FIT.to_string(),
+        ]
+        .into_iter()
+        .chain(
+            area.into_iter()
+                .flat_map(|area| ["--area".to_string(), area]),
+        )
+        .chain([file.to_string_lossy().into_owned()])
+        .collect::<Vec<_>>(),
+    )?;
     if !ran.success {
         return Ok(said(false, ran.stderr));
     }
@@ -857,6 +919,8 @@ fn screenshot(
         ))
     })?;
     *view = Some(View {
+        left: f64::from(shot.place.position.0),
+        top: f64::from(shot.place.position.1),
         across: f64::from(shot.place.size.0) / f64::from(shot.width),
         down: f64::from(shot.place.size.1) / f64::from(shot.height),
     });

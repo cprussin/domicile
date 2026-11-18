@@ -186,7 +186,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     act_on_window: &|_, _| {
                         panic!("a question about this desktop reaches no compositor")
                     },
-                    shoot_desk: &|_, _| {
+                    shoot_desk: &|_, _, _| {
                         panic!("a question about this desktop reaches no compositor")
                     },
                     emulate: &|_| panic!("a question about this desktop reaches no compositor"),

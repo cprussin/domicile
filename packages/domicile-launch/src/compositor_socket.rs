@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    AgentReach, ChromeMessage, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
-    KnownAgents, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding,
+    AgentReach, ChromeMessage, DeskRect, DeskShot, DesktopStatus, DisplayChange, EmulatedInput,
+    HostMessage, KnownAgents, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding,
     ShellCommandHelp, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, Theme,
     WatchTopic, WindowAct,
 };
@@ -192,6 +192,7 @@ pub fn shoot_desk(
     socket: &Path,
     file: &Path,
     fit: u32,
+    area: Option<DeskRect>,
     patience: Option<Duration>,
 ) -> Result<Result<DeskShot, String>, CompositorError> {
     let said = exchanged(
@@ -199,6 +200,7 @@ pub fn shoot_desk(
         &[ChromeMessage::ShootDesk {
             file: file.display().to_string(),
             fit,
+            area,
         }],
         patience,
     )?;
