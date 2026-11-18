@@ -494,7 +494,10 @@ ends it. Every call after is checked against what you allowed:
   Private browser windows are never offered.
 
 An agent you cancel or stop is refused from then on; its next session asks
-again. See [AGENTS.md](AGENTS.md).
+again. If you turn on **Remember** with the entire desktop, it comes in
+without asking until you forget it in Settings › Agents or with
+`forget-agent`. **Change** in the bar asks again; what you pick applies from
+the agent's next call. See [AGENTS.md](AGENTS.md).
 
 Each tool runs a verb and answers what it printed, or its error:
 
@@ -525,10 +528,34 @@ The browser and app tools work on a window the desk hides and need no screenshot
 Ask, in Domicile's dialog, to let the agent `name` see and use the desktop,
 and print what you allowed as a JSON line: `{"type":"desk"}`, or
 `{"type":"windows","windows":[...]}` with each window's `id`, `kind`, `title`
-and `app`. Each line read from stdin after is listed in the bar as what the
-agent did last. The agent stays in until stdin ends. Exits 1 if you cancel,
-don't answer within a minute, or stop it from the bar. `domicile mcp` runs this
-on its first tool call.
+and `app`. A remembered agent is let in without asking. Each time you change
+what it reaches from the bar, another such line follows. Each line read from
+stdin is listed in the bar as what the agent did last. The agent stays in
+until stdin ends. Exits 1 if you cancel, don't answer within a minute, or stop
+it from the bar. `domicile mcp` runs this on its first tool call.
+
+## `domicile list-agents [--json]`
+
+Print the agents in now, with the session `stop-agent` takes and the windows
+they reach (or `desk`), then those remembered.
+
+```text
+SESSION  STATE       REACH  AGENT
+12       in          kD3m   Claude Code
+-        remembered  desk   Codex
+```
+
+`--json` prints `{"connected": [{"session", "agent", "reach"}],
+"remembered": [{"agent", "last_used_ms"}]}`.
+
+## `domicile stop-agent <session>`
+
+Stop an agent, by its `list-agents` session, as Stop in the bar does.
+
+## `domicile forget-agent <name>`
+
+Make a remembered agent ask again the next time it connects. Forgetting one
+that isn't remembered does nothing.
 
 ## `domicile check-config <file>`
 
@@ -562,8 +589,8 @@ shell.
 
 `screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`,
 `kill-window`, `pointer`, `scroll`, `key`, `type`, `devtools`, `accessibility`,
-`accessibility-act` and `agent` are refused while the
-desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
+`accessibility-act`, `agent`, `list-agents`, `stop-agent` and `forget-agent`
+are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
 `list-inputs`, `status`, `subscribe`, `configure-display`,
 `list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.

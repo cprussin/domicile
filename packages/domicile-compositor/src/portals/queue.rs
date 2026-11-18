@@ -8,7 +8,7 @@
 //! until it ends, and the shell stops it with [`PortalAnswer::Stop`]. A screen
 //! recording, listed with [`Queue::begin_controlled`], also takes
 //! [`PortalAnswer::Pause`], [`PortalAnswer::Resume`] and
-//! [`PortalAnswer::Discard`].
+//! [`PortalAnswer::Discard`], and an agent's [`PortalAnswer::Change`].
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -32,7 +32,8 @@ struct Listener {
 /// Hears the dialogs and the sessions on each change.
 type Publish = dyn Fn(Vec<PortalRequest>, Vec<Capturing>) + Send + Sync;
 
-/// Takes the shell's stop, or a recording's pause, resume or discard.
+/// Takes the shell's stop, a recording's pause, resume or discard, or an
+/// agent's change.
 type Controller = Arc<dyn Fn(&PortalAnswer) + Send + Sync>;
 
 /// Resolves a `parent_window` to an app id.
@@ -73,7 +74,11 @@ impl Queue {
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
         if matches!(
             answer,
-            PortalAnswer::Stop | PortalAnswer::Pause | PortalAnswer::Resume | PortalAnswer::Discard
+            PortalAnswer::Stop
+                | PortalAnswer::Change
+                | PortalAnswer::Pause
+                | PortalAnswer::Resume
+                | PortalAnswer::Discard
         ) {
             // Outside the lock: controlling a session changes the queue
             // again.

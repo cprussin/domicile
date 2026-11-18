@@ -38,7 +38,8 @@ pub struct Ran {
 
 /// What the user let an agent do, from `domicile agent`.
 pub struct Grant {
-    pub reach: AgentReach,
+    /// What the user lets it reach now; they may change it.
+    pub reach: Box<dyn Fn() -> AgentReach>,
     /// Whether the user has stopped it since.
     pub stopped: Box<dyn Fn() -> bool>,
     /// Lists what it did, in the shell.
@@ -420,7 +421,9 @@ fn guarded(
             format!("The user stopped {name} from the desktop. Start a new session to ask again."),
         ));
     }
-    if let AgentReach::Windows { windows } = &grant.reach {
+    // Read once per call: a change the user makes applies from the next.
+    let reach = (grant.reach)();
+    if let AgentReach::Windows { windows } = &reach {
         if let Err(why) = within(tool, arguments, windows, &name) {
             return Ok(said(false, why));
         }
@@ -434,7 +437,7 @@ fn guarded(
     let mut answered = called(tool, arguments, domicile, &mut session.view)?;
     if answered["isError"] == json!(false) {
         if tool_is_listing_windows(tool) {
-            answered = listed_windows(answered, &grant.reach, &mut session.titles);
+            answered = listed_windows(answered, &reach, &mut session.titles);
         }
         (grant.did)(&what_it_did(tool, arguments, &session.titles));
     }

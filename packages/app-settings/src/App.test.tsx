@@ -17,6 +17,7 @@ import { fakeHost } from "./fake-host";
 import type {
   BrowserProfiles,
   InstalledExtension,
+  KnownAgents,
   Monitor,
   SettingsFiles,
 } from "./host";
@@ -116,6 +117,7 @@ const ublock = async () =>
 const renderApp = async (
   page: string,
   {
+    agents,
     chosen = "/home/me/src/my-extension",
     config = {},
     configExtensions = [],
@@ -125,6 +127,8 @@ const renderApp = async (
     refuse,
     writable = true,
   }: {
+    /** The agents in now and remembered; none by default. */
+    agents?: KnownAgents;
     /** The browser profiles the engine runs. */
     profiles?: BrowserProfiles;
     /** The folder the picker returns; `null` for a canceled picker. */
@@ -140,6 +144,7 @@ const renderApp = async (
   } = {},
 ) => {
   const host = fakeHost({
+    agents: structuredClone(agents),
     chosen: chosen ?? undefined,
     configExtensions,
     files: files(config, writable, options),
@@ -1065,6 +1070,50 @@ describe(App, () => {
       await waitFor(() => {
         expect(screen.queryByText("mail.example")).not.toBeInTheDocument();
       });
+    });
+  });
+
+  describe("agents", () => {
+    const AGENTS: KnownAgents = {
+      connected: [
+        {
+          agent: "Claude Code",
+          reach: {
+            type: "windows",
+            windows: [
+              { id: "n1", title: "Notes" },
+              { id: "w1", title: "Pull requests" },
+            ],
+          },
+          session: 4,
+        },
+      ],
+      remembered: [{ agent: "Codex", lastUsedMs: Date.now() }],
+    };
+
+    it("lists each agent connected now, then those remembered", async () => {
+      await renderApp("Agents", { agents: AGENTS });
+      expect(
+        await screen.findByText("Connected now · Notes and Pull requests"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Remembered · Your whole desktop · Last used today"),
+      ).toBeInTheDocument();
+    });
+
+    it("stops a connected agent and forgets a remembered one", async () => {
+      const { host, user } = await renderApp("Agents", { agents: AGENTS });
+      await user.click(
+        await screen.findByRole("button", { name: "Stop Claude Code" }),
+      );
+      await user.click(screen.getByRole("button", { name: "Forget Codex" }));
+      await waitFor(() => {
+        expect(screen.queryByText("Codex")).not.toBeInTheDocument();
+      });
+      expect(host.state.agents).toEqual({ connected: [], remembered: [] });
+      expect(
+        screen.getByText(/No agent is connected or remembered/u),
+      ).toBeInTheDocument();
     });
   });
 

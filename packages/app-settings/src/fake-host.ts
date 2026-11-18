@@ -4,6 +4,7 @@ import type {
   BrowserProfiles,
   ExtensionSettings,
   InstalledExtension,
+  KnownAgents,
   MediaDevices,
   Monitor,
   SettingsFiles,
@@ -28,6 +29,8 @@ export type FakeHostState = {
   media: MediaDevices;
   /** The lit monitors; none by default. */
   monitors?: Monitor[] | undefined;
+  /** The agents in now and remembered; none by default. */
+  agents?: KnownAgents | undefined;
   /** The browser profiles the engine runs; one default profile if unset. */
   profiles?: BrowserProfiles | undefined;
   /** The reason every write is refused, if any. */
@@ -53,6 +56,10 @@ export const fakeHost = (state: FakeHostState) => {
   /** Each site pinned to a profile. */
   const pinned: { site: string; profile: string }[] = [];
   const host: SettingsHost = {
+    agents: () =>
+      Promise.resolve(
+        structuredClone(state.agents ?? { connected: [], remembered: [] }),
+      ),
     browserProfiles: () =>
       Promise.resolve(
         structuredClone(
@@ -84,6 +91,14 @@ export const fakeHost = (state: FakeHostState) => {
       }
     },
     extensions: () => Promise.resolve(structuredClone(state.installed)),
+    forgetAgent: (agent) => {
+      if (state.agents !== undefined) {
+        state.agents.remembered = state.agents.remembered.filter(
+          (remembered) => remembered.agent !== agent,
+        );
+      }
+      return Promise.resolve();
+    },
     loadUnpacked: (directory) => {
       loaded.push(directory);
       return Promise.resolve("c".repeat(32));
@@ -157,6 +172,14 @@ export const fakeHost = (state: FakeHostState) => {
     },
     siteData: () => Promise.resolve(structuredClone(state.siteData)),
     sitePermissions: () => Promise.resolve(structuredClone(state.sites)),
+    stopAgent: (session) => {
+      if (state.agents !== undefined) {
+        state.agents.connected = state.agents.connected.filter(
+          (connected) => connected.session !== session,
+        );
+      }
+      return Promise.resolve();
+    },
     uninstallExtension: (id) => {
       uninstalled.push(id);
       return Promise.resolve();

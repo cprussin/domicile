@@ -4,7 +4,8 @@
 use std::path::Path;
 
 use domicile_protocol::{
-    DesktopStatus, ListedDisplay, ListedInput, ListedWindow, ShellBinding, ShellCommandHelp,
+    AgentReach, DesktopStatus, KnownAgents, ListedDisplay, ListedInput, ListedWindow, ShellBinding,
+    ShellCommandHelp,
 };
 use serde::Serialize;
 
@@ -230,4 +231,55 @@ fn wire_word(value: impl Serialize) -> String {
         Ok(serde_json::Value::String(word)) => word,
         other => panic!("a listed enum is a word on the wire, not {other:?}"),
     }
+}
+
+/// The agents let in now, then those remembered: each one's session (`-`
+/// for a remembered one not in now), whether it is in or remembered, what
+/// it reaches, and its name.
+pub fn agents_table(agents: &KnownAgents) -> String {
+    let header = ["SESSION", "STATE", "REACH", "AGENT"].map(str::to_string);
+    let reach = |reach: &AgentReach| match reach {
+        AgentReach::Desk => "desk".to_string(),
+        AgentReach::Windows { windows } => windows
+            .iter()
+            .map(|window| window.id.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    };
+    let rows: Vec<[String; 4]> = std::iter::once(header)
+        .chain(agents.connected.iter().map(|agent| {
+            [
+                agent.session.to_string(),
+                "in".to_string(),
+                reach(&agent.reach),
+                agent.agent.clone(),
+            ]
+        }))
+        .chain(agents.remembered.iter().map(|agent| {
+            [
+                "-".to_string(),
+                "remembered".to_string(),
+                "desk".to_string(),
+                agent.agent.clone(),
+            ]
+        }))
+        .collect();
+    let widths: Vec<usize> = (0..3)
+        .map(|column| {
+            rows.iter()
+                .map(|row| row[column].chars().count())
+                .max()
+                .expect("the header is a row")
+        })
+        .collect();
+    rows.iter()
+        .map(|row| {
+            let padded: String = widths
+                .iter()
+                .zip(row)
+                .map(|(width, cell)| format!("{cell:<width$}  "))
+                .collect();
+            format!("{padded}{}\n", row[3])
+        })
+        .collect()
 }

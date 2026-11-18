@@ -2,6 +2,7 @@ import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { Capturing, CapturingKind } from "@domicile-desktop/sdk/portal";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { StopIcon } from "@phosphor-icons/react/dist/ssr/Stop";
 import { useEffect, useState } from "react";
 
@@ -21,13 +22,16 @@ const TICK_MS = 15 * 1000;
 
 /**
  * A violet pill per agent in control, named as it names itself. Its panel
- * says what it can reach and what it did last, with a button that stops it.
+ * says what it can reach and what it did last, with buttons that change what
+ * it reaches and stop it.
  */
 export const Agents = ({
   agents,
+  change,
   stop,
 }: {
   agents: readonly Agent[];
+  change: (id: number) => void;
   stop: (id: number) => void;
 }) =>
   agents.map((agent) => (
@@ -46,6 +50,9 @@ export const Agents = ({
     >
       <Panel
         agent={agent}
+        change={() => {
+          change(agent.id);
+        }}
         stop={() => {
           stop(agent.id);
         }}
@@ -53,7 +60,15 @@ export const Agents = ({
     </Popover>
   ));
 
-const Panel = ({ agent, stop }: { agent: Agent; stop: () => void }) => {
+const Panel = ({
+  agent,
+  change,
+  stop,
+}: {
+  agent: Agent;
+  change: () => void;
+  stop: () => void;
+}) => {
   const now = useNow();
   return (
     <div className={panelStyles}>
@@ -81,14 +96,24 @@ const Panel = ({ agent, stop }: { agent: Agent; stop: () => void }) => {
           ))}
         </ul>
       )}
-      <Button
-        beforeIcon={<StopIcon aria-hidden weight="fill" />}
-        onClick={stop}
-        size="sm"
-        variant="danger"
-      >
-        Stop
-      </Button>
+      <span className={buttonsStyles}>
+        <Button
+          beforeIcon={<SlidersHorizontalIcon aria-hidden />}
+          onClick={change}
+          size="sm"
+          variant="outline"
+        >
+          Change
+        </Button>
+        <Button
+          beforeIcon={<StopIcon aria-hidden weight="fill" />}
+          onClick={stop}
+          size="sm"
+          variant="danger"
+        >
+          Stop
+        </Button>
+      </span>
     </div>
   );
 };
@@ -158,6 +183,13 @@ const panelStyles = flex({
 });
 
 const headStyles = flex({ direction: "column", gap: 0.5 });
+
+// Side by side, sharing the panel's width.
+const buttonsStyles = css({
+  "& > *": { flex: 1 },
+  display: "flex",
+  gap: 2,
+});
 
 const detailStyles = css({ fontSize: "xs", opacity: 0.75 });
 

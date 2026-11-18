@@ -8,6 +8,7 @@ import type { DomicileHost } from "../domicile-host";
 import type {
   AccessBody,
   AccountBody,
+  AgentBody,
   AgentReach,
   AgentSessionBody,
   AgentWindow,
@@ -141,6 +142,11 @@ export const answerPortalRequest = (
 /** End capturing session `id`. */
 export const stopCapturing = (host: PortalHost, id: number): void => {
   answerPortalRequest(host, id, PortalAnswer.Stop());
+};
+
+/** Ask the user again what agent session `id` reaches. */
+export const changeAgent = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Change());
 };
 
 /** Pause recording `id`. Its file leaves the pause out. */
@@ -426,11 +432,6 @@ const agentWindowSchema = z
     }),
   );
 
-const agentSchema = z.object({
-  agent: z.string(),
-  windows: z.array(agentWindowSchema),
-});
-
 const agentReachSchema = z
   .discriminatedUnion("type", [
     z.object({ type: z.literal("desk") }),
@@ -444,6 +445,26 @@ const agentReachSchema = z
       reach.type === "desk"
         ? { kind: "desk" }
         : { kind: "windows", windows: reach.windows },
+  );
+
+/** An agent's reach, as the compositor sends it. */
+export const readAgentReach = (reach: unknown): AgentReach =>
+  agentReachSchema.parse(reach);
+
+const agentSchema = z
+  .object({
+    agent: z.string(),
+    current: agentReachSchema.optional(),
+    remembered: z.boolean().default(false),
+    windows: z.array(agentWindowSchema),
+  })
+  .transform(
+    (body): AgentBody => ({
+      agent: body.agent,
+      current: body.current,
+      remembered: body.remembered,
+      windows: body.windows,
+    }),
   );
 
 const agentSessionSchema = z
@@ -964,7 +985,13 @@ const wireAnswer = (answer: PortalAnswer): object => {
     case PortalAnswerKind.PickColor:
       return { kind: "pick_color", x: answer.at.x, y: answer.at.y };
     case PortalAnswerKind.Agent:
-      return { kind: "agent", reach: wireReach(answer.reach) };
+      return {
+        kind: "agent",
+        reach: wireReach(answer.reach),
+        ...(answer.remember ? { remember: true } : {}),
+      };
+    case PortalAnswerKind.Change:
+      return { kind: "change" };
     case PortalAnswerKind.Refused:
       return { kind: "refused" };
   }
