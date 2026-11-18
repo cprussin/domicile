@@ -341,6 +341,26 @@ describe("Wallpaper", () => {
     jest.useRealTimers();
   });
 
+  it("keeps the photograph on screen when still", () => {
+    // Nothing redraws an idle desktop: the minute timer doesn't run.
+    jest.useFakeTimers();
+    const { container } = render(
+      <Wallpaper files={NO_FILES} order={inOrder} still theme="dark" />,
+      {
+        wrapper: OnOneScreen,
+      },
+    );
+    loadPhotos(container);
+
+    act(() => {
+      jest.advanceTimersByTime(DWELL_MS * 3);
+    });
+
+    expect(layer(container, "dark", "current")).toEqual([photo("dark", 0)]);
+    expect(jest.getTimerCount()).toBe(0);
+    jest.useRealTimers();
+  });
+
   it("holds the next photograph until the theme wipe is over", () => {
     // A crossfade under the wipe would show through the new theme's frame.
     jest.useFakeTimers();

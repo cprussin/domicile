@@ -207,6 +207,12 @@ let
           let
             config = pkgs.writeText "domicile.json" (builtins.toJSON {
               electron.apps = [ "slack.desktop" "codium.desktop" ];
+              # Like the other desktops at rest: a clock to the minute and
+              # one wallpaper, so nothing redraws every second or minute.
+              shell_options = {
+                clock.seconds = false;
+                wallpaper.rotate = false;
+              };
             });
           in
           ''

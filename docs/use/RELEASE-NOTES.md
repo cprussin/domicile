@@ -36,6 +36,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 - Quick settings lights Wi-Fi, Wired and Bluetooth while connected. [#2266](https://github.com/cprussin/domicile/pull/2266)
 - The tray's menu pins icons and switches extensions. [#2137](https://github.com/cprussin/domicile/pull/2137)
 - Tap Super, or swipe up with four fingers, for the overview. [#2065](https://github.com/cprussin/domicile/pull/2065) · [#2148](https://github.com/cprussin/domicile/pull/2148)
+- Keep one wallpaper instead of a new one every minute: Settings › Shell. [Wallpaper](APPEARANCE.md#wallpaper)
 - The night light fades in and out. [#2181](https://github.com/cprussin/domicile/pull/2181)
 - Meta+W merges side-by-side windows into tabs. [#2093](https://github.com/cprussin/domicile/pull/2093)
 - Extensions can run in private windows. [#2060](https://github.com/cprussin/domicile/pull/2060)

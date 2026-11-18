@@ -16,7 +16,10 @@ or with `host: crux` one at a time on crux's GPU (see below).
 
 `console` (no desktop, the VM's own cost), `domicile` (manganese), `sway`,
 `hyprland`, `gnome` and `plasma`, each as its NixOS module sets it up. First-run
-screens (GNOME's tour, Plasma's welcome) are left out.
+screens (GNOME's tour, Plasma's welcome) are left out. GNOME and Plasma never
+dim, blank or lock the idle screen, as the others don't. manganese's clock
+shows minutes only and its wallpaper stays put (`shell_options`), so it
+doesn't redraw every second or minute at rest.
 
 ## Workloads
 

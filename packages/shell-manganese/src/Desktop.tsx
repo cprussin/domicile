@@ -777,6 +777,7 @@ export const Desktop = ({
         held={flipping}
         photos={listedWallpapers ?? NO_WALLPAPERS}
         picture={backgroundPicture}
+        still={!shellOptions.wallpaper.rotate}
         theme={theme}
       />
       {/*

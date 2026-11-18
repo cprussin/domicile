@@ -10,6 +10,8 @@ A photograph behind the whole desktop, changing every minute. Source:
   for light. CSS shows the current theme's, and only it
   rotates. The other holds its loaded photo, so a theme switch shows it at
   once.
+- **Still**: manganese's `wallpaper.rotate` option, off, keeps the photo on
+  screen and stops the minute timer, so nothing redraws an idle desktop.
 - **Held during a theme wipe**: a photograph due mid-wipe fades in once the
   wipe ends, so no crossfade shows through the new theme's frame.
 - **Mounted**: only the photo on screen, the one fading out and the next one.

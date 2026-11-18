@@ -45,6 +45,11 @@ type Props = {
    */
   held?: boolean;
   /**
+   * Keeps the photograph on screen: the rotation never advances, so
+   * nothing redraws the wallpaper while the desktop is idle.
+   */
+  still?: boolean;
+  /**
    * The order each pass through a rotation shows its photographs in.
    * Defaults to a fresh shuffle each pass.
    */
@@ -82,6 +87,7 @@ const STARTS: Readonly<Record<Theme, number>> = { dark: 0, light: 0 };
 export const Wallpaper = ({
   files,
   held = false,
+  still = false,
   order: givenOrder,
   photos = DEFAULT_WALLPAPERS,
   picture,
@@ -111,13 +117,16 @@ export const Wallpaper = ({
   });
 
   useEffect(() => {
+    if (still) {
+      return;
+    }
     const timer = setInterval(() => {
       setDue(true);
     }, DWELL_MS);
     return () => {
       clearInterval(timer);
     };
-  }, []);
+  }, [still]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
