@@ -141,6 +141,11 @@ void CloseBrowserWindow(const std::string& id);
 base::CallbackListSubscription WatchBrowserWindowLoads(
     base::RepeatingCallback<void(const std::string& id)> loaded);
 
+// Runs `ready` with a browser window's id each time its main frame's DOM is
+// ready, until the subscription goes.
+base::CallbackListSubscription WatchBrowserWindowDomReadies(
+    base::RepeatingCallback<void(const std::string& id)> ready);
+
 // The shell's WebContents in any profile, or null while there is none.
 content::WebContents* DeskShellContents();
 

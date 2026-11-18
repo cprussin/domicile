@@ -107,10 +107,12 @@ const defined = (fields: Record<string, unknown>) =>
 
 /**
  * The session calls of an app whose requests to the engine go through
- * `send`; `hear` takes the engine's answers.
+ * `send`; `hear` takes the engine's answers. A session without its own user
+ * agent has `userAgentFallback`'s, app.userAgentFallback.
  */
 export const createSessionCalls = (
   send: (message: SessionCallMessage) => void,
+  userAgentFallback: () => string,
 ) => {
   const waiting = new Map<
     number,
@@ -132,7 +134,7 @@ export const createSessionCalls = (
   const nothing = (promise: Promise<unknown>) => promise.then(() => undefined);
 
   const forSession = (session: string): SessionCalls => {
-    let userAgent = "";
+    let userAgent: string | undefined;
     return {
       clearCache: () => nothing(call(session, "clear_cache")),
       clearStorageData: (options = {}) =>
@@ -178,7 +180,7 @@ export const createSessionCalls = (
             }),
           ),
       }),
-      getUserAgent: () => userAgent,
+      getUserAgent: () => userAgent ?? userAgentFallback(),
       setUserAgent: (agent) => {
         userAgent = agent;
         // Electron's is synchronous; a refusal is the engine's bug, and its

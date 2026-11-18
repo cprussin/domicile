@@ -124,6 +124,9 @@ source_set("domicile") {
     "//components/domicile:desk_downloads",
     # Electron apps' windows, for the Electron socket.
     "//components/domicile:electron_app",
+    # The engine's user agent and version, which Electron's user agent names.
+    "//components/embedder_support:user_agent",
+    "//components/version_info",
     "//components/domicile:line_framer",
     # Where the pointer is on the desk, from aura's own events.
     "//components/domicile:desk_pointer",

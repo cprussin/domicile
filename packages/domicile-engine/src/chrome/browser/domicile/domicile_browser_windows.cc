@@ -47,6 +47,7 @@
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/common/domicile_scheme.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/document_service.h"
@@ -77,9 +78,15 @@ namespace {
 // page makes after its current document, which take its entry's.
 void UseUserAgent(content::WebContents& contents,
                   const std::string& user_agent) {
-  contents.SetUserAgentOverride(
-      blink::UserAgentOverride::UserAgentOnly(user_agent),
-      /*override_in_new_tabs=*/true);
+  blink::UserAgentOverride override =
+      blink::UserAgentOverride::UserAgentOnly(user_agent);
+  // Without metadata a page's navigator.userAgentData and Sec-CH-UA go
+  // blank; Electron keeps the engine's. No user agent is no override, which
+  // takes none.
+  if (!user_agent.empty()) {
+    override.ua_metadata_override = embedder_support::GetUserAgentMetadata();
+  }
+  contents.SetUserAgentOverride(override, /*override_in_new_tabs=*/true);
   if (content::NavigationEntry* entry =
           contents.GetController().GetLastCommittedEntry()) {
     entry->SetIsOverridingUserAgent(true);
@@ -95,6 +102,16 @@ base::RepeatingCallbackList<void(const std::string&)>& BrowserWindowLoads() {
       base::RepeatingCallbackList<void(const std::string&)>>
       loads;
   return *loads;
+}
+
+// Each browser window whose main frame's DOM is ready, by the window's id. See
+// WatchBrowserWindowDomReadies.
+base::RepeatingCallbackList<void(const std::string&)>&
+BrowserWindowDomReadies() {
+  static base::NoDestructor<
+      base::RepeatingCallbackList<void(const std::string&)>>
+      readies;
+  return *readies;
 }
 
 // Returns the shell's WebContents in `context`, or null when it has none.
@@ -695,6 +712,11 @@ class DeskWindows final : public base::SupportsUserData::Data,
           id_(std::move(id)),
           changed_(std::move(changed)) {}
 
+    void DOMContentLoaded(content::RenderFrameHost* frame) override {
+      if (frame->IsInPrimaryMainFrame()) {
+        BrowserWindowDomReadies().Notify(id_);
+      }
+    }
     void DocumentOnLoadCompletedInPrimaryMainFrame() override {
       BrowserWindowLoads().Notify(id_);
     }
@@ -1569,6 +1591,11 @@ void CloseBrowserWindow(const std::string& id) {
 base::CallbackListSubscription WatchBrowserWindowLoads(
     base::RepeatingCallback<void(const std::string& id)> loaded) {
   return BrowserWindowLoads().Add(std::move(loaded));
+}
+
+base::CallbackListSubscription WatchBrowserWindowDomReadies(
+    base::RepeatingCallback<void(const std::string& id)> ready) {
+  return BrowserWindowDomReadies().Add(std::move(ready));
 }
 
 content::WebContents* DeskShellContents() {

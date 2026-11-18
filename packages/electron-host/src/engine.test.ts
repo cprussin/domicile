@@ -44,6 +44,18 @@ describe(connectEngine, () => {
     ]);
   });
 
+  it("knows the engine's user agent and Chrome version from its ready", async () => {
+    fake = await startFakeEngine();
+
+    const engine = await connected(fake);
+
+    expect(engine.browser).toEqual({
+      chromeVersion: "160.0.8155.0",
+      userAgent:
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/160.0.0.0 Safari/537.36",
+    });
+  });
+
   it("says why the engine refused the app", async () => {
     fake = await startFakeEngine(() => [
       { type: "refused", why: "this engine speaks version 2" },

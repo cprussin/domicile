@@ -294,6 +294,11 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   windows from their next navigation and its new windows before their first
   ([`domicile_electron_storage.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_storage.h)).
   Not yet: `cookies.on('changed')`.
+- **User agent**: `ready` names the engine's user agent and Chrome's full
+  version. The host makes Electron's from them (`Name/1.2.3 Chrome/<full>
+  Electron/<version>` in Chrome's place) and sends it as
+  `set_user_agent_fallback`, `app.userAgentFallback`, before the app's
+  windows open. A session without its own user agent has it.
 - **Permission handlers** (`permission_handler`): while one of the app's
   sessions has a `setPermissionRequestHandler`, its pages' permission
   requests ask the app (`permission_request`, answered by

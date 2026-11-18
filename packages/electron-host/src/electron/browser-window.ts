@@ -591,14 +591,15 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           // Its first page is loading; `window_loaded` says when it's done.
           break;
         }
+        case "window_dom_ready": {
+          this.webContents.emit("dom-ready", eventObject());
+          break;
+        }
         case "window_loaded": {
           this.#loading = false;
           for (const run of this.#toRun.splice(0)) {
             run();
           }
-          // The engine says only when the page has loaded, which is after
-          // its DOM is.
-          this.webContents.emit("dom-ready", eventObject());
           this.webContents.emit("did-finish-load");
           this.wasLoaded();
           for (const load of this.#loads.splice(0)) {
