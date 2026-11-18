@@ -19,7 +19,9 @@ if ! git diff --quiet "$1...HEAD" -- docs/RELEASE-NOTES.md docs/use/RELEASE-NOTE
   exit 0
 fi
 
-if git log --format='%(trailers:key=Release-notes,valueonly)' "$1..HEAD" | grep -qx none; then
+# grep reads all of git log's output. `grep -q` stops at the first match, and
+# git log then dies of SIGPIPE, which pipefail turns into a failure.
+if git log --format='%(trailers:key=Release-notes,valueonly)' "$1..HEAD" | grep -x none >/dev/null; then
   echo "a commit says this change needs no release notes"
   exit 0
 fi
