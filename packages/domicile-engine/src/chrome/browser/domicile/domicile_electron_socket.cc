@@ -28,7 +28,6 @@
 #include "base/threading/sequence_bound.h"
 #include "base/types/expected.h"
 #include "base/values.h"
-#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_electron_storage.h"
@@ -66,16 +65,8 @@ bool ConnectedByUs(const net::UnixDomainServerSocket::Credentials& peer) {
 // The desk as an Electron app sees it: the shell profile's browser windows.
 class ChromeElectronDesk final : public ElectronDesk {
  public:
-  void WhenProfileReady(
-      const std::string& profile,
-      base::OnceCallback<void(base::expected<void, std::string>)> ready)
-      override {
-    BrowserProfileRegistry::Get().WhenAppProfileReady(profile,
-                                                      std::move(ready));
-  }
   std::optional<std::string> Open(const GURL& url,
                                   const std::string& app_id,
-                                  const std::string& profile,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
                                   const std::vector<std::string>& arguments,
@@ -85,9 +76,22 @@ class ChromeElectronDesk final : public ElectronDesk {
                                   bool view,
                                   const std::string& title,
                                   bool hidden) override {
-    return OpenElectronWindow(url, app_id, profile, partition, preload,
-                              arguments, node, std::move(calls),
-                              std::move(session), view, title, hidden);
+    return OpenElectronWindow(url, app_id, partition, preload, arguments, node,
+                              std::move(calls), std::move(session), view, title,
+                              hidden);
+  }
+  std::optional<std::string> Adopt(std::unique_ptr<ElectronHeldPage> page,
+                                   const std::string& app_id,
+                                   const std::string& preload,
+                                   const std::vector<std::string>& arguments,
+                                   const std::optional<ElectronNode>& node,
+                                   ElectronPageCalls calls,
+                                   base::WeakPtr<ElectronSession> session,
+                                   const std::string& title,
+                                   bool hidden) override {
+    return AdoptElectronWindow(std::move(page), app_id, preload, arguments,
+                               node, std::move(calls), std::move(session),
+                               title, hidden);
   }
   void SetViews(const std::string& id,
                 std::vector<ElectronDeskView> views) override {
@@ -159,41 +163,35 @@ class ChromeElectronDesk final : public ElectronDesk {
     SetBrowserWindowUserAgent(id, user_agent);
   }
   void GetCookies(
-      const std::string& profile,
       const WebViewPartition& partition,
       const std::optional<GURL>& url,
       base::OnceCallback<void(std::vector<ElectronCookie>)> done) override {
-    GetElectronCookies(profile, partition, url, std::move(done));
+    GetElectronCookies(partition, url, std::move(done));
   }
   void SetCookie(
-      const std::string& profile,
       const WebViewPartition& partition,
       const ElectronCookieDetails& details,
       base::OnceCallback<void(std::optional<std::string>)> done) override {
-    SetElectronCookie(profile, partition, details, std::move(done));
+    SetElectronCookie(partition, details, std::move(done));
   }
-  void RemoveCookie(const std::string& profile,
-                    const WebViewPartition& partition,
+  void RemoveCookie(const WebViewPartition& partition,
                     const GURL& url,
                     const std::string& name,
                     base::OnceClosure done) override {
-    RemoveElectronCookie(profile, partition, url, name, std::move(done));
+    RemoveElectronCookie(partition, url, name, std::move(done));
   }
-  void FlushCookies(const std::string& profile,
-                    const WebViewPartition& partition,
+  void FlushCookies(const WebViewPartition& partition,
                     base::OnceClosure done) override {
-    FlushElectronCookies(profile, partition, std::move(done));
+    FlushElectronCookies(partition, std::move(done));
   }
-  void ClearStorage(const std::string& profile,
-                    const WebViewPartition& partition,
+  void ClearStorage(const WebViewPartition& partition,
                     const ElectronClearStorage& clear,
                     base::OnceClosure done) override {
-    ClearElectronStorage(profile, partition, clear, std::move(done));
+    ClearElectronStorage(partition, clear, std::move(done));
   }
-  void ClearCache(const std::string& profile,
-                  const WebViewPartition& partition,
+  void ClearCache(const WebViewPartition& partition,
                   base::OnceClosure done) override {
-    ClearElectronCache(profile, partition, std::move(done));
+    ClearElectronCache(partition, std::move(done));
   }
 };
 

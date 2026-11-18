@@ -347,22 +347,74 @@ pub async fn for_the_shell(
     }
 }
 
-/// Writes a PNG of the whole desk to `file`, its longer side at most `fit`
-/// pixels, for `domicile screenshot --fit`, and says what it shows.
-pub async fn for_an_agent(shots: &Shots, file: PathBuf, fit_into: u32) -> Result<DeskShot, String> {
+/// Writes a PNG of the whole desk, or of its `area`, to `file`, its longer
+/// side at most `fit` pixels, for `domicile screenshot --fit`, and says what
+/// it shows.
+pub async fn for_an_agent(
+    shots: &Shots,
+    file: PathBuf,
+    fit_into: u32,
+    area: Option<DeskRect>,
+) -> Result<DeskShot, String> {
     let desk = (shots.shoot)()
         .await
         .map_err(|why| format!("the desk could not be shot: {why}"))?;
-    let shot = fit(&desk.shot, fit_into);
+    let whole = DeskRect {
+        position: (desk.place.0, desk.place.1),
+        size: (desk.place.2, desk.place.3),
+    };
+    let (shot, place) = match area {
+        None => (desk.shot, whole),
+        Some(area) => (crop(&desk.shot, pixels_of(&desk.shot, whole, area)?), area),
+    };
+    let shot = fit(&shot, fit_into);
     std::fs::write(&file, encode(&shot))
         .map_err(|why| format!("the screenshot could not be written: {why}"))?;
     Ok(DeskShot {
-        place: DeskRect {
-            position: (desk.place.0, desk.place.1),
-            size: (desk.place.2, desk.place.3),
-        },
+        place,
         width: shot.width,
         height: shot.height,
+    })
+}
+
+/// `area` of the desk `whole` as the pixels of `shot`, which shows `whole`,
+/// or why it is not all on the desk.
+fn pixels_of(shot: &Shot, whole: DeskRect, area: DeskRect) -> Result<ShotRect, String> {
+    let describe = |rect: DeskRect| {
+        format!(
+            "{},{} {}x{}",
+            rect.position.0, rect.position.1, rect.size.0, rect.size.1
+        )
+    };
+    let (left, top) = (
+        area.position.0 - whole.position.0,
+        area.position.1 - whole.position.1,
+    );
+    let (right, bottom) = (left + area.size.0, top + area.size.1);
+    if left < 0
+        || top < 0
+        || right > whole.size.0
+        || bottom > whole.size.1
+        || area.size.0 < 1
+        || area.size.1 < 1
+    {
+        return Err(format!(
+            "the area {} is not all on the desk, which is {}",
+            describe(area),
+            describe(whole)
+        ));
+    }
+    // Logical pixels to the shot's, rounding outward so the area is all in.
+    let across = |at: i32| u64::from(shot.width) * at as u64;
+    let down = |at: i32| u64::from(shot.height) * at as u64;
+    let (width, height) = (whole.size.0 as u64, whole.size.1 as u64);
+    let x = (across(left) / width) as u32;
+    let y = (down(top) / height) as u32;
+    Ok(ShotRect {
+        x,
+        y,
+        width: (across(right).div_ceil(width) as u32) - x,
+        height: (down(bottom).div_ceil(height) as u32) - y,
     })
 }
 
@@ -641,7 +693,7 @@ mod tests {
             ..Shots::none()
         };
 
-        let shot = zbus::block_on(for_an_agent(&shots, file.clone(), 1)).unwrap();
+        let shot = zbus::block_on(for_an_agent(&shots, file.clone(), 1, None)).unwrap();
 
         assert_eq!(
             shot,
@@ -655,6 +707,39 @@ mod tests {
             }
         );
         assert_eq!(png_of(std::fs::read(&file).unwrap()).0, (1, 1));
+    }
+
+    #[test]
+    fn an_agents_shot_of_an_area_is_that_area_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("desk.png");
+        let shots = Shots {
+            shoot: shot_of(Ok(desk())),
+            ..Shots::none()
+        };
+        let right = DeskRect {
+            position: (0, 0),
+            size: (1, 1),
+        };
+
+        let shot = zbus::block_on(for_an_agent(&shots, file.clone(), 8, Some(right))).unwrap();
+
+        assert_eq!(
+            shot,
+            DeskShot {
+                place: right,
+                width: 1,
+                height: 1,
+            }
+        );
+        let off_the_desk = DeskRect {
+            position: (0, 0),
+            size: (2, 1),
+        };
+        assert_eq!(
+            zbus::block_on(for_an_agent(&shots, file, 8, Some(off_the_desk))),
+            Err("the area 0,0 2x1 is not all on the desk, which is -1,0 2x1".to_string())
+        );
     }
 
     /// A 2x1 desk: an orange pixel on monitor `left`, then a half-transparent

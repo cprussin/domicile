@@ -30,19 +30,46 @@ constexpr char kHello[] =
     R"({"type":"hello","version":1,"app_id":"com.anthropic.Claude",)"
     R"("partition":"persist:electron-claude"})";
 
+// A held page that says when it is destroyed, as a denied window closes.
+class FakeHeldPage final : public ElectronHeldPage {
+ public:
+  explicit FakeHeldPage(std::string name, std::vector<std::string>& calls)
+      : name_(std::move(name)), calls_(calls) {}
+  ~FakeHeldPage() override { calls_->push_back("destroy held " + name_); }
+  const std::string& name() const { return name_; }
+
+ private:
+  const std::string name_;
+  const raw_ref<std::vector<std::string>> calls_;
+};
+
 // A desk that numbers its windows from 10 and writes down each call.
 class FakeDesk final : public ElectronDesk {
  public:
-  void WhenProfileReady(
-      const std::string& profile,
-      base::OnceCallback<void(base::expected<void, std::string>)> ready)
-      override {
-    calls.push_back("wait for profile " + profile);
-    profile_waits.push_back(std::move(ready));
+  std::optional<std::string> Adopt(std::unique_ptr<ElectronHeldPage> page,
+                                   const std::string& app_id,
+                                   const std::string& preload,
+                                   const std::vector<std::string>& arguments,
+                                   const std::optional<ElectronNode>& node,
+                                   ElectronPageCalls page_calls,
+                                   base::WeakPtr<ElectronSession> session,
+                                   const std::string& title,
+                                   bool hidden) override {
+    if (!has_shell) {
+      return std::nullopt;
+    }
+    calls.push_back(
+        "adopt " + static_cast<FakeHeldPage&>(*page).name() + " as " + app_id +
+        (preload.empty() ? "" : " with " + preload) +
+        (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
+    adopted.push_back(std::move(page));
+    const std::string id = base::NumberToString(next_id++);
+    pages.emplace(id, std::move(page_calls));
+    sessions.emplace(id, std::move(session));
+    return id;
   }
   std::optional<std::string> Open(const GURL& url,
                                   const std::string& app_id,
-                                  const std::string& profile,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
                                   const std::vector<std::string>& arguments,
@@ -57,8 +84,7 @@ class FakeDesk final : public ElectronDesk {
     }
     calls.push_back(
         std::string(view ? "open view " : "open ") + url.spec() + " as " +
-        app_id + (profile.empty() ? "" : " in " + profile) +
-        (preload.empty() ? "" : " with " + preload) +
+        app_id + (preload.empty() ? "" : " with " + preload) +
         (arguments.empty()
              ? ""
              : " with arguments " + base::JoinString(arguments, " ")) +
@@ -140,55 +166,45 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("user agent " + id + " " + user_agent);
   }
   void GetCookies(
-      const std::string& profile,
       const WebViewPartition& partition,
       const std::optional<GURL>& url,
       base::OnceCallback<void(std::vector<ElectronCookie>)> done) override {
     calls.push_back("get cookies in " + partition.name +
-                    (profile.empty() ? "" : " of " + profile) +
                     (url.has_value() ? " for " + url->spec() : ""));
     std::move(done).Run(cookies);
   }
   void SetCookie(
-      const std::string& profile,
       const WebViewPartition& partition,
       const ElectronCookieDetails& details,
       base::OnceCallback<void(std::optional<std::string>)> done) override {
     calls.push_back("set cookie " + details.name + " in " + partition.name);
     std::move(done).Run(cookie_refusal);
   }
-  void RemoveCookie(const std::string& profile,
-                    const WebViewPartition& partition,
+  void RemoveCookie(const WebViewPartition& partition,
                     const GURL& url,
                     const std::string& name,
                     base::OnceClosure done) override {
     calls.push_back("remove cookie " + name + " for " + url.spec());
     std::move(done).Run();
   }
-  void FlushCookies(const std::string& profile,
-                    const WebViewPartition& partition,
+  void FlushCookies(const WebViewPartition& partition,
                     base::OnceClosure done) override {
     calls.push_back("flush cookies in " + partition.name);
     std::move(done).Run();
   }
-  void ClearStorage(const std::string& profile,
-                    const WebViewPartition& partition,
+  void ClearStorage(const WebViewPartition& partition,
                     const ElectronClearStorage& clear,
                     base::OnceClosure done) override {
     calls.push_back("clear storage in " + partition.name);
     waiting = std::move(done);
   }
-  void ClearCache(const std::string& profile,
-                  const WebViewPartition& partition,
+  void ClearCache(const WebViewPartition& partition,
                   base::OnceClosure done) override {
     calls.push_back("clear cache in " + partition.name);
     std::move(done).Run();
   }
 
   bool has_shell = true;
-  // Each WhenProfileReady's answer, oldest first.
-  std::vector<base::OnceCallback<void(base::expected<void, std::string>)>>
-      profile_waits;
   // What each window's page may call, by id.
   std::map<std::string, ElectronPageCalls> pages;
   // Each window's partition and session, by id.
@@ -215,6 +231,9 @@ class FakeDesk final : public ElectronDesk {
       ran;
   // A ClearStorage that has not finished.
   base::OnceClosure waiting;
+  // The held pages Adopt made windows of. Last, as each writes to `calls` as
+  // it goes.
+  std::vector<std::unique_ptr<ElectronHeldPage>> adopted;
 };
 
 class ElectronAppTest : public testing::Test {
@@ -249,49 +268,6 @@ TEST_F(ElectronAppTest, HelloIsAnsweredReady) {
   EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"160.0.8155.0\","
                          "\"schemes\":[],\"type\":\"ready\",\"user_agent\":"
                          "\"Mozilla/5.0 Chrome/160.0.0.0\"}\n"});
-}
-
-constexpr char kHelloInWork[] =
-    R"({"type":"hello","version":1,"app_id":"com.anthropic.Claude",)"
-    R"("partition":"persist:electron-claude","profile":"work"})";
-
-TEST_F(ElectronAppTest, HelloInAProfileIsAnsweredOnceTheProfileIsReady) {
-  app_->Take(kHelloInWork);
-  EXPECT_EQ(desk_.calls, Lines{"wait for profile work"});
-  EXPECT_TRUE(sent_.empty());
-
-  std::move(desk_.profile_waits.at(0)).Run(base::ok());
-
-  EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"160.0.8155.0\","
-                         "\"schemes\":[],\"type\":\"ready\",\"user_agent\":"
-                         "\"Mozilla/5.0 Chrome/160.0.0.0\"}\n"});
-}
-
-TEST_F(ElectronAppTest, HelloInAProfileTheDeskCannotGiveIsRefused) {
-  app_->Take(kHelloInWork);
-
-  std::move(desk_.profile_waits.at(0))
-      .Run(base::unexpected("the desk has no browser profile work"));
-  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
-
-  EXPECT_EQ(sent_, (Lines{"{\"type\":\"refused\",\"why\":\"the desk has no "
-                          "browser profile work\"}\n",
-                          "{\"type\":\"refused\","
-                          "\"why\":\"an app says hello first\"}\n"}));
-}
-
-TEST_F(ElectronAppTest, AnAppInAProfileKeepsItsWindowsAndStorageThere) {
-  app_->Take(kHelloInWork);
-  std::move(desk_.profile_waits.at(0)).Run(base::ok());
-  desk_.calls.clear();
-
-  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
-  app_->Take(R"({"type":"session_call","call":1,"session":"",)"
-             R"("method":"cookies_get","filter":{}})");
-
-  EXPECT_EQ(desk_.calls,
-            (Lines{"open https://a.test/ as com.anthropic.Claude in work",
-                   "get cookies in electron-claude of work"}));
 }
 
 TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
@@ -1477,6 +1453,122 @@ TEST_F(ElectronAppTest, ABadSessionCallIsAnsweredWithWhy) {
              "\"type\":\"session_result\"}\n",
              "{\"call\":7,\"error\":\"a partition of \\\"persist:\\\" "
              "names no partition to keep\",\"type\":\"session_result\"}\n"}));
+}
+
+// window.open in window 1's page, which keeps a handle on it.
+constexpr char kAskedLine[] =
+    R"({"ask":1,"disposition":"new-window","features":"width=500",)"
+    R"("frame_name":"popup","referrer":"https://a.test/",)"
+    R"("type":"window_open","url":"https://b.test/","window":1})"
+    "\n";
+
+ElectronWindowOpenDetails AskedDetails() {
+  return {.url = GURL("https://b.test/"),
+          .frame_name = "popup",
+          .features = "width=500",
+          .disposition = "new-window",
+          .referrer = GURL("https://a.test/")};
+}
+
+TEST_F(ElectronAppTest, APagesNewWindowAsksTheApp) {
+  Hello();
+  app_->Take(kOpenOwn);
+  sent_.clear();
+
+  desk_.pages.at("10").window_opening.Run(AskedDetails(), nullptr);
+
+  EXPECT_EQ(sent_, Lines{kAskedLine});
+}
+
+TEST_F(ElectronAppTest, ADeniedWindowClosesAndNothingOpens) {
+  Hello();
+  app_->Take(kOpenOwn);
+  desk_.pages.at("10").window_opening.Run(
+      AskedDetails(), std::make_unique<FakeHeldPage>("popup", desk_.calls));
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(R"({"type":"window_open_answer","ask":1,"action":"deny"})");
+
+  EXPECT_EQ(desk_.calls, Lines{"destroy held popup"});
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, AnAllowedNoopenerWindowOpensWhereThePageAsked) {
+  Hello();
+  app_->Take(kOpenOwn);
+  desk_.pages.at("10").window_opening.Run(AskedDetails(), nullptr);
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(
+      R"({"type":"window_open_answer","ask":1,"action":"allow","window":2,)"
+      R"("title":"B"})");
+
+  EXPECT_EQ(desk_.calls,
+            Lines{"open https://b.test/ as com.anthropic.Claude titled B"});
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"window_opened\",\"window\":2}\n"});
+}
+
+TEST_F(ElectronAppTest, AnAllowedHeldWindowBecomesTheAppsWindow) {
+  Hello();
+  app_->Take(kOpenOwn);
+  desk_.pages.at("10").window_opening.Run(
+      AskedDetails(), std::make_unique<FakeHeldPage>("popup", desk_.calls));
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(
+      R"({"type":"window_open_answer","ask":1,"action":"allow","window":2,)"
+      R"json("preload":"p()","hidden":true})json");
+  app_->Take(R"({"type":"focus_window","window":2})");
+
+  EXPECT_EQ(desk_.calls,
+            (Lines{"adopt popup as com.anthropic.Claude with p() hidden",
+                   "focus 11"}));
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"window_opened\",\"window\":2}\n"});
+}
+
+TEST_F(ElectronAppTest, AHeldWindowStaysInItsOpenersSession) {
+  Hello();
+  app_->Take(kOpenOwn);
+  desk_.pages.at("10").window_opening.Run(
+      AskedDetails(), std::make_unique<FakeHeldPage>("popup", desk_.calls));
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(
+      R"({"type":"window_open_answer","ask":1,"action":"allow","window":2,)"
+      R"("session":"persist:other"})");
+
+  EXPECT_EQ(sent_, Lines{R"({"type":"window_refused","why":"a window its )"
+                         R"(opener keeps a handle on is in the opener's )"
+                         R"(session, \"\", not \"persist:other\"",)"
+                         R"("window":2})"
+                         "\n"});
+  EXPECT_EQ(desk_.calls, Lines{"destroy held popup"});
+}
+
+TEST_F(ElectronAppTest, AWindowOpenAnswerNobodyWaitsForIsRefused) {
+  Hello();
+
+  app_->Take(R"({"type":"window_open_answer","ask":4,"action":"deny"})");
+
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"no new window is )"
+                         R"(waiting for answer 4"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AnAppThatGoesClosesTheWindowsItWasAskedAbout) {
+  Hello();
+  app_->Take(kOpenOwn);
+  desk_.pages.at("10").window_opening.Run(
+      AskedDetails(), std::make_unique<FakeHeldPage>("popup", desk_.calls));
+  desk_.calls.clear();
+
+  app_.reset();
+
+  EXPECT_EQ(desk_.calls, (Lines{"close 10", "destroy held popup"}));
 }
 
 }  // namespace

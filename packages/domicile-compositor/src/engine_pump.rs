@@ -248,6 +248,15 @@ impl DomicileCompositor {
                                 app_id: window.app_id.clone(),
                                 url: window.url.clone(),
                                 private: window.private,
+                                views: window
+                                    .views
+                                    .iter()
+                                    .map(|view| domicile_protocol::ListedView {
+                                        id: view.id.clone(),
+                                        position: [view.x, view.y],
+                                        size: [view.width, view.height],
+                                    })
+                                    .collect(),
                             })
                             .collect(),
                     );

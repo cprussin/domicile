@@ -9,7 +9,8 @@ use domicile_launch::cli::{
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
 use domicile_protocol::{
-    DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic, WindowAct,
+    DeskRect, DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic,
+    WindowAct,
 };
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
@@ -273,7 +274,6 @@ fn open_with_electron_takes_an_app_and_its_command() {
         run(&["open", "--electron", "slack.desktop"]).unwrap(),
         Invocation::OpenElectron {
             target: "slack.desktop".to_string(),
-            profile: None,
             command: vec![],
         }
     );
@@ -290,7 +290,6 @@ fn open_with_electron_takes_an_app_and_its_command() {
         .unwrap(),
         Invocation::OpenElectron {
             target: "slack.desktop".to_string(),
-            profile: None,
             command: vec!["slack".into(), "-u".into(), "slack://a".into()],
         }
     );
@@ -300,37 +299,6 @@ fn open_with_electron_takes_an_app_and_its_command() {
         Err(CliError::ExtraToOpen {
             extra: "-u".to_string()
         })
-    );
-}
-
-#[test]
-fn open_with_electron_takes_a_browser_profile() {
-    assert_eq!(
-        run(&[
-            "open",
-            "--electron",
-            "--profile",
-            "work",
-            "slack.desktop",
-            "--",
-            "slack"
-        ])
-        .unwrap(),
-        Invocation::OpenElectron {
-            target: "slack.desktop".to_string(),
-            profile: Some("work".to_string()),
-            command: vec!["slack".into()],
-        }
-    );
-    assert_eq!(
-        run(&["open", "--electron", "--profile"]),
-        Err(CliError::FlagWithoutValue {
-            flag: "--profile".to_string()
-        })
-    );
-    assert_eq!(
-        run(&["open", "--electron", "--profile", "work"]),
-        Err(CliError::NothingToOpen)
     );
 }
 
@@ -1270,9 +1238,29 @@ fn screenshot_fit_shrinks_the_desk_into_a_file() {
         run(&["screenshot", "--fit", "1280", "desk.png"]),
         Ok(Invocation::ShootDesk {
             file: "desk.png".to_string(),
-            fit: 1280
+            fit: 1280,
+            area: None,
         })
     );
+    assert_eq!(
+        run(&[
+            "screenshot",
+            "--fit",
+            "1280",
+            "--area",
+            "-10,20,300x200",
+            "desk.png"
+        ]),
+        Ok(Invocation::ShootDesk {
+            file: "desk.png".to_string(),
+            fit: 1280,
+            area: Some(DeskRect {
+                position: (-10, 20),
+                size: (300, 200),
+            }),
+        })
+    );
+    assert!(run(&["screenshot", "--fit", "1280", "--area", "10,20", "desk.png"]).is_err());
     assert!(run(&["screenshot", "--fit", "1280"]).is_err());
     assert!(run(&["screenshot", "--fit", "big", "desk.png"]).is_err());
 }
@@ -1390,6 +1378,7 @@ fn devtools_sends_a_method_and_its_params_to_a_window() {
         Ok(Invocation::Ask {
             request: Request::DevTools {
                 window: "Xy7p".to_string(),
+                view: None,
                 method: "DOM.getBoxModel".to_string(),
                 params,
             },
@@ -1408,6 +1397,18 @@ fn devtools_sends_a_method_and_its_params_to_a_window() {
         run(&["devtools", "Xy7p", "DOM.getBoxModel"]),
         devtools(serde_json::json!({}))
     );
+    assert_eq!(
+        run(&["devtools", "--view", "9", "Xy7p", "Page.reload"]),
+        Ok(Invocation::Ask {
+            request: Request::DevTools {
+                window: "Xy7p".to_string(),
+                view: Some("9".to_string()),
+                method: "Page.reload".to_string(),
+                params: serde_json::json!({}),
+            },
+        })
+    );
+    assert!(run(&["devtools", "--view"]).is_err());
     assert!(run(&["devtools", "Xy7p"]).is_err());
     assert!(run(&["devtools", "Xy7p", "Page.reload", "[1]"]).is_err());
     assert!(run(&["devtools", "Xy7p", "Page.reload", "{", "more"]).is_err());

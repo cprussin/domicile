@@ -20,7 +20,8 @@ use domicile_launch::site_permissions::{Permission, Setting, SitePermission, Sit
 use domicile_protocol::{
     AdaptiveSync, DeskRect, DeskShot, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo,
     DisplayTransform, EmulatedInput, InputConnection, InputKind, ListedDisplay, ListedInput,
-    ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, Theme, WindowAct, WindowKind,
+    ListedView, ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, Theme, WindowAct,
+    WindowKind,
 };
 
 #[test]
@@ -451,6 +452,7 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         url: None,
         private: false,
         engine_id: Some("3".to_string()),
+        views: Vec::new(),
     };
     assert_eq!(
         reply_to(
@@ -1281,7 +1283,7 @@ fn nothing_dialed() -> Desktop<'static> {
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
         lock: &|| panic!("only lock locks the desktop"),
         act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
-        shoot_desk: &|_, _| panic!("only shoot_desk shoots the desk"),
+        shoot_desk: &|_, _, _| panic!("only shoot_desk shoots the desk"),
         emulate: &|_| panic!("only emulate sends input"),
         devtools: &|_, _, _| panic!("only devtools sends DevTools methods"),
         configure_display: &|_, _| panic!("only configure_display configures a display"),
@@ -1407,10 +1409,17 @@ fn a_desk_shot_says_what_it_shows() {
     };
     assert_eq!(
         reply_to(
-            "{\"type\":\"shoot_desk\",\"file\":\"/tmp/desk.png\",\"fit\":1280}",
+            "{\"type\":\"shoot_desk\",\"file\":\"/tmp/desk.png\",\"fit\":1280,\"area\":{\"position\":[0,0],\"size\":[10,10]}}",
             &Desktop {
-                shoot_desk: &|file, fit| {
+                shoot_desk: &|file, fit, area| {
                     assert_eq!((file, fit), (Path::new("/tmp/desk.png"), 1280));
+                    assert_eq!(
+                        area,
+                        Some(DeskRect {
+                            position: (0, 0),
+                            size: (10, 10)
+                        })
+                    );
                     Ok(shot)
                 },
                 ..nothing_dialed()
@@ -1454,6 +1463,7 @@ fn three_windows() -> Result<Vec<ListedWindow>, String> {
         url: None,
         private: false,
         engine_id: None,
+        views: Vec::new(),
     };
     let mail = ListedWindow {
         id: "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
@@ -1465,6 +1475,11 @@ fn three_windows() -> Result<Vec<ListedWindow>, String> {
         focused: false,
         url: Some("https://mail.example/".to_string()),
         engine_id: Some("3".to_string()),
+        views: vec![ListedView {
+            id: "9".to_string(),
+            position: [0, 40],
+            size: [800, 560],
+        }],
         ..native.clone()
     };
     let private = ListedWindow {
@@ -1496,6 +1511,41 @@ fn devtools_sends_to_a_browser_window_by_its_listed_id() {
         ),
         Response::DevTools {
             result: serde_json::json!({"model": {}})
+        }
+    );
+}
+
+#[test]
+fn devtools_sends_to_a_view_the_window_holds() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE\",\"view\":\"9\",\"method\":\"Page.reload\",\"params\":{}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                devtools: &|window, _, _| {
+                    assert_eq!(window, "9");
+                    Ok(serde_json::json!({}))
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::DevTools {
+            result: serde_json::json!({})
+        }
+    );
+    let refused = reply_to(
+        "{\"type\":\"devtools\",\"window\":\"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE\",\"view\":\"3\",\"method\":\"Page.reload\",\"params\":{}}",
+        &Desktop {
+            windows: &three_windows,
+            status: &|| status(false),
+            ..nothing_dialed()
+        },
+    );
+    assert_eq!(
+        refused,
+        Response::Refused {
+            why: "window Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE holds no view 3; list-windows lists its views".to_string()
         }
     );
 }

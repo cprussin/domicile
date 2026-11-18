@@ -99,11 +99,12 @@ With no file, open the shell's screenshot picker. The picture goes in
 it instead. With a file, write every monitor to it as a PNG, without asking.
 Exits 1 if the picker is dismissed.
 
-## `domicile screenshot --fit <px> <file>`
+## `domicile screenshot --fit <px> [--area <x>,<y>,<w>x<h>] <file>`
 
 Write a PNG of every monitor to `<file>`, shrunk so neither side is over
 `<px>` pixels, without asking. Print what it shows as JSON: the desktop it
-covers in logical pixels, and its size.
+covers in logical pixels, and its size. `--area` takes only that area of the
+desk, in logical pixels; an area not all on the desk is refused.
 
 ```
 $ domicile screenshot --fit 1280 desk.png
@@ -166,12 +167,13 @@ the keyboard focus, or replace its text. Clicking runs the element's own
 click, press or activate action, so it works on a window the desk hides. A
 ref of another process is refused.
 
-## `domicile devtools <window> <method> [params]`
+## `domicile devtools [--view <view>] <window> <method> [params]`
 
 Send one [DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
 method to a browser window's page, with its params as a JSON object, and print
-its result as JSON. `<window>` is an id `list-windows` prints. `domicile mcp`
-drives browser windows with it.
+its result as JSON. `<window>` is an id `list-windows` prints. `--view` sends
+it to one of the window's views instead, by the id `list-windows --json`
+lists. `domicile mcp` drives browser windows with it.
 
 ```
 $ domicile devtools Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE DOM.getContentQuads '{"backendNodeId":42}'
@@ -338,8 +340,11 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
 
 `--json` prints a JSON array instead, for scripts, with `kind`, `title`,
 `app`, `pid`, `size`, `focused`, `urgent`, `url` (a browser window's address,
-`null` for a native window), `private` and `engine_id` (a browser window's
-id in the engine, `null` for a native window) per window.
+`null` for a native window), `private`, `engine_id` (a browser window's
+id in the engine, `null` for a native window) and `views` per window.
+`views` lists the views a browser window holds and shows, bottom first: an
+Electron app's `WebContentsView`s, each with its `id` and its `position` and
+`size` in the window's page, in CSS pixels.
 
 ## `domicile list-inputs [--json]`
 
@@ -509,21 +514,21 @@ Each tool runs a verb and answers what it printed, or its error:
 | `open` | `open [--app] [--profile <id>] <target>` |
 | `focus_window`, `close_window` | that verb with the window's id |
 | `theme` | `theme [light\|dark\|toggle]` |
-| `screenshot` | `screenshot --fit 1280 <file>`, answered as the PNG |
+| `screenshot` | `screenshot --fit 1280 [--area <area>] <file>`, answered as the PNG; `area` zooms into part of the last screenshot |
 | `click`, `move_pointer`, `drag` | `pointer`, with the point scaled from the last screenshot's pixels to the desk's |
 | `scroll` | `pointer`, then `scroll` |
 | `key`, `type_text` | `key <chord>`, `type <text>` |
-| `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, answered as an outline of the page, one element a line with its ref |
+| `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, then the same for each view the window holds, answered as an outline of the page and each view, one element a line with its ref. A view's refs are `<view>:<element>` |
 | `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle |
 | `browser_type` | `devtools` focusing the element, if given a ref, then `Input.insertText` |
 | `browser_key` | `devtools` pressing and releasing Enter, Tab, Escape, an arrow or another named key |
 | `browser_navigate` | `devtools <window> Page.navigate` |
-| `browser_screenshot` | `devtools <window> Page.captureScreenshot`, answered as a WebP |
+| `browser_screenshot` | `devtools [--view <view>] <window> Page.captureScreenshot`, answered as a WebP |
 | `app_snapshot` | `accessibility <window>` |
 | `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
 | `ask_to_use_desktop` | nothing: asks the user again, after they stopped the agent or turned it away |
 
-The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. Tools the lock refuses are refused while the desktop is locked.
+The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key` and `browser_screenshot` take a `view`. Tools the lock refuses are refused while the desktop is locked.
 
 ### Over HTTP
 

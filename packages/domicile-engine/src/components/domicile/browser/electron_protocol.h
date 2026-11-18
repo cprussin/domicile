@@ -157,6 +157,21 @@ namespace domicile {
 //                                           redirect_url, error, from_cache
 //                                           and ip as each knows them)
 //
+// A page's new window (window.open, a target="_blank" link, a middle click)
+// asks the app first, as setWindowOpenHandler does:
+//
+//   -> {"type":"window_open","ask":7,"window":1,"url":"https://a.test/",
+//       "frame_name":"","features":"width=500,height=600",
+//       "disposition":"foreground-tab","referrer":"https://claude.ai/"}
+//   {"type":"window_open_answer","ask":7,"action":"deny"}
+//                                          (no window opens)
+//   {"type":"window_open_answer","ask":7,"action":"allow","window":2,
+//    "title":"Sign in"}                    (window 2 opens where the page
+//                                           asked, with open_window's other
+//                                           keys; then window_opened or
+//                                           window_refused, as for
+//                                           open_window)
+//
 // The host picks window numbers. A window opens http and https URLs, and
 // file: and the app's own schemes once its session handles them: the app
 // serves those, file: included, as Electron's protocol.handle does. An
@@ -201,9 +216,6 @@ struct ElectronHello {
   std::string app_id;
   // Where the app's pages keep their data. Never the profile's own.
   WebViewPartition partition;
-  // The browser profile its pages are in, with that profile's extensions:
-  // the default profile when empty.
-  std::string profile;
 };
 
 // Node.js in a window's page, as Electron gives a window that isn't
@@ -533,6 +545,30 @@ struct ElectronPermissionAnswer {
                          const ElectronPermissionAnswer&) = default;
 };
 
+// A window a page asked for, as setWindowOpenHandler's details have it.
+struct ElectronWindowOpenDetails {
+  GURL url;
+  // window.open's target; empty for none.
+  std::string frame_name;
+  // window.open's features, as "width=500,height=600,left=0,top=0" from what
+  // Blink kept of them; empty for none.
+  std::string features;
+  // "default", "foreground-tab", "background-tab", "new-window" or "other".
+  std::string disposition;
+  // The page that asked; empty when it sends no referrer.
+  GURL referrer;
+
+  friend bool operator==(const ElectronWindowOpenDetails&,
+                         const ElectronWindowOpenDetails&) = default;
+};
+
+// The app's answer to window_open `ask`: the window to open, its url left
+// empty for the one the page asked for, or none for a denial.
+struct ElectronWindowOpenAnswer {
+  int ask = 0;
+  std::optional<ElectronOpenWindow> open;
+};
+
 // A page's permission request as setPermissionRequestHandler sees it.
 struct ElectronPermissionDetails {
   // Electron's name for it: "media", "geolocation", "notifications"...
@@ -685,6 +721,7 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSessionCall,
                                      ElectronPermissionHandler,
                                      ElectronPermissionAnswer,
+                                     ElectronWindowOpenAnswer,
                                      ElectronSetViews,
                                      ElectronSetMenuBar,
                                      ElectronShowMessageBox,
@@ -791,6 +828,11 @@ std::string ElectronWebRequest(ElectronWebRequestEvent event,
                                std::optional<ElectronWindow> window,
                                std::string_view session,
                                const ElectronWebRequestDetails& details);
+// Window `window`'s page asked for a window, `details`: ask `ask` waits for
+// window_open_answer.
+std::string ElectronWindowOpen(int ask,
+                               ElectronWindow window,
+                               const ElectronWindowOpenDetails& details);
 // Permission request `ask` in session `session`, made by window `window`'s
 // page when it was one; it waits for permission_answer.
 std::string ElectronPermissionRequest(int ask,

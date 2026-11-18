@@ -2887,11 +2887,49 @@ std::unique_ptr<content::WebContents> WebViewGuest::CreateNewGuestWindow(
   return Host().MakeOpenedWindow(create_params);
 }
 
-bool WebViewGuest::OpenedNoopenerWindowOutside(const GURL& target_url) {
-  if (!OpensInTheBrowser(target_url)) {
+namespace {
+
+WebViewGuest::WindowRequest RequestFor(
+    const GURL& url,
+    std::string frame_name,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& features,
+    const GURL& referrer) {
+  return WebViewGuest::WindowRequest{
+      .url = url,
+      .frame_name = std::move(frame_name),
+      .disposition = disposition,
+      .x = features.has_x ? std::optional<int>(features.bounds.x())
+                          : std::nullopt,
+      .y = features.has_y ? std::optional<int>(features.bounds.y())
+                          : std::nullopt,
+      .width = features.has_width ? std::optional<int>(features.bounds.width())
+                                  : std::nullopt,
+      .height = features.has_height
+                    ? std::optional<int>(features.bounds.height())
+                    : std::nullopt,
+      .popup = features.is_popup,
+      .referrer = referrer,
+  };
+}
+
+}  // namespace
+
+bool WebViewGuest::TakeNoopenerWindow(
+    const GURL& target_url,
+    const std::string& frame_name,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& features,
+    const GURL& referrer) {
+  if (window_opening_.is_null()) {
     return false;
   }
-  OpenInTheBrowser(target_url);
+  // guard-electron-window-open.sh greps for this.
+  LOG(INFO) << "domicile: a <webview>'s page asked for a noopener window at "
+            << target_url.possibly_invalid_spec() << "; its embedder decides.";
+  window_opening_.Run(
+      RequestFor(target_url, frame_name, disposition, features, referrer),
+      nullptr);
   return true;
 }
 
@@ -2903,6 +2941,17 @@ content::WebContents* WebViewGuest::AddNewContents(
     const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
+  if (!window_opening_.is_null()) {
+    // guard-electron-window-open.sh greps for this.
+    LOG(INFO) << "domicile: a <webview>'s page opened a window at "
+              << target_url.possibly_invalid_spec()
+              << "; its embedder decides whether it shows.";
+    WindowRequest request = RequestFor(
+        target_url, new_contents->GetPrimaryMainFrame()->GetFrameName(),
+        disposition, window_features, guest_contents_->GetLastCommittedURL());
+    window_opening_.Run(std::move(request), std::move(new_contents));
+    return nullptr;
+  }
   // Only the size the page asked for is kept, so the shell can float a sized
   // window, such as a call's, at that size. The shell places windows itself.
   // Content navigates the window after this returns.
@@ -2959,7 +3008,14 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
                    "page could not perform itself, to "
                 << params.url.possibly_invalid_spec();
 
-      ReportNewWindow(params.url);
+      if (!window_opening_.is_null()) {
+        window_opening_.Run(
+            RequestFor(params.url, std::string(), params.disposition,
+                       blink::mojom::WindowFeatures(), params.referrer.url),
+            nullptr);
+      } else {
+        ReportNewWindow(params.url);
+      }
       return nullptr;
     }
 
@@ -2986,11 +3042,6 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
   if (!target_url.is_valid()) {
     LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
                     "address to open; refused, and no window is opened.";
-    return;
-  }
-
-  if (OpensInTheBrowser(target_url)) {
-    OpenInTheBrowser(target_url);
     return;
   }
 
@@ -3196,25 +3247,13 @@ void WebViewGuest::Focused() {
   focused_callbacks_.Notify();
 }
 
+void WebViewGuest::DecideWindowsWith(WindowOpening opening) {
+  window_opening_ = std::move(opening);
+}
+
 void WebViewGuest::KeepFullFrameRate() {
   full_frame_rate_ = true;
   UnfocusedWebViews::Get().Untrack(this);
-}
-
-void WebViewGuest::OpenLinksInTheBrowser() {
-  links_in_the_browser_ = true;
-}
-
-bool WebViewGuest::OpensInTheBrowser(const GURL& url) const {
-  return links_in_the_browser_ && url.SchemeIsHTTPOrHTTPS();
-}
-
-void WebViewGuest::OpenInTheBrowser(const GURL& url) {
-  // guard-electron-profile.sh greps for this.
-  LOG(INFO) << "domicile: an app's page opened " << url.possibly_invalid_spec()
-            << " in the desk's browser.";
-  Host().Open(*guest_contents_->GetBrowserContext(), url,
-              /*partition=*/std::nullopt);
 }
 
 base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(

@@ -240,14 +240,26 @@ fn theme_with_no_change_prints_it() {
 const THIRD: &str =
     "{\"place\":{\"position\":[0,0],\"size\":[3840,1080]},\"width\":1280,\"height\":360}\n";
 
+/// What `domicile screenshot --fit` prints for the desk's area 300,150
+/// 600x300, which fits.
+const ZOOMED: &str =
+    "{\"place\":{\"position\":[300,150],\"size\":[600,300]},\"width\":600,\"height\":300}\n";
+
 /// Stands in for `domicile`: writes a PNG for `screenshot` and records every
-/// other run in `ran`.
+/// other run in `ran`, and each `--area` asked for.
 fn desk<'a>(ran: &'a mut Vec<Vec<String>>) -> impl FnMut(&[String]) -> io::Result<Ran> + 'a {
     move |args| {
         if args[0] == "screenshot" {
             assert_eq!(args[1..3], ["--fit", "1280"]);
-            std::fs::write(&args[3], b"\x89PNG").unwrap();
-            printed(THIRD)
+            std::fs::write(args.last().unwrap(), b"\x89PNG").unwrap();
+            match &args[3..] {
+                [_] => printed(THIRD),
+                [flag, area, _] if flag == "--area" => {
+                    ran.push(vec![flag.clone(), area.clone()]);
+                    printed(ZOOMED)
+                }
+                _ => panic!("ran domicile {args:?}"),
+            }
         } else {
             ran.push(args.to_vec());
             printed("")
@@ -314,6 +326,39 @@ fn pointer_tools_take_the_last_screenshots_pixels_to_the_desks() {
 }
 
 #[test]
+fn a_screenshot_of_an_area_of_the_last_zooms_in_and_points_go_there() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[
+            call("screenshot", json!({})),
+            call("screenshot", json!({"area": [100, 50, 200, 100]})),
+            call("click", json!({"x": 10, "y": 10})),
+        ],
+        desk(&mut ran),
+    );
+    assert!(replies[1]["result"]["content"][1]["text"]
+        .as_str()
+        .unwrap()
+        .contains("600x300"));
+    assert_eq!(
+        ran,
+        [
+            vec!["--area".to_string(), "300,150,600x300".to_string()],
+            vec![
+                "pointer".to_string(),
+                "310,160".to_string(),
+                "click".to_string()
+            ],
+        ]
+    );
+    let replies = served(
+        &[call("screenshot", json!({"area": [0, 0, 10, 10]}))],
+        never_run,
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+}
+
+#[test]
 fn keys_and_text_go_to_key_and_type() {
     assert_eq!(
         ran_for("key", json!({"chord": "ctrl+l"})),
@@ -376,6 +421,9 @@ fn page<'a>(
     ran: &'a mut Vec<(String, Value)>,
 ) -> impl FnMut(&[String]) -> io::Result<Ran> + 'a {
     move |args| {
+        if args == ["list-windows", "--json"] {
+            return printed("[{\"id\": \"w1\", \"views\": []}]\n");
+        }
         assert_eq!(args[..2], ["devtools", "w1"]);
         let params: Value = serde_json::from_str(&args[3]).unwrap();
         ran.push((args[2].clone(), params));
@@ -560,6 +608,120 @@ fn a_browser_screenshot_is_a_small_webp_of_the_page() {
     assert_eq!(
         replies[0]["result"]["content"][0],
         json!({"type": "image", "data": "UklGRg==", "mimeType": "image/webp"})
+    );
+}
+
+/// Stands in for `domicile` on Claude's window `w1`, whose page is empty and
+/// whose chat is view `9` at 200,40: answers each method from `answers` and
+/// records every run in `ran` with the view it went to.
+fn electron_window<'a>(
+    answers: &'a [(&'a str, Value)],
+    ran: &'a mut Vec<(Option<String>, String, Value)>,
+) -> impl FnMut(&[String]) -> io::Result<Ran> + 'a {
+    move |args| {
+        if args == ["list-windows", "--json"] {
+            return printed(
+                "[{\"id\": \"w1\", \"views\": [{\"id\": \"9\", \"position\": [200, 40], \"size\": [600, 560]}]}]\n",
+            );
+        }
+        let (view, args) = match args {
+            [devtools, flag, view, rest @ ..] if devtools == "devtools" && flag == "--view" => {
+                (Some(view.clone()), rest)
+            }
+            [devtools, rest @ ..] if devtools == "devtools" => (None, rest),
+            _ => panic!("ran domicile {args:?}"),
+        };
+        assert_eq!(args[0], "w1");
+        let params: Value = serde_json::from_str(&args[2]).unwrap();
+        ran.push((view.clone(), args[1].clone(), params));
+        let answer = answers
+            .iter()
+            .find(|(method, _)| *method == args[1] && view.is_some())
+            .map_or(json!({"nodes": []}), |(_, answer)| answer.clone());
+        printed(&format!("{answer}\n"))
+    }
+}
+
+#[test]
+fn a_browser_snapshot_reads_each_view_the_window_holds_with_its_refs() {
+    let chat = json!({"nodes": [
+        {"nodeId": "1", "ignored": false, "role": {"value": "RootWebArea"}, "name": {"value": "Claude"}, "childIds": ["2"], "backendDOMNodeId": 1},
+        {"nodeId": "2", "ignored": false, "role": {"value": "checkbox"}, "name": {"value": "Claude Code can use your desktop"},
+         "properties": [{"name": "checked", "value": {"value": "true"}}], "childIds": [], "backendDOMNodeId": 12}
+    ]});
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call("browser_snapshot", json!({"window": "w1"}))],
+        electron_window(&[("Accessibility.getFullAXTree", chat)], &mut ran),
+    );
+    assert_eq!(
+        ran,
+        [
+            (None, "Accessibility.getFullAXTree".to_string(), json!({})),
+            (
+                Some("9".to_string()),
+                "Accessibility.getFullAXTree".to_string(),
+                json!({})
+            ),
+        ]
+    );
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "- view 9, at 200,40, 600x560\n  \
+         - RootWebArea \"Claude\" [ref=9:1]\n    \
+         - checkbox \"Claude Code can use your desktop\" [ref=9:12] checked=\"true\"\n"
+    );
+}
+
+#[test]
+fn browser_tools_act_in_the_view_a_ref_names_or_the_view_given() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[
+            call("browser_click", json!({"window": "w1", "ref": "9:12"})),
+            call(
+                "browser_key",
+                json!({"window": "w1", "view": "9", "key": "Tab"}),
+            ),
+            call("browser_screenshot", json!({"window": "w1", "view": "9"})),
+        ],
+        electron_window(
+            &[
+                (
+                    "DOM.getContentQuads",
+                    json!({"quads": [[10, 20, 110, 20, 110, 40, 10, 40]]}),
+                ),
+                ("Page.captureScreenshot", json!({"data": "UklGRg=="})),
+            ],
+            &mut ran,
+        ),
+    );
+    assert!(
+        replies
+            .iter()
+            .all(|reply| reply["result"]["isError"] == false),
+        "{replies:?}"
+    );
+    assert!(
+        ran.iter().all(|(view, _, _)| view.as_deref() == Some("9")),
+        "{ran:?}"
+    );
+    assert_eq!(ran[1].2, json!({"backendNodeId": 12}));
+}
+
+#[test]
+fn a_ref_from_one_view_is_refused_in_another() {
+    let replies = served(
+        &[call(
+            "browser_type",
+            json!({"window": "w1", "view": "7", "ref": "9:12", "text": "hi"}),
+        )],
+        never_run,
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "ref 9:12 is in view 9, not view 7"
     );
 }
 
@@ -791,6 +953,7 @@ fn what_an_agent_did_is_listed_with_the_windows_title_and_never_what_it_typed() 
         ],
         |args| match args[0].as_str() {
             "devtools" => printed("{\"nodes\": []}"),
+            "list-windows" => printed("[{\"id\": \"w1\", \"views\": []}]"),
             _ => printed(""),
         },
         move |_| Ok(grant.take().expect("asked once")),

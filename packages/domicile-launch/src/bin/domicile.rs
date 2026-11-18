@@ -53,9 +53,7 @@ use domicile_launch::control_socket::{
     PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::dev::{dev_socket, going_back, loading};
-use domicile_launch::electron_app::{
-    app_icon, app_name, electron_app, PROFILE_VARIABLE, UNSUPPORTED_EXIT,
-};
+use domicile_launch::electron_app::{app_icon, app_name, electron_app, UNSUPPORTED_EXIT};
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
@@ -174,11 +172,7 @@ fn run() -> Result<ExitCode, String> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Invocation::OpenElectron {
-            target,
-            profile,
-            command,
-        } => electron_opened(&target, profile.as_deref(), &command),
+        Invocation::OpenElectron { target, command } => electron_opened(&target, &command),
         Invocation::OpenAsApp {
             target,
             id,
@@ -215,10 +209,11 @@ fn run() -> Result<ExitCode, String> {
                 .transpose()?,
         }),
         // Absolute here, as for `Screenshot`.
-        Invocation::ShootDesk { file, fit } => asked(&Request::ShootDesk {
+        Invocation::ShootDesk { file, fit, area } => asked(&Request::ShootDesk {
             file: std::path::absolute(&file)
                 .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
             fit,
+            area,
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
@@ -310,11 +305,7 @@ fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
 /// How long an app's wrappers may take to reach its program.
 const WRAPPERS_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
 
-fn electron_opened(
-    target: &str,
-    profile: Option<&str>,
-    command: &[String],
-) -> Result<ExitCode, String> {
+fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String> {
     let applications: Vec<PathBuf> = places()
         .data_dirs
         .iter()
@@ -353,10 +344,6 @@ fn electron_opened(
             eprintln!("domicile: {target} runs on the engine without what its wrappers set: {why}");
             run.args(&app.args);
         }
-    }
-    // After the wrappers' variables, which replace the rest.
-    if let Some(profile) = profile {
-        run.env(PROFILE_VARIABLE, profile);
     }
     let status = run
         .status()
@@ -1017,7 +1004,7 @@ fn native_window(id: &str) -> Result<(u32, String), String> {
             Err(format!("the desktop does not know window {id}'s process"))
         }
         (WindowKind::Browser, _) => Err(format!(
-            "window {id} is a browser window; devtools reads and drives those"
+            "window {id} is a browser window; devtools, and an agent's browser_ tools, read and drive those"
         )),
     }
 }
@@ -2061,8 +2048,8 @@ fn answer_a_command(
                         act_on_window(chrome, id, act, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
-                    shoot_desk: &|file, fit| {
-                        shoot_desk(chrome, file, fit, Some(CAPTURE_WITHIN))
+                    shoot_desk: &|file, fit, area| {
+                        shoot_desk(chrome, file, fit, area, Some(CAPTURE_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
                     emulate: &|input| {

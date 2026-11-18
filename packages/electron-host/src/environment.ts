@@ -5,12 +5,6 @@ import { z } from "zod";
 const schema = z.object({
   /** The session bus, where the desktop serves its portals. */
   DBUS_SESSION_BUS_ADDRESS: z.string().optional(),
-  /**
-   * The browser profile the app's windows open in, which `domicile open
-   * --electron --profile` names. Matches `PROFILE_VARIABLE` in
-   * `packages/domicile-launch`.
-   */
-  DOMICILE_ELECTRON_PROFILE: z.string().min(1).optional(),
   /** The engine's Electron socket, which the desktop names to its apps. */
   DOMICILE_ELECTRON_SOCK: z.string().optional(),
   XDG_CACHE_HOME: z.string().optional(),

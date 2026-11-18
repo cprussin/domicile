@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import type {
   Engine,
   EngineRequest,
+  OpenKeys,
   PageNode,
   ViewPlacement,
   WindowEvent,
@@ -66,6 +67,59 @@ export type BrowserWindowOptions = {
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly webPreferences?: WebPreferences | undefined;
+};
+
+/** What setWindowOpenHandler's handler is told of a page's new window. */
+export type WindowOpenDetails = {
+  readonly url: string;
+  readonly frameName: string;
+  readonly features: string;
+  readonly disposition: string;
+  readonly referrer: { readonly url: string; readonly policy: string };
+  readonly postBody?: undefined;
+};
+
+/** What a window open handler answers, as Electron's does. */
+export type WindowOpenAnswer =
+  | { readonly action: "deny" }
+  | {
+      readonly action: "allow";
+      readonly overrideBrowserWindowOptions?: BrowserWindowOptions | undefined;
+      readonly outlivesOpener?: boolean | undefined;
+      /** Makes the window itself: a new window's webContents, not yet loaded. */
+      readonly createWindow?:
+        | ((options: BrowserWindowOptions) => unknown)
+        | undefined;
+    };
+
+/**
+ * A new window's options: the opener's webPreferences, as Electron's child
+ * windows inherit them, the size window.open asked for, and what the
+ * handler overrides.
+ */
+export const childWindowOptions = (
+  opener: WebPreferences,
+  features: string,
+  override: BrowserWindowOptions = {},
+): BrowserWindowOptions => {
+  const asked = new Map(
+    features
+      .split(",")
+      .map((feature) => feature.split("=").map((part) => part.trim()))
+      .filter(
+        (pair): pair is [string, string] =>
+          pair.length === 2 && Number.isFinite(Number(pair[1])),
+      )
+      .map(([name, value]) => [name, Number(value)] as const),
+  );
+  const width = asked.get("width");
+  const height = asked.get("height");
+  return {
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    ...override,
+    webPreferences: { ...opener, ...override.webPreferences },
+  };
 };
 
 export type ViewOptions = {
@@ -308,11 +362,37 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       return this.owner.session;
     }
 
-    /**
-     * Not asked yet: the engine opens a page's new windows and
-     * `target=_blank` links as the desktop's browser does.
-     */
-    readonly setWindowOpenHandler = (_handler: unknown) => undefined;
+    #windowOpenHandler:
+      | ((details: WindowOpenDetails) => WindowOpenAnswer)
+      | undefined;
+
+    /** Decides on each window the page asks for, before any opens. */
+    readonly setWindowOpenHandler = (
+      handler: ((details: WindowOpenDetails) => WindowOpenAnswer) | null,
+    ) => {
+      this.#windowOpenHandler = handler ?? undefined;
+    };
+
+    /** The handler's answer for `details`: allowed when there's none, as in Electron. */
+    readonly windowOpenAnswer = (
+      details: WindowOpenDetails,
+    ): WindowOpenAnswer => {
+      if (this.#windowOpenHandler === undefined) {
+        return { action: "allow" };
+      }
+      const answer: unknown = this.#windowOpenHandler(details);
+      if (
+        typeof answer === "object" &&
+        answer !== null &&
+        "action" in answer &&
+        (answer.action === "allow" || answer.action === "deny")
+      ) {
+        return answer as WindowOpenAnswer;
+      }
+      throw new Error(
+        `a window open handler answers { action: "allow" } or { action: "deny" }, not ${JSON.stringify(answer)}`,
+      );
+    };
 
     readonly getTitle = () => this.owner.getTitle();
     readonly focus = () => {
@@ -481,9 +561,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** Node.js in its page, for a window that isn't sandboxed. */
     readonly #node: PageNode | undefined;
     readonly #view: boolean;
+    /** Its webPreferences, which the windows its page opens start from. */
+    readonly preferences: WebPreferences;
 
     constructor(preferences: WebPreferences, title: string, view: boolean) {
       super();
+      this.preferences = preferences;
       // As Electron decides: nodeIntegration turns the default sandbox off.
       const sandboxed =
         preferences.sandbox ?? preferences.nodeIntegration !== true;
@@ -562,23 +645,114 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         toEngine({ type: "load_url", url, window: this.id });
       } else {
         this.opened = true;
-        const session = sessionPartition(this.session);
-        toEngine({
-          type: "open_window",
-          url,
-          window: this.id,
-          ...(this.#preload === undefined ? {} : { preload: this.#preload }),
-          ...(this.#arguments.length === 0
-            ? {}
-            : { arguments: this.#arguments }),
-          ...(this.#node === undefined ? {} : { node: this.#node }),
-          ...(session === "" ? {} : { session }),
-          ...(this.#view ? { view: true } : {}),
-          ...this.opening(),
-        });
+        toEngine({ type: "open_window", url, ...this.#openKeys() });
         this.wasOpened();
       }
       return loaded;
+    };
+
+    /** What the engine is told of the page as it opens. */
+    readonly #openKeys = (): OpenKeys => {
+      const session = sessionPartition(this.session);
+      return {
+        window: this.id,
+        ...(this.#preload === undefined ? {} : { preload: this.#preload }),
+        ...(this.#arguments.length === 0 ? {} : { arguments: this.#arguments }),
+        ...(this.#node === undefined ? {} : { node: this.#node }),
+        ...(session === "" ? {} : { session }),
+        ...(this.#view ? { view: true } : {}),
+        ...this.opening(),
+      };
+    };
+
+    /**
+     * Opens the page as the window another page asked for at `url`, which
+     * window open ask `ask` allowed, instead of with a load of its own.
+     */
+    readonly openAsAsked = (ask: number, url: string) => {
+      this.assertAlive();
+      if (this.opened) {
+        throw new Error(
+          "a page's new window opens as a new BrowserWindow; this one already loaded a page",
+        );
+      }
+      this.url = url;
+      this.#loading = true;
+      this.opened = true;
+      toEngine({
+        action: "allow",
+        ask,
+        type: "window_open_answer",
+        ...this.#openKeys(),
+      });
+      this.wasOpened();
+    };
+
+    /** Asks the app's handler about the window the page asked for. */
+    readonly #windowOpen = (
+      event: Extract<WindowEvent, { type: "window_open" }>,
+    ) => {
+      const details: WindowOpenDetails = {
+        disposition: event.disposition,
+        features: event.features,
+        frameName: event.frame_name,
+        postBody: undefined,
+        referrer: {
+          policy: "strict-origin-when-cross-origin",
+          url: event.referrer,
+        },
+        url: event.url,
+      };
+      let answer: WindowOpenAnswer;
+      try {
+        answer = this.webContents.windowOpenAnswer(details);
+      } catch (error) {
+        // A handler that throws opens nothing, and the app hears why.
+        toEngine({
+          action: "deny",
+          ask: event.ask,
+          type: "window_open_answer",
+        });
+        throw error;
+      }
+      if (answer.action === "deny") {
+        toEngine({
+          action: "deny",
+          ask: event.ask,
+          type: "window_open_answer",
+        });
+        return;
+      }
+      const options = childWindowOptions(
+        this.preferences,
+        event.features,
+        answer.overrideBrowserWindowOptions,
+      );
+      if (answer.createWindow === undefined) {
+        const child = new BrowserWindow(options);
+        child.openAsAsked(event.ask, event.url);
+        this.webContents.emit("did-create-window", child, {
+          disposition: event.disposition,
+          frameName: event.frame_name,
+          options,
+          postBody: undefined,
+          referrer: details.referrer,
+          url: event.url,
+        });
+        return;
+      }
+      const made = answer.createWindow(options);
+      if (!(made instanceof WebContents)) {
+        toEngine({
+          action: "deny",
+          ask: event.ask,
+          type: "window_open_answer",
+        });
+        throw new Error(
+          "a window open handler's createWindow returns the new window's webContents",
+        );
+      }
+      made.owner.openAsAsked(event.ask, event.url);
     };
 
     /** Shows a file of the app, by its path from the app's root. */
@@ -603,6 +777,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** Takes what the engine said of this page. */
     readonly take = (event: WindowEvent) => {
       switch (event.type) {
+        case "window_open": {
+          this.#windowOpen(event);
+          break;
+        }
         case "window_opened": {
           // Its first page is loading; `window_loaded` says when it's done.
           break;

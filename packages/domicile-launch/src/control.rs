@@ -14,9 +14,9 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    AgentReach, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, KnownAgents,
-    ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp,
-    Theme, WatchTopic, WindowAct, WindowKind,
+    AgentReach, DeskRect, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
+    KnownAgents, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding,
+    ShellCommandHelp, Theme, WatchTopic, WindowAct, WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -212,17 +212,24 @@ pub enum Request {
     /// Focus, close or kill the native window `id`, as `domicile
     /// list-windows` prints it.
     ActOnWindow { id: String, act: WindowAct },
-    /// Write a PNG of the desk to `file`, its longer side at most `fit`
-    /// pixels. See `domicile screenshot --fit`.
-    ShootDesk { file: PathBuf, fit: u32 },
+    /// Write a PNG of the desk, or of its `area`, to `file`, its longer
+    /// side at most `fit` pixels. See `domicile screenshot --fit`.
+    ShootDesk {
+        file: PathBuf,
+        fit: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        area: Option<DeskRect>,
+    },
     /// Send `input` to the desk. See `domicile pointer`, `key` and `type`.
     Emulate { input: Vec<EmulatedInput> },
     /// Send DevTools Protocol `method` with `params` to browser window
-    /// `window`, as `domicile list-windows` prints it. See `domicile
-    /// devtools`.
+    /// `window`, as `domicile list-windows` prints it, or to its view
+    /// `view`. See `domicile devtools`.
     #[serde(rename = "devtools")]
     DevTools {
         window: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        view: Option<String>,
         method: String,
         params: serde_json::Value,
     },
@@ -633,10 +640,11 @@ pub type Locking<'a> = &'a dyn Fn() -> Result<(), String>;
 /// tests.
 pub type ActingOnWindows<'a> = &'a dyn Fn(&str, WindowAct) -> Result<(), String>;
 
-/// Asks the compositor for a PNG of the desk, shrunk to fit.
+/// Asks the compositor for a PNG of the desk, or an area of it, shrunk to
+/// fit.
 ///
 /// [`crate::compositor_socket::shoot_desk`] in a desktop; a closure in tests.
-pub type ShootingTheDesk<'a> = &'a dyn Fn(&Path, u32) -> Result<DeskShot, String>;
+pub type ShootingTheDesk<'a> = &'a dyn Fn(&Path, u32, Option<DeskRect>) -> Result<DeskShot, String>;
 
 /// Asks the compositor to send input to the desk.
 ///
@@ -1043,22 +1051,27 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::ShootDesk { file, fit }) => to_line(&match (desktop.shoot_desk)(&file, fit) {
-            Ok(shot) => Response::DeskShot { shot },
-            Err(why) => Response::Refused { why },
-        }),
+        Ok(Request::ShootDesk { file, fit, area }) => {
+            to_line(&match (desktop.shoot_desk)(&file, fit, area) {
+                Ok(shot) => Response::DeskShot { shot },
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::Emulate { input }) => to_line(&match (desktop.emulate)(&input) {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::DevTools {
             window,
+            view,
             method,
             params,
-        }) => to_line(&match driven(desktop, &window, &method, &params) {
-            Ok(result) => Response::DevTools { result },
-            Err(why) => Response::Refused { why },
-        }),
+        }) => to_line(
+            &match driven(desktop, &window, view.as_deref(), &method, &params) {
+                Ok(result) => Response::DevTools { result },
+                Err(why) => Response::Refused { why },
+            },
+        ),
         Ok(Request::ConfigureDisplay { display, change }) => {
             to_line(&match (desktop.configure_display)(&display, &change) {
                 Ok(()) => Response::Done,
@@ -1117,11 +1130,12 @@ fn powered(power: DisplayPower, display: Option<String>, set: PowerDisplays) -> 
 /// Carries out `to` with `set`. A toggle asks first, since the engine keeps the
 /// setting.
 /// Sends `method` to the browser window `domicile list-windows` lists as
-/// `window`, which must be neither native nor private, while the desktop is
-/// unlocked.
+/// `window`, or to its view `view`, while the desktop is unlocked. The window
+/// must be neither native nor private.
 fn driven(
     desktop: &Desktop,
     window: &str,
+    view: Option<&str>,
     method: &str,
     params: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -1139,7 +1153,15 @@ fn driven(
         ));
     }
     match (&listed.kind, &listed.engine_id) {
-        (WindowKind::Browser, Some(engine_id)) => (desktop.devtools)(engine_id, method, params),
+        (WindowKind::Browser, Some(engine_id)) => match view {
+            None => (desktop.devtools)(engine_id, method, params),
+            Some(view) if listed.views.iter().any(|held| held.id == view) => {
+                (desktop.devtools)(view, method, params)
+            }
+            Some(view) => Err(format!(
+                "window {window} holds no view {view}; list-windows lists its views"
+            )),
+        },
         (WindowKind::Browser, None) => Err(format!(
             "the compositor listed browser window {window} without its id in the engine"
         )),
